@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -e
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+ROOT_DIR=$( cd -- "$( dirname -- "${SCRIPT_DIR}" )" &> /dev/null && pwd )
+DIR=./src
+
+cd ${ROOT_DIR}
+
+echo "Formatting imports with isort"
+isort ${DIR}
+
+echo "Formatting code with black"
+black ${DIR}
+
+echo "Linting with flake8"
+flake8 ${DIR}
+
+echo "Type checking with mypy"
+mypy ${DIR}

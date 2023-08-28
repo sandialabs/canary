@@ -1,0 +1,32 @@
+[build-system]
+requires = [
+  # sync with setup.py until we discard non-pep-517/518
+  "setuptools>=45.0",
+  "setuptools-scm[toml]>=6.2.3",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+write_to = "src/_nvtest/_version.py"
+
+[tool.isort]
+line_length = 88
+force_single_line = true
+src_paths = ["src/nvtest","src/_nvtest"]
+
+[tool.black]
+target-version = ['py39']
+line_length = 88
+
+[tool.mypy]
+exclude = ["scripts", "tests", "src/_nvtest/config/distro.py"]
+
+[[tool.mypy.overrides]]
+module = "networkx.*,yaml.*,ruamel.*,pygments.*"
+ignore_missing_imports = true
+
+
+# check-wheel-contents is executed by the build-and-inspect-python-package action.
+[tool.check-wheel-contents]
+# W009: Wheel contains multiple toplevel library entries
+ignore = "W009"

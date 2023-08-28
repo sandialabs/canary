@@ -1,0 +1,13 @@
+*.res
+*.pyc
+TestResults*
+TestPartitions*
+Test*
+.mypy_cache
+vvt
+partition.p.*
+nvtest.ini
+scripts/sbatch
+
+src/UNKNOWN.egg-info/
+src/_nvtest/_version.py
