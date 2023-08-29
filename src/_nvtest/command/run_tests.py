@@ -5,7 +5,6 @@ import time
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-import nvtest
 from _nvtest.environment import Environment
 from _nvtest.error import StopExecution
 from _nvtest.executor import Executor
@@ -29,7 +28,6 @@ if TYPE_CHECKING:
     from _nvtest.session import Session
 
 
-@nvtest.plugin.command(family="testing")
 class RunTests(Command, ConsolePrinter):
     name = "run-tests"
     description = "Run the tests"

@@ -1,12 +1,8 @@
-import bisect
 import functools
-import inspect
-from functools import wraps
 from typing import Any
 from typing import Callable
 from typing import Generator
 from typing import Optional
-from typing import Type
 
 from .util import tty
 from .util.singleton import Singleton
@@ -15,7 +11,6 @@ from .util.singleton import Singleton
 class Manager:
     def __init__(self):
         self._plugins: dict[str, dict[str, dict[str, Callable]]] = {}
-        self._cli_commands: list[Type] = []
 
     def register(self, name: str, func: Callable, scope: str, stage: str) -> None:
         tty.verbose(f"Registering plugin {name}::{scope}::{stage}")
@@ -41,18 +36,9 @@ class Manager:
         for (name, func) in pl.items():
             yield name, func
 
-    def _add_command(self, cmdclass: Type, family: str):
-        order = {"info": 0, "batching": 1, "testing": 2}.get(family, 10)
-        cmdclass._order_ = order
-        bisect.insort(self._cli_commands, cmdclass, key=lambda x: (x._order_, x.name))
-
-    def cli_commands(self) -> list[Type]:
-        return self._cli_commands
-
-    def get_command(self, cmdname: str) -> Optional[Type]:
-        for cmdclass in self._cli_commands:
-            if cmdname == cmdclass.name:
-                return cmdclass
+    def get_plugin(self, scope: str, stage: str, name: str) -> Optional[Any]:
+        if scope in self._plugins and stage in self._plugins[scope]:
+            return self._plugins[scope][stage].get(name)
         return None
 
     def load(self, path: list[str], namespace: str) -> None:
@@ -72,68 +58,8 @@ def plugins(scope: str, stage: str) -> Generator[tuple[str, Callable], None, Non
     return _manager.plugins(scope, stage)
 
 
-def commands():
-    return _manager.cli_commands()
-
-
-def get_command(cmdname):
-    return _manager.get_command(cmdname)
-
-
-def command(*args, **kwargs):
-    """Decorator for registering a CLI command"""
-
-    def _defines_method(cls, method_name):
-        method = getattr(cls, method_name, None)
-        return callable(method)
-
-    def _command(cmdclass: object):
-        if not inspect.isclass(cmdclass):
-            raise TypeError("nvtest.plugins.command must wrap classes")
-
-        for method in ("add_options", "setup", "run", "teardown"):
-            if not _defines_method(cmdclass, method):
-                raise AttributeError(
-                    f"{cmdclass.__name__} must define a {method} method"
-                )
-
-        for attr in ("description",):
-            if not hasattr(cmdclass, attr):
-                raise AttributeError(
-                    f"{cmdclass.__name__} must define a {attr} attribute"
-                )
-
-        if not hasattr(cmdclass, "name"):
-            cmdclass.name = cmdclass.__name__.lower()
-        _manager._add_command(cmdclass, family)
-
-        @wraps(cmdclass, updated=())
-        class _wrapped(cmdclass):  # type: ignore
-            ...
-
-        return _wrapped
-
-    if len(args) > 1:
-        n = len(args)
-        raise TypeError(f"command() takes 1 positional argument but {n} were given")
-    elif args and kwargs:
-        family = kwargs.pop("family", None)
-        if kwargs:
-            kwd = next(iter(kwargs))
-            raise TypeError(f"command() got an unexpected keyword argument {kwd!r}")
-        return _command(args[0])
-    elif kwargs:
-        family = kwargs.pop("family", None)
-        if kwargs:
-            kwd = next(iter(kwargs))
-            raise TypeError(f"command() got an unexpected keyword argument {kwd!r}")
-        return _command
-    elif args:
-        family = None
-        return _command(args[0])
-    else:
-        family = None
-        return _command
+def get(scope: str, stage: str, name: str) -> Optional[Any]:
+    return _manager.get(scope, stage, name)
 
 
 def register(name: str, *, scope: str, stage: str):

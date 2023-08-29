@@ -1,7 +1,6 @@
 import argparse
 from typing import TYPE_CHECKING
 
-import nvtest
 from _nvtest.environment import Environment
 from _nvtest.test.partition import dump_partitions
 from _nvtest.test.partition import partition_n
@@ -18,7 +17,6 @@ if TYPE_CHECKING:
     from _nvtest.session import Session
 
 
-@nvtest.plugin.command(family="batching")
 class CreateBatches(Command, ConsolePrinter):
     name = "create-batches"
     description = "Create test batches, but don't run them"

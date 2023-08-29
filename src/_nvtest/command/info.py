@@ -1,16 +1,13 @@
 import argparse
 from typing import TYPE_CHECKING
 
-import nvtest
-
-from .nvtest_run_tests import RunTests
+from .run_tests import RunTests
 
 if TYPE_CHECKING:
     from _nvtest.config import Config
     from _nvtest.session import Session
 
 
-@nvtest.plugin.command(family="info")
 class Info(RunTests):
     name = "info"
     description = "Print information about a test run"

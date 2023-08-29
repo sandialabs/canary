@@ -1,9 +1,6 @@
-import nvtest
-
-from .nvtest_run_tests import RunTests
+from .run_tests import RunTests
 
 
-@nvtest.plugin.command(family="testing")
 class Setup(RunTests):
     description = "Setup tests, but don't run them"
     name = "setup"

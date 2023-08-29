@@ -18,14 +18,14 @@ def bootstrap_llvm_profile(session: nvtest.Session) -> None:
 
 
 @nvtest.plugin.register("setup-llvm-profile", scope="test", stage="setup")
-def setup_llvm_profile(session: nvtest.Session, test: nvtest.TestCase) -> None:
+def setup_llvm_profile(session: nvtest.Session, test: nvtest.TestCase, **kwds) -> None:
     llvm_profile = getattr(session.option, "llvm_profile", False)
     if llvm_profile:
         test.add_default_env("LLVM_PROFILE_FILE", "llvm-profile.raw")
 
 
 @nvtest.plugin.register("teardown-llvm-profile", scope="test", stage="teardown")
-def teardown_llvm_profile(session: nvtest.Session, test: nvtest.TestCase):
+def teardown_llvm_profile(session: nvtest.Session, test: nvtest.TestCase, **kwds):
     llvm_profile = getattr(session.option, "llvm_profile", False)
     if not llvm_profile:
         return

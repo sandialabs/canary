@@ -1,8 +1,10 @@
 import argparse
+import inspect
 import re
 import textwrap as textwrap
+from typing import Optional
+from typing import Type
 
-from .. import plugin
 from ..util import tty
 
 
@@ -30,8 +32,33 @@ class ArgumentParser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.register("type", None, identity)
+        self.__subcommands: dict[str, Type] = {}
 
-    def add_command(self, cmdname: str, cmdclass: object) -> None:
+    @staticmethod
+    def _validate_command_class(cmdclass: Type):
+        def _defines_method(cls, method_name):
+            method = getattr(cls, method_name, None)
+            return callable(method)
+
+        if not inspect.isclass(cmdclass):
+            raise TypeError("nvtest.plugins.command must wrap classes")
+
+        for method in ("add_options", "setup", "run", "teardown"):
+            if not _defines_method(cmdclass, method):
+                raise AttributeError(
+                    f"{cmdclass.__name__} must define a {method} method"
+                )
+
+        for attr in ("description",):
+            if not hasattr(cmdclass, attr):
+                raise AttributeError(
+                    f"{cmdclass.__name__} must define a {attr} attribute"
+                )
+
+        if not hasattr(cmdclass, "name"):
+            cmdclass.name = cmdclass.__name__.lower()
+
+    def add_command(self, cmdname: str, cmdclass: Type) -> None:
         """Add one subcommand to this parser."""
         # lazily initialize any subparsers
         if not hasattr(self, "subparsers"):
@@ -39,6 +66,8 @@ class ArgumentParser(argparse.ArgumentParser):
             if self._actions[-1].dest == "command":
                 self._remove_action(self._actions[-1])
             self.subparsers = self.add_subparsers(metavar="COMMAND", dest="command")
+
+        self._validate_command_class(cmdclass)
 
         subparser = self.subparsers.add_parser(
             cmdname,
@@ -50,6 +79,13 @@ class ArgumentParser(argparse.ArgumentParser):
         )
         subparser.register("type", None, identity)
         cmdclass.add_options(subparser)  # type: ignore
+        self.__subcommands[cmdname] = cmdclass
+
+    def get_command(self, cmdname: str) -> Optional[Type]:
+        for (name, cmdclass) in self.__subcommands.items():
+            if name == cmdname:
+                return cmdclass
+        return None
 
     def remove_argument(self, opt_string):
         for action in self._actions:
@@ -179,8 +215,5 @@ def make_argument_parser(**kwargs):
         version="1.0",
         help="show version and exit",
     )
-
-    for command in plugin.commands():
-        parser.add_command(command.name, command)
 
     return parser

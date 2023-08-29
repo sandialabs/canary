@@ -5,13 +5,12 @@ from typing import Optional
 from typing import Sequence
 from typing import Union
 
-import nvtest
 from _nvtest.runner import valid_runners
 from _nvtest.util.time import time_in_seconds
 
 from .common import add_mark_arguments
-from .nvtest_run_tests import RunTests
-from .nvtest_run_tests import default_timeout
+from .run_tests import RunTests
+from .run_tests import default_timeout
 
 if TYPE_CHECKING:
     from _nvtest.config import Config
@@ -33,7 +32,6 @@ class RunnerOptions(argparse.Action):
         setattr(namespace, self.dest, runner_opts)
 
 
-@nvtest.plugin.command(family="batching")
 class RunBatched(RunTests):
     name = "run-batched"
     description = "Run the tests in batches through a scheduler"

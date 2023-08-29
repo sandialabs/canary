@@ -4,21 +4,19 @@ import os
 import time
 from typing import TYPE_CHECKING
 
-import nvtest
 from _nvtest.executor import SingleBatchDirectExecutor
 from _nvtest.test.partition import Partition
 from _nvtest.test.partition import load_partition
 from _nvtest.util.returncode import compute_returncode
 from _nvtest.util.time import time_in_seconds
 
-from .nvtest_run_tests import RunTests
+from .run_tests import RunTests
 
 if TYPE_CHECKING:
     from _nvtest.config import Config
     from _nvtest.session import Session
 
 
-@nvtest.plugin.command(family="batching")
 class RunBatch(RunTests):
     name = "run-batch"
     description = "Run a single batch of tests.  Run nv.test create-batches first"

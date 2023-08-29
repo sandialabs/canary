@@ -2,7 +2,6 @@ import argparse
 import sys
 from typing import TYPE_CHECKING
 
-import nvtest
 from _nvtest.environment import Environment
 from _nvtest.test.testcase import TestCase
 from _nvtest.util import graph
@@ -20,7 +19,6 @@ if TYPE_CHECKING:
     from _nvtest.session import Session
 
 
-@nvtest.plugin.command(family="info")
 class Find(Command, ConsolePrinter):
     name = "find"
     description = "Search paths for test files"

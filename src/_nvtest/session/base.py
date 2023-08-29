@@ -109,7 +109,7 @@ class Session:
         self.parser.parse_args(self.invocation_params.args, namespace=self.option)
         self.config = Config()
 
-        cmd_class = plugin.get_command(self.option.command)
+        cmd_class = self.parser.get_command(self.option.command)
         if not cmd_class:
             raise ValueError(f"Unknown command {self.option.command!r}")
         self.command = cmd_class(self.config, self)

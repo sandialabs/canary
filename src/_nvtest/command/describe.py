@@ -2,7 +2,6 @@ import argparse
 import os
 import sys
 
-import nvtest
 from _nvtest.test.testfile import AbstractTestFile
 from _nvtest.util import graph
 
@@ -10,7 +9,6 @@ from .common import Command
 from .common import add_mark_arguments
 
 
-@nvtest.plugin.command(family="info")
 class Describe(Command):
     name = "describe"
     description = "Print information about a test"

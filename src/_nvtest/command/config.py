@@ -1,11 +1,8 @@
 import argparse
 
-import nvtest
-
 from .common import Command
 
 
-@nvtest.plugin.command(family="info")
 class Config(Command):
     name = "config"
     description = "Show configuration variable values"

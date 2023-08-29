@@ -1,4 +1,3 @@
-import nvtest
 from _nvtest.test.testcase import TestCase
 from _nvtest.util.environ import tmp_environ
 from _nvtest.util.filesystem import working_dir
@@ -6,7 +5,6 @@ from _nvtest.util.filesystem import working_dir
 from .common import Command
 
 
-@nvtest.plugin.command(family="testing")
 class RunCase(Command):
     name = "run-case"
     description = "Run an individual test case"

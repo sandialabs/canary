@@ -3,7 +3,6 @@ import json
 import os
 from typing import TYPE_CHECKING
 
-import nvtest
 from _nvtest.test.partition import merge
 from _nvtest.util import tty
 
@@ -14,7 +13,6 @@ if TYPE_CHECKING:
     from _nvtest.session import Session
 
 
-@nvtest.plugin.command(family="batching")
 class MergeBatches(Command):
     name = "merge-batches"
     description = "Merge batched test results"

@@ -5,6 +5,7 @@ from typing import Optional
 from typing import Union
 
 import nvtest
+from _nvtest.session import Session
 from _nvtest.util import tty
 from _nvtest.util.singleton import Singleton
 
@@ -70,7 +71,9 @@ _runtimes = Singleton(Runtimes)
 
 
 @nvtest.plugin.register("runtime", scope="test", stage="setup")
-def runtime(case: "TestCase", on_options: Optional[list[str]] = []) -> None:
+def runtime(
+    session: Session, case: "TestCase", on_options: Optional[list[str]] = []
+) -> None:
     if case.skip:
         return None
     rt = _runtimes.get(case, options=on_options)
