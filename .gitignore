@@ -2,7 +2,9 @@
 *.pyc
 TestResults*
 TestPartitions*
-Test*
+TestBatches*
+_test-cache
+.nvtest
 .mypy_cache
 vvt
 partition.p.*
