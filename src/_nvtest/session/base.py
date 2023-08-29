@@ -1,10 +1,10 @@
-import argparse
 import dataclasses
 import enum
 import json
 import os
 import sys
 import time
+from argparse import Namespace
 from contextlib import contextmanager
 from typing import Generator
 from typing import Iterable
@@ -20,6 +20,7 @@ from ..util.filesystem import accessible
 from ..util.filesystem import force_remove
 from ..util.filesystem import mkdirp
 from ..util.time import hhmmss
+from .argparsing import ArgumentParser
 from .argparsing import make_argument_parser
 
 
@@ -68,8 +69,8 @@ class Session:
     command: object
     rel_workdir: str
     config: Config
-    parser: argparse.ArgumentParser
-    option: argparse.Namespace
+    parser: ArgumentParser
+    option: Namespace
     mode: Mode
     orig_invocation_params: InvocationParams
 
@@ -101,11 +102,10 @@ class Session:
         tty.verbose("Bootstrapping test session")
         self.load_builtin_plugins()
 
-        for (name, func) in plugin.plugins("session", "bootstrap"):
+        self.parser: ArgumentParser = make_argument_parser()
+        for (_, func) in plugin.plugins("session", "bootstrap"):
             func(self)
-
-        self.parser: argparse.ArgumentParser = make_argument_parser()
-        self.option: argparse.Namespace = argparse.Namespace()
+        self.option: Namespace = Namespace()
         self.parser.parse_args(self.invocation_params.args, namespace=self.option)
         self.config = Config()
 
@@ -252,13 +252,8 @@ class Session:
                 os.environ[var] = val
 
     def load_builtin_plugins(self) -> None:
-        import importlib
-        import pkgutil
-
         import _nvtest.plugins
 
-        for finder, name, ispkg in pkgutil.iter_modules(
-            _nvtest.plugins.__path__, _nvtest.plugins.__name__ + "."
-        ):
-            if name.startswith("_nvtest.plugins.nvtest_"):
-                importlib.import_module(name)
+        path = _nvtest.plugins.__path__
+        namespace = _nvtest.plugins.__name__
+        plugin.load(path, namespace)

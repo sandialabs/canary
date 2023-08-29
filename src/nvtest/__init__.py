@@ -3,12 +3,17 @@ from typing import Iterable
 from typing import Sequence
 from typing import Union
 
-import _nvtest.plugin as plugin  # noqa: F401
-from _nvtest.error import TestDiffed  # noqa: F401
-from _nvtest.error import TestFailed  # noqa: F401
-from _nvtest.error import TestSkipped  # noqa: F401
-from _nvtest.main import console_main  # noqa: F401
-from _nvtest.test.enums import Result  # noqa: F401
+import _nvtest.plugin as plugin
+from _nvtest.error import TestDiffed
+from _nvtest.error import TestFailed
+from _nvtest.error import TestSkipped
+from _nvtest.main import console_main
+from _nvtest.session.base import Session
+from _nvtest.test.enums import Result
+from _nvtest.test.testcase import TestCase
+from _nvtest.util import tty
+from _nvtest.util.executable import Executable
+from _nvtest.util.filesystem import which
 
 if TYPE_CHECKING:
     from _nvtest.test.testfile import AbstractTestFile

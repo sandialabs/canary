@@ -1,6 +1,5 @@
 from typing import Any
 
-from .. import plugin
 from ..test.enums import Result
 from ..test.testcase import TestCase
 from .base import Runner
@@ -22,7 +21,4 @@ class DirectRunner(Runner):
             case.run(*args)
         except BaseException as e:
             case.result = Result("FAIL", reason=e.args[0])
-        finally:
-            for (_, func) in plugin.plugins("test", "teardown"):
-                func(case)
         return vars(case)

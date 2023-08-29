@@ -2,7 +2,7 @@ import argparse
 import re
 import textwrap as textwrap
 
-from ..plugin import nvtest_commands
+from .. import plugin
 from ..util import tty
 
 
@@ -64,6 +64,15 @@ class ArgumentParser(argparse.ArgumentParser):
                 if (opts and opts[0] == opt_string) or group_action.dest == opt_string:
                     action._group_actions.remove(group_action)
                     return
+
+    def add_plugin_argument(self, *args, **kwargs):
+        title = "plugin options"
+        for group in self._action_groups:
+            if group.title == title:
+                break
+        else:
+            group = self.add_argument_group(title)
+        group.add_argument(*args, **kwargs)
 
 
 def identity(arg):
@@ -171,7 +180,7 @@ def make_argument_parser(**kwargs):
         help="show version and exit",
     )
 
-    for command in nvtest_commands:
+    for command in plugin.commands():
         parser.add_command(command.name, command)
 
     return parser

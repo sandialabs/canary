@@ -111,8 +111,13 @@ class Executor:
         with self.session.rc_environ():
             for case in self.cases:
                 with working_dir(case.exec_dir):
-                    for (_, func) in plugin.plugins("test", "teardown"):
-                        func(case, on_options=self.session.option.on_options)
+                    for (name, func) in plugin.plugins("test", "teardown"):
+                        tty.verbose(f"Calling the {name} plugin")
+                        func(
+                            self.session,
+                            case,
+                            on_options=self.session.option.on_options,
+                        )
                 with working_dir(self.cache_dir):
                     case.teardown()
         tty.verbose("Done tearing down up executor")
@@ -148,7 +153,7 @@ class Executor:
 
             with working_dir(case.exec_dir):
                 for (_, func) in plugin.plugins("test", "setup"):
-                    func(case, on_options=self.session.option.on_options)
+                    func(self.session, case, on_options=self.session.option.on_options)
 
         tty.verbose("Done setting up test cases")
 
