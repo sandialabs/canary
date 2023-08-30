@@ -6,6 +6,7 @@ from typing import Sequence
 from typing import Union
 
 from _nvtest.runner import valid_runners
+from _nvtest.session.argparsing import ArgumentParser
 from _nvtest.util.time import time_in_seconds
 from _nvtest.util.tty.color import colorize
 
@@ -45,7 +46,7 @@ class RunBatched(RunTests):
         self.option.batch_size = self.session.option.batch_size
 
     @staticmethod
-    def add_options(parser: argparse.ArgumentParser):
+    def add_options(parser: ArgumentParser):
         add_mark_arguments(parser)
         add_cdash_arguments(parser)
         parser.add_argument(
@@ -80,10 +81,10 @@ class RunBatched(RunTests):
             help="Work load manager [default: %(default)s]",
         )
         help_msg = colorize(
-            "Pass @*{option} as an option to the runner. If @*{option} contains commas, "
-            "it is split into multiple options at the commas. You can use this syntax "
-            "to pass an argument to the option. For example, -R,-A,XXXX passes -A XXXX "
-            "to the runner."
+            "Pass @*{option} as an option to the runner. "
+            "If @*{option} contains commas, it is split into multiple options at the "
+            "commas. You can use this syntax to pass an argument to the option. "
+            "For example, -R,-A,XXXX passes -A XXXX to the runner."
         )
         parser.add_argument(
             "-R",

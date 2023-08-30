@@ -106,7 +106,7 @@ class Executor:
         stage["end"] = datetime.now()
         tty.verbose("Done running test cases")
 
-    def finish(self):
+    def teardown(self):
         tty.verbose("Cleaning up executor")
         with self.session.rc_environ():
             for case in self.cases:
@@ -119,7 +119,7 @@ class Executor:
                             on_options=self.session.option.on_options,
                         )
                 with working_dir(self.cache_dir):
-                    case.finish()
+                    case.teardown()
         tty.verbose("Done tearing down up executor")
         return
 

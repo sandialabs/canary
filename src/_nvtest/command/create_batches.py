@@ -1,7 +1,8 @@
-import argparse
+from argparse import Namespace
 from typing import TYPE_CHECKING
 
 from _nvtest.environment import Environment
+from _nvtest.session.argparsing import ArgumentParser
 from _nvtest.test.partition import dump_partitions
 from _nvtest.test.partition import partition_n
 from _nvtest.test.partition import partition_t
@@ -24,7 +25,7 @@ class CreateBatches(Command, ConsolePrinter):
     def __init__(self, config: "Config", session: "Session") -> None:
         self.config = config
         self.session = session
-        self.option = argparse.Namespace(
+        self.option = Namespace(
             on_options=self.session.option.on_options,
             keyword_expr=self.session.option.keyword_expr,
             timeout=None,
@@ -80,11 +81,11 @@ class CreateBatches(Command, ConsolePrinter):
         self.print_section_header(f"Finished test case batching ({duration:.2} s.)")
         return 0
 
-    def finish(self):
+    def teardown(self):
         ...
 
     @staticmethod
-    def add_options(parser: argparse.ArgumentParser):
+    def add_options(parser: ArgumentParser):
         add_mark_arguments(parser)
         g = parser.add_mutually_exclusive_group()
         g.add_argument(

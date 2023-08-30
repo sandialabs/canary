@@ -19,6 +19,7 @@ from ..util import tty
 from ..util.filesystem import accessible
 from ..util.filesystem import force_remove
 from ..util.filesystem import mkdirp
+from ..util.misc import ns2dict
 from ..util.time import hhmmss
 from .argparsing import ArgumentParser
 from .argparsing import make_argument_parser
@@ -191,6 +192,7 @@ class Session:
         data = {
             "args": list(self.invocation_params.args),
             "dir": self.invocation_params.dir,
+            "option": ns2dict(self.option),
             "config": self.config.asdict(),
         }
         with open(self.archive_file, "w") as fh:
@@ -219,8 +221,8 @@ class Session:
     def run(self) -> int:
         return self.command.run()  # type: ignore
 
-    def finish(self) -> None:
-        self.command.finish()  # type: ignore
+    def teardown(self) -> None:
+        self.command.teardown()  # type: ignore
         self.finish = time.time()
         if self.option.timeit:
             duration = self.finish - self.start

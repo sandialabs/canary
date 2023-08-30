@@ -1,7 +1,7 @@
-import argparse
 import os
 import sys
 
+from _nvtest.session.argparsing import ArgumentParser
 from _nvtest.test.testfile import AbstractTestFile
 from _nvtest.util import graph
 
@@ -18,7 +18,7 @@ class Describe(Command):
         return "anonymous"
 
     @staticmethod
-    def add_options(parser: argparse.ArgumentParser):
+    def add_options(parser: ArgumentParser):
         add_mark_arguments(parser)
         parser.add_argument("file", help="Test file")
 

@@ -8,7 +8,10 @@ from typing import TYPE_CHECKING
 from _nvtest.environment import Environment
 from _nvtest.error import StopExecution
 from _nvtest.executor import Executor
+from _nvtest.io.cdash import Reporter as CDashReporter
+from _nvtest.io.cdash import TestData as CDashTestData
 from _nvtest.mark.match import deselect_by_keyword
+from _nvtest.session.argparsing import ArgumentParser
 from _nvtest.test.enums import Result
 from _nvtest.test.enums import Skip
 from _nvtest.test.testcase import TestCase
@@ -17,8 +20,6 @@ from _nvtest.util.graph import TopologicalSorter
 from _nvtest.util.misc import ns2dict
 from _nvtest.util.returncode import compute_returncode
 from _nvtest.util.time import time_in_seconds
-from _nvtest.io.cdash import Reporter as CDashReporter
-from _nvtest.io.cdash import TestData as CDashTestData
 
 from .common import Command
 from .common import ConsolePrinter
@@ -116,16 +117,16 @@ class RunTests(Command, ConsolePrinter):
         self.finish = time.time()
         return compute_returncode(self.cases)
 
-    def finish(self):
+    def teardown(self):
         if hasattr(self, "executor"):
-            self.executor.finish()
+            self.executor.teardown()
         if self.session.option.cdash_options:
             self.dump_cdash()
         duration = self.finish - self.start
         self.print_test_results_summary(duration)
 
     @staticmethod
-    def add_options(parser: argparse.ArgumentParser):
+    def add_options(parser: ArgumentParser):
         add_mark_arguments(parser)
         add_cdash_arguments(parser)
         parser.add_argument(
@@ -158,7 +159,12 @@ class RunTests(Command, ConsolePrinter):
         cases = db.setdefault("cases", [])
         for case in self.cases:
             deps = [d.id for d in case.dependencies]
-            kwds = {"id": case.id, "dependencies": deps, "skip": bool(case.skip)}
+            kwds = {
+                "name": str(case),
+                "id": case.id,
+                "dependencies": deps,
+                "skip": case.skip.reason or None,
+            }
             cases.append(kwds)
         db["batches"] = None
         if self.option.batch_size is not None:

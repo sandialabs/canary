@@ -1,8 +1,8 @@
-import argparse
 import sys
 from typing import TYPE_CHECKING
 
 from _nvtest.environment import Environment
+from _nvtest.session.argparsing import ArgumentParser
 from _nvtest.test.testcase import TestCase
 from _nvtest.util import graph
 from _nvtest.util import tty
@@ -34,7 +34,7 @@ class Find(Command, ConsolePrinter):
         return "anonymous"
 
     @staticmethod
-    def add_options(parser: argparse.ArgumentParser):
+    def add_options(parser: ArgumentParser):
         group = parser.add_mutually_exclusive_group()
         group.add_argument(
             "-p",
@@ -90,7 +90,7 @@ class Find(Command, ConsolePrinter):
         else:
             return self._print(cases_to_run)
 
-    def finish(self) -> None:
+    def teardown(self) -> None:
         ...
 
     def _print_paths(self, cases_to_run: list[TestCase]):

@@ -2,12 +2,16 @@ import argparse
 import os
 import sys
 from typing import TYPE_CHECKING
-from typing import Optional, Sequence, Any, Union
+from typing import Any
+from typing import Optional
+from typing import Sequence
+from typing import Union
 
 if TYPE_CHECKING:
     from _nvtest.config import Config
     from _nvtest.session import Session
 
+from _nvtest.session.argparsing import ArgumentParser
 from _nvtest.test.enums import Result
 from _nvtest.test.testcase import TestCase
 from _nvtest.util import tty
@@ -16,7 +20,7 @@ from _nvtest.util.tty.color import colorize
 default_timeout = 60 * 60
 
 
-def add_mark_arguments(parser: argparse.ArgumentParser) -> None:
+def add_mark_arguments(parser: ArgumentParser) -> None:
     parser.add_argument(
         "-k",
         dest="keyword_expr",
@@ -43,6 +47,8 @@ valid_cdash_options = {
     "stamp": "The timestamp of the build",
     "build": "The build name",
 }
+
+
 class CDashOption(argparse.Action):
     def __call__(
         self,
@@ -57,13 +63,17 @@ class CDashOption(argparse.Action):
         for u_option in u_options:
             opt, value = u_option.split("=")
             if opt not in valid_cdash_options:
-                raise argparse.ArgumentError(self, f"{opt!r} is not a valid CDash option")
+                raise argparse.ArgumentError(
+                    self, f"{opt!r} is not a valid CDash option"
+                )
             options[opt] = value
         setattr(namespace, self.dest, options)
 
 
-def add_cdash_arguments(parser: argparse.ArgumentParser) -> None:
-    s_opt = ", ".join(colorize("@*{%s}: %s" % item) for item in valid_cdash_options.items())
+def add_cdash_arguments(parser: ArgumentParser) -> None:
+    s_opt = ", ".join(
+        colorize("@*{%s}: %s" % item) for item in valid_cdash_options.items()
+    )
     help_msg = colorize(
         "Write CDash XML files and (optionally) post to CDash. "
         "Pass @*{option} to the CDash writer. @*{option} is an '=' separated "
@@ -99,7 +109,7 @@ class Command:
         raise NotImplementedError
 
     @staticmethod
-    def add_options(parser: argparse.ArgumentParser):
+    def add_options(parser: ArgumentParser):
         raise NotImplementedError
 
     def setup(self, *args, **kwargs):
@@ -108,7 +118,7 @@ class Command:
     def run(self, *args, **kwargs):
         raise NotImplementedError
 
-    def finish(self, *args, **kwargs):
+    def teardown(self, *args, **kwargs):
         ...
 
 
@@ -182,7 +192,6 @@ class ConsolePrinter:
                 for case in totals[Result.NOTDONE]:
                     self.print_text("%s %s" % (case.result.cname, str(case)))
             if Result.SKIP in totals:
-
                 for case in totals[Result.SKIP]:
                     cname = case.result.cname
                     reason = case.skip.reason

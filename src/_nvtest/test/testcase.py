@@ -413,5 +413,5 @@ class TestCase:
                 fh.write(f"    {key!r}: {val!r},\n")
             fh.write("}\n")
 
-    def finish(self) -> None:
-        pass
+    def teardown(self) -> None:
+        ...

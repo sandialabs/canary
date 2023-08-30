@@ -43,7 +43,7 @@ class ArgumentParser(argparse.ArgumentParser):
         if not inspect.isclass(cmdclass):
             raise TypeError("nvtest.plugins.command must wrap classes")
 
-        for method in ("add_options", "setup", "run", "finish"):
+        for method in ("add_options", "setup", "run", "teardown"):
             if not _defines_method(cmdclass, method):
                 raise AttributeError(
                     f"{cmdclass.__name__} must define a {method} method"

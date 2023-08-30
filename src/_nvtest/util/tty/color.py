@@ -221,6 +221,11 @@ def clen(string):
     return len(re.sub(r"\033[^m]*m", "", string))
 
 
+def cstrip(string):
+    """Strip ansi color sequences from string"""
+    return re.sub(r"\033[^m]*m", "", string)
+
+
 def cextra(string):
     """Length of extra color characters in a string"""
     return len("".join(re.findall(r"\033[^m]*m", string)))

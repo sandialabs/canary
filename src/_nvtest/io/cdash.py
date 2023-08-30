@@ -1,23 +1,21 @@
 import glob
-import sys
 import os
+import sys
 import time
 import xml.dom.minidom as xdom
-from io import StringIO
 from typing import Optional
 
 import nvtest
 
-from .. import config
 from ..config.machine import machine_config
+from ..session import Session
+from ..test.enums import Result
+from ..test.testcase import TestCase
 from ..util import cdash
 from ..util import tty
 from ..util.filesystem import mkdirp
 from ..util.time import strftimestamp
 from ..util.time import timestamp
-from ..test.testcase import TestCase
-from ..test.enums import Result
-from ..session import Session
 
 
 class TestData:
@@ -65,10 +63,10 @@ class Reporter:
         *,
         test_data: TestData,
         buildname: str,
-        project: Optional[str]=None,
-        baseurl: Optional[str]=None,
-        buildgroup: Optional[str]=None,
-        site: Optional[str]=os.uname().nodename,
+        project: Optional[str] = None,
+        baseurl: Optional[str] = None,
+        buildgroup: Optional[str] = None,
+        site: Optional[str] = os.uname().nodename,
     ):
         if baseurl is not None and project is None:
             raise ValueError("CDash base url requires a project name")
@@ -158,7 +156,6 @@ class Reporter:
         filename = os.path.join(dest, "Test.xml")
         tty.info(f"WRITING: Test.xml to {filename}", prefix="")
         starttime = self.data.start
-        status = self.data.status
 
         doc = xdom.Document()
         root = self.site_node()
@@ -170,6 +167,7 @@ class Reporter:
             add_text_node(testlist, "Test", f"./{case.fullname}")
         l1.appendChild(testlist)
 
+        status: str
         for case in self.data:
             exit_value = case.returncode
             fail_reason = None
@@ -214,10 +212,13 @@ class Reporter:
                 add_measurement(results, name="Fail Reason", value=fail_reason)
             add_measurement(results, name="Completion Status", value=completion_status)
             add_measurement(results, name="Command Line", cdata=case.cmd_line)
+            add_measurement(results, name="Processors", value=int(case.size or 0))
             add_measurement(
-                results, name="Processors", value=int(case.size or 0)
+                results,
+                value=case.compressed_log(),
+                encoding="base64",
+                compression="gzip",
             )
-            add_measurement(results, value=case.compressed_log(), encoding="base64", compression="gzip")
             test_node.appendChild(results)
 
             labels = doc.createElement("Labels")
@@ -237,8 +238,7 @@ class Reporter:
     def write_notes_xml(self, dest: str = ".") -> str:
         filename = os.path.join(dest, "Notes.xml")
         tty.info(f"WRITING: Notes.xml to {filename}", prefix="")
-        s = StringIO()
-        notes = {}
+        notes: dict[str, str] = {}
         doc = xdom.Document()
         root = self.site_node()
         notes_el = doc.createElement("Notes")

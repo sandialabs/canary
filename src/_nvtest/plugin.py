@@ -64,12 +64,16 @@ def get(scope: str, stage: str, name: str) -> Optional[Any]:
 
 def register(name: str, *, scope: str, stage: str):
     """Decorator to register a callback"""
+
     def decorator(func: Callable):
         functools.wraps(func)
+
         def wrapper(*args: Any, **kwargs: Any):
             return func(*args, **kwargs)
+
         _manager.register(name, func, scope, stage)
         return wrapper
+
     return decorator
 
 
