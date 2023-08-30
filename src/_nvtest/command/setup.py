@@ -13,5 +13,5 @@ class Setup(RunTests):
         self.print_text(f"Tests setup and ready to run in {self.session.rel_workdir}")
         return 0
 
-    def teardown(self):
+    def finish(self):
         ...

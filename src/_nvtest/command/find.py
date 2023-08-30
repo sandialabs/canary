@@ -90,7 +90,7 @@ class Find(Command, ConsolePrinter):
         else:
             return self._print(cases_to_run)
 
-    def teardown(self) -> None:
+    def finish(self) -> None:
         ...
 
     def _print_paths(self, cases_to_run: list[TestCase]):

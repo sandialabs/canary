@@ -35,5 +35,5 @@ class Info(RunTests):
         self.print_test_results_summary()
         return 0
 
-    def teardown(self):
+    def finish(self):
         ...

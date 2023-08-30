@@ -305,10 +305,16 @@ class TestCase:
         data = self.asdict()
         done = self.result not in (Result.NOTRUN, Result.SKIP, Result.NOTDONE)
         if self.logfile and done:
+            data["log"] = self.compressed_log()
+        return json.dumps(data)
+
+    def compressed_log(self) -> str:
+        done = self.result not in (Result.NOTRUN, Result.SKIP, Result.NOTDONE)
+        if self.logfile and done:
             kb_to_keep = 2 if self.result == Result.PASS else 300
             compressed_log = compress_file(self.logfile, kb_to_keep)
-            data["log"] = compressed_log
-        return json.dumps(data)
+            return compressed_log
+        return "Log not found"
 
     def setup(
         self,
@@ -407,5 +413,5 @@ class TestCase:
                 fh.write(f"    {key!r}: {val!r},\n")
             fh.write("}\n")
 
-    def teardown(self) -> None:
+    def finish(self) -> None:
         pass

@@ -53,7 +53,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     finally:
         os.chdir(session.startdir)
         if initstate >= 1:
-            session.teardown()
+            session.finish()
     return session.exitstatus
 
 

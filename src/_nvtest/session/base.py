@@ -219,8 +219,8 @@ class Session:
     def run(self) -> int:
         return self.command.run()  # type: ignore
 
-    def teardown(self) -> None:
-        self.command.teardown()  # type: ignore
+    def finish(self) -> None:
+        self.command.finish()  # type: ignore
         self.finish = time.time()
         if self.option.timeit:
             duration = self.finish - self.start

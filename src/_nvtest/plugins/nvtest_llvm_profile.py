@@ -4,7 +4,7 @@ from typing import Optional
 import nvtest
 
 
-@nvtest.plugin.register("bootstrap-llvm-profile", scope="session", stage="bootstrap")
+@nvtest.plugin.register("llvm-profile", scope="session", stage="bootstrap")
 def bootstrap_llvm_profile(session: nvtest.Session) -> None:
     session.parser.add_plugin_argument(
         "--llvm-profile",
@@ -17,27 +17,27 @@ def bootstrap_llvm_profile(session: nvtest.Session) -> None:
     )
 
 
-@nvtest.plugin.register("setup-llvm-profile", scope="test", stage="setup")
+@nvtest.plugin.register("llvm-profile", scope="test", stage="setup")
 def setup_llvm_profile(session: nvtest.Session, test: nvtest.TestCase, **kwds) -> None:
     llvm_profile = getattr(session.option, "llvm_profile", False)
     if llvm_profile:
         test.add_default_env("LLVM_PROFILE_FILE", "llvm-profile.raw")
 
 
-@nvtest.plugin.register("teardown-llvm-profile", scope="test", stage="teardown")
-def teardown_llvm_profile(session: nvtest.Session, test: nvtest.TestCase, **kwds):
+@nvtest.plugin.register("llvm-profile", scope="test", stage="finish")
+def finish_llvm_profile(session: nvtest.Session, test: nvtest.TestCase, **kwds):
     llvm_profile = getattr(session.option, "llvm_profile", False)
     if not llvm_profile:
         return
     program = getattr(test, "program", None)
     if program is None:
         nvtest.tty.warn(
-            f"teardown_llvm_profile: {test} does not define 'program', "
+            f"llvm_profile: {test} does not define 'program', "
             "profile data will not be merged"
         )
         return
     elif not os.path.exists(program):
-        nvtest.tty.error(f"teardown_llvm_profile: {program}: executable not found")
+        nvtest.tty.error(f"llvm_profile: {program}: executable not found")
         return
     f = _merge_profile_data(test)
     if f is not None:

@@ -80,7 +80,7 @@ class CreateBatches(Command, ConsolePrinter):
         self.print_section_header(f"Finished test case batching ({duration:.2} s.)")
         return 0
 
-    def teardown(self):
+    def finish(self):
         ...
 
     @staticmethod

@@ -7,7 +7,9 @@ from typing import Union
 
 from _nvtest.runner import valid_runners
 from _nvtest.util.time import time_in_seconds
+from _nvtest.util.tty.color import colorize
 
+from .common import add_cdash_arguments
 from .common import add_mark_arguments
 from .run_tests import RunTests
 from .run_tests import default_timeout
@@ -45,6 +47,7 @@ class RunBatched(RunTests):
     @staticmethod
     def add_options(parser: argparse.ArgumentParser):
         add_mark_arguments(parser)
+        add_cdash_arguments(parser)
         parser.add_argument(
             "--timeout",
             type=time_in_seconds,
@@ -76,14 +79,17 @@ class RunBatched(RunTests):
             choices=valid_runners,
             help="Work load manager [default: %(default)s]",
         )
+        help_msg = colorize(
+            "Pass @*{option} as an option to the runner. If @*{option} contains commas, "
+            "it is split into multiple options at the commas. You can use this syntax "
+            "to pass an argument to the option. For example, -R,-A,XXXX passes -A XXXX "
+            "to the runner."
+        )
         parser.add_argument(
             "-R",
             action=RunnerOptions,
             dest="runner_options",
             metavar="option",
-            help="Pass option as an option to the runner. If option contains commas, "
-            "it is split into multiple options at the commas. You can use this syntax "
-            "to pass an argument to the option. For example, -R,-A,XXXX passes -A XXXX "
-            "to the runner.",
+            help=help_msg,
         )
         parser.add_argument("search_paths", nargs="+", help="Search paths")

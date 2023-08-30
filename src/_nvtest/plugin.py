@@ -15,10 +15,10 @@ class Manager:
     def register(self, name: str, func: Callable, scope: str, stage: str) -> None:
         tty.verbose(f"Registering plugin {name}::{scope}::{stage}")
         if scope == "session":
-            if stage not in ("bootstrap", "setup", "teardown"):
+            if stage not in ("bootstrap", "setup", "finish"):
                 raise TypeError(f"register() got unexpected stage {stage!r}")
         elif scope == "test":
-            if stage not in ("setup", "teardown"):
+            if stage not in ("setup", "finish"):
                 raise TypeError(f"register() got unexpected stage {stage!r}")
         else:
             raise TypeError(f"register() got unexpected scope {scope!r}")
@@ -63,18 +63,14 @@ def get(scope: str, stage: str, name: str) -> Optional[Any]:
 
 
 def register(name: str, *, scope: str, stage: str):
-    """Decorator for register a callback"""
-
-    def inner(func: Callable):
+    """Decorator to register a callback"""
+    def decorator(func: Callable):
         functools.wraps(func)
-
-        def _func(*args: Any, **kwargs: Any):
+        def wrapper(*args: Any, **kwargs: Any):
             return func(*args, **kwargs)
-
-        _manager.register(name, _func, scope, stage)
-        return _func
-
-    return inner
+        _manager.register(name, func, scope, stage)
+        return wrapper
+    return decorator
 
 
 def load(path: list[str], namespace: str) -> None:

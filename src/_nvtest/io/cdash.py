@@ -1,70 +1,94 @@
 import glob
-import json
+import sys
 import os
 import time
 import xml.dom.minidom as xdom
 from io import StringIO
+from typing import Optional
 
 import nvtest
 
 from .. import config
+from ..config.machine import machine_config
 from ..util import cdash
 from ..util import tty
 from ..util.filesystem import mkdirp
 from ..util.time import strftimestamp
 from ..util.time import timestamp
+from ..test.testcase import TestCase
+from ..test.enums import Result
+from ..session import Session
+
+
+class TestData:
+    def __init__(self, session: Session, cases: Optional[list[TestCase]] = None):
+        self.command = f"nvtest {' '.join(session.invocation_params.args)}"
+        self.cases: list[TestCase] = []
+        self.start: float = sys.maxsize
+        self.finish: float = -1
+        self.status: int = 0
+        if cases is not None:
+            for case in cases:
+                self.add_test(case)
+
+    def __len__(self):
+        return len(self.cases)
+
+    def __iter__(self):
+        for case in self.cases:
+            yield case
+
+    def update_status(self, case: TestCase) -> None:
+        if case.result == Result.DIFF:
+            self.status |= 2**1
+        elif case.result == Result.FAIL:
+            self.status |= 2**2
+        elif case.result == Result.TIMEOUT:
+            self.status |= 2**3
+        elif case.result == Result.NOTDONE:
+            self.status |= 2**4
+        elif case.result == Result.NOTRUN:
+            self.status |= 2**5
+
+    def add_test(self, case: TestCase) -> None:
+        if self.start > case.start:
+            self.start = case.start
+        if self.finish < case.finish:
+            self.finish = case.finish
+        self.update_status(case)
+        self.cases.append(case)
 
 
 class Reporter:
     def __init__(
         self,
         *,
-        cdash_buildname,
-        files,
-        cdash_project=None,
-        cdash_baseurl=None,
-        cdash_buildgroup="Experimental",
-        cdash_site=os.uname().nodename,
-        dest="./cdash",
+        test_data: TestData,
+        buildname: str,
+        project: Optional[str]=None,
+        baseurl: Optional[str]=None,
+        buildgroup: Optional[str]=None,
+        site: Optional[str]=os.uname().nodename,
     ):
-        if cdash_baseurl is not None and cdash_project is None:
+        if baseurl is not None and project is None:
             raise ValueError("CDash base url requires a project name")
-        if cdash_project is not None and cdash_baseurl is None:
-            raise ValueError("CDash project name requires a base url")
-        self.test = test_data(*files)
-        self.dest = os.path.abspath(dest)
-        self.cdash_baseurl = cdash_baseurl
-        self.cdash_project = cdash_project
-        self.cdash_buildname = cdash_buildname
-        self.cdash_buildgroup = cdash_buildgroup
-        self.cdash_site = cdash_site
-        self.returncode = None
+        self.data = test_data
+        self.baseurl: Optional[str] = baseurl
+        self.project: Optional[str] = project
+        self.buildname: str = buildname
+        self.buildgroup: str = buildgroup or "Experimental"
+        self.site = site or os.uname().nodename
 
-    def __enter__(self):
-        self.returncode = None
-        self.test.load()
-        return self
-
-    def __exit__(self, ex_type, ex_value, ex_traceback):
-        self.returncode = 0 if ex_type is None else 1
-        return
-
-    def create_cdash_reports(self):
+    def create_cdash_reports(self, dest: str = "."):
         """Collect information and create reports"""
-        mkdirp(self.dest)
-        failed_stages = 0
-        self.write_test_xml()
-        if self.test.status != 0:
-            tty.error(f"test:status = {self.test.status}")
-            failed_stages += 1
-        self.write_notes_xml()
-        if self.cdash_baseurl is not None:
-            self.post_to_cdash()
-        if failed_stages:
-            raise RuntimeError("One or more BnB stages failed")
+        mkdirp(dest)
+        self.write_test_xml(dest=dest)
+        self.write_notes_xml(dest=dest)
+        if self.baseurl is not None:
+            self.post_to_cdash(dest)
 
-    def post_to_cdash(self):
-        xml_files = glob.glob(os.path.join(self.dest, "*.xml"))
+    def post_to_cdash(self, dest: str):
+        xml_files = glob.glob(os.path.join(dest, "*.xml"))
         upload_errors = 0
         for filename in xml_files:
             upload_errors += self.upload_to_cdash(filename)
@@ -72,53 +96,54 @@ class Reporter:
             tty.warn(f"{upload_errors} files failed to upload to CDash")
 
     @property
-    def cdash_generator(self):
+    def generator(self):
         return f"nvtest version {nvtest.version}"
 
     @property
-    def cdash_buildurl(self):
-        if self.cdash_baseurl is None:
+    def buildurl(self):
+        if self.baseurl is None:
             return None
-        server = cdash.server(self.cdash_baseurl, self.cdash_project)
+        server = cdash.server(self.baseurl, self.project)
         buildid = server.buildid(
-            sitename=self.cdash_site,
-            buildname=self.cdash_buildname,
-            buildstamp=self.cdash_buildstamp,
+            sitename=self.site,
+            buildname=self.buildname,
+            buildstamp=self.buildstamp,
         )
         if buildid is None:
             return None
-        return f"{self.cdash_baseurl}/buildSummary.php?buildid={buildid}"
+        return f"{self.baseurl}/buildSummary.php?buildid={buildid}"
 
     @property
-    def cdash_buildstamp(self):
-        fmt = f"%Y%m%d-%H%M-{self.cdash_buildgroup}"
-        return "BUILDSTAMP"  # TODO
-        return time.strftime(fmt, 0)
+    def buildstamp(self):
+        fmt = f"%Y%m%d-%H%M-{self.buildgroup}"
+        t = time.localtime(self.data.start)
+        return time.strftime(fmt, t)
 
     def upload_to_cdash(self, filename):
-        if self.cdash_baseurl is None:
+        if self.baseurl is None:
             return None
-        server = cdash.server(self.cdash_baseurl, self.cdash_project)
+        server = cdash.server(self.baseurl, self.project)
         rc = server.upload(
             filename=filename,
-            sitename=self.cdash_site,
-            buildname=self.cdash_buildname,
-            buildstamp=self.cdash_buildstamp,
+            sitename=self.site,
+            buildname=self.buildname,
+            buildstamp=self.buildstamp,
         )
         return rc
 
     def site_node(self):
         host = os.uname().nodename
-        os_release = config.get("machine:os:release")
-        os_name = config.get("machine:platform")
-        os_version = config.get("machine:os:fullversion")
-        os_platform = config.get("machine:arch")
+        machine = machine_config()
+        os_release = machine.os.release
+        os_name = machine.platform
+        os_version = machine.os.fullversion
+        os_platform = machine.arch
         doc = xdom.Document()
         root = doc.createElement("Site")
-        add_attr(root, "BuildName", self.cdash_buildname)
-        add_attr(root, "BuildStamp", self.cdash_buildstamp)
-        add_attr(root, "Name", self.cdash_site)
-        add_attr(root, "Generator", self.cdash_generator)
+        add_attr(root, "BuildName", self.buildname)
+        add_attr(root, "BuildStamp", self.buildstamp)
+        add_attr(root, "Name", self.site)
+        add_attr(root, "Generator", self.generator)
         compiler_name, compiler_version = "gnu", "9.3"
         add_attr(root, "CompilerName", compiler_name)
         add_attr(root, "CompilerVersion", compiler_version)
@@ -129,12 +154,11 @@ class Reporter:
         add_attr(root, "OSPlatform", os_platform)
         return root
 
-    def write_test_xml(self):
-        tty.info("Writing Test.xml")
-        starttime = self.test.results["starttime"]
-        command = self.test.results["command"]
-        status = self.test.results["returncode"]
-        tests = self.test.results["tests"]["cases"]
+    def write_test_xml(self, dest: str = ".") -> str:
+        filename = os.path.join(dest, "Test.xml")
+        tty.info(f"WRITING: Test.xml to {filename}", prefix="")
+        starttime = self.data.start
+        status = self.data.status
 
         doc = xdom.Document()
         root = self.site_node()
@@ -142,32 +166,31 @@ class Reporter:
         add_text_node(l1, "StartDateTime", strftimestamp(starttime))
         add_text_node(l1, "StartTestTime", int(starttime))
         testlist = doc.createElement("TestList")
-        for test in tests:
-            add_text_node(testlist, "Test", f"./{test['name']}")
+        for case in self.data:
+            add_text_node(testlist, "Test", f"./{case.fullname}")
         l1.appendChild(testlist)
 
-        for test in tests:
-            result = test["result"]
-            exit_value = test["returncode"]
+        for case in self.data:
+            exit_value = case.returncode
             fail_reason = None
-            if test.get("skip") or result in ("notdone", "notrun"):
+            if case.skip or case.result in (Result.NOTDONE, Result.NOTRUN):
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif result == "timeout":
+            elif case.result == Result.TIMEOUT:
                 status = "failed"
                 exit_code = completion_status = "Timeout"
-            elif result == "diff":
+            elif case.result == Result.DIFF:
                 status = "failed"
                 exit_code = "Diffed"
                 completion_status = "Completed"
                 fail_reason = "Test diffed"
-            elif result == "fail":
+            elif case.result == Result.FAIL:
                 status = "failed"
                 exit_code = "Failed"
                 completion_status = "Completed"
                 fail_reason = "Test execution failed"
-            elif result == "pass":
+            elif case.result == Result.PASS:
                 status = "passed"
                 exit_code = "Passed"
                 completion_status = "Completed"
@@ -177,33 +200,28 @@ class Reporter:
                 completion_status = "Completed"
             test_node = doc.createElement("Test")
             test_node.setAttribute("Status", status)
-            add_text_node(test_node, "Name", test["case"])
-            add_text_node(test_node, "Path", f"./{test['path']}")
-            add_text_node(test_node, "FullName", test["name"])
-            commands = test["command"].split("\n")
-            command = "".join(commands[-1:])
-            add_text_node(test_node, "FullCommandLine", command)
+            add_text_node(test_node, "Name", case.family)
+            add_text_node(test_node, "Path", f"./{case.fullname}")
+            add_text_node(test_node, "FullName", case.name)
+            add_text_node(test_node, "FullCommandLine", case.cmd_line)
             results = doc.createElement("Results")
 
             add_measurement(results, name="Exit Code", value=exit_code)
             add_measurement(results, name="Exit Value", value=str(exit_value))
-            duration = test["endtime"] - test["starttime"]
+            duration = case.finish - case.start
             add_measurement(results, name="Execution Time", value=duration)
             if fail_reason is not None:
                 add_measurement(results, name="Fail Reason", value=fail_reason)
             add_measurement(results, name="Completion Status", value=completion_status)
-            add_measurement(results, name="Command Line", cdata=test["command"])
+            add_measurement(results, name="Command Line", cdata=case.cmd_line)
             add_measurement(
-                results,
-                name="Processors",
-                value=int(test["resources"]["processors"] or 0),
+                results, name="Processors", value=int(case.size or 0)
             )
-            log = test["log"] or "Log not found"
-            add_measurement(results, value=log, encoding="base64", compression="gzip")
+            add_measurement(results, value=case.compressed_log(), encoding="base64", compression="gzip")
             test_node.appendChild(results)
 
             labels = doc.createElement("Labels")
-            for keyword in test["keywords"]:
+            for keyword in case.keywords:
                 add_text_node(labels, "Label", keyword)
             test_node.appendChild(labels)
 
@@ -212,13 +230,13 @@ class Reporter:
         root.appendChild(l1)
         doc.appendChild(root)
 
-        f = os.path.join(self.dest, "Test.xml")
-        with open(f, "w") as fh:
+        with open(filename, "w") as fh:
             self.dump_xml(doc, fh)
-        return f
+        return filename
 
-    def write_notes_xml(self):
-        tty.info("Writing Notes.xml")
+    def write_notes_xml(self, dest: str = ".") -> str:
+        filename = os.path.join(dest, "Notes.xml")
+        tty.info(f"WRITING: Notes.xml to {filename}", prefix="")
         s = StringIO()
         notes = {}
         doc = xdom.Document()
@@ -235,79 +253,12 @@ class Reporter:
             notes_el.appendChild(el)
         root.appendChild(notes_el)
         doc.appendChild(root)
-        f = os.path.join(self.dest, "Notes.xml")
-        with open(f, "w") as fh:
+        with open(filename, "w") as fh:
             self.dump_xml(doc, fh)
-        return f
+        return filename
 
     def dump_xml(self, document, stream):
         stream.write(document.toprettyxml(indent="", newl=""))
-
-
-class test_data:
-    def __init__(self, *files):
-        self.files = files
-
-    def load(self):
-        to_merge = []
-        missing = 0
-        for file in self.files:
-            if not os.path.exists(file):
-                missing += 1
-                tty.error(f"{file}: file does not exist")
-                continue
-            to_merge.append(json.load(open(file)))
-        self.results = self.merge(*to_merge)
-        self.status = 1 if missing else self.results["returncode"]
-
-    def merge(self, *dicts_to_merge):
-        merged = dicts_to_merge[0]
-        command = [merged["nvtest"]["command"]]
-        cases = merged["nvtest"]["tests"]["cases"]
-        ti = merged["nvtest"]["starttime"]
-        tf = merged["nvtest"]["endtime"]
-        for fd in dicts_to_merge[1:]:
-            if not fd:
-                continue
-            assert "nvtest" in fd
-            for stat in ("pass", "notdone", "notrun", "diff", "fail", "timeout"):
-                n = merged["nvtest"]["tests"].get(stat, 0)
-                n += fd["nvtest"]["tests"].get(stat, 0)
-                merged["nvtest"]["tests"][stat] = n
-            if fd["nvtest"]["starttime"] < merged["nvtest"]["starttime"]:
-                merged["nvtest"]["starttime"] = fd["nvtest"]["starttime"]
-                merged["nvtest"]["startdate"] = fd["nvtest"]["startdate"]
-            if fd["nvtest"]["endtime"] > merged["nvtest"]["endtime"]:
-                merged["nvtest"]["endtime"] = fd["nvtest"]["endtime"]
-                merged["nvtest"]["enddate"] = fd["nvtest"]["enddate"]
-            ti = min(ti, fd["nvtest"]["starttime"])
-            tf = max(tf, fd["nvtest"]["endtime"])
-            cases.extend(fd["nvtest"]["tests"]["cases"])
-            command.append(fd["nvtest"]["command"])
-        merged["nvtest"]["starttime"] = ti
-        merged["nvtest"]["endtime"] = tf
-        merged["nvtest"]["command"] = " & ".join(command)
-        merged["nvtest"]["returncode"] = self.compute_returncode(merged)
-        return merged["nvtest"]
-
-    @staticmethod
-    def compute_returncode(results):
-        """"""
-        returncode = 0
-        for stat in ("pass", "notdone", "notrun", "diff", "fail", "timeout"):
-            n = results["nvtest"]["tests"].get(stat, 0)
-            for i in range(n):
-                if stat == "diff":
-                    returncode |= 2**1
-                elif stat == "fail":
-                    returncode |= 2**2
-                elif stat == "timeout":
-                    returncode |= 2**3
-                elif stat == "notdone":
-                    returncode |= 2**4
-                elif stat == "notrun":
-                    returncode |= 2**5
-        return returncode
 
 
 def add_text_node(parent_node, child_name, content, **attrs):

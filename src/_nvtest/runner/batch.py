@@ -98,7 +98,7 @@ class BatchRunner(Runner):
         )
         tty.set_log_level(level)
         self.print_text(f"FINISHED: Batch {batch_no + 1} of {num_batches}, {st_stat}")
-        #        for (_, func) in plugin.plugins("test", "teardown"):
+        #        for (_, func) in plugin.plugins("test", "finish"):
         #            func(case)
         return attrs
 

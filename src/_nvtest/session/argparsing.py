@@ -43,7 +43,7 @@ class ArgumentParser(argparse.ArgumentParser):
         if not inspect.isclass(cmdclass):
             raise TypeError("nvtest.plugins.command must wrap classes")
 
-        for method in ("add_options", "setup", "run", "teardown"):
+        for method in ("add_options", "setup", "run", "finish"):
             if not _defines_method(cmdclass, method):
                 raise AttributeError(
                     f"{cmdclass.__name__} must define a {method} method"
@@ -58,19 +58,19 @@ class ArgumentParser(argparse.ArgumentParser):
         if not hasattr(cmdclass, "name"):
             cmdclass.name = cmdclass.__name__.lower()
 
-    def add_command(self, cmdname: str, cmdclass: Type) -> None:
+    def add_command(self, cmdclass: Type) -> None:
         """Add one subcommand to this parser."""
         # lazily initialize any subparsers
         if not hasattr(self, "subparsers"):
             # remove the dummy "command" argument.
             if self._actions[-1].dest == "command":
                 self._remove_action(self._actions[-1])
-            self.subparsers = self.add_subparsers(metavar="COMMAND", dest="command")
+            self.subparsers = self.add_subparsers(metavar="subcommands", dest="command")
 
         self._validate_command_class(cmdclass)
 
         subparser = self.subparsers.add_parser(
-            cmdname,
+            cmdclass.name,
             aliases=getattr(cmdclass, "aliases", None) or [],
             help=getattr(cmdclass, "description", None),
             description=getattr(cmdclass, "description", None),
@@ -79,7 +79,7 @@ class ArgumentParser(argparse.ArgumentParser):
         )
         subparser.register("type", None, identity)
         cmdclass.add_options(subparser)  # type: ignore
-        self.__subcommands[cmdname] = cmdclass
+        self.__subcommands[cmdclass.name] = cmdclass
 
     def get_command(self, cmdname: str) -> Optional[Type]:
         for (name, cmdclass) in self.__subcommands.items():
@@ -101,13 +101,16 @@ class ArgumentParser(argparse.ArgumentParser):
                     action._group_actions.remove(group_action)
                     return
 
-    def add_plugin_argument(self, *args, **kwargs):
-        title = "plugin options"
+    def get_group(self, group_name: str):
         for group in self._action_groups:
-            if group.title == title:
+            if group.title == group_name:
                 break
         else:
-            group = self.add_argument_group(title)
+            group = self.add_argument_group(group_name)
+        return group
+
+    def add_plugin_argument(self, *args, **kwargs):
+        group = self.get_group("plugin options")
         group.add_argument(*args, **kwargs)
 
 

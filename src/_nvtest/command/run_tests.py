@@ -17,9 +17,12 @@ from _nvtest.util.graph import TopologicalSorter
 from _nvtest.util.misc import ns2dict
 from _nvtest.util.returncode import compute_returncode
 from _nvtest.util.time import time_in_seconds
+from _nvtest.io.cdash import Reporter as CDashReporter
+from _nvtest.io.cdash import TestData as CDashTestData
 
 from .common import Command
 from .common import ConsolePrinter
+from .common import add_cdash_arguments
 from .common import add_mark_arguments
 from .common import default_timeout
 
@@ -53,6 +56,8 @@ class RunTests(Command, ConsolePrinter):
             runner_options=None,
             batch_size=None,
         )
+        self.start: float = -1
+        self.finish: float = -1
 
     @property
     def mode(self) -> str:
@@ -106,20 +111,23 @@ class RunTests(Command, ConsolePrinter):
             self.dump_index()
 
     def run(self) -> int:
-        start = time.time()
+        self.start = time.time()
         self.executor.run(timeout=self.option.timeout)
-        finish = time.time()
-        duration = finish - start
-        self.print_test_results_summary(duration)
+        self.finish = time.time()
         return compute_returncode(self.cases)
 
-    def teardown(self):
+    def finish(self):
         if hasattr(self, "executor"):
-            self.executor.teardown()
+            self.executor.finish()
+        if self.session.option.cdash_options:
+            self.dump_cdash()
+        duration = self.finish - self.start
+        self.print_test_results_summary(duration)
 
     @staticmethod
     def add_options(parser: argparse.ArgumentParser):
         add_mark_arguments(parser)
+        add_cdash_arguments(parser)
         parser.add_argument(
             "--timeout",
             type=time_in_seconds,
@@ -218,3 +226,18 @@ class RunTests(Command, ConsolePrinter):
                     if not kw_skip:
                         case.skip = Skip()
                         case.result = Result("notrun")
+
+    def dump_cdash(self):
+        kwds = self.session.option.cdash_options
+        cases_to_run = [case for case in self.cases if not case.skip]
+        data = CDashTestData(self.session, cases_to_run)
+        reporter = CDashReporter(
+            test_data=data,
+            buildname=kwds.get("build", "BUILD"),
+            baseurl=kwds.get("url"),
+            project=kwds.get("project"),
+            buildgroup=kwds.get("track"),
+            site=kwds.get("site"),
+        )
+        dest = os.path.join(self.session.workdir, "cdash")
+        reporter.create_cdash_reports(dest=dest)

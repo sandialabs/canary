@@ -106,12 +106,12 @@ class Executor:
         stage["end"] = datetime.now()
         tty.verbose("Done running test cases")
 
-    def teardown(self):
+    def finish(self):
         tty.verbose("Cleaning up executor")
         with self.session.rc_environ():
             for case in self.cases:
                 with working_dir(case.exec_dir):
-                    for (name, func) in plugin.plugins("test", "teardown"):
+                    for (name, func) in plugin.plugins("test", "finish"):
                         tty.verbose(f"Calling the {name} plugin")
                         func(
                             self.session,
@@ -119,7 +119,7 @@ class Executor:
                             on_options=self.session.option.on_options,
                         )
                 with working_dir(self.cache_dir):
-                    case.teardown()
+                    case.finish()
         tty.verbose("Done tearing down up executor")
         return
 

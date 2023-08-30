@@ -2,7 +2,7 @@ import argparse
 import os
 import sys
 from typing import TYPE_CHECKING
-from typing import Optional
+from typing import Optional, Sequence, Any, Union
 
 if TYPE_CHECKING:
     from _nvtest.config import Config
@@ -35,6 +35,53 @@ def add_mark_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+valid_cdash_options = {
+    "url": "The URL of the CDash server",
+    "project": "The project name",
+    "track": "The CDash build track (group)",
+    "site": "The host tests were run on",
+    "stamp": "The timestamp of the build",
+    "build": "The build name",
+}
+class CDashOption(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        option: Union[str, Sequence[Any], None],
+        option_str: Optional[str] = None,
+    ):
+        options: dict[str, str] = getattr(namespace, self.dest, None) or {}
+        assert isinstance(option, str)
+        u_options: list[str] = option.replace(",", " ").split()
+        for u_option in u_options:
+            opt, value = u_option.split("=")
+            if opt not in valid_cdash_options:
+                raise argparse.ArgumentError(self, f"{opt!r} is not a valid CDash option")
+            options[opt] = value
+        setattr(namespace, self.dest, options)
+
+
+def add_cdash_arguments(parser: argparse.ArgumentParser) -> None:
+    s_opt = ", ".join(colorize("@*{%s}: %s" % item) for item in valid_cdash_options.items())
+    help_msg = colorize(
+        "Write CDash XML files and (optionally) post to CDash. "
+        "Pass @*{option} to the CDash writer. @*{option} is an '=' separated "
+        "key, value pair.  Multiple options can be separated by commas. "
+        "For example, --cdash "
+        "track=Experimental,project=MyProject,url=http://my-project.cdash.com"
+        "Recognized options are %s" % s_opt
+    )
+    group = parser.get_group("post processing options")
+    group.add_argument(
+        "--cdash",
+        action=CDashOption,
+        dest="cdash_options",
+        metavar="option",
+        help=help_msg,
+    )
+
+
 class Command:
     name: str
     add_help: bool = True
@@ -61,7 +108,7 @@ class Command:
     def run(self, *args, **kwargs):
         raise NotImplementedError
 
-    def teardown(self, *args, **kwargs):
+    def finish(self, *args, **kwargs):
         ...
 
 
