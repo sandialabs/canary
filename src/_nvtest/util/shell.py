@@ -98,17 +98,17 @@ class bash(shell):
 
     def format_env_mods(self, env_mods, file: TextIO = None) -> None:
         file = file or sys.stdout
-        for (var, value) in env_mods.variables.items():
+        for var, value in env_mods.variables.items():
             if value is None:
                 file.write(f"unset {var};\n")
             else:
                 file.write(f'{var}="{value}"; export {var};\n')
-        for (name, body) in env_mods.aliases.items():
+        for name, body in env_mods.aliases.items():
             if body is None:
                 file.write(f"unalias {name} 2> /dev/null || true;\n")
             else:
                 file.write(f"alias {name}={body!r};\n")
-        for (name, body) in env_mods.shell_functions.items():
+        for name, body in env_mods.shell_functions.items():
             if body is None:
                 file.write(f"unset -f {name} 2> /dev/null || true;\n")
             else:
@@ -173,22 +173,22 @@ class bash(shell):
         var_groups = re.findall("env<<<(.*?)>>>", out, re.DOTALL)
         var_regex = "declare -x (\w+)=(.*)\n"
         assert len(var_groups) == 2
-        for (i, var_group) in enumerate(var_groups):
-            for (name, value) in re.findall(var_regex, var_group):
+        for i, var_group in enumerate(var_groups):
+            for name, value in re.findall(var_regex, var_group):
                 if name.startswith("__MODULECMD_") or name in skip_vars:
                     continue
                 state["env"].setdefault(name, [None, None])[i] = value[1:-1]
         fn_regex = "(\w+?) \(\)\s?\n{(.*?)\n}\n"
         fn_groups = re.findall("fun<<<(.*?)>>>", out, re.DOTALL)
         assert len(fn_groups) == 2
-        for (i, fn_group) in enumerate(fn_groups):
-            for (name, defn) in re.findall(fn_regex, fn_group, re.DOTALL):
+        for i, fn_group in enumerate(fn_groups):
+            for name, defn in re.findall(fn_regex, fn_group, re.DOTALL):
                 state["function"].setdefault(name, [None, None])[i] = defn
         alias_regex = "alias (\w+)=(.*)\n"
         alias_groups = re.findall("alias<<<(.*?)>>>", out, re.DOTALL)
         assert len(alias_groups) == 2
-        for (i, alias_group) in enumerate(alias_groups):
-            for (name, value) in re.findall(alias_regex, alias_group):
+        for i, alias_group in enumerate(alias_groups):
+            for name, value in re.findall(alias_regex, alias_group):
                 state["alias"].setdefault(name, [None, None])[i] = value[1:-1]
         return state
 
@@ -201,7 +201,7 @@ class csh(shell):
 
     def format_env_mods(self, env_mods, file: TextIO = None) -> None:
         file = file or sys.stdout
-        for (var, value) in env_mods.variables.items():
+        for var, value in env_mods.variables.items():
             if value is None:
                 file.write(f"unsetenv {var};\n")
             else:
@@ -216,7 +216,7 @@ class csh(shell):
                 file.write(f'setenv {var} "{value}";\n')
         aliases = dict(env_mods.aliases)
         aliases.update(env_mods.shell_functions)
-        for (name, body) in aliases.items():
+        for name, body in aliases.items():
             if body is None:
                 file.write(f"unalias {name} 2> /dev/null || true;\n")
             else:
@@ -233,7 +233,7 @@ class csh(shell):
         tty.warn(f"Truncating PATH because it exceeds {self.limit} characters")
         truncated = ["/usr/bin", "/bin"]
         length = len(truncated[0]) + len(truncated[1]) + 1
-        for (i, item) in enumerate(path.split(os.pathsep)):
+        for i, item in enumerate(path.split(os.pathsep)):
             if (len(item) + 1 + length) > self.limit:
                 break
             else:
@@ -253,14 +253,14 @@ class python(shell):
     @staticmethod
     def format_env_mods(env_mods, file: TextIO = None) -> None:
         file = file or sys.stdout
-        for (var, value) in env_mods.variables.items():
+        for var, value in env_mods.variables.items():
             if value is None:
                 file.write(f"del os.environ[{var!r}]\n")
             else:
                 file.write(f"os.environ[{var!r}] = {value!r}\n")
-        for (name, body) in env_mods.aliases.items():
+        for name, body in env_mods.aliases.items():
             file.write(f"alias_{name} = {body!r}\n")
-        for (name, body) in env_mods.shell_functions.items():
+        for name, body in env_mods.shell_functions.items():
             file.write(f"shell_function_{name} = {body!r}\n")
 
 

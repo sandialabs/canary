@@ -174,7 +174,7 @@ class Executable:
         if verbose:
             tty.info(f"Command line: {cmd_line}")
         else:
-            tty.debug(cmd_line)
+            tty.verbose(cmd_line)
 
         try:
             proc = subprocess.Popen(

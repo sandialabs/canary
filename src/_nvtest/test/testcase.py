@@ -1,3 +1,4 @@
+import enum
 import errno
 import glob
 import itertools
@@ -9,6 +10,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from string import Template
 from typing import Optional
+from typing import Sequence
 from typing import Union
 
 from ..util import filesystem as fs
@@ -22,6 +24,7 @@ from ..util.hash import hashit
 from ..util.tty.color import colorize
 from .enums import Result
 from .enums import Skip
+from ..compat.vvtest import write_vvtest_util
 
 
 @contextmanager
@@ -47,11 +50,15 @@ class TestCase:
         baseline: list[tuple[str, str]] = [],
         sources: dict[str, list[tuple[str, str]]] = {},
     ):
-        self.root = root
-        self.path = path
+        # file properties
+        self.file_root = root
+        self.file_path = path
         self.file = os.path.join(root, path)
+        self.file_dir = os.path.dirname(self.file)
         assert os.path.exists(self.file)
-        self.family = family or os.path.splitext(os.path.basename(path))[0]
+        self.file_type = "vvt" if self.file.endswith(".vvt") else "pyt"
+
+        # Other properties
         self.analyze = analyze
         self.keywords = keywords
         self.parameters = {} if parameters is None else dict(parameters)
@@ -59,20 +66,38 @@ class TestCase:
         self._runtime = runtime
         self.baseline = baseline
         self.sources = sources
-        self.dirname = os.path.dirname(self.file)
-        self._process = None
-        self.exec_root = None
+        self._skip: Skip = skip
+        # Environment variables specific to this case
+        self.variables: dict[str, str] = {}
 
+        # Name properties
+        self.family = family or os.path.splitext(os.path.basename(self.file_path))[0]
+        self.name = self.family
+        self.display_name = self.family
+        if self.parameters:
+            keys = sorted(self.parameters.keys())
+            s_params = [f"{k}={self.parameters[k]}" for k in keys]
+            self.name = f"{self.name}.{'.'.join(s_params)}"
+            self.display_name = f"{self.display_name}[{','.join(s_params)}]"
+        self.fullname = os.path.join(os.path.dirname(self.file_path), self.name)
+        self.id: str = hashit(self.fullname, length=20)
+
+        # Execution properties
+        self.cmd_line: str = ""
+        self.exec_path = os.path.join(os.path.dirname(self.file_path), self.name)
+        # Set during set up
+        self.exec_root = None
+        # The process running the test case
+        self._process = None
         self.result: Result = Result("notrun")
         self.start: float = -1
         self.finish: float = -1
-        self.id: str = hashit(os.path.join(self.root, self.fullname), length=20)
-        self._skip: Skip = skip
-        self.cmd_line: str = ""
         self.returncode: int = -1
-        self.variables: dict[str, str] = {}
 
-        self._dependencies: set[Union["TestCase", str]] = set()
+        # Dependency management
+        self.dep_patterns: list[str] = []
+        self.dependencies: list["TestCase"] = []
+        self._depids: list[int] = []
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -85,26 +110,21 @@ class TestCase:
         return self.id == other.id
 
     def __str__(self) -> str:
-        string = self.family
-        id = self.identifier(sep=",")
-        if id:
-            string += f"[{id}]"
-        return string
+        return self.display_name
 
     def __repr__(self) -> str:
-        return str(self)
+        return self.display_name
 
     def pretty_repr(self) -> str:
-        pretty = self.family
-        id = self.identifier(sep=",")
-        if id:
-            parts = id.split(",")
-            colors = itertools.cycle("bmgycr")
-            for (i, part) in enumerate(parts):
-                color = next(colors)
-                parts[i] = colorize("@%s{%s}" % (color, part))
-            pretty = f"{pretty}[{','.join(parts)}]"
-        return pretty
+        i = self.display_name.find("[")
+        if i == -1:
+            return self.display_name
+        parts = self.display_name[i+1:-1].split(",")
+        colors = itertools.cycle("bmgycr")
+        for j, part in enumerate(parts):
+            color = next(colors)
+            parts[j] = colorize("@%s{%s}" % (color, part))
+        return f"{self.display_name[:i]}[{','.join(parts)}]"
 
     def add_default_env(self, var: str, value: str) -> None:
         self.variables[var] = value
@@ -120,16 +140,13 @@ class TestCase:
     def exec_dir(self) -> str:
         if self.exec_root is None:
             raise ValueError("Cannot call exec_dir until test case is setup")
-        return os.path.join(self.exec_root, self.id)
-
-    @property
-    def type(self) -> str:
-        return "vvt" if self.file.endswith(".vvt") else "pyt"
+        return os.path.join(self.exec_root, self.exec_path)
 
     @property
     def ready(self) -> bool:
-        if any(not dep.ready for dep in self.dependencies if isinstance(dep, TestCase)):
-            return False
+        for dep in self.dependencies:
+            if dep.result in (Result.NOTRUN, Result.NOTDONE):
+                return False
         return True
 
     @property
@@ -164,39 +181,23 @@ class TestCase:
         return self._skip
 
     @skip.setter
-    def skip(self, arg: Union[str, bool]):
+    def skip(self, arg: Union[str, bool, Skip]):
         if arg is False:
             self._skip.reason = ""
         elif arg is True:
             self._skip.reason = "Skip set to True"
+        elif isinstance(arg, Skip):
+            self._skip = arg
         else:
             self._skip.reason = arg
 
     def add_dependency(self, *cases: Union["TestCase", str]) -> None:
         for case in cases:
-            self._dependencies.add(case)
-
-    @property
-    def dependencies(self) -> set["TestCase"]:
-        return self._dependencies  # type: ignore
-
-    def identifier(self, sep: str = ",") -> str:
-        if not self.parameters:
-            return ""
-        keys = sorted(self.parameters.keys())
-        return sep.join(f"{k}={self.parameters[k]}" for k in keys)
-
-    @property
-    def name(self) -> str:
-        name = self.family
-        id = self.identifier(sep=".")
-        if id:
-            name += f".{id}"
-        return name
-
-    @property
-    def fullname(self) -> str:
-        return os.path.join(os.path.dirname(self.path), self.name)
+            if isinstance(case, TestCase):
+                self.dependencies.append(case)
+                self._depids.append(id(case))
+            else:
+                self.dep_patterns.append(case)
 
     @property
     def pythonpath(self):
@@ -215,8 +216,8 @@ class TestCase:
 
     def copy_sources_to_workdir(self, copy_all_resources: bool = False):
         for action in ("copy", "link"):
-            for (t, dst) in self.sources.get(action, []):
-                src = t if os.path.exists(t) else os.path.join(self.dirname, t)
+            for t, dst in self.sources.get(action, []):
+                src = t if os.path.exists(t) else os.path.join(self.file_dir, t)
                 if not os.path.exists(src):
                     s = f"{action} resource file {t} not found"
                     tty.error(s)
@@ -231,16 +232,35 @@ class TestCase:
         data = dict(vars(self))
         data["result"] = [data["result"].name, data["result"].reason]
         data["_skip"] = data["_skip"].reason
-        data.pop("file")
-        dependencies = list(data.pop("_dependencies"))
-        data["_dependencies"] = []
+        for attr in ("file", "_depids", "dep_patterns"):
+            data.pop(attr)
+        dependencies = list(data.pop("dependencies"))
+        data["dependencies"] = []
         for dependency in dependencies:
-            data["_dependencies"].append(dependency.asdict())
-        data["fullname"] = self.fullname
+            data["dependencies"].append(dependency.asdict())
         return data
 
     @classmethod
-    def load(cls, arg_path: Optional[str] = None) -> "TestCase":
+    def load(
+        cls,
+        arg_path: Optional[str] = None,
+        cases: Optional[list["TestCase"]] = None,
+    ) -> "TestCase":
+        """Load a test case from its json dump
+
+        Parameters
+        ----------
+        arg_path : str, default ``os.getcwd()``
+            The path to where the test was executed (or setup)
+        cases : list[Test], default ``[]``
+            Other test cases in this session.  If given, it is used to find
+            dependencies, rather than loading dependencies
+
+        Returns
+        -------
+        TestCase
+
+        """
         path: str = arg_path or "."
         if path.endswith((".pyt", ".vvt")):
             path = os.path.dirname(path)
@@ -251,12 +271,17 @@ class TestCase:
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), file)
         with open(file) as fh:
             kwds = json.load(fh)
-        dependencies = kwds.pop("_dependencies")
+        dependencies = kwds.pop("dependencies")
+        other_cases: list["TestCase"] = cases or []
+        ids_of_other_cases = [case.id for case in other_cases]
         self = cls.from_dict(kwds)
         for dep in dependencies:
-            dir = str(self.exec_root)
-            dep_file = os.path.join(dir, dep["fullname"], ".nvtest", "case.json")
-            tc = cls.load(dep_file)
+            if dep["id"] in ids_of_other_cases:
+                tc = other_cases[ids_of_other_cases.index(dep["id"])]
+            else:
+                dir = str(self.exec_root)
+                dep_file = os.path.join(dir, self.exec_path, ".nvtest", "case.json")
+                tc = cls.load(dep_file)
             self.add_dependency(tc)
         return self
 
@@ -280,8 +305,8 @@ class TestCase:
     @classmethod
     def from_dict(cls, kwds) -> "TestCase":
         self = cls(
-            kwds.pop("root"),
-            kwds.pop("path"),
+            kwds.pop("file_root"),
+            kwds.pop("file_path"),
             analyze=kwds.pop("analyze"),
             family=kwds.pop("family"),
             keywords=kwds.pop("keywords"),
@@ -295,9 +320,9 @@ class TestCase:
         kwds.pop("fullname", None)
         result, reason = kwds.pop("result")
         self.result = Result(result, reason=reason)
-        for dep in kwds.pop("_dependencies", []):
+        for dep in kwds.pop("dependencies", []):
             self.add_dependency(TestCase.from_dict(dep))
-        for (key, val) in kwds.items():
+        for key, val in kwds.items():
             setattr(self, key, val)
         return self
 
@@ -339,15 +364,15 @@ class TestCase:
                     relsrc = os.path.relpath(self.file, os.getcwd())
                     fs.force_symlink(relsrc, os.path.basename(self.file), echo=True)
                 self.copy_sources_to_workdir(copy_all_resources=copy_all_resources)
-                if self.type == "vvt":
-                    self.write_vvtest_util()
+                if self.file_type == "vvt":
+                    write_vvtest_util(self)
                 self.dump()
         tty.set_timestamp_stat(_timestamp_stat)
         tty.verbose(f"Done setting up {self}")
         return
 
     def update(self, attrs: dict[str, object]) -> None:
-        for (key, val) in attrs.items():
+        for key, val in attrs.items():
             if key == "result":
                 assert isinstance(val, Result)
             elif key == "skip":
@@ -358,6 +383,8 @@ class TestCase:
         self._process = proc
 
     def run(self, log_level: Optional[int] = None) -> None:
+        if self.dep_patterns:
+            raise RuntimeError("Dependency patterns must be resolved before running")
         if log_level is not None:
             _log_level = tty.set_log_level(log_level)
         tty.info(f"STARTING: {self.pretty_repr()}", prefix="")
@@ -395,23 +422,6 @@ class TestCase:
         if self._process is not None:
             self._process.kill()
         self.result = Result("FAIL", "Process killed")
-
-    def write_vvtest_util(self):
-        with open("vvtest_util.py", "w") as fh:
-            fh.write(f"NAME = {self.family!r}\n")
-            fh.write(f"TESTID = {self.fullname!r}\n")
-            fh.write(f"PLATFORM = {sys.platform.lower()!r}\n")
-            fh.write(f"SRCDIR = {self.dirname!r}\n")
-            fh.write(f"TIMEOUT = {self.timeout!r}\n")
-            fh.write("PROJECT = ''\n")
-            fh.write("diff_exit_status = 64\n")
-            fh.write("skip_exit_status = 63\n")
-            for (key, val) in self.parameters.items():
-                fh.write(f"{key} = {val!r}\n")
-            fh.write("PARAM_DICT = {\n")
-            for (key, val) in self.parameters.items():
-                fh.write(f"    {key!r}: {val!r},\n")
-            fh.write("}\n")
 
     def teardown(self) -> None:
         ...

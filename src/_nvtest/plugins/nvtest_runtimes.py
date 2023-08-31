@@ -24,7 +24,7 @@ class Runtimes:
         return f"{self.root}.json"
 
     def load_db_for_case(self, case: "TestCase") -> Union[None, dict]:
-        dirname = os.path.join(case.root, case.path)
+        dirname = os.path.join(case.file_root, case.file_path)
         while True:
             if dirname in self.cache:
                 return self.cache[dirname]
@@ -34,7 +34,7 @@ class Runtimes:
                 if data:
                     self.cache[dirname] = data
                     return data
-            if dirname == case.root:
+            if dirname == case.file_root:
                 break
             dirname = os.path.dirname(dirname)
         return None

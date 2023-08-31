@@ -1,9 +1,8 @@
 import argparse
-import json
 import os
 import time
-from datetime import datetime
 from typing import TYPE_CHECKING
+from typing import Optional
 
 from _nvtest.environment import Environment
 from _nvtest.error import StopExecution
@@ -16,7 +15,6 @@ from _nvtest.test.enums import Result
 from _nvtest.test.enums import Skip
 from _nvtest.test.testcase import TestCase
 from _nvtest.util import tty
-from _nvtest.util.graph import TopologicalSorter
 from _nvtest.util.misc import ns2dict
 from _nvtest.util.returncode import compute_returncode
 from _nvtest.util.time import time_in_seconds
@@ -26,6 +24,8 @@ from .common import ConsolePrinter
 from .common import add_cdash_arguments
 from .common import add_mark_arguments
 from .common import default_timeout
+from .common import dump_index
+from .common import load_index
 
 if TYPE_CHECKING:
     from _nvtest.config import Config
@@ -112,9 +112,11 @@ class RunTests(Command, ConsolePrinter):
             self.dump_index()
 
     def run(self) -> int:
-        self.start = time.time()
-        self.executor.run(timeout=self.option.timeout)
-        self.finish = time.time()
+        try:
+            self.start = time.time()
+            self.executor.run(timeout=self.option.timeout)
+        finally:
+            self.finish = time.time()
         return compute_returncode(self.cases)
 
     def teardown(self):
@@ -152,71 +154,29 @@ class RunTests(Command, ConsolePrinter):
         parser.add_argument("search_paths", nargs="+", help="Search paths")
 
     def dump_index(self):
-        db = {}
-        db["date"] = datetime.now().strftime("%c")
-        db["option"] = ns2dict(self.option)
-        db["search_paths"] = [os.path.abspath(p) for p in self.search_paths]
-        cases = db.setdefault("cases", [])
-        for case in self.cases:
-            deps = [d.id for d in case.dependencies]
-            kwds = {
-                "name": str(case),
-                "id": case.id,
-                "dependencies": deps,
-                "skip": case.skip.reason or None,
-            }
-            cases.append(kwds)
-        db["batches"] = None
-        if self.option.batch_size is not None:
-            mapping = dict([(case.fullname, i) for (i, case) in enumerate(self.cases)])
-            batches = []
-            for batch in self.executor.work_items:
-                case_ids = []
-                for case in batch:
-                    case_ids.append(mapping[case.fullname])
-                batches.append(case_ids)
-            db["batches"] = batches
-
-        with open(self.index_file, "w") as fh:
-            json.dump({"database": db}, fh, indent=2)
+        batches: Optional[list[TestCase]] = None
+        if self.option.batch_size:
+            batches = self.executor.work_items
+        paths = [os.path.abspath(p) for p in self.search_paths]
+        dump_index(
+            self.index_file,
+            self.cases,
+            batches=batches,
+            option=ns2dict(self.option),
+            search_paths=paths,
+        )
 
     def load_index(self) -> None:
         if not os.path.isfile(self.index_file):
             raise ValueError(f"Test index {self.index_file!r} not found")
-
-        def find(container, arg):
-            for item in container:
-                if item == arg:
-                    return item
-            raise ValueError(f"Could not find {arg}")
-
-        db = json.load(open(self.index_file))["database"]
-        self.search_paths = db["search_paths"]
-
-        ts: TopologicalSorter = TopologicalSorter()
-        for case in db["cases"]:
-            if not case["skip"]:
-                ts.add(case["id"], *case["dependencies"])
-
-        self.cases: list[TestCase] = []
-        cache_dir = Executor._cache_dir
-        for id in ts.static_order():
-            path = os.path.join(self.session.workdir, cache_dir, id)
-            case = TestCase.load(path)
-            for (i, dep) in enumerate(case.dependencies):
-                # dependencies already exist in ``cases`` because we are looping in
-                # topological order
-                case.dependencies[i] = find(self.cases, dep.id)
-            self.cases.append(case)
-
+        self.cases, kwds = load_index(self.index_file)
         if self.option.timeout == default_timeout:
-            self.option.timeout = db["options"]["timeout"]
-
-        if db["options"]["batchsize"] is not None:
-            self.option.batchsize = db["options"]["batchsize"]
-            self.option.runner = db["options"]["runner"]
+            self.option.timeout = kwds["option"]["timeout"]
+        if kwds["option"]["batch_size"] is not None:
+            self.option.batch_size = kwds["option"]["batch_size"]
+            self.option.runner = kwds["option"]["runner"]
             if not self.option.runner_options:
-                self.option.runner_options = db["options"]["runner_options"]
+                self.option.runner_options = kwds["option"]["runner_options"]
 
     def filter_testcases(self) -> None:
         for case in self.cases:

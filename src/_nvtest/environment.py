@@ -43,11 +43,11 @@ class Environment:
             tty.verbose(f"Searching for tests in {root}")
             testfiles: list[AbstractTestFile] = []
             root = os.path.abspath(root)
-            tty.debug(f"Searching {root} for test files")
+            tty.verbose(f"Searching {root} for test files")
             if os.path.isfile(root):
                 testfiles.append(AbstractTestFile(root))
                 continue
-            for (dirname, dirs, files) in os.walk(root):
+            for dirname, dirs, files in os.walk(root):
                 if os.path.basename(dirname) in self.skip_dirs or fs.is_hidden(dirname):
                     del dirs[:]
                     continue
@@ -89,39 +89,39 @@ class Environment:
     def resolve_dependencies(self, cases: list[TestCase]) -> None:
         tty.verbose("Resolving dependencies across test suite")
         case_map = dict([(case.name, i) for (i, case) in enumerate(cases)])
-        for (i, case) in enumerate(cases):
-            if not case.dependencies:
-                continue
-            remove: set[TestCase] = set()
-            update: set[TestCase] = set()
-            for dependency in case.dependencies:
-                if isinstance(dependency, TestCase):
-                    continue
+        for i, case in enumerate(cases):
+            while True:
+                if not case.dep_patterns:
+                    break
+                pat = case.dep_patterns.pop(0)
                 matches = [
                     cases[k]
                     for (name, k) in case_map.items()
-                    if i != k and fnmatch.fnmatchcase(name, dependency)
+                    if i != k and fnmatch.fnmatchcase(name, pat)
                 ]
                 if not matches:
                     raise ValueError(
-                        f"Dependency {dependency!r} of test case {case.name} not found"
+                        f"Dependency pattern {pat!r} of test case {case.name} not found"
                     )
-                remove.add(dependency)
-                update.update(matches)
-            for item in remove:
-                case.dependencies.remove(item)
-            case.dependencies.update(update)
+                for match in matches:
+                    assert isinstance(match, TestCase)
+                    case.add_dependency(match)
+        tty.verbose("Done resolving dependencies across test suite")
 
     def check_for_skipped_dependencies(self, cases: list[TestCase]) -> None:
         tty.verbose("Validating test cases")
+        missing = 0
+        ids = [id(case) for case in cases]
         for case in cases:
             if case.skip:
                 continue
-            if not case.dependencies:
-                continue
             for dep in case.dependencies:
+                if id(dep) not in ids:
+                    tty.error(f"ID of {dep!r} is not in test cases")
+                    missing += 1
                 if dep.skip:
                     case.skip = "deselected due to skipped dependency"
                     tty.warn(f"Dependency {dep!r} of {case!r} is marked to be skipped")
-                    break
+        if missing:
+            raise ValueError("Missing dependencies")
         tty.verbose("Done validating test cases")

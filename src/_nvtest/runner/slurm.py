@@ -50,7 +50,7 @@ class SlurmRunner(BatchRunner, _Slurm):
         fh.write(f"#!{self.shell}\n")
         if self.namespace.dont_wait:
             self.namespace.wait = False
-        for (key, value) in vars(self.namespace).items():
+        for key, value in vars(self.namespace).items():
             if isinstance(value, bool):
                 if value is True:
                     fh.write(f"#SBATCH {self.fmt_option_string(key):<19}\n")

@@ -267,30 +267,21 @@ class AbstractTestFile:
 
     @staticmethod
     def resolve_dependencies(cases: list[TestCase]) -> None:
-        tty.verbose("Resolving dependencies across test suite")
+        tty.verbose("Resolving dependencies in test file")
         case_map = dict([(case.name, i) for (i, case) in enumerate(cases)])
-        for (i, case) in enumerate(cases):
-            if not case.dependencies:
-                continue
-            remove: set[TestCase] = set()
-            update: set[TestCase] = set()
-            for dependency in case.dependencies:
-                if isinstance(dependency, TestCase):
-                    continue
+        for i, case in enumerate(cases):
+            while True:
+                if not case.dep_patterns:
+                    break
+                pat = case.dep_patterns.pop(0)
                 matches = [
                     cases[k]
                     for (name, k) in case_map.items()
-                    if i != k and fnmatch.fnmatchcase(name, dependency)
+                    if i != k and fnmatch.fnmatchcase(name, pat)
                 ]
-                if not matches:
-                    raise ValueError(
-                        f"Dependency {dependency!r} of test case {case.name} not found"
-                    )
-                remove.add(dependency)
-                update.update(matches)
-            for item in remove:
-                case.dependencies.remove(item)
-            case.dependencies.update(update)
+                if matches:
+                    for match in matches:
+                        case.add_dependency(match)
 
     # -------------------------------------------------------------------------------- #
 

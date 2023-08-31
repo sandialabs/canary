@@ -121,7 +121,7 @@ def dump_partitions(
     files = []
     mkdirp(dest)
     n = len(partitions)
-    for (i, partition) in enumerate(partitions):
+    for i, partition in enumerate(partitions):
         file = os.path.join(dest, f"batch.json.{n}.{i}")
         files.append(os.path.abspath(file))
         with open(file, "w") as fh:

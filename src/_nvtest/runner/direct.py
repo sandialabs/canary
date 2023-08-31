@@ -20,5 +20,8 @@ class DirectRunner(Runner):
         try:
             case.run(*args)
         except BaseException as e:
-            case.result = Result("FAIL", reason=e.args[0])
+            if isinstance(e.args[0], int):
+                case.result = Result.from_returncode(e.args[0])
+            else:
+                case.result = Result("FAIL", reason=e.args[0])
         return vars(case)

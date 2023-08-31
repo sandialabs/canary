@@ -1,6 +1,8 @@
 import argparse
+import json
 import os
 import sys
+from datetime import datetime
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
@@ -13,8 +15,10 @@ if TYPE_CHECKING:
 
 from _nvtest.session.argparsing import ArgumentParser
 from _nvtest.test.enums import Result
+from _nvtest.test.partition import Partition
 from _nvtest.test.testcase import TestCase
 from _nvtest.util import tty
+from _nvtest.util.graph import TopologicalSorter
 from _nvtest.util.tty.color import colorize
 
 default_timeout = 60 * 60
@@ -125,7 +129,10 @@ class Command:
 class ConsolePrinter:
     session: "Session"
     cases: list[TestCase]
-    log_level: int = tty.INFO
+
+    @property
+    def log_level(self) -> int:
+        return tty.INFO
 
     def print_text(self, text: str):
         if self.log_level < tty.INFO:
@@ -154,40 +161,33 @@ class ConsolePrinter:
             finish = max(_.finish for _ in self.cases)
             start = min(_.start for _ in self.cases)
             duration = finish - start
-        if self.log_level > tty.INFO:
-            tty.section("Test files")
-            groups: dict[str, list[str]] = {}
-            for case in self.cases:
-                color = case.result.color
-                group = groups.setdefault(case.result.name, [])
-                label = colorize("%s @%s{%s}" % (case.name, color, case.result.name))
-                group.append(label)
-            for result in Result.members:
-                for label in groups.get(result, []):
-                    self.print_text(label)
 
         totals: dict[str, list[TestCase]] = {}
         for case in self.cases:
             totals.setdefault(case.result.name, []).append(case)
 
-        if Result.FAIL in totals or Result.DIFF in totals or Result.SKIP in totals:
+        nonpass = (Result.FAIL, Result.DIFF, Result.SKIP, Result.NOTDONE)
+        if self.log_level > tty.INFO and len(totals):
             tty.section("Short test summary info")
-            for result in (Result.FAIL, Result.DIFF):
-                if result not in totals:
-                    continue
-                for case in totals[result]:
-                    f = case.logfile
-                    if f.startswith(os.getcwd()):
-                        f = os.path.relpath(f)
-                    reasons = [case.result.reason]
-                    if not case.result.reason and not os.path.exists(f):
-                        reasons.append("No log file found")
-                    else:
-                        reasons.append(f"See {f}")
-                    reason = ". ".join(_ for _ in reasons if _.split())
-                    self.print_text(
-                        "%s %s: %s" % (case.result.cname, str(case), reason)
-                    )
+        elif any(r in totals for r in nonpass):
+            tty.section("Short test summary info")
+        if self.log_level > tty.INFO and Result.PASS in totals:
+            for case in totals[Result.PASS]:
+                self.print_text("%s %s" % (case.result.cname, str(case)))
+        for result in (Result.FAIL, Result.DIFF):
+            if result not in totals:
+                continue
+            for case in totals[result]:
+                f = case.logfile
+                if f.startswith(os.getcwd()):
+                    f = os.path.relpath(f)
+                reasons = [case.result.reason]
+                if not case.result.reason and not os.path.exists(f):
+                    reasons.append("No log file found")
+                else:
+                    reasons.append(f"See {f}")
+                reason = ". ".join(_ for _ in reasons if _.split())
+                self.print_text("%s %s: %s" % (case.result.cname, str(case), reason))
             if Result.NOTDONE in totals:
                 for case in totals[Result.NOTDONE]:
                     self.print_text("%s %s" % (case.result.cname, str(case)))
@@ -234,6 +234,63 @@ class ConsolePrinter:
             reason = case.skip.reason
             skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
         self.print_text(colorize("@*b{skipping} %d test cases" % len(skipped)))
-        for (reason, n) in skipped_reasons.items():
+        for reason, n in skipped_reasons.items():
             self.print_text(f"  - {n} {reason.lstrip()}")
         return
+
+
+def dump_index(
+    file: str,
+    cases: list[TestCase],
+    batches: Optional[list[Partition]] = None,
+    **kwargs: Any,
+) -> None:
+    db: dict[str, Any] = {}
+    db["date"] = datetime.now().strftime("%c")
+    db.update(kwargs)
+    tcases: dict[str, Any] = db.setdefault("cases", {})  # type: ignore
+    dirname = os.path.dirname(file)
+    for case in cases:
+        deps: list[str] = [d.id for d in case.dependencies]
+        tcases[case.id] = {
+            "path": None if case.skip else os.path.relpath(case.exec_dir, dirname),
+            "dependencies": deps,
+            "skip": case.skip.reason or None,
+        }
+    db["batches"] = None
+    if batches is not None:
+        _batches = []
+        for batch in batches:
+            case_ids = [case.id for case in batch]
+            _batches.append(case_ids)
+        db["batches"] = _batches
+    with open(file, "w") as fh:
+        json.dump({"database": db}, fh, indent=2)
+
+
+def load_index(file: str) -> tuple[list[TestCase], dict[str, Any]]:
+    def find(container, arg):
+        for item in container:
+            if item.id == arg.id:
+                return item
+        raise ValueError(f"Could not find {arg}")
+
+    with open(file, "r") as fh:
+        fd = json.load(fh)
+    db = fd["database"]
+
+    ts: TopologicalSorter = TopologicalSorter()
+    tcases = db.pop("cases")
+    for id, kwds in tcases.items():
+        if not kwds["skip"]:
+            ts.add(id, *kwds["dependencies"])
+
+    cases: list[TestCase] = []
+    dirname = os.path.dirname(file)
+    for id in ts.static_order():
+        kwds = tcases[id]
+        path = os.path.join(dirname, kwds["path"])
+        case = TestCase.load(path, cases)
+        cases.append(case)
+
+    return cases, db

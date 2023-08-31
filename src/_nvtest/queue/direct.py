@@ -5,29 +5,32 @@ from .base import Queue
 
 
 class DirectQueue(Queue):
-    def __init__(self, cpus: int, workers: int, work_items: list[TestCase]) -> None:
-        for case in sorted(work_items, key=lambda c: c.size, reverse=True):
+    def validate(self) -> None:
+        for case in self.work_items:
             if case.skip:
                 continue
-            if case.size > cpus:
+            if case.size > self.cpus:
                 raise ValueError(
-                    f"{case!r}: size ({case.size}) exceeds max cpu count ({cpus})"
+                    f"{case!r}: size ({case.size}) exceeds max cpu count ({self.cpus})"
                 )
-        for case in work_items:
-            for dep in case.dependencies:
-                if dep not in work_items:
-                    raise ValueError(f"{case}: missing dependency: {dep}")
-        super().__init__(cpus, workers, work_items)
 
     def create_queue(self, work_items: list[TestCase]) -> dict[int, TestCase]:
         queue: dict[int, TestCase] = {}
-        for (i, case) in enumerate(work_items):
+        for i, case in enumerate(work_items):
             if not case.skip:
                 queue[i] = case
         return queue
 
-    def refresh(self):
-        self.queue = self.create_queue(self.work_items)
+    def mark_as_complete(self, case_no: int) -> TestCase:
+        if case_no not in self._running:
+            raise RuntimeError(f"case {case_no} is not running")
+        with self.lock():
+            self._done[case_no] = self._running.pop(case_no)
+            for case in self.queue.values():
+                for (i, dep) in enumerate(case.dependencies):
+                    if dep.id == self._done[case_no].id:
+                        case.dependencies[i] = self._done[case_no]
+        return self._done[case_no]
 
     @property
     def cases(self):

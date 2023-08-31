@@ -7,7 +7,7 @@ def compute_returncode(cases: list[TestCase]) -> int:
     results: dict[str, int] = {}
     for case in cases:
         results[case.result.name] = results.get(case.result.name, 0) + 1
-    for (result, n) in results.items():
+    for result, n in results.items():
         for i in range(n):
             if result == "DIFF":
                 returncode |= 2**1

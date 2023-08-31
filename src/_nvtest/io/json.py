@@ -74,7 +74,7 @@ class JsonWriter:
 
 def strip_env(environ: os._Environ[str]) -> dict[str, str]:
     stripped = {}
-    for (var, val) in environ.items():
+    for var, val in environ.items():
         if var.startswith(("_", "BASH_FUNC_")):
             continue
         stripped[var] = val

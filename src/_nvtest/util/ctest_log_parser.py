@@ -423,7 +423,6 @@ class CTestLogParser(object):
             ("warning_matches", _warning_matches),
             ("warning_exceptions", _warning_exceptions),
         ]:
-
             print()
             print(name)
             for i, elt in enumerate(arr):

@@ -3,7 +3,6 @@ import multiprocessing
 import os
 from concurrent.futures import Future
 from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures.process import BrokenProcessPool
 from datetime import datetime
 from functools import partial
 from itertools import repeat
@@ -21,7 +20,6 @@ from .test.partition import partition_t
 from .test.testcase import TestCase
 from .util import tty
 from .util.filesystem import force_remove
-from .util.filesystem import force_symlink
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.returncode import compute_returncode
@@ -34,7 +32,6 @@ if TYPE_CHECKING:
 class Executor:
     _tc_done_file = "testcases.json"
     _tc_prog_file = "testcases.jsons"
-    _cache_dir = "_test-cache"
 
     def __init__(
         self,
@@ -51,8 +48,8 @@ class Executor:
         self.cpu_count = config.machine.cpu_count
         self.max_workers = self.cpu_count if max_workers < 0 else max_workers
         tty.verbose(f"Tests will be run with {self.max_workers} concurrent workers")
-        self.exec_dir = self.session.workdir
-        tty.verbose(f"Execution directory: {self.exec_dir}")
+        self.workdir = self.session.workdir
+        tty.verbose(f"Execution directory: {self.workdir}")
 
         self.cases = cases
         self.work_items: Union[list[TestCase], list[Partition]] = cases
@@ -68,10 +65,6 @@ class Executor:
             options=runner_options,
         )
         self.stages: dict[str, dict[str, datetime]] = {}
-
-    @property
-    def cache_dir(self) -> str:
-        return os.path.join(self.session.workdir, self._cache_dir)
 
     @property
     def tc_done_file(self) -> str:
@@ -95,7 +88,7 @@ class Executor:
         stage["start"] = datetime.now()
         try:
             with self.session.rc_environ():
-                with working_dir(self.cache_dir):
+                with working_dir(self.workdir):
                     self.process_testcases(timeout)
             if not self.session.config.debug:
                 force_remove(self.tc_prog_file)
@@ -111,28 +104,28 @@ class Executor:
         with self.session.rc_environ():
             for case in self.cases:
                 with working_dir(case.exec_dir):
-                    for (name, func) in plugin.plugins("test", "finish"):
+                    for name, func in plugin.plugins("test", "teardown"):
                         tty.verbose(f"Calling the {name} plugin")
                         func(
                             self.session,
                             case,
                             on_options=self.session.option.on_options,
                         )
-                with working_dir(self.cache_dir):
+                with working_dir(self.workdir):
                     case.teardown()
         tty.verbose("Done tearing down up executor")
         return
 
     def setup_testcases(self, copy_all_resources: bool = False) -> None:
         tty.verbose("Setting up test cases")
-        mkdirp(self.cache_dir)
+        mkdirp(self.workdir)
         force_remove(self.tc_prog_file)
         with self.session.rc_environ():
-            with working_dir(self.cache_dir):
+            with working_dir(self.workdir):
                 tty.verbose("Launching mulitprocssing pool to setup tests in parallel")
                 pool = multiprocessing.Pool(processes=self.cpu_count)
                 args = zip(
-                    self.cases, repeat(self.cache_dir), repeat(copy_all_resources)
+                    self.cases, repeat(self.workdir), repeat(copy_all_resources)
                 )
                 result = pool.starmap(_setup_individual_case, args)
                 pool.close()
@@ -146,13 +139,9 @@ class Executor:
             if not case.skip:
                 case.result = Result("setup")
             case.dump()
-            dir, f = os.path.split(os.path.join(self.exec_dir, case.fullname))
-            with working_dir(dir, create=True):
-                src = os.path.relpath(case.exec_dir, os.getcwd())
-                force_symlink(src, os.path.basename(f))
 
             with working_dir(case.exec_dir):
-                for (_, func) in plugin.plugins("test", "setup"):
+                for _, func in plugin.plugins("test", "setup"):
                     func(self.session, case, on_options=self.session.option.on_options)
 
         tty.verbose("Done setting up test cases")
@@ -165,41 +154,37 @@ class Executor:
             with timeout(_timeout, timeout_message=timeout_message):
                 with ProcessPoolExecutor(max_workers=self.max_workers) as ppe:
                     while True:
-                        if self.queue.empty():
+                        try:
+                            i, entity = self.queue.pop_next()
+                        except StopIteration:
                             return
-                        i, item = self.queue.pop_next()
-                        future = ppe.submit(self.runner, item, log_level)
-                        future.add_done_callback(partial(self._update_from_future, i))
-                        self._futures[i] = (item, future)
+                        future = ppe.submit(self.runner, entity, log_level)
+                        callback = partial(self.update_from_future, i, entity)
+                        future.add_done_callback(callback)
+                        self._futures[i] = (entity, future)
         finally:
-            for (item, future) in self._futures.values():
+            for entity, future in self._futures.values():
                 if future.running():
-                    item.kill()
+                    entity.kill()
             for case in self.cases:
                 if case.result == Result.SETUP:
                     case.result = Result("notdone")
                     case.dump()
 
-    def _update_from_future(self, item_no: int, future: Future) -> None:
-        item = self.queue.get_from_running(item_no)
-        assert isinstance(item, (TestCase, Partition))
-        try:
-            attrs = future.result()
-        except (KeyboardInterrupt, BrokenProcessPool):
-            attrs = None
-        else:
-            if isinstance(item, Partition):
-                for case in item:
-                    case.update(attrs[case.fullname])
-            else:
-                item.update(attrs)
-        self.queue.mark_as_complete(item_no, item)
+    def update_from_future(
+            self, ent_no: int, entity: Union[Partition, TestCase], future: Future
+        ) -> None:
+        attrs = future.result()
+        obj: Union[TestCase, Partition] = self.queue.mark_as_complete(ent_no)
+        assert id(obj) == id(entity)
         with open(self.tc_prog_file, "a") as fh:
-            if isinstance(item, Partition):
-                for case in item:
+            if isinstance(obj, Partition):
+                for case in obj:
+                    case.update(attrs)
                     fh.write(case.to_json() + "\n")
             else:
-                fh.write(item.to_json() + "\n")
+                obj.update(attrs)
+                fh.write(obj.to_json() + "\n")
 
 
 class SingleBatchDirectExecutor(Executor):

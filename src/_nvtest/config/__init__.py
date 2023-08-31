@@ -115,11 +115,11 @@ class Config:
         cfg.read(config_file)
         for section in cfg.sections():
             if section == "variables":
-                for (key, val) in cfg.items("variables"):
+                for key, val in cfg.items("variables"):
                     t = Template(val)
                     self.variables[key] = t.safe_substitute(os.environ)
             elif section == "config":
-                for (key, val) in cfg.items("config"):
+                for key, val in cfg.items("config"):
                     if key not in vars(self.config):
                         raise ValueError(f"Illegal configuration setting: config:{key}")
                     if key == "debug":
@@ -128,7 +128,7 @@ class Config:
                         val = int(val)
                     setattr(self.config, key, val)
             elif section == "machine":
-                for (key, val) in cfg.items("machine"):
+                for key, val in cfg.items("machine"):
                     if key not in editable_machine_properties:
                         raise ValueError(f"machine:{key} is a read only property")
                     prop_type = type(getattr(self.machine, key))
@@ -138,11 +138,11 @@ class Config:
                 raise ValueError(errmsg)
 
     def restore(self, kwds: dict[str, Any]):
-        for (var, val) in kwds.get("variables", {}).items():
+        for var, val in kwds.get("variables", {}).items():
             self.variables[var] = val
-        for (key, val) in kwds.get("config", {}).items():
+        for key, val in kwds.get("config", {}).items():
             setattr(self.config, key, val)
-        for (var, val) in kwds.get("machine", {}).items():
+        for var, val in kwds.get("machine", {}).items():
             if var in editable_machine_properties:
                 setattr(self.machine, var, val)
 
@@ -158,7 +158,7 @@ class Config:
             raise ValueError(f"{path!r} is a read-only configuration")
         value = json.loads(parts.pop(-1))
         ns = self
-        for (i, part) in enumerate(parts):
+        for i, part in enumerate(parts):
             if not hasattr(ns, part):
                 p = ":".join(parts[:i])
                 msg = f"Configuration path {p!r} has no attribute {part!r}"

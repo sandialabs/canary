@@ -326,7 +326,7 @@ def combine_parameter_sets(paramsets: list[ParameterSet]) -> list[dict[str, obje
         paramset = paramsets[0]
         for values in paramset.values:
             parameters = {}
-            for (i, v) in enumerate(values):
+            for i, v in enumerate(values):
                 parameters[paramset.keys[i]] = v
             append_if_unique(all_parameters, parameters)
     else:
@@ -337,8 +337,8 @@ def combine_parameter_sets(paramsets: list[ParameterSet]) -> list[dict[str, obje
         groups = itertools.product(*values)
         for group in groups:
             parameters = {}
-            for (i, item) in enumerate(group):
-                for (j, x) in enumerate(item):
+            for i, item in enumerate(group):
+                for j, x in enumerate(item):
                     parameters[keys[i][j]] = x
             append_if_unique(all_parameters, parameters)
     return all_parameters
