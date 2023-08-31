@@ -105,7 +105,7 @@ def _time_in_seconds(arg: str) -> Union[int, float]:
             value = float(token)  # type: ignore
             units = parts.pop(0)
         else:
-            for (i, char) in enumerate(token):
+            for i, char in enumerate(token):
                 if not char.isdigit():
                     value = int(token[:i])
                     units = token[i:]

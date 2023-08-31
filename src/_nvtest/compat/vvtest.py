@@ -13,9 +13,11 @@ from typing import Union
 from ..mark.structures import AbstractParameterSet
 from ..util.time import to_seconds
 from ..util.tty.color import colorize
+from .. import paths
 
 if TYPE_CHECKING:
     from ..test.testfile import AbstractTestFile
+    from ..test.testcase import TestCase
 
 
 def load_vvt(file: "AbstractTestFile") -> None:
@@ -359,6 +361,46 @@ def parse_skipif(expression: str, **options: dict[str, str]) -> tuple[bool, str]
             "deselected because @*b{%s} evaluated to @*g{True}" % expression
         )
     return True, reason
+
+
+def write_vvtest_util(case: "TestCase") -> None:
+    with open("vvtest_util.py", "w") as fh:
+        fh.write("import os\n")
+        fh.write("import sys\n")
+        fh.write(f"NAME = {case.family!r}\n")
+        fh.write(f"TESTID = {case.fullname!r}\n")
+        fh.write(f"PLATFORM = {sys.platform.lower()!r}\n")
+        fh.write("COMPILER = ''\n")  # FIXME
+        fh.write(f"VVTESTSRC = {paths.prefix!r}\n")
+        fh.write(f"TESTROOT = {case.exec_root!r}\n")
+        fh.write("PROJECT = ''\n")
+        fh.write("OPTIONS = []\n")  # FIXME
+        fh.write("OPTIONS_OFF = []\n")  # FIXME
+        fh.write(f"SRCDIR = {case.file_dir!r}\n")
+        fh.write(f"TIMEOUT = {case.timeout!r}\n")
+        kwds = ", ".join(f"{_!r}" for _ in case.keywords)
+        fh.write(f"KEYWORDS = [{kwds}]\n")
+        fh.write("diff_exit_status = 64\n")
+        fh.write("skip_exit_status = 63\n")
+        fh.write("opt_analyze = '--execute-analysis-sections' in sys.argv[1:]\n")
+        for key, val in case.parameters.items():
+            fh.write(f"{key} = {val!r}\n")
+        fh.write("PARAM_DICT = {\n")
+        for key, val in case.parameters.items():
+            fh.write(f"    {key!r}: {val!r},\n")
+        fh.write("}\n")
+        if case.dependencies:
+            key = "_".join(_ for _ in next(iter(case.dependencies)).parameters)
+            fh.write(f"PARAM_{key} = [\n")
+            for dep in case.dependencies:
+                values = ", ".join(f"{val!r}" for val in dep.parameters.values())
+                fh.write(f"    [{values}],\n")
+            fh.write("]\n")
+            fh.write("DEPDIRS = [\n")
+            for dep in case.dependencies:
+                fh.write(f"    {case.exec_dir!r},\n")
+            fh.write("]\n")
+            fh.write("DEPDIRMAP = {}\n")  # FIXME
 
 
 class ParseError(Exception):

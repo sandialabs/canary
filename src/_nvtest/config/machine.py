@@ -4,6 +4,7 @@ import re
 import sys
 from types import SimpleNamespace
 
+from ..util import rprobe
 from ..util.executable import Executable
 from ..util.filesystem import which
 from . import linux
@@ -59,8 +60,8 @@ def machine_config() -> SimpleNamespace:
 def read_machine_info() -> SimpleNamespace:
     info = SimpleNamespace(
         sockets_per_node=1,
-        cores_per_socket=os.cpu_count(),
-        cpu_count=os.cpu_count(),
+        cores_per_socket=rprobe.cpu_count(),
+        cpu_count=rprobe.cpu_count(),
     )
     if which("sinfo"):
         sinfo = Executable("sinfo")

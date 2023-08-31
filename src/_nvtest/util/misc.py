@@ -14,7 +14,7 @@ def boolean(arg):
 
 def ns2dict(arg: SimpleNamespace) -> dict:
     value: dict[str, Any] = dict(vars(arg))
-    for (name, item) in value.items():
+    for name, item in value.items():
         if isinstance(item, SimpleNamespace):
             value[name] = ns2dict(item)
     return value

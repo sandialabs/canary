@@ -27,7 +27,10 @@ class Find(Command, ConsolePrinter):
         super().__init__(config, session)
         self.option = self.session.option
         self.cases: list[TestCase] = []
-        self.log_level = self.config.log_level
+
+    @property
+    def log_level(self) -> int:
+        return self.config.log_level
 
     @property
     def mode(self) -> str:
@@ -98,7 +101,7 @@ class Find(Command, ConsolePrinter):
         for case in cases_to_run:
             unique_files.setdefault(case.root, set()).add(case.path)
         _, max_width = tty.terminal_size()
-        for (root, paths) in unique_files.items():
+        for root, paths in unique_files.items():
             label = colorize("@m{%s}" % root)
             tty.hline(label, max_width=max_width)
             cols = colified(sorted(paths), indent=2, width=max_width)
@@ -118,7 +121,7 @@ class Find(Command, ConsolePrinter):
         for case in cases_to_run:
             unique_kwds.setdefault(case.root, set()).update(case.keywords)
         _, max_width = tty.terminal_size()
-        for (root, kwds) in unique_kwds.items():
+        for root, kwds in unique_kwds.items():
             label = colorize("@m{%s}" % root)
             tty.hline(label, max_width=max_width)
             cols = colified(sorted(kwds), indent=2, width=max_width)
@@ -135,7 +138,7 @@ class Find(Command, ConsolePrinter):
         for case in cases_to_run:
             line = f"{hhmmss(case.runtime)}    {case.name}"
             tree.setdefault(case.root, []).append(line)
-        for (root, lines) in tree.items():
+        for root, lines in tree.items():
             cols = colified(lines, indent=2, width=max_width)
             label = colorize("@m{%s}" % root)
             tty.hline(label, max_width=max_width)

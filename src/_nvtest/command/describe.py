@@ -35,9 +35,9 @@ class Describe(Command):
                 assert isinstance(ns.action, str)
                 src, dst = ns.value
                 grouped.setdefault(ns.action, []).append((src, dst))
-            for (action, files) in grouped.items():
+            for action, files in grouped.items():
                 fp.write(f"  {action.title()}:\n")
-                for (src, dst) in files:
+                for src, dst in files:
                     fp.write(f"    {src}")
                     if dst and dst != os.path.basename(src):
                         fp.write(f" -> {dst}")

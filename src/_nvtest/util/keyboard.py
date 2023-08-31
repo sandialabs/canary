@@ -43,4 +43,4 @@ def get_key() -> Union[None, str]:
     finally:
         termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
         fcntl.fcntl(fd, fcntl.F_SETFL, oldflags)
-    return None if char is None else key_mapping(char)
+    return None if not char else key_mapping(char)

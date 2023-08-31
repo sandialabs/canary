@@ -6,21 +6,34 @@ from .base import Queue
 
 
 class BatchQueue(Queue):
+    def validate(self) -> None:
+        ...
+
     def batch_info(self) -> list[list[str]]:
         return [[case.fullname for case in batch] for batch in self.work_items]
 
     def create_queue(self, work_items: list[Partition]) -> dict[int, Partition]:
         queue: dict[int, Partition] = {}
         n = len(work_items)
-        for (i, cases) in enumerate(work_items):
+        for i, cases in enumerate(work_items):
             cases_to_run = [case for case in cases if not case.skip]
             if not cases_to_run:
                 continue
             queue[i] = Partition(cases_to_run, i, n)
         return queue
 
-    def refresh(self):
-        self.queue = self.create_queue(self.work_items)
+    def mark_as_complete(self, batch_no: int) -> Partition:
+        if batch_no not in self._running:
+            raise RuntimeError(f"batch {batch_no} is not running")
+        with self.lock():
+            self._done[batch_no] = self._running.pop(batch_no)
+            completed = dict([(_.id, _) for _ in self.completed_testcases()])
+            for batch in self.queue.value():
+                for case in batch:
+                    for (i, dep) in case.dependencies:
+                        if dep.id in completed:
+                            case.dependencies[i] = completed[dep.id]
+        return batch
 
     @property
     def cases(self) -> list[TestCase]:

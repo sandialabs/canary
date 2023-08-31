@@ -1,9 +1,9 @@
-import os
 from typing import Optional
 from typing import Union
 
 from ..test.partition import Partition
 from ..test.testcase import TestCase
+from ..util import rprobe
 from ..util import tty
 from .base import Queue
 from .batch import BatchQueue
@@ -16,7 +16,7 @@ def factory(
     cpu_count: Optional[int] = None,
 ) -> Queue:
     tty.verbose("Setting up a test case queue")
-    cpus: int = cpu_count if cpu_count is not None else os.cpu_count()  # type: ignore
+    cpus: int = cpu_count or rprobe.cpu_count()
     if not isinstance(items, list):
         raise ValueError("Expected list of items to queue")
     elif isinstance(items, list) and isinstance(items[0], TestCase):

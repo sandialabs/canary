@@ -70,7 +70,7 @@ class Blacklist:
         return f"{self.root}.yaml"
 
     def load_db_for_case(self, case: TestCase) -> Union[None, dict]:
-        dirname = os.path.join(case.root, case.path)
+        dirname = os.path.join(case.file_root, case.file_path)
         while True:
             if dirname in self.cache:
                 return self.cache[dirname]
@@ -80,7 +80,7 @@ class Blacklist:
                 if data:
                     self.cache[dirname] = data
                     return data
-            if dirname == case.root:
+            if dirname == case.file_root:
                 break
             dirname = os.path.dirname(dirname)
         return None
@@ -102,9 +102,9 @@ class Blacklist:
             return None
         for blacklisted in db:
             file = blacklisted["file"]
-            if case.path == file:
+            if case.file_path == file:
                 break
-            elif os.path.join(case.root, case.path).endswith(file):
+            elif os.path.join(case.file_root, case.file_path).endswith(file):
                 break
         else:
             return None

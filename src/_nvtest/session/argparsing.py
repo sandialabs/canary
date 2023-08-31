@@ -82,7 +82,7 @@ class ArgumentParser(argparse.ArgumentParser):
         self.__subcommands[cmdclass.name] = cmdclass
 
     def get_command(self, cmdname: str) -> Optional[Type]:
-        for (name, cmdclass) in self.__subcommands.items():
+        for name, cmdclass in self.__subcommands.items():
             if name == cmdname:
                 return cmdclass
         return None

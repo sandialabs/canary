@@ -33,7 +33,7 @@ class Manager:
         pl = {}
         if scope in self._plugins and stage in self._plugins[scope]:
             pl = self._plugins[scope][stage]
-        for (name, func) in pl.items():
+        for name, func in pl.items():
             yield name, func
 
     def get_plugin(self, scope: str, stage: str, name: str) -> Optional[Any]:

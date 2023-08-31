@@ -104,7 +104,7 @@ class Session:
         self.load_builtin_plugins()
 
         self.parser: ArgumentParser = make_argument_parser()
-        for (_, func) in plugin.plugins("session", "bootstrap"):
+        for _, func in plugin.plugins("session", "bootstrap"):
             func(self)
         self.option: Namespace = Namespace()
         self.parser.parse_args(self.invocation_params.args, namespace=self.option)
@@ -214,7 +214,7 @@ class Session:
             mkdirp(self.dotdir)
             self.dump()
         self.command.setup()  # type: ignore
-        for (name, func) in plugin.plugins("session", "setup"):
+        for name, func in plugin.plugins("session", "setup"):
             func(self)
         tty.verbose("Done starting up test session")
 
@@ -243,11 +243,11 @@ class Session:
         save_env: dict[str, Union[str, None]] = {}
         variables = dict(self.config.variables)
         self.set_pythonpath(variables)
-        for (var, val) in variables.items():
+        for var, val in variables.items():
             save_env[var] = os.environ.pop(var, None)
             os.environ[var] = val
         yield
-        for (var, val) in save_env.items():
+        for var, val in save_env.items():
             if val is None:
                 os.environ.pop(var)
             else:

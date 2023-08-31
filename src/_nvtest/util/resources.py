@@ -2,6 +2,8 @@ import math
 import os
 from types import SimpleNamespace
 
+from . import rprobe
+
 
 def compute_resource_allocations(
     *, machine_config: SimpleNamespace, ranks=None, ranks_per_socket=None
@@ -23,7 +25,7 @@ def compute_resource_allocations(
 
     # System settings
     sockets_per_node = machine_config.sockets_per_node or 1
-    cores_per_socket = machine_config.cores_per_socket or os.cpu_count()
+    cores_per_socket = machine_config.cores_per_socket or rprobe.cpu_count()
 
     if ranks is None and ranks_per_socket is not None:
         # Raise an error since there is no reliable way of finding the number of
