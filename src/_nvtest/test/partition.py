@@ -138,7 +138,7 @@ def dump_partition(partition: Partition, fh: TextIO) -> None:
 
 
 def merge(files: list[str]) -> list[TestCase]:
-    tty.emit(f"Merging partitioned test results from {len(files)} partitions")
+    tty.emit(f"Merging partitioned test results from {len(files)} partitions\n")
     cases: dict[str, TestCase] = {}
     for file in files:
         data = json.load(open(file))

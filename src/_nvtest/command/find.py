@@ -105,7 +105,7 @@ class Find(Command, ConsolePrinter):
             label = colorize("@m{%s}" % root)
             tty.hline(label, max_width=max_width)
             cols = colified(sorted(paths), indent=2, width=max_width)
-            tty.emit(cols)
+            tty.emit(cols + "\n")
         return
 
     def _print_files(self, cases_to_run: list[TestCase]):
@@ -113,7 +113,7 @@ class Find(Command, ConsolePrinter):
         for case in cases_to_run:
             unique_files.add(case.file)
         for file in sorted(unique_files):
-            tty.emit(file)
+            tty.emit(file + "\n")
         return
 
     def _print_keywords(self, cases_to_run: list[TestCase]):
@@ -125,7 +125,7 @@ class Find(Command, ConsolePrinter):
             label = colorize("@m{%s}" % root)
             tty.hline(label, max_width=max_width)
             cols = colified(sorted(kwds), indent=2, width=max_width)
-            tty.emit(cols)
+            tty.emit(cols + "\n")
         return 0
 
     def _print_graph(self, cases_to_run: list[TestCase]):
@@ -142,7 +142,7 @@ class Find(Command, ConsolePrinter):
             cols = colified(lines, indent=2, width=max_width)
             label = colorize("@m{%s}" % root)
             tty.hline(label, max_width=max_width)
-            tty.emit(cols)
-            summary = f"found {len(lines)} test cases"
+            tty.emit(cols + "\n")
+            summary = f"found {len(lines)} test cases\n"
             tty.emit(summary)
         return 0

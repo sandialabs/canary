@@ -165,8 +165,6 @@ class Session:
         tty.set_log_level(log_level)
         self.config.log_level = log_level
         self.config.debug = args.debug
-        if args.debug:
-            tty.set_debug_stat(True)
         for env in args.env_mods:
             self.config.variables[env.var] = env.val
         for path in args.config_mods:

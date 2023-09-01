@@ -142,7 +142,7 @@ def force_remove(file_or_dir):
 
 def force_copy(src, dst, echo=False):
     if echo:
-        tty.emit(f"link {src} -> {dst}")
+        tty.emit(f"link {src} -> {dst}\n")
     if os.path.isfile(src):
         remove(dst)
         copyfile(src, dst)
@@ -328,7 +328,7 @@ def is_exe(path):
 
 def force_symlink(src, dest, echo=False):
     if echo:
-        tty.emit(f"link {src} -> {dest}")
+        tty.emit(f"link {src} -> {dest}\n")
     try:
         os.symlink(src, dest)
     except OSError:

@@ -241,7 +241,7 @@ class AbstractTestFile:
                 # add previous cases as dependencies
                 skip_analyze_case = Skip()
                 if all(bool(case.skip) for case in cases):
-                    skip_analyze_case = cases[0].skip
+                    skip_analyze_case.reason = "deselected due to skipped dependencies"
                 parent = TestCase(
                     self.root,
                     self.path,
@@ -260,7 +260,6 @@ class AbstractTestFile:
             if dependencies:
                 for case in cases:
                     case.add_dependency(*dependencies)
-
             testcases.extend(cases)
         self.resolve_dependencies(testcases)
         return testcases

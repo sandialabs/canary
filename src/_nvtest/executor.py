@@ -15,6 +15,7 @@ from . import plugin
 from .queue import factory as q_factory
 from .runner import factory as r_factory
 from .test.enums import Result
+from .util.graph import TopologicalSorter
 from .test.partition import Partition
 from .test.partition import partition_t
 from .test.testcase import TestCase
@@ -119,31 +120,35 @@ class Executor:
     def setup_testcases(self, copy_all_resources: bool = False) -> None:
         tty.verbose("Setting up test cases")
         mkdirp(self.workdir)
+        ts = TopologicalSorter()
+        for case in self.cases:
+            ts.add(case, *case.dependencies)
         force_remove(self.tc_prog_file)
         with self.session.rc_environ():
             with working_dir(self.workdir):
                 tty.verbose("Launching mulitprocssing pool to setup tests in parallel")
-                pool = multiprocessing.Pool(processes=self.cpu_count)
-                args = zip(
-                    self.cases, repeat(self.workdir), repeat(copy_all_resources)
-                )
-                result = pool.starmap(_setup_individual_case, args)
-                pool.close()
-                pool.join()
-                attrs = dict(result)
-                tty.verbose("Join mulitprocssing pool")
-        for case in self.cases:
-            # Since setup is run in a multiprocessing pool, the internal
-            # state is lost and needs to be updated
-            case.update(attrs[case.fullname])
-            if not case.skip:
-                case.result = Result("setup")
-            case.dump()
+                ts.prepare()
+                while ts.is_active():
+                    group = ts.get_ready()
+                    args = zip(group, repeat(self.workdir), repeat(copy_all_resources))
+                    pool = multiprocessing.Pool(processes=self.cpu_count)
+                    result = pool.starmap(_setup_individual_case, args)
+                    pool.close()
+                    pool.join()
+                    attrs = dict(result)
+                    for case in group:
+                        # Since setup is run in a multiprocessing pool, the internal
+                        # state is lost and needs to be updated
+                        case.update(attrs[case.fullname])
+                        if not case.skip:
+                            case.result = Result("setup")
+                        case.dump()
 
-            with working_dir(case.exec_dir):
-                for _, func in plugin.plugins("test", "setup"):
-                    func(self.session, case, on_options=self.session.option.on_options)
-
+                        with working_dir(case.exec_dir):
+                            kwds = dict(on_options=self.session.option.on_options)
+                            for _, func in plugin.plugins("test", "setup"):
+                                func(self.session, case, **kwds)
+                    ts.done(*group)
         tty.verbose("Done setting up test cases")
 
     def process_testcases(self, _timeout: int) -> None:
@@ -209,6 +214,7 @@ class SingleBatchDirectExecutor(Executor):
 
 
 def _setup_individual_case(case, exec_root, copy_all_resources):
-    tty.verbose("Setting up {case}")
+    tty.verbose(f"Setting up {case}")
     case.setup(exec_root=exec_root, copy_all_resources=copy_all_resources)
+    tty.verbose(f"Done etting up {case}")
     return (case.fullname, vars(case))

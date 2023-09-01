@@ -18,32 +18,32 @@ from .color import cescape
 from .color import clen
 from .color import cprint
 
-_stacktrace = False
-_timestamp = False
-_prefix = "==>"
-indent = "  "
+PRINT_TIMESTAMP = False
+DEFAULT_PREFIX = "==>"
+INDENT = "  "
 
+DEBUG = 4
 VERBOSE = 3
 INFO = 2
 WARN = 1
 ERROR = 0
 
-_level = INFO
-_debug = False
+LOG_LEVEL = INFO
 
 
 def set_log_level(arg: int) -> int:
-    global _level
-    assert arg in (VERBOSE, INFO, WARN, ERROR)
-    orig = _level
-    _level = arg
-    if arg == VERBOSE:
-        set_timestamp_stat(True)
+    global LOG_LEVEL
+    global PRINT_TIMESTAMP
+    assert arg in (DEBUG, VERBOSE, INFO, WARN, ERROR)
+    orig = LOG_LEVEL
+    LOG_LEVEL = arg
+    if arg >= VERBOSE:
+        PRINT_TIMESTAMP = True
     return orig
 
 
 def get_log_level() -> int:
-    return _level
+    return LOG_LEVEL
 
 
 def default_log_level() -> int:
@@ -55,40 +55,16 @@ def min_log_level() -> int:
 
 
 def max_log_level() -> int:
-    return VERBOSE
+    return DEBUG
 
 
-def set_debug_stat(arg: bool) -> bool:
-    global _debug
-    orig = _debug
-    _debug = bool(arg)
-    return orig
-
-
-def get_debug_stat() -> bool:
-    return _debug
-
-
-def set_stacktrace_stat(arg: bool) -> bool:
-    global _stacktrace
-    orig = _stacktrace
-    _stacktrace = bool(arg)
-    return orig
-
-
-def get_stacktrace_stat() -> bool:
-    return _stacktrace
-
-
-def set_timestamp_stat(arg: bool) -> bool:
-    global _timestamp
-    orig = _timestamp
-    _timestamp = bool(arg)
-    return orig
-
-
-def get_timestamp_stat() -> bool:
-    return _timestamp
+@contextmanager
+def timestamps():
+    global PRINT_TIMESTAMP
+    save = PRINT_TIMESTAMP
+    PRINT_TIMESTAMP = True
+    yield
+    PRINT_TIMESTAMP = save
 
 
 def process_stacktrace(countback):
@@ -108,117 +84,95 @@ def process_stacktrace(countback):
     return st_text
 
 
-def get_prefix():
-    return _prefix
-
-
 def get_timestamp(force=False):
     """Get a string timestamp"""
-    if get_debug_stat() or _timestamp or force:
+    if LOG_LEVEL >= DEBUG or PRINT_TIMESTAMP or force:
         return datetime.now().strftime("[%Y-%m-%d-%H:%M:%S.%f] ")
     else:
         return ""
 
 
-def emit(message, *args, **kwargs):
-    stream = kwargs.get("stream", sys.stdout)
+def emit(message, stream=sys.stdout):
+    stream.write(message)
+    stream.flush()
+
+
+def format_message(message, *args, **kwargs):
+    format = kwargs.get("format", "*b")
     wrap = kwargs.get("wrap", False)
     end = kwargs.get("end", "\n")
-    break_long_words = kwargs.get("break_long_words", False)
-    cprint("%s" % str(message), stream=stream, end=end)
+    prefix = kwargs.get("prefix", DEFAULT_PREFIX)
+    st_text = ""
+    if "countback" in kwargs:
+        st_countback = kwargs.get("countback", 3)
+        st_text = process_stacktrace(st_countback)
+    if prefix is None:
+        fmt = "%(ts)s%(msg)s"
+    else:
+        fmt = "@%(fmt)s{%(st_text)s%(prefix)s} %(ts)s%(msg)s"
+    kwds = {
+        "fmt": format,
+        "st_text": st_text,
+        "prefix": prefix,
+        "ts": get_timestamp(),
+        "msg": cescape(str(message))
+    }
+    text = fmt % kwds
+    stream = StringIO()
+    cprint(text, stream=stream, end=end)
     for arg in args:
-        if wrap:
-            lines = textwrap.wrap(
-                str(arg),
-                initial_indent=indent,
-                subsequent_indent=indent,
-                break_long_words=break_long_words,
-            )
-            for line in lines:
-                stream.write(line + "\n")
-        else:
-            stream.write(indent + str(arg) + end)
+        if not wrap:
+            stream.write(INDENT + str(arg) + end)
+            continue
+        lines = textwrap.wrap(
+            str(arg),
+            initial_indent=INDENT,
+            subsequent_indent=INDENT,
+            break_long_words=False,
+        )
+        for line in lines:
+            stream.write(line + "\n")
     stream.flush()
+    return stream.getvalue()
 
 
 def info(message, *args, **kwargs):
-    if get_log_level() < INFO:
+    if LOG_LEVEL < INFO:
         return
-    format = kwargs.get("format", "*b")
-    stream = kwargs.get("stream", sys.stdout)
-    wrap = kwargs.get("wrap", False)
-    prefix = kwargs.get("prefix", get_prefix())
-    end = kwargs.get("end", "\n")
-    break_long_words = kwargs.get("break_long_words", False)
-    st_countback = kwargs.get("countback", 3)
-    if not prefix:
-        emit(
-            message,
-            *args,
-            stream=stream,
-            wrap=wrap,
-            end=end,
-            break_long_words=break_long_words,
-        )
-        return
-
-    reported_by = kwargs.get("reported_by")
-    if reported_by is not None:
-        message += " (reported by {0})".format(reported_by)
-
-    st_text = ""
-    if get_stacktrace_stat():
-        st_text = process_stacktrace(st_countback)
-    cprint(
-        "@%s{%s%s} %s%s"
-        % (format, st_text, prefix, get_timestamp(), cescape(str(message))),
-        stream=stream,
-        end=end,
-    )
-    for arg in args:
-        if wrap:
-            lines = textwrap.wrap(
-                str(arg),
-                initial_indent=indent,
-                subsequent_indent=indent,
-                break_long_words=break_long_words,
-            )
-            for line in lines:
-                stream.write(line + "\n")
-        else:
-            stream.write(indent + str(arg) + end)
-    stream.flush()
+    text = format_message(message, *args, **kwargs)
+    emit(text, stream=kwargs.get("stream", sys.stdout))
 
 
 def verbose(message, *args, **kwargs):
-    if get_log_level() >= VERBOSE:
-        kwargs.setdefault("format", "c")
-        info(message, *args, **kwargs)
+    if LOG_LEVEL < VERBOSE:
+        return
+    kwargs.setdefault("format", "*c")
+    text = format_message(message, *args, **kwargs)
+    emit(text, stream=kwargs.get("stream", sys.stdout))
 
 
 def debug(message, *args, **kwargs):
-    if get_debug_stat():
-        kwargs.setdefault("format", "g")
-        kwargs.setdefault("stream", sys.stdout)
-        info(message, *args, **kwargs)
+    if LOG_LEVEL < DEBUG:
+        return
+    kwargs.setdefault("format", "*g")
+    text = format_message(message, *args, **kwargs)
+    emit(text, stream=kwargs.get("stream", sys.stdout))
 
 
 def error(message, *args, **kwargs):
-    if get_log_level() < ERROR:
+    if LOG_LEVEL < ERROR:
         return
-
     kwargs.setdefault("format", "*r")
-    kwargs.setdefault("stream", sys.stderr)
-    info("Error: " + str(message), *args, **kwargs)
+    text = format_message("Error: " + str(message), *args, **kwargs)
+    emit(text, stream=kwargs.get("stream", sys.stderr))
 
 
 def warn(message, *args, **kwargs):
-    if get_log_level() < WARN:
+    if LOG_LEVEL < WARN:
         return
-
     kwargs.setdefault("format", "*Y")
-    kwargs.setdefault("stream", sys.stderr)
-    info("Warning: " + str(message), *args, **kwargs)
+    text = format_message("Warning: " + str(message), *args, **kwargs)
+    emit(text, stream=kwargs.get("stream", sys.stderr))
 
 
 def die(message, *args, **kwargs):
@@ -296,10 +250,9 @@ def terminal_size():
 
 
 def fileno(file_or_fd):
-    fd = getattr(file_or_fd, "fileno", lambda: file_or_fd)()
-    if not isinstance(fd, int):
+    if not hasattr(file_or_fd, "fileno"):
         raise ValueError("Expected a file (`.fileno()`) or a file descriptor")
-    return fd
+    return file_or_fd.fileno()
 
 
 def streamify(arg, mode):
@@ -310,19 +263,14 @@ def streamify(arg, mode):
 
 
 @contextmanager
-def redirect_stdout(file_like=os.devnull, mode="w", stdout=None):
+def redirect_stdout(to=os.devnull, stdout=None):
     stdout = stdout or sys.stdout
-    file, fown = streamify(file_like, mode)
     stdout_fd = fileno(stdout)
     # copy stdout_fd before it is overwritten
     # NOTE: `copied` is inheritable on Windows when duplicating a standard stream
     with os.fdopen(os.dup(stdout_fd), "wb") as copied:
         stdout.flush()  # flush library buffers that dup2 knows nothing about
-        try:
-            os.dup2(fileno(file), stdout_fd)  # $ exec >&file
-        except ValueError:  # filename
-            with open(file, "wb") as to_file:
-                os.dup2(to_file.fileno(), stdout_fd)  # $ exec > file
+        os.dup2(fileno(to), stdout_fd)  # $ exec >&file
         try:
             yield stdout  # allow code to be run with the redirected stdout
         finally:
@@ -330,8 +278,10 @@ def redirect_stdout(file_like=os.devnull, mode="w", stdout=None):
             # NOTE: dup2 makes stdout_fd inheritable unconditionally
             stdout.flush()
             os.dup2(copied.fileno(), stdout_fd)  # $ exec >&copied
-            if fown:
-                file.close()
+
+
+def merged_stderr_stdout():  # $ exec 2>&1
+    return redirect_stdout(to=sys.stdout, stdout=sys.stderr)
 
 
 @contextmanager
@@ -339,6 +289,9 @@ def log_output(file_like, mode="w"):
     if file_like is None:
         yield
     else:
-        with redirect_stdout(file_like=file_like, mode=mode):
-            with redirect_stdout(file_like=sys.stdout, stdout=sys.stderr):
+        file, fown = streamify(file_like, mode)
+        with redirect_stdout(to=file):
+            with merged_stderr_stdout():
                 yield
+        if fown:
+            file.close()

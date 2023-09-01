@@ -154,7 +154,7 @@ class Reporter:
 
     def write_test_xml(self, dest: str = ".") -> str:
         filename = os.path.join(dest, "Test.xml")
-        tty.info(f"WRITING: Test.xml to {filename}", prefix="")
+        tty.info(f"WRITING: Test.xml to {filename}", prefix=None)
         starttime = self.data.start
 
         doc = xdom.Document()
@@ -237,7 +237,7 @@ class Reporter:
 
     def write_notes_xml(self, dest: str = ".") -> str:
         filename = os.path.join(dest, "Notes.xml")
-        tty.info(f"WRITING: Notes.xml to {filename}", prefix="")
+        tty.info(f"WRITING: Notes.xml to {filename}", prefix=None)
         notes: dict[str, str] = {}
         doc = xdom.Document()
         root = self.site_node()

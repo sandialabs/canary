@@ -10,7 +10,6 @@ from contextlib import contextmanager
 from copy import deepcopy
 from string import Template
 from typing import Optional
-from typing import Sequence
 from typing import Union
 
 from ..util import filesystem as fs
@@ -27,13 +26,13 @@ from .enums import Skip
 from ..compat.vvtest import write_vvtest_util
 
 
-@contextmanager
-def null_context():
-    yield
+def stringify(arg: Union[float, int, str]) -> str:
+    if isinstance(arg, float) and arg > 1e5:
+        return f"{arg:e}"
+    return str(arg)
 
 
 class TestCase:
-    _logfile_name = "nvtest-out.txt"
 
     def __init__(
         self,
@@ -76,7 +75,8 @@ class TestCase:
         self.display_name = self.family
         if self.parameters:
             keys = sorted(self.parameters.keys())
-            s_params = [f"{k}={self.parameters[k]}" for k in keys]
+            s_vals = [stringify(self.parameters[k]) for k in keys]
+            s_params = [f"{k}={s_vals[i]}" for (i, k) in enumerate(keys)]
             self.name = f"{self.name}.{'.'.join(s_params)}"
             self.display_name = f"{self.display_name}[{','.join(s_params)}]"
         self.fullname = os.path.join(os.path.dirname(self.file_path), self.name)
@@ -116,15 +116,16 @@ class TestCase:
         return self.display_name
 
     def pretty_repr(self) -> str:
+        family = colorize("@*{%s}" % self.family)
         i = self.display_name.find("[")
         if i == -1:
-            return self.display_name
+            return family
         parts = self.display_name[i+1:-1].split(",")
         colors = itertools.cycle("bmgycr")
         for j, part in enumerate(parts):
             color = next(colors)
             parts[j] = colorize("@%s{%s}" % (color, part))
-        return f"{self.display_name[:i]}[{','.join(parts)}]"
+        return f"{family}[{','.join(parts)}]"
 
     def add_default_env(self, var: str, value: str) -> None:
         self.variables[var] = value
@@ -134,7 +135,7 @@ class TestCase:
 
     @property
     def logfile(self) -> str:
-        return os.path.join(self.exec_dir, self._logfile_name)
+        return os.path.join(self.exec_dir, "nvtest-out.txt")
 
     @property
     def exec_dir(self) -> str:
@@ -145,7 +146,7 @@ class TestCase:
     @property
     def ready(self) -> bool:
         for dep in self.dependencies:
-            if dep.result in (Result.NOTRUN, Result.NOTDONE):
+            if dep.result in (Result.SETUP, Result.NOTRUN, Result.NOTDONE):
                 return False
         return True
 
@@ -215,17 +216,26 @@ class TestCase:
         return string.format(**kwds)
 
     def copy_sources_to_workdir(self, copy_all_resources: bool = False):
+        workdir = self.exec_dir
         for action in ("copy", "link"):
             for t, dst in self.sources.get(action, []):
-                src = t if os.path.exists(t) else os.path.join(self.file_dir, t)
+                if os.path.exists(t):
+                    src = t
+                else:
+                    src = os.path.join(self.file_dir, t)
+                dst = os.path.join(workdir, os.path.basename(dst))
                 if not os.path.exists(src):
                     s = f"{action} resource file {t} not found"
                     tty.error(s)
                     self._skip.reason = s
-                elif action == "copy" or copy_all_resources:
+                    continue
+                elif os.path.exists(dst):
+                    tty.warn(f"{os.path.basename(dst)} already exists in {workdir}")
+                    continue
+                if action == "copy" or copy_all_resources:
                     fs.force_copy(src, dst, echo=True)
                 else:
-                    relsrc = os.path.relpath(src, os.getcwd())
+                    relsrc = os.path.relpath(src, workdir)
                     fs.force_symlink(relsrc, dst, echo=True)
 
     def asdict(self):
@@ -349,25 +359,24 @@ class TestCase:
         tty.verbose(f"Setting up {self}")
         self.exec_root = exec_root or os.getcwd()  # type: ignore
         fs.force_remove(self.exec_dir)
-        _timestamp_stat = tty.set_timestamp_stat(True)
         with fs.working_dir(self.exec_dir, create=True):
             with tty.log_output(self.logfile, mode="w"):
-                tty.info(f"Preparing test: {self.name}")
-                tty.info(f"Directory: {os.getcwd()}")
-                tty.info("\nCleaning work directory...")
-                for item in glob.glob("*"):
-                    fs.force_remove(item)
-                tty.info("\nLinking and copying working files...")
-                if copy_all_resources:
-                    fs.force_copy(self.file, os.path.basename(self.file), echo=True)
-                else:
-                    relsrc = os.path.relpath(self.file, os.getcwd())
-                    fs.force_symlink(relsrc, os.path.basename(self.file), echo=True)
-                self.copy_sources_to_workdir(copy_all_resources=copy_all_resources)
                 if self.file_type == "vvt":
-                    write_vvtest_util(self)
-                self.dump()
-        tty.set_timestamp_stat(_timestamp_stat)
+                    fs.force_symlink(self.logfile, "execute.log")
+                with tty.timestamps():
+                    tty.info(f"Preparing test: {self.name}")
+                    tty.info(f"Directory: {os.getcwd()}")
+                    tty.info("\nCleaning work directory...")
+                    tty.info("\nLinking and copying working files...")
+                    if copy_all_resources:
+                        fs.force_copy(self.file, os.path.basename(self.file), echo=True)
+                    else:
+                        relsrc = os.path.relpath(self.file, os.getcwd())
+                        fs.force_symlink(relsrc, os.path.basename(self.file), echo=True)
+                    self.copy_sources_to_workdir(copy_all_resources=copy_all_resources)
+                    if self.file_type == "vvt":
+                        write_vvtest_util(self)
+                    self.dump()
         tty.verbose(f"Done setting up {self}")
         return
 
@@ -387,32 +396,31 @@ class TestCase:
             raise RuntimeError("Dependency patterns must be resolved before running")
         if log_level is not None:
             _log_level = tty.set_log_level(log_level)
-        tty.info(f"STARTING: {self.pretty_repr()}", prefix="")
+        tty.info(f"STARTING: {self.pretty_repr()}", prefix=None)
         self.start = time.time()
         python = Executable(sys.executable)
         python.add_begin_callback(self.register_proc)
-        _timestamp_stat = tty.set_timestamp_stat(True)
         with fs.working_dir(self.exec_dir):
             with tty.log_output(self.logfile, mode="a"):
-                if self.analyze and self.analyze.startswith("-"):
-                    args = [os.path.basename(self.file), self.analyze]
-                elif self.analyze:
-                    args = [self.analyze]
-                else:
-                    args = [os.path.basename(self.file)]
-                with tmp_environ(PYTHONPATH=self.pythonpath, **self.variables):
-                    python(*args, fail_on_error=False, timeout=self.timeout)
-                self._process = None
-                self.cmd_line = python.cmd_line
-                rc = python.returncode
-                self.returncode = rc
-                self.result = Result.from_returncode(rc)
-                if self.result == Result.SKIP:
-                    self._skip.reason = "runtime exception"
-        tty.set_timestamp_stat(_timestamp_stat)
+                with tty.timestamps():
+                    if self.analyze and self.analyze.startswith("-"):
+                        args = [os.path.basename(self.file), self.analyze]
+                    elif self.analyze:
+                        args = [self.analyze]
+                    else:
+                        args = [os.path.basename(self.file)]
+                    with tmp_environ(PYTHONPATH=self.pythonpath, **self.variables):
+                        python(*args, fail_on_error=False, timeout=self.timeout)
+                    self._process = None
+                    self.cmd_line = python.cmd_line
+                    rc = python.returncode
+                    self.returncode = rc
+                    self.result = Result.from_returncode(rc)
+                    if self.result == Result.SKIP:
+                        self._skip.reason = "runtime exception"
         self.finish = time.time()
         stat = self.result.cname
-        tty.info(f"FINISHED: {self.pretty_repr()} {stat}", prefix="")
+        tty.info(f"FINISHED: {self.pretty_repr()} {stat}", prefix=None)
         self.dump()
         if log_level is not None:
             tty.set_log_level(_log_level)

@@ -100,10 +100,10 @@ class Queue:
         while True:
             if not len(self.queue):
                 raise StopIteration
-            key = keyboard.get_key()
-            if isinstance(key, str) and key in "sS":
-                self.print_status()
             for i, item in self.queue.items():
+                key = keyboard.get_key()
+                if isinstance(key, str) and key in "sS":
+                    self.print_status()
                 with self.lock():
                     avail_workers = self._avail_workers
                     if avail_workers and item.size <= self._avail_cpus and item.ready:
