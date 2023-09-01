@@ -15,7 +15,6 @@ from . import plugin
 from .queue import factory as q_factory
 from .runner import factory as r_factory
 from .test.enums import Result
-from .util.graph import TopologicalSorter
 from .test.partition import Partition
 from .test.partition import partition_t
 from .test.testcase import TestCase
@@ -23,6 +22,7 @@ from .util import tty
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
+from .util.graph import TopologicalSorter
 from .util.returncode import compute_returncode
 from .util.time import timeout
 
@@ -120,7 +120,7 @@ class Executor:
     def setup_testcases(self, copy_all_resources: bool = False) -> None:
         tty.verbose("Setting up test cases")
         mkdirp(self.workdir)
-        ts = TopologicalSorter()
+        ts: TopologicalSorter = TopologicalSorter()
         for case in self.cases:
             ts.add(case, *case.dependencies)
         force_remove(self.tc_prog_file)
@@ -177,8 +177,8 @@ class Executor:
                     case.dump()
 
     def update_from_future(
-            self, ent_no: int, entity: Union[Partition, TestCase], future: Future
-        ) -> None:
+        self, ent_no: int, entity: Union[Partition, TestCase], future: Future
+    ) -> None:
         attrs = future.result()
         obj: Union[TestCase, Partition] = self.queue.mark_as_complete(ent_no)
         assert id(obj) == id(entity)

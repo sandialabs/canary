@@ -99,7 +99,7 @@ class Find(Command, ConsolePrinter):
     def _print_paths(self, cases_to_run: list[TestCase]):
         unique_files: dict[str, set[str]] = dict()
         for case in cases_to_run:
-            unique_files.setdefault(case.root, set()).add(case.path)
+            unique_files.setdefault(case.file_root, set()).add(case.file_path)
         _, max_width = tty.terminal_size()
         for root, paths in unique_files.items():
             label = colorize("@m{%s}" % root)
@@ -119,7 +119,7 @@ class Find(Command, ConsolePrinter):
     def _print_keywords(self, cases_to_run: list[TestCase]):
         unique_kwds: dict[str, set[str]] = dict()
         for case in cases_to_run:
-            unique_kwds.setdefault(case.root, set()).update(case.keywords)
+            unique_kwds.setdefault(case.file_root, set()).update(case.keywords)
         _, max_width = tty.terminal_size()
         for root, kwds in unique_kwds.items():
             label = colorize("@m{%s}" % root)
@@ -137,7 +137,7 @@ class Find(Command, ConsolePrinter):
         tree: dict[str, list[str]] = {}
         for case in cases_to_run:
             line = f"{hhmmss(case.runtime)}    {case.name}"
-            tree.setdefault(case.root, []).append(line)
+            tree.setdefault(case.file_root, []).append(line)
         for root, lines in tree.items():
             cols = colified(lines, indent=2, width=max_width)
             label = colorize("@m{%s}" % root)

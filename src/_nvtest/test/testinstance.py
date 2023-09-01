@@ -11,8 +11,8 @@ from .testcase import TestCase
 
 @dataclasses.dataclass(frozen=True)
 class TestInstance:
-    root: str
-    path: str
+    file_root: str
+    file_path: str
     name: str
     file: str
     size: int
@@ -34,7 +34,7 @@ class TestInstance:
     cmd_line: str
     returncode: int
     variables: dict[str, str]
-    dependencies: set["TestCase"]
+    dependencies: list["TestCase"]
 
     @classmethod
     def load(
@@ -42,10 +42,10 @@ class TestInstance:
     ) -> "TestInstance":
         case = TestCase.load(arg_path)
         self = cls(
-            root=case.root,
-            path=case.path,
+            root=case.file_root,
+            path=case.file_path,
             name=case.name,
-            file=os.path.join(case.root, case.path),
+            file=os.path.join(case.file_root, case.file_path),
             size=case.size,
             family=case.family,
             analyze=case.analyze or "",

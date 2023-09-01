@@ -10,7 +10,7 @@ builtin_print = print
 
 
 def static_order(cases: list[TestCase]) -> list[TestCase]:
-    graph: dict[TestCase, set[TestCase]] = {}
+    graph: dict[TestCase, list[TestCase]] = {}
     for case in cases:
         graph[case] = case.dependencies
     ts = TopologicalSorter(graph)

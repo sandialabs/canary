@@ -1,17 +1,16 @@
-import enum
 import errno
-import glob
 import itertools
 import json
 import os
 import sys
 import time
-from contextlib import contextmanager
 from copy import deepcopy
 from string import Template
+from typing import Any
 from typing import Optional
 from typing import Union
 
+from ..compat.vvtest import write_vvtest_util
 from ..util import filesystem as fs
 from ..util import tty
 from ..util.compression import compress_file
@@ -23,17 +22,15 @@ from ..util.hash import hashit
 from ..util.tty.color import colorize
 from .enums import Result
 from .enums import Skip
-from ..compat.vvtest import write_vvtest_util
 
 
-def stringify(arg: Union[float, int, str]) -> str:
+def stringify(arg: Any) -> str:
     if isinstance(arg, float) and arg > 1e5:
         return f"{arg:e}"
     return str(arg)
 
 
 class TestCase:
-
     def __init__(
         self,
         root: str,
@@ -120,7 +117,7 @@ class TestCase:
         i = self.display_name.find("[")
         if i == -1:
             return family
-        parts = self.display_name[i+1:-1].split(",")
+        parts = self.display_name[i + 1 : -1].split(",")
         colors = itertools.cycle("bmgycr")
         for j, part in enumerate(parts):
             color = next(colors)

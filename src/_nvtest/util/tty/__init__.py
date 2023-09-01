@@ -115,7 +115,7 @@ def format_message(message, *args, **kwargs):
         "st_text": st_text,
         "prefix": prefix,
         "ts": get_timestamp(),
-        "msg": cescape(str(message))
+        "msg": cescape(str(message)),
     }
     text = fmt % kwds
     stream = StringIO()

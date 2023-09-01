@@ -3,8 +3,8 @@ import time
 from contextlib import contextmanager
 from typing import Any
 from typing import Generator
-from typing import Union
 from typing import Optional
+from typing import Union
 
 from ..test.enums import Result
 from ..test.partition import Partition
@@ -32,7 +32,7 @@ class Queue:
         raise NotImplementedError
 
     @contextmanager
-    def lock(self) -> None:
+    def lock(self) -> Generator[None, None, None]:
         lock = self.acquire_lock()
         yield
         self.release_lock(lock)

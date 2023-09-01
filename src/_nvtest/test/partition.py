@@ -64,7 +64,7 @@ class Partition(list):
 
 
 def group_testcases(cases: list[TestCase]):
-    groups: list[set[TestCase]] = [{case} | case.dependencies for case in cases]
+    groups: list[set[TestCase]] = [{case} | set(case.dependencies) for case in cases]
     for group in groups:
         for other in groups:
             if group != other and group & other:
@@ -104,13 +104,13 @@ def load_partition(path: str) -> Partition:
     for case_vars in data["cases"]:
         cases.append(TestCase.from_dict(case_vars))
     for case in cases:
-        dependencies: set[Union[TestCase, str]] = set()
+        dependencies: set[TestCase] = set()
         for other in cases:
             if other in case.dependencies:
                 dependencies.add(other)
         if dependencies:
-            assert len(dependencies) == len(case._dependencies)
-            case._dependencies = dependencies
+            assert len(dependencies) == len(case.dependencies)
+            case.dependencies = [case for case in dependencies]
     i, n = data["rank"]
     return Partition(cases, i, n)
 

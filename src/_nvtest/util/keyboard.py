@@ -48,6 +48,7 @@ def get_key() -> Union[None, str]:
 
 if __name__ == "__main__":
     import time
+
     while True:
         char = get_key()
         print(f"THE CHAR IS {char}")

@@ -4,20 +4,21 @@ import os
 import re
 import sys
 import tokenize
+import typing
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from typing import Generator
 from typing import Union
 
+from .. import paths
 from ..mark.structures import AbstractParameterSet
 from ..util.time import to_seconds
 from ..util.tty.color import colorize
-from .. import paths
 
 if TYPE_CHECKING:
-    from ..test.testfile import AbstractTestFile
     from ..test.testcase import TestCase
+    from ..test.testfile import AbstractTestFile
 
 
 def load_vvt(file: "AbstractTestFile") -> None:
@@ -373,6 +374,7 @@ def write_vvtest_util(case: "TestCase") -> None:
             fh.write(f"{key} = {json.dumps(value, indent=3)}\n")
 
 
+@typing.no_type_check
 def get_vvtest_attrs(case: "TestCase") -> dict:
     attrs = {}
     attrs["NAME"] = case.family
