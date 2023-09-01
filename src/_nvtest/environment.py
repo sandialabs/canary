@@ -3,7 +3,8 @@ import fnmatch
 import os
 from typing import Optional
 
-from .config import Config
+from . import plugin
+from .session import Session
 from .test import AbstractTestFile
 from .test import TestCase
 from .util import filesystem as fs
@@ -64,7 +65,7 @@ class Environment:
 
     def test_cases(
         self,
-        config: Config,
+        session: Session,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
     ) -> list[TestCase]:
@@ -78,11 +79,14 @@ class Environment:
         for abstract_files in self.tree.values():
             for abstract_file in abstract_files:
                 concrete_test_cases = abstract_file.freeze(
-                    config, keyword_expr=keyword_expr, on_options=on_options
+                    session.config, keyword_expr=keyword_expr, on_options=on_options
                 )
                 cases.extend([case for case in concrete_test_cases if case])
         self.resolve_dependencies(cases)
         self.check_for_skipped_dependencies(cases)
+        for _, func in plugin.plugins("test", "discovery"):
+            for case in cases:
+                func(session, case)
         tty.verbose("Done creating test cases")
         return cases
 

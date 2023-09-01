@@ -84,7 +84,7 @@ class RunTests(Command, ConsolePrinter):
             self.print_text(text)
             env.discover()
             self.cases = env.test_cases(
-                self.config,
+                self.session,
                 on_options=self.option.on_options,
                 keyword_expr=self.option.keyword_expr,
             )

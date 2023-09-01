@@ -196,7 +196,7 @@ def evaluate_boolean_expression(expression):
 _blacklist = Singleton(Blacklist)
 
 
-@nvtest.plugin.register("blacklist", scope="test", stage="setup")
+@nvtest.plugin.register("blacklist", scope="test", stage="discovery")
 def blacklisted(session: Session, case: TestCase, **kwargs: Any) -> None:
     if case.skip:
         return

@@ -18,7 +18,7 @@ class Manager:
             if stage not in ("bootstrap", "setup", "finish"):
                 raise TypeError(f"register() got unexpected stage {stage!r}")
         elif scope == "test":
-            if stage not in ("setup", "finish"):
+            if stage not in ("discovery", "setup", "finish"):
                 raise TypeError(f"register() got unexpected stage {stage!r}")
         else:
             raise TypeError(f"register() got unexpected scope {scope!r}")

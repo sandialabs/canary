@@ -49,7 +49,7 @@ class CreateBatches(Command, ConsolePrinter):
         )
         env.discover()
         self.cases = env.test_cases(
-            self.session.config,
+            self.session,
             on_options=self.session.option.on_options,
             keyword_expr=self.session.option.keyword_expr,
         )

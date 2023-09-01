@@ -74,7 +74,7 @@ class Find(Command, ConsolePrinter):
         env = Environment(search_paths=self.session.option.search_paths)
         env.discover()
         self.cases = env.test_cases(
-            self.config,
+            self.session,
             keyword_expr=self.session.option.keyword_expr,
             on_options=self.session.option.on_options,
         )
