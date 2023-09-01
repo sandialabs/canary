@@ -128,7 +128,7 @@ class Queue:
                 f += 1
         fmt = "%d/%d running, %d/%d done, %d/%d queued "
         fmt += "(@g{%d pass}, @y{%d diff}, @r{%d fail}, @m{%d timeout})"
-        text = colorize(fmt % (running, total, done, total, notrun, total, p, f, d, t))
+        text = colorize(fmt % (running, total, done, total, notrun, total, p, d, f, t))
         n = clen(text)
         header = colorize("@*c{%s}" % " status ".center(n + 10, "="))
         footer = colorize("@*c{%s}" % "=" * (n + 10))
