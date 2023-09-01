@@ -400,13 +400,10 @@ def get_vvtest_attrs(case: "TestCase") -> dict:
     attrs["diff_exit_status"] = 64
     attrs["skip_exit_status"] = 63
     attrs["opt_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"
-    if not case.dependencies:
-        for key, val in case.parameters.items():
-            attrs[key] = val
-        for key, val in case.parameters.items():
-            attrs[f"PARAM_{key}"] = val
-        attrs["PARAM_DICT"] = case.parameters or {}
-    else:
+    attrs["PARAM_DICT"] = case.parameters or {}
+    for key, val in case.parameters.items():
+        attrs[key] = val
+    if case.dependencies:
         paramset = {}
         for dep in case.dependencies:
             for (key, value) in dep.parameters.items():
