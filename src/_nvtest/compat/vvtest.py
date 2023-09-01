@@ -374,6 +374,14 @@ def write_vvtest_util(case: "TestCase") -> None:
             fh.write(f"{key} = {json.dumps(value, indent=3)}\n")
 
 
+def unique(sequence: list[str]) -> list[str]:
+    result = []
+    for item in sequence:
+        if item not in result:
+            result.append(item)
+    return result
+
+
 @typing.no_type_check
 def get_vvtest_attrs(case: "TestCase") -> dict:
     attrs = {}
@@ -392,18 +400,19 @@ def get_vvtest_attrs(case: "TestCase") -> dict:
     attrs["diff_exit_status"] = 64
     attrs["skip_exit_status"] = 63
     attrs["opt_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"
-    for key, val in case.parameters.items():
-        attrs[key] = val
-    for key, val in case.parameters.items():
-        attrs[f"PARAM_{key}"] = val
-    attrs["PARAM_DICT"] = case.parameters or {}
-    if case.dependencies:
+    if not case.dependencies:
+        for key, val in case.parameters.items():
+            attrs[key] = val
+        for key, val in case.parameters.items():
+            attrs[f"PARAM_{key}"] = val
+        attrs["PARAM_DICT"] = case.parameters or {}
+    else:
         paramset = {}
         for dep in case.dependencies:
             for (key, value) in dep.parameters.items():
                 paramset.setdefault(key, []).append(value)
         for (key, values) in paramset.items():
-            attrs[f"PARAM_{key}"] = values
+            attrs[f"PARAM_{key}"] = unique(values)
         if len(paramset) > 1:
             key = "_".join(_ for _ in next(iter(case.dependencies)).parameters)
             table = [list(_) for _ in zip(*paramset.values())]

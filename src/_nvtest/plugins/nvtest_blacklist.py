@@ -113,7 +113,7 @@ class Blacklist:
         elif isinstance(blacklisted["case"], str):
             blacklisted["case"] = [blacklisted["case"]]
         for bcase in blacklisted["case"]:
-            if case.fullname == bcase:
+            if os.path.basename(case.exec_path) == bcase:
                 return blacklisted
         return None
 
