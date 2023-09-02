@@ -1,43 +1,26 @@
 import sys
-from typing import TYPE_CHECKING
 
-from _nvtest.environment import Environment
-from _nvtest.session.argparsing import ArgumentParser
-from _nvtest.test.testcase import TestCase
-from _nvtest.util import graph
-from _nvtest.util import tty
-from _nvtest.util.time import hhmmss
-from _nvtest.util.tty.colify import colified
-from _nvtest.util.tty.color import colorize
-
-from .common import Command
-from .common import ConsolePrinter
+from ..environment import Environment
+from ..session.argparsing import ArgumentParser
+from ..test.testcase import TestCase
+from ..util import graph
+from ..util import tty
+from ..util.time import hhmmss
+from ..util.tty.colify import colified
+from ..util.tty.color import colorize
 from .common import add_mark_arguments
-
-if TYPE_CHECKING:
-    from _nvtest.config import Config
-    from _nvtest.session import Session
+from .base import Session
 
 
-class Find(Command, ConsolePrinter):
-    name = "find"
-    description = "Search paths for test files"
-
-    def __init__(self, config: "Config", session: "Session") -> None:
-        super().__init__(config, session)
-        self.option = self.session.option
-        self.cases: list[TestCase] = []
-
-    @property
-    def log_level(self) -> int:
-        return self.config.log_level
+class Find(Session):
+    """Search paths for test files"""
 
     @property
     def mode(self) -> str:
         return "anonymous"
 
     @staticmethod
-    def add_options(parser: ArgumentParser):
+    def setup_parser(parser: ArgumentParser):
         group = parser.add_mutually_exclusive_group()
         group.add_argument(
             "-p",
@@ -71,24 +54,24 @@ class Find(Command, ConsolePrinter):
 
     def setup(self):
         self.print_front_matter()
-        env = Environment(search_paths=self.session.option.search_paths)
+        env = Environment(search_paths=self.option.search_paths)
         env.discover()
         self.cases = env.test_cases(
-            self.session,
-            keyword_expr=self.session.option.keyword_expr,
-            on_options=self.session.option.on_options,
+            self,
+            keyword_expr=self.option.keyword_expr,
+            on_options=self.option.on_options,
         )
 
     def run(self) -> int:
         cases_to_run = [case for case in self.cases if not case.skip]
         self.print_testcase_summary()
-        if self.session.option.keywords:
+        if self.option.keywords:
             return self._print_keywords(cases_to_run)
-        elif self.session.option.paths:
+        elif self.option.paths:
             return self._print_paths(cases_to_run)
-        elif self.session.option.files:
+        elif self.option.files:
             return self._print_files(cases_to_run)
-        elif self.session.option.graph:
+        elif self.option.graph:
             return self._print_graph(cases_to_run)
         else:
             return self._print(cases_to_run)

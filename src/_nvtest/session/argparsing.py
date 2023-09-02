@@ -28,6 +28,12 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
             return usage
 
 
+def cmd_name(cmdclass: Type) -> str:
+    """Convert CamelCase to camel-case"""
+    rx = re.compile("((?<=[a-z0-9])[A-Z]|(?!^)[A-Z](?=[a-z]))")
+    return rx.sub(r"-\1", cmdclass.__name__).lower()
+
+
 class ArgumentParser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -43,16 +49,10 @@ class ArgumentParser(argparse.ArgumentParser):
         if not inspect.isclass(cmdclass):
             raise TypeError("nvtest.plugins.command must wrap classes")
 
-        for method in ("add_options", "setup", "run", "teardown"):
+        for method in ("setup_parser", "setup", "run", "teardown"):
             if not _defines_method(cmdclass, method):
                 raise AttributeError(
                     f"{cmdclass.__name__} must define a {method} method"
-                )
-
-        for attr in ("description",):
-            if not hasattr(cmdclass, attr):
-                raise AttributeError(
-                    f"{cmdclass.__name__} must define a {attr} attribute"
                 )
 
         if not hasattr(cmdclass, "name"):
@@ -68,18 +68,18 @@ class ArgumentParser(argparse.ArgumentParser):
             self.subparsers = self.add_subparsers(metavar="subcommands", dest="command")
 
         self._validate_command_class(cmdclass)
-
+        cmdname = cmd_name(cmdclass)
         subparser = self.subparsers.add_parser(
-            cmdclass.name,
+            cmdname,
             aliases=getattr(cmdclass, "aliases", None) or [],
-            help=getattr(cmdclass, "description", None),
-            description=getattr(cmdclass, "description", None),
+            help=cmdclass.__doc__,
+            description=cmdclass.__doc__,
             epilog=getattr(cmdclass, "epilog", None),
-            add_help=getattr(cmdclass, "add_help", False),
+            add_help=getattr(cmdclass, "add_help", True),
         )
         subparser.register("type", None, identity)
-        cmdclass.add_options(subparser)  # type: ignore
-        self.__subcommands[cmdclass.name] = cmdclass
+        cmdclass.setup_parser(subparser)  # type: ignore
+        self.__subcommands[cmdname] = cmdclass
 
     def get_command(self, cmdname: str) -> Optional[Type]:
         for name, cmdclass in self.__subcommands.items():

@@ -1,5 +1,7 @@
+from argparse import Namespace
 from types import SimpleNamespace
 from typing import Any
+from typing import Union
 
 
 def boolean(arg):
@@ -12,7 +14,7 @@ def boolean(arg):
     return bool(arg)
 
 
-def ns2dict(arg: SimpleNamespace) -> dict:
+def ns2dict(arg: Union[Namespace, SimpleNamespace]) -> dict:
     value: dict[str, Any] = dict(vars(arg))
     for name, item in value.items():
         if isinstance(item, SimpleNamespace):

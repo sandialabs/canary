@@ -1,18 +1,16 @@
-import argparse
+from .argparsing import ArgumentParser
+from .base import Session
 
-from .common import Command
 
-
-class Config(Command):
-    name = "config"
-    description = "Show configuration variable values"
+class Config(Session):
+    """Show configuration variable values"""
 
     @property
     def mode(self):
-        return "anonymous"
+        return self.Mode.ANONYMOUS
 
     @staticmethod
-    def add_options(parser: argparse.ArgumentParser):
+    def setup_parser(parser: ArgumentParser):
         sp = parser.add_subparsers(dest="subcommand")
         sp.add_parser("show", help="Show the current configuration")
 
@@ -29,8 +27,8 @@ class Config(Command):
         )
 
     def run(self) -> int:
-        text = self.session.config.describe()
-        if self.session.option.subcommand == "show":
+        text = self.config.describe()
+        if self.option.subcommand == "show":
             try:
                 self.pretty_print(text)
             except ImportError:

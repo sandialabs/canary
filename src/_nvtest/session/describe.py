@@ -1,29 +1,28 @@
 import os
 import sys
 
-from _nvtest.session.argparsing import ArgumentParser
-from _nvtest.test.testfile import AbstractTestFile
-from _nvtest.util import graph
+from .argparsing import ArgumentParser
+from ..test.testfile import AbstractTestFile
+from ..util import graph
 
-from .common import Command
+from .base import Session
 from .common import add_mark_arguments
 
 
-class Describe(Command):
-    name = "describe"
-    description = "Print information about a test"
+class Describe(Session):
+    """Print information about a test"""
 
     @property
     def mode(self):
-        return "anonymous"
+        return self.Mode.ANONYMOUS
 
     @staticmethod
-    def add_options(parser: ArgumentParser):
+    def setup_parser(parser: ArgumentParser):
         add_mark_arguments(parser)
         parser.add_argument("file", help="Test file")
 
     def run(self) -> int:
-        file = AbstractTestFile(self.session.option.file)
+        file = AbstractTestFile(self.option.file)
         fp = sys.stdout
         fp.write(f"--- {file.name} ------------\n")
         fp.write(f"File: {file.file}\n")
@@ -44,8 +43,8 @@ class Describe(Command):
                     fp.write("\n")
         cases = file.freeze(
             self.config,
-            on_options=self.session.option.on_options,
-            keyword_expr=self.session.option.keyword_expr,
+            on_options=self.option.on_options,
+            keyword_expr=self.option.keyword_expr,
         )
         fp.write(f"{len(cases)} test cases:\n")
         graph.print(cases)

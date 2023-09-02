@@ -4,7 +4,7 @@ from typing import Optional
 
 from .error import StopExecution
 from .session import ExitCode
-from .session import Session
+from .session import factory
 from .util import tty
 
 
@@ -17,11 +17,8 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     :returns: An exit code.
     """
-    invocation_params = Session.InvocationParams(
-        args=argv or sys.argv[1:], dir=os.getcwd()
-    )
     initstate: int = 0
-    session = Session(invocation_params=invocation_params)
+    session = factory(args=argv or sys.argv[1:], dir=os.getcwd())
     session.exitstatus = ExitCode.OK
     try:
         session.bootstrap()
