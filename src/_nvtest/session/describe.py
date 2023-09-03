@@ -1,16 +1,17 @@
 import os
 import sys
 
-from .argparsing import ArgumentParser
 from ..test.testfile import AbstractTestFile
 from ..util import graph
-
+from .argparsing import ArgumentParser
 from .base import Session
 from .common import add_mark_arguments
 
 
 class Describe(Session):
     """Print information about a test"""
+
+    family = "info"
 
     @property
     def mode(self):

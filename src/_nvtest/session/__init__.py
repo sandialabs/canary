@@ -2,13 +2,17 @@ from ..test.testcase import TestCase
 from ..util.returncode import compute_returncode
 from .argparsing import make_argument_parser
 from .base import Session
-from .run_tests import RunTests
 from .config import Config
+from .create_batches import CreateBatches
+from .describe import Describe
 from .find import Find
 from .info import Info
-from .setup import Setup
-from .describe import Describe
+from .merge_batches import MergeBatches
+from .run_batch import RunBatch
+from .run_batched import RunBatched
 from .run_case import RunCase
+from .run_tests import RunTests
+from .setup import Setup
 
 
 class ExitCode:

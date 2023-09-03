@@ -1,51 +1,43 @@
-import argparse
 import errno
 import os
 import time
-from typing import TYPE_CHECKING
+from typing import Optional
 
-from _nvtest.executor import SingleBatchDirectExecutor
-from _nvtest.test.partition import Partition
-from _nvtest.test.partition import load_partition
-from _nvtest.util.returncode import compute_returncode
-from _nvtest.util.time import time_in_seconds
-
+from ..executor import SingleBatchDirectExecutor
+from ..test.partition import Partition
+from ..test.partition import load_partition
+from ..util.returncode import compute_returncode
+from ..util.time import time_in_seconds
+from .base import Session
 from .run_tests import RunTests
-
-if TYPE_CHECKING:
-    from _nvtest.config import Config
-    from _nvtest.session import Session
 
 
 class RunBatch(RunTests):
-    name = "run-batch"
-    description = "Run a single batch of tests.  Run nv.test create-batches first"
+    """Run a single batch of tests.  Run nv.test create-batches first"""
+
+    family = "batch"
     batch: Partition
 
-    def __init__(self, config: "Config", session: "Session") -> None:
-        self.config = config
-        self.session = session
-        if not os.path.exists(self.session.option.file):
-            file = self.session.option.file
+    def __init__(
+        self, *, invocation_params: Optional[Session.InvocationParams] = None
+    ) -> None:
+        super(RunTests, self).__init__(invocation_params=invocation_params)
+        if not os.path.exists(self.option.file):
+            file = self.option.file
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), file)
-        self._mode = "write"
-        if self.session.option.x:
-            self._mode = "append"
-            if self.session.option.workdir is None:
-                self.session.option.workdir = self.find_workdir(
-                    start=os.path.dirname(self.session.option.file)
+        self._mode = self.Mode.WRITE
+        if self.option.x:
+            self._mode = self.Mode.APPEND
+            if self.option.workdir is None:
+                self.option.workdir = self.find_workdir(
+                    start=os.path.dirname(self.option.file)
                 )
         self.search_paths = []
-        self.option = argparse.Namespace(
-            on_options=None,
-            keyword_expr=None,
-            timeout=self.session.option.timeout,
-            max_workers=self.session.option.max_workers,
-            copy_all_resources=self.session.option.copy_all_resources,
-            runner="direct",
-            runner_options=None,
-            batch_size=None,
-        )
+        self.option.on_options = None
+        self.option.keyword_expr = None
+        self.runner = "direct"
+        self.runner_options = None
+        self.batch_size = None
 
     @staticmethod
     def find_workdir(start) -> str:
@@ -65,16 +57,16 @@ class RunBatch(RunTests):
     def setup(self):
         self.print_section_header("Beginning test session")
         self.print_front_matter()
-        self.print_text(f"work directory: {self.session.workdir}")
-        self.batch = load_partition(self.session.option.file)
+        self.print_text(f"work directory: {self.workdir}")
+        self.batch = load_partition(self.option.file)
         self.print_text(f"batch {self.batch.rank[0] + 1} of {self.batch.rank[1]}")
         self.cases = [case for case in self.batch]
         self.executor = SingleBatchDirectExecutor(
-            self.session,
+            self,
             self.batch,
             max_workers=self.option.max_workers,
         )
-        if self.session.mode == self.session.Mode.WRITE:
+        if self.mode == self.Mode.WRITE:
             self.executor.setup(copy_all_resources=self.option.copy_all_resources)
 
     def run(self) -> int:

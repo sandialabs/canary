@@ -8,16 +8,18 @@ from ..util import tty
 from ..util.time import hhmmss
 from ..util.tty.colify import colified
 from ..util.tty.color import colorize
-from .common import add_mark_arguments
 from .base import Session
+from .common import add_mark_arguments
 
 
 class Find(Session):
     """Search paths for test files"""
 
+    family = "info"
+
     @property
-    def mode(self) -> str:
-        return "anonymous"
+    def mode(self) -> Session.Mode:
+        return self.Mode.ANONYMOUS
 
     @staticmethod
     def setup_parser(parser: ArgumentParser):

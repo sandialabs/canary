@@ -1,13 +1,17 @@
-import os
 from typing import Optional
 
 from .argparsing import ArgumentParser
 from .base import Session
 
+
 class Info(Session):
     """Print information about a test run"""
 
-    def __init__(self, *, invocation_params: Optional[Session.InvocationParams] = None) -> None:
+    family = "info"
+
+    def __init__(
+        self, *, invocation_params: Optional[Session.InvocationParams] = None
+    ) -> None:
         super().__init__(invocation_params=invocation_params)
         dir = self.option.directory
         if not self.is_workdir(dir):

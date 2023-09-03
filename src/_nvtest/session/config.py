@@ -5,6 +5,8 @@ from .base import Session
 class Config(Session):
     """Show configuration variable values"""
 
+    family = "config"
+
     @property
     def mode(self):
         return self.Mode.ANONYMOUS

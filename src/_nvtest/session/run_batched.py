@@ -1,23 +1,16 @@
 import argparse
-from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
 from typing import Sequence
 from typing import Union
 
-from _nvtest.runner import valid_runners
-from _nvtest.session.argparsing import ArgumentParser
-from _nvtest.util.time import time_in_seconds
-from _nvtest.util.tty.color import colorize
-
-from .common import add_cdash_arguments
+from ..runner import valid_runners
+from ..session.argparsing import ArgumentParser
+from ..util.time import time_in_seconds
+from ..util.tty.color import colorize
 from .common import add_mark_arguments
 from .run_tests import RunTests
 from .run_tests import default_timeout
-
-if TYPE_CHECKING:
-    from _nvtest.config import Config
-    from _nvtest.session import Session
 
 
 class RunnerOptions(argparse.Action):
@@ -36,19 +29,13 @@ class RunnerOptions(argparse.Action):
 
 
 class RunBatched(RunTests):
-    name = "run-batched"
-    description = "Run the tests in batches through a scheduler"
+    """Run the tests in batches through a scheduler"""
 
-    def __init__(self, config: "Config", session: "Session") -> None:
-        super().__init__(config, session)
-        self.option.runner = self.session.option.runner
-        self.option.runner_options = self.session.option.runner_options
-        self.option.batch_size = self.session.option.batch_size
+    family = "batch"
 
     @staticmethod
     def add_options(parser: ArgumentParser):
         add_mark_arguments(parser)
-        add_cdash_arguments(parser)
         parser.add_argument(
             "--timeout",
             type=time_in_seconds,

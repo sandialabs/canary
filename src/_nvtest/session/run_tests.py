@@ -20,6 +20,8 @@ from .common import default_timeout
 class RunTests(Session):
     """Run the tests"""
 
+    family = "test"
+
     executor: Executor
 
     def __init__(

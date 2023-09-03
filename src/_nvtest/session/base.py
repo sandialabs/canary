@@ -1,3 +1,4 @@
+import bisect
 import dataclasses
 import enum
 import json
@@ -96,7 +97,12 @@ class Session:
 
     def __init_subclass__(subclass, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
-        Session.registry.append(subclass)
+
+        def order(cls):
+            family = getattr(cls, "family", None)
+            return {"config": 0, "info": 1, "test": 2, "batch": 3}.get(family, 4)
+
+        bisect.insort(Session.registry, subclass, key=order)
 
     @property
     def archive_file(self) -> str:

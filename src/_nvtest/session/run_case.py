@@ -1,12 +1,13 @@
 from ..test.testcase import TestCase
 from ..util.environ import tmp_environ
 from ..util.filesystem import working_dir
-
 from .base import Session
 
 
 class RunCase(Session):
     """Run an individual test case"""
+
+    family = "test"
 
     def run(self) -> int:
         case = TestCase.load(self.option.file)

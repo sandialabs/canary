@@ -4,6 +4,8 @@ from .run_tests import RunTests
 class Setup(RunTests):
     """Setup tests, but don't run them"""
 
+    family = "test"
+
     @property
     def mode(self):
         return self.Mode.WRITE
