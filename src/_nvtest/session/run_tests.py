@@ -129,13 +129,14 @@ class RunTests(Session):
         kwds = super().load_index()
         if not os.path.isfile(self.index_file):
             raise ValueError(f"{self.index_file!r} not found")
+        print(kwds)
         if self.option.timeout == default_timeout:
-            self.option.timeout = kwds["option"]["timeout"]
-        if kwds["option"]["batch_size"] is not None:
-            self.option.batch_size = kwds["option"]["batch_size"]
-            self.option.runner = kwds["option"]["runner"]
+            self.option.timeout = kwds["timeout"]
+        if kwds["batch_size"] is not None:
+            self.option.batch_size = kwds["batch_size"]
+            self.option.runner = kwds["runner"]
             if not self.option.runner_options:
-                self.option.runner_options = kwds["option"]["runner_options"]
+                self.option.runner_options = kwds["runner_options"]
 
     def filter_testcases(self) -> None:
         for case in self.cases:
