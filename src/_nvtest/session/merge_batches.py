@@ -22,7 +22,7 @@ class MergeBatches(Session):
         files = self.option.files
         if len(files) == 1 and self.is_workdir(files[0]):
             self.workdir = files[0]
-            files = glob.glob(os.path.join(self.workdir, ".nvtest", "testcases.json.*"))
+            files = glob.glob(os.path.join(self.workdir, ".nvtest", "results.json.*"))
             if not files:
                 tty.die(f"No files found in {self.workdir}")
         else:

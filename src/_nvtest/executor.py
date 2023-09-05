@@ -31,8 +31,8 @@ if TYPE_CHECKING:
 
 
 class Executor:
-    _tc_done_file = "testcases.json"
-    _tc_prog_file = "testcases.jsons"
+    _tc_done_file = "results.json"
+    _tc_prog_file = "results.jsons"
 
     def __init__(
         self,

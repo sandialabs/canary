@@ -58,7 +58,7 @@ class BatchRunner(Runner):
         script = self.write_submission_script(batch)
         script_x = Executable(self.command)
         script_x(script, fail_on_error=False)
-        out = os.path.join(self.dotdir, f"testcases.json.{num_batches}.{batch_no}")
+        out = os.path.join(self.dotdir, f"results.json.{num_batches}.{batch_no}")
         if not os.path.isfile(out):
             tty.error(f"Required output file {out} not found")
             attrs: dict[str, dict] = {}
