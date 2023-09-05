@@ -4,12 +4,12 @@ import time
 from typing import Optional
 
 from ..executor import SingleBatchDirectExecutor
-from .common import add_workdir_arguments
-from .common import add_timing_arguments
 from ..test.partition import Partition
 from ..test.partition import load_partition
 from ..util.returncode import compute_returncode
 from .base import Session
+from .common import add_timing_arguments
+from .common import add_workdir_arguments
 from .run_tests import RunTests
 
 

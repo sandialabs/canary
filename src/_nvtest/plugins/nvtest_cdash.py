@@ -356,6 +356,8 @@ class CDashOption(argparse.Action):
 
 
 nvtest.plugin.register(scope="cli", stage="setup")
+
+
 def bootstrap_cdash(session: Session, parser: Parser):
     s_opt = ", ".join(
         colorize("@*{%s}: %s" % item) for item in valid_cdash_options.items()
@@ -378,6 +380,8 @@ def bootstrap_cdash(session: Session, parser: Parser):
 
 
 nvtest.plugin.register(scope="session", stage="teardown")
+
+
 def dump_cdash(session: Session):
     kwds = session.option.cdash_options
     cases_to_run = [case for case in session.cases if not case.skip]

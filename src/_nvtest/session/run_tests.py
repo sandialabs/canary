@@ -15,8 +15,8 @@ from ..util import tty
 from ..util.returncode import compute_returncode
 from .base import Session
 from .common import add_mark_arguments
-from .common import add_workdir_arguments
 from .common import add_timing_arguments
+from .common import add_workdir_arguments
 from .common import default_timeout
 
 
@@ -55,6 +55,7 @@ class RunTests(Session):
 
     def setup(self) -> None:
         from _nvtest.session import ExitCode
+
         self.print_section_header("Beginning test session")
         self.print_front_matter()
         self.print_text(f"work directory: {self.workdir}")

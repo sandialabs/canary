@@ -31,7 +31,7 @@ class Manager:
         scope_plugins = self._plugins.setdefault(scope, {})
         stage_plugins = scope_plugins.setdefault(stage, [])
         hook: Callable = func
-        hook.specname = f"{func.__name__}_impl"
+        hook.specname = f"{func.__name__}_impl"  # type: ignore
         stage_plugins.append(hook)
 
     def plugins(self, scope: str, stage: str) -> Generator[Callable, None, None]:
@@ -42,7 +42,7 @@ class Manager:
         if scope in self._plugins and stage in self._plugins[scope]:
             specname = f"{name}_impl"
             for hook in self._plugins[scope][stage]:
-                if hook.specname == specname:
+                if hook.specname == specname:  # type: ignore
                     return hook
         return None
 
@@ -59,7 +59,7 @@ class Manager:
 _manager = Singleton(Manager)
 
 
-def plugins(scope: str, stage: str) -> Generator[tuple[str, Callable], None, None]:
+def plugins(scope: str, stage: str) -> Generator[Callable, None, None]:
     return _manager.plugins(scope, stage)
 
 

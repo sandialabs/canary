@@ -1,7 +1,8 @@
-from .argparsing import Parser
 from ..util.time import time_in_seconds
+from .argparsing import Parser
 
 default_timeout = 60 * 60
+
 
 def add_timing_arguments(parser: Parser) -> None:
     parser.add_argument(

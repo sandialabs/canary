@@ -5,12 +5,12 @@ from typing import Sequence
 from typing import Union
 
 from ..runner import valid_runners
-from .argparsing import Parser
 from ..util.time import time_in_seconds
 from ..util.tty.color import colorize
+from .argparsing import Parser
 from .common import add_mark_arguments
-from .common import add_workdir_arguments
 from .common import add_timing_arguments
+from .common import add_workdir_arguments
 from .run_tests import RunTests
 
 

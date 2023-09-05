@@ -4,8 +4,8 @@ import os
 from typing import Optional
 
 from ..test.partition import merge
-from ..util.filesystem import mkdirp
 from ..util import tty
+from ..util.filesystem import mkdirp
 from .base import Session
 
 
@@ -21,9 +21,7 @@ class MergeBatches(Session):
         files = self.option.files
         if len(files) == 1 and self.is_workdir(files[0]):
             self.workdir = files[0]
-            files = glob.glob(
-                os.path.join(self.workdir, ".nvtest", "testcases.json.*")
-            )
+            files = glob.glob(os.path.join(self.workdir, ".nvtest", "testcases.json.*"))
             if not files:
                 tty.die(f"No files found in {self.workdir}")
         else:

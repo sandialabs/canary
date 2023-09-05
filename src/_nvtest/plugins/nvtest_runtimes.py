@@ -39,7 +39,7 @@ class Runtimes:
             dirname = os.path.dirname(dirname)
         return None
 
-    def load(self, filename: str) -> Union[dict, None]:
+    def load(self, filename: str) -> Optional[dict]:
         with open(filename) as fh:
             data = json.load(fh)
             if self.root not in data:
@@ -54,18 +54,17 @@ class Runtimes:
         db = self.load_db_for_case(case)
         if db is None:
             return None
-        if options and "opt" in options:
+        opts: set[str] = {_ for _ in (options or [])}
+        if {"opt"} & opts:
             build_type = "release"
-        elif options and "dbg" in options:
+        elif {"debug", "dbg"} & opts:
             build_type = "debug"
         else:
             build_type = "relwithdebinfo"
-        build = db["builds"].get(build_type)
-        if build is None:
+        if (build := db["builds"].get(build_type)) is None:
             return None
-        details = build["tests"]
-        if case.fullname in details:
-            return details[case.fullname]["mean"]
+        if (details := build["tests"].get(case.fullname)) is not None:
+            return details["mean"]
         return None
 
 
@@ -76,9 +75,5 @@ _runtimes = Singleton(Runtimes)
 def runtime(
     session: Session, case: "TestCase", on_options: Optional[list[str]] = []
 ) -> None:
-    if case.skip:
-        return None
-    rt = _runtimes.get(case, options=on_options)
-    if rt is None:
-        return None
-    case.runtime = rt
+    if not case.skip and (rt := _runtimes.get(case, options=on_options)) is not None:
+        case.runtime = rt

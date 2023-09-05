@@ -41,6 +41,7 @@ class _PostInit(type):
             post()
         return instance
 
+
 class Session(metaclass=_PostInit):
     """Manages the test session
 
@@ -104,7 +105,7 @@ class Session(metaclass=_PostInit):
         self.option: Namespace = Namespace()
         self.parser.parse_args(self.invocation_params.args, namespace=self.option)
         self.config = Config()
-        self.rel_workdir = None
+        self.rel_workdir: str = None  # type: ignore
 
     def __init_subclass__(subclass, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
