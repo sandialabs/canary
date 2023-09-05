@@ -1,7 +1,7 @@
 import sys
 
 from ..environment import Environment
-from ..session.argparsing import ArgumentParser
+from ..session.argparsing import Parser
 from ..test.testcase import TestCase
 from ..util import graph
 from ..util import tty
@@ -22,7 +22,7 @@ class Find(Session):
         return self.Mode.ANONYMOUS
 
     @staticmethod
-    def setup_parser(parser: ArgumentParser):
+    def setup_parser(parser: Parser):
         group = parser.add_mutually_exclusive_group()
         group.add_argument(
             "-p",

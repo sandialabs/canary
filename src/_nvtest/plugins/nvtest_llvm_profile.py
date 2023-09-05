@@ -4,9 +4,9 @@ from typing import Optional
 import nvtest
 
 
-@nvtest.plugin.register("llvm-profile", scope="session", stage="bootstrap")
-def bootstrap_llvm_profile(session: nvtest.Session) -> None:
-    session.parser.add_plugin_argument(
+@nvtest.plugin.register(scope="cli", stage="setup")
+def bootstrap_llvm_profile(session: nvtest.Session, parser) -> None:
+    parser.add_argument(
         "--llvm-profile",
         action="store_true",
         default=False,
@@ -17,14 +17,14 @@ def bootstrap_llvm_profile(session: nvtest.Session) -> None:
     )
 
 
-@nvtest.plugin.register("llvm-profile", scope="test", stage="setup")
+@nvtest.plugin.register(scope="test", stage="setup")
 def setup_llvm_profile(session: nvtest.Session, test: nvtest.TestCase, **kwds) -> None:
     llvm_profile = getattr(session.option, "llvm_profile", False)
     if llvm_profile:
         test.add_default_env("LLVM_PROFILE_FILE", "llvm-profile.raw")
 
 
-@nvtest.plugin.register("llvm-profile", scope="test", stage="finish")
+@nvtest.plugin.register(scope="test", stage="finish")
 def finish_llvm_profile(session: nvtest.Session, test: nvtest.TestCase, **kwds):
     llvm_profile = getattr(session.option, "llvm_profile", False)
     if not llvm_profile:

@@ -1,4 +1,4 @@
-from .argparsing import ArgumentParser
+from .argparsing import Parser
 from .base import Session
 
 
@@ -12,7 +12,7 @@ class Config(Session):
         return self.Mode.ANONYMOUS
 
     @staticmethod
-    def setup_parser(parser: ArgumentParser):
+    def setup_parser(parser: Parser):
         sp = parser.add_subparsers(dest="subcommand")
         sp.add_parser("show", help="Show the current configuration")
 

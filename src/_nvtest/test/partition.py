@@ -65,9 +65,9 @@ class Partition(list):
 
 def group_testcases(cases: list[TestCase]):
     groups: list[set[TestCase]] = [{case} | set(case.dependencies) for case in cases]
-    for group in groups:
-        for other in groups:
-            if group != other and group & other:
+    for (i, group) in enumerate(groups):
+        for (j, other) in enumerate(groups):
+            if i != j and group & other:
                 group.update(other)
                 other.clear()
     return sorted(filter(None, groups), key=lambda g: -len(g))

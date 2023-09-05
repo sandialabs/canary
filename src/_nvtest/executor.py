@@ -105,9 +105,9 @@ class Executor:
         with self.session.rc_environ():
             for case in self.cases:
                 with working_dir(case.exec_dir):
-                    for name, func in plugin.plugins("test", "teardown"):
-                        tty.verbose(f"Calling the {name} plugin")
-                        func(
+                    for hook in plugin.plugins("test", "teardown"):
+                        tty.verbose(f"Calling the {hook.specname} plugin")
+                        hook(
                             self.session,
                             case,
                             on_options=self.session.option.on_options,
@@ -146,8 +146,8 @@ class Executor:
 
                         with working_dir(case.exec_dir):
                             kwds = dict(on_options=self.session.option.on_options)
-                            for _, func in plugin.plugins("test", "setup"):
-                                func(self.session, case, **kwds)
+                            for hook in plugin.plugins("test", "setup"):
+                                hook(self.session, case, **kwds)
                     ts.done(*group)
         tty.verbose("Done setting up test cases")
 
@@ -185,7 +185,7 @@ class Executor:
         with open(self.tc_prog_file, "a") as fh:
             if isinstance(obj, Partition):
                 for case in obj:
-                    case.update(attrs)
+                    case.update(attrs[case.fullname])
                     fh.write(case.to_json() + "\n")
             else:
                 obj.update(attrs)

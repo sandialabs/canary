@@ -34,7 +34,7 @@ def cmd_name(cmdclass: Type) -> str:
     return rx.sub(r"-\1", cmdclass.__name__).lower()
 
 
-class ArgumentParser(argparse.ArgumentParser):
+class Parser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.register("type", None, identity)
@@ -135,7 +135,7 @@ class EnvironmentModification:
 
 def make_argument_parser(**kwargs):
     """Create an basic argument parser without any subcommands added."""
-    parser = ArgumentParser(
+    parser = Parser(
         formatter_class=HelpFormatter,
         description="nv.test - an application testing framework",
         prog="nv.test",
@@ -155,6 +155,7 @@ def make_argument_parser(**kwargs):
         help="Decrease console logging level by 1",
     )
     parser.add_argument(
+        "-d",
         "--debug",
         action="store_true",
         default=False,
@@ -188,19 +189,6 @@ def make_argument_parser(**kwargs):
         default=[],
         help="Colon-separated path to config that should be "
         "added to the testing environment, e.g. 'config:debug:true'",
-    )
-    parser.add_argument(
-        "-w",
-        dest="wipe",
-        action="store_true",
-        help="Remove test execution directory, if it exists [default: %(default)s]",
-    )
-    parser.add_argument(
-        "-d",
-        "--work-dir",
-        dest="workdir",
-        default=None,
-        help="Root path to test work (execution) directory [default: ./TestResults]",
     )
     parser.add_argument(
         "-e",

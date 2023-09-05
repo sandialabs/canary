@@ -1,6 +1,6 @@
 from typing import Optional
 
-from .argparsing import ArgumentParser
+from .argparsing import Parser
 from .base import Session
 
 
@@ -16,10 +16,10 @@ class Info(Session):
         dir = self.option.directory
         if not self.is_workdir(dir):
             raise ValueError(f"{dir!r} is not a test execution directory")
-        self.option.workdir = dir
+        self.workdir = dir
 
     @staticmethod
-    def setup_parser(parser: ArgumentParser):
+    def setup_parser(parser: Parser):
         parser.add_argument("directory", help="Test result directory")
 
     @property

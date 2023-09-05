@@ -30,11 +30,18 @@ from ..util.graph import TopologicalSorter
 from ..util.misc import ns2dict
 from ..util.time import hhmmss
 from ..util.tty.color import colorize
-from .argparsing import ArgumentParser
+from .argparsing import Parser
 from .argparsing import make_argument_parser
 
 
-class Session:
+class _PostInit(type):
+    def __call__(cls, *args, **kwargs):
+        instance = type.__call__(cls, *args, **kwargs)
+        if post := getattr(instance, "__post_init__", None):
+            post()
+        return instance
+
+class Session(metaclass=_PostInit):
     """Manages the test session
 
     :param InvocationParams invocation_params:
@@ -77,9 +84,8 @@ class Session:
     exitstatus: int
     start: float
     finish: float
-    rel_workdir: str
     config: Config
-    parser: ArgumentParser
+    parser: Parser
     option: Namespace
     orig_invocation_params: InvocationParams
     cases: list[TestCase]
@@ -89,11 +95,16 @@ class Session:
         if invocation_params is None:
             invocation_params = self.InvocationParams(args=(), dir=os.getcwd())
         self.invocation_params = invocation_params
-        self.parser: ArgumentParser = make_argument_parser()
+        self.parser: Parser = make_argument_parser()
+        self.load_plugins()
+        group = self.parser.get_group("plugin options")
+        for hook in plugin.plugins("cli", "setup"):
+            hook(self, group)
         self.parser.add_command(self.__class__)
         self.option: Namespace = Namespace()
         self.parser.parse_args(self.invocation_params.args, namespace=self.option)
         self.config = Config()
+        self.rel_workdir = None
 
     def __init_subclass__(subclass, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
@@ -110,10 +121,7 @@ class Session:
 
     @property
     def mode(self) -> Mode:
-        raise NotImplementedError
-
-    def bootstrap(self):
-        """Prepare the tests session by setting the session mode.  Possible values are
+        """Possible values are
 
         - Mode.WRITE
           Results directory will be created and the session run within it.
@@ -128,14 +136,10 @@ class Session:
           read or written.
 
         """
-        tty.verbose("Bootstrapping test session")
+        raise NotImplementedError
 
-        # Don't set the rel_workdir until after letting the command set up (and
-        # possibly set the value of option.workdir)
-        workdir = self.option.workdir or "TestResults"
-        if os.path.isabs(workdir):
-            workdir = os.path.relpath(workdir, self.startdir)
-        self.rel_workdir = workdir
+    def __post_init__(self):
+        tty.verbose("Performing test session post initialization")
 
         rmodes = self.Mode.READ, self.Mode.APPEND
         if self.mode in rmodes and not accessible(self.workdir):
@@ -154,8 +158,7 @@ class Session:
         self.set_main_options()
         self.start: float = -1
         self.finish: float = -1
-        # self.load_plugins()
-        tty.verbose("Done bootstrapping test session")
+        tty.verbose("Done performing test session post initialization")
 
     def startup(self) -> None:
         tty.verbose("Starting up test session")
@@ -165,8 +168,8 @@ class Session:
             mkdirp(self.dotdir)
             self.dump()
         self.setup()
-        for name, func in plugin.plugins("session", "setup"):
-            func(self)
+        for hook in plugin.plugins("session", "setup"):
+            hook(self)
         tty.verbose("Done starting up test session")
 
     def setup(self) -> None:
@@ -182,7 +185,7 @@ class Session:
         return
 
     @staticmethod
-    def setup_parser(parser: ArgumentParser) -> None:
+    def setup_parser(parser: Parser) -> None:
         ...
 
     @property
@@ -193,7 +196,17 @@ class Session:
     def workdir(self) -> str:
         if self.mode == Session.Mode.ANONYMOUS:
             raise ValueError("Anonymous sessions do not have a work directory")
+        elif self.rel_workdir is None:
+            raise ValueError("Work directory has not been set!")
         return os.path.join(self.startdir, self.rel_workdir)
+
+    @workdir.setter
+    def workdir(self, arg: str) -> None:
+        if self.rel_workdir is not None:
+            raise RuntimeError("work directory has already been set")
+        if os.path.isabs(arg):
+            arg = os.path.relpath(arg, self.startdir)
+        self.rel_workdir = arg
 
     @property
     def dotdir(self) -> str:
@@ -281,7 +294,8 @@ class Session:
             else:
                 os.environ[var] = val
 
-    def load_builtin_plugins(self) -> None:
+    @staticmethod
+    def load_plugins() -> None:
         import _nvtest.plugins
 
         path = _nvtest.plugins.__path__

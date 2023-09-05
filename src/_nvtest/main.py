@@ -21,10 +21,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     session = factory(args=argv or sys.argv[1:], dir=os.getcwd())
     session.exitstatus = ExitCode.OK
     try:
-        session.bootstrap()
-        initstate = 1
         session.startup()
-        initstate = 2
+        initstate = 1
         session.exitstatus = session.run() or 0
     except KeyboardInterrupt:
         session.exitstatus = ExitCode.INTERRUPTED
@@ -41,7 +39,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         error_msg = ", ".join(str(_) for _ in ex.args)
         tty.error(error_msg)
         reraise = False
-        if initstate > 1 and session.config.debug:
+        if initstate and session.config.debug:
             reraise = True
         elif "--debug" in sys.argv:
             reraise = True

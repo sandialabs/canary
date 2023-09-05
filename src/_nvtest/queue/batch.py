@@ -28,12 +28,12 @@ class BatchQueue(Queue):
         with self.lock():
             self._done[batch_no] = self._running.pop(batch_no)
             completed = dict([(_.id, _) for _ in self.completed_testcases()])
-            for batch in self.queue.value():
+            for batch in self.queue.values():
                 for case in batch:
-                    for (i, dep) in case.dependencies:
+                    for (i, dep) in enumerate(case.dependencies):
                         if dep.id in completed:
                             case.dependencies[i] = completed[dep.id]
-        return batch
+        return self._done[batch_no]
 
     @property
     def cases(self) -> list[TestCase]:

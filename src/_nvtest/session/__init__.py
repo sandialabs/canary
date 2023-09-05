@@ -29,6 +29,7 @@ class ExitCode:
 
 def factory(*, args: list[str], dir: str) -> Session:
     parser = make_argument_parser()
+    # Session.load_plugins()
     for session_type in Session.registry:
         parser.add_command(session_type)
     opts = parser.parse_args(args)

@@ -1,20 +1,28 @@
+import argparse
 import os
 import time
+from typing import Any
 from typing import Optional
 
 from ..environment import Environment
 from ..error import StopExecution
 from ..executor import Executor
 from ..mark.match import deselect_by_keyword
-from ..session.argparsing import ArgumentParser
+from ..session.argparsing import Parser
 from ..test.enums import Result
 from ..test.enums import Skip
 from ..util import tty
 from ..util.returncode import compute_returncode
-from ..util.time import time_in_seconds
 from .base import Session
 from .common import add_mark_arguments
+from .common import add_workdir_arguments
+from .common import add_timing_arguments
 from .common import default_timeout
+
+
+def set_default_attr(namespace: argparse.Namespace, attr: str, default: Any) -> None:
+    if not hasattr(namespace, attr):
+        setattr(namespace, attr, default)
 
 
 class RunTests(Session):
@@ -32,12 +40,14 @@ class RunTests(Session):
         self.search_paths: list[str] = self.option.search_paths or []
         if len(self.search_paths) == 1 and self.is_workdir(self.search_paths[0]):
             self._mode = self.Mode.APPEND
-            if self.option.workdir is not None:
+            if self.workdir is not None:
                 raise ValueError("Do not set value of work-dir when rerunning tests")
-            self.option.workdir = self.search_paths[0]
-        self.option.runner = "direct"
-        self.option.runner_options = None
-        self.option.batch_size = None
+            self.workdir = self.search_paths[0]
+        else:
+            self.workdir = self.option.workdir or "./TestResults"
+        set_default_attr(self.option, "runner", "direct")
+        set_default_attr(self.option, "runner_options", None)
+        set_default_attr(self.option, "batch_size", None)
 
     @property
     def mode(self) -> Session.Mode:
@@ -45,7 +55,6 @@ class RunTests(Session):
 
     def setup(self) -> None:
         from _nvtest.session import ExitCode
-
         self.print_section_header("Beginning test session")
         self.print_front_matter()
         self.print_text(f"work directory: {self.workdir}")
@@ -97,14 +106,10 @@ class RunTests(Session):
         self.print_test_results_summary(duration)
 
     @staticmethod
-    def setup_parser(parser: ArgumentParser):
+    def setup_parser(parser: Parser):
+        add_workdir_arguments(parser)
         add_mark_arguments(parser)
-        parser.add_argument(
-            "--timeout",
-            type=time_in_seconds,
-            default=default_timeout,
-            help="Set a timeout on test execution [default: 1 hr]",
-        )
+        add_timing_arguments(parser)
         parser.add_argument(
             "--concurrent-tests",
             dest="max_workers",

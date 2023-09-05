@@ -4,10 +4,11 @@ import time
 from typing import Optional
 
 from ..executor import SingleBatchDirectExecutor
+from .common import add_workdir_arguments
+from .common import add_timing_arguments
 from ..test.partition import Partition
 from ..test.partition import load_partition
 from ..util.returncode import compute_returncode
-from ..util.time import time_in_seconds
 from .base import Session
 from .run_tests import RunTests
 
@@ -32,6 +33,7 @@ class RunBatch(RunTests):
                 self.option.workdir = self.find_workdir(
                     start=os.path.dirname(self.option.file)
                 )
+        self.workdir = self.option.workdir or "./TestResults"
         self.search_paths = []
         self.option.on_options = None
         self.option.keyword_expr = None
@@ -70,21 +72,15 @@ class RunBatch(RunTests):
             self.executor.setup(copy_all_resources=self.option.copy_all_resources)
 
     def run(self) -> int:
-        start = time.time()
+        self.start = time.time()
         self.executor.run(timeout=self.option.timeout)
-        finish = time.time()
-        duration = finish - start
-        self.print_test_results_summary(duration)
+        self.finish = time.time()
         return compute_returncode(self.cases)
 
     @staticmethod
-    def add_options(parser):
-        parser.add_argument(
-            "--timeout",
-            type=time_in_seconds,
-            default=60 * 60,
-            help="Set a timeout on test execution [default: 1 hr]",
-        )
+    def setup_parser(parser):
+        add_workdir_arguments(parser)
+        add_timing_arguments(parser)
         parser.add_argument(
             "--concurrent-tests",
             type=int,

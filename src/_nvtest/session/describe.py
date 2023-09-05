@@ -3,7 +3,7 @@ import sys
 
 from ..test.testfile import AbstractTestFile
 from ..util import graph
-from .argparsing import ArgumentParser
+from .argparsing import Parser
 from .base import Session
 from .common import add_mark_arguments
 
@@ -18,7 +18,7 @@ class Describe(Session):
         return self.Mode.ANONYMOUS
 
     @staticmethod
-    def setup_parser(parser: ArgumentParser):
+    def setup_parser(parser: Parser):
         add_mark_arguments(parser)
         parser.add_argument("file", help="Test file")
 

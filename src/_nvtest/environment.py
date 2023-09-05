@@ -84,9 +84,9 @@ class Environment:
                 cases.extend([case for case in concrete_test_cases if case])
         self.resolve_dependencies(cases)
         self.check_for_skipped_dependencies(cases)
-        for _, func in plugin.plugins("test", "discovery"):
+        for hook in plugin.plugins("test", "discovery"):
             for case in cases:
-                func(session, case)
+                hook(session, case)
         tty.verbose("Done creating test cases")
         return cases
 

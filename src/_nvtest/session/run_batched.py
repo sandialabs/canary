@@ -5,12 +5,13 @@ from typing import Sequence
 from typing import Union
 
 from ..runner import valid_runners
-from ..session.argparsing import ArgumentParser
+from .argparsing import Parser
 from ..util.time import time_in_seconds
 from ..util.tty.color import colorize
 from .common import add_mark_arguments
+from .common import add_workdir_arguments
+from .common import add_timing_arguments
 from .run_tests import RunTests
-from .run_tests import default_timeout
 
 
 class RunnerOptions(argparse.Action):
@@ -34,14 +35,10 @@ class RunBatched(RunTests):
     family = "batch"
 
     @staticmethod
-    def add_options(parser: ArgumentParser):
+    def setup_parser(parser: Parser):
+        add_workdir_arguments(parser)
         add_mark_arguments(parser)
-        parser.add_argument(
-            "--timeout",
-            type=time_in_seconds,
-            default=default_timeout,
-            help="Set a timeout on test execution [default: 1 hr]",
-        )
+        add_timing_arguments(parser)
         parser.add_argument(
             "--concurrent-batches",
             dest="max_workers",
@@ -50,16 +47,16 @@ class RunBatched(RunTests):
             help="Number of concurrent batches to run [default: %(default)s]",
         )
         parser.add_argument(
-            "--copy-all-resources",
-            action="store_true",
-            help="Do not link resources to the test "
-            "directory, only copy [default: %(default)s]",
-        )
-        parser.add_argument(
             "--batch-size",
             type=time_in_seconds,
             default=30 * 60,
             help="Batch size in seconds [default: 30m]",
+        )
+        parser.add_argument(
+            "--copy-all-resources",
+            action="store_true",
+            help="Do not link resources to the test "
+            "directory, only copy [default: %(default)s]",
         )
         parser.add_argument(
             "--runner",

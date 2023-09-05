@@ -63,14 +63,16 @@ class Runtimes:
         build = db["builds"].get(build_type)
         if build is None:
             return None
-        details = build["tests"].get(case.fullname)
-        return None if details is None else details["mean"]
+        details = build["tests"]
+        if case.fullname in details:
+            return details[case.fullname]["mean"]
+        return None
 
 
 _runtimes = Singleton(Runtimes)
 
 
-@nvtest.plugin.register("runtime", scope="test", stage="setup")
+@nvtest.plugin.register(scope="test", stage="discovery")
 def runtime(
     session: Session, case: "TestCase", on_options: Optional[list[str]] = []
 ) -> None:

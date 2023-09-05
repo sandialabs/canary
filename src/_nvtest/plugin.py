@@ -10,35 +10,40 @@ from .util.singleton import Singleton
 
 class Manager:
     def __init__(self):
-        self._plugins: dict[str, dict[str, dict[str, Callable]]] = {}
+        self._plugins: dict[str, dict[str, list[Callable]]] = {}
 
-    def register(self, name: str, func: Callable, scope: str, stage: str) -> None:
+    def register(self, func: Callable, scope: str, stage: str) -> None:
+        name = func.__name__
         tty.verbose(f"Registering plugin {name}::{scope}::{stage}")
-        if scope == "session":
-            if stage not in ("bootstrap", "setup", "finish"):
-                raise TypeError(f"register() got unexpected stage {stage!r}")
+        err_msg = f"register() got unexpected stage '{scope}::{stage}'"
+        if scope == "cli":
+            if stage not in ("setup",):
+                raise TypeError(err_msg)
+        elif scope == "session":
+            if stage not in ("setup", "finish"):
+                raise TypeError(err_msg)
         elif scope == "test":
             if stage not in ("discovery", "setup", "finish"):
-                raise TypeError(f"register() got unexpected stage {stage!r}")
+                raise TypeError(err_msg)
         else:
             raise TypeError(f"register() got unexpected scope {scope!r}")
 
         scope_plugins = self._plugins.setdefault(scope, {})
-        stage_plugins = scope_plugins.setdefault(stage, {})
-        stage_plugins[name] = func
+        stage_plugins = scope_plugins.setdefault(stage, [])
+        hook: Callable = func
+        hook.specname = f"{func.__name__}_impl"
+        stage_plugins.append(hook)
 
-    def plugins(
-        self, scope: str, stage: str
-    ) -> Generator[tuple[str, Callable], None, None]:
-        pl = {}
-        if scope in self._plugins and stage in self._plugins[scope]:
-            pl = self._plugins[scope][stage]
-        for name, func in pl.items():
-            yield name, func
+    def plugins(self, scope: str, stage: str) -> Generator[Callable, None, None]:
+        for hook in self._plugins.get(scope, {}).get(stage, []):
+            yield hook
 
-    def get_plugin(self, scope: str, stage: str, name: str) -> Optional[Any]:
+    def get_plugin(self, scope: str, stage: str, name: str) -> Optional[Callable]:
         if scope in self._plugins and stage in self._plugins[scope]:
-            return self._plugins[scope][stage].get(name)
+            specname = f"{name}_impl"
+            for hook in self._plugins[scope][stage]:
+                if hook.specname == specname:
+                    return hook
         return None
 
     def load(self, path: list[str], namespace: str) -> None:
@@ -58,11 +63,11 @@ def plugins(scope: str, stage: str) -> Generator[tuple[str, Callable], None, Non
     return _manager.plugins(scope, stage)
 
 
-def get(scope: str, stage: str, name: str) -> Optional[Any]:
+def get(scope: str, stage: str, name: str) -> Optional[Callable]:
     return _manager.get(scope, stage, name)
 
 
-def register(name: str, *, scope: str, stage: str):
+def register(*, scope: str, stage: str):
     """Decorator to register a callback"""
 
     def decorator(func: Callable):
@@ -71,7 +76,7 @@ def register(name: str, *, scope: str, stage: str):
         def wrapper(*args: Any, **kwargs: Any):
             return func(*args, **kwargs)
 
-        _manager.register(name, func, scope, stage)
+        _manager.register(func, scope, stage)
         return wrapper
 
     return decorator

@@ -1,7 +1,7 @@
 from typing import Optional
 
 from ..environment import Environment
-from ..session.argparsing import ArgumentParser
+from ..session.argparsing import Parser
 from ..test.partition import dump_partitions
 from ..test.partition import partition_n
 from ..test.partition import partition_t
@@ -9,6 +9,7 @@ from ..util.time import time_in_seconds
 from ..util.time import timestamp
 from .base import Session
 from .common import add_mark_arguments
+from .common import add_workdir_arguments
 
 
 class CreateBatches(Session):
@@ -20,12 +21,7 @@ class CreateBatches(Session):
         self, *, invocation_params: Optional[Session.InvocationParams] = None
     ) -> None:
         super().__init__(invocation_params=invocation_params)
-        self.option.timeout = None
-        self.option.max_workers = 1
-        self.option.copy_all_resources = None
-        self.option.runner = None
-        self.option.runner_options = None
-        self.option.batch_size = None
+        self.workdir = self.option.workdir or "./Batches"
 
     @property
     def mode(self):
@@ -76,7 +72,8 @@ class CreateBatches(Session):
         ...
 
     @staticmethod
-    def setup_parser(parser: ArgumentParser):
+    def setup_parser(parser: Parser):
+        add_workdir_arguments(parser)
         add_mark_arguments(parser)
         g = parser.add_mutually_exclusive_group()
         g.add_argument(
