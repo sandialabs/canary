@@ -1,11 +1,14 @@
 import os
 import sys
+from typing import TYPE_CHECKING
 
 from ..test.testfile import AbstractTestFile
 from ..util import graph
-from .argparsing import Parser
 from .base import Session
 from .common import add_mark_arguments
+
+if TYPE_CHECKING:
+    from ..config.argparsing import Parser
 
 
 class Describe(Session):
@@ -18,7 +21,7 @@ class Describe(Session):
         return self.Mode.ANONYMOUS
 
     @staticmethod
-    def setup_parser(parser: Parser):
+    def setup_parser(parser: "Parser"):
         add_mark_arguments(parser)
         parser.add_argument("file", help="Test file")
 

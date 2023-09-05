@@ -1,5 +1,9 @@
-from .argparsing import Parser
+from typing import TYPE_CHECKING
+
 from .base import Session
+
+if TYPE_CHECKING:
+    from ..config.argparsing import Parser
 
 
 class Config(Session):
@@ -12,7 +16,7 @@ class Config(Session):
         return self.Mode.ANONYMOUS
 
     @staticmethod
-    def setup_parser(parser: Parser):
+    def setup_parser(parser: "Parser"):
         sp = parser.add_subparsers(dest="subcommand")
         sp.add_parser("show", help="Show the current configuration")
 

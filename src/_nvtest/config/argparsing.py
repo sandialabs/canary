@@ -173,13 +173,8 @@ def make_argument_parser(**kwargs):
         "--config-file",
         dest="config_file",
         metavar="CONFIG",
-        help="Path to alternative configuration file",
-    )
-    parser.add_argument(
-        "--no-user-config",
-        action="store_true",
-        default=False,
-        help="Do not load a user configuration file",
+        help="Path to alternative configuration file. "
+        "Set to 'none' to skip user config",
     )
     parser.add_argument(
         "-c",

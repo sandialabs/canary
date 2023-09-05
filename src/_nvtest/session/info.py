@@ -1,7 +1,11 @@
-from typing import Optional
+import shlex
+from typing import TYPE_CHECKING
 
-from .argparsing import Parser
 from .base import Session
+
+if TYPE_CHECKING:
+    from ..config import Config
+    from ..config.argparsing import Parser
 
 
 class Info(Session):
@@ -9,17 +13,15 @@ class Info(Session):
 
     family = "info"
 
-    def __init__(
-        self, *, invocation_params: Optional[Session.InvocationParams] = None
-    ) -> None:
-        super().__init__(invocation_params=invocation_params)
+    def __init__(self, *, config: "Config") -> None:
+        super().__init__(config=config)
         dir = self.option.directory
         if not self.is_workdir(dir):
             raise ValueError(f"{dir!r} is not a test execution directory")
         self.workdir = dir
 
     @staticmethod
-    def setup_parser(parser: Parser):
+    def setup_parser(parser: "Parser"):
         parser.add_argument("directory", help="Test result directory")
 
     @property
@@ -30,8 +32,8 @@ class Info(Session):
         self.load_index()
         self.print_section_header("Test summary")
         self.print_front_matter()
-        args = self.orig_invocation_params.args
-        self.print_text(f"command: nvtest {' '.join(args)}")
+        args = self.config.orig_invocation_params.args
+        self.print_text(f"command: nvtest {shlex.join(args)}")
         self.print_test_results_summary()
         return 0
 

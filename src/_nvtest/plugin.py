@@ -16,14 +16,14 @@ class Manager:
         name = func.__name__
         tty.verbose(f"Registering plugin {name}::{scope}::{stage}")
         err_msg = f"register() got unexpected stage '{scope}::{stage}'"
-        if scope == "cli":
-            if stage not in ("setup",):
+        if scope == "argparse":
+            if stage not in ("add_command", "add_argument"):
                 raise TypeError(err_msg)
         elif scope == "session":
-            if stage not in ("setup", "finish"):
+            if stage not in ("setup", "teardown"):
                 raise TypeError(err_msg)
         elif scope == "test":
-            if stage not in ("discovery", "setup", "finish"):
+            if stage not in ("discovery", "setup", "teardown"):
                 raise TypeError(err_msg)
         else:
             raise TypeError(f"register() got unexpected scope {scope!r}")

@@ -15,7 +15,6 @@ from ..config.machine import machine_config
 from ..io.cdash import Reporter as CDashReporter
 from ..io.cdash import TestData as CDashTestData
 from ..session import Session
-from ..session.argparsing import Parser
 from ..test.enums import Result
 from ..test.testcase import TestCase
 from ..util import cdash
@@ -355,10 +354,8 @@ class CDashOption(argparse.Action):
         setattr(namespace, self.dest, options)
 
 
-nvtest.plugin.register(scope="cli", stage="setup")
-
-
-def bootstrap_cdash(session: Session, parser: Parser):
+@nvtest.plugin.register(scope="argparse", stage="add_argument")
+def bootstrap_cdash(config: nvtest.Config, parser: nvtest.Parser) -> None:
     s_opt = ", ".join(
         colorize("@*{%s}: %s" % item) for item in valid_cdash_options.items()
     )
@@ -379,11 +376,9 @@ def bootstrap_cdash(session: Session, parser: Parser):
     )
 
 
-nvtest.plugin.register(scope="session", stage="teardown")
-
-
+@nvtest.plugin.register(scope="session", stage="teardown")
 def dump_cdash(session: Session):
-    kwds = session.option.cdash_options
+    kwds = session.config.option.cdash_options
     cases_to_run = [case for case in session.cases if not case.skip]
     data = CDashTestData(session, cases_to_run)
     reporter = CDashReporter(

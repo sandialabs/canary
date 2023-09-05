@@ -1,14 +1,13 @@
 import argparse
 import os
 import time
+from typing import TYPE_CHECKING
 from typing import Any
-from typing import Optional
 
 from ..environment import Environment
 from ..error import StopExecution
 from ..executor import Executor
 from ..mark.match import deselect_by_keyword
-from ..session.argparsing import Parser
 from ..test.enums import Result
 from ..test.enums import Skip
 from ..util import tty
@@ -18,6 +17,10 @@ from .common import add_mark_arguments
 from .common import add_timing_arguments
 from .common import add_workdir_arguments
 from .common import default_timeout
+
+if TYPE_CHECKING:
+    from ..config import Config
+    from ..config.argparsing import Parser
 
 
 def set_default_attr(namespace: argparse.Namespace, attr: str, default: Any) -> None:
@@ -29,13 +32,10 @@ class RunTests(Session):
     """Run the tests"""
 
     family = "test"
-
     executor: Executor
 
-    def __init__(
-        self, *, invocation_params: Optional[Session.InvocationParams] = None
-    ) -> None:
-        super().__init__(invocation_params=invocation_params)
+    def __init__(self, *, config: "Config") -> None:
+        super().__init__(config=config)
         self._mode: self.Mode = self.Mode.WRITE
         self.search_paths: list[str] = self.option.search_paths or []
         if len(self.search_paths) == 1 and self.is_workdir(self.search_paths[0]):
@@ -107,7 +107,7 @@ class RunTests(Session):
         self.print_test_results_summary(duration)
 
     @staticmethod
-    def setup_parser(parser: Parser):
+    def setup_parser(parser: "Parser"):
         add_workdir_arguments(parser)
         add_mark_arguments(parser)
         add_timing_arguments(parser)

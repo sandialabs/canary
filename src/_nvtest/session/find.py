@@ -1,7 +1,7 @@
 import sys
+from typing import TYPE_CHECKING
 
 from ..environment import Environment
-from ..session.argparsing import Parser
 from ..test.testcase import TestCase
 from ..util import graph
 from ..util import tty
@@ -10,6 +10,9 @@ from ..util.tty.colify import colified
 from ..util.tty.color import colorize
 from .base import Session
 from .common import add_mark_arguments
+
+if TYPE_CHECKING:
+    from ..config.argparsing import Parser
 
 
 class Find(Session):
@@ -22,7 +25,7 @@ class Find(Session):
         return self.Mode.ANONYMOUS
 
     @staticmethod
-    def setup_parser(parser: Parser):
+    def setup_parser(parser: "Parser"):
         group = parser.add_mutually_exclusive_group()
         group.add_argument(
             "-p",

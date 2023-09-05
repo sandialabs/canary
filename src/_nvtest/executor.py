@@ -153,7 +153,7 @@ class Executor:
 
     def process_testcases(self, _timeout: int) -> None:
         self._futures = {}
-        log_level = self.session.config.log_level
+        log_level = tty.get_log_level()
         timeout_message = f"Test suite execution exceeded time out of {_timeout} s."
         try:
             with timeout(_timeout, timeout_message=timeout_message):

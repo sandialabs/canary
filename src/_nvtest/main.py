@@ -2,6 +2,7 @@ import os
 import sys
 from typing import Optional
 
+from .config import Config
 from .error import StopExecution
 from .session import ExitCode
 from .session import factory
@@ -17,8 +18,10 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     :returns: An exit code.
     """
+    params = Config.InvocationParams(args=argv or sys.argv[1:], dir=os.getcwd())
+    config = Config(invocation_params=params)
+    session = factory(config)
     initstate: int = 0
-    session = factory(args=argv or sys.argv[1:], dir=os.getcwd())
     session.exitstatus = ExitCode.OK
     try:
         session.startup()

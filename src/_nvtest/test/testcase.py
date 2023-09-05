@@ -363,8 +363,8 @@ class TestCase:
                 with tty.timestamps():
                     tty.info(f"Preparing test: {self.name}")
                     tty.info(f"Directory: {os.getcwd()}")
-                    tty.info("\nCleaning work directory...")
-                    tty.info("\nLinking and copying working files...")
+                    tty.info("Cleaning work directory...")
+                    tty.info("Linking and copying working files...")
                     if copy_all_resources:
                         fs.force_copy(self.file, os.path.basename(self.file), echo=True)
                     else:

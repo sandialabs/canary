@@ -1,12 +1,15 @@
 import glob
 import json
 import os
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from ..test.partition import merge
 from ..util import tty
 from ..util.filesystem import mkdirp
 from .base import Session
+
+if TYPE_CHECKING:
+    from ..config import Config
 
 
 class MergeBatches(Session):
@@ -14,10 +17,8 @@ class MergeBatches(Session):
 
     family = "batch"
 
-    def __init__(
-        self, *, invocation_params: Optional[Session.InvocationParams] = None
-    ) -> None:
-        super().__init__(invocation_params=invocation_params)
+    def __init__(self, *, config: "Config") -> None:
+        super().__init__(config=config)
         files = self.option.files
         if len(files) == 1 and self.is_workdir(files[0]):
             self.workdir = files[0]

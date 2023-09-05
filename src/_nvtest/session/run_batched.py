@@ -1,4 +1,5 @@
 import argparse
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
 from typing import Sequence
@@ -7,11 +8,13 @@ from typing import Union
 from ..runner import valid_runners
 from ..util.time import time_in_seconds
 from ..util.tty.color import colorize
-from .argparsing import Parser
 from .common import add_mark_arguments
 from .common import add_timing_arguments
 from .common import add_workdir_arguments
 from .run_tests import RunTests
+
+if TYPE_CHECKING:
+    from ..config.argparsing import Parser
 
 
 class RunnerOptions(argparse.Action):
@@ -35,7 +38,7 @@ class RunBatched(RunTests):
     family = "batch"
 
     @staticmethod
-    def setup_parser(parser: Parser):
+    def setup_parser(parser: "Parser"):
         add_workdir_arguments(parser)
         add_mark_arguments(parser)
         add_timing_arguments(parser)

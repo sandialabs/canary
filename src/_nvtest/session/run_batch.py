@@ -1,16 +1,18 @@
 import errno
 import os
 import time
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from ..executor import SingleBatchDirectExecutor
 from ..test.partition import Partition
 from ..test.partition import load_partition
 from ..util.returncode import compute_returncode
-from .base import Session
 from .common import add_timing_arguments
 from .common import add_workdir_arguments
 from .run_tests import RunTests
+
+if TYPE_CHECKING:
+    from ..config import Config
 
 
 class RunBatch(RunTests):
@@ -19,10 +21,8 @@ class RunBatch(RunTests):
     family = "batch"
     batch: Partition
 
-    def __init__(
-        self, *, invocation_params: Optional[Session.InvocationParams] = None
-    ) -> None:
-        super(RunTests, self).__init__(invocation_params=invocation_params)
+    def __init__(self, *, config: "Config") -> None:
+        super(RunTests, self).__init__(config=config)
         if not os.path.exists(self.option.file):
             file = self.option.file
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), file)

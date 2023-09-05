@@ -1,10 +1,14 @@
+from typing import TYPE_CHECKING
+
 from ..util.time import time_in_seconds
-from .argparsing import Parser
+
+if TYPE_CHECKING:
+    from ..config.argparsing import Parser
 
 default_timeout = 60 * 60
 
 
-def add_timing_arguments(parser: Parser) -> None:
+def add_timing_arguments(parser: "Parser") -> None:
     parser.add_argument(
         "--timeout",
         type=time_in_seconds,
@@ -13,7 +17,7 @@ def add_timing_arguments(parser: Parser) -> None:
     )
 
 
-def add_mark_arguments(parser: Parser) -> None:
+def add_mark_arguments(parser: "Parser") -> None:
     parser.add_argument(
         "-k",
         dest="keyword_expr",
@@ -32,7 +36,7 @@ def add_mark_arguments(parser: Parser) -> None:
     )
 
 
-def add_workdir_arguments(parser: Parser) -> None:
+def add_workdir_arguments(parser: "Parser") -> None:
     parser.add_argument(
         "-w",
         dest="wipe",

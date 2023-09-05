@@ -1,7 +1,6 @@
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from ..environment import Environment
-from ..session.argparsing import Parser
 from ..test.partition import dump_partitions
 from ..test.partition import partition_n
 from ..test.partition import partition_t
@@ -11,16 +10,18 @@ from .base import Session
 from .common import add_mark_arguments
 from .common import add_workdir_arguments
 
+if TYPE_CHECKING:
+    from ..config import Config
+    from ..config.argparsing import Parser
+
 
 class CreateBatches(Session):
     """Create test batches, but don't run them"""
 
     family = "batch"
 
-    def __init__(
-        self, *, invocation_params: Optional[Session.InvocationParams] = None
-    ) -> None:
-        super().__init__(invocation_params=invocation_params)
+    def __init__(self, *, config: "Config") -> None:
+        super().__init__(config=config)
         self.workdir = self.option.workdir or "./Batches"
 
     @property
@@ -72,7 +73,7 @@ class CreateBatches(Session):
         ...
 
     @staticmethod
-    def setup_parser(parser: Parser):
+    def setup_parser(parser: "Parser"):
         add_workdir_arguments(parser)
         add_mark_arguments(parser)
         g = parser.add_mutually_exclusive_group()

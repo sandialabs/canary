@@ -4,6 +4,8 @@ from typing import Sequence
 from typing import Union
 
 import _nvtest.plugin as plugin
+from _nvtest.config import Config
+from _nvtest.config.argparsing import Parser
 from _nvtest.error import TestDiffed
 from _nvtest.error import TestFailed
 from _nvtest.error import TestSkipped

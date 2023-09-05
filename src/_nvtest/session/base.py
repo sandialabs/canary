@@ -1,19 +1,16 @@
 import bisect
-import dataclasses
 import enum
 import json
 import os
 import sys
 import time
-from argparse import Namespace
 from contextlib import contextmanager
 from datetime import datetime
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
-from typing import Iterable
 from typing import Optional
 from typing import Type
-from typing import Union
 from typing import final
 
 from .. import paths
@@ -30,13 +27,14 @@ from ..util.graph import TopologicalSorter
 from ..util.misc import ns2dict
 from ..util.time import hhmmss
 from ..util.tty.color import colorize
-from .argparsing import Parser
-from .argparsing import make_argument_parser
+
+if TYPE_CHECKING:
+    from ..config.argparsing import Parser
 
 
 class _PostInit(type):
-    def __call__(cls, *args, **kwargs):
-        instance = type.__call__(cls, *args, **kwargs)
+    def __call__(cls, config: Config):
+        instance = type.__call__(cls, config=config)
         if post := getattr(instance, "__post_init__", None):
             post()
         return instance
@@ -49,22 +47,6 @@ class Session(metaclass=_PostInit):
         Object containing parameters regarding the :func:`pytest.main`
         invocation.
     """
-
-    @final
-    @dataclasses.dataclass(frozen=True)
-    class InvocationParams:
-        """Holds parameters passed during :func:`nvtest.main`.
-
-        The object attributes are read-only.
-
-        """
-
-        args: tuple[str, ...]
-        dir: str  # The directory from which :func:`nvtest.main` was invoked
-
-        def __init__(self, *, args: Iterable[str], dir: str) -> None:
-            object.__setattr__(self, "args", tuple(args))
-            object.__setattr__(self, "dir", dir)
 
     @final
     class Mode(enum.IntEnum):
@@ -86,25 +68,13 @@ class Session(metaclass=_PostInit):
     start: float
     finish: float
     config: Config
-    parser: Parser
-    option: Namespace
-    orig_invocation_params: InvocationParams
     cases: list[TestCase]
     batches: Optional[list[Partition]] = None
 
-    def __init__(self, *, invocation_params: Optional[InvocationParams] = None) -> None:
-        if invocation_params is None:
-            invocation_params = self.InvocationParams(args=(), dir=os.getcwd())
-        self.invocation_params = invocation_params
-        self.parser: Parser = make_argument_parser()
-        self.load_plugins()
-        group = self.parser.get_group("plugin options")
-        for hook in plugin.plugins("cli", "setup"):
-            hook(self, group)
-        self.parser.add_command(self.__class__)
-        self.option: Namespace = Namespace()
-        self.parser.parse_args(self.invocation_params.args, namespace=self.option)
-        self.config = Config()
+    def __init__(self, *, config: Config) -> None:
+        self.config = config
+        self.invocation_params = config.invocation_params
+        self.option = self.config.option
         self.rel_workdir: str = None  # type: ignore
 
     def __init_subclass__(subclass, **kwargs) -> None:
@@ -155,8 +125,6 @@ class Session(metaclass=_PostInit):
                     d = self.rel_workdir
                     raise ValueError(f"Work directory {d!r} already exists!")
                 self.make_workdir()
-            self.config.do_configure(config_file=self.option.config_file)
-        self.set_main_options()
         self.start: float = -1
         self.finish: float = -1
         tty.verbose("Done performing test session post initialization")
@@ -186,7 +154,7 @@ class Session(metaclass=_PostInit):
         return
 
     @staticmethod
-    def setup_parser(parser: Parser) -> None:
+    def setup_parser(parser: "Parser") -> None:
         ...
 
     @property
@@ -225,20 +193,6 @@ class Session(metaclass=_PostInit):
     def log_level(self) -> int:
         return self.config.log_level
 
-    def set_main_options(self) -> None:
-        args = self.option
-        user_log_level = tty.default_log_level() - args.q + args.v
-        log_level = max(min(user_log_level, tty.max_log_level()), tty.min_log_level())
-        tty.set_log_level(log_level)
-        self.config.log_level = log_level
-        self.config.debug = args.debug
-        for env in args.env_mods:
-            self.config.variables[env.var] = env.val
-        for path in args.config_mods:
-            self.config.set(path)
-        if args.no_user_config:
-            self.config.disable_user_config = True
-
     def remove_workdir(self):
         if self.mode != Session.Mode.WRITE:
             mode = self.mode.name.lower()
@@ -254,12 +208,7 @@ class Session(metaclass=_PostInit):
         mkdirp(self.workdir)
 
     def dump(self):
-        data = {
-            "args": list(self.invocation_params.args),
-            "dir": self.invocation_params.dir,
-            "option": ns2dict(self.option),
-            "config": self.config.asdict(),
-        }
+        data = {"config": self.config.asdict()}
         with open(self.archive_file, "w") as fh:
             json.dump({"session": data}, fh, indent=2)
 
@@ -268,8 +217,6 @@ class Session(metaclass=_PostInit):
             data = json.load(fh)
         fd = data["session"]
         self.config.restore(fd["config"])
-        ip = self.InvocationParams(args=tuple(fd["args"]), dir=fd["dir"])
-        self.orig_invocation_params = ip
 
     def set_pythonpath(self, environ) -> None:
         pythonpath = [paths.prefix]
@@ -282,26 +229,18 @@ class Session(metaclass=_PostInit):
 
     @contextmanager
     def rc_environ(self) -> Generator[None, None, None]:
-        save_env: dict[str, Union[str, None]] = {}
+        save_env: dict[str, Optional[str]] = {}
         variables = dict(self.config.variables)
         self.set_pythonpath(variables)
         for var, val in variables.items():
             save_env[var] = os.environ.pop(var, None)
             os.environ[var] = val
         yield
-        for var, val in save_env.items():
-            if val is None:
-                os.environ.pop(var)
+        for var, save_val in save_env.items():
+            if save_val is not None:
+                os.environ[var] = save_val
             else:
-                os.environ[var] = val
-
-    @staticmethod
-    def load_plugins() -> None:
-        import _nvtest.plugins
-
-        path = _nvtest.plugins.__path__
-        namespace = _nvtest.plugins.__name__
-        plugin.load(path, namespace)
+                os.environ.pop(var)
 
     def print_text(self, text: str):
         if self.log_level < tty.INFO:
