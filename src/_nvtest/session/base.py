@@ -148,9 +148,8 @@ class Session(metaclass=_PostInit):
         raise NotImplementedError
 
     def teardown(self) -> None:
-        if self.option.timeit:
-            duration = self.finish - self.start
-            sys.stdout.write(f"{self.option.command} completed in {hhmmss(duration)}\n")
+        for hook in plugin.plugins("session", "teardown"):
+            hook(self)
         return
 
     @staticmethod

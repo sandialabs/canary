@@ -356,15 +356,15 @@ class CDashOption(argparse.Action):
 
 @nvtest.plugin.register(scope="argparse", stage="add_argument")
 def bootstrap_cdash(config: nvtest.Config, parser: nvtest.Parser) -> None:
-    s_opt = ", ".join(
+    s_opt = "; ".join(
         colorize("@*{%s}: %s" % item) for item in valid_cdash_options.items()
     )
     help_msg = colorize(
         "Write CDash XML files and (optionally) post to CDash. "
         "Pass @*{option} to the CDash writer. @*{option} is an '=' separated "
-        "key, value pair.  Multiple options can be separated by commas. "
+        "key=value pair.  Multiple options can be separated by commas. "
         "For example, --cdash "
-        "track=Experimental,project=MyProject,url=http://my-project.cdash.com"
+        "track=Experimental,project=MyProject,url=http://my-project.cdash.com. "
         "Recognized options are %s" % s_opt
     )
     parser.add_argument(
@@ -379,6 +379,8 @@ def bootstrap_cdash(config: nvtest.Config, parser: nvtest.Parser) -> None:
 @nvtest.plugin.register(scope="session", stage="teardown")
 def dump_cdash(session: Session):
     kwds = session.config.option.cdash_options
+    if not kwds:
+        return
     cases_to_run = [case for case in session.cases if not case.skip]
     data = CDashTestData(session, cases_to_run)
     reporter = CDashReporter(

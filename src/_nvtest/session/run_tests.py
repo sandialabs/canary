@@ -103,6 +103,7 @@ class RunTests(Session):
     def teardown(self):
         if hasattr(self, "executor"):
             self.executor.teardown()
+        super().teardown()
         duration = self.finish - self.start
         self.print_test_results_summary(duration)
 

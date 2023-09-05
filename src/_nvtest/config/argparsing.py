@@ -162,13 +162,6 @@ def make_argument_parser(**kwargs):
         help="Debug mode [default: %(default)s]",
     )
     parser.add_argument(
-        "-t",
-        "--timeit",
-        action="store_true",
-        default=False,
-        help="Time execution of command [default: %(default)s]",
-    )
-    parser.add_argument(
         "-C",
         "--config-file",
         dest="config_file",
