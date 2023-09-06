@@ -355,7 +355,7 @@ class CDashOption(argparse.Action):
 
 
 @nvtest.plugin.register(scope="argparse", stage="add_argument")
-def bootstrap_cdash(config: nvtest.Config, parser: nvtest.Parser) -> None:
+def setup(config: nvtest.Config, parser: nvtest.Parser) -> None:
     s_opt = "; ".join(
         colorize("@*{%s}: %s" % item) for item in valid_cdash_options.items()
     )
@@ -377,7 +377,7 @@ def bootstrap_cdash(config: nvtest.Config, parser: nvtest.Parser) -> None:
 
 
 @nvtest.plugin.register(scope="session", stage="teardown")
-def dump_cdash(session: Session):
+def postprocess(session: Session):
     kwds = session.config.option.cdash_options
     if not kwds:
         return

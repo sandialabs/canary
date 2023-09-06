@@ -70,6 +70,8 @@ class RunBatch(RunTests):
         )
         if self.mode == self.Mode.WRITE:
             self.executor.setup(copy_all_resources=self.option.copy_all_resources)
+        i, n = self.batch.rank
+        self.dump(os.path.join(self.dotdir, f"session.json.{n}.{i}"))
 
     def run(self) -> int:
         self.start = time.time()

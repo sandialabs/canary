@@ -25,7 +25,6 @@ from ..util.filesystem import force_remove
 from ..util.filesystem import mkdirp
 from ..util.graph import TopologicalSorter
 from ..util.misc import ns2dict
-from ..util.time import hhmmss
 from ..util.tty.color import colorize
 
 if TYPE_CHECKING:
@@ -132,9 +131,9 @@ class Session(metaclass=_PostInit):
     def startup(self) -> None:
         tty.verbose("Starting up test session")
         self.start = time.time()
-        wmodes = Session.Mode.APPEND, Session.Mode.WRITE
-        if self.mode in wmodes:
+        if self.mode in (Session.Mode.WRITE, Session.Mode.APPEND):
             mkdirp(self.dotdir)
+        if self.mode == Session.Mode.WRITE:
             self.dump()
         self.setup()
         for hook in plugin.plugins("session", "setup"):
@@ -206,9 +205,10 @@ class Session(metaclass=_PostInit):
             raise ValueError(f"Work directory {self.rel_workdir} already exists!")
         mkdirp(self.workdir)
 
-    def dump(self):
+    def dump(self, file: Optional[str] = None):
         data = {"config": self.config.asdict()}
-        with open(self.archive_file, "w") as fh:
+        f: str = file or self.archive_file
+        with open(f, "w") as fh:
             json.dump({"session": data}, fh, indent=2)
 
     def restore(self):
