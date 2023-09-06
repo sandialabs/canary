@@ -40,11 +40,12 @@ class RunTests(Session):
         self.search_paths: list[str] = self.option.search_paths or []
         if len(self.search_paths) == 1 and self.is_workdir(self.search_paths[0]):
             self._mode = self.Mode.APPEND
-            if self.workdir is not None:
+            if self.option.workdir is not None:
                 raise ValueError("Do not set value of work-dir when rerunning tests")
-            self.workdir = self.search_paths[0]
+            workdir = self.search_paths[0]
         else:
-            self.workdir = self.option.workdir or "./TestResults"
+            workdir = self.option.workdir or "./TestResults"
+        self.workdir = os.path.normpath(workdir)
         set_default_attr(self.option, "runner", "direct")
         set_default_attr(self.option, "runner_options", None)
         set_default_attr(self.option, "batch_size", None)
