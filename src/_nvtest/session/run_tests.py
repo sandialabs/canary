@@ -4,9 +4,9 @@ import time
 from typing import TYPE_CHECKING
 from typing import Any
 
-from ..environment import Environment
 from ..error import StopExecution
 from ..executor import Executor
+from ..finder import Finder
 from ..mark.match import deselect_by_keyword
 from ..test.enums import Result
 from ..test.enums import Skip
@@ -61,11 +61,11 @@ class RunTests(Session):
         self.print_front_matter()
         self.print_text(f"work directory: {self.workdir}")
         if self.mode == self.Mode.WRITE:
-            env = Environment(self.search_paths)
-            text = "search paths: {0}".format("\n           ".join(env.search_paths))
+            finder = Finder(self.search_paths)
+            text = "search paths: {0}".format("\n           ".join(finder.search_paths))
             self.print_text(text)
-            env.discover()
-            self.cases = env.test_cases(
+            finder.discover()
+            self.cases = finder.test_cases(
                 self,
                 on_options=self.option.on_options,
                 keyword_expr=self.option.keyword_expr,

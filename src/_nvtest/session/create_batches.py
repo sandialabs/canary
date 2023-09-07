@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from ..environment import Environment
+from ..finder import Finder
 from ..test.partition import dump_partitions
 from ..test.partition import partition_n
 from ..test.partition import partition_t
@@ -31,12 +31,12 @@ class CreateBatches(Session):
     def setup(self):
         self.print_section_header("Begin test case batching")
         self.print_front_matter()
-        env = Environment(self.option.search_paths)
+        finder = Finder(self.option.search_paths)
         self.print_text(
-            "testpaths: {0}\n".format("\n           ".join(env.search_paths))
+            "testpaths: {0}\n".format("\n           ".join(finder.search_paths))
         )
-        env.discover()
-        self.cases = env.test_cases(
+        finder.discover()
+        self.cases = finder.test_cases(
             self,
             on_options=self.option.on_options,
             keyword_expr=self.option.keyword_expr,

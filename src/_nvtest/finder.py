@@ -11,8 +11,7 @@ from .util import filesystem as fs
 from .util import tty
 
 
-class Environment:
-    _config_file = "environ"
+class Finder:
     exts = (".pyt", ".vvt")
     skip_dirs = ["__pycache__", ".git", ".svn"]
     version_info = (1, 0, 3)

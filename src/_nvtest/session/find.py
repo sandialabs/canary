@@ -1,7 +1,7 @@
 import sys
 from typing import TYPE_CHECKING
 
-from ..environment import Environment
+from ..finder import Finder
 from ..test.testcase import TestCase
 from ..util import graph
 from ..util import tty
@@ -59,9 +59,9 @@ class Find(Session):
 
     def setup(self):
         self.print_front_matter()
-        env = Environment(search_paths=self.option.search_paths)
-        env.discover()
-        self.cases = env.test_cases(
+        finder = Finder(search_paths=self.option.search_paths)
+        finder.discover()
+        self.cases = finder.test_cases(
             self,
             keyword_expr=self.option.keyword_expr,
             on_options=self.option.on_options,
