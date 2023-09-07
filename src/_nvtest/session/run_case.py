@@ -1,4 +1,3 @@
-import os
 from ..test.testcase import TestCase
 from ..util.environ import tmp_environ
 from ..util.filesystem import working_dir

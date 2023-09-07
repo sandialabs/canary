@@ -12,8 +12,6 @@ from typing import Union
 import nvtest
 
 from ..config.machine import machine_config
-from ..io.cdash import Reporter as CDashReporter
-from ..io.cdash import TestData as CDashTestData
 from ..session import Session
 from ..test.enums import Result
 from ..test.testcase import TestCase
@@ -382,8 +380,8 @@ def postprocess(session: Session):
     if not kwds:
         return
     cases_to_run = [case for case in session.cases if not case.skip]
-    data = CDashTestData(session, cases_to_run)
-    reporter = CDashReporter(
+    data = TestData(session, cases_to_run)
+    reporter = Reporter(
         test_data=data,
         buildname=kwds.get("build", "BUILD"),
         baseurl=kwds.get("url"),
