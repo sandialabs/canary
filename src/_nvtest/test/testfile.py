@@ -269,18 +269,17 @@ class AbstractTestFile:
         tty.verbose("Resolving dependencies in test file")
         case_map = dict([(case.name, i) for (i, case) in enumerate(cases)])
         for i, case in enumerate(cases):
-            while True:
-                if not case.dep_patterns:
-                    break
-                pat = case.dep_patterns.pop(0)
+            for (j, pat) in enumerate(case.dep_patterns):
                 matches = [
                     cases[k]
                     for (name, k) in case_map.items()
                     if i != k and fnmatch.fnmatchcase(name, pat)
                 ]
                 if matches:
+                    case.dep_patterns[j] = None
                     for match in matches:
                         case.add_dependency(match)
+            case.dep_patterns = [_ for _ in case.dep_patterns if _ is not None]
 
     # -------------------------------------------------------------------------------- #
 

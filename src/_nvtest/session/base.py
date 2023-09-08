@@ -67,7 +67,7 @@ class Session(metaclass=_PostInit):
     start: float
     finish: float
     config: Config
-    cases: list[TestCase]
+    _cases: list[TestCase]
     batches: Optional[list[Partition]] = None
 
     def __init__(self, *, config: Config) -> None:
@@ -107,6 +107,17 @@ class Session(metaclass=_PostInit):
 
         """
         raise NotImplementedError
+
+    @property
+    def cases(self) -> list[TestCase]:
+        return self._cases
+
+    @cases.setter
+    def cases(self, arg: list[TestCase]) -> None:
+        self._cases = arg
+        for hook in plugin.plugins("test", "discovery"):
+            for case in self._cases:
+                hook(self, case)
 
     def __post_init__(self):
         tty.verbose("Performing test session post initialization")

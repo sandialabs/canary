@@ -3,8 +3,7 @@ import fnmatch
 import os
 from typing import Optional
 
-from . import plugin
-from .session import Session
+from .config import Config
 from .test import AbstractTestFile
 from .test import TestCase
 from .util import filesystem as fs
@@ -64,7 +63,7 @@ class Finder:
 
     def test_cases(
         self,
-        session: Session,
+        config: Config,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
     ) -> list[TestCase]:
@@ -78,20 +77,23 @@ class Finder:
         for abstract_files in self.tree.values():
             for abstract_file in abstract_files:
                 concrete_test_cases = abstract_file.freeze(
-                    session.config, keyword_expr=keyword_expr, on_options=on_options
+                    config, keyword_expr=keyword_expr, on_options=on_options
                 )
                 cases.extend([case for case in concrete_test_cases if case])
         self.resolve_dependencies(cases)
         self.check_for_skipped_dependencies(cases)
-        for hook in plugin.plugins("test", "discovery"):
-            for case in cases:
-                hook(session, case)
         tty.verbose("Done creating test cases")
         return cases
 
     def resolve_dependencies(self, cases: list[TestCase]) -> None:
         tty.verbose("Resolving dependencies across test suite")
-        case_map = dict([(case.name, i) for (i, case) in enumerate(cases)])
+        case_map = {}
+        for (i, case) in enumerate(cases):
+            case_map[case.name] = i
+            case_map[case.display_name] = i
+            case_map[case.exec_path] = i
+            d = os.path.dirname(case.exec_path)
+            case_map[os.path.join(d, case.display_name)] = i
         for i, case in enumerate(cases):
             while True:
                 if not case.dep_patterns:
@@ -100,7 +102,7 @@ class Finder:
                 matches = [
                     cases[k]
                     for (name, k) in case_map.items()
-                    if i != k and fnmatch.fnmatchcase(name, pat)
+                    if i != k and (fnmatch.fnmatchcase(name, pat) or name == pat)
                 ]
                 if not matches:
                     raise ValueError(

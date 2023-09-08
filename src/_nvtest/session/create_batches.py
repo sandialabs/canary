@@ -37,7 +37,7 @@ class CreateBatches(Session):
         )
         finder.discover()
         self.cases = finder.test_cases(
-            self,
+            self.config,
             on_options=self.option.on_options,
             keyword_expr=self.option.keyword_expr,
         )

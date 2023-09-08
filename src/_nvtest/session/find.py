@@ -62,7 +62,7 @@ class Find(Session):
         finder = Finder(search_paths=self.option.search_paths)
         finder.discover()
         self.cases = finder.test_cases(
-            self,
+            self.config,
             keyword_expr=self.option.keyword_expr,
             on_options=self.option.on_options,
         )
