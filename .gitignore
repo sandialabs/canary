@@ -1,5 +1,6 @@
 *.res
 *.pyc
+Results*
 TestResults*
 TestPartitions*
 TestBatches*
@@ -8,7 +9,7 @@ _test-cache
 .mypy_cache
 vvt
 partition.p.*
-nvtest.ini
+nvtest.toml
 scripts/sbatch
 
 src/UNKNOWN.egg-info/

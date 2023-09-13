@@ -22,7 +22,7 @@ line_length = 88
 exclude = ["scripts", "tests", "src/_nvtest/config/distro.py"]
 
 [[tool.mypy.overrides]]
-module = "networkx.*,yaml.*,ruamel.*,pygments.*"
+module = "networkx.*,yaml.*,ruamel.*,pygments.*,toml.*"
 ignore_missing_imports = true
 
 

@@ -13,7 +13,7 @@ def add_timing_arguments(parser: "Parser") -> None:
         "--timeout",
         type=time_in_seconds,
         default=default_timeout,
-        help="Set a timeout on test execution [default: 1 hr]",
+        help="Set a timeout on test execution [default: %(default)s]",
     )
 
 

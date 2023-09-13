@@ -2,8 +2,11 @@ import argparse
 import inspect
 import re
 import textwrap as textwrap
+from typing import Any
 from typing import Optional
+from typing import Sequence
 from typing import Type
+from typing import Union
 
 from ..util import tty
 
@@ -39,6 +42,10 @@ class Parser(argparse.ArgumentParser):
         super().__init__(*args, **kwargs)
         self.register("type", None, identity)
         self.__subcommands: dict[str, Type] = {}
+
+    def preparse(self, args, namespace=None):
+        args = [_ for _ in args if _ not in ("-h", "--help")]
+        return super().parse_known_args(args, namespace=namespace)
 
     @staticmethod
     def _validate_command_class(cmdclass: Type):
@@ -76,6 +83,7 @@ class Parser(argparse.ArgumentParser):
             description=cmdclass.__doc__,
             epilog=getattr(cmdclass, "epilog", None),
             add_help=getattr(cmdclass, "add_help", True),
+            formatter_class=HelpFormatter,
         )
         subparser.register("type", None, identity)
         cmdclass.setup_parser(subparser)  # type: ignore
@@ -118,19 +126,25 @@ def identity(arg):
     return arg
 
 
-class EnvironmentModification:
-    def __init__(self, arg: str) -> None:
-        var, val = [_.strip() for _ in arg.split("=", 1)]
+class EnvironmentModification(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        option: Union[str, Sequence[Any], None],
+        option_str: Optional[str] = None,
+    ):
+        assert isinstance(option, str)
         try:
-            var, val = [_.strip() for _ in arg.split("=", 1)]
+            var, val = [_.strip() for _ in option.split("=", 1)]
         except ValueError:
             raise argparse.ArgumentTypeError(
-                f"Invalid environment variable {arg!r} specification. "
+                f"Invalid environment variable {option!r} specification. "
                 "Expected form NAME=VAL"
             ) from None
-        else:
-            self.var = var
-            self.val = val
+        env_mods: dict[str, str] = getattr(namespace, self.dest, None) or {}
+        env_mods[var] = val
+        setattr(namespace, self.dest, env_mods)
 
 
 def make_argument_parser(**kwargs):
@@ -138,7 +152,7 @@ def make_argument_parser(**kwargs):
     parser = Parser(
         formatter_class=HelpFormatter,
         description="nv.test - an application testing framework",
-        prog="nv.test",
+        prog="nvtest",
         **kwargs,
     )
     g = parser.add_mutually_exclusive_group()
@@ -181,10 +195,9 @@ def make_argument_parser(**kwargs):
     parser.add_argument(
         "-e",
         dest="env_mods",
-        action="append",
         metavar="ENVAR",
-        default=[],
-        type=EnvironmentModification,
+        default={},
+        action=EnvironmentModification,
         help="Environment variables that should be added to "
         "the testing environment, e.g. 'NAME=VAL'",
     )

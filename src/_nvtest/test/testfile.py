@@ -276,10 +276,10 @@ class AbstractTestFile:
                     if i != k and fnmatch.fnmatchcase(name, pat)
                 ]
                 if matches:
-                    case.dep_patterns[j] = None
+                    case.dep_patterns[j] = "==None=="
                     for match in matches:
                         case.add_dependency(match)
-            case.dep_patterns = [_ for _ in case.dep_patterns if _ is not None]
+            case.dep_patterns = [_ for _ in case.dep_patterns if _ != "==None=="]
 
     # -------------------------------------------------------------------------------- #
 

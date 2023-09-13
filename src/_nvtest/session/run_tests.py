@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+from io import StringIO
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -11,7 +12,9 @@ from ..mark.match import deselect_by_keyword
 from ..test.enums import Result
 from ..test.enums import Skip
 from ..util import tty
+from ..util.misc import dedup
 from ..util.returncode import compute_returncode
+from ..util.time import time_in_seconds
 from .base import Session
 from .common import add_mark_arguments
 from .common import add_timing_arguments
@@ -23,9 +26,12 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
 
 
-def set_default_attr(namespace: argparse.Namespace, attr: str, default: Any) -> None:
-    if not hasattr(namespace, attr):
+def setdefault(namespace: argparse.Namespace, attr: str, default: Any) -> Any:
+    try:
+        return getattr(namespace, attr)
+    except AttributeError:
         setattr(namespace, attr, default)
+        return default
 
 
 class RunTests(Session):
@@ -37,7 +43,7 @@ class RunTests(Session):
     def __init__(self, *, config: "Config") -> None:
         super().__init__(config=config)
         self._mode: self.Mode = self.Mode.WRITE
-        self.search_paths: list[str] = self.option.search_paths or []
+        self.search_paths: list[str] = dedup(self.option.search_paths) or []
         if len(self.search_paths) == 1 and self.is_workdir(self.search_paths[0]):
             self._mode = self.Mode.APPEND
             if self.option.workdir is not None:
@@ -46,9 +52,11 @@ class RunTests(Session):
         else:
             workdir = self.option.workdir or "./TestResults"
         self.workdir = os.path.normpath(workdir)
-        set_default_attr(self.option, "runner", "direct")
-        set_default_attr(self.option, "runner_options", None)
-        set_default_attr(self.option, "batch_size", None)
+        setdefault(self.option, "runner", "direct")
+        setdefault(self.option, "runner_options", None)
+        setdefault(self.option, "batch_size", None)
+        if isinstance(self.option.timeout, str):
+            self.option.timeout = time_in_seconds(self.option.timeout)
 
     @property
     def mode(self) -> Session.Mode:
@@ -62,7 +70,7 @@ class RunTests(Session):
         self.print_text(f"work directory: {self.workdir}")
         if self.mode == self.Mode.WRITE:
             finder = Finder(self.search_paths)
-            text = "search paths: {0}".format("\n           ".join(finder.search_paths))
+            text = "search paths: {0}".format("\n  ".join(finder.search_paths))
             self.print_text(text)
             finder.discover()
             self.cases = finder.test_cases(
@@ -127,7 +135,14 @@ class RunTests(Session):
             help="Do not link resources to the test "
             "directory, only copy [default: %(default)s]",
         )
-        parser.add_argument("search_paths", nargs="+", help="Search paths")
+        parser.add_argument("search_paths", nargs="*", help="Search paths")
+        epilog = StringIO()
+        epilog.write("[nvtest.run-tests] ini-options:\n")
+        epilog.write("  workdir (string): path to work directory\n")
+        epilog.write("  timeout (string|int): test execution timeout\n")
+        epilog.write("  max_workers (int): number of concurrent tests\n")
+        epilog.write("  copy_all_resources (bool): copy, don't link, resources\n")
+        parser.epilog = epilog.getvalue()
 
     def dump_index(self):
         paths = [os.path.abspath(p) for p in self.search_paths]
@@ -137,7 +152,6 @@ class RunTests(Session):
         kwds = super().load_index()
         if not os.path.isfile(self.index_file):
             raise ValueError(f"{self.index_file!r} not found")
-        print(kwds)
         if self.option.timeout == default_timeout:
             self.option.timeout = kwds["timeout"]
         if kwds["batch_size"] is not None:

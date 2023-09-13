@@ -1,9 +1,11 @@
+import argparse
+import copy
 import dataclasses
 import errno
 import json
 import os
+import shlex
 import sys
-from configparser import ConfigParser
 from string import Template
 from types import SimpleNamespace
 from typing import Any
@@ -11,6 +13,8 @@ from typing import Iterable
 from typing import Optional
 from typing import Union
 from typing import final
+
+import toml
 
 from .. import plugin
 from ..util import tty
@@ -20,7 +24,15 @@ from .argparsing import make_argument_parser
 from .machine import editable_properties as editable_machine_properties
 from .machine import machine_config
 
-user_config_filename = "nvtest.ini"
+user_config_filename = "nvtest.toml"
+
+
+def setdefault(namespace: argparse.Namespace, attr: str, default: Any) -> Any:
+    try:
+        return getattr(namespace, attr)
+    except AttributeError:
+        setattr(namespace, attr, default)
+        return default
 
 
 class Config:
@@ -48,9 +60,7 @@ class Config:
     def __init__(self, *, invocation_params: InvocationParams):
         self.invocation_params = invocation_params
         self.orig_invocation_params = invocation_params
-        self.config = SimpleNamespace(
-            debug=False, log_level=2, user_cfg_file=None, disable_user_config=False
-        )
+        self.config = SimpleNamespace(debug=False, log_level=2, user_cfg_file=None)
         self.machine = machine_config()
         self.variables: dict[str, str] = {}
         self.python = SimpleNamespace(
@@ -60,15 +70,21 @@ class Config:
         )
         self.dir = self.invocation_params.dir
         self.parser = make_argument_parser()
+        self.option = argparse.Namespace()
+        self.load_user_config_file()
+        ns, remaining = self.parser.preparse(
+            self.invocation_params.args, namespace=copy.copy(self.option)
+        )
+        self.set_main_options(ns)
         self.load_plugins()
-        for hook in plugin.plugins("argparse", "add_command"):
-            hook(self, self.parser)
         group = self.parser.get_group("plugin options")
         for hook in plugin.plugins("argparse", "add_argument"):
             hook(self, group)
-        self.option = self.parser.parse_args(self.invocation_params.args)
-        self.set_main_options()
-        self.load_user_config_file()
+        for hook in plugin.plugins("argparse", "add_command"):
+            hook(self, self.parser)
+        if remaining and remaining[0] != "-":
+            self.set_subcommand_defaults(remaining[0])
+        self.parser.parse_args(self.invocation_params.args, namespace=self.option)
 
     @property
     def debug(self) -> bool:
@@ -106,27 +122,36 @@ class Config:
         kwds.pop("orig_invocation_params", None)
         return kwds
 
-    def set_main_options(self) -> None:
-        args = self.option
+    def set_subcommand_defaults(self, subcommand: str) -> None:
+        opts = getattr(self.option, "__subopts__", {})
+        kwds = opts.get(subcommand)
+        if not kwds:
+            return
+        for (name, parser) in self.parser.subparsers.choices.items():
+            if name == subcommand:
+                parser.set_defaults(**kwds)
+
+    def set_main_options(self, args: argparse.Namespace) -> None:
         user_log_level = tty.default_log_level() - args.q + args.v
         log_level = max(min(user_log_level, tty.max_log_level()), tty.min_log_level())
         tty.set_log_level(log_level)
         self.log_level = log_level
         self.debug = args.debug
-        for env in args.env_mods:
-            self.variables[env.var] = env.val
+        for (var, val) in args.env_mods.items():
+            self.variables[var] = val
         for path in args.config_mods:
             self.set(path)
-        if args.config_file == "none":
-            self.config.disable_user_config = True
-        elif args.config_file:
-            self.user_cfg_file = args.config_file
 
     def find_user_config_file(self) -> Union[str, None]:
         cwd = os.getcwd()
         f: str = user_config_filename
         home = os.path.expanduser("~")
-        if os.path.exists(os.path.join(cwd, ".nvtest", f)):
+        opts, _ = self.parser.preparse(self.invocation_params.args)
+        if opts.config_file == "none":
+            return None
+        elif opts.config_file:
+            return opts.config_file
+        elif os.path.exists(os.path.join(cwd, ".nvtest", f)):
             return os.path.join(cwd, ".nvtest", f)
         elif os.path.exists(os.path.join(cwd, f)):
             return os.path.join(cwd, f)
@@ -137,50 +162,47 @@ class Config:
         return None
 
     def load_user_config_file(self, config_file: Optional[str] = None) -> None:
-        class RawConfigParser(ConfigParser):
-            def optionxform(self, option):
-                return option
-
-            def items(self, section, *args, **kwargs):
-                kwargs["raw"] = True
-                return super(RawConfigParser, self).items(section, *args, **kwargs)
-
-        if self.config.disable_user_config:
-            return None
         if config_file is None:
             config_file = self.find_user_config_file()
             if config_file is None:
-                return
+                return None
         if not os.path.exists(config_file):
             raise FileNotFoundError(
                 errno.ENOENT, os.strerror(errno.ENOENT), config_file
             )
         self.user_cfg_file = config_file
-        cfg = RawConfigParser()
-        cfg.read(config_file)
-        for section in cfg.sections():
+        cfg = toml.load(config_file)
+        for (section, section_data) in cfg.get("nvtest", {}).items():
             if section == "variables":
-                for key, val in cfg.items("variables"):
-                    t = Template(val)
-                    self.variables[key] = t.safe_substitute(os.environ)
+                env_mods = setdefault(self.option, "env_mods", {})
+                for key, val in section_data.items():
+                    val = Template(val).safe_substitute(os.environ)
+                    env_mods[key] = val
             elif section == "config":
-                for key, val in cfg.items("config"):
-                    if key not in vars(self.config):
-                        raise ValueError(f"Illegal configuration setting: config:{key}")
+                config_mods = setdefault(self.option, "config_mods", [])
+                for key, val in section_data.items():
+                    if key not in ("debug", "log_level"):
+                        raise IllegalConfiguration(f"config:{key}")
                     if key == "debug":
-                        val = str2bool(val)
-                    elif key == "log_level":
-                        val = int(val)
-                    setattr(self.config, key, val)
+                        val = str(val).lower()
+                    config_mods.append(f"config:{key}:{val}")
             elif section == "machine":
-                for key, val in cfg.items("machine"):
+                config_mods = setdefault(self.option, "config_mods", [])
+                for key, val in section_data.items():
                     if key not in editable_machine_properties:
-                        raise ValueError(f"machine:{key} is a read only property")
-                    prop_type = type(getattr(self.machine, key))
-                    setattr(self.machine, key, prop_type(val))
+                        raise IllegalConfiguration(
+                            f"machine:{key}", f"{key} is a read-only property"
+                        )
+                    config_mods.append(f"machine:{key}:{val}")
+            elif section == "testpaths":
+                roots = section_data["roots"]
+                if isinstance(roots, str):
+                    roots = shlex.split(roots)
+                self.option.search_paths = roots
             else:
-                errmsg = f"Illegal configuration section {section} in {config_file}"
-                raise ValueError(errmsg)
+                opts = setdefault(self.option, "__subopts__", {})
+                opts[section] = section_data
+        return None
 
     @staticmethod
     def load_plugins() -> None:
@@ -201,7 +223,6 @@ class Config:
         ipd: dict[str, Any] = kwds["invocation_params"]
         ip = self.InvocationParams(args=tuple(ipd["args"]), dir=ipd["dir"])
         self.orig_invocation_params = ip
-        self.set_main_options()
 
     def set(self, path: str) -> None:
         parts = path.split(":")
@@ -231,5 +252,9 @@ class Config:
         return yaml.dump(self.asdict(), default_flow_style=False)
 
 
-def str2bool(arg: str):
-    return False if arg.lower() in ("0", "no", "false", "off") else True
+class IllegalConfiguration(Exception):
+    def __init__(self, option, message=None):
+        msg = f"Illegal configuration setting: {option}"
+        if message:
+            msg += f". {message}"
+        super().__init__(msg)

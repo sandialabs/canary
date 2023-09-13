@@ -1,6 +1,7 @@
 from argparse import Namespace
 from types import SimpleNamespace
 from typing import Any
+from typing import Sequence
 from typing import Union
 
 
@@ -20,3 +21,11 @@ def ns2dict(arg: Union[Namespace, SimpleNamespace]) -> dict:
         if isinstance(item, SimpleNamespace):
             value[name] = ns2dict(item)
     return value
+
+
+def dedup(arg: Sequence[Any]) -> list[Any]:
+    result: list[Any] = []
+    for item in arg:
+        if item not in result:
+            result.append(item)
+    return result

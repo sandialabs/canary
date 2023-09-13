@@ -17,49 +17,73 @@ class Finder:
 
     def __init__(self, search_paths: Optional[list[str]] = None) -> None:
         self.dir = os.getcwd()
-        self._search_paths: list[str] = []
-        for path in search_paths or [self.dir]:
-            if not os.path.exists(path):
-                raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), path)
-            self._search_paths.append(os.path.relpath(os.path.abspath(path), self.dir))
-        self.tree: dict[str, list[AbstractTestFile]] = {}
+        self._search_paths = self._construct_search_paths(search_paths)
+        self.abstract_testfiles: list[AbstractTestFile] = []
 
-    def asdict(self):
-        data = dict(vars(self))
-        data.pop("tree")
-        return data
+    def _construct_search_paths(
+        self, paths: Optional[list[str]] = None
+    ) -> list[tuple[str, Optional[list[str]]]]:
+        search_paths: list[tuple[str, Optional[list[str]]]] = []
+        for path in paths or [self.dir]:
+            if ":" in path:
+                root, rpaths = path.split(":")
+                xpaths = rpaths.split(",")
+                for p in xpaths:
+                    f = os.path.join(root, p)
+                    if not os.path.exists(f):
+                        raise FileNotFoundError(
+                            errno.ENOENT, os.strerror(errno.ENOENT), f
+                        )
+                root = os.path.relpath(os.path.abspath(root), self.dir)
+                search_paths.append((root, xpaths))
+            else:
+                if not os.path.exists(path):
+                    raise FileNotFoundError(
+                        errno.ENOENT, os.strerror(errno.ENOENT), path
+                    )
+                root = os.path.relpath(os.path.abspath(path), self.dir)
+                search_paths.append((root, None))
+        return search_paths
 
     def expandpath(self, path):
         return os.path.normpath(os.path.join(self.dir, path))
 
     @property
     def search_paths(self) -> list[str]:
-        return [self.expandpath(p) for p in self._search_paths]
+        return [self.expandpath(p[0]) for p in self._search_paths]
 
     def discover(self) -> None:
         tty.verbose("Discovering tests")
-        for root in self.search_paths:
+
+        def skip_dir(dirname):
+            return os.path.basename(dirname) in self.skip_dirs or fs.is_hidden(dirname)
+
+        for (p, paths) in self._search_paths:
+            root = self.expandpath(p)
             tty.verbose(f"Searching for tests in {root}")
             testfiles: list[AbstractTestFile] = []
             root = os.path.abspath(root)
             tty.verbose(f"Searching {root} for test files")
             if os.path.isfile(root):
                 testfiles.append(AbstractTestFile(root))
-                continue
-            for dirname, dirs, files in os.walk(root):
-                if os.path.basename(dirname) in self.skip_dirs or fs.is_hidden(dirname):
-                    del dirs[:]
-                    continue
-                paths = [
-                    os.path.relpath(os.path.join(dirname, f), root)
-                    for f in files
-                    if f.endswith(self.exts)
-                ]
+            elif paths:
                 testfiles.extend([AbstractTestFile(root, path) for path in paths])
-            self.tree[root] = testfiles
+            else:
+                for dirname, dirs, files in os.walk(root):
+                    if skip_dir(dirname):
+                        del dirs[:]
+                        continue
+                    paths = [
+                        os.path.relpath(os.path.join(dirname, f), root)
+                        for f in files
+                        if f.endswith(self.exts)
+                    ]
+                    testfiles.extend([AbstractTestFile(root, path) for path in paths])
+            self.abstract_testfiles.extend(testfiles)
             tty.verbose(f"Found {len(testfiles)} test files in {root}")
-        n = sum(len(_) for _ in self.tree.values())
-        tty.verbose(f"Found {n} test files in {len(self.tree)} search roots")
+        n = len(self.abstract_testfiles)
+        nr = len({_.root for _ in self.abstract_testfiles})
+        tty.verbose(f"Found {n} test files in {nr} search roots")
 
     def test_cases(
         self,
@@ -74,12 +98,11 @@ class Finder:
             f"options={o}",
             f"keywords={keyword_expr}",
         )
-        for abstract_files in self.tree.values():
-            for abstract_file in abstract_files:
-                concrete_test_cases = abstract_file.freeze(
-                    config, keyword_expr=keyword_expr, on_options=on_options
-                )
-                cases.extend([case for case in concrete_test_cases if case])
+        for abstract_file in self.abstract_testfiles:
+            concrete_test_cases = abstract_file.freeze(
+                config, keyword_expr=keyword_expr, on_options=on_options
+            )
+            cases.extend([case for case in concrete_test_cases if case])
         self.resolve_dependencies(cases)
         self.check_for_skipped_dependencies(cases)
         tty.verbose("Done creating test cases")
