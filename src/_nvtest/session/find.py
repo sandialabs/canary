@@ -61,7 +61,6 @@ class Find(Session):
         self.print_front_matter()
         finder = Finder(self.config)
         self.cases = finder.test_cases(
-            self.config,
             keyword_expr=self.option.keyword_expr,
             on_options=self.option.on_options,
         )
