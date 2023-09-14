@@ -60,7 +60,6 @@ class Find(Session):
     def setup(self):
         self.print_front_matter()
         finder = Finder(self.config)
-        finder.discover()
         self.cases = finder.test_cases(
             self.config,
             keyword_expr=self.option.keyword_expr,

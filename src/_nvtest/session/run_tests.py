@@ -72,7 +72,6 @@ class RunTests(Session):
             finder = Finder(self.config)
             text = "search paths: {0}".format("\n  ".join(finder.search_paths))
             self.print_text(text)
-            finder.discover()
             self.cases = finder.test_cases(
                 self.config,
                 on_options=self.option.on_options,

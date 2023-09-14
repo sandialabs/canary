@@ -35,7 +35,6 @@ class CreateBatches(Session):
         self.print_text(
             "testpaths: {0}\n".format("\n           ".join(finder.search_paths))
         )
-        finder.discover()
         self.cases = finder.test_cases(
             self.config,
             on_options=self.option.on_options,
