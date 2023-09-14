@@ -31,7 +31,7 @@ class CreateBatches(Session):
     def setup(self):
         self.print_section_header("Begin test case batching")
         self.print_front_matter()
-        finder = Finder(self.option.search_paths)
+        finder = Finder(self.config)
         self.print_text(
             "testpaths: {0}\n".format("\n           ".join(finder.search_paths))
         )

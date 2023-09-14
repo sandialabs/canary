@@ -4,7 +4,6 @@ import dataclasses
 import errno
 import json
 import os
-import shlex
 import sys
 from string import Template
 from types import SimpleNamespace
@@ -17,8 +16,10 @@ from typing import final
 import toml
 
 from .. import plugin
+from ..schemas.config import config_schema
 from ..util import tty
 from ..util.misc import ns2dict
+from ..util.schema import SchemaError
 from ..util.tty.color import colorize
 from .argparsing import make_argument_parser
 from .machine import editable_properties as editable_machine_properties
@@ -172,6 +173,10 @@ class Config:
             )
         self.user_cfg_file = config_file
         cfg = toml.load(config_file)
+        try:
+            config_schema.validate(cfg)
+        except SchemaError as e:
+            raise ConfigSchemaError(config_file, e.args[0]) from None
         for (section, section_data) in cfg.get("nvtest", {}).items():
             if section == "variables":
                 env_mods = setdefault(self.option, "env_mods", {})
@@ -181,24 +186,19 @@ class Config:
             elif section == "config":
                 config_mods = setdefault(self.option, "config_mods", [])
                 for key, val in section_data.items():
-                    if key not in ("debug", "log_level"):
-                        raise IllegalConfiguration(f"config:{key}")
                     if key == "debug":
                         val = str(val).lower()
                     config_mods.append(f"config:{key}:{val}")
             elif section == "machine":
                 config_mods = setdefault(self.option, "config_mods", [])
                 for key, val in section_data.items():
-                    if key not in editable_machine_properties:
-                        raise IllegalConfiguration(
-                            f"machine:{key}", f"{key} is a read-only property"
-                        )
                     config_mods.append(f"machine:{key}:{val}")
             elif section == "testpaths":
-                roots = section_data["roots"]
-                if isinstance(roots, str):
-                    roots = shlex.split(roots)
-                self.option.search_paths = roots
+                if isinstance(section_data, list):
+                    # list of directories to search
+                    self.option.testpaths = {_: None for _ in section_data}
+                else:
+                    self.option.testpaths = dict(section_data)
             else:
                 opts = setdefault(self.option, "__subopts__", {})
                 opts[section] = section_data
@@ -257,4 +257,10 @@ class IllegalConfiguration(Exception):
         msg = f"Illegal configuration setting: {option}"
         if message:
             msg += f". {message}"
+        super().__init__(msg)
+
+
+class ConfigSchemaError(Exception):
+    def __init__(self, filename, error):
+        msg = f"Schema error encountered in {filename}: {error}"
         super().__init__(msg)

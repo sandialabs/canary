@@ -59,7 +59,7 @@ class Find(Session):
 
     def setup(self):
         self.print_front_matter()
-        finder = Finder(search_paths=self.option.search_paths)
+        finder = Finder(self.config)
         finder.discover()
         self.cases = finder.test_cases(
             self.config,

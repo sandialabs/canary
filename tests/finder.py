@@ -10,11 +10,11 @@ def test_skipif(tmpdir, config):
             fh.write("import nvtest\nnvtest.mark.skipif(True, reason='Because')")
         with open("b.pyt", "w") as fh:
             fh.write("import nvtest\nnvtest.mark.skipif(False, reason='Because')")
-    finder = Finder([workdir])
+    cfg = config([], workdir)
+    finder = Finder(cfg)
     assert len(finder.search_paths) == 1
     assert finder.search_paths[0] == workdir
-    finder.discover()
-    cases = finder.test_cases(config([], workdir))
+    cases = finder.test_cases()
     assert len(cases) == 2
     assert len([c for c in cases if not c.skip]) == 1
 
@@ -26,15 +26,15 @@ def test_keywords(tmpdir, config):
             fh.write("import nvtest\nnvtest.mark.keywords('a', 'b', 'c', 'd', 'e')")
         with open("b.pyt", "w") as fh:
             fh.write("import nvtest\nnvtest.mark.keywords('e', 'f', 'g', 'h', 'i')")
-    finder = Finder([workdir])
+    cfg = config([], workdir)
+    finder = Finder(cfg)
     assert len(finder.search_paths) == 1
     assert finder.search_paths[0] == workdir
-    finder.discover()
-    cases = finder.test_cases(config([], workdir), keyword_expr="a and i")
+    cases = finder.test_cases(keyword_expr="a and i")
     assert len([c for c in cases if not c.skip]) == 0
-    cases = finder.test_cases(config([], workdir), keyword_expr="a and e")
+    cases = finder.test_cases(keyword_expr="a and e")
     assert len([c for c in cases if not c.skip]) == 1
-    cases = finder.test_cases(config([], workdir), keyword_expr="a or i")
+    cases = finder.test_cases(keyword_expr="a or i")
     assert len([c for c in cases if not c.skip]) == 2
 
 
@@ -44,11 +44,11 @@ def test_parameterize_1(tmpdir, config):
         with open("a.pyt", "w") as fh:
             fh.write("import nvtest\n")
             fh.write("nvtest.mark.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
-    finder = Finder([workdir])
+    cfg = config([], workdir)
+    finder = Finder(cfg)
     assert len(finder.search_paths) == 1
     assert finder.search_paths[0] == workdir
-    finder.discover()
-    cases = finder.test_cases(config([], workdir))
+    cases = finder.test_cases()
     assert len([c for c in cases if not c.skip]) == 3
     a, b = 0, 1
     for case in cases:
@@ -64,11 +64,11 @@ def test_parameterize_2(tmpdir, config):
             fh.write("import nvtest\n")
             fh.write("nvtest.mark.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
             fh.write("nvtest.mark.parameterize('n', [10,11,12])\n")
-    finder = Finder([workdir])
+    cfg = config([], workdir)
+    finder = Finder(cfg)
     assert len(finder.search_paths) == 1
     assert finder.search_paths[0] == workdir
-    finder.discover()
-    cases = finder.test_cases(config([], workdir))
+    cases = finder.test_cases()
     assert len([c for c in cases if not c.skip]) == 9
     i = 0
     for (a, b) in [(0, 1), (2, 3), (4, 5)]:
@@ -83,13 +83,13 @@ def test_parameterize_3(tmpdir, config):
         with open("a.pyt", "w") as fh:
             fh.write("import nvtest\n")
             fh.write("nvtest.mark.parameterize('a,b', [(0,1),(2,3)], options='xxx')\n")
-    finder = Finder([workdir])
+    cfg = config([], workdir)
+    finder = Finder(cfg)
     assert len(finder.search_paths) == 1
     assert finder.search_paths[0] == workdir
-    finder.discover()
-    cases = finder.test_cases(config([], workdir), on_options=["xxx"])
+    cases = finder.test_cases(on_options=["xxx"])
     assert len([c for c in cases if not c.skip]) == 2
-    cases = finder.test_cases(config([], workdir))
+    cases = finder.test_cases()
     assert len(cases) == 1
     assert cases[0].parameters == {}
 
@@ -100,14 +100,13 @@ def test_cpu_count(tmpdir, config):
         with open("a.pyt", "w") as fh:
             fh.write("import nvtest\n")
             fh.write("nvtest.mark.parameterize('np', [1, 4, 8, 32])\n")
-    finder = Finder([workdir])
-    finder.discover()
     cfg = config([], workdir)
     cfg.set("machine:cpu_count:40")
-    cases = finder.test_cases(cfg)
+    finder = Finder(cfg)
+    cases = finder.test_cases()
     assert len([c for c in cases if not c.skip]) == 4
     cfg.set("machine:cpu_count:2")
-    cases = finder.test_cases(cfg)
+    cases = finder.test_cases()
     assert len([c for c in cases if not c.skip]) == 1
 
 
@@ -122,10 +121,9 @@ def test_dep_patterns(tmpdir, config):
         with open("b/g.pyt", "w") as fh:
             fh.write("import nvtest\n")
             fh.write("nvtest.mark.parameterize('n', [1, 2, 3])\n")
-    finder = Finder([workdir])
-    finder.discover()
     cfg = config([], workdir)
-    cases = finder.test_cases(cfg)
+    finder = Finder(cfg)
+    cases = finder.test_cases()
     assert len([c for c in cases if not c.skip]) == 4
     for case in cases:
         if case.name == "f":
@@ -142,10 +140,9 @@ def test_analyze(tmpdir, config):
             fh.write("nvtest.mark.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
             fh.write("nvtest.mark.parameterize('n', [10,11,12])\n")
             fh.write("nvtest.mark.analyze(True)\n")
-    finder = Finder([workdir])
-    finder.discover()
     cfg = config([], workdir)
-    cases = finder.test_cases(cfg)
+    finder = Finder(cfg)
+    cases = finder.test_cases()
     assert len([c for c in cases if not c.skip]) == 10
     assert cases[-1].analyze == "--analyze"
     assert all(case in cases[-1].dependencies for case in cases[:-1])

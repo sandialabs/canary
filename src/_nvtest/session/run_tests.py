@@ -69,7 +69,7 @@ class RunTests(Session):
         self.print_front_matter()
         self.print_text(f"work directory: {self.workdir}")
         if self.mode == self.Mode.WRITE:
-            finder = Finder(self.search_paths)
+            finder = Finder(self.config)
             text = "search paths: {0}".format("\n  ".join(finder.search_paths))
             self.print_text(text)
             finder.discover()
