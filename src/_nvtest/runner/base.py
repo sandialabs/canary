@@ -4,7 +4,7 @@ from typing import Any
 
 class Runner:
     name: str
-    default_args = []
+    default_args: list[str] = []
 
     def __init__(self, machine_config: SimpleNamespace, *args: Any):
         self.machine_config = machine_config

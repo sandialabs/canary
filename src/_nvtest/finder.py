@@ -1,15 +1,11 @@
 import fnmatch
-import json
 import os
-from typing import Any
 from typing import Optional
-from typing import Union
 
 from .test import AbstractTestFile
 from .test import TestCase
 from .util import filesystem as fs
 from .util import tty
-from .util.filesystem import mkdirp
 
 
 class Finder:
@@ -40,6 +36,7 @@ class Finder:
 
     def populate(self) -> None:
         from .session import Session
+
         def skip_dir(dirname):
             if os.path.basename(dirname) in self.skip_dirs:
                 return True
@@ -149,7 +146,9 @@ class Finder:
         for abstract_files in self.tree.values():
             for abstract_file in abstract_files:
                 concrete_test_cases = abstract_file.freeze(
-                    cpu_count=cpu_count, keyword_expr=keyword_expr, on_options=on_options
+                    cpu_count=cpu_count,
+                    keyword_expr=keyword_expr,
+                    on_options=on_options,
                 )
                 cases.extend([case for case in concrete_test_cases if case])
         self.resolve_dependencies(cases)

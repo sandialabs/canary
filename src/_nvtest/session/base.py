@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
 from typing import Optional
-from typing import Union
 from typing import Type
+from typing import Union
 from typing import final
 
 from .. import paths
@@ -229,8 +229,8 @@ class Session(metaclass=_PostInit):
         if file is None:
             return False
         pat = "^batch.json.[0-9]+.[0-9]+$"
-        dirname, basename = os.path.split(file)
-        return Session.is_workdir(dirname, ascend=True) and re.search(pat, basename)
+        dir, name = os.path.split(file)
+        return Session.is_workdir(dir, ascend=True) and bool(re.search(pat, name))
 
     @property
     def log_level(self) -> int:
@@ -251,7 +251,7 @@ class Session(metaclass=_PostInit):
         mkdirp(self.workdir)
 
     def dump(self, file: Optional[str] = None):
-        data = {"config": self.config.asdict()}
+        data: dict[str, Any] = {"config": self.config.asdict()}
         data["date"] = datetime.fromtimestamp(self.start).strftime("%c")
         f: str = file or self.archive_file
         with open(f, "w") as fh:
@@ -392,7 +392,7 @@ class Session(metaclass=_PostInit):
     def dump_index(self) -> None:
         index: dict[str, Any] = {}
 
-        cases: dict[str, Union[str, None, list[str]]] = index.setdefault("cases", {})
+        cases: dict[str, Any] = index.setdefault("cases", {})
         for case in self.cases:
             path = None if case.skip else os.path.relpath(case.exec_dir, self.workdir)
             cases[case.id] = {

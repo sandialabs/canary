@@ -1,34 +1,33 @@
 import argparse
 import os
 import time
-from io import StringIO
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Union
 from typing import Optional
 from typing import Sequence
+from typing import Union
+
 import toml
 
-from ..test.partition import load_partition
-from ..test.partition import Partition
-from ..schemas import testpaths_schema
 from ..error import StopExecution
 from ..executor import Executor
 from ..finder import Finder
 from ..mark.match import deselect_by_keyword
+from ..runner import valid_runners
+from ..schemas import testpaths_schema
 from ..test.enums import Result
 from ..test.enums import Skip
-from ..util.tty.color import colorize
+from ..test.partition import Partition
+from ..test.partition import load_partition
 from ..util import tty
 from ..util.misc import dedup
 from ..util.returncode import compute_returncode
-from ..runner import valid_runners
 from ..util.time import time_in_seconds
+from ..util.tty.color import colorize
 from .base import Session
 from .common import add_mark_arguments
 from .common import add_timing_arguments
 from .common import add_workdir_arguments
-from .common import default_timeout
 
 if TYPE_CHECKING:
     from ..config import Config
@@ -193,6 +192,7 @@ class Run(Session):
 
     def run(self) -> int:
         from _nvtest.session import ExitCode
+
         try:
             self.start = time.time()
             self.executor.run(timeout=self.option.timeout)
@@ -288,18 +288,18 @@ class Run(Session):
         )
         parser.add_argument(
             "search_paths",
-            metavar="file",
+            metavar="file_or_dir",
             nargs="*",
             help="Test file[s] or directories to search",
         )
 
     def load_index(self) -> None:
         cases = super().load_index()
-#        if kwds["batch_size"] is not None:
-#            self.option.batch_size = kwds["batch_size"]
-#            self.option.runner = kwds["runner"]
-#            if not self.option.runner_options:
-#                self.option.runner_options = kwds["runner_options"]
+        #        if kwds["batch_size"] is not None:
+        #            self.option.batch_size = kwds["batch_size"]
+        #            self.option.runner = kwds["runner"]
+        #            if not self.option.runner_options:
+        #                self.option.runner_options = kwds["runner_options"]
         return cases
 
     def filter_testcases(self) -> None:

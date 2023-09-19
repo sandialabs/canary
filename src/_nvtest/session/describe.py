@@ -46,7 +46,7 @@ class Describe(Session):
                         fp.write(f" -> {dst}")
                     fp.write("\n")
         cases = file.freeze(
-            self.config,
+            cpu_count=self.config.machine.cpu_count,
             on_options=self.option.on_options,
             keyword_expr=self.option.keyword_expr,
         )

@@ -28,8 +28,10 @@ class Info(Session):
     def mode(self):
         return self.Mode.READ
 
+    def setup(self) -> None:
+        self.cases = self.load_index()
+
     def run(self) -> int:
-        self.load_index()
         self.print_section_header("Test summary")
         self.print_front_matter()
         args = self.config.orig_invocation_params.args

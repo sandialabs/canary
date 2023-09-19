@@ -16,8 +16,8 @@ from .queue import factory as q_factory
 from .runner import factory as r_factory
 from .test.enums import Result
 from .test.partition import Partition
-from .test.partition import partition_t
 from .test.partition import partition_n
+from .test.partition import partition_t
 from .test.testcase import TestCase
 from .util import tty
 from .util.filesystem import force_remove

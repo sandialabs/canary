@@ -2,9 +2,9 @@ import errno
 import fnmatch
 import glob
 import os
+import sys
 from copy import copy
 from string import Template
-from typing import TYPE_CHECKING
 from typing import Any
 from typing import Iterable
 from typing import Optional
@@ -20,10 +20,10 @@ from ..mark.structures import AbstractParameterSet
 from ..mark.structures import ParameterExpression
 from ..mark.structures import ParameterSet
 from ..mark.structures import combine_parameter_sets
+from ..util import rprobe
 from ..util import tty
 from ..util.filesystem import working_dir
 from ..util.time import time_in_seconds
-from ..util import rprobe
 from ..util.tty.color import colorize
 from .enums import Skip
 from .testcase import TestCase
@@ -169,6 +169,8 @@ class AbstractTestFile:
                 cpu_count=cpu_count, keyword_expr=keyword_expr, on_options=on_options
             )
         except Exception as e:
+            if "--debug" in sys.argv[1:]:
+                raise
             raise ValueError(f"Failed to freeze {self.file}: {e}") from None
 
     def _freeze(
@@ -205,6 +207,7 @@ class AbstractTestFile:
                         skip = Skip(colorize("deselected by @*b{keyword expression}"))
 
                 np = parameters.get("np")
+                assert isinstance(np, int)
                 if np and np > cpu_count:
                     if not skip:
                         skip = Skip(

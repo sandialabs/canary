@@ -1,3 +1,4 @@
+import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -59,8 +60,14 @@ class Find(Session):
 
     def setup(self):
         self.print_front_matter()
-        finder = Finder(self.config)
-        self.cases = finder.test_cases(
+        self.finder = Finder()
+        search_paths = self.option.search_paths or [os.getcwd()]
+        for path in search_paths:
+            self.finder.add(path)
+        self.finder.prepare()
+        self.finder.populate()
+        self.cases = self.finder.test_cases(
+            cpu_count=self.config.machine.cpu_count,
             keyword_expr=self.option.keyword_expr,
             on_options=self.option.on_options,
         )
