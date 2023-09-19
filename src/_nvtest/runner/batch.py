@@ -119,7 +119,7 @@ class BatchRunner(Runner):
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
         fh.write(
-            f"{py} -m nvtest -qqq run-batch --concurrent-tests=1 -x {input_file}\n"
+            f"{py} -m nvtest -qqq run-tests --max-workers=1 {input_file}\n"
         )
 
     def submit_filename(self, num_batches: int, batch_no: int) -> str:

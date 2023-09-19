@@ -17,6 +17,7 @@ from .runner import factory as r_factory
 from .test.enums import Result
 from .test.partition import Partition
 from .test.partition import partition_t
+from .test.partition import partition_n
 from .test.testcase import TestCase
 from .util import tty
 from .util.filesystem import force_remove
@@ -40,22 +41,28 @@ class Executor:
         cases: list[TestCase],
         *,
         runner: str,
-        max_workers: int = 5,
-        batch_size: Optional[int] = None,
+        max_workers: Optional[int] = None,
+        batching_options: Optional[dict[str, Any]],
         runner_options: Optional[list[Any]] = None,
     ):
         self.session = session
         config = self.session.config
         self.cpu_count = config.machine.cpu_count
-        self.max_workers = self.cpu_count if max_workers < 0 else max_workers
+        self.max_workers = self.cpu_count if max_workers is None else max_workers
         tty.verbose(f"Tests will be run with {self.max_workers} concurrent workers")
         self.workdir = self.session.workdir
         tty.verbose(f"Execution directory: {self.workdir}")
 
         self.cases = cases
-        self.work_items: Union[list[TestCase], list[Partition]] = cases
-        if batch_size is not None:
+        self.work_items: Union[list[TestCase], list[Partition]]
+        if batching_options.get("batch_size") is not None:
+            batch_size = batching_options["batch_size"]
             self.work_items = partition_t(cases, t=batch_size)
+        elif batching_options.get("num_batches") is not None:
+            batches = batching_options["num_batches"]
+            self.work_items = partition_n(cases, n=batches)
+        else:
+            self.work_items = cases
         tty.verbose(f"Initializing executor for {len(self.work_items)} test items")
 
         self.queue = q_factory(self.work_items, self.max_workers, self.cpu_count)

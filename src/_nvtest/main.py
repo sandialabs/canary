@@ -30,7 +30,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     except KeyboardInterrupt:
         session.exitstatus = ExitCode.INTERRUPTED
     except StopExecution as e:
-        tty.error(e.message)
+        if e.exit_code == ExitCode.OK:
+            tty.info(e.message)
+        else:
+            tty.error(e.message)
         session.exitstatus = e.exit_code
     except TimeoutError as e:
         tty.error(e.args[0])

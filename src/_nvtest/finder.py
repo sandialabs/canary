@@ -1,7 +1,10 @@
 import fnmatch
 import os
 from typing import Optional
+from typing import Union
+import toml
 
+from .schemas import testpaths_schema
 from .config import Config
 from .test import AbstractTestFile
 from .test import TestCase
@@ -14,65 +17,48 @@ class Finder:
     skip_dirs = ["__pycache__", ".git", ".svn"]
     version_info = (1, 0, 3)
 
-    def __init__(self, config: Config) -> None:
-        self.dir = config.dir
-        self.config = config
-        self.populate()
+    def __init__(self) -> None:
+        self.roots: dict[str, Optional[list[str]]] = {}
+        self._ready = False
+        self.tree: dict[str, list[AbstractTestFile]] = {}
 
-    def _search_paths(self) -> dict[str, Optional[list[str]]]:
-        # search_paths is set on the command line by a subcommand, testpaths is
-        # set in the ini file.   Prefer the command line
-        getoption = lambda opt: getattr(self.config.option, opt, None)
-        search_paths: list[str] = getoption("search_paths") or []
-        if search_paths:
-            return {root: None for root in search_paths}
-        testpaths: dict[str, Optional[list[str]]] = getoption("testpaths") or {}
-        if testpaths:
-            return testpaths
-        return {self.dir: None}
+    def prepare(self):
+        self._ready = True
 
-    def _maketree(self) -> dict[str, Optional[list[str]]]:
-        tree: dict[str, Optional[list[str]]] = {}
-        search_paths = self._search_paths()
-        for (root, paths) in search_paths.items():
-            if not os.path.exists(root):
-                raise FinderError(f"{root!r}: search root does not exist")
-            if paths:
-                for path in paths:
-                    file = os.path.join(root, path)
-                    if not os.path.exists(file):
-                        raise FinderError(f"{path} not found in {root}")
-            p = os.path.relpath(os.path.abspath(root), self.dir)
-            tree[p] = paths
-        return tree
-
-    def expandpath(self, path):
-        return os.path.normpath(os.path.join(self.dir, path))
-
-    @property
-    def search_paths(self) -> list[str]:
-        return [self.expandpath(root) for root in self.tree]
+    def add(self, root: str, *paths: str) -> None:
+        if self._ready:
+            raise ValueError("Cannot call add() after calling prepare()")
+        root = os.path.abspath(root)
+        self.roots.setdefault(root, None)
+        if paths and self.roots[root] is None:
+            self.roots[root] = []
+        for path in paths:
+            file = os.path.join(root, path)
+            if not os.path.exists(file):
+                raise ValueError(f"{path} not found in {root}")
+            self.roots[root].append(path)
 
     def populate(self) -> None:
-        tty.verbose("Discovering tests")
-
         def skip_dir(dirname):
             return os.path.basename(dirname) in self.skip_dirs or fs.is_hidden(dirname)
-
-        self.tree: dict[str, list[AbstractTestFile]] = {}
-        tree = self._maketree()
-        for (p, paths) in tree.items():
-            root = self.expandpath(p)
-            tty.verbose(f"Searching for tests in {root}")
-            root = os.path.abspath(root)
+        if len(self.tree):
+            raise ValueError("populate() should be called one time")
+        if not self._ready:
+            raise ValueError("Cannot call populate() before calling prepare()")
+        for (root, paths) in self.roots.items():
             tty.verbose(f"Searching {root} for test files")
             if os.path.isfile(root):
-                self.tree[p] = [AbstractTestFile(root)]
-            elif paths:
-                self.tree[p] = [AbstractTestFile(root, path) for path in paths]
+                f = AbstractTestFile(root)
+                root = f.root
+                testfiles = self.tree.setdefault(root, [])
+                testfiles.append(f)
+            elif paths is not None:
+                testfiles = self.tree.setdefault(root, [])
+                for path in paths:
+                    testfiles.append(AbstractTestFile(root, path))
             else:
-                testfiles: list[AbstractTestFile] = []
-                for dirname, dirs, files in os.walk(root):
+                testfiles = self.tree.setdefault(root, [])
+                for (dirname, dirs, files) in os.walk(root):
                     if skip_dir(dirname):
                         del dirs[:]
                         continue
@@ -82,34 +68,14 @@ class Finder:
                         if f.endswith(self.exts)
                     ]
                     testfiles.extend([AbstractTestFile(root, path) for path in paths])
-                self.tree[p] = testfiles
-            tty.verbose(f"Found {len(self.tree[p])} test files in {root}")
+            tty.verbose(f"Found {len(testfiles)} test files in {root}")
         n = sum([len(_) for _ in self.tree.values()])
         nr = len(self.tree)
         tty.verbose(f"Found {n} test files in {nr} search roots")
 
-    def test_cases(
-        self,
-        keyword_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-    ) -> list[TestCase]:
-        cases: list[TestCase] = []
-        o = ",".join(on_options or [])
-        tty.verbose(
-            "Creating concrete test cases using",
-            f"options={o}",
-            f"keywords={keyword_expr}",
-        )
-        for abstract_files in self.tree.values():
-            for abstract_file in abstract_files:
-                concrete_test_cases = abstract_file.freeze(
-                    self.config, keyword_expr=keyword_expr, on_options=on_options
-                )
-                cases.extend([case for case in concrete_test_cases if case])
-        self.resolve_dependencies(cases)
-        self.check_for_skipped_dependencies(cases)
-        tty.verbose("Done creating test cases")
-        return cases
+    @property
+    def search_paths(self) -> list[str]:
+        return [root for root in self.roots]
 
     def resolve_dependencies(self, cases: list[TestCase]) -> None:
         tty.verbose("Resolving dependencies across test suite")
@@ -156,6 +122,32 @@ class Finder:
         if missing:
             raise ValueError("Missing dependencies")
         tty.verbose("Done validating test cases")
+
+    def test_cases(
+        self,
+        cpu_count: Optional[int] = None,
+        keyword_expr: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+    ) -> list[TestCase]:
+        if self.tree is None:
+            raise ValueError("Finder.find() must be called before Finder.test_cases()")
+        cases: list[TestCase] = []
+        o = ",".join(on_options or [])
+        tty.verbose(
+            "Creating concrete test cases using",
+            f"options={o}",
+            f"keywords={keyword_expr}",
+        )
+        for abstract_files in self.tree.values():
+            for abstract_file in abstract_files:
+                concrete_test_cases = abstract_file.freeze(
+                    cpu_count=cpu_count, keyword_expr=keyword_expr, on_options=on_options
+                )
+                cases.extend([case for case in concrete_test_cases if case])
+        self.resolve_dependencies(cases)
+        self.check_for_skipped_dependencies(cases)
+        tty.verbose("Done creating test cases")
+        return cases
 
 
 class FinderError(Exception):

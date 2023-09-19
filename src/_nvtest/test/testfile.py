@@ -23,12 +23,10 @@ from ..mark.structures import combine_parameter_sets
 from ..util import tty
 from ..util.filesystem import working_dir
 from ..util.time import time_in_seconds
+from ..util import rprobe
 from ..util.tty.color import colorize
 from .enums import Skip
 from .testcase import TestCase
-
-if TYPE_CHECKING:
-    from ..config import Config
 
 
 class Namespace:
@@ -162,25 +160,24 @@ class AbstractTestFile:
 
     def freeze(
         self,
-        config: "Config",
+        cpu_count: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
     ) -> list[TestCase]:
         try:
             return self._freeze(
-                config, keyword_expr=keyword_expr, on_options=on_options
+                cpu_count=cpu_count, keyword_expr=keyword_expr, on_options=on_options
             )
         except Exception as e:
-            if config.debug:
-                raise
             raise ValueError(f"Failed to freeze {self.file}: {e}") from None
 
     def _freeze(
         self,
-        config: "Config",
+        cpu_count: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
     ) -> list[TestCase]:
+        cpu_count = cpu_count or rprobe.cpu_count()
         testcases: list[TestCase] = []
         keyword_expr = keyword_expr or "notrun"
         names = ", ".join(self.names())
@@ -208,7 +205,7 @@ class AbstractTestFile:
                         skip = Skip(colorize("deselected by @*b{keyword expression}"))
 
                 np = parameters.get("np")
-                if np and np > config.machine.cpu_count:
+                if np and np > cpu_count:
                     if not skip:
                         skip = Skip(
                             colorize(

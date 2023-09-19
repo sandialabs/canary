@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
 from typing import Optional
+from typing import Union
 from typing import Type
 from typing import final
 
@@ -24,7 +25,6 @@ from ..util.filesystem import accessible
 from ..util.filesystem import force_remove
 from ..util.filesystem import mkdirp
 from ..util.graph import TopologicalSorter
-from ..util.misc import ns2dict
 from ..util.tty.color import colorize
 
 if TYPE_CHECKING:
@@ -68,7 +68,7 @@ class Session(metaclass=_PostInit):
     finish: float
     config: Config
     _cases: list[TestCase]
-    batches: Optional[list[Partition]] = None
+    batches: list[Partition]
 
     def __init__(self, *, config: Config) -> None:
         self.config = config
@@ -194,9 +194,23 @@ class Session(metaclass=_PostInit):
     def index_file(self) -> str:
         return os.path.join(self.dotdir, "index.json")
 
+    def cases_to_run(self) -> list[TestCase]:
+        return [
+            case
+            for case in self.cases
+            if not case.skip
+            and case.result in (Result.NOTRUN, Result.NOTDONE, Result.SETUP)
+        ]
+
     @staticmethod
-    def is_workdir(path: str) -> bool:
-        return os.path.exists(os.path.join(path, ".nvtest", "session.json"))
+    def is_workdir(path: str, ascend: bool = False) -> bool:
+        if not ascend:
+            return os.path.exists(os.path.join(path, ".nvtest", "session.json"))
+        while path != os.path.sep:
+            if os.path.exists(os.path.join(path, ".nvtest", "session.json")):
+                return True
+            path = os.path.dirname(path)
+        return False
 
     @property
     def log_level(self) -> int:
@@ -331,16 +345,11 @@ class Session(metaclass=_PostInit):
         files: list[str] = list({case.file for case in self.cases})
         t = "@*{collected %d tests from %d files}" % (len(self.cases), len(files))
         self.print_text(colorize(t))
-        cases_to_run = [
-            case
-            for case in self.cases
-            if not case.skip
-            and case.result in (Result.NOTRUN, Result.NOTDONE, Result.SETUP)
-        ]
-        max_workers = getattr(self.option, "max_workers", -1)
+        cases_to_run = self.cases_to_run()
+        max_workers = str(getattr(self.option, "max_workers", None) or "auto")
         self.print_text(
             colorize(
-                "@*g{running} %d test cases with %d workers"
+                "@*g{running} %d test cases with %s workers"
                 % (len(cases_to_run), max_workers)
             )
         )
@@ -355,50 +364,49 @@ class Session(metaclass=_PostInit):
             self.print_text(f"  - {n} {reason.lstrip()}")
         return
 
-    def dump_index(self, **kwargs: Any) -> None:
-        db: dict[str, Any] = {}
-        db["date"] = datetime.now().strftime("%c")
-        db.update(ns2dict(self.option))
-        db.update(kwargs)
-        tcases: dict[str, Any] = db.setdefault("cases", {})  # type: ignore
+    def dump_index(self) -> None:
+        index: dict[str, Any] = {}
+
+        cases: dict[str, Union[str, None, list[str]]] = index.setdefault("cases", {})
         for case in self.cases:
-            deps: list[str] = [d.id for d in case.dependencies]
-            tcases[case.id] = {
-                "path": None
-                if case.skip
-                else os.path.relpath(case.exec_dir, self.dotdir),
-                "dependencies": deps,
+            path = None if case.skip else os.path.relpath(case.exec_dir, self.workdir)
+            cases[case.id] = {
+                "path": path,
+                "dependencies": [d.id for d in case.dependencies],
                 "skip": case.skip.reason or None,
             }
-        db["batches"] = None
+
+        index["batches"] = None
         if getattr(self, "batches", None) is not None:
             assert isinstance(self.batches, list)
             batches: list[list[str]] = []
             for batch in self.batches:
                 case_ids = [case.id for case in batch]
                 batches.append(case_ids)
-            db["batches"] = batches
-        with open(self.index_file, "w") as fh:
-            json.dump({"database": db}, fh, indent=2)
+            index["batches"] = batches
 
-    def load_index(self) -> dict[str, Any]:
+        mkdirp(os.path.dirname(self.index_file))
+        with open(self.index_file, "w") as fh:
+            json.dump({"index": index}, fh, indent=2)
+
+    def load_index(self) -> list[TestCase]:
         if not os.path.isfile(self.index_file):
             raise ValueError(f"{self.index_file!r} not found")
         with open(self.index_file, "r") as fh:
             fd = json.load(fh)
-        db = fd["database"]
+        index = fd["index"]
 
         ts: TopologicalSorter = TopologicalSorter()
-        tcases = db.pop("cases")
-        for id, kwds in tcases.items():
+        tcases = index.pop("cases")
+        for (id, kwds) in tcases.items():
             if not kwds["skip"]:
                 ts.add(id, *kwds["dependencies"])
 
-        self.cases: list[TestCase] = []
+        cases: list[TestCase] = []
         for id in ts.static_order():
             kwds = tcases[id]
-            path = os.path.join(self.dotdir, kwds["path"])
-            case = TestCase.load(path, self.cases)
-            self.cases.append(case)
+            path = os.path.join(self.workdir, kwds["path"])
+            case = TestCase.load(path, cases)
+            cases.append(case)
 
-        return db
+        return cases

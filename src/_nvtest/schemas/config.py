@@ -28,7 +28,6 @@ config_schema = Schema(
                 Optional("cores_per_socket"): int,
                 Optional("cpu_count"): int,
             },
-            Optional("testpaths"): Or(list_of_str, tree_struct),
             Optional("run-tests"): {
                 Optional("search_paths"): list_of_str,
                 Optional("keyword_expr"): str,
@@ -40,3 +39,6 @@ config_schema = Schema(
         },
     },
 )
+
+
+testpaths_schema = Schema({"testpaths": Or(list_of_str, tree_struct)})

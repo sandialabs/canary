@@ -16,7 +16,7 @@ from typing import final
 import toml
 
 from .. import plugin
-from ..schemas.config import config_schema
+from ..schemas import config_schema
 from ..util import tty
 from ..util.misc import ns2dict
 from ..util.schema import SchemaError
@@ -193,12 +193,6 @@ class Config:
                 config_mods = setdefault(self.option, "config_mods", [])
                 for key, val in section_data.items():
                     config_mods.append(f"machine:{key}:{val}")
-            elif section == "testpaths":
-                if isinstance(section_data, list):
-                    # list of directories to search
-                    self.option.testpaths = {_: None for _ in section_data}
-                else:
-                    self.option.testpaths = dict(section_data)
             else:
                 opts = setdefault(self.option, "__subopts__", {})
                 opts[section] = section_data
