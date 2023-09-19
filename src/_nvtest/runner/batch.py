@@ -37,14 +37,8 @@ class BatchRunner(Runner):
         from ..session import Session
 
         if self._dotdir is None:
-            path = os.getcwd()
-            while True:
-                if Session.is_workdir(path):
-                    self._dotdir = os.path.join(path, ".nvtest")
-                    break
-                path = os.path.dirname(path)
-                if path == "/":
-                    raise ValueError("Could not find dotdir")
+            workdir = Session.find_workdir(os.getcwd())
+            self._dotdir = os.path.join(workdir, ".nvtest")
         return self._dotdir
 
     @staticmethod
@@ -53,11 +47,15 @@ class BatchRunner(Runner):
 
     def __call__(self, batch: Partition, *args: Any) -> dict[str, dict]:
         batch_no, num_batches = batch.rank
-        self.print_text(f"STARTING: Batch {batch_no + 1} of {num_batches}")
+        n = len(batch)
+        self.print_text(f"STARTING: Batch {batch_no + 1} of {num_batches} ({n} tests)")
         level = tty.set_log_level(0)
         script = self.write_submission_script(batch)
-        script_x = Executable(self.command)
-        script_x(script, fail_on_error=False)
+        with tty.restore():
+            script_x = Executable(self.command)
+            if self.default_args:
+                script_x.add_default_args(*self.default_args)
+            script_x(script, fail_on_error=False)
         out = os.path.join(self.dotdir, f"results.json.{num_batches}.{batch_no}")
         if not os.path.isfile(out):
             tty.error(f"Required output file {out} not found")
@@ -118,9 +116,7 @@ class BatchRunner(Runner):
         py = sys.executable
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(
-            f"{py} -m nvtest -qqq run-tests --max-workers=1 {input_file}\n"
-        )
+        fh.write(f"{py} -m nvtest -qqq run --max-workers=1 -f {input_file}\n")
 
     def submit_filename(self, num_batches: int, batch_no: int) -> str:
         basename = f"submit.sh.{num_batches}.{batch_no}"

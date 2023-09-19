@@ -2,6 +2,7 @@ import bisect
 import enum
 import json
 import os
+import re
 import sys
 import time
 from contextlib import contextmanager
@@ -212,6 +213,25 @@ class Session(metaclass=_PostInit):
             path = os.path.dirname(path)
         return False
 
+    @staticmethod
+    def find_workdir(start) -> str:
+        path = start
+        while True:
+            f = os.path.join(path, ".nvtest/session.json")
+            if os.path.exists(f):
+                return path
+            path = os.path.dirname(path)
+            if path == "/":
+                raise ValueError("Could not find workdir")
+
+    @staticmethod
+    def is_batch_file(file: Union[str, None]) -> bool:
+        if file is None:
+            return False
+        pat = "^batch.json.[0-9]+.[0-9]+$"
+        dirname, basename = os.path.split(file)
+        return Session.is_workdir(dirname, ascend=True) and re.search(pat, basename)
+
     @property
     def log_level(self) -> int:
         return self.config.log_level
@@ -232,6 +252,7 @@ class Session(metaclass=_PostInit):
 
     def dump(self, file: Optional[str] = None):
         data = {"config": self.config.asdict()}
+        data["date"] = datetime.fromtimestamp(self.start).strftime("%c")
         f: str = file or self.archive_file
         with open(f, "w") as fh:
             json.dump({"session": data}, fh, indent=2)
@@ -240,7 +261,11 @@ class Session(metaclass=_PostInit):
         with open(self.archive_file, "r") as fh:
             data = json.load(fh)
         fd = data["session"]
-        self.config.restore(fd["config"])
+        self.config.restore(
+            variables=fd["config"]["variables"],
+            machine=fd["config"]["machine"],
+            invocation_params=fd["config"]["invocation_params"],
+        )
 
     def set_pythonpath(self, environ) -> None:
         pythonpath = [paths.prefix]

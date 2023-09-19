@@ -295,3 +295,13 @@ def log_output(file_like, mode="w"):
                 yield
         if fown:
             file.close()
+
+
+@contextmanager
+def restore(fd=sys.stdin.fileno()):
+    if os.isatty(fd):
+        save_tty_attr = termios.tcgetattr(fd)
+        yield
+        termios.tcsetattr(fd, termios.TCSAFLUSH, save_tty_attr)
+    else:
+        yield

@@ -1,15 +1,15 @@
 import fnmatch
+import json
 import os
+from typing import Any
 from typing import Optional
 from typing import Union
-import toml
 
-from .schemas import testpaths_schema
-from .config import Config
 from .test import AbstractTestFile
 from .test import TestCase
 from .util import filesystem as fs
 from .util import tty
+from .util.filesystem import mkdirp
 
 
 class Finder:
@@ -39,8 +39,16 @@ class Finder:
             self.roots[root].append(path)
 
     def populate(self) -> None:
+        from .session import Session
         def skip_dir(dirname):
-            return os.path.basename(dirname) in self.skip_dirs or fs.is_hidden(dirname)
+            if os.path.basename(dirname) in self.skip_dirs:
+                return True
+            if fs.is_hidden(dirname):
+                return True
+            if Session.is_workdir(dirname):
+                return True
+            return False
+
         if len(self.tree):
             raise ValueError("populate() should be called one time")
         if not self._ready:

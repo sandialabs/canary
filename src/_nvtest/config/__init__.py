@@ -206,7 +206,7 @@ class Config:
         namespace = _nvtest.plugins.__name__
         plugin.load(path, namespace)
 
-    def restore(self, kwds: dict[str, Any]):
+    def restore(self, **kwds):
         for var, val in kwds.get("variables", {}).items():
             self.variables[var] = val
         for key, val in kwds.get("config", {}).items():

@@ -9,6 +9,8 @@ from typing import Optional
 from typing import Sequence
 import toml
 
+from ..test.partition import load_partition
+from ..test.partition import Partition
 from ..schemas import testpaths_schema
 from ..error import StopExecution
 from ..executor import Executor
@@ -36,12 +38,13 @@ default_workdir = "./TestResults"
 default_batchsize = 30 * 60  # 30 minutes
 
 
-class RunTests(Session):
+class Run(Session):
     """Run the tests"""
 
     family = "test"
     executor: Executor
     finder: Finder
+    batch: Partition
 
     def __init__(self, *, config: "Config") -> None:
         super().__init__(config=config)
@@ -68,35 +71,44 @@ class RunTests(Session):
             args.timeout = time_in_seconds(args.timeout)
 
         search_paths = dedup([os.path.abspath(_) for _ in args.search_paths or []])
-        if not search_paths and not args.toml_test_defns:
+        if not search_paths and not args.test_defn_file:
             search_paths = [self.config.dir]
         previous_workdirs = [_ for _ in search_paths if self.is_workdir(_, ascend=True)]
-        if len(previous_workdirs) > 1:
+
+        reuse = len(previous_workdirs) > 0
+        if reuse and len(previous_workdirs) > 1:
             raise TypeError(
                 f"at most one path argument can point to a previous session's "
                 f"execution directory, but {len(previous_workdirs)} did"
             )
-        if previous_workdirs and args.toml_test_defns:
+        if reuse and args.test_defn_file is not None:
             raise TypeError(
                 "toml test definition file and path argument that points to a previous "
                 "session's execution directory are incompatible"
             )
 
         self.finder = Finder()
-        if previous_workdirs:
+        workdir = args.workdir or default_workdir
+        if reuse:
             assert len(previous_workdirs) == 1
             if self.option.workdir is not None:
                 raise TypeError("workdir should not be set when rerunning tests")
             mode = self.Mode.APPEND
-            workdir = search_paths[0]
-        elif len(search_paths) == 1 and self.is_batch_file(search_paths[0]):
-            assert 0, "NOT DONE YET"
+            workdir = self.find_workdir(previous_workdirs[0])
+        elif self.is_batch_file(args.test_defn_file):
+            if search_paths:
+                raise TypeError("-f BATCH_FILE not compatible with SEARCH_PATHS")
+            try:
+                workdir = self.find_workdir(os.path.dirname(args.test_defn_file))
+                mode = self.Mode.APPEND
+            except ValueError:
+                mode = self.Mode.WRITE
         else:
             mode = self.Mode.WRITE
             for path in search_paths:
                 self.finder.add(path)
-            if args.toml_test_defns:
-                with open(args.toml_test_defns, "r") as fh:
+            if args.test_defn_file:
+                with open(args.test_defn_file, "r") as fh:
                     data = toml.load(fh)
                 testpaths_schema.validate(data)
                 testpaths = data["testpaths"]
@@ -106,8 +118,8 @@ class RunTests(Session):
                 else:
                     for (root, paths) in testpaths.items():
                         self.finder.add(root, *paths)
-            workdir = os.path.normpath(args.workdir or default_workdir)
             self.finder.prepare()
+            workdir = os.path.normpath(workdir)
 
         if args.batch_size is None and args.batches is None:
             if args.runner not in (None, "direct"):
@@ -129,7 +141,17 @@ class RunTests(Session):
         self.print_section_header("Beginning test session")
         self.print_front_matter()
         self.print_text(f"work directory: {self.workdir}")
-        if self.mode == self.Mode.WRITE:
+        tag = ""
+        if self.is_batch_file(self.option.test_defn_file):
+            batch = load_partition(self.option.test_defn_file)
+            self.print_text(f"batch {batch.rank[0] + 1} of {batch.rank[1]}")
+            self.cases = [case for case in batch]
+            if self.option.runner is None:
+                self.option.runner = "direct"
+            i, n = batch.rank
+            self.dump(os.path.join(self.dotdir, f"session.json.{n}.{i}"))
+            tag = f".{n}.{i}"
+        elif self.mode == self.Mode.WRITE:
             text = "search paths: {0}".format("\n  ".join(self.finder.search_paths))
             self.print_text(text)
             self.finder.populate()
@@ -142,10 +164,11 @@ class RunTests(Session):
             assert self.mode == self.Mode.APPEND
             text = f"loading test index from {self.workdir!r}"
             self.print_text(text)
-            self.load_index()
+            self.cases = self.load_index()
             self.filter_testcases()
         if self.log_level >= tty.WARN:
             self.print_testcase_summary()
+
         cases_to_run = self.cases_to_run()
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
@@ -153,12 +176,13 @@ class RunTests(Session):
         self.executor = Executor(
             self,
             cases_to_run,
-            runner=self.option.runner,
             max_workers=self.option.max_workers,
+            runner=self.option.runner,
             runner_options=self.option.runner_options,
             batching_options=dict(
                 batch_size=self.option.batch_size, num_batches=self.option.batches
-            )
+            ),
+            tag=tag,
         )
         if self.mode == self.Mode.WRITE:
             self.executor.setup(copy_all_resources=self.option.copy_all_resources)
@@ -168,6 +192,7 @@ class RunTests(Session):
             raise StopExecution("Setup complete", ExitCode.OK)
 
     def run(self) -> int:
+        from _nvtest.session import ExitCode
         try:
             self.start = time.time()
             self.executor.run(timeout=self.option.timeout)
@@ -218,8 +243,8 @@ class RunTests(Session):
         )
         parser.add_argument(
             "-f",
-            dest="toml_test_defns",
-            metavar="TEST_TOML_FILE",
+            dest="test_defn_file",
+            metavar="TEST_DEFN_FILE",
             help="Read tests from file",
         )
         group = parser.add_argument_group(
@@ -269,12 +294,13 @@ class RunTests(Session):
         )
 
     def load_index(self) -> None:
-        self.cases = super().load_index()
+        cases = super().load_index()
 #        if kwds["batch_size"] is not None:
 #            self.option.batch_size = kwds["batch_size"]
 #            self.option.runner = kwds["runner"]
 #            if not self.option.runner_options:
 #                self.option.runner_options = kwds["runner_options"]
+        return cases
 
     def filter_testcases(self) -> None:
         for case in self.cases:

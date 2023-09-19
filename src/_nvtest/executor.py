@@ -44,6 +44,7 @@ class Executor:
         max_workers: Optional[int] = None,
         batching_options: Optional[dict[str, Any]],
         runner_options: Optional[list[Any]] = None,
+        tag: str = "",
     ):
         self.session = session
         config = self.session.config
@@ -51,6 +52,7 @@ class Executor:
         self.max_workers = self.cpu_count if max_workers is None else max_workers
         tty.verbose(f"Tests will be run with {self.max_workers} concurrent workers")
         self.workdir = self.session.workdir
+        self.tag = tag
         tty.verbose(f"Execution directory: {self.workdir}")
 
         self.cases = cases
@@ -76,11 +78,11 @@ class Executor:
 
     @property
     def tc_done_file(self) -> str:
-        return os.path.join(self.session.dotdir, self._tc_done_file)
+        return os.path.join(self.session.dotdir, self._tc_done_file + self.tag)
 
     @property
     def tc_prog_file(self) -> str:
-        return os.path.join(self.session.dotdir, self._tc_prog_file)
+        return os.path.join(self.session.dotdir, self._tc_prog_file + self.tag)
 
     def setup(self, copy_all_resources: bool = False):
         tty.verbose("Setting up test executor")
@@ -197,27 +199,6 @@ class Executor:
             else:
                 obj.update(attrs)
                 fh.write(obj.to_json() + "\n")
-
-
-class SingleBatchDirectExecutor(Executor):
-    def __init__(
-        self,
-        session: "Session",
-        batch: Partition,  # type: ignore
-        *,
-        max_workers: int = 5,
-    ):
-        super().__init__(session, batch, max_workers=max_workers, runner="direct")
-        batch_no, num_batches = batch.rank
-        self._f_ext = f".{num_batches}.{batch_no}"
-
-    @property
-    def tc_done_file(self) -> str:
-        return os.path.join(self.session.dotdir, self._tc_done_file + self._f_ext)
-
-    @property
-    def tc_prog_file(self) -> str:
-        return os.path.join(self.session.dotdir, self._tc_prog_file + self._f_ext)
 
 
 def _setup_individual_case(case, exec_root, copy_all_resources):

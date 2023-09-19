@@ -28,7 +28,7 @@ config_schema = Schema(
                 Optional("cores_per_socket"): int,
                 Optional("cpu_count"): int,
             },
-            Optional("run-tests"): {
+            Optional("run"): {
                 Optional("search_paths"): list_of_str,
                 Optional("keyword_expr"): str,
                 Optional("timeout"): Or(int, float, str),
