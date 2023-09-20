@@ -207,7 +207,7 @@ class AbstractTestFile:
                         skip = Skip(colorize("deselected by @*b{keyword expression}"))
 
                 np = parameters.get("np")
-                assert isinstance(np, int)
+                assert isinstance(np, int) or np is None
                 if np and np > cpu_count:
                     if not skip:
                         skip = Skip(

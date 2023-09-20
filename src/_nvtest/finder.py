@@ -32,7 +32,7 @@ class Finder:
             file = os.path.join(root, path)
             if not os.path.exists(file):
                 raise ValueError(f"{path} not found in {root}")
-            self.roots[root].append(path)
+            self.roots[root].append(path)  # type: ignore
 
     def populate(self) -> None:
         from .session import Session

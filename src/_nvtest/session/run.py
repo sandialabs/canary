@@ -19,6 +19,7 @@ from ..test.enums import Result
 from ..test.enums import Skip
 from ..test.partition import Partition
 from ..test.partition import load_partition
+from ..test.testcase import TestCase
 from ..util import tty
 from ..util.misc import dedup
 from ..util.returncode import compute_returncode
@@ -195,7 +196,9 @@ class Run(Session):
 
         try:
             self.start = time.time()
-            self.executor.run(timeout=self.option.timeout)
+            self.executor.run(
+                timeout=self.option.timeout, fail_fast=self.option.fail_fast
+            )
         finally:
             self.finish = time.time()
         if self.option.until == "run":
@@ -293,7 +296,7 @@ class Run(Session):
             help="Test file[s] or directories to search",
         )
 
-    def load_index(self) -> None:
+    def load_index(self) -> list[TestCase]:
         cases = super().load_index()
         #        if kwds["batch_size"] is not None:
         #            self.option.batch_size = kwds["batch_size"]

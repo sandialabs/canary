@@ -12,6 +12,7 @@ from typing import Optional
 from typing import Union
 
 from . import plugin
+from .error import StopExecution
 from .queue import factory as q_factory
 from .runner import factory as r_factory
 from .test.enums import Result
@@ -56,15 +57,14 @@ class Executor:
         tty.verbose(f"Execution directory: {self.workdir}")
 
         self.cases = cases
-        self.work_items: Union[list[TestCase], list[Partition]]
-        if batching_options.get("batch_size") is not None:
-            batch_size = batching_options["batch_size"]
-            self.work_items = partition_t(cases, t=batch_size)
-        elif batching_options.get("num_batches") is not None:
-            batches = batching_options["num_batches"]
-            self.work_items = partition_n(cases, n=batches)
-        else:
-            self.work_items = cases
+        self.work_items: Union[list[TestCase], list[Partition]] = cases
+        if batching_options:
+            if batching_options.get("batch_size") is not None:
+                batch_size = batching_options["batch_size"]
+                self.work_items = partition_t(cases, t=batch_size)
+            elif batching_options.get("num_batches") is not None:
+                batches = batching_options["num_batches"]
+                self.work_items = partition_n(cases, n=batches)
         tty.verbose(f"Initializing executor for {len(self.work_items)} test items")
 
         self.queue = q_factory(self.work_items, self.max_workers, self.cpu_count)
@@ -92,14 +92,14 @@ class Executor:
         stage["end"] = datetime.now()
         tty.verbose("Done setting up test executor")
 
-    def run(self, timeout: int = 3600) -> None:
+    def run(self, timeout: int = 3600, fail_fast: bool = False) -> None:
         tty.verbose("Running test cases")
         stage = self.stages.setdefault("run", {})
         stage["start"] = datetime.now()
         try:
             with self.session.rc_environ():
                 with working_dir(self.workdir):
-                    self.process_testcases(timeout)
+                    self.process_testcases(timeout, fail_fast)
             if not self.session.config.debug:
                 force_remove(self.tc_prog_file)
         finally:
@@ -160,20 +160,22 @@ class Executor:
                     ts.done(*group)
         tty.verbose("Done setting up test cases")
 
-    def process_testcases(self, _timeout: int) -> None:
+    def process_testcases(self, _timeout: int, fail_fast: bool) -> None:
         self._futures = {}
         log_level = tty.get_log_level()
         timeout_message = f"Test suite execution exceeded time out of {_timeout} s."
         try:
             with timeout(_timeout, timeout_message=timeout_message):
-                with ProcessPoolExecutor(max_workers=self.max_workers) as ppe:
+                with ProcessPoolExecutor(max_workers=self.max_workers) as self.ppe:
                     while True:
                         try:
                             i, entity = self.queue.pop_next()
                         except StopIteration:
                             return
-                        future = ppe.submit(self.runner, entity, log_level)
-                        callback = partial(self.update_from_future, i, entity)
+                        future = self.ppe.submit(self.runner, entity, log_level)
+                        callback = partial(
+                            self.update_from_future, i, entity, fail_fast
+                        )
                         future.add_done_callback(callback)
                         self._futures[i] = (entity, future)
         finally:
@@ -186,7 +188,11 @@ class Executor:
                     case.dump()
 
     def update_from_future(
-        self, ent_no: int, entity: Union[Partition, TestCase], future: Future
+        self,
+        ent_no: int,
+        entity: Union[Partition, TestCase],
+        fail_fast: bool,
+        future: Future,
     ) -> None:
         attrs = future.result()
         obj: Union[TestCase, Partition] = self.queue.mark_as_complete(ent_no)
@@ -195,10 +201,18 @@ class Executor:
             if isinstance(obj, Partition):
                 for case in obj:
                     case.update(attrs[case.fullname])
+                    if fail_fast and attrs[case.fullname].result != Result.PASS:
+                        self.ppe.shutdown(wait=False, cancel_futures=True)
+                        code = compute_returncode([case])
+                        raise StopExecution(f"fail_fast: {case} did not pass", code)
                     fh.write(case.to_json() + "\n")
             else:
                 obj.update(attrs)
                 fh.write(obj.to_json() + "\n")
+                if fail_fast and obj.result != Result.PASS:
+                    self.ppe.shutdown(wait=False, cancel_futures=True)
+                    code = compute_returncode([obj])
+                    raise StopExecution(f"fail_fast: {obj} did not pass", code)
 
 
 def _setup_individual_case(case, exec_root, copy_all_resources):
