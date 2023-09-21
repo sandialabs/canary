@@ -140,7 +140,6 @@ class Run(Session):
 
         self.print_section_header("Beginning test session")
         self.print_front_matter()
-        self.print_text(f"work directory: {self.workdir}")
         tag = ""
         if self.is_batch_file(self.option.test_defn_file):
             batch = load_partition(self.option.test_defn_file)
@@ -152,8 +151,6 @@ class Run(Session):
             self.dump(os.path.join(self.dotdir, f"session.json.{n}.{i}"))
             tag = f".{n}.{i}"
         elif self.mode == self.Mode.WRITE:
-            text = "search paths: {0}".format("\n  ".join(self.finder.search_paths))
-            self.print_text(text)
             self.finder.populate()
             self.cases = self.finder.test_cases(
                 cpu_count=self.config.machine.cpu_count,

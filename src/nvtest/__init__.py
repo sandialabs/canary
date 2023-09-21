@@ -16,6 +16,7 @@ from _nvtest.test.testcase import TestCase
 from _nvtest.util import tty
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import which
+from _nvtest.util import filesystem
 
 if TYPE_CHECKING:
     from _nvtest.test.testfile import AbstractTestFile

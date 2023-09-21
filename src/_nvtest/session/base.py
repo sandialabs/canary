@@ -27,6 +27,7 @@ from ..util.filesystem import force_remove
 from ..util.filesystem import mkdirp
 from ..util.graph import TopologicalSorter
 from ..util.tty.color import colorize
+from ..finder import Finder
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
@@ -70,6 +71,7 @@ class Session(metaclass=_PostInit):
     config: Config
     _cases: list[TestCase]
     batches: list[Partition]
+    finder: Finder
 
     def __init__(self, *, config: Config) -> None:
         self.config = config
@@ -291,28 +293,35 @@ class Session(metaclass=_PostInit):
             else:
                 os.environ.pop(var)
 
-    def print_text(self, text: str):
-        if self.log_level < tty.INFO:
+    def print_text(self, text: str, force: bool = False):
+        if not force and self.log_level < tty.INFO:
             return
         sys.stdout.write(text + "\n")
         sys.stdout.flush()
 
-    def print_section_header(self, label, char="="):
+    def print_section_header(self, label, char="=", force: bool = False):
         _, width = tty.terminal_size()
         repl = "." * tty.clen(label)
         text = f" {repl} ".center(width, char)
-        self.print_text(text.replace(repl, label))
+        self.print_text(text.replace(repl, label), force=force)
 
-    def print_front_matter(self):
+    def print_front_matter(self, force: bool = False):
+        if self.option.no_header:
+            return
         n = N = self.config.machine.cpu_count
         p = self.config.machine.platform
         v = self.config.python.version
-        self.print_text(f"platform {p} -- Python {v}, num cores: {n}, max cores: {N}")
-        self.print_text(f"rootdir: {self.invocation_params.dir}")
+        self.print_text(f"platform {p} -- Python {v}, num cores: {n}, max cores: {N}", force=force)
+        self.print_text(f"rootdir: {self.invocation_params.dir}", force=force)
+        self.print_text(f"work directory: {self.workdir}")
+        if self.mode == self.Mode.WRITE:
+            text = "search paths: {0}".format("\n  ".join(self.finder.search_paths))
+            self.print_text(text)
 
     def print_test_results_summary(self, duration: float = -1):
-        if self.log_level < tty.WARN:
+        if self.log_level < tty.WARN or self.option.no_summary:
             return
+
         if duration == -1:
             finish = max(_.finish for _ in self.cases)
             start = min(_.start for _ in self.cases)
@@ -324,9 +333,9 @@ class Session(metaclass=_PostInit):
 
         nonpass = (Result.FAIL, Result.DIFF, Result.SKIP, Result.NOTDONE)
         if self.log_level > tty.INFO and len(totals):
-            tty.section("Short test summary info")
+            self.print_section_header("Short test summary info")
         elif any(r in totals for r in nonpass):
-            tty.section("Short test summary info")
+            self.print_section_header("Short test summary info")
         if self.log_level > tty.INFO and Result.PASS in totals:
             for case in totals[Result.PASS]:
                 self.print_text("%s %s" % (case.result.cname, str(case)))
@@ -364,9 +373,11 @@ class Session(metaclass=_PostInit):
                 c = Result.colors[member]
                 summary_parts.append(colorize("@%s{%d %s}" % (c, n, member.lower())))
         text = ", ".join(summary_parts)
-        tty.section(text + f" in {duration:.2f}s.")
+        self.print_section_header(text + f" in {duration:.2f}s.")
 
     def print_testcase_summary(self):
+        if self.option.no_header:
+            return
         files: list[str] = list({case.file for case in self.cases})
         t = "@*{collected %d tests from %d files}" % (len(self.cases), len(files))
         self.print_text(colorize(t))
@@ -385,8 +396,9 @@ class Session(metaclass=_PostInit):
             reason = case.skip.reason
             skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
         self.print_text(colorize("@*b{skipping} %d test cases" % len(skipped)))
-        for reason, n in skipped_reasons.items():
-            self.print_text(f"  - {n} {reason.lstrip()}")
+        reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
+        for reason in reversed(reasons):
+            self.print_text(f"  • {skipped_reasons[reason]} {reason.lstrip()}")
         return
 
     def dump_index(self) -> None:

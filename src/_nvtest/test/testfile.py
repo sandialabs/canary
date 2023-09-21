@@ -367,7 +367,7 @@ class AbstractTestFile:
                 if ns.value is False:
                     return False, "disabled"
             if ns.platform_expr is not None:
-                platform_exprs.append(ns.platform_expr)
+                platform_exprs.append(ns.platform_expr.strip())
             if ns.option_expr is not None:
                 option_exprs.append(ns.option_expr)
         if platform_exprs:
@@ -376,7 +376,7 @@ class AbstractTestFile:
             else:
                 platform_expr = " and ".join(f"({expr})" for expr in platform_exprs)
             if deselect_by_platform(platform_expr):
-                o = colorize("@*b{%s}" % platform_expr)
+                o = colorize("@*b{%s}" % (platform_expr.strip() or "null"))
                 b = colorize("@*r{False}")
                 return False, f"platform expression {o} evaluated to {b}"
         if option_exprs and on_options:

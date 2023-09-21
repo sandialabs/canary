@@ -12,6 +12,9 @@ from ..util import tty
 
 
 class HelpFormatter(argparse.RawTextHelpFormatter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._indent_increment = 2
     def _split_lines(self, text, width):
         text = self._whitespace_matcher.sub(" ", text).strip()
         _, cols = tty.terminal_size()
@@ -29,6 +32,13 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
             return "[-%s] %s" % (chars, usage)
         else:
             return usage
+    def _iter_indented_subactions(self, action):
+        try:
+            get_subactions = action._get_subactions
+        except AttributeError:
+            pass
+        else:
+            yield from get_subactions()
 
 
 def cmd_name(cmdclass: Type) -> str:
@@ -42,6 +52,8 @@ class Parser(argparse.ArgumentParser):
         super().__init__(*args, **kwargs)
         self.register("type", None, identity)
         self.__subcommands: dict[str, Type] = {}
+        if self._action_groups[0].title == "positional arguments":
+            self._action_groups[0].title = "nvtest subcommands"
 
     def preparse(self, args, namespace=None):
         args = [_ for _ in args if _ not in ("-h", "--help")]
@@ -72,7 +84,7 @@ class Parser(argparse.ArgumentParser):
             # remove the dummy "command" argument.
             if self._actions[-1].dest == "command":
                 self._remove_action(self._actions[-1])
-            self.subparsers = self.add_subparsers(metavar="subcommands", dest="command")
+            self.subparsers = self.add_subparsers(metavar="", dest="command")
 
         self._validate_command_class(cmdclass)
         cmdname = cmd_name(cmdclass)
@@ -155,18 +167,30 @@ def make_argument_parser(**kwargs):
         prog="nvtest",
         **kwargs,
     )
-    g = parser.add_mutually_exclusive_group()
-    g.add_argument(
+    group = parser.add_argument_group("console reporting")
+    group.add_argument(
         "-v",
         default=0,
         action="count",
         help="Increase console logging level by 1",
     )
-    g.add_argument(
+    group.add_argument(
         "-q",
         default=0,
         action="count",
         help="Decrease console logging level by 1",
+    )
+    group.add_argument(
+        "--no-header",
+        action="store_true",
+        default=False,
+        help="Disable header [default: %(default)s]",
+    )
+    group.add_argument(
+        "--no-summary",
+        action="store_true",
+        default=False,
+        help="Disable summary [default: %(default)s]",
     )
     parser.add_argument(
         "-d",
@@ -175,7 +199,8 @@ def make_argument_parser(**kwargs):
         default=False,
         help="Debug mode [default: %(default)s]",
     )
-    parser.add_argument(
+    group = parser.add_argument_group("runtime configuration")
+    group.add_argument(
         "-C",
         "--config-file",
         dest="config_file",
@@ -183,7 +208,7 @@ def make_argument_parser(**kwargs):
         help="Path to alternative configuration file. "
         "Set to 'none' to skip user config",
     )
-    parser.add_argument(
+    group.add_argument(
         "-c",
         dest="config_mods",
         action="append",
@@ -192,7 +217,7 @@ def make_argument_parser(**kwargs):
         help="Colon-separated path to config that should be "
         "added to the testing environment, e.g. 'config:debug:true'",
     )
-    parser.add_argument(
+    group.add_argument(
         "-e",
         dest="env_mods",
         metavar="ENVAR",
@@ -204,7 +229,7 @@ def make_argument_parser(**kwargs):
     parser.add_argument(
         "--version",
         action="version",
-        version="1.0",
+        version="nvtest 0.1",
         help="show version and exit",
     )
 

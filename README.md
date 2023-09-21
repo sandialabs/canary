@@ -9,7 +9,7 @@ Python 3.9+
 ## Install
 
 ```console
-git clone cee-gitlab.sandia.gov:tjfulle/nvtest
+git clone git@cee-gitlab.sandia.gov:tjfulle/nvtest
 cd nvtest
 pip install -e .
 ```
@@ -42,24 +42,26 @@ Configuration variables can be set on the command line or read from a configurat
 
 You can explicitly set configuration variables in:
 
-- `./nvtest.ini`;
-- `~/.config/nvtest.ini`; and
-- `~/.nvtest.ini`.
+- `./nvtest.toml`;
+- `~/.config/nvtest.toml`; and
+- `~/.nvtest.toml`.
 
 The first found is used.  Basic configuration settings are:
 
-```ini
-[config]
+```toml
+[nvtest]
+
+[nvtest.config]
 debug = false
 log_level = int
 
-[machine]
+[nvtest.machine]
 sockets_per_node = 1
 cores_per_socket = N  # default computed from os.cpu_count()
 cpu_count = N  # default computed from os.cpu_count()
 
-[variables]
-key = value  # environment variables to set for the test session
+[nvtest.variables]
+key = "value"  # environment variables to set for the test session
 ```
 
 ### Setting configuration variables on the command line
@@ -73,7 +75,7 @@ nvtest -c machine:cpu_count:20 -c config:log_level:0 SUBCOMMAND [OPTIONS] ARGUME
 To set environment variables do
 
 ```console
-nvtest -e VAR1=VAL1 -e VAR1=VAL1 SUBCOMMAND [OPTIONS] ARGUMENTS
+nvtest -e VAR1=VAL1 -e VAR2=VAL2 SUBCOMMAND [OPTIONS] ARGUMENTS
 ```
 
 ## Find tests to run
@@ -113,13 +115,13 @@ nvtest describe [OPTIONS] PATH
 ### Basic usage
 
 ```console
-nvtest run-tests [OPTIONS] PATH [PATHS...]
+nvtest run [OPTIONS] PATH [PATHS...]
 ```
 
 ### Filter tests to run by keyword
 
 ```console
-nvtest run-tests -k KEYWORD_EXPR PATH [PATHS...]
+nvtest run -k KEYWORD_EXPR PATH [PATHS...]
 ```
 
 where `KEYWORD_EXPR` is a Python expression.  For example, `-k 'key1 and not key2`.
@@ -127,13 +129,13 @@ where `KEYWORD_EXPR` is a Python expression.  For example, `-k 'key1 and not key
 ### Limit the number of concurrent tests
 
 ```console
-nvtest run-tests --concurrent-tests=N PATH [PATHS...]
+nvtest run --max-workers=N PATH [PATHS...]
 ```
 
 ### Set a timeout on the test session
 
 ```console
-nvtest run-tests --timeout=TIME_EXPR PATH [PATHS...]
+nvtest run --timeout=TIME_EXPR PATH [PATHS...]
 ```
 
 where `TIME_EXPR` is a number or a human-readable number representation like `1 sec`, `1s`, etc.
@@ -143,19 +145,19 @@ where `TIME_EXPR` is a number or a human-readable number representation like `1 
 ### Basic usage
 
 ```console
-nvtest run-batched [OPTIONS] PATH [PATHS...]
+nvtest run [--batches=N|--batch-size=T] [OPTIONS] PATH [PATHS...]
 ```
 
 ### Use slurm scheduler
 
 ```console
-nvtest run-batched --runner=slurm PATH [PATHS...]
+nvtest run --runner=slurm PATH [PATHS...]
 ```
 
 ### Pass arguments to the scheduler
 
 ```console
-nvtest run-batched --runner=slurm -R,ARG1 -R,ARG2 PATH [PATHS...]
+nvtest run --runner=slurm -R,ARG1 -R,ARG2 PATH [PATHS...]
 ```
 
 where `ARGI` are passed directly to the scheduler.  Eg, `-R,--account=XXYYZZ01`
