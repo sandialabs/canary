@@ -207,6 +207,7 @@ class Session(metaclass=_PostInit):
 
     @staticmethod
     def is_workdir(path: str, ascend: bool = False) -> bool:
+        path = os.path.abspath(path)
         if not ascend:
             return os.path.exists(os.path.join(path, ".nvtest", "session.json"))
         while path != os.path.sep:
@@ -322,6 +323,10 @@ class Session(metaclass=_PostInit):
         if self.log_level < tty.WARN or self.option.no_summary:
             return
 
+        durations = getattr(self.option, "durations", None)
+        if durations is not None:
+            self.print_durations(int(durations))
+
         if duration == -1:
             finish = max(_.finish for _ in self.cases)
             start = min(_.start for _ in self.cases)
@@ -339,6 +344,7 @@ class Session(metaclass=_PostInit):
         if self.log_level > tty.INFO and Result.PASS in totals:
             for case in totals[Result.PASS]:
                 self.print_text("%s %s" % (case.result.cname, str(case)))
+        nreported = 0
         for result in (Result.FAIL, Result.DIFF):
             if result not in totals:
                 continue
@@ -353,6 +359,7 @@ class Session(metaclass=_PostInit):
                     reasons.append(f"See {f}")
                 reason = ". ".join(_ for _ in reasons if _.split())
                 self.print_text("%s %s: %s" % (case.result.cname, str(case), reason))
+                nreported += 1
             if Result.NOTDONE in totals:
                 for case in totals[Result.NOTDONE]:
                     self.print_text("%s %s" % (case.result.cname, str(case)))
@@ -363,7 +370,6 @@ class Session(metaclass=_PostInit):
                     self.print_text(
                         "%s %s: Skipped due to %s" % (cname, str(case), reason)
                     )
-
         summary_parts = []
         for member in Result.members:
             if self.log_level <= tty.INFO and member == Result.NOTRUN:
@@ -375,18 +381,29 @@ class Session(metaclass=_PostInit):
         text = ", ".join(summary_parts)
         self.print_section_header(text + f" in {duration:.2f}s.")
 
-    def print_testcase_summary(self):
+    def print_durations(self, N: int) -> None:
+        cases = [case for case in self.cases if case.duration > 0]
+        sorted_cases = sorted(cases, key=lambda x: x.duration)
+        if N > 0:
+            sorted_cases = sorted_cases[-N:]
+        self.print_section_header(f"Slowest {len(sorted_cases)} durations")
+        for case in sorted_cases:
+            self.print_text("%6.2f     %s" % (case.duration, str(case)))
+
+    def print_testcase_summary(self) -> None:
         if self.option.no_header:
             return
         files: list[str] = list({case.file for case in self.cases})
         t = "@*{collected %d tests from %d files}" % (len(self.cases), len(files))
         self.print_text(colorize(t))
         cases_to_run = self.cases_to_run()
-        max_workers = str(getattr(self.option, "max_workers", None) or "auto")
+        max_workers = getattr(self.option, "max_workers", None)
+        max_workers = max_workers or self.config.machine.cpu_count
+        files = {case.file for case in cases_to_run}
         self.print_text(
             colorize(
-                "@*g{running} %d test cases with %s workers"
-                % (len(cases_to_run), max_workers)
+                "@*g{running} %d test cases from %d files with %s workers"
+                % (len(cases_to_run), len(files), max_workers),
             )
         )
 

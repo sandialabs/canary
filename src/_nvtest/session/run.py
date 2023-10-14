@@ -215,6 +215,12 @@ class Run(Session):
         add_mark_arguments(parser)
         add_timing_arguments(parser)
         parser.add_argument(
+            "--durations",
+            type=int,
+            metavar="N",
+            help="Show N slowest test durations (N=0 for all)"
+        )
+        parser.add_argument(
             "-u",
             "--until",
             choices=("setup", "run", "postrun"),

@@ -134,3 +134,5 @@ class Queue:
         footer = colorize("@*c{%s}" % "=" * (n + 10))
         pad = colorize("@*c{====}")
         sys.stdout.write(f"\n{header}\n{pad} {text} {pad}\n{footer}\n\n")
+        sys.stdout.flush()
+

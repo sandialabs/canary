@@ -131,6 +131,12 @@ class TestCase:
         return deepcopy(self)
 
     @property
+    def duration(self):
+        if self.start == -1 or self.finish == -1:
+            return -1
+        return self.finish - self.start
+
+    @property
     def logfile(self) -> str:
         return os.path.join(self.exec_dir, "nvtest-out.txt")
 
