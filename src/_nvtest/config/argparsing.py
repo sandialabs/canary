@@ -1,7 +1,11 @@
 import argparse
 import inspect
+import pstats
 import re
+import shlex
+import sys
 import textwrap as textwrap
+from types import ModuleType
 from typing import Any
 from typing import Optional
 from typing import Sequence
@@ -10,11 +14,14 @@ from typing import Union
 
 from ..util import tty
 
+stat_names = pstats.Stats.sort_arg_dict_default
+
 
 class HelpFormatter(argparse.RawTextHelpFormatter):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._indent_increment = 2
+
     def _split_lines(self, text, width):
         text = self._whitespace_matcher.sub(" ", text).strip()
         _, cols = tty.terminal_size()
@@ -32,6 +39,7 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
             return "[-%s] %s" % (chars, usage)
         else:
             return usage
+
     def _iter_indented_subactions(self, action):
         try:
             get_subactions = action._get_subactions
@@ -41,10 +49,12 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
             yield from get_subactions()
 
 
-def cmd_name(cmdclass: Type) -> str:
-    """Convert CamelCase to camel-case"""
-    rx = re.compile("((?<=[a-z0-9])[A-Z]|(?!^)[A-Z](?=[a-z]))")
-    return rx.sub(r"-\1", cmdclass.__name__).lower()
+def cmd_name(module: ModuleType) -> str:
+    return module.__name__.lower().split(".")[-1].replace("_", "-")
+
+
+def py_name(module: ModuleType) -> str:
+    return module.__name__.lower().split(".")[-1]
 
 
 class Parser(argparse.ArgumentParser):
@@ -54,30 +64,50 @@ class Parser(argparse.ArgumentParser):
         self.__subcommands: dict[str, Type] = {}
         if self._action_groups[0].title == "positional arguments":
             self._action_groups[0].title = "nvtest subcommands"
+        self.argv: Sequence[str] = sys.argv[1:]
 
-    def preparse(self, args, namespace=None):
-        args = [_ for _ in args if _ not in ("-h", "--help")]
-        return super().parse_known_args(args, namespace=namespace)
+    def convert_arg_line_to_args(self, arg_line: str) -> list[str]:
+        return shlex.split(arg_line.split("#", 1)[0].strip())
+
+    def preparse(self, args: Optional[list[str]] = None, namespace=None):
+        argv: list[str] = sys.argv[1:] if args is None else args
+        args = [_ for _ in argv if _ not in ("-h", "--help")]
+        return super().parse_known_args(args, namespace=namespace)[0]
 
     @staticmethod
-    def _validate_command_class(cmdclass: Type):
-        def _defines_method(cls, method_name):
-            method = getattr(cls, method_name, None)
+    def _validate_command_module(module: ModuleType):
+        def _defines_method(module, method_name):
+            method = getattr(module, method_name, None)
             return callable(method)
 
-        if not inspect.isclass(cmdclass):
-            raise TypeError("nvtest.plugins.command must wrap classes")
+        if not inspect.ismodule(module):
+            raise TypeError(f"{module} is not a module")
 
-        for method in ("setup_parser", "setup", "run", "teardown"):
-            if not _defines_method(cmdclass, method):
+        for method in ("setup_parser", py_name(module)):
+            if not _defines_method(module, method):
+                raise AttributeError(f"{module.__name__} must define a {method} method")
+
+        for attr in ("description",):
+            if not hasattr(module, attr):
                 raise AttributeError(
-                    f"{cmdclass.__name__} must define a {method} method"
+                    f"{module.__name__} must define a {attr} attribute"
                 )
 
-        if not hasattr(cmdclass, "name"):
-            cmdclass.name = cmdclass.__name__.lower()
+    def parse_known_args(
+        self,
+        args: Optional[Sequence[str]] = None,
+        namespace: Optional[argparse.Namespace] = None,
+    ) -> tuple[argparse.Namespace, list[str]]:
+        if args is not None:
+            self.argv = args
+        return super().parse_known_args(args, namespace)
 
-    def add_command(self, cmdclass: Type) -> None:
+    def _read_args_from_files(self, arg_strings: list[str]) -> list[str]:
+        arg_strings = super()._read_args_from_files(arg_strings)
+        self.argv = arg_strings
+        return arg_strings
+
+    def add_command(self, module: ModuleType) -> None:
         """Add one subcommand to this parser."""
         # lazily initialize any subparsers
         if not hasattr(self, "subparsers"):
@@ -85,26 +115,25 @@ class Parser(argparse.ArgumentParser):
             if self._actions[-1].dest == "command":
                 self._remove_action(self._actions[-1])
             self.subparsers = self.add_subparsers(metavar="", dest="command")
-
-        self._validate_command_class(cmdclass)
-        cmdname = cmd_name(cmdclass)
+        self._validate_command_module(module)
+        cmdname = cmd_name(module)
         subparser = self.subparsers.add_parser(
             cmdname,
-            aliases=getattr(cmdclass, "aliases", None) or [],
-            help=cmdclass.__doc__,
-            description=cmdclass.__doc__,
-            epilog=getattr(cmdclass, "epilog", None),
-            add_help=getattr(cmdclass, "add_help", True),
+            aliases=getattr(module, "aliases", None) or [],
+            help=module.description,
+            description=module.description,
+            epilog=getattr(module, "epilog", None),
+            add_help=getattr(module, "add_help", True),
             formatter_class=HelpFormatter,
         )
         subparser.register("type", None, identity)
-        cmdclass.setup_parser(subparser)  # type: ignore
-        self.__subcommands[cmdname] = cmdclass
+        module.setup_parser(subparser)  # type: ignore
+        self.__subcommands[cmdname] = getattr(module, py_name(module))
 
     def get_command(self, cmdname: str) -> Optional[Type]:
-        for name, cmdclass in self.__subcommands.items():
+        for name, module in self.__subcommands.items():
             if name == cmdname:
-                return cmdclass
+                return module
         return None
 
     def remove_argument(self, opt_string):
@@ -164,8 +193,15 @@ def make_argument_parser(**kwargs):
     parser = Parser(
         formatter_class=HelpFormatter,
         description="nv.test - an application testing framework",
+        fromfile_prefix_chars="@",
         prog="nvtest",
         **kwargs,
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="nvtest 0.1",
+        help="show version and exit",
     )
     group = parser.add_argument_group("console reporting")
     group.add_argument(
@@ -180,24 +216,33 @@ def make_argument_parser(**kwargs):
         action="count",
         help="Decrease console logging level by 1",
     )
-    group.add_argument(
-        "--no-header",
-        action="store_true",
-        default=False,
-        help="Disable header [default: %(default)s]",
-    )
-    group.add_argument(
-        "--no-summary",
-        action="store_true",
-        default=False,
-        help="Disable summary [default: %(default)s]",
-    )
     parser.add_argument(
         "-d",
         "--debug",
         action="store_true",
         default=False,
         help="Debug mode [default: %(default)s]",
+    )
+    parser.add_argument(
+        "-p",
+        "--profile",
+        action="store_true",
+        dest="nvtest_profile",
+        help="profile execution using cProfile",
+    )
+    stat_lines = list(zip(*(iter(stat_names),) * 7))
+    parser.add_argument(
+        "--sorted-profile",
+        default=None,
+        metavar="STAT",
+        help="profile and sort by one or more of:\n[%s]"
+        % ",\n ".join([", ".join(line) for line in stat_lines]),
+    )
+    parser.add_argument(
+        "--lines",
+        default=20,
+        action="store",
+        help="lines of profile output or 'all' (default: 20)",
     )
     group = parser.add_argument_group("runtime configuration")
     group.add_argument(
@@ -225,12 +270,6 @@ def make_argument_parser(**kwargs):
         action=EnvironmentModification,
         help="Environment variables that should be added to "
         "the testing environment, e.g. 'NAME=VAL'",
-    )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version="nvtest 0.1",
-        help="show version and exit",
     )
 
     return parser

@@ -1,7 +1,6 @@
 from typing import Any
 
 from ..util.schema import Optional
-from ..util.schema import Or
 from ..util.schema import Schema
 
 
@@ -22,23 +21,17 @@ config_schema = Schema(
             Optional("config"): {
                 Optional("debug"): bool,
                 Optional("log_level"): int,
+                Optional("user_cfg_file"): str,
             },
             Optional("machine"): {
                 Optional("sockets_per_node"): int,
                 Optional("cores_per_socket"): int,
                 Optional("cpu_count"): int,
             },
-            Optional("run"): {
-                Optional("search_paths"): list_of_str,
-                Optional("keyword_expr"): str,
-                Optional("timeout"): Or(int, float, str),
-                Optional("workdir"): str,
-                Optional("wipe"): bool,
-                Optional("max_workers"): int,
-            },
         },
     },
+    ignore_extra_keys=True,
 )
 
 
-testpaths_schema = Schema({"testpaths": Or(list_of_str, tree_struct)})
+testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})

@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import os
 from typing import Optional
 from typing import Type
@@ -40,7 +41,13 @@ class TestInstance:
     def load(
         cls: Type["TestInstance"], arg_path: Optional[str] = None
     ) -> "TestInstance":
-        case = TestCase.load(arg_path)
+        if arg_path is None:
+            arg_path = "./.nvtest/case.json"
+        elif arg_path.endswith((".vvt", ".pyt")):
+            arg_path = os.path.join(os.path.dirname(arg_path), ".nvtest/case.json")
+        with open(arg_path) as fh:
+            kwds = json.load(fh)
+        case = TestCase.from_dict(kwds)
         self = cls(
             root=case.file_root,
             path=case.file_path,
@@ -49,7 +56,7 @@ class TestInstance:
             size=case.size,
             family=case.family,
             analyze=case.analyze or "",
-            keywords=case.keywords,
+            keywords=case.keywords(),
             parameters=case.parameters,
             timeout=case.timeout,
             runtime=case.runtime,

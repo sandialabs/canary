@@ -57,6 +57,7 @@ class Queue:
     def batch_info(self) -> Optional[list[list[str]]]:
         return None
 
+    @property
     def cases(self) -> list[TestCase]:
         raise NotImplementedError
 
@@ -135,4 +136,3 @@ class Queue:
         pad = colorize("@*c{====}")
         sys.stdout.write(f"\n{header}\n{pad} {text} {pad}\n{footer}\n\n")
         sys.stdout.flush()
-

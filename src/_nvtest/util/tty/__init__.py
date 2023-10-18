@@ -29,6 +29,7 @@ WARN = 1
 ERROR = 0
 
 LOG_LEVEL = INFO
+builtin_print = print
 
 
 def set_log_level(arg: int) -> int:
@@ -92,12 +93,27 @@ def get_timestamp(force=False):
         return ""
 
 
-def emit(message, stream=sys.stdout):
+def emit(message, stream=sys.stdout) -> None:
     stream.write(message)
     stream.flush()
 
 
-def format_message(message, *args, **kwargs):
+def print(*args, **kwargs):
+    force = kwargs.pop("force", False)
+    if not force and LOG_LEVEL < INFO:
+        return
+    centered = kwargs.pop("centered", False)
+    char = kwargs.pop("char", "=")
+    if centered:
+        _, width = terminal_size()
+        label = " ".join(str(_) for _ in args)
+        repl = "." * clen(label)
+        text = f" {repl} ".center(width, char)
+        args = [text.replace(repl, label)]
+    builtin_print(*args, **kwargs)
+
+
+def format_message(message, *args, **kwargs) -> str:
     format = kwargs.get("format", "*b")
     wrap = kwargs.get("wrap", False)
     end = kwargs.get("end", "\n")
@@ -212,7 +228,7 @@ def hline(label=None, **kwargs):
     out.write(label)
     out.write(suffix)
 
-    print(out.getvalue())
+    builtin_print(out.getvalue())
 
 
 def section(label, width=None, char="=", stream=None):

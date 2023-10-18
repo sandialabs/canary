@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING
 
-from ..util.time import time_in_seconds
+from _nvtest.util.time import time_in_seconds
 
 if TYPE_CHECKING:
-    from ..config.argparsing import Parser
+    from _nvtest.config.argparsing import Parser
 
 default_timeout = 60 * 60
 

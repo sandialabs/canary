@@ -396,7 +396,7 @@ def get_vvtest_attrs(case: "TestCase") -> dict:
     attrs["OPTIONS_OFF"] = []  # FIXME
     attrs["SRCDIR"] = case.file_dir
     attrs["TIMEOUT"] = case.timeout
-    attrs["KEYWORDS"] = case.keywords
+    attrs["KEYWORDS"] = case.keywords()
     attrs["diff_exit_status"] = 64
     attrs["skip_exit_status"] = 63
     attrs["opt_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"

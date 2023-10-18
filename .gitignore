@@ -9,7 +9,7 @@ _test-cache
 .mypy_cache
 vvt
 partition.p.*
-nvtest.toml
+nvtest.cfg
 scripts/sbatch
 
 src/UNKNOWN.egg-info/

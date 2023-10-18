@@ -34,7 +34,7 @@ class Finder:
                 raise ValueError(f"{path} not found in {root}")
             self.roots[root].append(path)  # type: ignore
 
-    def populate(self) -> None:
+    def populate(self) -> dict[str, list[AbstractTestFile]]:
         from .session import Session
 
         def skip_dir(dirname):
@@ -78,11 +78,14 @@ class Finder:
         nr = len(self.tree)
         tty.verbose(f"Found {n} test files in {nr} search roots")
 
+        return self.tree
+
     @property
     def search_paths(self) -> list[str]:
         return [root for root in self.roots]
 
-    def resolve_dependencies(self, cases: list[TestCase]) -> None:
+    @staticmethod
+    def resolve_dependencies(cases: list[TestCase]) -> None:
         tty.verbose("Resolving dependencies across test suite")
         case_map = {}
         for (i, case) in enumerate(cases):
@@ -110,7 +113,8 @@ class Finder:
                     case.add_dependency(match)
         tty.verbose("Done resolving dependencies across test suite")
 
-    def check_for_skipped_dependencies(self, cases: list[TestCase]) -> None:
+    @staticmethod
+    def check_for_skipped_dependencies(cases: list[TestCase]) -> None:
         tty.verbose("Validating test cases")
         missing = 0
         ids = [id(case) for case in cases]
@@ -128,14 +132,13 @@ class Finder:
             raise ValueError("Missing dependencies")
         tty.verbose("Done validating test cases")
 
-    def test_cases(
-        self,
+    @staticmethod
+    def freeze(
+        tree: dict[str, list[AbstractTestFile]],
         cpu_count: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
     ) -> list[TestCase]:
-        if self.tree is None:
-            raise ValueError("Finder.find() must be called before Finder.test_cases()")
         cases: list[TestCase] = []
         o = ",".join(on_options or [])
         tty.verbose(
@@ -143,7 +146,7 @@ class Finder:
             f"options={o}",
             f"keywords={keyword_expr}",
         )
-        for abstract_files in self.tree.values():
+        for abstract_files in tree.values():
             for abstract_file in abstract_files:
                 concrete_test_cases = abstract_file.freeze(
                     cpu_count=cpu_count,
@@ -151,8 +154,8 @@ class Finder:
                     on_options=on_options,
                 )
                 cases.extend([case for case in concrete_test_cases if case])
-        self.resolve_dependencies(cases)
-        self.check_for_skipped_dependencies(cases)
+        Finder.resolve_dependencies(cases)
+        Finder.check_for_skipped_dependencies(cases)
         tty.verbose("Done creating test cases")
         return cases
 

@@ -1,4 +1,3 @@
-import json
 import os
 import sys
 from datetime import datetime
@@ -7,11 +6,11 @@ from types import SimpleNamespace
 from typing import Any
 from typing import TextIO
 
+from .. import index
 from ..test.enums import Result
 from ..test.enums import Skip
 from ..test.partition import Partition
 from ..test.partition import dump_partition
-from ..test.testcase import TestCase
 from ..util import tty
 from ..util.executable import Executable
 from ..util.filesystem import getuser
@@ -66,13 +65,11 @@ class BatchRunner(Runner):
                     reason=f"{self.command} failure, required output {out!r} not found",
                 )
                 attrs[case.fullname] = {"result": result}
-                tty.error(result.reason)
             return attrs
         with open(out) as fh:
-            results = json.load(fh)
+            completed = index.load(fh)
         executed = {}
-        for kwds in results:
-            tc = TestCase.from_dict(kwds)
+        for tc in completed:
             executed[tc.fullname] = tc
         attrs = {}
         for original in batch:
@@ -116,7 +113,7 @@ class BatchRunner(Runner):
         py = sys.executable
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(f"{py} -m nvtest -qqq run --max-workers=1 -f {input_file}\n")
+        fh.write(f"{py} -m nvtest -qqq run --max-workers=1 {input_file}\n")
 
     def submit_filename(self, num_batches: int, batch_no: int) -> str:
         basename = f"submit.sh.{num_batches}.{batch_no}"

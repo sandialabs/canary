@@ -1,4 +1,3 @@
-import errno
 import itertools
 import json
 import os
@@ -56,7 +55,7 @@ class TestCase:
 
         # Other properties
         self.analyze = analyze
-        self.keywords = keywords
+        self._keywords = keywords
         self.parameters = {} if parameters is None else dict(parameters)
         self._timeout = timeout
         self._runtime = runtime
@@ -81,9 +80,8 @@ class TestCase:
 
         # Execution properties
         self.cmd_line: str = ""
+        self.exec_root: Optional[str] = None
         self.exec_path = os.path.join(os.path.dirname(self.file_path), self.name)
-        # Set during set up
-        self.exec_root = None
         # The process running the test case
         self._process = None
         self.result: Result = Result("notrun")
@@ -124,6 +122,15 @@ class TestCase:
             parts[j] = colorize("@%s{%s}" % (color, part))
         return f"{family}[{','.join(parts)}]"
 
+    def keywords(self, implicit: bool = False) -> list[str]:
+        kwds = {kw for kw in self._keywords}
+        if implicit:
+            kwds.add(self.result.name.lower())
+            kwds.add(self.name)
+            kwds.add(self.family)
+            kwds.update(self.parameters.keys())
+        return list(kwds)
+
     def add_default_env(self, var: str, value: str) -> None:
         self.variables[var] = value
 
@@ -142,9 +149,9 @@ class TestCase:
 
     @property
     def exec_dir(self) -> str:
-        if self.exec_root is None:
-            raise ValueError("Cannot call exec_dir until test case is setup")
-        return os.path.join(self.exec_root, self.exec_path)
+        if not self.exec_root:
+            raise ValueError("exec_root must be set during set up")
+        return os.path.normpath(os.path.join(self.exec_root, self.exec_path))
 
     @property
     def ready(self) -> bool:
@@ -173,9 +180,9 @@ class TestCase:
     def timeout(self) -> int:
         if self._timeout is not None:
             return int(self._timeout)
-        elif "fast" in self.keywords:
+        elif "fast" in self._keywords:
             return 5 * 30
-        elif "long" in self.keywords:
+        elif "long" in self._keywords:
             return 5 * 60 * 60
         else:
             return 60 * 60
@@ -253,51 +260,6 @@ class TestCase:
             data["dependencies"].append(dependency.asdict())
         return data
 
-    @classmethod
-    def load(
-        cls,
-        arg_path: Optional[str] = None,
-        cases: Optional[list["TestCase"]] = None,
-    ) -> "TestCase":
-        """Load a test case from its json dump
-
-        Parameters
-        ----------
-        arg_path : str, default ``os.getcwd()``
-            The path to where the test was executed (or setup)
-        cases : list[Test], default ``[]``
-            Other test cases in this session.  If given, it is used to find
-            dependencies, rather than loading dependencies
-
-        Returns
-        -------
-        TestCase
-
-        """
-        path: str = arg_path or "."
-        if path.endswith((".pyt", ".vvt")):
-            path = os.path.dirname(path)
-        elif path.endswith(".nvtest/case.json"):
-            path = os.path.dirname(os.path.dirname(path))
-        file = os.path.join(path, ".nvtest/case.json")
-        if not os.path.exists(file):
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), file)
-        with open(file) as fh:
-            kwds = json.load(fh)
-        dependencies = kwds.pop("dependencies")
-        other_cases: list["TestCase"] = cases or []
-        ids_of_other_cases = [case.id for case in other_cases]
-        self = cls.from_dict(kwds)
-        for dep in dependencies:
-            if dep["id"] in ids_of_other_cases:
-                tc = other_cases[ids_of_other_cases.index(dep["id"])]
-            else:
-                dir = str(self.exec_root)
-                dep_file = os.path.join(dir, self.exec_path, ".nvtest", "case.json")
-                tc = cls.load(dep_file)
-            self.add_dependency(tc)
-        return self
-
     def dump(self) -> None:
         dest = os.path.join(self.exec_dir, ".nvtest")
         mkdirp(dest)
@@ -322,7 +284,7 @@ class TestCase:
             kwds.pop("file_path"),
             analyze=kwds.pop("analyze"),
             family=kwds.pop("family"),
-            keywords=kwds.pop("keywords"),
+            keywords=kwds.pop("_keywords"),
             parameters=kwds.pop("parameters"),
             timeout=kwds.pop("_timeout"),
             runtime=kwds.pop("_runtime"),
@@ -354,14 +316,15 @@ class TestCase:
             return compressed_log
         return "Log not found"
 
-    def setup(
-        self,
-        exec_root: Optional[str] = None,
-        copy_all_resources: bool = False,
-    ) -> None:
+    def setup(self, exec_root: str, copy_all_resources: bool = False) -> None:
         tty.verbose(f"Setting up {self}")
-        self.exec_root = exec_root or os.getcwd()  # type: ignore
-        fs.force_remove(self.exec_dir)
+        if self.exec_root is not None:
+            assert os.path.samefile(exec_root, self.exec_root)
+        self.exec_root = exec_root
+        if os.path.exists(self.exec_dir):
+            with fs.working_dir(self.exec_dir):
+                for f in os.listdir("."):
+                    fs.force_remove(f)
         with fs.working_dir(self.exec_dir, create=True):
             with tty.log_output(self.logfile, mode="w"):
                 if self.file_type == "vvt":

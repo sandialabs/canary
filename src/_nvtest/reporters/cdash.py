@@ -1,13 +1,9 @@
-import argparse
 import glob
 import os
 import sys
 import time
 import xml.dom.minidom as xdom
-from typing import Any
 from typing import Optional
-from typing import Sequence
-from typing import Union
 
 import nvtest
 
@@ -20,12 +16,33 @@ from ..util import tty
 from ..util.filesystem import mkdirp
 from ..util.time import strftimestamp
 from ..util.time import timestamp
-from ..util.tty.color import colorize
+
+
+def report(
+    session: Session,
+    buildname: str = None,
+    url: str = None,
+    project: str = None,
+    buildgroup: str = None,
+    site: str = None,
+):
+    cases_to_run = [case for case in session.cases if not case.skip]
+    data = TestData(session, cases_to_run)
+    reporter = Reporter(
+        test_data=data,
+        buildname=buildname or "BUILD",
+        baseurl=url,
+        project=project,
+        buildgroup=buildgroup,
+        site=site,
+    )
+    dest = os.path.join(session.workdir, "cdash")
+    reporter.create_cdash_reports(dest=dest)
 
 
 class TestData:
     def __init__(self, session: Session, cases: Optional[list[TestCase]] = None):
-        self.command = f"nvtest {' '.join(session.invocation_params.args)}"
+        self.command = "nvtest"
         self.cases: list[TestCase] = []
         self.start: float = sys.maxsize
         self.finish: float = -1
@@ -227,7 +244,7 @@ class Reporter:
             test_node.appendChild(results)
 
             labels = doc.createElement("Labels")
-            for keyword in case.keywords:
+            for keyword in case.keywords():
                 add_text_node(labels, "Label", keyword)
             test_node.appendChild(labels)
 
@@ -319,75 +336,3 @@ def add_measurement(parent, name=None, value=None, cdata=None, **attrs):
     l2.appendChild(text_node)
     l1.appendChild(l2)
     parent.appendChild(l1)
-
-
-valid_cdash_options = {
-    "url": "The URL of the CDash server",
-    "project": "The project name",
-    "track": "The CDash build track (group)",
-    "site": "The host tests were run on",
-    "stamp": "The timestamp of the build",
-    "build": "The build name",
-}
-
-
-class CDashOption(argparse.Action):
-    def __call__(
-        self,
-        parser: argparse.ArgumentParser,
-        namespace: argparse.Namespace,
-        option: Union[str, Sequence[Any], None],
-        option_str: Optional[str] = None,
-    ):
-        options: dict[str, str] = getattr(namespace, self.dest, None) or {}
-        assert isinstance(option, str)
-        u_options: list[str] = option.replace(",", " ").split()
-        for u_option in u_options:
-            opt, value = u_option.split("=")
-            if opt not in valid_cdash_options:
-                raise argparse.ArgumentError(
-                    self, f"{opt!r} is not a valid CDash option"
-                )
-            options[opt] = value
-        setattr(namespace, self.dest, options)
-
-
-@nvtest.plugin.register(scope="argparse", stage="add_argument")
-def setup(config: nvtest.Config, parser: nvtest.Parser) -> None:
-    s_opt = "; ".join(
-        colorize("@*{%s}: %s" % item) for item in valid_cdash_options.items()
-    )
-    help_msg = colorize(
-        "Write CDash XML files and (optionally) post to CDash. "
-        "Pass @*{option} to the CDash writer. @*{option} is an '=' separated "
-        "key=value pair.  Multiple options can be separated by commas. "
-        "For example, --cdash "
-        "track=Experimental,project=MyProject,url=http://my-project.cdash.com. "
-        "Recognized options are %s" % s_opt
-    )
-    parser.add_argument(
-        "--cdash",
-        action=CDashOption,
-        dest="cdash_options",
-        metavar="option",
-        help=help_msg,
-    )
-
-
-@nvtest.plugin.register(scope="session", stage="teardown")
-def postprocess(session: Session):
-    kwds = session.config.option.cdash_options
-    if not kwds:
-        return
-    cases_to_run = [case for case in session.cases if not case.skip]
-    data = TestData(session, cases_to_run)
-    reporter = Reporter(
-        test_data=data,
-        buildname=kwds.get("build", "BUILD"),
-        baseurl=kwds.get("url"),
-        project=kwds.get("project"),
-        buildgroup=kwds.get("track"),
-        site=kwds.get("site"),
-    )
-    dest = os.path.join(session.workdir, "cdash")
-    reporter.create_cdash_reports(dest=dest)

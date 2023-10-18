@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any
 from typing import Optional
 from typing import TextIO
 from typing import Union
@@ -8,6 +9,7 @@ from ..util import graph
 from ..util import tty
 from ..util.collections import defaultlist
 from ..util.filesystem import mkdirp
+from ..util.graph import TopologicalSorter
 from .testcase import TestCase
 
 
@@ -100,19 +102,19 @@ def partition_t(cases, t=60 * 30) -> list[Partition]:
 def load_partition(path: str) -> Partition:
     with open(path, "r") as fh:
         data = json.load(fh)
-    cases: list[TestCase] = []
-    for case_vars in data["cases"]:
-        cases.append(TestCase.from_dict(case_vars))
-    for case in cases:
-        dependencies: set[TestCase] = set()
-        for other in cases:
-            if other in case.dependencies:
-                dependencies.add(other)
-        if dependencies:
-            assert len(dependencies) == len(case.dependencies)
-            case.dependencies = [case for case in dependencies]
+
+    ts: TopologicalSorter = TopologicalSorter()
+    for (id, kwds) in data["cases"].items():
+        ts.add(id, *kwds["dependencies"])
+    cases: dict[str, TestCase] = {}
+    for id in ts.static_order():
+        kwds = data["cases"][id]
+        dependencies = kwds.pop("dependencies")
+        case = TestCase.from_dict(kwds)
+        case.dependencies = [cases[dep] for dep in dependencies]
+        cases[case.id] = case
     i, n = data["rank"]
-    return Partition(cases, i, n)
+    return Partition(list(cases.values()), i, n)
 
 
 def dump_partitions(
@@ -130,10 +132,11 @@ def dump_partitions(
 
 
 def dump_partition(partition: Partition, fh: TextIO) -> None:
-    data = {
-        "rank": list(partition.rank),
-        "cases": [case.asdict() for case in partition],
-    }
+    cases: dict[str, Any] = {}
+    for case in partition:
+        cases[case.id] = case.asdict()
+        cases[case.id]["dependencies"] = [dep.id for dep in case.dependencies]
+    data = {"rank": list(partition.rank), "cases": cases}
     json.dump(data, fh, indent=2)
 
 

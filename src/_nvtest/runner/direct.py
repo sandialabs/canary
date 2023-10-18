@@ -24,4 +24,4 @@ class DirectRunner(Runner):
                 case.result = Result.from_returncode(e.args[0])
             else:
                 case.result = Result("FAIL", reason=e.args[0])
-        return vars(case)
+        return {case.fullname: vars(case)}

@@ -166,7 +166,9 @@ class AbstractTestFile:
     ) -> list[TestCase]:
         try:
             return self._freeze(
-                cpu_count=cpu_count, keyword_expr=keyword_expr, on_options=on_options
+                cpu_count=cpu_count,
+                keyword_expr=keyword_expr,
+                on_options=on_options,
             )
         except Exception as e:
             if "--debug" in sys.argv[1:]:

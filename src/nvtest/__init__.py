@@ -10,13 +10,13 @@ from _nvtest.error import TestDiffed
 from _nvtest.error import TestFailed
 from _nvtest.error import TestSkipped
 from _nvtest.main import console_main
-from _nvtest.session.base import Session
+from _nvtest.session import Session
 from _nvtest.test.enums import Result
 from _nvtest.test.testcase import TestCase
+from _nvtest.util import filesystem
 from _nvtest.util import tty
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import which
-from _nvtest.util import filesystem
 
 if TYPE_CHECKING:
     from _nvtest.test.testfile import AbstractTestFile
@@ -84,6 +84,8 @@ class Marker:
 
     def name(self, arg: str):
         self.testfile.m_name(arg)
+
+    testname = name
 
     def timeout(
         self,

@@ -1,11 +1,14 @@
+import argparse
 import os
+import pstats
 import sys
+from types import FunctionType
 from typing import Optional
 
-from .config import Config
-from .error import StopExecution
-from .session import ExitCode
-from .session import factory
+from . import plugin
+from .command import add_commands
+from .config.argparsing import make_argument_parser
+from .config.argparsing import stat_names
 from .util import tty
 
 
@@ -18,44 +21,63 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     :returns: An exit code.
     """
-    params = Config.InvocationParams(args=argv or sys.argv[1:], dir=os.getcwd())
-    config = Config(invocation_params=params)
-    session = factory(config)
-    initstate: int = 0
-    session.exitstatus = ExitCode.OK
+    parser = make_argument_parser()
+
+    load_plugins()
+    add_commands(parser)
+
+    args = parser.parse_args(argv)
+    command = parser.get_command(args.command)
+
+    if args.nvtest_profile:
+        return _profile_wrapper(command, args)
+    else:
+        return invoke_command(command, args)
+
+
+def invoke_command(command: FunctionType, args: argparse.Namespace) -> int:
+    return command(args)
+
+
+def _profile_wrapper(command, args):
+    import cProfile
+
     try:
-        session.startup()
-        initstate = 1
-        session.exitstatus = session.run() or 0
-    except KeyboardInterrupt:
-        session.exitstatus = ExitCode.INTERRUPTED
-    except StopExecution as e:
-        if e.exit_code == ExitCode.OK:
-            tty.info(e.message)
-        else:
-            tty.error(e.message)
-        session.exitstatus = e.exit_code
-    except TimeoutError as e:
-        tty.error(e.args[0])
-        session.exitstatus = ExitCode.TIMEOUT
-    except SystemExit as ex:
-        session.exitstatus = ex.code
-    except BaseException as ex:
-        session.exitstatus = ExitCode.INTERNAL_ERROR
-        error_msg = ", ".join(str(_) for _ in ex.args)
-        tty.error(error_msg)
-        reraise = False
-        if initstate and session.config.debug:
-            reraise = True
-        elif "--debug" in sys.argv:
-            reraise = True
-        if reraise:
-            raise
+        nlines = int(args.lines)
+    except ValueError:
+        if args.lines != "all":
+            tty.die("Invalid number for --lines: %s" % args.lines)
+        nlines = -1
+
+    # allow comma-separated list of fields
+    sortby = ["time"]
+    if args.sorted_profile:
+        sortby = args.sorted_profile.split(",")
+        for stat in sortby:
+            if stat not in stat_names:
+                tty.die("Invalid sort field: %s" % stat)
+
+    try:
+        # make a profiler and run the code.
+        pr = cProfile.Profile()
+        pr.enable()
+        return invoke_command(command, args)
+
     finally:
-        os.chdir(session.startdir)
-        if initstate >= 1:
-            session.teardown()
-    return session.exitstatus
+        pr.disable()
+
+        # print out profile stats.
+        stats = pstats.Stats(pr)
+        stats.sort_stats(*sortby)
+        stats.print_stats(nlines)
+
+
+def load_plugins() -> None:
+    import _nvtest.plugins
+
+    path = _nvtest.plugins.__path__
+    namespace = _nvtest.plugins.__name__
+    plugin.load(path, namespace)
 
 
 def console_main() -> int:
