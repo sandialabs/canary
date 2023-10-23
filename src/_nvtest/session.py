@@ -20,8 +20,8 @@ from .config import Config
 from .error import StopExecution
 from .finder import Finder
 from .mark.match import deselect_by_keyword
-from .queue import factory as q_factory
 from .queue import Queue
+from .queue import factory as q_factory
 from .runner import factory as r_factory
 from .test import AbstractTestFile
 from .test.enums import Result
