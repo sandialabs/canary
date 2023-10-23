@@ -21,6 +21,7 @@ from .error import StopExecution
 from .finder import Finder
 from .mark.match import deselect_by_keyword
 from .queue import factory as q_factory
+from .queue import Queue
 from .runner import factory as r_factory
 from .test import AbstractTestFile
 from .test.enums import Result
@@ -85,6 +86,7 @@ class Session:
     search_paths: dict[str, list[str]]
     batch_config: BatchConfig
     cases: list[TestCase]
+    queue: Queue
 
     def __init__(self) -> None:
         stack = inspect.stack()
