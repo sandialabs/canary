@@ -248,7 +248,7 @@ class TestCase:
                     relsrc = os.path.relpath(src, workdir)
                     fs.force_symlink(relsrc, dst, echo=True)
 
-    def asdict(self):
+    def asdict(self, *keys):
         data = dict(vars(self))
         data["result"] = [data["result"].name, data["result"].reason]
         data["_skip"] = data["_skip"].reason
@@ -258,7 +258,9 @@ class TestCase:
         data["dependencies"] = []
         for dependency in dependencies:
             data["dependencies"].append(dependency.asdict())
-        return data
+        if not keys:
+            return data
+        return {key: data[key] for key in keys}
 
     def dump(self) -> None:
         dest = os.path.join(self.exec_dir, ".nvtest")
@@ -349,6 +351,9 @@ class TestCase:
     def update(self, attrs: dict[str, object]) -> None:
         for key, val in attrs.items():
             if key == "result":
+                if isinstance(val, (tuple, list)):
+                    assert len(val) == 2
+                    val = Result(val[0], val[1])
                 assert isinstance(val, Result)
             elif key == "skip":
                 assert isinstance(val, Skip)

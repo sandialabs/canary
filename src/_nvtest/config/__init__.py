@@ -138,6 +138,7 @@ class Config:
         tty.set_log_level(log_level)
         self.config.log_level = log_level
         self.config.debug = args.debug
+        tty.set_debug(args.debug)
         for (var, val) in args.env_mods.items():
             self.variables[var] = val
         for path in args.config_mods:

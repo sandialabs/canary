@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
 from typing import Type
@@ -9,11 +10,15 @@ from .direct import DirectRunner
 from .shell import ShellRunner
 from .slurm import SlurmRunner
 
+if TYPE_CHECKING:
+    from _nvtest.session import Session
+
 valid_runners = ("shell", "direct", "slurm")
 
 
 def factory(
     name: str,
+    session: "Session",
     work_items: list[Any],
     *,
     machine_config: SimpleNamespace,
@@ -30,4 +35,4 @@ def factory(
     runner.validate(work_items)
     opts: list[Any] = options or []
     tty.verbose(f"Runner type = {runner.__class__.__name__}")
-    return runner(machine_config, *opts)
+    return runner(session, machine_config, *opts)

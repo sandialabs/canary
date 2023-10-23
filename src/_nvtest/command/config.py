@@ -29,9 +29,8 @@ def pretty_print(text: str):
     )
 
 
-def config(args: "argparse.Namespace") -> int:
-    _config = Config()
-    text = _config.describe()
+def config(config: "Config", args: "argparse.Namespace") -> int:
+    text = config.describe()
     if args.subcommand == "show":
         try:
             pretty_print(text)

@@ -1,5 +1,6 @@
 import argparse
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
 
@@ -9,6 +10,9 @@ from ..util.resources import compute_resource_allocations
 from ._slurm import _Slurm
 from .batch import BatchRunner
 
+if TYPE_CHECKING:
+    from ..session import Session
+
 
 class SlurmRunner(BatchRunner, _Slurm):
     """Setup and submit jobs to the slurm scheduler"""
@@ -17,8 +21,8 @@ class SlurmRunner(BatchRunner, _Slurm):
     shell = "/bin/sh"
     command = "sbatch"
 
-    def __init__(self, machine_config: SimpleNamespace, *args: Any):
-        super().__init__(machine_config, *args)
+    def __init__(self, session: "Session", machine_config: SimpleNamespace, *args: Any):
+        super().__init__(session, machine_config, *args)
         parser = self.make_argument_parser()
         self.namespace = argparse.Namespace(wait=True)  # always block
         self.namespace, unknown_args = parser.parse_known_args(

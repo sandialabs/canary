@@ -32,6 +32,9 @@ LOG_LEVEL = INFO
 builtin_print = print
 
 
+HAVE_DEBUG = False
+
+
 def set_log_level(arg: int) -> int:
     global LOG_LEVEL
     global PRINT_TIMESTAMP
@@ -57,6 +60,11 @@ def min_log_level() -> int:
 
 def max_log_level() -> int:
     return DEBUG
+
+
+def set_debug(arg: bool) -> None:
+    global HAVE_DEBUG
+    HAVE_DEBUG = arg
 
 
 @contextmanager
@@ -168,7 +176,7 @@ def verbose(message, *args, **kwargs):
 
 
 def debug(message, *args, **kwargs):
-    if LOG_LEVEL < DEBUG:
+    if not HAVE_DEBUG and LOG_LEVEL < DEBUG:
         return
     kwargs.setdefault("format", "*g")
     text = format_message(message, *args, **kwargs)

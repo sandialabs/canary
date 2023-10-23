@@ -7,6 +7,7 @@ from ..session import Session
 if TYPE_CHECKING:
     from argparse import Namespace
 
+    from ..config import Config
     from ..config.argparsing import Parser
 
 
@@ -28,9 +29,8 @@ def setup_parser(parser: "Parser") -> None:
     p.add_argument("workdir", help="Test results directory")
 
 
-def report(args: "Namespace") -> int:
-    session = Session(workdir=args.workdir, mode="r")
-    session.config.set_main_options(args)
+def report(config: "Config", args: "Namespace") -> int:
+    session = Session.load(workdir=args.workdir, config=config, mode="r")
     if args.subcommand == "cdash":
         cdash.report(
             session,

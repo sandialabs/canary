@@ -3,42 +3,32 @@ import sys
 from datetime import datetime
 from io import StringIO
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
 
-from .. import index
 from ..test.enums import Result
-from ..test.enums import Skip
 from ..test.partition import Partition
-from ..test.partition import dump_partition
 from ..util import tty
 from ..util.executable import Executable
 from ..util.filesystem import getuser
 from ..util.filesystem import set_executable
 from ..util.filesystem import which
+from ..util.misc import digits
 from ..util.tty.color import colorize
 from .base import Runner
+
+if TYPE_CHECKING:
+    from _nvtest.session import Session
 
 
 class BatchRunner(Runner):
     shell = "/bin/sh"
     command = "/bin/sh"
 
-    def __init__(self, machine_config: SimpleNamespace, *args: Any):
-        super().__init__(machine_config, *args)
-        self._dotdir = None
-
-    @property
-    def dotdir(self):
-        """Find the session's dotdir.  We'd prefer to pass the session to this
-        object so that we would not have to infer its location - but that leads
-        to incompatibilities with ProcessPoolExecutor"""
-        from ..session import Session
-
-        if self._dotdir is None:
-            workdir = Session.find_workdir(os.getcwd())
-            self._dotdir = os.path.join(workdir, ".nvtest")
-        return self._dotdir
+    def __init__(self, session: "Session", machine_config: SimpleNamespace, *args: Any):
+        super().__init__(session, machine_config, *args)
+        self.batchdir = session.batchdir
 
     @staticmethod
     def print_text(text: str):
@@ -55,38 +45,17 @@ class BatchRunner(Runner):
             if self.default_args:
                 script_x.add_default_args(*self.default_args)
             script_x(script, fail_on_error=False)
-        out = os.path.join(self.dotdir, f"results.json.{num_batches}.{batch_no}")
-        if not os.path.isfile(out):
-            tty.error(f"Required output file {out} not found")
-            attrs: dict[str, dict] = {}
-            for case in batch:
-                result = Result(
-                    "fail",
-                    reason=f"{self.command} failure, required output {out!r} not found",
-                )
-                attrs[case.fullname] = {"result": result}
-            return attrs
-        with open(out) as fh:
-            completed = index.load(fh)
-        executed = {}
-        for tc in completed:
-            executed[tc.fullname] = tc
-        attrs = {}
-        for original in batch:
-            if original.fullname not in executed:
-                case = original
-                case.result = Result(
-                    "fail", f"Test case {case} not found batch {batch_no}'s output"
-                )
-                tty.error(case.result.reason)
-            else:
-                case = executed[original.fullname]
-            if case.result == Result.SKIP:
-                case.skip = Skip("runtime exception")
-            attrs[case.fullname] = vars(case)
+        self.load_batch_results(batch)
         stat: dict[str, int] = {}
-        for case in executed.values():
+        attrs: dict[str, dict] = {}
+        for case in batch:
             stat[case.result.name] = stat.get(case.result.name, 0) + 1
+            data = {
+                "start": case.start,
+                "finish": case.finish,
+                "result": [case.result.name, case.result.reason],
+            }
+            attrs[case.fullname] = data
         fmt = "@%s{%d %s}"
         st_stat = ", ".join(
             colorize(fmt % (Result.colors[n], v, n)) for (n, v) in stat.items()
@@ -109,35 +78,55 @@ class BatchRunner(Runner):
     def write_header(self, fh: TextIO) -> None:
         raise NotImplementedError
 
-    def write_body(self, input_file: str, fh: TextIO) -> None:
+    def write_body(self, batch_no: int, fh: TextIO) -> None:
         py = sys.executable
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(f"{py} -m nvtest -qqq run --max-workers=1 {input_file}\n")
+        fh.write(f"{py} -m nvtest -qqq run --max-workers=1 ")
+        fh.write(f"^b {batch_no} ^s {self.session} {self.workdir}\n")
 
-    def submit_filename(self, num_batches: int, batch_no: int) -> str:
-        basename = f"submit.sh.{num_batches}.{batch_no}"
-        return os.path.join(self.dotdir, basename)
+    def submit_filename(self, batch_no: int) -> str:
+        n = max(digits(batch_no), 3)
+        basename = f"{batch_no:0{n}}.sh"
+        return os.path.join(self.batchdir, basename)
 
     def write_submission_script(self, batch: Partition) -> str:
         batch_no, num_batches = batch.rank
-        batch_file = self._dump_batch(batch)
         fh = StringIO()
         self.write_header(fh)
-        self.write_body(batch_file, fh)
-        f = self.submit_filename(num_batches, batch_no)
+        self.write_body(batch_no, fh)
+        f = self.submit_filename(batch_no)
         with open(f, "w") as fp:
             fp.write(fh.getvalue())
         set_executable(f)
         return f
 
-    def _dump_batch(self, batch: Partition) -> str:
-        batch_no, num_batches = batch.rank
-        basename = f"batch.json.{num_batches}.{batch_no}"
-        f = os.path.join(self.dotdir, basename)
-        with open(f, "w") as fh:
-            dump_partition(batch, fh)
-        return f
-
     def max_tasks_required(self, batch: Partition) -> int:
         return max([case.size for case in batch])
+
+    def load_batch_results(self, batch: Partition):
+        """Load the results for cases in this batch
+
+        Batches are run in a subprocess and the results written to
+
+        $workdir/.nvtest/stage/$session_id/tests
+
+        These results are loaded and assigned to the test cases in *this*
+        processes' memory
+
+        """
+        from .. import session
+
+        fd = session.load_test_results(self.stage)
+        for case in batch:
+            if case.id not in fd:
+                # This should never happen
+                case.result = Result(
+                    "fail", f"Test case {case} not found batch {batch.rank[0]}'s output"
+                )
+                tty.error(case.result.reason)
+            elif fd[case.id]["result"] == "SETUP":
+                # This case was never run
+                case.result = Result("NOTDONE", "This case was never run after setup")
+            else:
+                case.update(fd[case.id])

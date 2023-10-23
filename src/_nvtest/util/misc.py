@@ -29,3 +29,12 @@ def dedup(arg: Sequence[Any]) -> list[Any]:
         if item not in result:
             result.append(item)
     return result
+
+
+def digits(x: int) -> int:
+    i, n = 1, 10
+    while True:
+        if x < n:
+            return i
+        i += 1
+        n *= 10

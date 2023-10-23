@@ -1,14 +1,21 @@
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from typing import Any
+
+if TYPE_CHECKING:
+    from ..session import Session
 
 
 class Runner:
     name: str
     default_args: list[str] = []
 
-    def __init__(self, machine_config: SimpleNamespace, *args: Any):
+    def __init__(self, session: "Session", machine_config: SimpleNamespace, *args: Any):
         self.machine_config = machine_config
         self.options: list[Any] = list(args)
+        self.session = session.id
+        self.workdir = session.workdir
+        self.stage = session.stage
 
     @classmethod
     def validate(cls, *args):

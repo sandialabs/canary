@@ -7,6 +7,7 @@ from typing import Optional
 
 from . import plugin
 from .command import add_commands
+from .config import Config
 from .config.argparsing import make_argument_parser
 from .config.argparsing import stat_names
 from .util import tty
@@ -36,7 +37,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 
 def invoke_command(command: FunctionType, args: argparse.Namespace) -> int:
-    return command(args)
+    config = Config()
+    config.set_main_options(args)
+    return command(config, args)
 
 
 def _profile_wrapper(command, args):

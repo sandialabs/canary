@@ -22,7 +22,7 @@ def setup_parser(parser: "Parser"):
     parser.add_argument("file", help="Test file")
 
 
-def describe(args: "argparse.Namespace") -> int:
+def describe(config: "Config", args: "argparse.Namespace") -> int:
     file = AbstractTestFile(args.file)
     config = Config()
     config.set_main_options(args)

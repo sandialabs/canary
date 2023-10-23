@@ -61,9 +61,7 @@ def setup_parser(parser: "Parser"):
     parser.add_argument("search_paths", nargs="*", help="Search path[s]")
 
 
-def find(args: "argparse.Namespace") -> int:
-    config = Config()
-    config.set_main_options(args)
+def find(config: "Config", args: "argparse.Namespace") -> int:
     if not args.no_header:
         print_front_matter(config)
     finder = Finder()
