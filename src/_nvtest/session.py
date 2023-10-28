@@ -20,6 +20,7 @@ from .config import Config
 from .error import StopExecution
 from .finder import Finder
 from .mark.match import deselect_by_keyword
+from .mark.match import deselect_by_parameter
 from .queue import Queue
 from .queue import factory as q_factory
 from .runner import factory as r_factory
@@ -110,6 +111,7 @@ class Session:
         max_workers: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
+        parameter_expr: Optional[str] = None,
         batch_config: BatchConfig = None,
         copy_all_resources: bool = False,
     ) -> "Session":
@@ -130,13 +132,13 @@ class Session:
             hook(self)
 
         tree = self.populate(search_paths)
-        with timed("freezing test tree"):
-            self.cases = Finder.freeze(
-                tree,
-                cpu_count=self.cpu_count,
-                on_options=on_options,
-                keyword_expr=keyword_expr,
-            )
+        self.cases = Finder.freeze(
+            tree,
+            cpu_count=self.cpu_count,
+            on_options=on_options,
+            keyword_expr=keyword_expr,
+            parameter_expr=parameter_expr,
+        )
 
         for hook in plugin.plugins("test", "discovery"):
             for case in self.cases:
@@ -149,8 +151,7 @@ class Session:
         mkdirp(self.index_dir)
         mkdirp(self.stage)
 
-        with timed("Setting up test cases"):
-            self.setup_testcases(cases_to_run, copy_all_resources=copy_all_resources)
+        self.setup_testcases(cases_to_run, copy_all_resources=copy_all_resources)
 
         # Setup the queue
         work_items: Union[list[TestCase], list[Partition]]
@@ -171,7 +172,10 @@ class Session:
         if batch_config:
             self.save_active_batch_data(work_items)  # type: ignore
         self.save_active_case_data(
-            cases_to_run, keyword_expr=keyword_expr, on_options=on_options
+            cases_to_run,
+            keyword_expr=keyword_expr,
+            on_options=on_options,
+            parameter_expr=parameter_expr,
         )
 
         with open(os.path.join(self.dotdir, "params"), "w") as fh:
@@ -187,6 +191,7 @@ class Session:
             cpu_count=self.cpu_count,
             keyword_expr=keyword_expr,
             on_options=on_options,
+            parameter_expr=parameter_expr,
             copy_all_resources=copy_all_resources,
         )
 
@@ -197,7 +202,12 @@ class Session:
 
     @classmethod
     def load(
-        cls, *, workdir: str, config: Optional[Config] = None, mode: str = "r"
+        cls,
+        *,
+        workdir: str,
+        config: Optional[Config] = None,
+        session_no: Optional[int] = None,
+        mode: str = "r",
     ) -> "Session":
         if not Session.is_workdir(workdir, ascend=True):
             raise ValueError(
@@ -219,17 +229,28 @@ class Session:
                     value = Session.BatchConfig(**value)
                 setattr(self, attr, value)
         self.cases = self._load_testcases()
-        self.id = -1
-        if mode == "r":
+        if session_no is not None:
+            n_sessions = len(os.listdir(os.path.join(self.dotdir, "stage")))
+            assert session_no < n_sessions
+            self.id = session_no
+        elif mode == "r":
             self.id = len(os.listdir(os.path.join(self.dotdir, "stage"))) - 1
+        else:
+            self.id = -1
         return self
 
     @classmethod
     def load_batch(
-        cls, *, workdir: str, batch_no: int, config: Optional[Config] = None
+        cls,
+        *,
+        workdir: str,
+        batch_no: int,
+        session_no: Optional[int] = None,
+        config: Optional[Config] = None,
     ) -> "Session":
-        self = Session.load(workdir=workdir, config=config, mode="a")
-        self.id = 0
+        self = Session.load(
+            workdir=workdir, config=config, session_no=session_no, mode="a"
+        )
         n = max(3, digits(len(os.listdir(self.batchdir))))
         f = os.path.join(self.batchdir, f"{batch_no:0{n}d}")
         case_ids: list[str] = [_.strip() for _ in open(f).readlines() if _.split()]
@@ -295,37 +316,55 @@ class Session:
         self, treeish: dict[str, list[str]]
     ) -> dict[str, list[AbstractTestFile]]:
         assert self.mode == "w"
-        with timed("populating test tree"):
-            finder = Finder()
-            for (root, _paths) in treeish.items():
-                finder.add(root, *_paths)
-            finder.prepare()
-            tree = finder.populate()
+        finder = Finder()
+        for (root, _paths) in treeish.items():
+            finder.add(root, *_paths)
+        finder.prepare()
+        tree = finder.populate()
         return tree
 
     def filter(
-        self, keyword_expr: Optional[str] = None, start: Optional[str] = None
+        self,
+        cpu_count: Optional[int] = None,
+        keyword_expr: Optional[str] = None,
+        parameter_expr: Optional[str] = None,
+        start: Optional[str] = None,
     ) -> None:
+        raise NotImplementedError("Need to look at this logic")
         if not self.cases:
             raise ValueError("This test session has not been setup")
-        if start is not None:
-            if not os.path.isabs(start):
-                start = os.path.join(self.workdir, start)
-            start = os.path.normpath(start)
+        if start is None:
+            start = self.workdir
+        elif not os.path.isabs(start):
+            start = os.path.join(self.workdir, start)
+        start = os.path.normpath(start)
         for case in self.cases:
             if case.result not in (Result.NOTDONE, Result.NOTRUN, Result.SETUP):
                 skip_reason = f"previous test result: {case.result.cname}"
                 case.skip = Skip(skip_reason)
-                if start is not None and not case.exec_dir.startswith(start):
+            if not case.exec_dir.startswith(start):
+                continue
+            if cpu_count and case.size > cpu_count:
+                continue
+            if parameter_expr:
+                param_skip = deselect_by_parameter(case.parameters, parameter_expr)
+                if not param_skip:
+                    case.skip = Skip()
+                    case.result = Result("notrun")
                     continue
-                elif keyword_expr:
-                    kwds = set(case.keywords(implicit=True))
-                    kw_skip = deselect_by_keyword(kwds, keyword_expr)
-                    if not kw_skip:
-                        case.skip = Skip()
-                        case.result = Result("notrun")
+            if keyword_expr:
+                kwds = set(case.keywords(implicit=True))
+                kw_skip = deselect_by_keyword(kwds, keyword_expr)
+                if not kw_skip:
+                    case.skip = Skip()
+                    case.result = Result("notrun")
         cases = self.cases_to_run()
-        self.save_active_case_data(cases, keyword_expr=keyword_expr, start=start)
+        self.save_active_case_data(
+            cases,
+            keyword_expr=keyword_expr,
+            parameter_expr=parameter_expr,
+            start=start,
+        )
         self.queue = q_factory(
             cases, workers=self.max_workers, cpu_count=self.cpu_count
         )
@@ -337,38 +376,36 @@ class Session:
         runner_options: list[str] = None,
         fail_fast: bool = False,
     ) -> int:
-        with timed("running test cases"):
-            if not self.queue:
-                raise ValueError("This session's queue was not set up")
-            if not self.queue.cases:
-                raise ValueError("There are not cases to run in this session")
-            self.runner = r_factory(
-                runner or "direct",
-                self,
-                self.queue.cases,
-                machine_config=self.config.machine,
-                options=runner_options,
-            )
-            try:
-                with self.rc_environ():
-                    with working_dir(self.workdir):
-                        self.process_testcases(timeout, fail_fast)
-            finally:
-                self.returncode = compute_returncode(self.queue.cases)
+        if not self.queue:
+            raise ValueError("This session's queue was not set up")
+        if not self.queue.cases:
+            raise ValueError("There are not cases to run in this session")
+        self.runner = r_factory(
+            runner or "direct",
+            self,
+            self.queue.cases,
+            machine_config=self.config.machine,
+            options=runner_options,
+        )
+        try:
+            with self.rc_environ():
+                with working_dir(self.workdir):
+                    self.process_testcases(timeout, fail_fast)
+        finally:
+            self.returncode = compute_returncode(self.queue.cases)
         return compute_returncode(self.queue.cases)
 
     def teardown(self):
-        with timed("cleaning up test session"):
-            with self.rc_environ():
-                for case in self.cases_to_run():
-                    with working_dir(case.exec_dir):
-                        for hook in plugin.plugins("test", "teardown"):
-                            tty.debug(f"Calling the {hook.specname} plugin")
-                            hook(self, case)
-                    with working_dir(self.workdir):
-                        case.teardown()
-            for hook in plugin.plugins("session", "teardown"):
-                hook(self)
+        with self.rc_environ():
+            for case in self.cases_to_run():
+                with working_dir(case.exec_dir):
+                    for hook in plugin.plugins("test", "teardown"):
+                        tty.debug(f"Calling the {hook.specname} plugin")
+                        hook(self, case)
+                with working_dir(self.workdir):
+                    case.teardown()
+        for hook in plugin.plugins("session", "teardown"):
+            hook(self)
 
     def cases_to_run(self) -> list[TestCase]:
         return [
@@ -424,6 +461,7 @@ class Session:
         for var, val in variables.items():
             save_env[var] = os.environ.pop(var, None)
             os.environ[var] = val
+        os.environ["NVTEST_SESSION_NO"] = str(self.id)
         yield
         for var, save_val in save_env.items():
             if save_val is not None:
@@ -538,20 +576,22 @@ class Session:
         for id in ts.static_order():
             kwds = fd[id]
             dependencies = kwds.pop("dependencies")
+            if "exec_root" not in kwds:
+                kwds["exec_root"] = self.workdir
             case = TestCase.from_dict(kwds)
             case.dependencies = [cases[dep] for dep in dependencies]
             cases[case.id] = case
         return list(cases.values())
 
     def create_index(self, cases: list[TestCase], **kwds: Any) -> None:
-        files: dict[str, list[str]] = {}
+        files: dict[str, set[str]] = {}
         indexed: dict[str, Any] = {}
         for case in cases:
-            files.setdefault(case.file_root, []).append(case.file_path)
+            files.setdefault(case.file_root, set()).add(case.file_path)
             indexed[case.id] = case.asdict()
             indexed[case.id]["dependencies"] = [dep.id for dep in case.dependencies]
         with open(os.path.join(self.index_dir, "files"), "w") as fh:
-            json.dump(files, fh, indent=2)
+            json.dump({k: list(v) for (k, v) in files.items()}, fh, indent=2)
         with open(os.path.join(self.index_dir, "cases"), "w") as fh:
             json.dump(indexed, fh, indent=2)
         if kwds:
@@ -560,7 +600,7 @@ class Session:
 
     def save_active_case_data(self, cases: list[TestCase], **kwds: Any):
         mkdirp(self.stage)
-        save_attrs = ["start", "finish", "exec_root", "result"]
+        save_attrs = ["start", "finish", "result"]
         with open(self.results_file, "w") as fh:
             for case in cases:
                 idata = case.asdict(*save_attrs)
@@ -581,8 +621,7 @@ class Session:
 
 
 def _setup_individual_case(case, exec_root, copy_all_resources):
-    with timed(f"setting up {case}"):
-        case.setup(exec_root, copy_all_resources=copy_all_resources)
+    case.setup(exec_root, copy_all_resources=copy_all_resources)
     return (case.fullname, vars(case))
 
 
@@ -595,12 +634,3 @@ def load_test_results(stage: str) -> dict[str, dict]:
                 for (case_id, value) in json.loads(line).items():
                     fd.setdefault(case_id, {}).update(value)
     return fd
-
-
-@contextmanager
-def timed(label: str):
-    start = time.time()
-    tty.debug(label.capitalize())
-    yield
-    duration = time.time() - start
-    tty.debug(f"Done {label} ({duration:.2f}s.)")

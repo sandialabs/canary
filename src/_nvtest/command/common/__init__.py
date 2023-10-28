@@ -1,4 +1,7 @@
+import argparse
+import json
 from typing import TYPE_CHECKING
+from typing import Union, Any, Optional, Sequence
 
 from _nvtest.util.time import time_in_seconds
 
@@ -34,6 +37,13 @@ def add_mark_arguments(parser: "Parser") -> None:
         metavar="OPTION",
         action="append",
         help="Turn option(s) on, such as '-o dbg' or '-o intel'",
+    )
+    parser.add_argument(
+        "-p",
+        dest="parameter_expr",
+        metavar="P",
+        default=None,
+        help="Filter tests by parameter name and value, such as '-p np=8' or '-p np<8'",
     )
 
 

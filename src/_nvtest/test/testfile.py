@@ -2,7 +2,6 @@ import errno
 import fnmatch
 import glob
 import os
-import sys
 from copy import copy
 from string import Template
 from typing import Any
@@ -16,8 +15,8 @@ from ..mark.match import deselect_by_keyword
 from ..mark.match import deselect_by_name
 from ..mark.match import deselect_by_option
 from ..mark.match import deselect_by_platform
+from ..mark.match import deselect_by_parameter
 from ..mark.structures import AbstractParameterSet
-from ..mark.structures import ParameterExpression
 from ..mark.structures import ParameterSet
 from ..mark.structures import combine_parameter_sets
 from ..util import rprobe
@@ -29,7 +28,7 @@ from .enums import Skip
 from .testcase import TestCase
 
 
-class Namespace:
+class FilterNamespace:
     def __init__(
         self,
         value: Any,
@@ -46,12 +45,10 @@ class Namespace:
         self.option_expr: Union[None, str] = option_expr
         self.testname_expr: Union[None, str] = testname_expr
         self.platform_expr: Union[None, str] = platform_expr
-        self.parameter_expr: Union[None, ParameterExpression] = None
+        self.parameter_expr: Union[None, str] = parameter_expr
         self.expect = expect
         self.result = result
         self.action = action
-        if parameter_expr:
-            self.parameter_expr = ParameterExpression(parameter_expr)
 
     def enabled(
         self,
@@ -68,7 +65,7 @@ class Namespace:
             if deselect_by_option(set(on_options), self.option_expr):
                 return False
         if parameters and self.parameter_expr:
-            if not self.parameter_expr.eval(parameters):
+            if deselect_by_parameter(parameters, self.parameter_expr):
                 return False
         return True
 
@@ -106,16 +103,16 @@ class AbstractTestFile:
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = os.path.splitext(os.path.basename(self.path))[0]
         self._skip: Skip = Skip()
-        self._keywords: list[Namespace] = []
+        self._keywords: list[FilterNamespace] = []
         self._paramsets: list[AbstractParameterSet] = []
-        self._names: list[Namespace] = []
-        self._timeout: list[Namespace] = []
-        self._analyze: list[Namespace] = []
-        self._sources: list[Namespace] = []
-        self._baseline: list[Namespace] = []
-        self._enable: list[Namespace] = []
-        self._preload: list[Namespace] = []
-        self._depends_on: list[Namespace] = []
+        self._names: list[FilterNamespace] = []
+        self._timeout: list[FilterNamespace] = []
+        self._analyze: list[FilterNamespace] = []
+        self._sources: list[FilterNamespace] = []
+        self._baseline: list[FilterNamespace] = []
+        self._enable: list[FilterNamespace] = []
+        self._preload: list[FilterNamespace] = []
+        self._depends_on: list[FilterNamespace] = []
         self.skip_reason: str = ""
 
         self.load()
@@ -163,15 +160,17 @@ class AbstractTestFile:
         cpu_count: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
+        parameter_expr: Optional[str] = None,
     ) -> list[TestCase]:
         try:
             return self._freeze(
                 cpu_count=cpu_count,
                 keyword_expr=keyword_expr,
                 on_options=on_options,
+                parameter_expr=parameter_expr,
             )
         except Exception as e:
-            if "--debug" in sys.argv[1:]:
+            if tty.HAVE_DEBUG:
                 raise
             raise ValueError(f"Failed to freeze {self.file}: {e}") from None
 
@@ -180,6 +179,7 @@ class AbstractTestFile:
         cpu_count: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
+        parameter_expr: Optional[str] = None,
     ) -> list[TestCase]:
         cpu_count = cpu_count or rprobe.cpu_count()
         testcases: list[TestCase] = []
@@ -198,32 +198,33 @@ class AbstractTestFile:
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in combine_parameter_sets(paramsets) or [{}]:
                 keywords = self.keywords(testname=name, parameters=parameters)
-                if keyword_expr:
+                if not skip and keyword_expr:
                     kwds = {kw for kw in keywords}
                     kwds.add("notrun")
                     kwds.add(name)
                     kwds.update(parameters.keys())
                     kw_skip = deselect_by_keyword(kwds, keyword_expr)
-                    if kw_skip and not skip:
+                    if kw_skip:
                         tty.verbose(f"Skipping {self}::{name}")
                         skip = Skip(colorize("deselected by @*b{keyword expression}"))
 
                 np = parameters.get("np")
                 assert isinstance(np, int) or np is None
-                if np and np > cpu_count:
-                    if not skip:
-                        skip = Skip(
-                            colorize(
-                                "deselected due to @*b{exceeding cpu count of machine}"
-                            )
+                if not skip and np and np > cpu_count:
+                    skip = Skip(
+                        colorize(
+                            "deselected due to @*b{exceeding cpu count of machine}"
                         )
-                if "TDD" in keywords or "tdd" in keywords:
-                    if not skip:
-                        skip = Skip(
-                            colorize(
-                                "deselected because it contained the @*b{TDD keyword}"
-                            )
-                        )
+                    )
+                if not skip and ("TDD" in keywords or "tdd" in keywords):
+                    skip = Skip(
+                        colorize("deselected because it contained the @*b{TDD keyword}")
+                    )
+                if not skip and parameter_expr:
+                    param_skip = deselect_by_parameter(parameters, parameter_expr)
+                    if param_skip:
+                        reason = colorize("deselected due to @*{parameter combination}")
+                        skip = Skip(reason)
 
                 case = TestCase(
                     self.root,
@@ -505,7 +506,7 @@ class AbstractTestFile:
         parameters: Optional[str] = None,
         testname: Optional[str] = None,
     ) -> None:
-        keyword_ns = Namespace(
+        keyword_ns = FilterNamespace(
             tuple(args), parameter_expr=parameters, testname_expr=testname
         )
         self._keywords.append(keyword_ns)
@@ -518,7 +519,7 @@ class AbstractTestFile:
         result: Optional[str] = None,
         expect: Optional[int] = None,
     ) -> None:
-        ns = Namespace(
+        ns = FilterNamespace(
             arg,
             testname_expr=testname,
             parameter_expr=parameters,
@@ -535,7 +536,7 @@ class AbstractTestFile:
         platforms: Optional[str] = None,
         parameters: Optional[str] = None,
     ) -> None:
-        ns = Namespace(
+        ns = FilterNamespace(
             arg,
             testname_expr=testname,
             parameter_expr=parameters,
@@ -579,7 +580,7 @@ class AbstractTestFile:
                 src, dst = files
             except ValueError:
                 raise ValueError("Expected 2 file arguments with rename=True") from None
-            ns = Namespace(
+            ns = FilterNamespace(
                 (src, dst),
                 action=action,
                 option_expr=options,
@@ -590,7 +591,7 @@ class AbstractTestFile:
             self._sources.append(ns)
             return
         for file in files:
-            ns = Namespace(
+            ns = FilterNamespace(
                 (file, None),
                 action=action,
                 option_expr=options,
@@ -664,7 +665,7 @@ class AbstractTestFile:
             string = script
         else:
             string = flag or "--analyze"
-        ns = Namespace(
+        ns = FilterNamespace(
             string,
             platform_expr=platforms,
             testname_expr=testname,
@@ -673,7 +674,7 @@ class AbstractTestFile:
         self._analyze.append(ns)
 
     def m_name(self, arg: str) -> None:
-        self._names.append(Namespace(arg))
+        self._names.append(FilterNamespace(arg))
 
     def m_timeout(
         self,
@@ -685,7 +686,7 @@ class AbstractTestFile:
     ) -> None:
         "testname parameter parameters platform platforms option options"
         arg = time_in_seconds(arg)
-        ns = Namespace(
+        ns = FilterNamespace(
             arg,
             option_expr=options,
             platform_expr=platforms,
@@ -709,7 +710,7 @@ class AbstractTestFile:
             raise ValueError(
                 "'enable' with 'platform' or 'option' options cannot specify 'false'"
             )
-        ns = Namespace(
+        ns = FilterNamespace(
             bool(arg),
             testname_expr=testname,
             platform_expr=platforms,
@@ -725,7 +726,7 @@ class AbstractTestFile:
         platforms: Optional[str] = None,
         parameters: Optional[str] = None,
     ) -> None:
-        ns = Namespace(
+        ns = FilterNamespace(
             (arg1, arg2),
             option_expr=options,
             platform_expr=platforms,

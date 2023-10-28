@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 
 description = "Print information about a test run"
+aliases = ["stat"]
 
 
 def setup_parser(parser: "Parser"):
@@ -23,12 +24,14 @@ def setup_parser(parser: "Parser"):
         metavar="N",
         help="Show N slowest test durations (N=0 for all)",
     )
-    parser.add_argument("workdir", nargs="?", help="Test results directory")
+    parser.add_argument(
+        "workdir", nargs="?", default=os.getcwd(), help="Test results directory"
+    )
 
 
-def info(config: "Config", args: "argparse.Namespace") -> int:
+def status(config: "Config", args: "argparse.Namespace") -> int:
     try:
-        workdir = Session.find_workdir(args.workdir or os.getcwd())
+        workdir = Session.find_workdir(args.workdir)
     except ValueError:
         tty.die(f"{args.workdir!r} is not a test execution directory")
     args.mode = "r"

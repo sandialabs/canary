@@ -32,7 +32,7 @@ def setup_parser(parser: "Parser"):
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
-        "-p",
+        "--paths",
         dest="paths",
         action="store_true",
         default=False,
@@ -40,6 +40,7 @@ def setup_parser(parser: "Parser"):
     )
     group.add_argument(
         "-f",
+        "--files",
         dest="files",
         action="store_true",
         default=False,

@@ -8,6 +8,7 @@ from typing import Union
 
 from .expression import Expression
 from .expression import ParseError
+from .structures import ParameterExpression
 
 
 @dataclasses.dataclass
@@ -100,6 +101,16 @@ def deselect_by_platform(platform_expr: str) -> Union[None, bool]:
     if "SNLSYSTEM" in os.environ:
         platforms.add(os.environ["SNLSYSTEM"])
     return not expr.evaluate(PlatformMatcher(platforms))
+
+
+def deselect_by_parameter(
+    parameters: dict[str, object], parameter_expr: str
+) -> Union[None, bool]:
+    try:
+        expr = ParameterExpression(parameter_expr)
+    except ValueError:
+        raise UsageError("Invalid expression passed to '-p'")
+    return not expr.eval(parameters)
 
 
 def _parse_expression(

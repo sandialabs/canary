@@ -9,7 +9,8 @@ from typing import Union
 from ..test.enums import Result
 from ..test.partition import Partition
 from ..test.testcase import TestCase
-from ..util import keyboard
+
+# from ..util import keyboard
 from ..util import rprobe
 from ..util.tty.color import clen
 from ..util.tty.color import colorize
@@ -102,15 +103,15 @@ class Queue:
             if not len(self.queue):
                 raise StopIteration
             for i, item in self.queue.items():
-                key = keyboard.get_key()
-                if isinstance(key, str) and key in "sS":
-                    self.print_status()
+                # key = keyboard.get_key()
+                # if isinstance(key, str) and key in "sS":
+                #    self.print_status()
                 with self.lock():
                     avail_workers = self._avail_workers
                     if avail_workers and item.size <= self._avail_cpus and item.ready:
                         self._running[i] = self.queue.pop(i)
                         return i, item
-            time.sleep(0.025)
+            time.sleep(lock_wait_time)
 
     def print_status(self):
         p = d = f = t = 0

@@ -44,12 +44,3 @@ def get_key() -> Union[None, str]:
         termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
         fcntl.fcntl(fd, fcntl.F_SETFL, oldflags)
     return None if not char else key_mapping(char)
-
-
-if __name__ == "__main__":
-    import time
-
-    while True:
-        char = get_key()
-        print(f"THE CHAR IS {char}")
-        time.sleep(1)

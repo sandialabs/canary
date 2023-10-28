@@ -168,18 +168,26 @@ def run(config: "Config", args: "argparse.Namespace") -> int:
                 keyword_expr=args.keyword_expr,
                 on_options=args.on_options,
                 batch_config=bc,
+                parameter_expr=args.parameter_expr,
                 copy_all_resources=args.copy_all_resources,
             )
-        elif args.batch_no is not None:
+        elif args.mode == "b":
             # Run a single batch
-            assert args.session_no == 0
+            assert args.batch_no is not None
+            assert args.session_no is not None
             tty.print(f"Setting up batch {args.batch_no}", centered=True)
-            session = Session.load_batch(workdir=args.workdir, batch_no=args.batch_no)
+            session = Session.load_batch(
+                workdir=args.workdir, batch_no=args.batch_no, session_no=args.session_no
+            )
         else:
             assert args.mode == "a"
             tty.print("Setting up test session", centered=True)
             session = Session.copy(workdir=args.workdir, config=config, mode=args.mode)
-            session.filter(keyword_expr=args.keyword_expr, start=args.start)
+            session.filter(
+                keyword_expr=args.keyword_expr,
+                start=args.start,
+                parameter_expr=args.parameter_expr,
+            )
         initstate = 1
         session.exitstatus = ExitCode.OK
         if not args.no_header:
@@ -243,8 +251,9 @@ def parse_user_paths(args: argparse.Namespace) -> None:
             raise ValueError(f"^b{args.batch_no} requires ^sSESSION_ID")
         if workdir is not None:
             raise ValueError(f"^b{args.batch_no} and -d{args.workdir} are incompatible")
-        mode = "a"
+        mode = "b"
         workdir = args.path_args.pop(0)
+        assert len(args.path_args) == 0
     for path in args.path_args:
         if Session.is_workdir(path, ascend=True):
             mode = "a"

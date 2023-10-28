@@ -61,7 +61,7 @@ class Parser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.register("type", None, identity)
-        self.__subcommands: dict[str, Type] = {}
+        self.__subcommand_modules: dict[str, ModuleType] = {}
         if self._action_groups[0].title == "positional arguments":
             self._action_groups[0].title = "nvtest subcommands"
         self.argv: Sequence[str] = sys.argv[1:]
@@ -80,18 +80,21 @@ class Parser(argparse.ArgumentParser):
             method = getattr(module, method_name, None)
             return callable(method)
 
+        name: str = module.__name__
         if not inspect.ismodule(module):
             raise TypeError(f"{module} is not a module")
 
         for method in ("setup_parser", py_name(module)):
             if not _defines_method(module, method):
-                raise AttributeError(f"{module.__name__} must define a {method} method")
+                raise AttributeError(f"{name} must define a {method} method")
 
         for attr in ("description",):
             if not hasattr(module, attr):
-                raise AttributeError(
-                    f"{module.__name__} must define a {attr} attribute"
-                )
+                raise AttributeError(f"{name} must define a {attr} attribute")
+
+        if hasattr(module, "aliases") and not isinstance(module.aliases, list):
+            a_type = type(module.aliases).__name__
+            raise TypeError(f"{name}.aliases must be a list, not {a_type}")
 
     def parse_known_args(
         self,
@@ -128,12 +131,13 @@ class Parser(argparse.ArgumentParser):
         )
         subparser.register("type", None, identity)
         module.setup_parser(subparser)  # type: ignore
-        self.__subcommands[cmdname] = getattr(module, py_name(module))
+        self.__subcommand_modules[cmdname] = module
 
     def get_command(self, cmdname: str) -> Optional[Type]:
-        for name, module in self.__subcommands.items():
-            if name == cmdname:
-                return module
+        for name, module in self.__subcommand_modules.items():
+            candidates = [name] + getattr(module, "aliases", [])
+            if cmdname in candidates:
+                return getattr(module, py_name(module))
         return None
 
     def remove_argument(self, opt_string):
