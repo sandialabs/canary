@@ -5,6 +5,7 @@ import re
 import signal
 import time
 from datetime import datetime
+from typing import Callable
 from typing import Union
 
 DEFAULT_TIMEOUT_MESSAGE = os.strerror(errno.ETIME)
@@ -149,6 +150,32 @@ class timeout(contextlib.ContextDecorator):
         signal.alarm(0)
         if self.suppress and exc_type is TimeoutError:
             return True
+
+
+def pretty_seconds_formatter(seconds: Union[int, float]) -> Callable:
+    multiplier: float
+    unit: str
+    if seconds >= 1:
+        multiplier, unit = 1, "s"
+    elif seconds >= 1e-3:
+        multiplier, unit = 1e3, "ms"
+    elif seconds >= 1e-6:
+        multiplier, unit = 1e6, "us"
+    else:
+        multiplier, unit = 1e9, "ns"
+    return lambda s: "%.3f%s" % (multiplier * s, unit)
+
+
+def pretty_seconds(seconds: Union[int, float]) -> str:
+    """Seconds to string with appropriate units
+
+    Arguments:
+        seconds (float): Number of seconds
+
+    Returns:
+        str: Time string with units
+    """
+    return pretty_seconds_formatter(seconds)(seconds)
 
 
 class InvalidTimeFormat(Exception):

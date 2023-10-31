@@ -35,6 +35,8 @@ from .util import tty
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
+from .util.lock import Lock
+from .util.lock import WriteTransaction
 from .util.misc import digits
 from .util.returncode import compute_returncode
 from .util.time import timeout
@@ -88,6 +90,7 @@ class Session:
     batch_config: BatchConfig
     cases: list[TestCase]
     queue: Queue
+    lock: Lock
 
     def __init__(self) -> None:
         stack = inspect.stack()
@@ -151,6 +154,9 @@ class Session:
         mkdirp(self.index_dir)
         mkdirp(self.stage)
 
+        lock_path = os.path.join(self.dotdir, "lock")
+        self.lock = Lock(lock_path, default_timeout=120, desc="session")
+
         self.setup_testcases(cases_to_run, copy_all_resources=copy_all_resources)
 
         # Setup the queue
@@ -180,7 +186,7 @@ class Session:
 
         with open(os.path.join(self.dotdir, "params"), "w") as fh:
             variables = dict(vars(self))
-            for attr in ("config", "cases", "queue"):
+            for attr in ("config", "cases", "queue", "lock"):
                 variables.pop(attr)
             variables["batch_config"] = self.batch_config.asdict()
             json.dump(variables, fh, indent=2)
@@ -222,6 +228,8 @@ class Session:
         self.exitstatus = -1
         self.config = config or Config()
         self.config.load_user_config_file(self.config_file)
+        lock_path = os.path.join(self.dotdir, "lock")
+        self.lock = Lock(lock_path, default_timeout=120, desc="session")
         assert os.path.exists(os.path.join(self.dotdir, "stage"))
         with open(os.path.join(self.dotdir, "params")) as fh:
             for (attr, value) in json.load(fh).items():
@@ -549,10 +557,11 @@ class Session:
                     raise StopExecution(f"fail_fast: {case} did not pass", code)
         else:
             assert isinstance(obj, TestCase)
-            with open(self.results_file, "a") as fh:
-                obj.update(attrs[obj.fullname])
-                fd = obj.asdict("start", "finish", "result")
-                fh.write(json.dumps({obj.id: fd}) + "\n")
+            obj.update(attrs[obj.fullname])
+            fd = obj.asdict("start", "finish", "result")
+            with WriteTransaction(self.lock):
+                with open(self.results_file, "a") as fh:
+                    fh.write(json.dumps({obj.id: fd}) + "\n")
             if fail_fast and attrs[obj.fullname].result != Result.PASS:
                 self.ppe.shutdown(wait=False, cancel_futures=True)
                 code = compute_returncode([obj])
@@ -600,12 +609,14 @@ class Session:
     def save_active_case_data(self, cases: list[TestCase], **kwds: Any):
         mkdirp(self.stage)
         save_attrs = ["start", "finish", "result"]
-        with open(self.results_file, "w") as fh:
-            for case in cases:
-                idata = case.asdict(*save_attrs)
-                if "dependencies" in idata:
-                    idata["dependencies"] = [dep.id for dep in case.dependencies]
-                fh.write(json.dumps({case.id: idata}) + "\n")
+
+        with WriteTransaction(self.lock):
+            with open(self.results_file, "w") as fh:
+                for case in cases:
+                    idata = case.asdict(*save_attrs)
+                    if "dependencies" in idata:
+                        idata["dependencies"] = [dep.id for dep in case.dependencies]
+                    fh.write(json.dumps({case.id: idata}) + "\n")
         with open(os.path.join(self.stage, "params"), "w") as fh:
             json.dump(kwds, fh)
 
@@ -625,11 +636,10 @@ def _setup_individual_case(case, exec_root, copy_all_resources):
 
 
 def load_test_results(stage: str) -> dict[str, dict]:
+    lines = open(os.path.join(stage, "tests")).readlines()
     fd: dict[str, dict] = {}
-    file = os.path.join(stage, "tests")
-    with open(file) as fh:
-        for line in fh:
-            if line.split():
-                for (case_id, value) in json.loads(line).items():
-                    fd.setdefault(case_id, {}).update(value)
+    for line in lines:
+        if line.split():
+            for (case_id, value) in json.loads(line.strip()).items():
+                fd.setdefault(case_id, {}).update(value)
     return fd

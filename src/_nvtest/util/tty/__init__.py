@@ -46,6 +46,10 @@ def set_log_level(arg: int) -> int:
     return orig
 
 
+def is_verbose() -> bool:
+    return LOG_LEVEL >= VERBOSE
+
+
 def get_log_level() -> int:
     return LOG_LEVEL
 

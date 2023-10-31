@@ -1,6 +1,7 @@
 from argparse import Namespace
 from types import SimpleNamespace
 from typing import Any
+from typing import Optional
 from typing import Sequence
 from typing import Union
 
@@ -38,3 +39,31 @@ def digits(x: int) -> int:
             return i
         i += 1
         n *= 10
+
+
+def plural(
+    n: int, singular: str, plural: Optional[str] = None, show_n: bool = True
+) -> str:
+    """Pluralize <singular> word by adding an s if n != 1.
+
+    Arguments:
+        n (int): number of things there are
+        singular (str): singular form of word
+        plural (str or None): optional plural form, for when it's not just
+            singular + 's'
+        show_n (bool): whether to include n in the result string (default True)
+
+    Returns:
+        (str): "1 thing" if n == 1 or "n things" if n != 1
+
+    Notes:
+    Taken from spack.util.string
+
+    """
+    number = "%s " % n if show_n else ""
+    if n == 1:
+        return "%s%s" % (number, singular)
+    elif plural is not None:
+        return "%s%s" % (number, plural)
+    else:
+        return "%s%ss" % (number, singular)
