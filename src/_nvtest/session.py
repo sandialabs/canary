@@ -330,7 +330,6 @@ class Session:
         parameter_expr: Optional[str] = None,
         start: Optional[str] = None,
     ) -> None:
-        raise NotImplementedError("Need to look at this logic")
         if not self.cases:
             raise ValueError("This test session has not been setup")
         if start is None:
@@ -342,22 +341,22 @@ class Session:
             if case.result not in (Result.NOTDONE, Result.NOTRUN, Result.SETUP):
                 skip_reason = f"previous test result: {case.result.cname}"
                 case.skip = Skip(skip_reason)
-            if not case.exec_dir.startswith(start):
-                continue
-            if cpu_count and case.size > cpu_count:
-                continue
-            if parameter_expr:
-                param_skip = deselect_by_parameter(case.parameters, parameter_expr)
-                if not param_skip:
-                    case.skip = Skip()
-                    case.result = Result("notrun")
+                if not case.exec_dir.startswith(start):
                     continue
-            if keyword_expr:
-                kwds = set(case.keywords(implicit=True))
-                kw_skip = deselect_by_keyword(kwds, keyword_expr)
-                if not kw_skip:
-                    case.skip = Skip()
-                    case.result = Result("notrun")
+                if cpu_count and case.size > cpu_count:
+                    continue
+                if parameter_expr:
+                    param_skip = deselect_by_parameter(case.parameters, parameter_expr)
+                    if not param_skip:
+                        case.skip = Skip()
+                        case.result = Result("notrun")
+                        continue
+                if keyword_expr:
+                    kwds = set(case.keywords(implicit=True))
+                    kw_skip = deselect_by_keyword(kwds, keyword_expr)
+                    if not kw_skip:
+                        case.skip = Skip()
+                        case.result = Result("notrun")
         cases = self.cases_to_run()
         self.save_active_case_data(
             cases,

@@ -22,6 +22,7 @@ def print_case(
     level: int = -1,
     file=None,
     indent="",
+    end=False,
 ):
     """Given a list of test cases, print a visual tree structure"""
     file = file or sys.stdout
@@ -43,7 +44,7 @@ def print_case(
             else:
                 yield prefix + pointer + dependency.pretty_repr()
 
-    file.write(f"{tee}{indent}{case.pretty_repr()}\n")
+    file.write(f"{tee if not end else last}{indent}{case.pretty_repr()}\n")
     iterator = inner(case, level=level)
     for line in iterator:
         file.write(f"{branch}{indent}{line}\n")
@@ -66,7 +67,7 @@ def print(cases: list[TestCase], file: Union[str, Path, TextIO] = sys.stdout) ->
         if case in all_deps:
             remove.append(case)
     cases = [case for case in cases if case not in remove]
-    for case in cases:
-        print_case(case, file=file)
+    for (i, case) in enumerate(cases):
+        print_case(case, file=file, end=i == len(cases) - 1)
     if fown:
         file.close()

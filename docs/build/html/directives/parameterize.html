@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+
+<html lang="python" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+    <title>parameterize &#8212; nvtest 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=4f649999" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=039e1c02" />
+    <script src="../_static/documentation_options.js?v=8cfa8c60"></script>
+    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="skipif" href="skipif.html" />
+    <link rel="prev" title="link" href="link.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+              <div class="related top">
+                &nbsp;
+  <nav id="rellinks">
+    <ul>
+        <li>
+          &larr;
+          <a href="link.html" title="Previous document">link</a>
+        </li>
+        <li>
+          <a href="skipif.html" title="Next document">skipif</a>
+          &rarr;
+        </li>
+    </ul>
+  </nav>
+              </div>
+          
+
+          <div class="body" role="main">
+            
+  <section id="parameterize">
+<span id="directive-parameterize"></span><h1>parameterize<a class="headerlink" href="#parameterize" title="Link to this heading">¶</a></h1>
+<p>Add new invocations to the test using the list of argvalues for the given argnames.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">parametrize</span><span class="p">(</span><span class="n">argnames</span><span class="p">,</span> <span class="n">argvalues</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">platforms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">testname</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1">#VVT: parametrize (options=...,platforms=...,testname=...) : argnames = argvalues</span>
+</pre></div>
+</div>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">argnames</span></code>: A comma-separated string denoting one or more argument names, or a list/tuple of argument strings.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">argvalues</span></code>: The list of <code class="docutils literal notranslate"><span class="pre">argvalues</span></code> determines how often a test is invoked with different argument values.  If only one <code class="docutils literal notranslate"><span class="pre">argname</span></code> was specified, <code class="docutils literal notranslate"><span class="pre">argvalues</span></code> is a list of values. If <code class="docutils literal notranslate"><span class="pre">N</span></code> <code class="docutils literal notranslate"><span class="pre">argnames</span></code> were specified, <code class="docutils literal notranslate"><span class="pre">argvalues</span></code> must be a list of N-tuples, where each tuple-element specifies a value for its respective <code class="docutils literal notranslate"><span class="pre">argname</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">testname</span></code>: Restrict processing of the directive to this test name</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">platform</span></code>: Restrict processing of the directive to certain platform or platforms</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">option</span></code>: Restrict processing of the directive to command line <code class="docutils literal notranslate"><span class="pre">-o</span></code> options</p></li>
+</ul>
+</section>
+<section id="special-argnames">
+<h2>Special argnames<a class="headerlink" href="#special-argnames" title="Link to this heading">¶</a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">np</span></code> parameter is interpreted to mean &quot;number of processing cores&quot;.  If the <code class="docutils literal notranslate"><span class="pre">np</span></code> parameter is not defined, the test is assumed to use 1 processing core.</p>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="../howto/parameterizing.html#parameterizing"><span class="std std-ref">Parameterizing Tests</span></a></p></li>
+</ul>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">¶</a></h2>
+<p>The following equivalent test specifications result in 4 test instantiations</p>
+<p><code class="docutils literal notranslate"><span class="pre">test1.pyt</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># test1</span>
+<span class="n">nvtest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parameterize</span><span class="p">(</span><span class="s2">&quot;np&quot;</span><span class="p">,</span> <span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">32</span><span class="p">))</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">test1.vvt</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># test1</span>
+<span class="c1">#VVT: parameterize : np = 4 8 12 32</span>
+</pre></div>
+</div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">4 test cases:</span>
+<span class="go">├── test1[np=4]</span>
+<span class="go">├── test1[np=8]</span>
+<span class="go">├── test1[np=12]</span>
+<span class="go">├── test1[np=32]</span>
+</pre></div>
+</div>
+<hr class="docutils" />
+<p><code class="docutils literal notranslate"><span class="pre">argnames</span></code> can be a list of parameters with associated <code class="docutils literal notranslate"><span class="pre">argvalues</span></code>, e.g.</p>
+<p><code class="docutils literal notranslate"><span class="pre">test1.pyt</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># test1</span>
+<span class="n">nvtest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parameterize</span><span class="p">(</span><span class="s2">&quot;a,b&quot;</span><span class="p">,</span> <span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">)])</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">test1.vvt</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># test1</span>
+<span class="c1">#VVT: parameterize : a,b = 1,2 3,4 5,6</span>
+</pre></div>
+</div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">4 test cases:</span>
+<span class="go">├── test1[a=1,b=2]</span>
+<span class="go">├── test1[a=3,b=4]</span>
+<span class="go">├── test1[a=5,b=6]</span>
+</pre></div>
+</div>
+<hr class="docutils" />
+<p><code class="docutils literal notranslate"><span class="pre">parameterize</span></code> can be called multiple times.  When multiple parameterize directives are given, the Cartesian product of each is taken to form the set of parameters, e.g.</p>
+<p><code class="docutils literal notranslate"><span class="pre">test1.pyt</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># test1</span>
+<span class="n">nvtest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parameterize</span><span class="p">(</span><span class="s2">&quot;a,b&quot;</span><span class="p">,</span> <span class="p">[(</span><span class="s2">&quot;a1&quot;</span><span class="p">,</span> <span class="s2">&quot;b1&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;a2&quot;</span><span class="p">,</span> <span class="s2">&quot;b2&quot;</span><span class="p">)])</span>
+<span class="n">nvtest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parameterize</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;x1&quot;</span><span class="p">,</span> <span class="s2">&quot;x2&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>results in the following test invocations:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">4 test cases:</span>
+<span class="go">├── test1[a=a1,b=b1,x=x1]</span>
+<span class="go">├── test1[a=a1,b=b1,x=x2]</span>
+<span class="go">├── test1[a=a2,b=b2,x=x1]</span>
+<span class="go">├── test1[a=a2,b=b2,x=x2]</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+          </div>
+              <div class="related bottom">
+                &nbsp;
+  <nav id="rellinks">
+    <ul>
+        <li>
+          &larr;
+          <a href="link.html" title="Previous document">link</a>
+        </li>
+        <li>
+          <a href="skipif.html" title="Next document">skipif</a>
+          &rarr;
+        </li>
+    </ul>
+  </nav>
+              </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">nvtest</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installing.html">Installing nvtest</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../discovery.html">Test discovery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results_directory.html">The test results directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">How-to guides</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../subcommands/index.html">Subcommands</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Test Directives</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="analyze.html">analyze</a></li>
+<li class="toctree-l2"><a class="reference internal" href="copy.html">copy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enable.html">enable</a></li>
+<li class="toctree-l2"><a class="reference internal" href="keywords.html">keywords</a></li>
+<li class="toctree-l2"><a class="reference internal" href="link.html">link</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">parameterize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="skipif.html">skipif</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testname.html">testname</a></li>
+<li class="toctree-l2"><a class="reference internal" href="timeout.html">timeout</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Test Directives</a><ul>
+      <li>Previous: <a href="link.html" title="previous chapter">link</a></li>
+      <li>Next: <a href="skipif.html" title="next chapter">skipif</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2023, Tim Fuller.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 7.2.6</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+      |
+      <a href="../_sources/directives/parameterize.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

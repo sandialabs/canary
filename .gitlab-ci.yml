@@ -1,0 +1,27 @@
+stages:
+- deploy
+
+pages:
+  stage: deploy
+  script:
+  - module use /projects/alegranevada/modules/cee/linux_rh7
+  - module load python/3.9
+  - cd docs
+  - make clean
+  - make html
+  - cd ..
+  - rm -rf public
+  - mv docs/build/html public
+  artifacts:
+    paths:
+    - public
+  only:
+    refs:
+    - master
+    changes:
+    - docs/*.rst
+    - docs/*/*.rst
+    - docs/**/*.rst
+  except:
+    refs:
+    - schedules

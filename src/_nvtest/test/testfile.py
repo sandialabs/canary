@@ -14,8 +14,8 @@ from ..compat.vvtest import load_vvt
 from ..mark.match import deselect_by_keyword
 from ..mark.match import deselect_by_name
 from ..mark.match import deselect_by_option
-from ..mark.match import deselect_by_platform
 from ..mark.match import deselect_by_parameter
+from ..mark.match import deselect_by_platform
 from ..mark.structures import AbstractParameterSet
 from ..mark.structures import ParameterSet
 from ..mark.structures import combine_parameter_sets
@@ -223,7 +223,7 @@ class AbstractTestFile:
                 if not skip and parameter_expr:
                     param_skip = deselect_by_parameter(parameters, parameter_expr)
                     if param_skip:
-                        reason = colorize("deselected due to @*{parameter combination}")
+                        reason = colorize("deselected due to @*b{parameter expression}")
                         skip = Skip(reason)
 
                 case = TestCase(
@@ -297,7 +297,7 @@ class AbstractTestFile:
                 if deselect_by_name({testname}, ns.testname_expr):
                     continue
             if ns.parameter_expr is not None and parameters:
-                if not ns.parameter_expr.eval(parameters):
+                if deselect_by_parameter(parameters, ns.parameter_expr):
                     continue
             keywords.update(ns.value)
         return sorted(keywords)
@@ -349,7 +349,7 @@ class AbstractTestFile:
                 if deselect_by_option(set(on_options), ns.option_expr):
                     continue
             if parameters and ns.parameter_expr:
-                if not ns.parameter_expr.eval(parameters):
+                if deselect_by_parameter(parameters, ns.parameter_expr):
                     continue
             return int(ns.value)
         return None
@@ -415,7 +415,7 @@ class AbstractTestFile:
                 if deselect_by_option(set(on_options), ns.option_expr):
                     continue
             if parameters and ns.parameter_expr:
-                if not ns.parameter_expr.eval(parameters):
+                if deselect_by_parameter(parameters, ns.parameter_expr):
                     continue
             arg1, arg2 = ns.value
             file1 = self.safe_substitute(arg1, **kwds)
@@ -450,7 +450,7 @@ class AbstractTestFile:
                     if deselect_by_option(set(on_options), ns.option_expr):
                         continue
                 if parameters and ns.parameter_expr:
-                    if not ns.parameter_expr.eval(parameters):
+                    if deselect_by_parameter(parameters, ns.parameter_expr):
                         continue
                 src, dst = ns.value
                 src = self.safe_substitute(src, **kwds)
@@ -486,7 +486,7 @@ class AbstractTestFile:
                 if deselect_by_option(set(on_options), ns.option_expr):
                     continue
             if parameters and ns.parameter_expr:
-                if not ns.parameter_expr.eval(parameters):
+                if deselect_by_parameter(parameters, ns.parameter_expr):
                     continue
             dependencies.append(self.safe_substitute(ns.value, **kwds))
         return dependencies

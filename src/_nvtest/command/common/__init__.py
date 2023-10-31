@@ -1,7 +1,4 @@
-import argparse
-import json
 from typing import TYPE_CHECKING
-from typing import Union, Any, Optional, Sequence
 
 from _nvtest.util.time import time_in_seconds
 

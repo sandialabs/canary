@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+
+<html lang="python" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+    <title>testname &#8212; nvtest 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=4f649999" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=039e1c02" />
+    <script src="../_static/documentation_options.js?v=8cfa8c60"></script>
+    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="timeout" href="timeout.html" />
+    <link rel="prev" title="skipif" href="skipif.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+              <div class="related top">
+                &nbsp;
+  <nav id="rellinks">
+    <ul>
+        <li>
+          &larr;
+          <a href="skipif.html" title="Previous document">skipif</a>
+        </li>
+        <li>
+          <a href="timeout.html" title="Next document">timeout</a>
+          &rarr;
+        </li>
+    </ul>
+  </nav>
+              </div>
+          
+
+          <div class="body" role="main">
+            
+  <section id="testname">
+<span id="directive-testname"></span><h1>testname<a class="headerlink" href="#testname" title="Link to this heading">¶</a></h1>
+<p>Set the name of a test to one different from the filename and/or define multiple test names (multiple test instances) in the same file.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">name</span><span class="p">(</span><span class="n">arg</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">testname</span> <span class="p">:</span> <span class="n">arg</span>
+</pre></div>
+</div>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">arg</span></code>: The alternative test name.</p></li>
+</ul>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">¶</a></h2>
+<p>For the test file <code class="docutils literal notranslate"><span class="pre">a.vvt</span></code> containing</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1">#VVT: testname : spam</span>
+<span class="o">...</span>
+</pre></div>
+</div>
+<p>a test instance with name &quot;spam&quot; would be created, even though the file is named <code class="docutils literal notranslate"><span class="pre">a.vvt</span></code>.</p>
+<hr class="docutils" />
+<p><code class="docutils literal notranslate"><span class="pre">testname</span></code> can be called multiple times.  Each call will create a new test instance with a different name, e.g.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1">#VVT: testname : foo</span>
+<span class="c1">#VVT: testname : bar</span>
+
+<span class="kn">import</span> <span class="nn">vvtest_util</span> <span class="k">as</span> <span class="nn">vvt</span>
+
+<span class="k">if</span> <span class="n">vvt</span><span class="o">.</span><span class="n">NAME</span> <span class="o">==</span> <span class="s2">&quot;foo&quot;</span><span class="p">:</span>
+    <span class="n">do_foo_stuff</span><span class="p">()</span>
+<span class="k">elif</span> <span class="n">vvt</span><span class="o">.</span><span class="n">NAME</span> <span class="o">==</span> <span class="s2">&quot;bar&quot;</span><span class="p">:</span>
+    <span class="n">do_bar_stuff</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>This file would result in two tests: &quot;foo&quot; and &quot;bar&quot;.</p>
+</section>
+</section>
+
+
+          </div>
+              <div class="related bottom">
+                &nbsp;
+  <nav id="rellinks">
+    <ul>
+        <li>
+          &larr;
+          <a href="skipif.html" title="Previous document">skipif</a>
+        </li>
+        <li>
+          <a href="timeout.html" title="Next document">timeout</a>
+          &rarr;
+        </li>
+    </ul>
+  </nav>
+              </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">nvtest</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installing.html">Installing nvtest</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../discovery.html">Test discovery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results_directory.html">The test results directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">How-to guides</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../subcommands/index.html">Subcommands</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Test Directives</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="analyze.html">analyze</a></li>
+<li class="toctree-l2"><a class="reference internal" href="copy.html">copy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enable.html">enable</a></li>
+<li class="toctree-l2"><a class="reference internal" href="keywords.html">keywords</a></li>
+<li class="toctree-l2"><a class="reference internal" href="link.html">link</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parameterize.html">parameterize</a></li>
+<li class="toctree-l2"><a class="reference internal" href="skipif.html">skipif</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">testname</a></li>
+<li class="toctree-l2"><a class="reference internal" href="timeout.html">timeout</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Test Directives</a><ul>
+      <li>Previous: <a href="skipif.html" title="previous chapter">skipif</a></li>
+      <li>Next: <a href="timeout.html" title="next chapter">timeout</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2023, Tim Fuller.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 7.2.6</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+      |
+      <a href="../_sources/directives/testname.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

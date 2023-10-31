@@ -137,6 +137,7 @@ class Finder:
         tree: dict[str, list[AbstractTestFile]],
         cpu_count: Optional[int] = None,
         keyword_expr: Optional[str] = None,
+        parameter_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
     ) -> list[TestCase]:
         cases: list[TestCase] = []
@@ -151,6 +152,7 @@ class Finder:
                 concrete_test_cases = abstract_file.freeze(
                     cpu_count=cpu_count,
                     keyword_expr=keyword_expr,
+                    parameter_expr=parameter_expr,
                     on_options=on_options,
                 )
                 cases.extend([case for case in concrete_test_cases if case])

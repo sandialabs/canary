@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+
+<html lang="python" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+    <title>skipif &#8212; nvtest 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=4f649999" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=039e1c02" />
+    <script src="../_static/documentation_options.js?v=8cfa8c60"></script>
+    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="testname" href="testname.html" />
+    <link rel="prev" title="parameterize" href="parameterize.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+              <div class="related top">
+                &nbsp;
+  <nav id="rellinks">
+    <ul>
+        <li>
+          &larr;
+          <a href="parameterize.html" title="Previous document">parameterize</a>
+        </li>
+        <li>
+          <a href="testname.html" title="Next document">testname</a>
+          &rarr;
+        </li>
+    </ul>
+  </nav>
+              </div>
+          
+
+          <div class="body" role="main">
+            
+  <section id="skipif">
+<span id="directive-skipif"></span><h1>skipif<a class="headerlink" href="#skipif" title="Link to this heading">¶</a></h1>
+<p>Conditionally skip tests</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">skipif</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">reason</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1">#VVT: skipif : python_expression</span>
+</pre></div>
+</div>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">arg</span></code>: If <code class="docutils literal notranslate"><span class="pre">True</span></code>, the test will be skipped.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">python_expression</span></code>: String that is evaluated and cast to a <code class="docutils literal notranslate"><span class="pre">bool</span></code>. If the result is <code class="docutils literal notranslate"><span class="pre">True</span></code> the test will be skipped.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reason</span></code>: The reason the test is being skipped.</p></li>
+</ul>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">nvtest</span>
+<span class="n">nvtest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skipif</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">platform</span> <span class="o">==</span> <span class="s2">&quot;Darwin&quot;</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;Test does not run on Apple hardware&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1">#VVT: skipif (reason=Test does not run on Apple hardware) : sys.platform == &quot;Darwin&quot;</span>
+</pre></div>
+</div>
+<p>will skip the test if run on Apple hardware.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">reason</span></code> is not defined, <code class="docutils literal notranslate"><span class="pre">nvtest</span></code> reports the reason as <code class="docutils literal notranslate"><span class="pre">&quot;python_expression</span> <span class="pre">evaluated</span> <span class="pre">to</span> <span class="pre">True&quot;</span></code>.</p>
+</section>
+<section id="checking-module-availability">
+<h2>Checking module availability<a class="headerlink" href="#checking-module-availability" title="Link to this heading">¶</a></h2>
+<p>A test may be skipped if a module is not importable by using the <code class="docutils literal notranslate"><span class="pre">importable</span></code> function. <code class="docutils literal notranslate"><span class="pre">importable(module_name)</span></code> evaluates to <code class="docutils literal notranslate"><span class="pre">True</span></code> if <code class="docutils literal notranslate"><span class="pre">module_name</span></code> can be imported otherwise, <code class="docutils literal notranslate"><span class="pre">False</span></code>. For example,</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1">#VVT: skipif : not importable(&quot;numpy&quot;)</span>
+</pre></div>
+</div>
+<p>would skip the test if <code class="docutils literal notranslate"><span class="pre">numpy</span></code> was not available.</p>
+</section>
+<section id="evaluation-namespace">
+<h2>Evaluation namespace<a class="headerlink" href="#evaluation-namespace" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">python_expression</span></code> is evaluated in a minimal namespace consisting of the <code class="docutils literal notranslate"><span class="pre">os</span></code> module, <code class="docutils literal notranslate"><span class="pre">sys</span></code> module, and <code class="docutils literal notranslate"><span class="pre">importable</span></code> function.</p>
+</section>
+</section>
+
+
+          </div>
+              <div class="related bottom">
+                &nbsp;
+  <nav id="rellinks">
+    <ul>
+        <li>
+          &larr;
+          <a href="parameterize.html" title="Previous document">parameterize</a>
+        </li>
+        <li>
+          <a href="testname.html" title="Next document">testname</a>
+          &rarr;
+        </li>
+    </ul>
+  </nav>
+              </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">nvtest</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getting_started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installing.html">Installing nvtest</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../discovery.html">Test discovery</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../results_directory.html">The test results directory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../howto/index.html">How-to guides</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../subcommands/index.html">Subcommands</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Test Directives</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="analyze.html">analyze</a></li>
+<li class="toctree-l2"><a class="reference internal" href="copy.html">copy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enable.html">enable</a></li>
+<li class="toctree-l2"><a class="reference internal" href="keywords.html">keywords</a></li>
+<li class="toctree-l2"><a class="reference internal" href="link.html">link</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parameterize.html">parameterize</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">skipif</a></li>
+<li class="toctree-l2"><a class="reference internal" href="testname.html">testname</a></li>
+<li class="toctree-l2"><a class="reference internal" href="timeout.html">timeout</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Test Directives</a><ul>
+      <li>Previous: <a href="parameterize.html" title="previous chapter">parameterize</a></li>
+      <li>Next: <a href="testname.html" title="next chapter">testname</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2023, Tim Fuller.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 7.2.6</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+      |
+      <a href="../_sources/directives/skipif.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

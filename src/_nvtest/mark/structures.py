@@ -399,7 +399,10 @@ class ParameterExpression:
         global_vars["not_defined"] = not_defined(list(parameters.keys()))
         local_vars: dict = {}
         assert isinstance(self.expression, str)
-        return bool(eval(self.expression, global_vars, local_vars))
+        try:
+            return bool(eval(self.expression, global_vars, local_vars))
+        except NameError:
+            return False
 
 
 def not_defined(names: list[str]) -> Callable:

@@ -75,6 +75,7 @@ def find(config: "Config", args: "argparse.Namespace") -> int:
         tree,
         cpu_count=config.machine.cpu_count,
         keyword_expr=args.keyword_expr,
+        parameter_expr=args.parameter_expr,
         on_options=args.on_options,
     )
     cases_to_run = [case for case in cases if not case.skip]

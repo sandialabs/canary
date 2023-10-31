@@ -1,6 +1,7 @@
 import dataclasses
 import json
 import os
+from types import SimpleNamespace
 from typing import Optional
 from typing import Type
 from typing import Union
@@ -20,7 +21,7 @@ class TestInstance:
     analyze: str
     family: str
     keywords: list[str]
-    parameters: dict[str, object]
+    parameters: SimpleNamespace
     timeout: Union[None, int]
     runtime: Union[None, float, int]
     skip: Skip
@@ -49,15 +50,15 @@ class TestInstance:
             kwds = json.load(fh)
         case = TestCase.from_dict(kwds)
         self = cls(
-            root=case.file_root,
-            path=case.file_path,
+            file_root=case.file_root,
+            file_path=case.file_path,
             name=case.name,
             file=os.path.join(case.file_root, case.file_path),
             size=case.size,
             family=case.family,
             analyze=case.analyze or "",
             keywords=case.keywords(),
-            parameters=case.parameters,
+            parameters=SimpleNamespace(**case.parameters),
             timeout=case.timeout,
             runtime=case.runtime,
             skip=case.skip,

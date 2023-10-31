@@ -2,8 +2,10 @@ import argparse
 import glob
 import os
 import time
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Generator
 from typing import Optional
 from typing import Sequence
 from typing import Union
@@ -146,67 +148,54 @@ class RunnerOptions(argparse.Action):
         setattr(namespace, self.dest, runner_opts)
 
 
+class Timer:
+    T0: int = 111
+    TF: int = 222
+
+    def __init__(self):
+        self.data = {}
+
+    @contextmanager
+    def timeit(self, label: str) -> Generator[None, None, None]:
+        try:
+            start = time.time()
+            yield
+        finally:
+            finish = time.time()
+            self.data[label] = {self.T0: start, self.TF: finish}
+
+    def duration(self, label: str) -> float:
+        return self.data[label][self.TF] - self.data[label][self.T0]
+
+
 def run(config: "Config", args: "argparse.Namespace") -> int:
     parse_user_paths(args)
     initstate: int = 0
-    start = time.time()
-    if args.wipe:
-        if args.mode != "w":
-            tty.die(f"Cannot wipe work directory with mode={args.mode}")
-        force_remove(args.workdir or Session.default_workdir)
-    if not args.no_header:
-        print_front_matter(config, args)
+
+    timer = Timer()
+    with timer.timeit("setup"):
+        session = setup_session(config, args)
+    setup_duration = timer.duration("setup")
+
+    initstate = 1
     try:
-        if args.mode == "w":
-            tty.print("Setting up test session", centered=True)
-            bc = Session.BatchConfig(size_t=args.batch_size, size_n=args.batches)
-            session = Session.create(
-                workdir=args.workdir,
-                search_paths=args.paths,
-                config=config,
-                max_workers=args.max_workers,
-                keyword_expr=args.keyword_expr,
-                on_options=args.on_options,
-                batch_config=bc,
-                parameter_expr=args.parameter_expr,
-                copy_all_resources=args.copy_all_resources,
-            )
-        elif args.mode == "b":
-            # Run a single batch
-            assert args.batch_no is not None
-            assert args.session_no is not None
-            tty.print(f"Setting up batch {args.batch_no}", centered=True)
-            session = Session.load_batch(
-                workdir=args.workdir, batch_no=args.batch_no, session_no=args.session_no
-            )
-        else:
-            assert args.mode == "a"
-            tty.print("Setting up test session", centered=True)
-            session = Session.copy(workdir=args.workdir, config=config, mode=args.mode)
-            session.filter(
-                keyword_expr=args.keyword_expr,
-                start=args.start,
-                parameter_expr=args.parameter_expr,
-            )
-        initstate = 1
-        session.exitstatus = ExitCode.OK
         if not args.no_header:
-            print_testcase_overview(session.cases)
+            print_testcase_overview(session.cases, duration=setup_duration)
         if args.until == "setup":
-            tty.print("Setup complete, stopping on request")
             return 0
         tty.print("Beginning test session", centered=True)
         initstate = 2
-        session.exitstatus = session.run(
-            timeout=args.timeout,
-            runner=args.runner,
-            runner_options=args.runner_options,
-            fail_fast=args.fail_fast,
-        )
-        finish = time.time()
+        with timer.timeit("run"):
+            session.exitstatus = session.run(
+                timeout=args.timeout,
+                runner=args.runner,
+                runner_options=args.runner_options,
+                fail_fast=args.fail_fast,
+            )
+        run_duration = timer.duration("run")
         if not args.no_summary:
             print_testcase_results(
-                session.queue.cases, duration=finish - start, durations=args.durations
+                session.queue.cases, duration=run_duration, durations=args.durations
             )
         if args.until == "run":
             return session.exitstatus
@@ -306,9 +295,13 @@ def print_front_matter(config: "Config", args: "argparse.Namespace"):
         tty.print(f"search paths:\n  {paths}")
 
 
-def print_testcase_overview(cases: list[TestCase]) -> None:
+def print_testcase_overview(
+    cases: list[TestCase], duration: Optional[float] = None
+) -> None:
     files = {case.file for case in cases}
     t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
+    if duration is not None:
+        t += "@*{ in %.2fs.}" % duration
     tty.print(colorize(t))
     cases_to_run = [case for case in cases if not case.skip]
     files = {case.file for case in cases_to_run}
@@ -417,3 +410,47 @@ def read_paths(file: str, paths: dict[str, list[str]]) -> None:
     testpaths_schema.validate(data)
     for root, _paths in data["testpaths"].items():
         paths.setdefault(root, []).extend(_paths)
+
+
+def setup_session(config: "Config", args: "argparse.Namespace") -> Session:
+    if args.wipe:
+        if args.mode != "w":
+            tty.die(f"Cannot wipe work directory with mode={args.mode}")
+        force_remove(args.workdir or Session.default_workdir)
+    if not args.no_header:
+        print_front_matter(config, args)
+
+    session: Session
+    if args.mode == "w":
+        tty.print("Setting up test session", centered=True)
+        bc = Session.BatchConfig(size_t=args.batch_size, size_n=args.batches)
+        session = Session.create(
+            workdir=args.workdir or Session.default_workdir,
+            search_paths=args.paths,
+            config=config,
+            max_workers=args.max_workers,
+            keyword_expr=args.keyword_expr,
+            on_options=args.on_options,
+            batch_config=bc,
+            parameter_expr=args.parameter_expr,
+            copy_all_resources=args.copy_all_resources,
+        )
+    elif args.mode == "b":
+        # Run a single batch
+        assert args.batch_no is not None
+        assert args.session_no is not None
+        tty.print(f"Setting up batch {args.batch_no}", centered=True)
+        session = Session.load_batch(
+            workdir=args.workdir, batch_no=args.batch_no, session_no=args.session_no
+        )
+    else:
+        assert args.mode == "a"
+        tty.print("Setting up test session", centered=True)
+        session = Session.copy(workdir=args.workdir, config=config, mode=args.mode)
+        session.filter(
+            keyword_expr=args.keyword_expr,
+            start=args.start,
+            parameter_expr=args.parameter_expr,
+        )
+    session.exitstatus = ExitCode.OK
+    return session
