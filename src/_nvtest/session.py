@@ -32,6 +32,7 @@ from .test.partition import partition_n
 from .test.partition import partition_t
 from .test.testcase import TestCase
 from .util import tty
+from .util.tty.color import colorize
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
@@ -130,11 +131,22 @@ class Session:
         self.search_paths = search_paths
         self.batch_config = batch_config or Session.BatchConfig()
 
-        t_start = time.time()
+        tty.debug(f"Creating new nvtest session in {self.rel_workdir}")
+
+        t_start: float = time.time()
         for hook in plugin.plugins("session", "setup"):
             hook(self)
 
         tree = self.populate(search_paths)
+
+        tty.debug(
+            "Freezing test files with the following options: ",
+            f"{cpu_count=}",
+            f"{on_options=}",
+            f"{keyword_expr=}",
+            f"{parameter_expr=}",
+        )
+
         self.cases = Finder.freeze(
             tree,
             cpu_count=self.cpu_count,
@@ -146,6 +158,7 @@ class Session:
         for hook in plugin.plugins("test", "discovery"):
             for case in self.cases:
                 hook(self, case)
+
         cases_to_run = self.cases_to_run()
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
@@ -202,8 +215,7 @@ class Session:
         )
 
         duration = time.time() - t_start
-        tty.debug(f"Done setting up test session ({duration:.2f}s.)")
-        tty.debug("Done creating new test session")
+        tty.debug(f"Done creating test session ({duration:.2f}s.)")
         return self
 
     @classmethod
@@ -324,8 +336,10 @@ class Session:
         self, treeish: dict[str, list[str]]
     ) -> dict[str, list[AbstractTestFile]]:
         assert self.mode == "w"
+        tty.debug("Populating test session")
         finder = Finder()
         for (root, _paths) in treeish.items():
+            tty.debug(f"Adding tests in {root}")
             finder.add(root, *_paths)
         finder.prepare()
         tree = finder.populate()

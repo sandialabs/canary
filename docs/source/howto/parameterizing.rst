@@ -1,7 +1,7 @@
 .. _parameterizing:
 
-Parameterizing tests
-====================
+How to parameterize tests
+=========================
 
 A single test script can generate many test instances, each having different parameters, using the :ref:`parameterize <directive-parameterize>` directive.  The test script uses the parameter name[s] and value[s] to run variations of the test.  For example, the test script
 

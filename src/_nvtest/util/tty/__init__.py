@@ -115,7 +115,7 @@ def print(*args, **kwargs):
     if not force and LOG_LEVEL < INFO:
         return
     centered = kwargs.pop("centered", False)
-    char = kwargs.pop("char", "=")
+    char = kwargs.pop("char", "—")
     if centered:
         _, width = terminal_size()
         label = " ".join(str(_) for _ in args)
@@ -216,7 +216,7 @@ def hline(label=None, **kwargs):
         char (str): Char to draw the line with.  Default '-'
         max_width (int): Maximum width of the line.  Default is 64 chars.
     """
-    char = kwargs.pop("char", "-")
+    char = kwargs.pop("char", "—")
     max_width = kwargs.pop("max_width", 64)
     if kwargs:
         raise TypeError(
@@ -224,26 +224,25 @@ def hline(label=None, **kwargs):
             % next(kwargs.iterkeys())
         )
 
-    rows, cols = terminal_size()
-    if not cols:
-        cols = max_width
-    else:
-        cols -= 2
-    cols = min(max_width, cols)
-
-    label = str(label)
-    prefix = char * 2 + " "
-    suffix = " " + (cols - len(prefix) - clen(label)) * char
+    _, cols = terminal_size()
+    if max_width < 0:
+        max_width = cols
+    cols = min(max_width, cols - 2)
 
     out = StringIO()
-    out.write(prefix)
-    out.write(label)
-    out.write(suffix)
-
+    if label is None:
+        out.write(char * max_width)
+    else:
+        label = str(label)
+        prefix = char * 2 + " "
+        suffix = " " + (cols - len(prefix) - clen(label)) * char
+        out.write(prefix)
+        out.write(label)
+        out.write(suffix)
     builtin_print(out.getvalue())
 
 
-def section(label, width=None, char="=", stream=None):
+def section(label, width=None, char="—", stream=None):
     if width is None:
         _, width = terminal_size()
     repl = "." * clen(label)

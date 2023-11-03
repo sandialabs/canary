@@ -1,3 +1,5 @@
+.. _directive-keywords:
+
 keywords
 ========
 

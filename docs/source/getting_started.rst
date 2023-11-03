@@ -1,7 +1,7 @@
 Getting started
 ===============
 
-``nvtest`` provides a framework for writing and running tests.  A test is an executable script with extension ``.pyt`` or ``.vvt`` and are most often used to test finite element and other scientific applications.  Tests are considered to have ``passed`` if the script's exit code is 0, ``diffed`` if the exit code is 64, or ``failed`` otherwise.  ``.pyt`` scripts are written in python while ``.vvt`` scripts can be any executable recognized by the system, though scripts written is Python can take advantage of the full ``nvtest`` ecosystem.
+``nvtest`` is a framework for writing and running tests.  A test is an executable script with extension ``.pyt`` or ``.vvt`` and are most often used to test finite element and other scientific applications.  Tests are considered to have ``passed`` if the script's exit code is 0, ``diffed`` if the exit code is 64, or ``failed`` otherwise.  ``.pyt`` scripts are written in python while ``.vvt`` scripts can be any executable recognized by the system, though scripts written is Python can take advantage of the full ``nvtest`` ecosystem.
 
 A first test
 ------------
