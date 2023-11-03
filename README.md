@@ -16,4 +16,4 @@ pip install -e .
 
 ## Documentation
 
-[](./docs/source/index.rst)
+./docs/source/index.rst
