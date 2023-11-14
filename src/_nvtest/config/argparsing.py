@@ -62,8 +62,6 @@ class Parser(argparse.ArgumentParser):
         super().__init__(*args, **kwargs)
         self.register("type", None, identity)
         self.__subcommand_modules: dict[str, ModuleType] = {}
-        if self._action_groups[0].title == "positional arguments":
-            self._action_groups[0].title = "nvtest subcommands"
         self.argv: Sequence[str] = sys.argv[1:]
 
     def convert_arg_line_to_args(self, arg_line: str) -> list[str]:

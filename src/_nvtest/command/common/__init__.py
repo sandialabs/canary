@@ -9,7 +9,8 @@ default_timeout = 60 * 60
 
 
 def add_timing_arguments(parser: "Parser") -> None:
-    parser.add_argument(
+    group = parser.add_argument_group("timing")
+    group.add_argument(
         "--timeout",
         type=time_in_seconds,
         default=default_timeout,
@@ -19,7 +20,8 @@ def add_timing_arguments(parser: "Parser") -> None:
 
 
 def add_mark_arguments(parser: "Parser") -> None:
-    parser.add_argument(
+    group = parser.add_argument_group("filtering")
+    group.add_argument(
         "-k",
         dest="keyword_expr",
         default="",
@@ -27,7 +29,7 @@ def add_mark_arguments(parser: "Parser") -> None:
         help="Only run tests matching given keyword expression. "
         "For example: -k 'key1 and not key2'.",
     )
-    parser.add_argument(
+    group.add_argument(
         "-o",
         dest="on_options",
         default=[],
@@ -35,7 +37,7 @@ def add_mark_arguments(parser: "Parser") -> None:
         action="append",
         help="Turn option(s) on, such as '-o dbg' or '-o intel'",
     )
-    parser.add_argument(
+    group.add_argument(
         "-p",
         dest="parameter_expr",
         metavar="P",

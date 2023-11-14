@@ -84,9 +84,7 @@ def setup_parser(parser: "Parser"):
         help="Do not link resources to the test "
         "directory, only copy [default: %(default)s]",
     )
-    group = parser.add_argument_group(
-        "Batching", description="Run tests in batches through a scheduler"
-    )
+    group = parser.add_argument_group("batching")
     group.add_argument("^s", dest="session_no", type=int, help=argparse.SUPPRESS)
     group.add_argument("^b", dest="batch_no", type=int, help=argparse.SUPPRESS)
     p1 = group.add_mutually_exclusive_group()
