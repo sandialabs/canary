@@ -32,7 +32,6 @@ from .test.partition import partition_n
 from .test.partition import partition_t
 from .test.testcase import TestCase
 from .util import tty
-from .util.tty.color import colorize
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
@@ -85,7 +84,7 @@ class Session:
     rel_workdir: str
     exitstatus: int
     config: Config
-    cpu_count: int
+    max_cores_per_test: int
     max_workers: int
     search_paths: dict[str, list[str]]
     batch_config: BatchConfig
@@ -111,7 +110,7 @@ class Session:
         workdir: str,
         search_paths: dict[str, list[str]],
         config: Optional[Config] = None,
-        cpu_count: Optional[int] = None,
+        max_cores_per_test: Optional[int] = None,
         max_workers: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
@@ -126,7 +125,7 @@ class Session:
         self.rel_workdir = os.path.relpath(os.path.abspath(workdir), self.startdir)
         self.exitstatus = -1
         self.config = config or Config()
-        self.cpu_count = cpu_count or self.config.machine.cpu_count
+        self.max_cores_per_test = max_cores_per_test or self.config.machine.cpu_count
         self.max_workers = max_workers or 5
         self.search_paths = search_paths
         self.batch_config = batch_config or Session.BatchConfig()
@@ -141,7 +140,7 @@ class Session:
 
         tty.debug(
             "Freezing test files with the following options: ",
-            f"{cpu_count=}",
+            f"{max_cores_per_test=}",
             f"{on_options=}",
             f"{keyword_expr=}",
             f"{parameter_expr=}",
@@ -149,7 +148,7 @@ class Session:
 
         self.cases = Finder.freeze(
             tree,
-            cpu_count=self.cpu_count,
+            cpu_count=self.max_cores_per_test,
             on_options=on_options,
             keyword_expr=keyword_expr,
             parameter_expr=parameter_expr,
@@ -185,7 +184,7 @@ class Session:
             work_items = cases_to_run
 
         self.queue = q_factory(
-            work_items, workers=self.max_workers, cpu_count=self.cpu_count
+            work_items, workers=self.max_workers, cpu_count=self.max_cores_per_test
         )
 
         if batch_config:
@@ -207,7 +206,7 @@ class Session:
             self.config.dump(fh)
         self.create_index(
             self.cases,
-            cpu_count=self.cpu_count,
+            max_cores_per_test=self.max_cores_per_test,
             keyword_expr=keyword_expr,
             on_options=on_options,
             parameter_expr=parameter_expr,
@@ -282,7 +281,7 @@ class Session:
                 case.skip = Skip("case is not in batch")
         cases = self.cases_to_run()
         self.queue = q_factory(
-            cases, workers=self.max_workers, cpu_count=self.cpu_count
+            cases, workers=self.max_workers, cpu_count=self.max_cores_per_test
         )
         return self
 
@@ -347,10 +346,10 @@ class Session:
 
     def filter(
         self,
-        cpu_count: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
         start: Optional[str] = None,
+        max_cores_per_test: Optional[int] = None,
     ) -> None:
         if not self.cases:
             raise ValueError("This test session has not been setup")
@@ -365,7 +364,7 @@ class Session:
                 case.skip = Skip(skip_reason)
                 if not case.exec_dir.startswith(start):
                     continue
-                if cpu_count and case.size > cpu_count:
+                if max_cores_per_test and case.size > max_cores_per_test:
                     continue
                 if parameter_expr:
                     param_skip = deselect_by_parameter(case.parameters, parameter_expr)
@@ -387,7 +386,7 @@ class Session:
             start=start,
         )
         self.queue = q_factory(
-            cases, workers=self.max_workers, cpu_count=self.cpu_count
+            cases, workers=self.max_workers, cpu_count=max_cores_per_test
         )
 
     def run(

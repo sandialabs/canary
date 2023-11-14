@@ -63,13 +63,24 @@ def setup_parser(parser: "Parser"):
         choices=("setup", "run", "postrun"),
         help="Stage to stop after when testing [default: %(default)s]",
     )
-    parser.add_argument(
+    group = parser.add_argument_group("resource control")
+    group.add_argument(
+        "-N",
+        "--max-cores-per-test",
+        type=int,
+        metavar="N",
+        default=None,
+        help="Skip tests requiring more than N cores.  For direct runs, N is set to "
+        "the number of available cores",
+    )
+    group.add_argument(
         "-n",
         "--max-workers",
         type=int,
+        metavar="N",
         default=None,
         help="Execute tests/batches asynchronously using a pool of at most "
-        "MAX_WORKERS.  For batched runs, the default is 5.  For direct runs, the "
+        "N workers.  For batched runs, the default is 5.  For direct runs, the "
         "max_workers is determined automatically",
     )
     parser.add_argument(
@@ -426,6 +437,7 @@ def setup_session(config: "Config", args: "argparse.Namespace") -> Session:
             workdir=args.workdir or Session.default_workdir,
             search_paths=args.paths,
             config=config,
+            max_cores_per_test=args.max_cores_per_test,
             max_workers=args.max_workers,
             keyword_expr=args.keyword_expr,
             on_options=args.on_options,
@@ -449,6 +461,7 @@ def setup_session(config: "Config", args: "argparse.Namespace") -> Session:
             keyword_expr=args.keyword_expr,
             start=args.start,
             parameter_expr=args.parameter_expr,
+            max_cores_per_test=args.max_cores_per_test,
         )
     session.exitstatus = ExitCode.OK
     return session
