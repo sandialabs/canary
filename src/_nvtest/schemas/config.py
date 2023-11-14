@@ -8,8 +8,17 @@ def list_of_str(arg: Any) -> bool:
     return isinstance(arg, list) and all([isinstance(_, str) for _ in arg])
 
 
-def tree_struct(arg: Any) -> bool:
-    return isinstance(arg, dict) and all([list_of_str(v) for _, v in arg.items()])
+def vardict(arg: Any) -> bool:
+    if arg is None:
+        return True
+    if not isinstance(arg, dict):
+        return False
+    for (key, value) in arg.items():
+        if not isinstance(key, str):
+            return False
+        if not isinstance(value, str):
+            return False
+    return True
 
 
 config_schema = Schema(
@@ -17,7 +26,7 @@ config_schema = Schema(
         "nvtest": {
             Optional("debug"): bool,
             Optional("log_level"): int,
-            Optional("variables"): {str: str},
+            Optional("variables"): vardict,
             Optional("config"): {
                 Optional("debug"): bool,
                 Optional("log_level"): int,

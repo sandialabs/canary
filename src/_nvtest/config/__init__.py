@@ -119,6 +119,8 @@ class Config:
         self.config.user_cfg_file = config_file
         cfg = self.loadcfg(config_file)
         for (section, section_data) in cfg.items():
+            if not section_data:
+                continue
             if section == "variables":
                 for key, val in section_data.items():
                     val = Template(val).safe_substitute(os.environ)

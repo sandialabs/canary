@@ -406,8 +406,8 @@ def read_paths(file: str, paths: dict[str, list[str]]) -> None:
     with open(file, "r") as fh:
         data = yaml.safe_load(fh)
     testpaths_schema.validate(data)
-    for root, _paths in data["testpaths"].items():
-        paths.setdefault(root, []).extend(_paths)
+    for p in data["testpaths"]:
+        paths.setdefault(p["root"], []).extend(p["paths"])
 
 
 def setup_session(config: "Config", args: "argparse.Namespace") -> Session:
