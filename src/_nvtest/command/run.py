@@ -244,6 +244,8 @@ def parse_user_paths(args: argparse.Namespace) -> None:
     mode = start = None
     paths: dict[str, list[str]] = {}
     if args.batch_no:
+        # if a specific batch number is given, then nvtest is being called
+        # recursively and the positional argument is the work directory
         assert len(args.path_args) == 1
         if args.session_no is None:
             raise ValueError(f"^b{args.batch_no} requires ^sSESSION_ID")
@@ -271,7 +273,7 @@ def parse_user_paths(args: argparse.Namespace) -> None:
                     if len(f) == 1:
                         args.keyword_expr = os.path.splitext(os.path.basename(f[0]))[0]
                         break
-        elif path.endswith((".yaml", ".yml")):
+        elif path.endswith((".yaml", ".yml", ".json")):
             mode = "w"
             read_paths(path, paths)
         elif os.path.isfile(path) and path.endswith((".vvt", ".pyt")):
