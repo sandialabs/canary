@@ -1,7 +1,7 @@
 Configuration settings
 ======================
 
-Additional configuration is not required.  To see the current configuration, issue
+Additional configuration is not required to run ``nvtest``.  To see the current configuration, issue
 
 .. code-block:: console
 
@@ -21,17 +21,18 @@ You can explicitly set configuration variables in:
 The first found is used.  Basic configuration settings are:
 
 .. code-block:: ini
-[config]
-debug = false
-log_level = int
 
-[variables]
-key = "value"  # environment variables to set for the test session
+   [config]
+   debug = false
+   log_level = int
 
-[machine]
-sockets_per_node = 1
-cores_per_socket = N  # default computed from os.cpu_count()
-cpu_count = N  # default computed from os.cpu_count()
+   [variables]
+   key = "value"  # environment variables to set for the test session
+
+   [machine]
+   sockets_per_node = 1
+   cores_per_socket = N  # default computed from os.cpu_count()
+   cpu_count = N  # default computed from os.cpu_count()
 
 Setting configuration variables on the command line
 ---------------------------------------------------
