@@ -17,6 +17,7 @@ from ..schemas import testpaths_schema
 from ..session import ExitCode
 from ..session import Session
 from ..test.enums import Result
+from ..test.enums import Skip
 from ..test.testcase import TestCase
 from ..util import tty
 from ..util.filesystem import force_remove
@@ -309,6 +310,7 @@ def print_front_matter(config: "Config", args: "argparse.Namespace"):
 def print_testcase_overview(
     cases: list[TestCase], duration: Optional[float] = None
 ) -> None:
+    cases = [case for case in cases if case.skip.reason != Skip.UNREACHABLE]
     files = {case.file for case in cases}
     t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
     if duration is not None:
@@ -382,14 +384,14 @@ def print_testcase_results(
             reason = ". ".join(_ for _ in reasons if _.split())
             tty.print("%s %s: %s" % (case.result.cname, str(case), reason))
             nreported += 1
-        if Result.NOTDONE in totals:
-            for case in totals[Result.NOTDONE]:
-                tty.print("%s %s" % (case.result.cname, str(case)))
-        if Result.SKIP in totals:
-            for case in totals[Result.SKIP]:
-                cname = case.result.cname
-                reason = case.skip.reason
-                tty.print("%s %s: Skipped due to %s" % (cname, str(case), reason))
+    if Result.NOTDONE in totals:
+        for case in totals[Result.NOTDONE]:
+            tty.print("%s %s" % (case.result.cname, str(case)))
+    if Result.SKIP in totals:
+        for case in totals[Result.SKIP]:
+            cname = case.result.cname
+            reason = case.skip.reason
+            tty.print("%s %s: Skipped due to %s" % (cname, str(case), reason))
 
     summary_parts = []
     for member in Result.members:

@@ -99,6 +99,8 @@ def deselect_by_platform(platform_expr: str) -> Union[None, bool]:
     platforms = {sys.platform, sys.platform.lower()}
     if "SNLSYSTEM" in os.environ:
         platforms.add(os.environ["SNLSYSTEM"])
+    if "NVTEST_PLATFORM" in os.environ:
+        platforms.add(os.environ["NVTEST_PLATFORM"])
     return not expr.evaluate(PlatformMatcher(platforms))
 
 

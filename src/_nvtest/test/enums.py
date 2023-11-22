@@ -9,6 +9,8 @@ from ..util.tty.color import colorize
 
 
 class Skip:
+    UNREACHABLE = "==UNREACHABLE=="
+
     def __init__(self, reason: Optional[str] = None) -> None:
         self._reason = reason
 

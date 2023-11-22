@@ -125,6 +125,7 @@ class Config:
                 for key, val in section_data.items():
                     val = Template(val).safe_substitute(os.environ)
                     self.variables[str(key)] = str(val)
+                    os.environ[str(key)] = str(val)
             elif section == "config":
                 for key, val in section_data.items():
                     setattr(self.config, key, val)
@@ -143,6 +144,7 @@ class Config:
         tty.set_debug(args.debug)
         for (var, val) in args.env_mods.items():
             self.variables[var] = val
+            os.environ[var] = val
         for path in args.config_mods:
             self.set(path)
 
@@ -166,6 +168,7 @@ class Config:
     def restore(self, **kwds):
         for var, val in kwds.get("variables", {}).items():
             self.variables[var] = val
+            os.environ[var] = val
         for key, val in kwds.get("config", {}).items():
             setattr(self.config, key, val)
         for var, val in kwds.get("machine", {}).items():

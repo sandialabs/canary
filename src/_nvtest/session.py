@@ -359,7 +359,10 @@ class Session:
             start = os.path.join(self.workdir, start)
         start = os.path.normpath(start)
         for case in self.cases:
-            if case.result not in (Result.NOTDONE, Result.NOTRUN, Result.SETUP):
+            if not case.exec_dir.startswith(start):
+                case.skip = Skip(Skip.UNREACHABLE)
+                continue
+            elif case.result not in (Result.NOTDONE, Result.NOTRUN, Result.SETUP):
                 skip_reason = f"previous test result: {case.result.cname}"
                 case.skip = Skip(skip_reason)
                 if not case.exec_dir.startswith(start):
