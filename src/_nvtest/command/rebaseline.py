@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from ..config import Config
 from ..session import Session
+from ..test.enums import Result
 from ..util.filesystem import copyfile
 
 if TYPE_CHECKING:
@@ -21,7 +22,11 @@ def rebaseline(config: "Config", args: "argparse.Namespace") -> int:
     start = os.path.abspath(args.path)
     workdir = Session.find_workdir(start)
     session = Session.load(workdir=workdir, config=config)
-    cases = [c for c in session.cases if c.exec_dir.startswith(start)]
+    cases = [
+        c
+        for c in session.cases
+        if c.result != Result.NOTRUN and c.exec_dir.startswith(start)
+    ]
     for case in cases:
         if not case.baseline:
             continue

@@ -359,10 +359,10 @@ class Session:
             start = os.path.join(self.workdir, start)
         start = os.path.normpath(start)
         for case in self.cases:
-            if not case.exec_dir.startswith(start):
+            if case.result != Result.NOTRUN and not case.exec_dir.startswith(start):
                 case.skip = Skip(Skip.UNREACHABLE)
                 continue
-            elif case.result not in (Result.NOTDONE, Result.NOTRUN, Result.SETUP):
+            if case.result not in (Result.NOTDONE, Result.NOTRUN, Result.SETUP):
                 skip_reason = f"previous test result: {case.result.cname}"
                 case.skip = Skip(skip_reason)
                 if not case.exec_dir.startswith(start):
@@ -382,6 +382,8 @@ class Session:
                         case.skip = Skip()
                         case.result = Result("notrun")
         cases = self.cases_to_run()
+        if not cases:
+            tty.die("No test cases to run")
         self.save_active_case_data(
             cases,
             keyword_expr=keyword_expr,
