@@ -45,10 +45,11 @@ def status(config: "Config", args: "argparse.Namespace") -> int:
     if not cases:
         tty.info("Nothing to report")
         return 0
+    tty.print(f"\nTest execution directory: {start}\n")
+    print_status(cases)
     if args.durations is not None:
         print_durations(cases, int(args.durations))
-
-    print_status(cases)
+    tty.print()
     return 0
 
 
@@ -56,11 +57,10 @@ def cformat(case: TestCase) -> str:
     f = case.exec_dir
     if f.startswith(os.getcwd()):
         f = os.path.relpath(f)
-    return "%s %s: %s" % (case.result.cname, str(case), f)
+    return "  %s %s: %s" % (case.result.cname, str(case), f)
 
 
 def print_status(cases: list[TestCase]) -> None:
-    tty.print("Test status", centered=True)
     totals: dict[str, list[TestCase]] = {}
     for case in cases:
         totals.setdefault(case.result.name, []).append(case)
@@ -94,6 +94,6 @@ def print_durations(cases: list[TestCase], N: int) -> None:
     sorted_cases = sorted(cases, key=lambda x: x.duration)
     if N > 0:
         sorted_cases = sorted_cases[-N:]
-    tty.print(f"Slowest {len(sorted_cases)} durations", centered=True)
+    tty.print(f"\nSlowest {len(sorted_cases)} durations\n")
     for case in sorted_cases:
-        tty.print("%6.2f     %s" % (case.duration, str(case)))
+        tty.print("  %6.2f     %s" % (case.duration, str(case)))

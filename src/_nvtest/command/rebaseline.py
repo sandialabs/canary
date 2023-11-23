@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from ..config import Config
 from ..session import Session
 from ..test.enums import Result
+from ..util import tty
 from ..util.filesystem import copyfile
 
 if TYPE_CHECKING:
@@ -34,5 +35,6 @@ def rebaseline(config: "Config", args: "argparse.Namespace") -> int:
             src = os.path.join(case.exec_dir, a)
             dst = os.path.join(case.file_dir, b)
             if os.path.exists(src):
+                tty.info(f"Replacing {b} with {a}")
                 copyfile(src, dst)
     return 0
