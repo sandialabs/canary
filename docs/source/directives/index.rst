@@ -1,3 +1,5 @@
+.. _test-directives:
+
 Test Directives
 ===============
 

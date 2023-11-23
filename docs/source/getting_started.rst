@@ -1,20 +1,25 @@
 Getting started
 ===============
 
-``nvtest`` is a framework for writing and running tests and is developed to test finite element and other scientific applications.  A test is an executable script with extension ``.pyt`` or ``.vvt``.  ``nvtest``'s methodology is simple: given a path on the filesystem, recursively search it for test files having ``.pyt`` or ``.vvt`` extensions and execute them.  If the exit code from executed test file is ``0``, the test is considered to have ``passed``, it is considered to have ``diffed`` if the exit code is 64, or ``failed`` otherwise.  ``.pyt`` scripts are written in python while ``.vvt`` scripts can be any executable recognized by the system, though scripts written in Python can take advantage of the full ``nvtest`` ecosystem.
+Install nvtest
+--------------
 
+``nvtest`` requires Python 3.9+
 
-``nvtest`` has several subcommands.  To get the list of subcommands, issue
+1. Clone and install via ``pip``
 
-.. code-block:: console
+   .. code-block:: console
 
-   nvtest -h
+      git clone git@cee-gitlab.gov:tfuller/nvtest
+      cd nvtest
+      pip install .
 
-To get help on an individual subcommand, issue
+2. Check the installation
 
-.. code-block:: console
+  .. code-block:: console
 
-   nvtest SUBCOMMAND -h
+     $ nvtest --version
+     nvtest 0.1
 
 
 A first test
@@ -57,29 +62,51 @@ To execute it:
    FINISHED: test_1 PASS
    ================================== 1 pass in 0.14s. =================================
 
-
 A second test
 -------------
 
-In this second test, the external program "``my-app``" is executed and output verified for correctness.
+In this second, somewhat contrived, test, the external program "``my-add``" adds two numbers and writes the result to the console's stdout.  The test executes the script, reads it output, and verifies correctness.
 
 .. code:: python
 
-   # contents of test_2.pyt
+   #!/usr/bin/env python3
+   # contents of my-add
+   import argparse
+   import sys
+
+   def add(a: int, b: int) -> int:
+       return a + b
+
+   def main():
+       p = argparse.ArgumentParser(description="Add two numbers a and b")
+       p.add_argument("a", type=int)
+       p.add_argument("b", type=int)
+       args = p.parse_args()
+       print(add(args.a, args.b))
+       return 0
+
+
+   if __name__ == "__main__":
+       sys.exit(main())
+
+
+.. code:: python
+
+   # contents of test_my_add.pyt
    import sys
    import nvtest
 
-
    def test() -> int:
-       exe = nvtest.Executable("./my-app")
-       exe()
+       my_add = nvtest.Executable("./my-add")
+       out = my_add("3", "2", output=str)
        assert exe.returncode == 0
+       assert int(out.strip()) == 5
        return 0
 
    if __name__ == "__main__":
        sys.exit(test())
 
-To execute it:
+To execute it, navigate to the folder containing the script and test file and execute:
 
 .. code:: console
 
@@ -94,6 +121,21 @@ To execute it:
    running 1 test cases from 1 files
    skipping 0 test cases
    =============================== Beginning test session ==============================
-   STARTING: test_2
-   FINISHED: test_2 PASS
+   STARTING: test_my_add
+   FINISHED: test_my_add PASS
    ================================== 1 pass in 0.14s. =================================
+
+Getting help
+------------
+
+``nvtest`` has several subcommands.  To get the list of subcommands, issue
+
+.. code-block:: console
+
+   nvtest -h
+
+To get help on an individual subcommand, issue
+
+.. code-block:: console
+
+   nvtest SUBCOMMAND -h

@@ -6,3 +6,4 @@ Reference guides
 
    discovery
    results_directory
+   status
