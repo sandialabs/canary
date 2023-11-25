@@ -45,7 +45,7 @@ def status(config: "Config", args: "argparse.Namespace") -> int:
     if not cases:
         tty.info("Nothing to report")
         return 0
-    tty.print(f"\nTest execution directory: {start}\n")
+    tty.print(f"\nTest execution directory: {session.workdir}\n")
     print_status(cases)
     if args.durations is not None:
         print_durations(cases, int(args.durations))
@@ -56,7 +56,7 @@ def status(config: "Config", args: "argparse.Namespace") -> int:
 def cformat(case: TestCase) -> str:
     f = case.exec_dir
     if f.startswith(os.getcwd()):
-        f = os.path.relpath(f)
+        f = f"./{os.path.relpath(f)}"
     return "  %s %s: %s" % (case.result.cname, str(case), f)
 
 

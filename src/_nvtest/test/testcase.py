@@ -74,7 +74,7 @@ class TestCase:
         if self.parameters:
             keys = sorted(self.parameters.keys())
             s_vals = [stringify(self.parameters[k]) for k in keys]
-            s_params = [f"{k}={fmt(s_vals[i])}" for (i, k) in enumerate(keys)]
+            s_params = [f"{k}={s_vals[i]}" for (i, k) in enumerate(keys)]
             self.name = f"{self.name}.{'.'.join(s_params)}"
             self.display_name = f"{self.display_name}[{','.join(s_params)}]"
         self.fullname = os.path.join(os.path.dirname(self.file_path), self.name)

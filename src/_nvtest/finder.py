@@ -16,7 +16,7 @@ class Finder:
     def __init__(self) -> None:
         self.roots: dict[str, Optional[list[str]]] = {}
         self._ready = False
-        self.tree: dict[str, list[AbstractTestFile]] = {}
+        self.tree: dict[str, set[AbstractTestFile]] = {}
 
     def prepare(self):
         self._ready = True
@@ -34,8 +34,42 @@ class Finder:
                 raise ValueError(f"{path} not found in {root}")
             self.roots[root].append(path)  # type: ignore
 
-    def populate(self) -> dict[str, list[AbstractTestFile]]:
+    def populate(self) -> dict[str, set[AbstractTestFile]]:
+        if len(self.tree):
+            raise ValueError("populate() should be called one time")
+        if not self._ready:
+            raise ValueError("Cannot call populate() before calling prepare()")
+        for (root, paths) in self.roots.items():
+            tty.verbose(f"Searching {root} for test files")
+            if os.path.isfile(root):
+                f = AbstractTestFile(root)
+                root = f.root
+                testfiles = self.tree.setdefault(root, set())
+                testfiles.add(f)
+            elif paths is not None:
+                testfiles = self.tree.setdefault(root, set())
+                for path in paths:
+                    p = os.path.join(root, path)
+                    if os.path.isfile(p):
+                        testfiles.add(AbstractTestFile(root, path))
+                    elif os.path.isdir(p):
+                        testfiles.update(self.rfind(root, subdir=path))
+                    else:
+                        raise FileNotFoundError(path)
+            else:
+                testfiles = self.tree.setdefault(root, set())
+                testfiles.update(self.rfind(root))
+            tty.verbose(f"Found {len(testfiles)} test files in {root}")
+        n = sum([len(_) for _ in self.tree.values()])
+        nr = len(self.tree)
+        tty.verbose(f"Found {n} test files in {nr} search roots")
+
+        return self.tree
+
+    def rfind(self, root, subdir=None):
         from .session import Session
+
+        testfiles: list[AbstractTestFile] = []
 
         def skip_dir(dirname):
             if os.path.basename(dirname) in self.skip_dirs:
@@ -46,39 +80,18 @@ class Finder:
                 return True
             return False
 
-        if len(self.tree):
-            raise ValueError("populate() should be called one time")
-        if not self._ready:
-            raise ValueError("Cannot call populate() before calling prepare()")
-        for (root, paths) in self.roots.items():
-            tty.verbose(f"Searching {root} for test files")
-            if os.path.isfile(root):
-                f = AbstractTestFile(root)
-                root = f.root
-                testfiles = self.tree.setdefault(root, [])
-                testfiles.append(f)
-            elif paths is not None:
-                testfiles = self.tree.setdefault(root, [])
-                for path in paths:
-                    testfiles.append(AbstractTestFile(root, path))
-            else:
-                testfiles = self.tree.setdefault(root, [])
-                for (dirname, dirs, files) in os.walk(root):
-                    if skip_dir(dirname):
-                        del dirs[:]
-                        continue
-                    paths = [
-                        os.path.relpath(os.path.join(dirname, f), root)
-                        for f in files
-                        if f.endswith(self.exts)
-                    ]
-                    testfiles.extend([AbstractTestFile(root, path) for path in paths])
-            tty.verbose(f"Found {len(testfiles)} test files in {root}")
-        n = sum([len(_) for _ in self.tree.values()])
-        nr = len(self.tree)
-        tty.verbose(f"Found {n} test files in {nr} search roots")
-
-        return self.tree
+        start = root if subdir is None else os.path.join(root, subdir)
+        for (dirname, dirs, files) in os.walk(start):
+            if skip_dir(dirname):
+                del dirs[:]
+                continue
+            paths = [
+                os.path.relpath(os.path.join(dirname, f), root)
+                for f in files
+                if f.endswith(self.exts)
+            ]
+            testfiles.extend([AbstractTestFile(root, path) for path in paths])
+        return testfiles
 
     @property
     def search_paths(self) -> list[str]:
@@ -134,7 +147,7 @@ class Finder:
 
     @staticmethod
     def freeze(
-        tree: dict[str, list[AbstractTestFile]],
+        tree: dict[str, set[AbstractTestFile]],
         cpu_count: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,

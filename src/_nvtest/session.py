@@ -334,7 +334,7 @@ class Session:
 
     def populate(
         self, treeish: dict[str, list[str]]
-    ) -> dict[str, list[AbstractTestFile]]:
+    ) -> dict[str, set[AbstractTestFile]]:
         assert self.mode == "w"
         tty.debug("Populating test session")
         finder = Finder()
