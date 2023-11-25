@@ -405,7 +405,7 @@ class Session:
         if not self.queue:
             raise ValueError("This session's queue was not set up")
         if not self.queue.cases:
-            raise ValueError("There are not cases to run in this session")
+            raise ValueError("There are no cases to run in this session")
         self.runner = r_factory(
             runner or "direct",
             self,
@@ -419,7 +419,7 @@ class Session:
                     self.process_testcases(timeout, fail_fast)
         finally:
             self.returncode = compute_returncode(self.queue.cases)
-        return compute_returncode(self.queue.cases)
+        return self.returncode
 
     def teardown(self):
         with self.rc_environ():
