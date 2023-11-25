@@ -212,25 +212,13 @@ def run(config: "Config", args: "argparse.Namespace") -> int:
     except KeyboardInterrupt:
         session.exitstatus = ExitCode.INTERRUPTED
     except StopExecution as e:
-        if e.exit_code == ExitCode.OK:
-            tty.info(e.message)
-        else:
-            tty.error(e.message)
         session.exitstatus = e.exit_code
-    except TimeoutError as e:
-        tty.error(e.args[0])
+    except TimeoutError:
         session.exitstatus = ExitCode.TIMEOUT
     except SystemExit as ex:
         session.exitstatus = ex.code
-    except BaseException as ex:
+    except BaseException:
         session.exitstatus = ExitCode.INTERNAL_ERROR
-        error_msg = ", ".join(str(_) for _ in ex.args)
-        tty.error(error_msg)
-        reraise = False
-        if config.debug:
-            reraise = True
-        if reraise:
-            raise
     finally:
         if initstate >= 2:
             session.teardown()

@@ -24,8 +24,10 @@ from .enums import Skip
 
 
 def stringify(arg: Any) -> str:
-    if isinstance(arg, float) and arg > 1e5:
-        return f"{arg:e}"
+    if isinstance(arg, float):
+        return f"{arg:g}"
+    elif isinstance(arg, int):
+        return f"{arg:d}"
     return str(arg)
 
 
@@ -72,7 +74,7 @@ class TestCase:
         if self.parameters:
             keys = sorted(self.parameters.keys())
             s_vals = [stringify(self.parameters[k]) for k in keys]
-            s_params = [f"{k}={s_vals[i]}" for (i, k) in enumerate(keys)]
+            s_params = [f"{k}={fmt(s_vals[i])}" for (i, k) in enumerate(keys)]
             self.name = f"{self.name}.{'.'.join(s_params)}"
             self.display_name = f"{self.display_name}[{','.join(s_params)}]"
         self.fullname = os.path.join(os.path.dirname(self.file_path), self.name)
@@ -149,9 +151,13 @@ class TestCase:
 
     @property
     def exec_dir(self) -> str:
-        if not self.exec_root:
-            raise ValueError("exec_root must be set during set up")
-        return os.path.normpath(os.path.join(self.exec_root, self.exec_path))
+        exec_root = self.exec_root
+        if not exec_root:
+            if "NVTEST_EXEC_DIR" in os.environ:
+                exec_root = os.environ["NVTEST_EXEC_DIR"]
+            else:
+                raise ValueError("exec_root must be set during set up") from None
+        return os.path.normpath(os.path.join(exec_root, self.exec_path))
 
     @property
     def ready(self) -> bool:

@@ -9,3 +9,4 @@ How-to guides
    status
    filter
    parameterizing
+   execute-and-analyze

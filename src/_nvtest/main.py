@@ -1,7 +1,9 @@
 import argparse
 import os
 import pstats
+import signal
 import sys
+import traceback
 from types import FunctionType
 from typing import Optional
 
@@ -10,7 +12,11 @@ from .command import add_commands
 from .config import Config
 from .config.argparsing import make_argument_parser
 from .config.argparsing import stat_names
+from .error import StopExecution
+from .session import ExitCode
 from .util import tty
+
+DEBUG = os.getenv("NVTEST_DEBUG", "").lower() in ("1", "on", "true", "yes")
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -37,8 +43,10 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 
 def invoke_command(command: FunctionType, args: argparse.Namespace) -> int:
+    global DEBUG
     config = Config()
     config.set_main_options(args)
+    DEBUG = config.debug
     return command(config, args)
 
 
@@ -98,3 +106,29 @@ def console_main() -> int:
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
         return 1  # Python exits with error code 1 on EPIPE
+    except StopExecution as e:
+        if e.exit_code == ExitCode.OK:
+            tty.info(e.message)
+        else:
+            tty.error(e.message)
+        return 1
+    except TimeoutError as e:
+        if DEBUG:
+            raise
+        tty.error(e.args[0])
+        return 4
+    except KeyboardInterrupt:
+        if DEBUG:
+            raise
+        sys.stderr.write("\n")
+        tty.error("Keyboard interrupt.")
+        return signal.SIGINT.value
+    except SystemExit as e:
+        if DEBUG:
+            traceback.print_exc()
+        return e.code
+    except Exception as e:
+        if DEBUG:
+            raise
+        tty.error(e)
+        return 3

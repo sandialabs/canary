@@ -129,6 +129,7 @@ class Session:
         self.max_workers = max_workers or 5
         self.search_paths = search_paths
         self.batch_config = batch_config or Session.BatchConfig()
+        os.environ["NVTEST_EXEC_DIR"] = self.workdir
 
         tty.debug(f"Creating new nvtest session in {self.rel_workdir}")
 

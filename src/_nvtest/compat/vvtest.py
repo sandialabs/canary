@@ -275,6 +275,7 @@ def f_parameterize(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
                     row.append(json.loads(item))
                 except json.JSONDecodeError:
                     row.append(item)
+                # row[-1].raw = item
         values.append(row)
     if not all(len(values[0]) == len(_) for _ in values[1:]):
         raise ValueError(f"{file.file}: invalid parameterize command at {arg.line!r}")

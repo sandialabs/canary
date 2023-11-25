@@ -3,7 +3,9 @@
 How to parameterize tests
 =========================
 
-A single test script can generate many test instances, each having different parameters, using the :ref:`parameterize <directive-parameterize>` directive.  The test script uses the parameter name[s] and value[s] to run variations of the test.  For example, the test script
+A single test file can generate many test cases, each having different parameters, using the :ref:`parameterize <directive-parameterize>` directive.  The test file uses the parameter name[s] and value[s] to run variations of the test.  For example, the test script
+
+``.pyt``:
 
 .. code-block:: python
 
@@ -11,18 +13,31 @@ A single test script can generate many test instances, each having different par
    import sys
    import nvtest
 
-   nvtest.mark.parameterize("MODEL", (1, 2))
-
+   nvtest.mark.parameterize("a", (1, 4))
 
    def test():
       self = nvtest.test.instance
-      print(f"{self.parameters.MODEL}")
-
+      print(f"{self.parameters.a}")
 
    if __name__ == "__main__":
       sys.exit(test())
 
-will produce two test instances, one with ``[MODEL=1]`` and another with ``[MODEL=2]``, each executed in their own test directory:
+``.vvt``:
+
+.. code-block:: python
+
+   # test.pyt
+   #VVT: parameterize : a = 1 4
+   import sys
+   import vvtest_util as vvt
+
+   def test():
+      print(f"{vvt.a}")
+
+   if __name__ == "__main__":
+      sys.exit(test())
+
+will produce two test cases, one with ``a=1`` and another with ``a=4``, each executed in their own test directory:
 
 .. code-block:: console
 
@@ -31,32 +46,15 @@ will produce two test instances, one with ``[MODEL=1]`` and another with ``[MODE
    File: .../test.pyt
    Keywords:
    2 test cases:
-   ├── test[MODEL=1]
-   └── test[MODEL=2]
-
-This same script, implemented as a ``.vvt`` test type looks like:
-
-.. code-block:: python
-
-   # test.vvt
-   import sys
-   import vvtest_util as vvt
-
-   # VVT: parameterize : MODEL = 1,2
-
-   def test():
-      print(f"{vvt.MODEL}")
-
-
-   if __name__ == "__main__":
-      sys.exit(test())
+   ├── test[a=1]
+   └── test[a=4]
 
 Multiple parameter names and their values can be defined:
 
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.parameterize("MODEL,YIELD", [(1, 1.e5), (2, 1.e6), (3, 1.e7)])
+   nvtest.mark.parameterize("a,b", [(1, 1.e5), (4, 1.e6), (16, 1.e7)])
 
 which would result in the following three tests
 
@@ -67,9 +65,9 @@ which would result in the following three tests
    File: .../test.pyt
    Keywords:
    3 test cases:
-   ├── test[MODEL=1,YIELD=100000.0]
-   ├── test[MODEL=2,YIELD=1.000000e+06]
-   └── test[MODEL=3,YIELD=1.000000e+07]
+   ├── test[a=1,b=100000]
+   ├── test[a=4,b=1e+06]
+   └── test[a=16,b=1e+07]
 
 If multiple ``parameterize`` directives are specified, the cartesian product of parameters is performed:
 
@@ -77,13 +75,13 @@ If multiple ``parameterize`` directives are specified, the cartesian product of 
 
    import nvtest
 
-   nvtest.mark.parameterize("MODEL", (1, 2))
-   nvtest.mark.parameterize("YIELD", (1.e5, 1.e6, 1.e7))
+   nvtest.mark.parameterize("a", (1, 4))
+   nvtest.mark.parameterize("b", (1.e5, 1.e6, 1.e7))
 
    def test():
        self = nvtest.test.instance
-       model, yld = self.parameters.model, self.parameters.YIELD
-       print(f"running test with MODEL={model} and YIELD={yld}")
+       a, b = self.parameters.model, self.parameters.b
+       print(f"running test with a={a} and b={b}")
 
 .. code-block:: console
 
@@ -92,12 +90,12 @@ If multiple ``parameterize`` directives are specified, the cartesian product of 
    File: .../test.pyt
    Keywords:
    6 test cases:
-   ├── test[MODEL=1,YIELD=100000.0]
-   ├── test[MODEL=1,YIELD=1.000000e+06]
-   ├── test[MODEL=1,YIELD=1.000000e+07]
-   ├── test[MODEL=2,YIELD=100000.0]
-   ├── test[MODEL=2,YIELD=1.000000e+06]
-   └── test[MODEL=2,YIELD=1.000000e+07]
+   ├── test[a=1,b=100000]
+   ├── test[a=1,b=1e+06]
+   ├── test[a=1,b=1e+07]
+   ├── test[a=4,b=100000]
+   ├── test[a=4,b=1e+06]
+   └── test[a=4,b=1e+07]
 
 
 Similarly,
@@ -106,7 +104,7 @@ Similarly,
 
    import nvtest
 
-   nvtest.mark.parameterize("MODEL,YIELD", [(1, 1e5), (2, 1e6), (3, 1e7)])
+   nvtest.mark.parameterize("a,b", [(1, 1e5), (2, 1e6), (3, 1e7)])
    nvtest.mark.parameterize("np", (4, 8))
 
    def test():
@@ -121,12 +119,12 @@ results in the following 6 test cases:
    File: .../test.pyt
    Keywords:
    6 test cases:
-   ├── foo[MODEL=1,YIELD=100000.0,np=4]
-   ├── foo[MODEL=1,YIELD=100000.0,np=8]
-   ├── foo[MODEL=2,YIELD=1.000000e+06,np=4]
-   ├── foo[MODEL=2,YIELD=1.000000e+06,np=8]
-   ├── foo[MODEL=3,YIELD=1.000000e+07,np=4]
-   └── foo[MODEL=3,YIELD=1.000000e+07,np=8]
+   ├── foo[a=1,b=100000,np=4]
+   ├── foo[a=1,b=100000,np=8]
+   ├── foo[a=2,b=1e+06,np=4]
+   ├── foo[a=2,b=1e+06,np=8]
+   ├── foo[a=3,b=1e+07,np=4]
+   └── foo[a=3,b=1e+07,np=8]
 
 vvt parameter types
 -------------------
@@ -151,8 +149,8 @@ Test instances are executed in their own test directories.
    running 2 test cases from 1 files
    skipping 0 test cases
    =============================== Beginning test session ==============================
-   STARTING: test[MODEL=1]
-   STARTING: test[MODEL=2]
-   FINISHED: test[MODEL=1] PASS
-   FINISHED: test[MODEL=2] PASS
+   STARTING: test[a=1]
+   STARTING: test[a=2]
+   FINISHED: test[a=1] PASS
+   FINISHED: test[a=2] PASS
    ================================== 2 pass in 0.34s. =================================

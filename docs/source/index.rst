@@ -16,9 +16,9 @@ nvtest
    :maxdepth: 2
 
    getting_started
+   config
    session
    writing_tests
-   config
    howto/index
    reference/index
    subcommands/index

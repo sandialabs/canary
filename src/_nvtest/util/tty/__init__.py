@@ -204,7 +204,8 @@ def warn(message, *args, **kwargs):
 
 
 def die(message, *args, **kwargs):
-    kwargs.setdefault("countback", 4)
+    if HAVE_DEBUG:
+        kwargs.setdefault("countback", 4)
     error(message, *args, **kwargs)
     sys.exit(1)
 

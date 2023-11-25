@@ -3,6 +3,9 @@ The test file
 
 A test file is an executable script with ``.pyt`` or ``.vvt``.  A good test ensures the correctness of output given a set of inputs and should be as simple and fast running as possible.
 
+Test file structure
+-------------------
+
 The test file is composed of two parts:
 
 .. rubric:: 1. Directives
