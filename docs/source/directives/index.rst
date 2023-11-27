@@ -18,7 +18,13 @@ The general format for a directive is
 
 .. code-block:: python
 
-    #VVT: directive_name [(kwd=val[, ...])] [: args]
+    #VVT: directive_name [<option spec>] [: <args>]
+
+where the optional ``option spec`` takes the form:
+
+.. code-block:: console
+
+    (name=value[, ...])
 
 ``.vvt`` directives can be continued on subsequent lines by starting them with ``#VVT::``:
 

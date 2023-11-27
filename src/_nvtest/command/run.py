@@ -180,7 +180,7 @@ class Timer:
 
 
 def run(args: "argparse.Namespace") -> int:
-    parse_user_paths(args)
+    parse_pathspec(args)
     initstate: int = 0
 
     timer = Timer()
@@ -226,7 +226,16 @@ def run(args: "argparse.Namespace") -> int:
     return session.exitstatus
 
 
-def parse_user_paths(args: argparse.Namespace) -> None:
+def parse_pathspec(args: argparse.Namespace) -> None:
+    """Parse the ``pathspec`` argument.  The ``pathspec`` can take on different meanings:
+
+    Each entry in pathspec can represent one of
+
+    - an input file containing search path information when creating a new session
+    - a directory to search for test files when creating a new session
+    - a filter when re-using a previous session
+
+    """
     args.mode = None
     args.start = None
     args.paths = {}
@@ -240,10 +249,8 @@ def parse_user_paths(args: argparse.Namespace) -> None:
             tty.die(f"^b{args.batch_no} requires ^sSESSION_ID")
         if args.work_tree is not None:
             tty.die(f"^b{args.batch_no} and -d{args.work_tree} are incompatible")
-    elif config.get("session") and not args.pathspec:
-        args.pathspec.append(".")
     elif not args.pathspec:
-        tty.die("expected at least one pathspec argument")
+        args.pathspec.append(os.getcwd())
     for path in args.pathspec:
         if config.get("session"):
             args.mode = "a"
@@ -255,6 +262,8 @@ def parse_user_paths(args: argparse.Namespace) -> None:
                 tty.die("wipe=True incompatible with path arguments")
             args.work_tree = config.get("session:work_tree")
             path = os.path.abspath(path)
+            if path.endswith((".yaml", ".yml", ".json")):
+                tty.die(f"path={path} is an illegal pathspec argument in re-use mode")
             if not path.startswith(args.work_tree):
                 tty.die("path arg must be a child of the work tree")
             args.start = os.path.relpath(path, args.work_tree)
