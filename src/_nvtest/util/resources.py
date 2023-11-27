@@ -6,7 +6,7 @@ from . import rprobe
 
 
 def compute_resource_allocations(
-    *, machine_config: SimpleNamespace, ranks=None, ranks_per_socket=None
+    *, sockets_per_node=None, cores_per_socket=None, ranks=None, ranks_per_socket=None
 ):
     """Return basic information about how to allocate resources on this machine
 
@@ -24,8 +24,8 @@ def compute_resource_allocations(
     """
 
     # System settings
-    sockets_per_node = machine_config.sockets_per_node or 1
-    cores_per_socket = machine_config.cores_per_socket or rprobe.cpu_count()
+    sockets_per_node = sockets_per_node or 1
+    cores_per_socket = cores_per_socket or rprobe.cpu_count()
 
     if ranks is None and ranks_per_socket is not None:
         # Raise an error since there is no reliable way of finding the number of

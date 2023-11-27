@@ -36,7 +36,7 @@ def report(
         buildgroup=buildgroup,
         site=site,
     )
-    dest = os.path.join(session.workdir, "cdash")
+    dest = os.path.join(session.work_tree, "cdash")
     reporter.create_cdash_reports(dest=dest)
 
 

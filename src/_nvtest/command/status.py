@@ -1,6 +1,7 @@
 import os
 from typing import TYPE_CHECKING
 
+from .. import config
 from ..session import Session
 from ..test.enums import Result
 from ..test.testcase import TestCase
@@ -9,7 +10,6 @@ from ..util import tty
 if TYPE_CHECKING:
     import argparse
 
-    from ..config import Config
     from ..config.argparsing import Parser
 
 
@@ -24,28 +24,27 @@ def setup_parser(parser: "Parser"):
         metavar="N",
         help="Show N slowest test durations (N=0 for all)",
     )
-    parser.add_argument(
-        "workdir", nargs="?", default=os.getcwd(), help="Test results directory"
-    )
+    parser.add_argument("pathspec", nargs="?", help="Limit status results to this path")
 
 
-def status(config: "Config", args: "argparse.Namespace") -> int:
-    try:
-        workdir = Session.find_workdir(args.workdir)
-    except ValueError:
-        tty.die(f"{args.workdir!r} is not a test execution directory")
-    args.mode = "r"
-    session = Session.load(config=config, workdir=workdir, mode=args.mode)
-    start = workdir if args.workdir is None else os.path.abspath(args.workdir)
+def matches(pathspec, case):
+    return case.exec_root is not None and case.exec_dir.startswith(pathspec)
+
+
+def status(args: "argparse.Namespace") -> int:
+    work_tree = config.get("session:work_tree")
+    if work_tree is None:
+        tty.die("not a nvtest session (or any of the parent directories): .nvtest")
+    session = Session.load(mode="r")
     cases = [c for c in session.cases if not c.skip]
-    if start != workdir:
-        cases = [
-            c for c in cases if c.exec_root is not None and c.exec_dir.startswith(start)
-        ]
+    if args.pathspec:
+        pathspec = os.path.abspath(args.pathspec)
+        if pathspec != work_tree:
+            cases = [c for c in cases if matches(pathspec, c)]
     if not cases:
         tty.info("Nothing to report")
         return 0
-    tty.print(f"\nTest execution directory: {session.workdir}\n")
+    tty.print(f"\nWork tree: {session.work_tree}")
     print_status(cases)
     if args.durations is not None:
         print_durations(cases, int(args.durations))
@@ -56,7 +55,7 @@ def status(config: "Config", args: "argparse.Namespace") -> int:
 def cformat(case: TestCase) -> str:
     f = case.exec_dir
     if f.startswith(os.getcwd()):
-        f = f"./{os.path.relpath(f)}"
+        f = os.path.relpath(f)
     return "  %s %s: %s" % (case.result.cname, str(case), f)
 
 
@@ -65,6 +64,7 @@ def print_status(cases: list[TestCase]) -> None:
     for case in cases:
         totals.setdefault(case.result.name, []).append(case)
     level = tty.get_log_level()
+    tty.print()
     if level > tty.VERBOSE and Result.NOTRUN in totals:
         for case in totals[Result.NOTRUN]:
             tty.print(cformat(case))

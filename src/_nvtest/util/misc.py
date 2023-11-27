@@ -1,6 +1,7 @@
 from argparse import Namespace
 from types import SimpleNamespace
 from typing import Any
+from typing import Callable
 from typing import Optional
 from typing import Sequence
 from typing import Union
@@ -67,3 +68,13 @@ def plural(
         return "%s%s" % (number, plural)
     else:
         return "%s%ss" % (number, singular)
+
+
+def partition(sequence: list, predicate: Callable) -> tuple[list, list]:
+    first, second = [], []
+    for item in sequence:
+        if predicate(item):
+            first.append(item)
+        else:
+            second.append(item)
+    return first, second

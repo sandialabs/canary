@@ -10,7 +10,7 @@ from .util import tty
 
 class Finder:
     exts = (".pyt", ".vvt")
-    skip_dirs = ["__pycache__", ".git", ".svn"]
+    skip_dirs = ["__pycache__", ".git", ".svn", ".nvtest"]
     version_info = (1, 0, 3)
 
     def __init__(self) -> None:
@@ -67,7 +67,6 @@ class Finder:
         return self.tree
 
     def rfind(self, root, subdir=None):
-        from .session import Session
 
         testfiles: list[AbstractTestFile] = []
 
@@ -75,8 +74,6 @@ class Finder:
             if os.path.basename(dirname) in self.skip_dirs:
                 return True
             if fs.is_hidden(dirname):
-                return True
-            if Session.is_workdir(dirname):
                 return True
             return False
 

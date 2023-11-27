@@ -7,6 +7,7 @@ import time
 from concurrent.futures import Future
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
+from functools import cached_property
 from functools import partial
 from itertools import repeat
 from typing import Any
@@ -14,9 +15,9 @@ from typing import Generator
 from typing import Optional
 from typing import Union
 
+from . import config
 from . import paths
 from . import plugin
-from .config import Config
 from .error import StopExecution
 from .finder import Finder
 from .mark.match import deselect_by_keyword
@@ -77,13 +78,11 @@ class Session:
         def asdict(self):
             return vars(self)
 
-    default_workdir = "./TestResults"
+    default_work_tree = "./TestResults"
     mode: str
     id: int
     startdir: str
-    rel_workdir: str
     exitstatus: int
-    config: Config
     max_cores_per_test: int
     max_workers: int
     search_paths: dict[str, list[str]]
@@ -107,9 +106,8 @@ class Session:
     def create(
         cls,
         *,
-        workdir: str,
+        work_tree: str,
         search_paths: dict[str, list[str]],
-        config: Optional[Config] = None,
         max_cores_per_test: Optional[int] = None,
         max_workers: Optional[int] = None,
         keyword_expr: Optional[str] = None,
@@ -118,20 +116,30 @@ class Session:
         batch_config: BatchConfig = None,
         copy_all_resources: bool = False,
     ) -> "Session":
+        if config.has_scope("session"):
+            raise ValueError("cannot create new session when another session is active")
         self = cls()
         self.mode = "w"
         self.id = 0
-        self.startdir = os.getcwd()
-        self.rel_workdir = os.path.relpath(os.path.abspath(workdir), self.startdir)
+
         self.exitstatus = -1
-        self.config = config or Config()
-        self.max_cores_per_test = max_cores_per_test or self.config.machine.cpu_count
+        self.max_cores_per_test = max_cores_per_test or config.get("machine:cpu_count")
         self.max_workers = max_workers or 5
         self.search_paths = search_paths
         self.batch_config = batch_config or Session.BatchConfig()
-        os.environ["NVTEST_EXEC_DIR"] = self.workdir
 
-        tty.debug(f"Creating new nvtest session in {self.rel_workdir}")
+        self._create_config(
+            work_tree,
+            search_paths=self.search_paths,
+            max_cores_per_test=self.max_cores_per_test,
+            max_workers=self.max_workers,
+            keyword_expr=keyword_expr,
+            on_options=on_options,
+            parameter_expr=parameter_expr,
+            batch_config=self.batch_config.asdict(),
+            copy_all_resources=copy_all_resources,
+        )
+        tty.debug(f"Creating new nvtest session in {config.get('session:start')}")
 
         t_start: float = time.time()
         for hook in plugin.plugins("session", "setup"):
@@ -163,7 +171,6 @@ class Session:
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
 
-        mkdirp(self.dotdir)
         mkdirp(self.index_dir)
         mkdirp(self.stage)
 
@@ -199,47 +206,27 @@ class Session:
 
         with open(os.path.join(self.dotdir, "params"), "w") as fh:
             variables = dict(vars(self))
-            for attr in ("config", "cases", "queue", "lock"):
+            for attr in ("cases", "queue", "lock"):
                 variables.pop(attr)
             variables["batch_config"] = self.batch_config.asdict()
             json.dump(variables, fh, indent=2)
-        with open(self.config_file, "w") as fh:
-            self.config.dump(fh)
-        self.create_index(
-            self.cases,
-            max_cores_per_test=self.max_cores_per_test,
-            keyword_expr=keyword_expr,
-            on_options=on_options,
-            parameter_expr=parameter_expr,
-            copy_all_resources=copy_all_resources,
-        )
+        self.create_index(self.cases)
 
         duration = time.time() - t_start
         tty.debug(f"Done creating test session ({duration:.2f}s.)")
         return self
 
     @classmethod
-    def load(
-        cls,
-        *,
-        workdir: str,
-        config: Optional[Config] = None,
-        session_no: Optional[int] = None,
-        mode: str = "r",
-    ) -> "Session":
-        if not Session.is_workdir(workdir, ascend=True):
+    def load(cls, *, session_no: Optional[int] = None, mode: str = "r") -> "Session":
+        work_tree = config.get("session:work_tree")
+        if not work_tree:
             raise ValueError(
                 "not a nvtest session (or any of the parent directories): .nvtest"
             )
         assert mode in "ra"
         self = cls()
-        workdir = self.find_workdir(workdir)
         self.mode = mode
-        self.startdir = os.getcwd()
-        self.rel_workdir = os.path.relpath(os.path.abspath(workdir), self.startdir)
         self.exitstatus = -1
-        self.config = config or Config()
-        self.config.load_user_config_file(self.config_file)
         lock_path = os.path.join(self.dotdir, "lock")
         self.lock = Lock(lock_path, default_timeout=120, desc="session")
         assert os.path.exists(os.path.join(self.dotdir, "stage"))
@@ -263,14 +250,10 @@ class Session:
     def load_batch(
         cls,
         *,
-        workdir: str,
         batch_no: int,
         session_no: Optional[int] = None,
-        config: Optional[Config] = None,
     ) -> "Session":
-        self = Session.load(
-            workdir=workdir, config=config, session_no=session_no, mode="a"
-        )
+        self = Session.load(session_no=session_no, mode="a")
         n = max(3, digits(len(os.listdir(self.batchdir))))
         f = os.path.join(self.batchdir, f"{batch_no:0{n}d}")
         case_ids: list[str] = [_.strip() for _ in open(f).readlines() if _.split()]
@@ -287,25 +270,39 @@ class Session:
         return self
 
     @classmethod
-    def copy(
-        cls, *, workdir: str, config: Optional[Config] = None, mode: str = "a"
-    ) -> "Session":
-        self = Session.load(workdir=workdir, config=config, mode=mode)
+    def copy(cls, *, mode: str = "a") -> "Session":
+        self = Session.load(mode=mode)
         self.id = len(os.listdir(os.path.join(self.dotdir, "stage")))
         return self
 
-    @property
-    def log_level(self) -> int:
-        return self.config.log_level
+    def _create_config(self, work_tree: str, **kwds: Any) -> None:
+        work_tree = os.path.abspath(work_tree)
+        config.set("session:work_tree", work_tree, scope="session")
+        config.set("session:invocation_dir", os.getcwd(), scope="session")
+        start = os.path.relpath(work_tree, os.getcwd()) or "."
+        config.set("session:start", start, scope="session")
+        for (key, value) in kwds.items():
+            config.set(f"session:{key}", value, scope="session")
+        for attr in ("sockets_per_node", "cores_per_socket", "cpu_count"):
+            value = config.get(f"machine:{attr}", scope="local")
+            if value is not None:
+                config.set(f"machine:{attr}", value, scope="session")
+        for section in ("config", "variables"):
+            data = config.get(section, scope="local") or {}
+            for (key, value) in data.items():
+                config.set(f"{section}:{key}", value, scope="session")
+        dotdir = os.path.join(work_tree, config.config_dir)
+        mkdirp(dotdir)
+        with open(os.path.join(dotdir, "config"), "w") as fh:
+            config.dump(fh, scope="session")
 
-    @property
-    def workdir(self) -> str:
-        path = os.path.join(self.startdir, self.rel_workdir)
-        return os.path.normpath(path)
+    @cached_property
+    def work_tree(self) -> str:
+        return config.get("session:work_tree", scope="session")
 
     @property
     def dotdir(self) -> str:
-        path = os.path.join(self.workdir, ".nvtest")
+        path = os.path.join(self.work_tree, ".nvtest")
         return path
 
     @property
@@ -355,9 +352,9 @@ class Session:
         if not self.cases:
             raise ValueError("This test session has not been setup")
         if start is None:
-            start = self.workdir
+            start = self.work_tree
         elif not os.path.isabs(start):
-            start = os.path.join(self.workdir, start)
+            start = os.path.join(self.work_tree, start)
         start = os.path.normpath(start)
         for case in self.cases:
             if case.result != Result.NOTRUN and not case.exec_dir.startswith(start):
@@ -410,12 +407,11 @@ class Session:
             runner or "direct",
             self,
             self.queue.cases,
-            machine_config=self.config.machine,
             options=runner_options,
         )
         try:
             with self.rc_environ():
-                with working_dir(self.workdir):
+                with working_dir(self.work_tree):
                     self.process_testcases(timeout, fail_fast)
         finally:
             self.returncode = compute_returncode(self.queue.cases)
@@ -428,7 +424,7 @@ class Session:
                     for hook in plugin.plugins("test", "teardown"):
                         tty.debug(f"Calling the {hook.specname} plugin")
                         hook(self, case)
-                with working_dir(self.workdir):
+                with working_dir(self.work_tree):
                     case.teardown()
         for hook in plugin.plugins("session", "teardown"):
             hook(self)
@@ -440,35 +436,6 @@ class Session:
             if not case.skip
             and case.result in (Result.NOTRUN, Result.NOTDONE, Result.SETUP)
         ]
-
-    @staticmethod
-    def is_workdir(path: str, ascend: bool = False) -> bool:
-        path = os.path.abspath(path)
-        f1 = lambda d: os.path.join(d, ".nvtest/config")
-        f2 = lambda d: os.path.join(d, ".nvtest/index")
-        f3 = lambda d: os.path.join(d, ".nvtest/params")
-        exists = os.path.exists
-        while path != os.path.sep:
-            if all((exists(f1(path)), exists(f2(path)), exists(f3(path)))):
-                return True
-            elif not ascend:
-                break
-            path = os.path.dirname(path)
-        return False
-
-    @staticmethod
-    def find_workdir(start) -> str:
-        path = os.path.abspath(start)
-        f1 = lambda d: os.path.join(d, ".nvtest/config")
-        f2 = lambda d: os.path.join(d, ".nvtest/index")
-        f3 = lambda d: os.path.join(d, ".nvtest/params")
-        exists = os.path.exists
-        while True:
-            if all((exists(f1(path)), exists(f2(path)), exists(f3(path)))):
-                return path
-            path = os.path.dirname(path)
-            if path == "/":
-                raise ValueError("Could not find workdir")
 
     def set_pythonpath(self, environ) -> None:
         pythonpath = [paths.prefix]
@@ -482,7 +449,7 @@ class Session:
     @contextmanager
     def rc_environ(self) -> Generator[None, None, None]:
         save_env: dict[str, Optional[str]] = {}
-        variables = dict(self.config.variables)
+        variables = dict(config.get("variables"))
         self.set_pythonpath(variables)
         for var, val in variables.items():
             save_env[var] = os.environ.pop(var, None)
@@ -498,17 +465,20 @@ class Session:
     def setup_testcases(
         self, cases: list[TestCase], copy_all_resources: bool = False
     ) -> None:
-        mkdirp(self.workdir)
+        mkdirp(self.work_tree)
         ts: TopologicalSorter = TopologicalSorter()
         for case in cases:
             ts.add(case, *case.dependencies)
         with self.rc_environ():
-            with working_dir(self.workdir):
+            with working_dir(self.work_tree):
                 ts.prepare()
                 while ts.is_active():
                     group = ts.get_ready()
-                    args = zip(group, repeat(self.workdir), repeat(copy_all_resources))
-                    pool = multiprocessing.Pool(processes=self.config.machine.cpu_count)
+                    args = zip(
+                        group, repeat(self.work_tree), repeat(copy_all_resources)
+                    )
+                    cpu_count = config.get("machine:cpu_count")
+                    pool = multiprocessing.Pool(processes=cpu_count)
                     result = pool.starmap(_setup_individual_case, args)
                     pool.close()
                     pool.join()
@@ -604,13 +574,13 @@ class Session:
             kwds = fd[id]
             dependencies = kwds.pop("dependencies")
             if "exec_root" not in kwds:
-                kwds["exec_root"] = self.workdir
+                kwds["exec_root"] = self.work_tree
             case = TestCase.from_dict(kwds)
             case.dependencies = [cases[dep] for dep in dependencies]
             cases[case.id] = case
         return list(cases.values())
 
-    def create_index(self, cases: list[TestCase], **kwds: Any) -> None:
+    def create_index(self, cases: list[TestCase]) -> None:
         files: dict[str, set[str]] = {}
         indexed: dict[str, Any] = {}
         for case in cases:
@@ -621,9 +591,6 @@ class Session:
             json.dump({k: list(v) for (k, v) in files.items()}, fh, indent=2)
         with open(os.path.join(self.index_dir, "cases"), "w") as fh:
             json.dump(indexed, fh, indent=2)
-        if kwds:
-            with open(os.path.join(self.index_dir, "params"), "w") as fh:
-                json.dump(kwds, fh, indent=2)
 
     def save_active_case_data(self, cases: list[TestCase], **kwds: Any):
         mkdirp(self.stage)

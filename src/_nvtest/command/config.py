@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from _nvtest.config import Config
+import _nvtest.config
 
 if TYPE_CHECKING:
     import argparse
@@ -13,7 +13,8 @@ description = "Show configuration variable values"
 
 def setup_parser(parser: "Parser"):
     sp = parser.add_subparsers(dest="subcommand")
-    sp.add_parser("show", help="Show the current configuration")
+    p = sp.add_parser("show", help="Show the current configuration")
+    p.add_argument("section", nargs="?", help="Show only this section")
 
 
 def pretty_print(text: str):
@@ -29,9 +30,9 @@ def pretty_print(text: str):
     )
 
 
-def config(config: "Config", args: "argparse.Namespace") -> int:
-    text = config.describe()
+def config(args: "argparse.Namespace") -> int:
     if args.subcommand == "show":
+        text = _nvtest.config.describe(section=args.section)
         try:
             pretty_print(text)
         except ImportError:

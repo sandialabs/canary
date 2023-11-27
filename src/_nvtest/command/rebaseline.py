@@ -2,7 +2,6 @@ import argparse
 import os
 from typing import TYPE_CHECKING
 
-from ..config import Config
 from ..session import Session
 from ..test.enums import Result
 from ..util import tty
@@ -16,18 +15,15 @@ description = "Rebaseline tests"
 
 
 def setup_parser(parser: "Parser"):
-    parser.add_argument("path", help="Rebaseline tests found at PATH")
+    parser.add_argument("pathspec", nargs="?", help="Limit rebaselining to this path")
 
 
-def rebaseline(config: "Config", args: "argparse.Namespace") -> int:
-    start = os.path.abspath(args.path)
-    workdir = Session.find_workdir(start)
-    session = Session.load(workdir=workdir, config=config)
-    cases = [
-        c
-        for c in session.cases
-        if c.result != Result.NOTRUN and c.exec_dir.startswith(start)
-    ]
+def rebaseline(args: "argparse.Namespace") -> int:
+    session = Session.load(mode="r")
+    cases = [c for c in session.cases if c.result != Result.NOTRUN]
+    if args.pathspec:
+        start = os.path.abspath(args.pathspec)
+        cases = [c for c in cases if c.exec_dir.startswith(start)]
     for case in cases:
         if not case.baseline:
             continue

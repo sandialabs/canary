@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
@@ -21,7 +20,6 @@ def factory(
     session: "Session",
     work_items: list[Any],
     *,
-    machine_config: SimpleNamespace,
     options: Optional[list[Any]] = None,
 ) -> Runner:
     runner: Type[Runner]
@@ -35,4 +33,4 @@ def factory(
     runner.validate(work_items)
     opts: list[Any] = options or []
     tty.verbose(f"Runner type = {runner.__class__.__name__}")
-    return runner(session, machine_config, *opts)
+    return runner(session, *opts)

@@ -2,7 +2,6 @@ import os
 import platform
 import re
 import sys
-from types import SimpleNamespace
 
 from ..util import rprobe
 from ..util.executable import Executable
@@ -13,7 +12,7 @@ from . import macos
 editable_properties = ("sockets_per_node", "cores_per_socket", "cpu_count")
 
 
-def machine_config() -> SimpleNamespace:
+def machine_config() -> dict:
     """Return machine specific configuration data"""
     if sys.platform == "darwin":
         info = macos.sys_info()
@@ -25,7 +24,7 @@ def machine_config() -> SimpleNamespace:
     version_str = info.version_str
     uname = platform.uname()
 
-    os_config = SimpleNamespace(
+    os_config = dict(
         vendor=vendor,
         version=version_str,
         name=f"{version_str}" if vendor == "apple" else f"{vendor}{version_str}",
@@ -42,23 +41,23 @@ def machine_config() -> SimpleNamespace:
         else:
             sitename = sitename.replace("-login", "")
     ns = read_machine_info()
-    config = SimpleNamespace(
+    config = dict(
         node=nodename,
         arch=uname.machine,
         site=sitename,
         host=sitename,
         name=os.getenv("SNLCLUSTER", uname.node),
         platform=uname.system,
-        sockets_per_node=ns.sockets_per_node,
-        cores_per_socket=ns.cores_per_socket,
-        cpu_count=ns.cpu_count,
+        sockets_per_node=ns["sockets_per_node"],
+        cores_per_socket=ns["cores_per_socket"],
+        cpu_count=ns["cpu_count"],
         os=os_config,
     )
     return config
 
 
-def read_machine_info() -> SimpleNamespace:
-    info = SimpleNamespace(
+def read_machine_info() -> dict:
+    info = dict(
         sockets_per_node=1,
         cores_per_socket=rprobe.cpu_count(),
         cpu_count=rprobe.cpu_count(),
@@ -75,7 +74,7 @@ def read_machine_info() -> SimpleNamespace:
         format = " ".join(opts)
         out = sinfo("-o", format, fail_on_error=False, output=str)
         sockets_per_node, cores_per_socket, _, cpus_per_node, node_count = out.split()
-        info.sockets_per_node = sockets_per_node
-        info.cores_per_socket = cores_per_socket
-        info.cpu_count = cpus_per_node * node_count
+        info["sockets_per_node"] = sockets_per_node
+        info["cores_per_socket"] = cores_per_socket
+        info["cpu_count"] = cpus_per_node * node_count
     return info

@@ -9,6 +9,7 @@ from typing import Any
 from typing import Optional
 from typing import Union
 
+from .. import config
 from ..compat.vvtest import write_vvtest_util
 from ..util import filesystem as fs
 from ..util import tty
@@ -153,10 +154,9 @@ class TestCase:
     def exec_dir(self) -> str:
         exec_root = self.exec_root
         if not exec_root:
-            if "NVTEST_EXEC_DIR" in os.environ:
-                exec_root = os.environ["NVTEST_EXEC_DIR"]
-            else:
-                raise ValueError("exec_root must be set during set up") from None
+            exec_root = config.get("session:work_tree")
+        if not exec_root:
+            raise ValueError("exec_root must be set during set up") from None
         return os.path.normpath(os.path.join(exec_root, self.exec_path))
 
     @property

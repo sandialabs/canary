@@ -10,7 +10,7 @@ from typing import Optional
 from typing import Sequence
 from typing import Union
 
-from ..config import Config
+from .. import config
 from ..error import StopExecution
 from ..runner import valid_runners
 from ..schemas import testpaths_schema
@@ -21,11 +21,12 @@ from ..test.enums import Skip
 from ..test.testcase import TestCase
 from ..util import tty
 from ..util.filesystem import force_remove
+from ..util.misc import partition
 from ..util.time import time_in_seconds
 from ..util.tty.color import colorize
 from .common import add_mark_arguments
 from .common import add_timing_arguments
-from .common import add_workdir_arguments
+from .common import add_work_tree_arguments
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
@@ -36,7 +37,7 @@ description = "Run the tests"
 
 def setup_parser(parser: "Parser"):
     parser.prefix_chars = "-^"
-    add_workdir_arguments(parser)
+    add_work_tree_arguments(parser)
     add_mark_arguments(parser)
     add_timing_arguments(parser)
     group = parser.add_argument_group("console reporting")
@@ -136,8 +137,8 @@ def setup_parser(parser: "Parser"):
         help=help_msg,
     )
     parser.add_argument(
-        "path_args",
-        metavar="file_or_dir",
+        "pathspec",
+        metavar="PATHSPEC",
         nargs="*",
         help="Test file[s] or directories to search",
     )
@@ -178,13 +179,13 @@ class Timer:
         return self.data[label][self.TF] - self.data[label][self.T0]
 
 
-def run(config: "Config", args: "argparse.Namespace") -> int:
+def run(args: "argparse.Namespace") -> int:
     parse_user_paths(args)
     initstate: int = 0
 
     timer = Timer()
     with timer.timeit("setup"):
-        session = setup_session(config, args)
+        session = setup_session(args)
     setup_duration = timer.duration("setup")
 
     initstate = 1
@@ -226,34 +227,37 @@ def run(config: "Config", args: "argparse.Namespace") -> int:
 
 
 def parse_user_paths(args: argparse.Namespace) -> None:
-
-    workdir = args.workdir
-    wipe = args.wipe
-
-    mode = start = None
-    paths: dict[str, list[str]] = {}
-    if args.batch_no:
-        # if a specific batch number is given, then nvtest is being called
-        # recursively and the positional argument is the work directory
-        assert len(args.path_args) == 1
+    args.mode = None
+    args.start = None
+    args.paths = {}
+    if args.batch_no is not None:
+        args.mode = "b"
+        if not config.get("session"):
+            tty.die("^bBATCH_NO must be run in a work tree")
+        if args.pathspec:
+            tty.die("^bBATCH_NO should not include pathspec[s]")
         if args.session_no is None:
-            raise ValueError(f"^b{args.batch_no} requires ^sSESSION_ID")
-        if workdir is not None:
-            raise ValueError(f"^b{args.batch_no} and -d{args.workdir} are incompatible")
-        mode = "b"
-        workdir = args.path_args.pop(0)
-        assert len(args.path_args) == 0
-    for path in args.path_args:
-        if Session.is_workdir(path, ascend=True):
-            mode = "a"
-            if len(args.path_args) > 1:
-                raise ValueError("incompatible input path arguments")
-            if workdir is not None:
-                raise ValueError(f"workdir={path} incompatible with path arguments")
-            if wipe:
-                raise ValueError("wipe=True incompatible with path arguments")
-            workdir = Session.find_workdir(path)
-            start = os.path.relpath(path, workdir)
+            tty.die(f"^b{args.batch_no} requires ^sSESSION_ID")
+        if args.work_tree is not None:
+            tty.die(f"^b{args.batch_no} and -d{args.work_tree} are incompatible")
+    elif config.get("session") and not args.pathspec:
+        args.pathspec.append(".")
+    elif not args.pathspec:
+        tty.die("expected at least one pathspec argument")
+    for path in args.pathspec:
+        if config.get("session"):
+            args.mode = "a"
+            if len(args.pathspec) > 1:
+                tty.die("incompatible input path arguments")
+            if args.work_tree is not None:
+                tty.die(f"work_tree={args.work_tree} incompatible with path arguments")
+            if args.wipe:
+                tty.die("wipe=True incompatible with path arguments")
+            args.work_tree = config.get("session:work_tree")
+            path = os.path.abspath(path)
+            if not path.startswith(args.work_tree):
+                tty.die("path arg must be a child of the work tree")
+            args.start = os.path.relpath(path, args.work_tree)
             if path.endswith((".vvt", ".pyt")):
                 args.keyword_expr = os.path.splitext(os.path.basename(path))[0]
             else:
@@ -263,33 +267,30 @@ def parse_user_paths(args: argparse.Namespace) -> None:
                         args.keyword_expr = os.path.splitext(os.path.basename(f[0]))[0]
                         break
         elif path.endswith((".yaml", ".yml", ".json")):
-            mode = "w"
-            read_paths(path, paths)
+            args.mode = "w"
+            read_paths(path, args.paths)
         elif os.path.isfile(path) and path.endswith((".vvt", ".pyt")):
-            mode = "w"
+            args.mode = "w"
             root, name = os.path.split(path)
-            paths.setdefault(root, []).append(name)
+            args.paths.setdefault(root, []).append(name)
         elif os.path.isdir(path):
-            mode = "w"
-            paths.setdefault(path, [])
+            args.mode = "w"
+            args.paths.setdefault(path, [])
         else:
-            raise ValueError(f"{path}: no such file or directory")
+            tty.die(f"{path}: no such file or directory")
 
-    assert mode is not None
-    args.start = start
-    args.paths = paths
-    args.mode = mode
-    args.workdir = workdir
+    if args.mode is None:
+        tty.die("internal error: mode = None.  This should never happen")
 
 
-def print_front_matter(config: "Config", args: "argparse.Namespace"):
-    n = N = config.machine.cpu_count
-    p = config.machine.platform
-    v = config.python.version
+def print_front_matter(args: "argparse.Namespace"):
+    n = N = config.get("machine:cpu_count")
+    p = config.get("system:platform")
+    v = config.get("python:version")
     tty.print(f"platform {p} -- Python {v}, num cores: {n}, max cores: {N}")
     if hasattr(args, "max_workers"):
         tty.print(f"Maximum subprocess workers: {args.max_workers or 'auto'}")
-    tty.print(f"Test results directory: {args.workdir or Session.default_workdir}")
+    tty.print(f"Working tree: {args.work_tree or Session.default_work_tree}")
     if args.mode == "w":
         paths = "\n  ".join(args.paths)
         tty.print(f"search paths:\n  {paths}")
@@ -298,8 +299,8 @@ def print_front_matter(config: "Config", args: "argparse.Namespace"):
 def print_testcase_overview(
     cases: list[TestCase], duration: Optional[float] = None
 ) -> None:
-    cases = [case for case in cases if case.skip.reason != Skip.UNREACHABLE]
     files = {case.file for case in cases}
+    _, cases = partition(cases, lambda c: c.skip.reason == Skip.UNREACHABLE)
     t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
     if duration is not None:
         t += "@*{ in %.2fs.}" % duration
@@ -413,22 +414,21 @@ def read_paths(file: str, paths: dict[str, list[str]]) -> None:
         paths.setdefault(p["root"], []).extend(p["paths"])
 
 
-def setup_session(config: "Config", args: "argparse.Namespace") -> Session:
+def setup_session(args: "argparse.Namespace") -> Session:
     if args.wipe:
         if args.mode != "w":
             tty.die(f"Cannot wipe work directory with mode={args.mode}")
-        force_remove(args.workdir or Session.default_workdir)
+        force_remove(args.work_tree or Session.default_work_tree)
     if not args.no_header:
-        print_front_matter(config, args)
+        print_front_matter(args)
 
     session: Session
     if args.mode == "w":
         tty.print("Setting up test session", centered=True)
         bc = Session.BatchConfig(size_t=args.batch_size, size_n=args.batches)
         session = Session.create(
-            workdir=args.workdir or Session.default_workdir,
+            work_tree=args.work_tree or Session.default_work_tree,
             search_paths=args.paths,
-            config=config,
             max_cores_per_test=args.max_cores_per_test,
             max_workers=args.max_workers,
             keyword_expr=args.keyword_expr,
@@ -442,13 +442,11 @@ def setup_session(config: "Config", args: "argparse.Namespace") -> Session:
         assert args.batch_no is not None
         assert args.session_no is not None
         tty.print(f"Setting up batch {args.batch_no}", centered=True)
-        session = Session.load_batch(
-            workdir=args.workdir, batch_no=args.batch_no, session_no=args.session_no
-        )
+        session = Session.load_batch(batch_no=args.batch_no, session_no=args.session_no)
     else:
         assert args.mode == "a"
         tty.print("Setting up test session", centered=True)
-        session = Session.copy(workdir=args.workdir, config=config, mode=args.mode)
+        session = Session.copy(mode=args.mode)
         session.filter(
             keyword_expr=args.keyword_expr,
             start=args.start,

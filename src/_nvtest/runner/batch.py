@@ -2,7 +2,6 @@ import os
 import sys
 from datetime import datetime
 from io import StringIO
-from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
@@ -26,8 +25,8 @@ class BatchRunner(Runner):
     shell = "/bin/sh"
     command = "/bin/sh"
 
-    def __init__(self, session: "Session", machine_config: SimpleNamespace, *args: Any):
-        super().__init__(session, machine_config, *args)
+    def __init__(self, session: "Session", *args: Any):
+        super().__init__(session, *args)
         self.batchdir = session.batchdir
 
     @staticmethod
@@ -82,8 +81,8 @@ class BatchRunner(Runner):
         py = sys.executable
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(f"{py} -m nvtest -qqq run --max-workers=1 ")
-        fh.write(f"^b {batch_no} ^s {self.session} {self.workdir}\n")
+        fh.write(f"{py} -m nvtest -qqq -C {self.work_tree} run --max-workers=1 ")
+        fh.write(f"^b {batch_no} ^s {self.session}\n")
 
     def submit_filename(self, batch_no: int) -> str:
         n = max(digits(batch_no), 3)
@@ -109,7 +108,7 @@ class BatchRunner(Runner):
 
         Batches are run in a subprocess and the results written to
 
-        $workdir/.nvtest/stage/$session_id/tests
+        $work_tree/.nvtest/stage/$session_id/tests
 
         These results are loaded and assigned to the test cases in *this*
         processes' memory

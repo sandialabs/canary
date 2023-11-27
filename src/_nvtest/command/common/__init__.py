@@ -46,7 +46,7 @@ def add_mark_arguments(parser: "Parser") -> None:
     )
 
 
-def add_workdir_arguments(parser: "Parser") -> None:
+def add_work_tree_arguments(parser: "Parser") -> None:
     parser.add_argument(
         "-w",
         dest="wipe",
@@ -55,8 +55,9 @@ def add_workdir_arguments(parser: "Parser") -> None:
     )
     parser.add_argument(
         "-d",
-        "--work-dir",
-        dest="workdir",
+        "--work-tree",
+        dest="work_tree",
         default=None,
-        help="Root path to work (execution) directory [default: ./TestResults]",
+        help="Set the path to the working tree. It can be an absolute path or a "
+        "path relative to the current working directory. [default: ./TestResults]",
     )

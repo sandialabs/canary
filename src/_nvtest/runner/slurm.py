@@ -1,9 +1,9 @@
 import argparse
-from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
 
+from .. import config
 from ..test.partition import Partition
 from ..util import tty
 from ..util.resources import compute_resource_allocations
@@ -21,8 +21,8 @@ class SlurmRunner(BatchRunner, _Slurm):
     shell = "/bin/sh"
     command = "sbatch"
 
-    def __init__(self, session: "Session", machine_config: SimpleNamespace, *args: Any):
-        super().__init__(session, machine_config, *args)
+    def __init__(self, session: "Session", *args: Any):
+        super().__init__(session, *args)
         parser = self.make_argument_parser()
         self.namespace = argparse.Namespace(wait=True)  # always block
         self.namespace, unknown_args = parser.parse_known_args(
@@ -36,7 +36,9 @@ class SlurmRunner(BatchRunner, _Slurm):
         """Performs basic resource calculations"""
         tasks = self.max_tasks_required(batch)
         resources = compute_resource_allocations(
-            machine_config=self.machine_config, ranks=tasks
+            sockets_per_node=config.get("machine:sockets_per_node"),
+            cores_per_socket=config.get("machine:cores_per_socket"),
+            ranks=tasks,
         )
         tasks = resources.ranks
         nodes = resources.nodes

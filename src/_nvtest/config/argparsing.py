@@ -205,6 +205,13 @@ def make_argument_parser(**kwargs):
         version="nvtest 0.1",
         help="show version and exit",
     )
+    parser.add_argument(
+        "-C",
+        default=None,
+        metavar="PATH",
+        help="Run as if nvtest was started in PATH "
+        "instead of the current working directory.",
+    )
     group = parser.add_argument_group("console reporting")
     group.add_argument(
         "-v",
@@ -225,7 +232,8 @@ def make_argument_parser(**kwargs):
         default=False,
         help="Debug mode [default: %(default)s]",
     )
-    parser.add_argument(
+    group = parser.add_argument_group("profiling")
+    group.add_argument(
         "-p",
         "--profile",
         action="store_true",
@@ -233,28 +241,20 @@ def make_argument_parser(**kwargs):
         help="profile execution using cProfile",
     )
     stat_lines = list(zip(*(iter(stat_names),) * 7))
-    parser.add_argument(
+    group.add_argument(
         "--sorted-profile",
         default=None,
         metavar="STAT",
         help="profile and sort by one or more of:\n[%s]"
         % ",\n ".join([", ".join(line) for line in stat_lines]),
     )
-    parser.add_argument(
+    group.add_argument(
         "--lines",
         default=20,
         action="store",
         help="lines of profile output or 'all' (default: 20)",
     )
     group = parser.add_argument_group("runtime configuration")
-    group.add_argument(
-        "-C",
-        "--config-file",
-        dest="config_file",
-        metavar="CONFIG",
-        help="Path to alternative configuration file. "
-        "Set to 'none' to skip user config",
-    )
     group.add_argument(
         "-c",
         dest="config_mods",

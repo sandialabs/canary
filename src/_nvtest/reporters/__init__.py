@@ -1,1 +1,1 @@
-from . import cdash
+from . import cdash  # noqa: F401

@@ -2,8 +2,7 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
-from _nvtest.config import Config
-
+from .. import config
 from ..test.testfile import AbstractTestFile
 from ..util import graph
 from .common import add_mark_arguments
@@ -22,10 +21,8 @@ def setup_parser(parser: "Parser"):
     parser.add_argument("file", help="Test file")
 
 
-def describe(config: "Config", args: "argparse.Namespace") -> int:
+def describe(args: "argparse.Namespace") -> int:
     file = AbstractTestFile(args.file)
-    config = Config()
-    config.set_main_options(args)
     fp = sys.stdout
     fp.write(f"--- {file.name} ------------\n")
     fp.write(f"File: {file.file}\n")
@@ -45,7 +42,7 @@ def describe(config: "Config", args: "argparse.Namespace") -> int:
                     fp.write(f" -> {dst}")
                 fp.write("\n")
     cases = file.freeze(
-        cpu_count=config.machine.cpu_count,
+        cpu_count=config.get("machine:cpu_count"),
         on_options=args.on_options,
         keyword_expr=args.keyword_expr,
     )

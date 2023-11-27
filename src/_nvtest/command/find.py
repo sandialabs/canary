@@ -2,7 +2,7 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
-from ..config import Config
+from .. import config
 from ..finder import Finder
 from ..util import graph
 from ..util import tty
@@ -62,9 +62,9 @@ def setup_parser(parser: "Parser"):
     parser.add_argument("search_paths", nargs="*", help="Search path[s]")
 
 
-def find(config: "Config", args: "argparse.Namespace") -> int:
+def find(args: "argparse.Namespace") -> int:
     if not args.no_header:
-        print_front_matter(config)
+        print_front_matter()
     finder = Finder()
     search_paths = args.search_paths or [os.getcwd()]
     for path in search_paths:
@@ -73,14 +73,14 @@ def find(config: "Config", args: "argparse.Namespace") -> int:
     tree = finder.populate()
     cases = Finder.freeze(
         tree,
-        cpu_count=config.machine.cpu_count,
+        cpu_count=config.get("machine:cpu_count"),
         keyword_expr=args.keyword_expr,
         parameter_expr=args.parameter_expr,
         on_options=args.on_options,
     )
     cases_to_run = [case for case in cases if not case.skip]
     if not args.no_header:
-        print_testcase_summary(config, args, cases)
+        print_testcase_summary(args, cases)
     if args.keywords:
         _print_keywords(cases_to_run)
     elif args.paths:
@@ -145,23 +145,21 @@ def _print(cases_to_run: "list[TestCase]"):
         tty.emit(summary)
 
 
-def print_front_matter(config: Config):
-    n = N = config.machine.cpu_count
-    p = config.machine.platform
-    v = config.python.version
+def print_front_matter():
+    n = N = config.get("machine:cpu_count")
+    p = config.get("system:platform")
+    v = config.get("python:version")
     print(f"platform {p} -- Python {v}, num cores: {n}, max cores: {N}")
     print(f"rootdir: {os.getcwd()}")
 
 
-def print_testcase_summary(
-    config: "Config", args: "argparse.Namespace", cases: "list[TestCase]"
-) -> None:
+def print_testcase_summary(args: "argparse.Namespace", cases: "list[TestCase]") -> None:
     files = {case.file for case in cases}
     t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
     print(colorize(t))
     cases_to_run = [case for case in cases if not case.skip]
     max_workers = getattr(args, "max_workers", None)
-    max_workers = max_workers or config.machine.cpu_count
+    max_workers = max_workers or config.get("machine:cpu_count")
     files = {case.file for case in cases_to_run}
     fmt = "@*g{running} %d test cases from %d files with %s workers"
     print(colorize(fmt % (len(cases_to_run), len(files), max_workers)))

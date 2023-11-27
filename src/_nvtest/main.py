@@ -7,16 +7,14 @@ import traceback
 from types import FunctionType
 from typing import Optional
 
+from . import config
 from . import plugin
 from .command import add_commands
-from .config import Config
 from .config.argparsing import make_argument_parser
 from .config.argparsing import stat_names
 from .error import StopExecution
 from .session import ExitCode
 from .util import tty
-
-DEBUG = os.getenv("NVTEST_DEBUG", "").lower() in ("1", "on", "true", "yes")
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -30,24 +28,29 @@ def main(argv: Optional[list[str]] = None) -> int:
     """
     parser = make_argument_parser()
 
-    load_plugins()
-    add_commands(parser)
+    invocation_dir = os.getcwd()
+    pre, _ = parser.parse_known_args()
 
-    args = parser.parse_args(argv)
-    command = parser.get_command(args.command)
+    try:
+        os.chdir(pre.C or invocation_dir)
 
-    if args.nvtest_profile:
-        return _profile_wrapper(command, args)
-    else:
-        return invoke_command(command, args)
+        load_plugins()
+        add_commands(parser)
+
+        args = parser.parse_args(argv)
+        command = parser.get_command(args.command)
+
+        if args.nvtest_profile:
+            return _profile_wrapper(command, args)
+        else:
+            return invoke_command(command, args)
+    finally:
+        os.chdir(invocation_dir)
 
 
 def invoke_command(command: FunctionType, args: argparse.Namespace) -> int:
-    global DEBUG
-    config = Config()
     config.set_main_options(args)
-    DEBUG = config.debug
-    return command(config, args)
+    return command(args)
 
 
 def _profile_wrapper(command, args):
@@ -113,22 +116,22 @@ def console_main() -> int:
             tty.error(e.message)
         return 1
     except TimeoutError as e:
-        if DEBUG:
+        if config.get("config:debug"):
             raise
         tty.error(e.args[0])
         return 4
     except KeyboardInterrupt:
-        if DEBUG:
+        if config.get("config:debug"):
             raise
         sys.stderr.write("\n")
         tty.error("Keyboard interrupt.")
         return signal.SIGINT.value
     except SystemExit as e:
-        if DEBUG:
+        if config.get("config:debug"):
             traceback.print_exc()
         return e.code
     except Exception as e:
-        if DEBUG:
+        if config.get("config:debug"):
             raise
         tty.error(e)
         return 3
