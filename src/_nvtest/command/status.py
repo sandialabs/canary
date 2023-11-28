@@ -126,18 +126,17 @@ def status(args: "argparse.Namespace") -> int:
                 cases_to_show.append(case)
             elif args.show_notrun and case.result in (Result.NOTRUN, Result.NOTDONE):
                 cases_to_show.append(case)
-    if not cases_to_show:
-        tty.info("Nothing to report")
-        return 0
-    print_status(cases_to_show, show_logs=args.show_logs)
+    if cases_to_show:
+        print_status(cases_to_show, show_logs=args.show_logs)
     if args.durations is not None:
         print_durations(cases, int(args.durations))
+    print_summary(cases)
     return 0
 
 
 def cformat(case: TestCase, show_log: bool) -> str:
     id = tty.color.colorize("@*b{%s}" % case.id[:7])
-    string = "%s %s %s (%g s)" % (case.result.cname, id, str(case), case.duration)
+    string = "%s %s %s (%.2f s.)" % (case.result.cname, id, str(case), case.duration)
     if show_log:
         f = os.path.relpath(case.logfile, os.getcwd())
         string += tty.color.colorize(": @m{%s}" % f)
@@ -170,6 +169,12 @@ def print_status(cases: list[TestCase], show_logs: bool = False) -> None:
             cname = case.result.cname
             reason = case.skip.reason
             tty.print("%s %s: Skipped due to %s" % (cname, str(case), reason))
+
+
+def print_summary(cases: list[TestCase]) -> None:
+    totals: dict[str, list[TestCase]] = {}
+    for case in cases:
+        totals.setdefault(case.result.name, []).append(case)
     summary_parts = []
     colorize = tty.color.colorize
     for member in Result.members:

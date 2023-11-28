@@ -81,6 +81,8 @@ class Finder:
                 return True
             if fs.is_hidden(dirname):
                 return True
+            if os.path.exists(os.path.join(dirname, ".nvtest")):
+                return True
             return False
 
         start = root if subdir is None else os.path.join(root, subdir)
