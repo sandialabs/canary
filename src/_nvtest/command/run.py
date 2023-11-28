@@ -330,6 +330,14 @@ def print_testcase_overview(
     return
 
 
+def cformat(case: TestCase) -> str:
+    id = tty.color.colorize("@*b{%s}" % case.id[:7])
+    string = "%s %s %s" % (case.result.cname, id, str(case))
+    if case.result == Result.SKIP:
+        string = ": Skipped due to %s" % case.skip.reason
+    return string
+
+
 def print_testcase_results(
     cases: list[TestCase], duration: float = -1, durations: int = None
 ) -> None:
@@ -350,7 +358,7 @@ def print_testcase_results(
     for case in cases:
         totals.setdefault(case.result.name, []).append(case)
 
-    nonpass = (Result.FAIL, Result.DIFF, Result.SKIP, Result.NOTDONE)
+    nonpass = (Result.FAIL, Result.DIFF, Result.TIMEOUT, Result.SKIP, Result.NOTDONE)
     level = tty.get_log_level()
     if level > tty.INFO and len(totals):
         tty.print("Short test summary info", centered=True)
@@ -358,38 +366,16 @@ def print_testcase_results(
         tty.print("Short test summary info", centered=True)
     if level > tty.VERBOSE and Result.NOTRUN in totals:
         for case in totals[Result.NOTRUN]:
-            tty.print("%s %s" % (case.result.cname, str(case)))
-    if level > tty.INFO and Result.SETUP in totals:
-        for case in totals[Result.SETUP]:
-            tty.print("%s %s" % (case.result.cname, str(case)))
-    if level > tty.INFO and Result.PASS in totals:
-        for case in totals[Result.PASS]:
-            tty.print("%s %s" % (case.result.cname, str(case)))
-
-    nreported = 0
-    for result in (Result.FAIL, Result.DIFF, Result.TIMEOUT):
-        if result not in totals:
-            continue
-        for case in totals[result]:
-            f = case.logfile
-            if f.startswith(os.getcwd()):
-                f = os.path.relpath(f)
-            reasons = [case.result.reason]
-            if not case.result.reason and not os.path.exists(f):
-                reasons.append("No log file found")
-            else:
-                reasons.append(f"See {f}")
-            reason = ". ".join(_ for _ in reasons if _.split())
-            tty.print("%s %s: %s" % (case.result.cname, str(case), reason))
-            nreported += 1
-    if Result.NOTDONE in totals:
-        for case in totals[Result.NOTDONE]:
-            tty.print("%s %s" % (case.result.cname, str(case)))
-    if Result.SKIP in totals:
-        for case in totals[Result.SKIP]:
-            cname = case.result.cname
-            reason = case.skip.reason
-            tty.print("%s %s: Skipped due to %s" % (cname, str(case), reason))
+            tty.print(cformat(case))
+    if level > tty.INFO:
+        for result in (Result.SETUP, Result.PASS):
+            if result in totals:
+                for case in totals[Result.SETUP]:
+                    tty.print(cformat(case))
+    for result in nonpass:
+        if result in totals:
+            for case in totals[result]:
+                tty.print(cformat(case))
 
     summary_parts = []
     for member in Result.members:
@@ -420,7 +406,10 @@ def read_paths(file: str, paths: dict[str, list[str]]) -> None:
         data = yaml.safe_load(fh)
     testpaths_schema.validate(data)
     for p in data["testpaths"]:
-        paths.setdefault(p["root"], []).extend(p["paths"])
+        if isinstance(p, str):
+            paths.setdefault(p, [])
+        else:
+            paths.setdefault(p["root"], []).extend(p["paths"])
 
 
 def setup_session(args: "argparse.Namespace") -> Session:
@@ -445,6 +434,7 @@ def setup_session(args: "argparse.Namespace") -> Session:
             batch_config=bc,
             parameter_expr=args.parameter_expr,
             copy_all_resources=args.copy_all_resources,
+            ignore_vvt=args.ignore_vvt,
         )
     elif args.mode == "b":
         # Run a single batch

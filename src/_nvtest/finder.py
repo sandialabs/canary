@@ -7,9 +7,10 @@ from .test import TestCase
 from .util import filesystem as fs
 from .util import tty
 
+test_file_extensions = [".pyt", ".vvt"]
+
 
 class Finder:
-    exts = (".pyt", ".vvt")
     skip_dirs = ["__pycache__", ".git", ".svn", ".nvtest"]
     version_info = (1, 0, 3)
 
@@ -17,6 +18,7 @@ class Finder:
         self.roots: dict[str, Optional[list[str]]] = {}
         self._ready = False
         self.tree: dict[str, set[AbstractTestFile]] = {}
+        self.exts = tuple(test_file_extensions)
 
     def prepare(self):
         self._ready = True
@@ -34,11 +36,13 @@ class Finder:
                 raise ValueError(f"{path} not found in {root}")
             self.roots[root].append(path)  # type: ignore
 
-    def populate(self) -> dict[str, set[AbstractTestFile]]:
+    def populate(self, ignore_vvt: bool = False) -> dict[str, set[AbstractTestFile]]:
         if len(self.tree):
             raise ValueError("populate() should be called one time")
         if not self._ready:
             raise ValueError("Cannot call populate() before calling prepare()")
+        if ignore_vvt:
+            self.exts = tuple(self.exts[0:1])
         for (root, paths) in self.roots.items():
             tty.verbose(f"Searching {root} for test files")
             if os.path.isfile(root):
@@ -63,6 +67,8 @@ class Finder:
         n = sum([len(_) for _ in self.tree.values()])
         nr = len(self.tree)
         tty.verbose(f"Found {n} test files in {nr} search roots")
+        if ignore_vvt:
+            self.exts = tuple(test_file_extensions)
 
         return self.tree
 

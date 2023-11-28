@@ -35,6 +35,7 @@ section_schemas: dict[str, Schema] = {
     "machine": machine_schema,
     "python": python_schema,
     "variables": variables_schema,
+    "system": any_schema,
     "session": any_schema,
 }
 
