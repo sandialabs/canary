@@ -40,7 +40,7 @@ section_schemas: dict[str, Schema] = {
 }
 
 read_only_sections = ("python",)
-valid_scopes = ("defaults", "global", "local", "session", "command_line")
+valid_scopes = ("defaults", "global", "local", "session", "environment", "command_line")
 
 
 class Config:
@@ -84,12 +84,24 @@ class Config:
                 self.set("session:start", start, scope="session")
                 break
             dir = os.path.dirname(dir)
+        self.load_env_config()
 
     def load_config(self, file: str, scope: str) -> None:
         self.scopes[scope] = read_config(file)
         if "variables" in self.scopes[scope]:
             for (var, val) in self.scopes[scope]["variables"].items():
                 os.environ[var] = val
+
+    def load_env_config(self) -> None:
+        if "NVTEST_LOG_LEVEL" in os.environ:
+            scope_data = self.scopes.setdefault("environment", {})
+            level: int = int(os.environ["NVTEST_LOG_LEVEL"])
+            tty.set_log_level(level)
+            scope_data.setdefault("config", {})["log_level"] = level
+        if os.getenv("NVTEST_DEBUG", "off").lower() in ("on", "1", "true", "yess"):
+            scope_data = self.scopes.setdefault("environment", {})
+            scope_data.setdefault("config", {})["debug"] = True
+            tty.set_debug(True)
 
     def dump(self, fh: TextIO, scope: Optional[str] = None):
         if scope is not None:

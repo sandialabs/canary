@@ -40,7 +40,7 @@ from .util.lock import Lock
 from .util.lock import WriteTransaction
 from .util.misc import digits
 from .util.returncode import compute_returncode
-from .util.time import timeout
+from .util.time import timeout as timeout_context
 
 default_batchsize = 30 * 60  # 30 minutes
 
@@ -400,6 +400,7 @@ class Session:
         timeout: int = 60 * 60,
         runner_options: list[str] = None,
         fail_fast: bool = False,
+        analyze_only: bool = False,
     ) -> int:
         if not self.queue:
             raise ValueError("This session's queue was not set up")
@@ -414,7 +415,9 @@ class Session:
         try:
             with self.rc_environ():
                 with working_dir(self.work_tree):
-                    self.process_testcases(timeout, fail_fast)
+                    self.process_testcases(
+                        timeout=timeout, fail_fast=fail_fast, analyze_only=analyze_only
+                    )
         finally:
             self.returncode = compute_returncode(self.queue.cases)
         return self.returncode
@@ -457,6 +460,7 @@ class Session:
             save_env[var] = os.environ.pop(var, None)
             os.environ[var] = val
         os.environ["NVTEST_SESSION_NO"] = str(self.id)
+        os.environ["NVTEST_LOG_LEVEL"] = str(tty.get_log_level())
         yield
         for var, save_val in save_env.items():
             if save_val is not None:
@@ -497,19 +501,20 @@ class Session:
                                 hook(self, case)
                     ts.done(*group)
 
-    def process_testcases(self, _timeout: int, fail_fast: bool) -> None:
+    def process_testcases(
+        self, *, timeout: int, fail_fast: bool, analyze_only: bool
+    ) -> None:
         self._futures = {}
-        log_level = tty.get_log_level()
-        timeout_message = f"Test suite execution exceeded time out of {_timeout} s."
+        timeout_message = f"Test suite execution exceeded time out of {timeout} s."
         try:
-            with timeout(_timeout, timeout_message=timeout_message):
+            with timeout_context(timeout, timeout_message=timeout_message):
                 with ProcessPoolExecutor(max_workers=self.max_workers) as self.ppe:
                     while True:
                         try:
                             i, entity = self.queue.pop_next()
                         except StopIteration:
                             return
-                        future = self.ppe.submit(self.runner, entity, log_level)
+                        future = self.ppe.submit(self.runner, entity, analyze_only)
                         callback = partial(
                             self.update_from_future, i, entity, fail_fast
                         )

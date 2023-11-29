@@ -28,7 +28,9 @@ INFO = 2
 WARN = 1
 ERROR = 0
 
-LOG_LEVEL = INFO
+
+DEFAULT_LOG_LEVEL: int = int(os.getenv("NVTEST_LOG_LEVEL", str(INFO)))
+LOG_LEVEL = DEFAULT_LOG_LEVEL
 builtin_print = print
 
 
@@ -55,7 +57,7 @@ def get_log_level() -> int:
 
 
 def default_log_level() -> int:
-    return INFO
+    return DEFAULT_LOG_LEVEL
 
 
 def min_log_level() -> int:

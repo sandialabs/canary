@@ -3,6 +3,7 @@ import code
 import os
 import platform
 import sys
+
 from ..config.argparsing import Parser
 
 description = "launch an interpreter as nvtest would launch a command"
@@ -17,6 +18,7 @@ def setup_parser(subparser: Parser):
 
 def python(args: argparse.Namespace):
     import nvtest
+
     # Fake a main python shell by setting __name__ to __main__.
     python_args = args.python_args
     python_command = args.python_command

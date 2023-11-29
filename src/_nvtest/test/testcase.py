@@ -368,11 +368,9 @@ class TestCase:
     def register_proc(self, proc) -> None:
         self._process = proc
 
-    def run(self, log_level: Optional[int] = None) -> None:
+    def run(self, analyze_only: bool = False) -> None:
         if self.dep_patterns:
             raise RuntimeError("Dependency patterns must be resolved before running")
-        if log_level is not None:
-            _log_level = tty.set_log_level(log_level)
         tty.info(f"STARTING: {self.pretty_repr()}", prefix=None)
         self.start = time.time()
         python = Executable(sys.executable)
@@ -386,6 +384,8 @@ class TestCase:
                         args = [self.analyze]
                     else:
                         args = [os.path.basename(self.file)]
+                        if analyze_only:
+                            args.append("--execute-analysis-sections")
                     with tmp_environ(PYTHONPATH=self.pythonpath, **self.variables):
                         python(*args, fail_on_error=False, timeout=self.timeout)
                     self._process = None
@@ -399,8 +399,6 @@ class TestCase:
         stat = self.result.cname
         tty.info(f"FINISHED: {self.pretty_repr()} {stat}", prefix=None)
         self.dump()
-        if log_level is not None:
-            tty.set_log_level(_log_level)
         return
 
     def kill(self):
