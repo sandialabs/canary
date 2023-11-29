@@ -72,7 +72,7 @@ class Finder:
 
         return self.tree
 
-    def rfind(self, root, subdir=None):
+    def rfind(self, root: str, subdir: Optional[str] = None) -> list[AbstractTestFile]:
         testfiles: list[AbstractTestFile] = []
 
         def skip_dir(dirname):

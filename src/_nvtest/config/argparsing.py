@@ -58,7 +58,7 @@ def py_name(module: ModuleType) -> str:
 
 
 class Parser(argparse.ArgumentParser):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.register("type", None, identity)
         self.__subcommand_modules: dict[str, ModuleType] = {}
@@ -94,11 +94,7 @@ class Parser(argparse.ArgumentParser):
             a_type = type(module.aliases).__name__
             raise TypeError(f"{name}.aliases must be a list, not {a_type}")
 
-    def parse_known_args(
-        self,
-        args: Optional[Sequence[str]] = None,
-        namespace: Optional[argparse.Namespace] = None,
-    ) -> tuple[argparse.Namespace, list[str]]:
+    def parse_known_args(self, args=None, namespace=None):
         if args is not None:
             self.argv = args
         return super().parse_known_args(args, namespace)

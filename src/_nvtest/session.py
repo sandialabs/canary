@@ -66,7 +66,9 @@ class Session:
     """
 
     class BatchConfig:
-        def __init__(self, *, size_t: float = None, size_n: int = None) -> None:
+        def __init__(
+            self, *, size_t: Optional[float] = None, size_n: Optional[int] = None
+        ) -> None:
             self.size_t = size_t
             self.size_n = size_n
             if self.size_t is not None and self.size_n is not None:
@@ -113,7 +115,7 @@ class Session:
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
-        batch_config: BatchConfig = None,
+        batch_config: Optional[BatchConfig] = None,
         copy_all_resources: bool = False,
         ignore_vvt: bool = False,
     ) -> "Session":
@@ -401,9 +403,9 @@ class Session:
 
     def run(
         self,
-        runner: str = None,
+        runner: Optional[str] = None,
         timeout: int = 60 * 60,
-        runner_options: list[str] = None,
+        runner_options: Optional[list[str]] = None,
         fail_fast: bool = False,
         analyze_only: bool = False,
     ) -> int:

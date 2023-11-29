@@ -182,7 +182,9 @@ class Config:
             return {}
         return merged_section[section]
 
-    def get(self, path: str, default: Any = None, scope: Optional[str] = None) -> Any:
+    def get(
+        self, path: str, default: Optional[Any] = None, scope: Optional[str] = None
+    ) -> Any:
         """Get a config section or a single value from one.
 
         Accepts a path syntax that allows us to grab nested config map
@@ -433,7 +435,7 @@ def set_main_options(args: argparse.Namespace) -> None:
     return config.set_main_options(args)
 
 
-def get(path: str, default: Any = None, scope: Optional[str] = None) -> Any:
+def get(path: str, default: Optional[Any] = None, scope: Optional[str] = None) -> Any:
     return config.get(path, default=default, scope=scope)
 
 

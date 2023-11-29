@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 from typing import Iterable
+from typing import Optional
 from typing import Sequence
 from typing import Union
 
@@ -14,8 +15,8 @@ class Marker:
     def keywords(
         self,
         *args: str,
-        parameters: str = None,
-        testname: str = None,
+        parameters: Optional[str] = None,
+        testname: Optional[str] = None,
     ) -> None:
         self.testfile.m_keywords(*args, parameters=parameters, testname=testname)
 
@@ -24,9 +25,9 @@ class Marker:
         names: Union[str, Sequence[str]],
         values: Iterable[Union[Sequence[object], object]],
         *,
-        options: str = None,
-        platforms: str = None,
-        testname: str = None,
+        options: Optional[str] = None,
+        platforms: Optional[str] = None,
+        testname: Optional[str] = None,
     ) -> None:
         self.testfile.m_parameterize(
             names, values, options=options, platforms=platforms, testname=testname
@@ -35,10 +36,10 @@ class Marker:
     def depends_on(
         self,
         arg: str,
-        parameters: str = None,
-        testname: str = None,
-        expect: int = None,
-        result: str = None,
+        parameters: Optional[str] = None,
+        testname: Optional[str] = None,
+        expect: Optional[int] = None,
+        result: Optional[str] = None,
     ):
         self.testfile.m_depends_on(
             arg, testname=testname, result=result, expect=expect, parameters=parameters
@@ -48,11 +49,11 @@ class Marker:
         self,
         arg: bool = True,
         *,
-        flag: str = None,
-        script: str = None,
-        options: str = None,
-        platforms: str = None,
-        testname: str = None,
+        flag: Optional[str] = None,
+        script: Optional[str] = None,
+        options: Optional[str] = None,
+        platforms: Optional[str] = None,
+        testname: Optional[str] = None,
     ):
         self.testfile.m_analyze(
             arg=arg,
@@ -72,10 +73,10 @@ class Marker:
         self,
         arg: Union[str, float, int],
         *,
-        options: str = None,
-        platforms: str = None,
-        parameters: str = None,
-        testname: str = None,
+        options: Optional[str] = None,
+        platforms: Optional[str] = None,
+        parameters: Optional[str] = None,
+        testname: Optional[str] = None,
     ):
         self.testfile.m_timeout(
             arg,
@@ -91,10 +92,10 @@ class Marker:
     def copy(
         self,
         *args: str,
-        options: str = None,
-        platforms: str = None,
-        parameters: str = None,
-        testname: str = None,
+        options: Optional[str] = None,
+        platforms: Optional[str] = None,
+        parameters: Optional[str] = None,
+        testname: Optional[str] = None,
     ):
         self.testfile.m_copy(
             *args,
@@ -108,10 +109,10 @@ class Marker:
         self,
         *args: str,
         rename: bool = False,
-        options: str = None,
-        platforms: str = None,
-        parameters: str = None,
-        testname: str = None,
+        options: Optional[str] = None,
+        platforms: Optional[str] = None,
+        parameters: Optional[str] = None,
+        testname: Optional[str] = None,
     ):
         self.testfile.m_link(
             *args,
@@ -122,16 +123,16 @@ class Marker:
             testname=testname,
         )
 
-    def sources(self, *args: str, testname: str = None):
+    def sources(self, *args: str, testname: Optional[str] = None):
         self.testfile.m_sources(*args, testname=testname)
 
     def enable(
         self,
         arg: bool,
         *,
-        options: str = None,
-        platforms: str = None,
-        testname: str = None,
+        options: Optional[str] = None,
+        platforms: Optional[str] = None,
+        testname: Optional[str] = None,
     ):
         self.testfile.m_enable(
             arg, options=options, platforms=platforms, testname=testname

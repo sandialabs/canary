@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+from typing import Optional
 from typing import TextIO
 
 from . import tty
@@ -15,7 +16,7 @@ class shell:
     type: str
     rcfile: str
 
-    def format_env_mods(self, env_mods, file: TextIO = None) -> None:
+    def format_env_mods(self, env_mods, file: Optional[TextIO] = None) -> None:
         raise NotImplementedError
 
     @staticmethod
@@ -96,7 +97,7 @@ class bash(shell):
             )
             fh.write("# <<< modulecmd initialize <<<\n")
 
-    def format_env_mods(self, env_mods, file: TextIO = None) -> None:
+    def format_env_mods(self, env_mods, file: Optional[TextIO] = None) -> None:
         file = file or sys.stdout
         for var, value in env_mods.variables.items():
             if value is None:
@@ -199,7 +200,7 @@ class csh(shell):
     shells.extend(("csh", "tcsh"))
     rcfile = os.path.expanduser("~/.tcshrc")
 
-    def format_env_mods(self, env_mods, file: TextIO = None) -> None:
+    def format_env_mods(self, env_mods, file: Optional[TextIO] = None) -> None:
         file = file or sys.stdout
         for var, value in env_mods.variables.items():
             if value is None:
@@ -251,7 +252,7 @@ class python(shell):
         pass
 
     @staticmethod
-    def format_env_mods(env_mods, file: TextIO = None) -> None:
+    def format_env_mods(env_mods, file: Optional[TextIO] = None) -> None:
         file = file or sys.stdout
         for var, value in env_mods.variables.items():
             if value is None:
@@ -271,7 +272,7 @@ def default_shell() -> str:
     return os.path.basename(shell)
 
 
-def factory(arg: str = None) -> shell:
+def factory(arg: Optional[str] = None) -> shell:
     arg = arg or default_shell()
     if arg in ("bash", "sh"):
         return bash()

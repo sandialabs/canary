@@ -20,11 +20,11 @@ from ..util.time import timestamp
 
 def report(
     session: Session,
-    buildname: str = None,
-    url: str = None,
-    project: str = None,
-    buildgroup: str = None,
-    site: str = None,
+    buildname: Optional[str] = None,
+    url: Optional[str] = None,
+    project: Optional[str] = None,
+    buildgroup: Optional[str] = None,
+    site: Optional[str] = None,
 ):
     cases_to_run = [case for case in session.cases if not case.skip]
     data = TestData(session, cases_to_run)

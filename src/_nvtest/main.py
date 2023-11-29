@@ -129,7 +129,9 @@ def console_main() -> int:
     except SystemExit as e:
         if config.get("config:debug"):
             traceback.print_exc()
-        return e.code
+        if isinstance(e.code, int):
+            return e.code
+        return 1
     except Exception as e:
         if config.get("config:debug"):
             raise

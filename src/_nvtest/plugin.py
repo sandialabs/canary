@@ -9,7 +9,7 @@ from .util.singleton import Singleton
 
 
 class Manager:
-    def __init__(self):
+    def __init__(self) -> None:
         self._plugins: dict[str, dict[str, list[Callable]]] = {}
 
     def register(self, func: Callable, scope: str, stage: str) -> None:

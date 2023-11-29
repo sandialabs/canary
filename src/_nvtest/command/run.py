@@ -226,7 +226,7 @@ def run(args: "argparse.Namespace") -> int:
     except TimeoutError:
         session.exitstatus = ExitCode.TIMEOUT
     except SystemExit as ex:
-        session.exitstatus = ex.code
+        session.exitstatus = ex.code if isinstance(ex.code, int) else 1
     except BaseException:
         session.exitstatus = ExitCode.INTERNAL_ERROR
     finally:
@@ -368,7 +368,7 @@ def cformat(case: TestCase) -> str:
 
 
 def print_testcase_results(
-    cases: list[TestCase], duration: float = -1, durations: int = None
+    cases: list[TestCase], duration: float = -1, durations: Optional[int] = None
 ) -> None:
     if not cases:
         tty.info("Nothing to report")
