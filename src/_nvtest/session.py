@@ -117,7 +117,6 @@ class Session:
         parameter_expr: Optional[str] = None,
         batch_config: Optional[BatchConfig] = None,
         copy_all_resources: bool = False,
-        ignore_vvt: bool = False,
     ) -> "Session":
         if config.has_scope("session"):
             raise ValueError("cannot create new session when another session is active")
@@ -141,7 +140,6 @@ class Session:
             parameter_expr=parameter_expr,
             batch_config=self.batch_config.asdict(),
             copy_all_resources=copy_all_resources,
-            ignore_vvt=ignore_vvt,
         )
         tty.debug(f"Creating new nvtest session in {config.get('session:start')}")
 
@@ -149,7 +147,7 @@ class Session:
         for hook in plugin.plugins("session", "setup"):
             hook(self)
 
-        tree = self.populate(search_paths, ignore_vvt=ignore_vvt)
+        tree = self.populate(search_paths)
 
         tty.debug(
             "Freezing test files with the following options: ",
@@ -334,7 +332,7 @@ class Session:
         return p
 
     def populate(
-        self, treeish: dict[str, list[str]], ignore_vvt: bool = False
+        self, treeish: dict[str, list[str]]
     ) -> dict[str, set[AbstractTestFile]]:
         assert self.mode == "w"
         tty.debug("Populating test session")
@@ -343,7 +341,7 @@ class Session:
             tty.debug(f"Adding tests in {root}")
             finder.add(root, *_paths)
         finder.prepare()
-        tree = finder.populate(ignore_vvt=ignore_vvt)
+        tree = finder.populate()
         return tree
 
     def filter(

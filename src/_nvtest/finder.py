@@ -1,13 +1,13 @@
 import fnmatch
 import os
+import re
 from typing import Optional
 
+from . import config
 from .test import AbstractTestFile
 from .test import TestCase
 from .util import filesystem as fs
 from .util import tty
-
-test_file_extensions = [".pyt", ".vvt"]
 
 
 class Finder:
@@ -18,7 +18,6 @@ class Finder:
         self.roots: dict[str, Optional[list[str]]] = {}
         self._ready = False
         self.tree: dict[str, set[AbstractTestFile]] = {}
-        self.exts = tuple(test_file_extensions)
 
     def prepare(self):
         self._ready = True
@@ -36,13 +35,11 @@ class Finder:
                 raise ValueError(f"{path} not found in {root}")
             self.roots[root].append(path)  # type: ignore
 
-    def populate(self, ignore_vvt: bool = False) -> dict[str, set[AbstractTestFile]]:
+    def populate(self) -> dict[str, set[AbstractTestFile]]:
         if len(self.tree):
             raise ValueError("populate() should be called one time")
         if not self._ready:
             raise ValueError("Cannot call populate() before calling prepare()")
-        if ignore_vvt:
-            self.exts = tuple(self.exts[0:1])
         for root, paths in self.roots.items():
             tty.verbose(f"Searching {root} for test files")
             if os.path.isfile(root):
@@ -67,13 +64,11 @@ class Finder:
         n = sum([len(_) for _ in self.tree.values()])
         nr = len(self.tree)
         tty.verbose(f"Found {n} test files in {nr} search roots")
-        if ignore_vvt:
-            self.exts = tuple(test_file_extensions)
-
         return self.tree
 
     def rfind(self, root: str, subdir: Optional[str] = None) -> list[AbstractTestFile]:
         testfiles: list[AbstractTestFile] = []
+        file_pattern = config.get("config:test_files") or r"^[a-zA-Z_]\w*\.(vvt|pyt)$"
 
         def skip_dir(dirname):
             if os.path.basename(dirname) in self.skip_dirs:
@@ -92,7 +87,7 @@ class Finder:
             paths = [
                 os.path.relpath(os.path.join(dirname, f), root)
                 for f in files
-                if f.endswith(self.exts)
+                if re.search(file_pattern, f)
             ]
             testfiles.extend([AbstractTestFile(root, path) for path in paths])
         return testfiles

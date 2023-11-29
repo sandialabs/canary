@@ -55,7 +55,11 @@ class Config:
         }
         self.scopes = {
             "defaults": {
-                "config": {"debug": False, "log_level": 2},
+                "config": {
+                    "debug": False,
+                    "log_level": 2,
+                    "test_files": r"^[a-zA-Z_]\w*\.(vvt|pyt)$",
+                },
                 "machine": editable_machine_config,
                 "system": machine,
                 "variables": {},

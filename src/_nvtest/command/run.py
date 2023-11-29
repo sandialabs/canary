@@ -1,7 +1,6 @@
 import argparse
 import glob
 import os
-import re
 import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
@@ -264,7 +263,7 @@ def parse_pathspec(args: argparse.Namespace) -> None:
         args.mode = "a"
         args.case_specs = []
         for i, p in enumerate(args.pathspec):
-            if looks_like_case_spec(p):
+            if TestCase.spec_like(p):
                 args.case_specs.append(p[1:] if p.startswith("/") else p)
                 args.pathspec[i] = None
         if args.case_specs:
@@ -464,7 +463,6 @@ def setup_session(args: "argparse.Namespace") -> Session:
             batch_config=bc,
             parameter_expr=args.parameter_expr,
             copy_all_resources=args.copy_all_resources,
-            ignore_vvt=args.ignore_vvt,
         )
     elif args.mode == "b":
         # Run a single batch
@@ -485,11 +483,3 @@ def setup_session(args: "argparse.Namespace") -> Session:
         )
     session.exitstatus = ExitCode.OK
     return session
-
-
-def looks_like_case_spec(case_spec):
-    if case_spec.startswith("/") and not os.path.exists(case_spec):
-        return True
-    elif re.search(r"^[a-zA-Z_]\w*\[.*\]$", case_spec):
-        return True
-    return False

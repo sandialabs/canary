@@ -95,9 +95,13 @@ def status(args: "argparse.Namespace") -> int:
     session = Session.load(mode="r")
     cases = session.cases
     if args.pathspec:
-        pathspec = os.path.abspath(args.pathspec)
-        if pathspec != work_tree:
-            cases = [c for c in cases if matches(pathspec, c)]
+        if TestCase.spec_like(args.pathspec):
+            cases = [c for c in cases if c.matches(args.pathspec)]
+            args.show_all = True
+        else:
+            pathspec = os.path.abspath(args.pathspec)
+            if pathspec != work_tree:
+                cases = [c for c in cases if c.exec_dir.startswith(pathspec)]
     for attr in (
         "show_fail",
         "show_diff",

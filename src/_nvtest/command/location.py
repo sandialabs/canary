@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING
 
 from .. import config
 from ..session import Session
-from ..test.testcase import TestCase
 from ..util import tty
 
 if TYPE_CHECKING:
@@ -34,20 +33,13 @@ def setup_parser(parser: "Parser"):
 
 
 def location(args: "argparse.Namespace") -> int:
-    def matches(case: TestCase):
-        if case.id.startswith(args.testspec):
-            return True
-        if case.display_name == args.testspec:
-            return True
-        return False
-
     work_tree = config.get("session:work_tree")
     if work_tree is None:
         tty.die("not a nvtest session (or any of the parent directories): .nvtest")
 
     session = Session.load(mode="r")
     for case in session.cases:
-        if matches(case):
+        if case.matches(args.testspec):
             if args.results_dir:
                 print(case.exec_dir)
             else:

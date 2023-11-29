@@ -1,6 +1,7 @@
 import itertools
 import json
 import os
+import re
 import sys
 import time
 from copy import deepcopy
@@ -114,11 +115,23 @@ class TestCase:
         return self.display_name
 
     def matches(self, pattern) -> bool:
-        if self.id.startswith(pattern):
+        if pattern.startswith("/") and self.id.startswith(pattern[1:]):
             return True
-        if self.display_name == pattern:
+        elif self.id.startswith(pattern):
+            tty.warn(f"Prefer /{pattern}")
             return True
-        if self.file_path.endswith(pattern):
+        elif self.display_name == pattern:
+            return True
+        elif self.file_path.endswith(pattern):
+            return True
+        return False
+
+    @staticmethod
+    def spec_like(spec: str) -> bool:
+        display_name_pattern = r"^[a-zA-Z_]\w*\[.*\]$"
+        if spec.startswith("/") and not os.path.exists(spec):
+            return True
+        elif re.search(display_name_pattern, spec):
             return True
         return False
 

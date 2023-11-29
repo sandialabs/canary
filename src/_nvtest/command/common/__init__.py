@@ -44,13 +44,6 @@ def add_mark_arguments(parser: "Parser") -> None:
         default=None,
         help="Filter tests by parameter name and value, such as '-p np=8' or '-p np<8'",
     )
-    group.add_argument(
-        "--ignore-vvt",
-        dest="ignore_vvt",
-        action="store_true",
-        default=False,
-        help="Ignore .vvt files [default: %(default)s]",
-    )
 
 
 def add_work_tree_arguments(parser: "Parser") -> None:
