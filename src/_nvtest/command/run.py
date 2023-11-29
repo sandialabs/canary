@@ -406,7 +406,7 @@ def print_durations(cases: list[TestCase], N: int) -> None:
         sorted_cases = sorted_cases[-N:]
     tty.print(f"Slowest {len(sorted_cases)} durations", centered=True)
     for case in sorted_cases:
-        tty.print("%6.2f     %s" % (case.duration, str(case)))
+        tty.print("  %6.2f     %s" % (case.duration, case.pretty_repr()))
 
 
 def read_paths(file: str, paths: dict[str, list[str]]) -> None:
@@ -466,3 +466,4 @@ def setup_session(args: "argparse.Namespace") -> Session:
         )
     session.exitstatus = ExitCode.OK
     return session
+

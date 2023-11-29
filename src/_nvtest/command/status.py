@@ -184,4 +184,5 @@ def print_durations(cases: list[TestCase], N: int) -> None:
         sorted_cases = sorted_cases[-N:]
     tty.print(f"\nSlowest {len(sorted_cases)} durations\n")
     for case in sorted_cases:
-        tty.print("  %6.2f     %s" % (case.duration, str(case)))
+        tty.print("  %6.2f     %s" % (case.duration, case.pretty_repr()))
+
