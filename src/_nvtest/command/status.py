@@ -139,7 +139,9 @@ def status(args: "argparse.Namespace") -> int:
 
 def cformat(case: TestCase, show_log: bool) -> str:
     id = tty.color.colorize("@*b{%s}" % case.id[:7])
-    string = "%s %s %s (%.2f s.)" % (case.result.cname, id, str(case), case.duration)
+    string = "%s %s %s (%.2f s.)" % (
+        case.result.cname, id, case.pretty_repr(), case.duration
+    )
     if case.result == Result.SKIP:
         string = ": Skipped due to %s" % case.skip.reason
     if show_log:
