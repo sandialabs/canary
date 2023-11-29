@@ -25,7 +25,7 @@ The first found is used.  Basic configuration settings are:
    [config]
    debug = false
    log_level = int
-   test_files = r"^[a-zA-Z_]\w+\.(pyt|vvt)$"  # regular expression for test file names
+   test_files = r"^[a-zA-Z_]\w*\.(pyt|vvt)$"  # regular expression for test file names
 
    [variables]
    key = "value"  # environment variables to set for the test session
