@@ -14,7 +14,11 @@ Install nvtest
 
       git clone git@cee-gitlab.gov:tfuller/nvtest
       cd nvtest
-      pip install .
+      pip install -e .
+
+  .. note::
+
+    The ``-e`` flag puts the installation in "editable" mode, allowing changes to the source code to appear in your python environment.
 
 3. Check the installation
 
