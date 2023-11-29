@@ -15,13 +15,11 @@ pages:
   artifacts:
     paths:
     - public
-  only:
-    refs:
-    - master
+  rules:
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     changes:
     - docs/*.rst
     - docs/*/*.rst
     - docs/**/*.rst
-  except:
-    refs:
-    - schedules
+    when: always
+

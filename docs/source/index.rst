@@ -32,3 +32,4 @@ Indices and tables
 
 .. [#] ``.pyt`` scripts are written in python while ``.vvt`` scripts can be any executable recognized by the system, though scripts written in Python can take advantage of the full ``nvtest`` ecosystem.
 .. [#] Other test outcomes are also possible, eg, ``diffed``, ``timeout``.  See :ref:`test-status`.
+
