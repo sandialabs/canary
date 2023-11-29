@@ -23,11 +23,9 @@ def pretty_print(text: str):
     from pygments.lexers import get_lexer_by_name
 
     lexer = get_lexer_by_name("yaml")
-    print(
-        highlight(
-            text.strip(), lexer, Formatter(bg="dark", style="monokai", linenos=True)
-        )
-    )
+    formatter = Formatter(bg="dark", style="monokai", linenos=True)
+    formatted_text = highlight(text.strip(), lexer, formatter)
+    print(formatted_text)
 
 
 def config(args: "argparse.Namespace") -> int:
