@@ -6,7 +6,9 @@ Install nvtest
 
 ``nvtest`` requires Python 3.9+
 
-1. Clone and install via ``pip``
+1. Create and activate a python virtual environment or conda environment.  For instructions on creating a conda environment, see :ref:`conda-env`.
+
+2. Clone and install via ``pip``
 
    .. code-block:: console
 
@@ -14,7 +16,7 @@ Install nvtest
       cd nvtest
       pip install .
 
-2. Check the installation
+3. Check the installation
 
   .. code-block:: console
 
@@ -139,3 +141,49 @@ To get help on an individual subcommand, issue
 .. code-block:: console
 
    nvtest SUBCOMMAND -h
+
+
+.. _conda-env:
+
+How to set up a conda environment
+---------------------------------
+
+The following conda environment is a good starting point for scientific computing.  Write the following to ``environment.yml``
+
+.. code-block:: yaml
+
+   name:
+   dependencies:
+   - python=3.9
+   - numpy
+   - matplotlib
+   - scipy
+   - netcdf4
+   - imageio
+   - yaml
+   - pyyaml
+   - requests
+   - six
+   - urllib3
+   - pytest
+   - coverage
+   - sphinx
+   - alabaster
+   - black
+   - flake8
+   - bokeh
+   - conda-forge::conda-pack
+   - conda-forge::clingo
+
+At the command line, execute the following, substituting ``PREFIX`` for the prefix of your choice:
+
+.. code-block:: console
+
+  $ export PREFIX=YOUR_PREFIX
+  $ mkdir -p $PREFIX/python
+  $ cd $PREFIX/python
+  $ # Write environment.yml
+  $ conda env create -k -f ./environment.yml -p ./3.9
+
+This will put a full-featured python environment in ``PREFIX/python/3.9``.
+
