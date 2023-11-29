@@ -43,7 +43,7 @@ class Finder:
             raise ValueError("Cannot call populate() before calling prepare()")
         if ignore_vvt:
             self.exts = tuple(self.exts[0:1])
-        for (root, paths) in self.roots.items():
+        for root, paths in self.roots.items():
             tty.verbose(f"Searching {root} for test files")
             if os.path.isfile(root):
                 f = AbstractTestFile(root)
@@ -73,7 +73,6 @@ class Finder:
         return self.tree
 
     def rfind(self, root, subdir=None):
-
         testfiles: list[AbstractTestFile] = []
 
         def skip_dir(dirname):
@@ -86,7 +85,7 @@ class Finder:
             return False
 
         start = root if subdir is None else os.path.join(root, subdir)
-        for (dirname, dirs, files) in os.walk(start):
+        for dirname, dirs, files in os.walk(start):
             if skip_dir(dirname):
                 del dirs[:]
                 continue
@@ -106,7 +105,7 @@ class Finder:
     def resolve_dependencies(cases: list[TestCase]) -> None:
         tty.verbose("Resolving dependencies across test suite")
         case_map = {}
-        for (i, case) in enumerate(cases):
+        for i, case in enumerate(cases):
             case_map[case.name] = i
             case_map[case.display_name] = i
             case_map[case.exec_path] = i

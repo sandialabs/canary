@@ -272,7 +272,7 @@ class AbstractTestFile:
         tty.verbose("Resolving dependencies in test file")
         case_map = dict([(case.name, i) for (i, case) in enumerate(cases)])
         for i, case in enumerate(cases):
-            for (j, pat) in enumerate(case.dep_patterns):
+            for j, pat in enumerate(case.dep_patterns):
                 matches = [
                     cases[k]
                     for (name, k) in case_map.items()

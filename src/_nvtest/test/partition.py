@@ -67,8 +67,8 @@ class Partition(list):
 
 def group_testcases(cases: list[TestCase]):
     groups: list[set[TestCase]] = [{case} | set(case.dependencies) for case in cases]
-    for (i, group) in enumerate(groups):
-        for (j, other) in enumerate(groups):
+    for i, group in enumerate(groups):
+        for j, other in enumerate(groups):
             if i != j and group & other:
                 group.update(other)
                 other.clear()
@@ -104,7 +104,7 @@ def load_partition(path: str) -> Partition:
         data = json.load(fh)
 
     ts: TopologicalSorter = TopologicalSorter()
-    for (id, kwds) in data["cases"].items():
+    for id, kwds in data["cases"].items():
         ts.add(id, *kwds["dependencies"])
     cases: dict[str, TestCase] = {}
     for id in ts.static_order():

@@ -233,7 +233,7 @@ class Session:
         self.lock = Lock(lock_path, default_timeout=120, desc="session")
         assert os.path.exists(os.path.join(self.dotdir, "stage"))
         with open(os.path.join(self.dotdir, "params")) as fh:
-            for (attr, value) in json.load(fh).items():
+            for attr, value in json.load(fh).items():
                 if attr == "batch_config":
                     value = Session.BatchConfig(**value)
                 setattr(self, attr, value)
@@ -283,7 +283,7 @@ class Session:
         config.set("session:invocation_dir", os.getcwd(), scope="session")
         start = os.path.relpath(work_tree, os.getcwd()) or "."
         config.set("session:start", start, scope="session")
-        for (key, value) in kwds.items():
+        for key, value in kwds.items():
             config.set(f"session:{key}", value, scope="session")
         for attr in ("sockets_per_node", "cores_per_socket", "cpu_count"):
             value = config.get(f"machine:{attr}", scope="local")
@@ -291,7 +291,7 @@ class Session:
                 config.set(f"machine:{attr}", value, scope="session")
         for section in ("config", "variables"):
             data = config.get(section, scope="local") or {}
-            for (key, value) in data.items():
+            for key, value in data.items():
                 config.set(f"{section}:{key}", value, scope="session")
         dotdir = os.path.join(work_tree, config.config_dir)
         mkdirp(dotdir)
@@ -337,7 +337,7 @@ class Session:
         assert self.mode == "w"
         tty.debug("Populating test session")
         finder = Finder()
-        for (root, _paths) in treeish.items():
+        for root, _paths in treeish.items():
             tty.debug(f"Adding tests in {root}")
             finder.add(root, *_paths)
         finder.prepare()
@@ -350,6 +350,7 @@ class Session:
         parameter_expr: Optional[str] = None,
         start: Optional[str] = None,
         max_cores_per_test: Optional[int] = None,
+        case_specs: Optional[list[str]] = None,
     ) -> None:
         if not self.cases:
             raise ValueError("This test session has not been setup")
@@ -361,6 +362,10 @@ class Session:
         for case in self.cases:
             if case.result != Result.NOTRUN and not case.exec_dir.startswith(start):
                 case.skip = Skip(Skip.UNREACHABLE)
+                continue
+            if case_specs is not None and any(case.matches(_) for _ in case_specs):
+                case.skip = Skip()
+                case.result = Result("notrun")
                 continue
             if case.result not in (Result.NOTDONE, Result.NOTRUN, Result.SETUP):
                 skip_reason = f"previous test result: {case.result.cname}"
@@ -571,10 +576,10 @@ class Session:
             with open(file) as fh:
                 for line in fh:
                     if line.split():
-                        for (case_id, value) in json.loads(line).items():
+                        for case_id, value in json.loads(line).items():
                             fd[case_id].update(value)
         ts: TopologicalSorter = TopologicalSorter()
-        for (id, kwds) in fd.items():
+        for id, kwds in fd.items():
             ts.add(id, *kwds["dependencies"])
         cases: dict[str, TestCase] = {}
         for id in ts.static_order():
@@ -633,6 +638,6 @@ def load_test_results(stage: str) -> dict[str, dict]:
     fd: dict[str, dict] = {}
     for line in lines:
         if line.split():
-            for (case_id, value) in json.loads(line.strip()).items():
+            for case_id, value in json.loads(line.strip()).items():
                 fd.setdefault(case_id, {}).update(value)
     return fd

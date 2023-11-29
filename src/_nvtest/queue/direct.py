@@ -27,7 +27,7 @@ class DirectQueue(Queue):
         with self.lock():
             self._done[case_no] = self._running.pop(case_no)
             for case in self.queue.values():
-                for (i, dep) in enumerate(case.dependencies):
+                for i, dep in enumerate(case.dependencies):
                     if dep.id == self._done[case_no].id:
                         case.dependencies[i] = self._done[case_no]
         return self._done[case_no]

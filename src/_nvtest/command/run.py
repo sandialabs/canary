@@ -1,6 +1,7 @@
 import argparse
 import glob
 import os
+import re
 import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
@@ -235,9 +236,10 @@ def run(args: "argparse.Namespace") -> int:
 
 
 def parse_pathspec(args: argparse.Namespace) -> None:
-    """Parse the ``pathspec`` argument.  The ``pathspec`` can take on different meanings:
+    """Parse the ``pathspec`` argument.
 
-    Each entry in pathspec can represent one of
+    The ``pathspec`` can take on different meanings, each entry in pathspec
+    can represent one of
 
     - an input file containing search path information when creating a new session
     - a directory to search for test files when creating a new session
@@ -257,19 +259,30 @@ def parse_pathspec(args: argparse.Namespace) -> None:
             tty.die(f"^b{args.batch_no} requires ^sSESSION_ID")
         if args.work_tree is not None:
             tty.die(f"^b{args.batch_no} and -d{args.work_tree} are incompatible")
-    elif not args.pathspec:
-        args.pathspec.append(os.getcwd())
-    for path in args.pathspec:
-        if config.get("session"):
-            args.mode = "a"
-            if len(args.pathspec) > 1:
+        return
+    if config.get("session"):
+        args.mode = "a"
+        args.case_specs = []
+        for i, p in enumerate(args.pathspec):
+            if looks_like_case_spec(p):
+                args.case_specs.append(p[1:] if p.startswith("/") else p)
+                args.pathspec[i] = None
+        if args.case_specs:
+            args.pathspec = [_ for _ in args.pathspec if _ is not None]
+            if args.pathspec:
                 tty.die("incompatible input path arguments")
-            if args.work_tree is not None:
-                tty.die(f"work_tree={args.work_tree} incompatible with path arguments")
-            if args.wipe:
-                tty.die("wipe=True incompatible with path arguments")
-            args.work_tree = config.get("session:work_tree")
-            path = os.path.abspath(path)
+        if len(args.pathspec) > 1:
+            tty.die("incompatible input path arguments")
+        if args.work_tree is not None:
+            tty.die(f"work_tree={args.work_tree} incompatible with path arguments")
+        args.work_tree = config.get("session:work_tree")
+        if args.wipe:
+            tty.die("wipe=True incompatible with path arguments")
+        try:
+            path = os.path.abspath(args.pathspec.pop(0))
+        except IndexError:
+            pass
+        else:
             if path.endswith((".yaml", ".yml", ".json")):
                 tty.die(f"path={path} is an illegal pathspec argument in re-use mode")
             if not path.startswith(args.work_tree):
@@ -282,8 +295,11 @@ def parse_pathspec(args: argparse.Namespace) -> None:
                     f = glob.glob(f"{path}/*{ext}")
                     if len(f) == 1:
                         args.keyword_expr = os.path.splitext(os.path.basename(f[0]))[0]
-                        break
-        elif path.endswith((".yaml", ".yml", ".json")):
+        return
+    if not args.pathspec:
+        args.pathspec.append(os.getcwd())
+    for path in args.pathspec:
+        if path.endswith((".yaml", ".yml", ".json")):
             args.mode = "w"
             read_paths(path, args.paths)
         elif os.path.isfile(path) and path.endswith((".vvt", ".pyt")):
@@ -341,7 +357,10 @@ def print_testcase_overview(
 def cformat(case: TestCase) -> str:
     id = tty.color.colorize("@*b{%s}" % case.id[:7])
     string = "%s %s %s (%.2f s.)" % (
-        case.result.cname, id, case.pretty_repr(), case.duration
+        case.result.cname,
+        id,
+        case.pretty_repr(),
+        case.duration,
     )
     if case.result == Result.SKIP:
         string = ": Skipped due to %s" % case.skip.reason
@@ -351,7 +370,6 @@ def cformat(case: TestCase) -> str:
 def print_testcase_results(
     cases: list[TestCase], duration: float = -1, durations: int = None
 ) -> None:
-
     if not cases:
         tty.info("Nothing to report")
         return
@@ -463,7 +481,15 @@ def setup_session(args: "argparse.Namespace") -> Session:
             start=args.start,
             parameter_expr=args.parameter_expr,
             max_cores_per_test=args.max_cores_per_test,
+            case_specs=getattr(args, "case_specs", None),
         )
     session.exitstatus = ExitCode.OK
     return session
 
+
+def looks_like_case_spec(case_spec):
+    if case_spec.startswith("/") and not os.path.exists(case_spec):
+        return True
+    elif re.search(r"^[a-zA-Z_]\w*\[.*\]$", case_spec):
+        return True
+    return False

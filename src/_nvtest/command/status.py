@@ -140,7 +140,10 @@ def status(args: "argparse.Namespace") -> int:
 def cformat(case: TestCase, show_log: bool) -> str:
     id = tty.color.colorize("@*b{%s}" % case.id[:7])
     string = "%s %s %s (%.2f s.)" % (
-        case.result.cname, id, case.pretty_repr(), case.duration
+        case.result.cname,
+        id,
+        case.pretty_repr(),
+        case.duration,
     )
     if case.result == Result.SKIP:
         string = ": Skipped due to %s" % case.skip.reason
@@ -185,4 +188,3 @@ def print_durations(cases: list[TestCase], N: int) -> None:
     tty.print(f"\nSlowest {len(sorted_cases)} durations\n")
     for case in sorted_cases:
         tty.print("  %6.2f     %s" % (case.duration, case.pretty_repr()))
-

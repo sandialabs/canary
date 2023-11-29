@@ -371,7 +371,7 @@ def write_vvtest_util(case: "TestCase") -> None:
     with open("vvtest_util.py", "w") as fh:
         fh.write("import os\n")
         fh.write("import sys\n")
-        for (key, value) in attrs.items():
+        for key, value in attrs.items():
             fh.write(f"{key} = {json.dumps(value, indent=3)}\n")
 
 
@@ -407,9 +407,9 @@ def get_vvtest_attrs(case: "TestCase") -> dict:
     if case.dependencies:
         paramset = {}
         for dep in case.dependencies:
-            for (key, value) in dep.parameters.items():
+            for key, value in dep.parameters.items():
                 paramset.setdefault(key, []).append(value)
-        for (key, values) in paramset.items():
+        for key, values in paramset.items():
             attrs[f"PARAM_{key}"] = unique(values)
         if len(paramset) > 1:
             key = "_".join(_ for _ in next(iter(case.dependencies)).parameters)

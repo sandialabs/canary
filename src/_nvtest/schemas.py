@@ -13,7 +13,7 @@ def vardict(arg: Any) -> bool:
         return True
     if not isinstance(arg, dict):
         return False
-    for (key, value) in arg.items():
+    for key, value in arg.items():
         if not isinstance(key, str):
             return False
         if not isinstance(value, str):

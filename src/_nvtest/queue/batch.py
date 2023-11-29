@@ -30,7 +30,7 @@ class BatchQueue(Queue):
             completed = dict([(_.id, _) for _ in self.completed_testcases()])
             for batch in self.queue.values():
                 for case in batch:
-                    for (i, dep) in enumerate(case.dependencies):
+                    for i, dep in enumerate(case.dependencies):
                         if dep.id in completed:
                             case.dependencies[i] = completed[dep.id]
         return self._done[batch_no]

@@ -28,7 +28,7 @@ def load(fh: TextIO) -> list[TestCase]:
     index = fd["index"]
     ts: TopologicalSorter = TopologicalSorter()
     tcases = index.pop("cases")
-    for (id, kwds) in tcases.items():
+    for id, kwds in tcases.items():
         ts.add(id, *kwds["dependencies"])
     cases: dict[str, TestCase] = {}
     for id in ts.static_order():

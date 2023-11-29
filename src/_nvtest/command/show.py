@@ -36,7 +36,7 @@ def setup_parser(parser: "Parser"):
 
 
 def matches(case: TestCase, testspec: str) -> bool:
-    if case.id.startswith(testspec):
+    if testspec.startswith("/") and case.id.startswith(testspec[1:]):
         return True
     if case.display_name == testspec:
         return True
@@ -44,7 +44,6 @@ def matches(case: TestCase, testspec: str) -> bool:
 
 
 def show(args: "argparse.Namespace") -> int:
-
     work_tree = config.get("session:work_tree")
     if work_tree is None:
         tty.die("not a nvtest session (or any of the parent directories): .nvtest")

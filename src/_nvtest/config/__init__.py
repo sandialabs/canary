@@ -89,7 +89,7 @@ class Config:
     def load_config(self, file: str, scope: str) -> None:
         self.scopes[scope] = read_config(file)
         if "variables" in self.scopes[scope]:
-            for (var, val) in self.scopes[scope]["variables"].items():
+            for var, val in self.scopes[scope]["variables"].items():
                 os.environ[var] = val
 
     def load_env_config(self) -> None:
@@ -108,9 +108,9 @@ class Config:
             merged = self.scopes[scope]
         else:
             merged = self.merge()
-        for (section, data) in merged.items():
+        for section, data in merged.items():
             fh.write(f"[{section}]\n")
-            for (key, value) in data.items():
+            for key, value in data.items():
                 fh.write(f"{key} = {json.dumps(value)}\n")
             fh.write("\n")
 
@@ -124,7 +124,7 @@ class Config:
         if args.debug:
             tty.set_debug(True)
             scope_data.setdefault("config", {})["debug"] = True
-        for (var, val) in args.env_mods.items():
+        for var, val in args.env_mods.items():
             os.environ[var] = val
             scope_data.setdefault("variables", {})[var] = val
         for path in args.config_mods:
@@ -383,7 +383,7 @@ def read_config(file: str, tolerant: bool = False) -> dict:
         if tolerant and section in read_only_sections:
             continue
         section_data = data.setdefault(section, {})
-        for (key, value) in cfg.items(section, raw=True):
+        for key, value in cfg.items(section, raw=True):
             value = Template(value).safe_substitute(os.environ)
             try:
                 section_data[key] = json.loads(value)

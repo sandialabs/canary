@@ -113,6 +113,15 @@ class TestCase:
     def __repr__(self) -> str:
         return self.display_name
 
+    def matches(self, pattern) -> bool:
+        if self.id.startswith(pattern):
+            return True
+        if self.display_name == pattern:
+            return True
+        if self.file_path.endswith(pattern):
+            return True
+        return False
+
     def pretty_repr(self) -> str:
         family = colorize("@*{%s}" % self.family)
         i = self.display_name.find("[")

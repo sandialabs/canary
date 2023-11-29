@@ -67,7 +67,7 @@ def print(cases: list[TestCase], file: Union[str, Path, TextIO] = sys.stdout) ->
         if case in all_deps:
             remove.append(case)
     cases = [case for case in cases if case not in remove]
-    for (i, case) in enumerate(cases):
+    for i, case in enumerate(cases):
         print_case(case, file=file, end=i == len(cases) - 1)
     if fown:
         file.close()
