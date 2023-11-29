@@ -1,0 +1,118 @@
+# CMake module
+include(CMakeParseArguments)
+
+function(reset_nvtest_cache)
+    set(NVTEST_SEARCH_PATH "" CACHE STRING "" FORCE)
+endfunction()
+
+# --- ADD_NVTEST --------------------------------------------------------------------- #
+function(add_nvtest)
+  macro(_print_usage)
+    set(
+      USAGE_STR
+      "\nADD_NVTEST(NAME <name> [COMMAND <command>|SCRIPT <script>] [LINK <link>])\n"
+      "Add a nvtest unit test.\n"
+    )
+    message("${USAGE_STR}")
+  endmacro(_print_usage)
+  cmake_parse_arguments(PARSED_ARGS "NO_DEFAULT_LINK" "NAME;COMMAND;SCRIPT" "LINK" ${ARGN})
+  if(NOT PARSED_ARGS_NAME)
+    _print_usage()
+    message(FATAL_ERROR "Must define <name>")
+  endif()
+  set(NAME ${PARSED_ARGS_NAME})
+
+  if(NOT PARSED_ARGS_COMMAND AND NOT PARSED_ARGS_SCRIPT)
+    _print_usage()
+    message(FATAL_ERROR "Must define exactly one of <command> or <script>")
+  endif()
+
+  if(PARSED_ARGS_COMMAND AND PARSED_ARGS_SCRIPT)
+    _print_usage()
+    message(FATAL_ERROR "Must define exactly one of <command> or <script>")
+  endif()
+
+  set(CONTENT "#!/usr/bin/env python3\nimport sys\nimport nvtest\n")
+  string(APPEND CONTENT "nvtest.mark.keywords(\"fast\", \"unit_test\")\n")
+
+  if(PARSED_ARGS_COMMAND)
+    separate_arguments(COMMAND_LIST UNIX_COMMAND ${PARSED_ARGS_COMMAND})
+    list(GET COMMAND_LIST 0 PROGRAM)
+    if(NOT NO_DEFAULT_LINK)
+      string(APPEND CONTENT "nvtest.mark.link(\"${PROGRAM}\")\n")
+    endif()
+    if(PARSED_ARGS_LINK)
+      foreach(LINK_ARG ${PARSED_ARGS_LINK})
+        string(APPEND CONTENT "nvtest.mark.link(\"${LINK_ARG}\")\n")
+      endforeach()
+    endif()
+    string(APPEND CONTENT "def test():\n    cmd = nvtest.Executable(\"${PROGRAM}")
+    list(LENGTH COMMAND_LIST N)
+    if(N GREATER 1)
+      list(SUBLIST COMMAND_LIST 1 -1 TMP)
+      foreach(ARG ${TMP})
+        string(APPEND CONTENT " ${ARG}")
+      endforeach()
+    endif()
+    string(APPEND CONTENT "\")\n    cmd()\n    if cmd.returncode != 0:\n")
+    string(APPEND CONTENT "        raise nvtest.TestFailed(\"${NAME}\")\n    return 0\n")
+    string(APPEND CONTENT "if __name__ == \"__main__\":\n    sys.exit(test())\n")
+    file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${NAME}.pyt" CONTENT "${CONTENT}")
+  else()
+    get_filename_component(F ${PARSED_ARGS_SCRIPT} NAME)
+    file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${F}.pyt" INPUT "${PARSED_ARGS_SCRIPT}")
+  endif()
+  add_nvtest_search_path(${CMAKE_CURRENT_BINARY_DIR})
+endfunction()
+
+# --- ADD_NVTEST_SEARCH_PATH --------------------------------------------------------- #
+function(add_nvtest_search_path DIRECTORY)
+  macro(_print_usage)
+    message("\nadd_nvtest_search_path(<directory>)\n Add directory to nvtest search path.\n")
+  endmacro(_print_usage)
+  if(NOT DIRECTORY)
+    _print_usage()
+    message(FATAL_ERROR "Must define <directory>")
+  endif()
+  if(NOT IS_ABSOLUTE ${DIRECTORY})
+    set(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${DIRECTORY})
+  endif()
+  list(APPEND NVTEST_SEARCH_PATH "${DIRECTORY}")
+  list(REMOVE_DUPLICATES NVTEST_SEARCH_PATH)
+  set(NVTEST_SEARCH_PATH "${NVTEST_SEARCH_PATH}" CACHE STRING "" FORCE)
+endfunction()
+
+# --- ADD_NVTEST_OPTIONS ------------------------------------------------------------- #
+function(add_nvtest_options)
+  macro(_print_usage)
+    message("\nADD_NVTEST_OPTIONS(ON_OPTION <option>)\n Add option to nvtest options.\n")
+  endmacro(_print_usage)
+  cmake_parse_arguments(PARSED_ARGS "" "" "ON_OPTION" ${ARGN})
+  if(NOT PARSED_ARGS_ON_OPTION)
+    _print_usage()
+    message(FATAL_ERROR "Must define <option>")
+  endif()
+  foreach(ON_OPTION ${PARSED_ARGS_ON_OPTION})
+    list(APPEND NVTEST_OPTION_ON_OPTIONS "${ON_OPTION}")
+    list(REMOVE_DUPLICATES NVTEST_OPTION_ON_OPTIONS)
+  endforeach()
+  set(NVTEST_OPTION_ON_OPTIONS "${NVTEST_OPTION_ON_OPTIONS}" CACHE STRING "" FORCE)
+endfunction()
+
+# --- WRITE_NVTEST_CONFIG ------------------------------------------------------------ #
+function(write_nvtest_config)
+  add_custom_target(
+    nvtest
+    VERBATIM
+    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
+    COMMAND nvtest -w .
+  )
+  set_target_properties(nvtest PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  set(TMPSTR "\"testpaths\": [")
+  foreach(DIR ${NVTEST_SEARCH_PATH})
+    set(TMPSTR "${TMPSTR}\n  \"${DIR}\",")
+  endforeach()
+  string(REGEX REPLACE ",$" "" FILE_CONTENTS ${TMPSTR})
+  set(FILE_CONTENTS "${FILE_CONTENTS}\n]")
+  file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/nvtest.json" "${FILE_CONTENTS}")
+endfunction()

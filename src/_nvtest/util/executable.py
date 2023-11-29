@@ -122,6 +122,7 @@ class Executable:
         else:
             env = self.default_env.copy()
             env.update(env_arg)
+        env["PATH"] = f"{os.getcwd()}:{env['PATH']}"
         env.update(kwargs.get("extra_env", {}))
         if "_dump_env" in kwargs:
             kwargs["_dump_env"].clear()

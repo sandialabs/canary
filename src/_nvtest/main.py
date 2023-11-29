@@ -29,7 +29,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = make_argument_parser()
 
     invocation_dir = os.getcwd()
-    pre, _ = parser.parse_known_args()
+    pre = parser.preparse()
 
     try:
         os.chdir(pre.C or invocation_dir)

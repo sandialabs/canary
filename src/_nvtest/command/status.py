@@ -81,6 +81,7 @@ def setup_parser(parser: "Parser"):
         help="Show status for all tests (implies -ptdfn) [default: %(default)s]",
     )
     parser.add_argument("pathspec", nargs="?", help="Limit status results to this path")
+    parser.epilog = "-fdt is assumed if no other selection flags are passed"
 
 
 def matches(pathspec, case):
@@ -108,7 +109,7 @@ def status(args: "argparse.Namespace") -> int:
         if getattr(args, attr):
             break
     else:
-        args.show_all = True
+        args.show_diff = args.show_fail = args.show_timeout = True
     cases_to_show: list[TestCase] = []
     if args.show_all:
         cases_to_show = cases
@@ -126,49 +127,38 @@ def status(args: "argparse.Namespace") -> int:
                 cases_to_show.append(case)
             elif args.show_notrun and case.result in (Result.NOTRUN, Result.NOTDONE):
                 cases_to_show.append(case)
+    n: int = 0
     if cases_to_show:
-        print_status(cases_to_show, show_logs=args.show_logs)
+        n = print_status(cases_to_show, show_logs=args.show_logs)
     if args.durations is not None:
         print_durations(cases, int(args.durations))
-    print_summary(cases)
+    if n:
+        print_summary(cases)
     return 0
 
 
 def cformat(case: TestCase, show_log: bool) -> str:
     id = tty.color.colorize("@*b{%s}" % case.id[:7])
     string = "%s %s %s (%.2f s.)" % (case.result.cname, id, str(case), case.duration)
+    if case.result == Result.SKIP:
+        string = ": Skipped due to %s" % case.skip.reason
     if show_log:
         f = os.path.relpath(case.logfile, os.getcwd())
         string += tty.color.colorize(": @m{%s}" % f)
     return string
 
 
-def print_status(cases: list[TestCase], show_logs: bool = False) -> None:
+def print_status(cases: list[TestCase], show_logs: bool = False) -> int:
     totals: dict[str, list[TestCase]] = {}
     for case in cases:
         totals.setdefault(case.result.name, []).append(case)
-    if Result.NOTRUN in totals:
-        for case in totals[Result.NOTRUN]:
-            tty.print(cformat(case, show_logs))
-    if Result.SETUP in totals:
-        for case in totals[Result.SETUP]:
-            tty.print(cformat(case, show_logs))
-    if Result.PASS in totals:
-        for case in totals[Result.PASS]:
-            tty.print(cformat(case, show_logs))
-    for result in (Result.FAIL, Result.DIFF, Result.TIMEOUT):
-        if result not in totals:
-            continue
-        for case in totals[result]:
-            tty.print(cformat(case, show_logs))
-    if Result.NOTDONE in totals:
-        for case in totals[Result.NOTDONE]:
-            tty.print(cformat(case, show_logs))
-    if Result.SKIP in totals:
-        for case in totals[Result.SKIP]:
-            cname = case.result.cname
-            reason = case.skip.reason
-            tty.print("%s %s: Skipped due to %s" % (cname, str(case), reason))
+    nprinted = 0
+    for member in Result.members:
+        if member in totals:
+            for case in totals[member]:
+                tty.print(cformat(case, show_logs))
+                nprinted += 1
+    return nprinted
 
 
 def print_summary(cases: list[TestCase]) -> None:
