@@ -74,8 +74,8 @@ would generate the following file in the current binary directory
        if cmd.returncode != 0:
            raise nvtest.TestFailed("my_test")
 
-```add_nvtest_target```
-~~~~~~~~~~~~~~~~~~~~~~~
+``add_nvtest_target``
+~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: cmake
 
