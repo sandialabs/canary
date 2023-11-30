@@ -74,6 +74,80 @@ would generate the following file in the current binary directory
        if cmd.returncode != 0:
            raise nvtest.TestFailed("my_test")
 
+``add_parallel_nvtest``
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: cmake
+
+   add_nvtest(
+    NAME <name>
+    COMMAND <command>
+    NPROC <np1 [np2...]>
+    [NO_DEFAULT_LINK]
+    [LINK link1 [link2...]]
+    [KEYWORDS kwd1 [kwd2...]]
+   )
+
+Generates a ``nvtest`` named ``<name>`` in the current binary directory that is parameterized on the number of processors.  Parallel jobs are launched using the value of `MPIEXEC_EXECUTABLE <https://cmake.org/cmake/help/latest/module/FindMPI.html#variables-for-using-mpi>`_.
+
+CMake generator expressions are supported.
+
+.. rubric:: Parameters
+
+``NAME``:
+  The name of the test case.
+``COMMAND``:
+  Specify the test command line.  This is the command line that will be executed in the generated ``.pyt`` file.
+``NPROC``:
+  Number of processors to run the test on.
+``NO_DEFAULT_LINK``:
+  By default, the first argument in ``COMMAND`` is :ref:`linked <directive-link>` in the ``nvtest`` file.  This option disables the behavior.
+``LINK``:
+  Optional auxiliary files that should be :ref:`linked <directive-link>` into the test's execution directory.
+``KEYWORDS``:
+  Optional test :ref:`keywords <directive-keywords>`.
+
+
+.. rubric:: Example
+
+.. code-block:: cmake
+
+   add_executable(my_parallel_test my_parallel_test.cxx)
+   add_parallel_nvtest(
+     NAME my_parallel_test
+     COMMAND my_parallel_test --option=value
+     NPROC 1 4
+     KEYWORDS fast unit_test
+   )
+
+would generate the following file in the current binary directory
+
+.. code-block:: python
+
+   #!/usr/bin/env python3
+   # my_parallel_test.pyt
+   import sys
+   import nvtest
+   nvtest.mark.keywords("fast", "unit_test")
+   nvtest.mark.link("my_test")
+   nvtest.mark.parameterize("np", [1, 4])
+   def test():
+       self = nvtest.test.instance
+       mpi = nvtest.Executable("${MPIEXEC_EXECUTABLE}")
+       args = ["${MPIEXEC_NUMPROC_FLAG}", self.parameters.np, "my_parallel_test", "--option=value"]
+       mpi(*args, allow_failure=True)
+       if mpi.returncode != 0:
+           raise nvtest.TestFailed("my_parallel_test")
+
+.. note::
+
+    The values of ``${MPIEXEC_EXECUTABLE}`` and ``${MPIEXEC_NUMPROC_FLAG}`` are expanded in the actual test file.
+
+.. note::
+
+   If the variables ``MPIEXEC_EXECUTABLE_OVERRIDE`` and/or ``MPIEXEC_NUMPROC_FLAG_OVERRIDE`` are defined, they are preferred over the standard values of ``${MPIEXEC_EXECUTABLE}`` and ``${MPIEXEC_NUMPROC_FLAG}``.  This is useful, for example, when the tests will run in a queuing system and need to be run with ``srun`` or ``jsrun``.
+
+
 ``add_nvtest_target``
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -83,6 +157,26 @@ would generate the following file in the current binary directory
 
 Adds a make target "nvtest" to the project.  When invoked in the build directory ``nvtest -w`` is executed.
 
+.. rubric:: Example
+
+In your ``CMakeLists.txt`` add
+
+.. code-block:: cmake
+
+    add_nvtest_target()
+
+and then
+
+.. code-block:: console
+
+   cd BUILD_DIR
+   cmake [OPTIONS] $SOURCE_DIR
+   make
+   make vvtest
+   make install
+
+.. _write-nvtest-config:
+
 ``write_nvtest_config``
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -90,7 +184,7 @@ Adds a make target "nvtest" to the project.  When invoked in the build directory
 
    write_nvtest_config()
 
-Generates a ``nvtest.cfg`` configuration file in the project's build directory.
+Generates a ``nvtest.cfg`` configuration file in the project's build directory.  The configuration populates the :ref:`build section <config-file>` of the configuration file.
 
 ``add_nvtest_options``
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -100,3 +194,17 @@ Generates a ``nvtest.cfg`` configuration file in the project's build directory.
    add_nvtest_options(ON_OPTION <opt1 [opt2...]>)
 
 Add options to the ``build:options`` configuration setting.
+
+.. rubric:: Example
+
+.. code-block:: cmake
+
+   add_nvtest_options(ON_OPTION feature1 feature2)
+
+would cause the following to be written to the build configuration (:ref:`write-nvtest-config` must be called):
+
+.. code-block:: ini
+
+   [build:options]
+   feature1 = true
+   feature2 = true
