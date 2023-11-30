@@ -29,6 +29,16 @@ See :ref:`test-directives` for more.
 
 Executable statements that are run during the session's run phase.
 
+Best practices
+~~~~~~~~~~~~~~
+
+Because [``.pyt``] test files are imported during the discovery process, the test body should be contained in one or more functions with an entry point guarded by
+
+.. code-block:: python
+
+    if __name__ == "__main__":
+        # run the test
+
 Test case expansion
 -------------------
 
