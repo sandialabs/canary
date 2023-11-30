@@ -16,4 +16,5 @@ pip install -e .
 
 ## Documentation
 
-See the [rst documentation](./docs/source/index.rst)
+- [website](http://tfuller.cee-gitlab.lan/nvtest/)
+- [documentation source](./docs/source/index.rst)
