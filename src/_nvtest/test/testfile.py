@@ -19,7 +19,7 @@ from ..mark.match import deselect_by_platform
 from ..mark.structures import AbstractParameterSet
 from ..mark.structures import ParameterSet
 from ..mark.structures import combine_parameter_sets
-from ..util import rprobe
+from ..third_party import rprobe
 from ..util import tty
 from ..util.filesystem import working_dir
 from ..util.time import time_in_seconds

@@ -9,7 +9,7 @@ Python 3.9+
 ## Install
 
 ```console
-git clone git@cee-gitlab.sandia.gov:tjfulle/nvtest
+git clone git@cee-gitlab.sandia.gov:tfuller/nvtest
 cd nvtest
 pip install -e .
 ```

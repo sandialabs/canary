@@ -10,16 +10,17 @@ from typing import Optional
 from typing import TextIO
 from typing import Union
 
-from ..schemas import any_schema
-from ..schemas import config_schema
-from ..schemas import machine_schema
-from ..schemas import python_schema
-from ..schemas import variables_schema
 from ..util import tty
 from ..util.schema import Schema
 from ..util.schema import SchemaError
 from ..util.singleton import Singleton
 from .machine import machine_config
+from .schemas import any_schema
+from .schemas import build_schema
+from .schemas import config_schema
+from .schemas import machine_schema
+from .schemas import python_schema
+from .schemas import variables_schema
 
 
 class ConfigParser(configparser.ConfigParser):
@@ -31,12 +32,13 @@ config_dir = ".nvtest"
 
 
 section_schemas: dict[str, Schema] = {
+    "build": build_schema,
     "config": config_schema,
     "machine": machine_schema,
     "python": python_schema,
     "variables": variables_schema,
-    "system": any_schema,
     "session": any_schema,
+    "system": any_schema,
 }
 
 read_only_sections = ("python",)
@@ -381,13 +383,11 @@ def _merge(dest, source):
     return copy.copy(source)
 
 
-def read_config(file: str, tolerant: bool = False) -> dict:
+def read_config(file: str) -> dict:
     cfg = ConfigParser()
     cfg.read(file)
     data: dict[str, Any] = {}
     for section in cfg.sections():
-        if tolerant and section in read_only_sections:
-            continue
         section_data = data.setdefault(section, {})
         for key, value in cfg.items(section, raw=True):
             value = Template(value).safe_substitute(os.environ)
@@ -395,13 +395,29 @@ def read_config(file: str, tolerant: bool = False) -> dict:
                 section_data[key] = json.loads(value)
             except json.decoder.JSONDecodeError:
                 section_data[key] = value
-        if section in section_schemas:
-            schema = section_schemas[section]
-            try:
-                schema.validate({section: section_data})
-            except SchemaError as e:
-                raise ConfigSchemaError(file, e.args[0]) from None
-    return data
+    config_data: dict[str, Any] = {}
+    # expand any keys given as a:b:c
+    for (path, section_data) in data.items():
+        if path in section_schemas:
+            config_data[path] = section_data
+        elif ":" in path:
+            parts = parse_config_path(path)
+            if parts[0] not in section_schemas:
+                tty.warn(f"ignoring unrecognized config section: {parts[0]}")
+                continue
+            x = config_data.setdefault(parts[0], {})
+            for part in parts[1:]:
+                x = x.setdefault(part, {})
+            x.update(section_data)
+        else:
+            tty.warn(f"ignoring unrecognized config section: {path}")
+    for (section, section_data) in config_data.items():
+        schema = section_schemas[section]
+        try:
+            schema.validate({section: section_data})
+        except SchemaError as e:
+            raise ConfigSchemaError(file, e.args[0]) from None
+    return config_data
 
 
 def parse_config_path(path):

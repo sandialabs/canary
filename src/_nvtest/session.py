@@ -31,12 +31,13 @@ from .test.partition import Partition
 from .test.partition import partition_n
 from .test.partition import partition_t
 from .test.testcase import TestCase
+from .third_party.lock import Lock
+from .third_party.lock import WriteTransaction
 from .util import tty
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
-from .util.lock import Lock
-from .util.lock import WriteTransaction
+from .util.misc import dedup
 from .util.misc import digits
 from .util.returncode import compute_returncode
 from .util.time import timeout as timeout_context
@@ -127,6 +128,13 @@ class Session:
         self.max_workers = max_workers or 5
         self.search_paths = search_paths
         self.batch_config = batch_config or Session.BatchConfig()
+
+        on_options = on_options or []
+        if config.get("build:options"):
+            for (opt, val) in config.get("build:options").items():
+                if val:
+                    on_options.append(opt)
+        on_options = dedup(on_options)
 
         self._create_config(
             work_tree,

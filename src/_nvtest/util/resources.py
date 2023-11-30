@@ -2,7 +2,7 @@ import math
 import os
 from types import SimpleNamespace
 
-from . import rprobe
+from ..third_party import rprobe
 
 
 def compute_resource_allocations(

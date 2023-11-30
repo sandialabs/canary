@@ -1,7 +1,7 @@
 from typing import Any
 
-from .util.schema import Optional
-from .util.schema import Schema
+from ..util.schema import Optional
+from ..util.schema import Schema
 
 
 def list_of_str(arg: Any) -> bool:
@@ -44,5 +44,24 @@ python_schema = Schema(
 )
 variables_schema = Schema({"variables": vardict})
 testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
+
+build_schema = Schema(
+    {
+        "build": {
+            Optional("type"): str,
+            Optional("date"): str,
+            Optional("compiler"): {
+                Optional("vendor"): str,
+                Optional("version"): str,
+                Optional("paths"): {
+                    Optional("cc"): str,
+                    Optional("cxx"): str,
+                    Optional("fc"): str,
+                },
+            },
+            Optional("options"): dict,
+        }
+    }
+)
 
 any_schema = Schema({}, ignore_extra_keys=True)

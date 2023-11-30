@@ -3,7 +3,7 @@ from typing import Union
 
 from ..test.partition import Partition
 from ..test.testcase import TestCase
-from ..util import rprobe
+from ..third_party import rprobe
 from ..util import tty
 from .base import Queue
 from .batch import BatchQueue

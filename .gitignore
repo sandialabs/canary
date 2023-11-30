@@ -16,3 +16,5 @@ src/UNKNOWN.egg-info/
 src/_nvtest/_version.py
 
 docs/build
+
+.pre-commit.log

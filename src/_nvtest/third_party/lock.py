@@ -10,9 +10,9 @@ import sys
 import time
 from datetime import datetime
 
-from . import tty
-from .misc import plural
-from .time import pretty_seconds
+from ..util import tty
+from ..util.misc import plural
+from ..util.time import pretty_seconds
 
 if sys.platform != "win32":
     import fcntl

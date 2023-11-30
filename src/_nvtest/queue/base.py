@@ -11,7 +11,7 @@ from ..test.partition import Partition
 from ..test.testcase import TestCase
 
 # from ..util import keyboard
-from ..util import rprobe
+from ..third_party import rprobe
 from ..util.tty.color import clen
 from ..util.tty.color import colorize
 

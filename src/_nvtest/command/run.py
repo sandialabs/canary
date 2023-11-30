@@ -11,9 +11,9 @@ from typing import Union
 
 from .. import config
 from .. import finder
+from ..config.schemas import testpaths_schema
 from ..error import StopExecution
 from ..runner import valid_runners
-from ..schemas import testpaths_schema
 from ..session import ExitCode
 from ..session import Session
 from ..test.enums import Result

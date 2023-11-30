@@ -19,7 +19,7 @@ target-version = ['py39']
 line_length = 88
 
 [tool.mypy]
-exclude = ["scripts", "tests", "src/_nvtest/config/distro.py", "src/_nvtest/_session"]
+exclude = ["scripts", "tests", "src/_nvtest/third_party/distro.py", "src/_nvtest/_session"]
 
 [[tool.mypy.overrides]]
 module = "networkx.*,yaml.*,ruamel.*,pygments.*,toml.*,contextlib2.*,scipy.*"

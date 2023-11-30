@@ -15,7 +15,7 @@ def sys_info():
         return
     try:
         # This will throw an error if imported on a non-Linux platform.
-        from .distro import linux_distribution
+        from ..third_party.distro import linux_distribution
 
         distname, version, _ = linux_distribution(full_distribution_name=False)
         vendor, version = str(distname), str(version)

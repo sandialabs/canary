@@ -3,7 +3,7 @@ import platform
 import re
 import sys
 
-from ..util import rprobe
+from ..third_party import rprobe
 from ..util.executable import Executable
 from ..util.filesystem import which
 from . import linux
