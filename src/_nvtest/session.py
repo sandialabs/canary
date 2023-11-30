@@ -1,4 +1,3 @@
-import glob
 import inspect
 import json
 import multiprocessing
@@ -529,13 +528,11 @@ class Session:
     def _load_testcases(self) -> list[TestCase]:
         with open(os.path.join(self.index_dir, "cases")) as fh:
             fd = json.load(fh)
-        pat = os.path.join(self.dotdir, "stage/*/tests")
-        for file in sorted(glob.glob(pat)):
-            with open(file) as fh:
-                for line in fh:
-                    if line.split():
-                        for case_id, value in json.loads(line).items():
-                            fd[case_id].update(value)
+        with open(self.results_file) as fh:
+            for line in fh:
+                if line.split():
+                    for case_id, value in json.loads(line).items():
+                        fd[case_id].update(value)
         ts: TopologicalSorter = TopologicalSorter()
         for id, kwds in fd.items():
             ts.add(id, *kwds["dependencies"])

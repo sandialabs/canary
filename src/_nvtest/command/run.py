@@ -1,5 +1,4 @@
 import argparse
-import glob
 import os
 import time
 from contextlib import contextmanager
@@ -11,6 +10,7 @@ from typing import Sequence
 from typing import Union
 
 from .. import config
+from .. import finder
 from ..error import StopExecution
 from ..runner import valid_runners
 from ..schemas import testpaths_schema
@@ -241,63 +241,76 @@ def parse_pathspec(args: argparse.Namespace) -> None:
     - a filter when re-using a previous session
 
     """
-    args.mode = None
     args.start = None
-    args.paths = {}
     if config.get("session"):
-        args.mode = "a"
-        args.case_specs = []
-        for i, p in enumerate(args.pathspec):
-            if TestCase.spec_like(p):
-                args.case_specs.append(p if p.startswith("/") else p)
-                args.pathspec[i] = None
-        if args.case_specs:
-            args.pathspec = [_ for _ in args.pathspec if _ is not None]
-            if args.pathspec:
-                tty.die("incompatible input path arguments")
-        if len(args.pathspec) > 1:
-            tty.die("incompatible input path arguments")
-        if args.work_tree is not None:
-            tty.die(f"work_tree={args.work_tree} incompatible with path arguments")
-        args.work_tree = config.get("session:work_tree")
-        if args.wipe:
-            tty.die("wipe=True incompatible with path arguments")
-        try:
-            path = os.path.abspath(args.pathspec.pop(0))
-        except IndexError:
-            pass
-        else:
-            if path.endswith((".yaml", ".yml", ".json")):
-                tty.die(f"path={path} is an illegal pathspec argument in re-use mode")
-            if not path.startswith(args.work_tree):
-                tty.die("path arg must be a child of the work tree")
-            args.start = os.path.relpath(path, args.work_tree)
-            if path.endswith((".vvt", ".pyt")):
-                args.keyword_expr = os.path.splitext(os.path.basename(path))[0]
-            else:
-                for ext in (".vvt", ".pyt"):
-                    f = glob.glob(f"{path}/*{ext}")
-                    if len(f) == 1:
-                        args.keyword_expr = os.path.splitext(os.path.basename(f[0]))[0]
-        return
+        return _parse_in_session_pathspec(args)
+    else:
+        return _parse_new_session_pathspec(args)
+
+
+def _parse_new_session_pathspec(args: argparse.Namespace) -> None:
+    args.mode = "w"
+    args.paths = {}
     if not args.pathspec:
-        args.pathspec.append(os.getcwd())
+        args.paths.setdefault(os.getcwd(), [])
+        return
     for path in args.pathspec:
         if path.endswith((".yaml", ".yml", ".json")):
-            args.mode = "w"
             read_paths(path, args.paths)
-        elif os.path.isfile(path) and path.endswith((".vvt", ".pyt")):
-            args.mode = "w"
+        elif os.path.isfile(path) and finder.is_test_file(path):
             root, name = os.path.split(path)
             args.paths.setdefault(root, []).append(name)
         elif os.path.isdir(path):
-            args.mode = "w"
             args.paths.setdefault(path, [])
         else:
             tty.die(f"{path}: no such file or directory")
 
-    if args.mode is None:
-        tty.die("internal error: mode = None.  This should never happen")
+
+def _parse_in_session_pathspec(args: argparse.Namespace) -> None:
+    assert config.get("session") is not None
+    args.mode = "a"
+    if args.work_tree is not None:
+        tty.die(f"work_tree={args.work_tree} incompatible with path arguments")
+    args.work_tree = config.get("session:work_tree")
+
+    def setdefault(obj, attr, default):
+        setattr(obj, attr, default)
+        return getattr(obj, attr)
+
+    pathspec: list[str] = []
+    for i, p in enumerate(args.pathspec):
+        if TestCase.spec_like(p):
+            setdefault(args, "case_specs", []).append(p)
+            args.pathspec[i] = None
+        else:
+            pathspec.append(p)
+    if getattr(args, "case_specs", None):
+        if pathspec:
+            tty.die("do not mix /ID with other pathspec arguments")
+    if len(pathspec) > 1:
+        tty.die("incompatible input path arguments")
+    if args.wipe:
+        tty.die("wipe=True incompatible with path arguments")
+    if pathspec:
+        path = os.path.abspath(pathspec.pop(0))
+        if not os.path.exists(path):
+            tty.die(f"{path}: no such file or directory")
+        if path.endswith((".yaml", ".yml", ".json")):
+            tty.die(f"path={path} is an illegal pathspec argument in re-use mode")
+        if not path.startswith(args.work_tree):
+            tty.die("path arg must be a child of the work tree")
+        args.start = os.path.relpath(path, args.work_tree)
+        if os.path.isfile(path):
+            if finder.is_test_file(path):
+                args.keyword_expr = os.path.splitext(os.path.basename(path))[0]
+            else:
+                tty.die(f"{path}: unrecognized file extension")
+        else:
+            for f in os.listdir(path):
+                if finder.is_test_file(f):
+                    args.keyword_expr = os.path.splitext(os.path.basename(f[0]))[0]
+                    break
+    return
 
 
 def print_front_matter(args: "argparse.Namespace"):

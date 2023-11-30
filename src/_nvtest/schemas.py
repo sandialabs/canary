@@ -22,7 +22,13 @@ def vardict(arg: Any) -> bool:
 
 
 config_schema = Schema(
-    {"config": {Optional("debug"): bool, Optional("log_level"): int}}
+    {
+        "config": {
+            Optional("debug"): bool,
+            Optional("log_level"): int,
+            Optional("test_files"): str,
+        }
+    }
 )
 machine_schema = Schema(
     {

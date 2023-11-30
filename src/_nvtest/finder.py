@@ -68,7 +68,6 @@ class Finder:
 
     def rfind(self, root: str, subdir: Optional[str] = None) -> list[AbstractTestFile]:
         testfiles: list[AbstractTestFile] = []
-        file_pattern = config.get("config:test_files") or r"^[a-zA-Z_]\w*\.(vvt|pyt)$"
 
         def skip_dir(dirname):
             if os.path.basename(dirname) in self.skip_dirs:
@@ -87,7 +86,7 @@ class Finder:
             paths = [
                 os.path.relpath(os.path.join(dirname, f), root)
                 for f in files
-                if re.search(file_pattern, f)
+                if is_test_file(f)
             ]
             testfiles.extend([AbstractTestFile(root, path) for path in paths])
         return testfiles
@@ -172,6 +171,11 @@ class Finder:
         Finder.check_for_skipped_dependencies(cases)
         tty.verbose("Done creating test cases")
         return cases
+
+
+def is_test_file(file):
+    file_pattern = config.get("config:test_files") or r"^[a-zA-Z_]\w*\.(vvt|pyt)$"
+    return bool(re.search(file_pattern, os.path.basename(file)))
 
 
 class FinderError(Exception):
