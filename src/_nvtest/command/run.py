@@ -36,7 +36,6 @@ description = "Run the tests"
 
 
 def setup_parser(parser: "Parser"):
-    parser.prefix_chars = "-^"
     add_work_tree_arguments(parser)
     add_mark_arguments(parser)
     add_timing_arguments(parser)
@@ -104,9 +103,6 @@ def setup_parser(parser: "Parser"):
         help="Do not link resources to the test "
         "directory, only copy [default: %(default)s]",
     )
-    group = parser.add_argument_group("batching")
-    group.add_argument("^s", dest="session_no", type=int, help=argparse.SUPPRESS)
-    group.add_argument("^b", dest="batch_no", type=int, help=argparse.SUPPRESS)
     p1 = group.add_mutually_exclusive_group()
     p1.add_argument(
         "--batch-size",
@@ -248,23 +244,12 @@ def parse_pathspec(args: argparse.Namespace) -> None:
     args.mode = None
     args.start = None
     args.paths = {}
-    if args.batch_no is not None:
-        args.mode = "b"
-        if not config.get("session"):
-            tty.die("^bBATCH_NO must be run in a work tree")
-        if args.pathspec:
-            tty.die("^bBATCH_NO should not include pathspec[s]")
-        if args.session_no is None:
-            tty.die(f"^b{args.batch_no} requires ^sSESSION_ID")
-        if args.work_tree is not None:
-            tty.die(f"^b{args.batch_no} and -d{args.work_tree} are incompatible")
-        return
     if config.get("session"):
         args.mode = "a"
         args.case_specs = []
         for i, p in enumerate(args.pathspec):
             if TestCase.spec_like(p):
-                args.case_specs.append(p[1:] if p.startswith("/") else p)
+                args.case_specs.append(p if p.startswith("/") else p)
                 args.pathspec[i] = None
         if args.case_specs:
             args.pathspec = [_ for _ in args.pathspec if _ is not None]
@@ -446,7 +431,6 @@ def setup_session(args: "argparse.Namespace") -> Session:
         force_remove(args.work_tree or Session.default_work_tree)
     if not args.no_header:
         print_front_matter(args)
-
     session: Session
     if args.mode == "w":
         tty.print("Setting up test session", centered=True)
@@ -464,16 +448,10 @@ def setup_session(args: "argparse.Namespace") -> Session:
             parameter_expr=args.parameter_expr,
             copy_all_resources=args.copy_all_resources,
         )
-    elif args.mode == "b":
-        # Run a single batch
-        assert args.batch_no is not None
-        assert args.session_no is not None
-        tty.print(f"Setting up batch {args.batch_no}", centered=True)
-        session = Session.load_batch(batch_no=args.batch_no, session_no=args.session_no)
     else:
         assert args.mode == "a"
         tty.print("Setting up test session", centered=True)
-        session = Session.copy(mode=args.mode)
+        session = Session.load(mode=args.mode)
         session.filter(
             keyword_expr=args.keyword_expr,
             start=args.start,

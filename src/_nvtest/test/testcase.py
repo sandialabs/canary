@@ -299,12 +299,16 @@ class TestCase:
             with open("environment.json", "w") as fh:
                 json.dump({"PYTHONPATH": self.pythonpath}, fh, indent=2)
 
+    def load_results(self):
+        file = os.path.join(self.exec_dir, ".nvtest/case.json")
+        if not os.path.exists(file):
+            raise FileNotFoundError(file)
+        with open(file) as fh:
+            return json.load(fh)
+
     def rc_environ(self) -> dict[str, str]:
-        env = {}
-        f = os.path.join(self.exec_dir, ".nvtest/environment.json")
-        if os.path.exists(f):
-            with open(f) as fh:
-                env.update(json.load(fh))
+        env = dict(PYTHONPATH=self.pythonpath)
+        env.update(self.variables)
         return env
 
     @classmethod
@@ -400,15 +404,9 @@ class TestCase:
         with fs.working_dir(self.exec_dir):
             with tty.log_output(self.logfile, mode="a"):
                 with tty.timestamps():
-                    if self.analyze and self.analyze.startswith("-"):
-                        args = [os.path.basename(self.file), self.analyze]
-                    elif self.analyze:
-                        args = [self.analyze]
-                    else:
-                        args = [os.path.basename(self.file)]
-                        if analyze_only:
-                            args.append("--execute-analysis-sections")
-                    with tmp_environ(PYTHONPATH=self.pythonpath, **self.variables):
+                    args = self.command_line_args(analyze_only=analyze_only)
+                    env = self.rc_environ()
+                    with tmp_environ(**env):
                         python(*args, fail_on_error=False, timeout=self.timeout)
                     self._process = None
                     self.cmd_line = python.cmd_line
@@ -422,6 +420,17 @@ class TestCase:
         tty.info(f"FINISHED: {self.pretty_repr()} {stat}", prefix=None)
         self.dump()
         return
+
+    def command_line_args(self, analyze_only: bool = False) -> list[str]:
+        if self.analyze and self.analyze.startswith("-"):
+            args = [os.path.basename(self.file), self.analyze]
+        elif self.analyze:
+            args = [self.analyze]
+        else:
+            args = [os.path.basename(self.file)]
+            if analyze_only:
+                args.append("--execute-analysis-sections")
+        return args
 
     def kill(self):
         if self._process is not None:

@@ -99,7 +99,7 @@ class Session:
         calling_func = None
         if "cls" in frame.f_locals:
             calling_func = getattr(frame.f_locals["cls"], frame.f_code.co_name, None)
-        if calling_func not in (Session.create, Session.load, Session.copy):
+        if calling_func not in (Session.create, Session.load):
             raise ValueError(
                 "Session must be created through one of its factory methods"
             )
@@ -122,7 +122,6 @@ class Session:
             raise ValueError("cannot create new session when another session is active")
         self = cls()
         self.mode = "w"
-        self.id = 0
 
         self.exitstatus = -1
         self.max_cores_per_test = max_cores_per_test or config.get("machine:cpu_count")
@@ -219,7 +218,7 @@ class Session:
         return self
 
     @classmethod
-    def load(cls, *, session_no: Optional[int] = None, mode: str = "r") -> "Session":
+    def load(cls, *, mode: str = "r") -> "Session":
         work_tree = config.get("session:work_tree")
         if not work_tree:
             raise ValueError(
@@ -238,43 +237,6 @@ class Session:
                     value = Session.BatchConfig(**value)
                 setattr(self, attr, value)
         self.cases = self._load_testcases()
-        if session_no is not None:
-            n_sessions = len(os.listdir(os.path.join(self.dotdir, "stage")))
-            assert session_no < n_sessions
-            self.id = session_no
-        elif mode == "r":
-            self.id = len(os.listdir(os.path.join(self.dotdir, "stage"))) - 1
-        else:
-            self.id = -1
-        return self
-
-    @classmethod
-    def load_batch(
-        cls,
-        *,
-        batch_no: int,
-        session_no: Optional[int] = None,
-    ) -> "Session":
-        self = Session.load(session_no=session_no, mode="a")
-        n = max(3, digits(len(os.listdir(self.batchdir))))
-        f = os.path.join(self.batchdir, f"{batch_no:0{n}d}")
-        case_ids: list[str] = [_.strip() for _ in open(f).readlines() if _.split()]
-        for case in self.cases:
-            if case.id in case_ids:
-                case.skip = Skip()
-                case.result = Result("notrun")
-            elif not case.skip:
-                case.skip = Skip("case is not in batch")
-        cases = self.cases_to_run()
-        self.queue = q_factory(
-            cases, workers=self.max_workers, cpu_count=self.max_cores_per_test
-        )
-        return self
-
-    @classmethod
-    def copy(cls, *, mode: str = "a") -> "Session":
-        self = Session.load(mode=mode)
-        self.id = len(os.listdir(os.path.join(self.dotdir, "stage")))
         return self
 
     def _create_config(self, work_tree: str, **kwds: Any) -> None:
@@ -319,7 +281,7 @@ class Session:
 
     @property
     def stage(self) -> str:
-        return os.path.join(self.dotdir, "stage", f"{self.id:03d}")
+        return os.path.join(self.dotdir, "stage")
 
     @property
     def batchdir(self):
@@ -363,9 +325,12 @@ class Session:
             if case.result != Result.NOTRUN and not case.exec_dir.startswith(start):
                 case.skip = Skip(Skip.UNREACHABLE)
                 continue
-            if case_specs is not None and any(case.matches(_) for _ in case_specs):
-                case.skip = Skip()
-                case.result = Result("notrun")
+            if case_specs is not None:
+                if any(case.matches(_) for _ in case_specs):
+                    case.skip = Skip()
+                    case.result = Result("notrun")
+                else:
+                    case.skip = Skip("not explicitly requested")
                 continue
             if case.result not in (Result.NOTDONE, Result.NOTRUN, Result.SETUP):
                 skip_reason = f"previous test result: {case.result.cname}"
@@ -388,13 +353,7 @@ class Session:
                         case.result = Result("notrun")
         cases = self.cases_to_run()
         if not cases:
-            tty.die("No test cases to run")
-        self.save_active_case_data(
-            cases,
-            keyword_expr=keyword_expr,
-            parameter_expr=parameter_expr,
-            start=start,
-        )
+            raise EmptySession()
         self.queue = q_factory(
             cases, workers=self.max_workers, cpu_count=max_cores_per_test
         )
@@ -464,7 +423,6 @@ class Session:
         for var, val in variables.items():
             save_env[var] = os.environ.pop(var, None)
             os.environ[var] = val
-        os.environ["NVTEST_SESSION_NO"] = str(self.id)
         os.environ["NVTEST_LOG_LEVEL"] = str(tty.get_log_level())
         yield
         for var, save_val in save_env.items():
@@ -641,3 +599,8 @@ def load_test_results(stage: str) -> dict[str, dict]:
             for case_id, value in json.loads(line.strip()).items():
                 fd.setdefault(case_id, {}).update(value)
     return fd
+
+
+class EmptySession(Exception):
+    def __init__(self):
+        super().__init__("No test cases to run")

@@ -5,7 +5,6 @@ from typing import TextIO
 
 from .. import config
 from ..test.partition import Partition
-from ..util import tty
 from ..util.resources import compute_resource_allocations
 from ._slurm import _Slurm
 from .batch import BatchRunner
@@ -30,7 +29,7 @@ class SlurmRunner(BatchRunner, _Slurm):
         )
         if unknown_args:
             s_unknown = " ".join(unknown_args)
-            tty.die(f"unrecognized slurm arguments: {s_unknown}")
+            raise ValueError(f"unrecognized slurm arguments: {s_unknown}")
 
     def calculate_resource_allocations(self, batch: Partition):
         """Performs basic resource calculations"""

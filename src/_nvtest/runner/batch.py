@@ -37,13 +37,13 @@ class BatchRunner(Runner):
         batch_no, num_batches = batch.rank
         n = len(batch)
         self.print_text(f"STARTING: Batch {batch_no + 1} of {num_batches} ({n} tests)")
-        level = tty.set_log_level(0)
         script = self.write_submission_script(batch)
         with tty.restore():
             script_x = Executable(self.command)
             if self.default_args:
                 script_x.add_default_args(*self.default_args)
-            script_x(script, fail_on_error=False)
+            with open(self.logfile(batch_no), "w") as fh:
+                script_x(script, fail_on_error=False, output=fh, error=fh)
         self.load_batch_results(batch)
         stat: dict[str, int] = {}
         attrs: dict[str, dict] = {}
@@ -59,7 +59,6 @@ class BatchRunner(Runner):
         st_stat = ", ".join(
             colorize(fmt % (Result.colors[n], v, n)) for (n, v) in stat.items()
         )
-        tty.set_log_level(level)
         self.print_text(f"FINISHED: Batch {batch_no + 1} of {num_batches}, {st_stat}")
         #        for hook in plugin.plugins("test", "finish"):
         #            hook(case)
@@ -69,31 +68,40 @@ class BatchRunner(Runner):
     def validate(cls, items):
         x = which(cls.command)
         if x is None:
-            tty.die(f"Required command {cls.command} not found")
+            raise ValueError(f"Required command {cls.command} not found")
         if not isinstance(items, list) and not isinstance(items[0], Partition):
             s = f"{items.__class__.__name__}"
-            tty.die(f"{cls.__name__} is only compatible with list[Partition], not {s}")
+            raise ValueError(
+                f"{cls.__name__} is only compatible with list[Partition], not {s}"
+            )
 
     def write_header(self, fh: TextIO) -> None:
         raise NotImplementedError
 
-    def write_body(self, batch_no: int, fh: TextIO) -> None:
-        py = sys.executable
+    def write_body(self, batch: Partition, fh: TextIO) -> None:
+        batch_no, num_batches = batch.rank
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(f"{py} -m nvtest -qqq -C {self.work_tree} run --max-workers=1 ")
-        fh.write(f"^b {batch_no} ^s {self.session}\n")
+        fh.write(f"# batch {batch_no + 1} of {num_batches}\n")
+        for case in batch:
+            fh.write(f"\n# --- {case.display_name} ---\n(\n")
+            fh.write(f"  nvtest -C {self.work_tree} run /{case.id}\n)\n")
 
     def submit_filename(self, batch_no: int) -> str:
         n = max(digits(batch_no), 3)
         basename = f"{batch_no:0{n}}.sh"
         return os.path.join(self.batchdir, basename)
 
+    def logfile(self, batch_no: int) -> str:
+        n = max(digits(batch_no), 3)
+        basename = f"{batch_no:0{n}}.log"
+        return os.path.join(self.batchdir, basename)
+
     def write_submission_script(self, batch: Partition) -> str:
-        batch_no, num_batches = batch.rank
+        batch_no, _ = batch.rank
         fh = StringIO()
         self.write_header(fh)
-        self.write_body(batch_no, fh)
+        self.write_body(batch, fh)
         f = self.submit_filename(batch_no)
         with open(f, "w") as fp:
             fp.write(fh.getvalue())
@@ -114,18 +122,16 @@ class BatchRunner(Runner):
         processes' memory
 
         """
-        from .. import session
-
-        fd = session.load_test_results(self.stage)
         for case in batch:
-            if case.id not in fd:
-                # This should never happen
+            try:
+                fd = case.load_results()
+            except FileNotFoundError:
                 case.result = Result(
                     "fail", f"Test case {case} not found batch {batch.rank[0]}'s output"
                 )
-                tty.error(case.result.reason)
-            elif fd[case.id]["result"] == "SETUP":
-                # This case was never run
-                case.result = Result("NOTDONE", "This case was never run after setup")
             else:
-                case.update(fd[case.id])
+                if fd["result"] == "SETUP":
+                    # This case was never run
+                    case.result = Result("NOTDONE", "Case never run after setup")
+                else:
+                    case.update(fd)

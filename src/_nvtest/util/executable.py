@@ -44,7 +44,7 @@ class Executable:
             kwargs[key] = value
         for key, value in kwargs.items():
             if value is None:
-                tty.die(f"The value of {key} must not be None")
+                raise ValueError(f"The value of {key} must not be None")
             self.default_env[str(key)] = str(value)
 
     @property

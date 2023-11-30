@@ -87,7 +87,7 @@ def which(*args, path=None, required=False):
                 return exe
 
     if required:
-        tty.die(f"{args[0]}: program not found")
+        raise FileNotFoundError(args[0])
 
     return None
 

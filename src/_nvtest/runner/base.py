@@ -11,7 +11,6 @@ class Runner:
 
     def __init__(self, session: "Session", *args: Any):
         self.options: list[Any] = list(args)
-        self.session = session.id
         self.work_tree = session.work_tree
         self.stage = session.stage
 
