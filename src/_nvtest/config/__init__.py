@@ -44,6 +44,8 @@ section_schemas: dict[str, Schema] = {
 read_only_sections = ("python",)
 valid_scopes = ("defaults", "global", "local", "session", "environment", "command_line")
 
+invocation_dir = os.getcwd()
+
 
 class Config:
     """Access to configuration values"""
@@ -85,7 +87,7 @@ class Config:
             if os.path.exists(path):
                 self.load_config(path, "session")
                 self.set("session:work_tree", dir, scope="session")
-                self.set("session:invocation_dir", os.getcwd(), scope="session")
+                self.set("session:invocation_dir", invocation_dir, scope="session")
                 start = os.path.relpath(dir, os.getcwd()) or "."
                 self.set("session:start", start, scope="session")
                 break

@@ -73,7 +73,8 @@ class Reporter:
                 self.generate_case_file(case, fh)
         with open(self.index, "w") as fh:
             self.generate_index(fh)
-        tty.info(f"Report index written to {self.index}")
+        f = os.path.relpath(self.index, config.get("session:invocation_dir"))
+        tty.info(f"HTML report written to {f}")
 
     @property
     def style(self) -> str:

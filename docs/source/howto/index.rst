@@ -10,4 +10,5 @@ How-to guides
    filter
    parameterizing
    execute-and-analyze
+   html
    cmake
