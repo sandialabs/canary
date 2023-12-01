@@ -15,7 +15,6 @@ from typing import Optional
 from typing import Union
 
 from . import config
-from . import paths
 from . import plugin
 from .error import StopExecution
 from .finder import Finder
@@ -413,20 +412,10 @@ class Session:
             and case.result in (Result.NOTRUN, Result.NOTDONE, Result.SETUP)
         ]
 
-    def set_pythonpath(self, environ) -> None:
-        pythonpath = [paths.prefix]
-        if "PYTHONPATH" in environ:
-            pythonpath.extend(environ["PYTHONPATH"].split(os.pathsep))
-        if "PYTHONPATH" in os.environ:
-            pythonpath.extend(os.environ["PYTHONPATH"].split(os.pathsep))
-        environ["PYTHONPATH"] = os.pathsep.join(pythonpath)
-        return
-
     @contextmanager
     def rc_environ(self) -> Generator[None, None, None]:
         save_env: dict[str, Optional[str]] = {}
         variables = dict(config.get("variables"))
-        self.set_pythonpath(variables)
         for var, val in variables.items():
             save_env[var] = os.environ.pop(var, None)
             os.environ[var] = val

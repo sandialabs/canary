@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from typing import Generator
 from typing import Union
 
-from .. import paths
+from .. import config
 from ..mark.structures import AbstractParameterSet
 from ..util.time import to_seconds
 from ..util.tty.color import colorize
@@ -386,12 +386,17 @@ def unique(sequence: list[str]) -> list[str]:
 @typing.no_type_check
 def get_vvtest_attrs(case: "TestCase") -> dict:
     attrs = {}
+    compiler_spec = None
+    if config.get("build:compiler:vendor") is None:
+        vendor = config.get("build:compiler:vendor")
+        version = config.get("build:compiler:version")
+        compiler_spec = f"{vendor}@{version}"
     attrs["NAME"] = case.family
     attrs["TESTID"] = case.fullname
     attrs["PLATFORM"] = sys.platform.lower()
-    attrs["COMPILER"] = ""  # FIXME
-    attrs["VVTESTSRC"] = paths.prefix
+    attrs["COMPILER"] = compiler_spec
     attrs["TESTROOT"] = case.exec_root
+    attrs["VVTESTSRC"] = ""
     attrs["PROJECT"] = ""
     attrs["OPTIONS"] = []  # FIXME
     attrs["OPTIONS_OFF"] = []  # FIXME

@@ -103,3 +103,14 @@ class Result:
     @property
     def color(self) -> str:
         return self.colors[self.name]
+
+    @property
+    def html_name(self) -> str:
+        color = {
+            "r": "#FF3333",
+            "b": "#3354FF",
+            "m": "#F202FE",
+            "g": "#02FE20",
+            "y": "#FEFD02",
+        }[self.color.lower()]
+        return f"<font color={color}>{self.name}</font>"
