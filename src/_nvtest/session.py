@@ -513,7 +513,7 @@ class Session:
         else:
             assert isinstance(obj, TestCase)
             obj.update(attrs[obj.fullname])
-            fd = obj.asdict("start", "finish", "result")
+            fd = obj.asdict("start", "finish", "result", "returncode")
             with WriteTransaction(self.lock):
                 with open(self.results_file, "a") as fh:
                     fh.write(json.dumps({obj.id: fd}) + "\n")

@@ -2,6 +2,7 @@ import os
 import sys
 from typing import TextIO
 
+from .. import config
 from ..session import Session
 from ..test.enums import Result
 from ..test.testcase import TestCase
@@ -72,31 +73,38 @@ class Reporter:
                 self.generate_case_file(case, fh)
         with open(self.index, "w") as fh:
             self.generate_index(fh)
-        f = os.path.relpath(self.index, os.getcwd())
-        tty.info(f"Report index written to {f}")
+        tty.info(f"Report index written to {self.index}")
+
+    @property
+    def style(self) -> str:
+        ts = "<style>"
+        ts += "table{font-family:arial,sans-serif;border-collapse:collapse;}\n\n"
+        ts += "td, th {border: 1px solid #dddddd; text-align: left; padding: 8px;}\n\n"
+        ts += "tr:nth-child(even) {background-color: #dddddd;}\n"
+        ts += "</style>"
+        return ts
+
+    @property
+    def head(self) -> str:
+        return f"<head>{self.style}</head>"
 
     def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
-        fh.write("<html><body><br>")
-        fh.write(f"<b>Test:</b> {case.display_name}<br><br>")
-        fh.write(f"<b>Status:</b> {case.result.name}<br><br>")
+        fh.write("<html>")
+        fh.write("<body><table>")
+        fh.write(f"<tr><td><b>Test:</b> {case.display_name}</td></tr>")
+        fh.write(f"<tr><td><b>Status:</b> {case.result.name}</td></tr>")
+        fh.write(f"<tr><td><b>Exit code:</b> {case.returncode}</td></tr>")
+        fh.write(f"<tr><td><b>Duration:</b> {case.duration}</td></tr>")
+        fh.write("</table><br>")
         fh.write("<b>Test output</b><br><pre>")
         with open(case.logfile) as fp:
             fh.write(fp.read())
-        fh.write("</pre><br>")
-        fh.write("</body>")
-        fh.write("</html>")
+        fh.write("</pre></body></html>")
 
     def generate_index(self, fh: TextIO) -> None:
-        fh.write("<html><head><style>")
-        fh.write(
-            "table {font-family: arial, sans-serif; "
-            "border-collapse: collapse; width: 100%;}"
-        )
-        fh.write("td, th {border: 1px solid #dddddd; text-align: left; padding: 8px;}")
-        fh.write("tr:nth-child(even) {background-color: #dddddd;}")
-        fh.write("</style></head>")
-        fh.write("<body><h1> Test Results </h1><br>")
-        fh.write("<table><br>")
+        fh.write("<html>")
+        fh.write(self.head)
+        fh.write("<body><h1> Test Results </h1><table>")
         fh.write("<tr><th>Test</th><th>ID</th><th>Status</th></tr><br>")
         totals: dict[str, list[TestCase]] = {}
         for case in self.data.cases:
@@ -108,7 +116,7 @@ class Reporter:
                 file = os.path.join(self.cases_dir, f"{case.id}.html")
                 if not os.path.exists(file):
                     raise ValueError(f"{file}: html file not found")
-                link = f'<a href="file://{file}"> {case.display_name} </a>'
+                link = f'<a href="file://{file}">{case.display_name}</a>'
                 st = case.result.html_name
                 fh.write(f"<tr><td>{link}</td><td>{case.id}</td><td>{st}</td></tr><br>")
         fh.write("</table></body></html>")

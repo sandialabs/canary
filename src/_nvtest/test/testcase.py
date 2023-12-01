@@ -329,6 +329,7 @@ class TestCase:
         kwds.pop("fullname", None)
         result, reason = kwds.pop("result")
         self.result = Result(result, reason=reason)
+        self.returncode = kwds.pop("returncode")
         for dep in kwds.pop("dependencies", []):
             self.add_dependency(TestCase.from_dict(dep))
         for key, val in kwds.items():
