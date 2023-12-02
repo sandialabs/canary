@@ -1,117 +1,74 @@
 import glob
+import json
 import os
-import sys
 import time
 import xml.dom.minidom as xdom
 from typing import Optional
 
 import nvtest
 
+from .. import config
 from ..config.machine import machine_config
 from ..session import Session
 from ..test.enums import Result
-from ..test.testcase import TestCase
 from ..util import cdash
 from ..util import tty
+from ..util.filesystem import force_remove
 from ..util.filesystem import mkdirp
 from ..util.time import strftimestamp
 from ..util.time import timestamp
+from .common import Reporter as _Reporter
 
 
-def report(
-    session: Session,
-    buildname: Optional[str] = None,
-    url: Optional[str] = None,
-    project: Optional[str] = None,
-    buildgroup: Optional[str] = None,
-    site: Optional[str] = None,
-):
-    cases_to_run = [case for case in session.cases if not case.skip]
-    data = TestData(session, cases_to_run)
-    reporter = Reporter(
-        test_data=data,
-        buildname=buildname or "BUILD",
-        baseurl=url,
-        project=project,
-        buildgroup=buildgroup,
-        site=site,
-    )
-    dest = os.path.join(session.work_tree, "cdash")
-    reporter.create_cdash_reports(dest=dest)
+class Reporter(_Reporter):
+    def __init__(self, session: Session) -> None:
+        super().__init__(session)
+        self.xml_dir = os.path.join(config.get("session:work_tree"), "xml")
+        self.xml_files: list[str] = []
 
-
-class TestData:
-    def __init__(self, session: Session, cases: Optional[list[TestCase]] = None):
-        self.command = "nvtest"
-        self.cases: list[TestCase] = []
-        self.start: float = sys.maxsize
-        self.finish: float = -1
-        self.status: int = 0
-        if cases is not None:
-            for case in cases:
-                self.add_test(case)
-
-    def __len__(self):
-        return len(self.cases)
-
-    def __iter__(self):
-        for case in self.cases:
-            yield case
-
-    def update_status(self, case: TestCase) -> None:
-        if case.result == Result.DIFF:
-            self.status |= 2**1
-        elif case.result == Result.FAIL:
-            self.status |= 2**2
-        elif case.result == Result.TIMEOUT:
-            self.status |= 2**3
-        elif case.result == Result.NOTDONE:
-            self.status |= 2**4
-        elif case.result == Result.NOTRUN:
-            self.status |= 2**5
-
-    def add_test(self, case: TestCase) -> None:
-        if self.start > case.start:
-            self.start = case.start
-        if self.finish < case.finish:
-            self.finish = case.finish
-        self.update_status(case)
-        self.cases.append(case)
-
-
-class Reporter:
-    def __init__(
+    def create(
         self,
-        *,
-        test_data: TestData,
+        project: str,
         buildname: str,
-        project: Optional[str] = None,
-        baseurl: Optional[str] = None,
         buildgroup: Optional[str] = None,
-        site: Optional[str] = os.uname().nodename,
-    ):
-        if baseurl is not None and project is None:
-            raise ValueError("CDash base url requires a project name")
-        self.data = test_data
-        self.baseurl: Optional[str] = baseurl
-        self.project: Optional[str] = project
-        self.buildname: str = buildname
-        self.buildgroup: str = buildgroup or "Experimental"
-        self.site = site or os.uname().nodename
-
-    def create_cdash_reports(self, dest: str = "."):
+        site: Optional[str] = None,
+    ) -> None:
         """Collect information and create reports"""
-        mkdirp(dest)
-        self.write_test_xml(dest=dest)
-        self.write_notes_xml(dest=dest)
-        if self.baseurl is not None:
-            self.post_to_cdash(dest)
+        self.project = project
+        self.buildname = buildname
+        self.buildgroup = buildgroup or "Experimental"
+        self.site = site or os.uname().nodename
+        force_remove(self.xml_dir)
+        mkdirp(self.xml_dir)
+        self.write_test_xml()
+        self.write_notes_xml()
+        self.dump()
 
-    def post_to_cdash(self, dest: str):
-        xml_files = glob.glob(os.path.join(dest, "*.xml"))
+    def load(self):
+        f = os.path.join(self.xml_dir, ".meta.json")
+        with open(f, "r") as fh:
+            data = json.load(fh)
+        for (key, value) in data.items():
+            setattr(self, key, value)
+        self.xml_files = glob.glob(os.path.join(self.xml_dir, "*.xml"))
+
+    def dump(self) -> None:
+        f = os.path.join(self.xml_dir, ".meta.json")
+        data = {
+            "project": self.project,
+            "buildname": self.buildname,
+            "buildgroup": self.buildgroup,
+            "site": self.site,
+        }
+        with open(f, "w") as fh:
+            json.dump(data, fh, indent=2)
+
+    def post(self, url: str) -> None:
+        if not self.xml_files:
+            self.load()
         upload_errors = 0
-        for filename in xml_files:
-            upload_errors += self.upload_to_cdash(filename)
+        for filename in self.xml_files:
+            upload_errors += self.upload_to_cdash(url, filename)
         if upload_errors:
             tty.warn(f"{upload_errors} files failed to upload to CDash")
 
@@ -120,29 +77,13 @@ class Reporter:
         return f"nvtest version {nvtest.version}"
 
     @property
-    def buildurl(self):
-        if self.baseurl is None:
-            return None
-        server = cdash.server(self.baseurl, self.project)
-        buildid = server.buildid(
-            sitename=self.site,
-            buildname=self.buildname,
-            buildstamp=self.buildstamp,
-        )
-        if buildid is None:
-            return None
-        return f"{self.baseurl}/buildSummary.php?buildid={buildid}"
-
-    @property
     def buildstamp(self):
         fmt = f"%Y%m%d-%H%M-{self.buildgroup}"
         t = time.localtime(self.data.start)
         return time.strftime(fmt, t)
 
-    def upload_to_cdash(self, filename):
-        if self.baseurl is None:
-            return None
-        server = cdash.server(self.baseurl, self.project)
+    def upload_to_cdash(self, url, filename):
+        server = cdash.server(url, self.project)
         rc = server.upload(
             filename=filename,
             sitename=self.site,

@@ -1,5 +1,9 @@
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Union
+
+from ..test.partition import Partition
+from ..test.testcase import TestCase
 
 if TYPE_CHECKING:
     from ..session import Session
@@ -18,7 +22,12 @@ class Runner:
     def validate(cls, *args):
         raise NotImplementedError
 
-    def __call__(self, *args, **kwargs):
+    def __call__(
+        self, entity: Union[TestCase, Partition], kwds: dict[str, Any]
+    ) -> dict[str, dict]:
+        return self.run(entity, **kwds)
+
+    def run(self, *args, **kwargs):
         raise NotImplementedError
 
     def add_default_args(self, *args):

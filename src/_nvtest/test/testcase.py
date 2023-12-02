@@ -395,7 +395,7 @@ class TestCase:
     def register_proc(self, proc) -> None:
         self._process = proc
 
-    def run(self, analyze_only: bool = False) -> None:
+    def run(self, **kwds: Any) -> None:
         if self.dep_patterns:
             raise RuntimeError("Dependency patterns must be resolved before running")
         tty.info(f"STARTING: {self.pretty_repr()}", prefix=None)
@@ -405,7 +405,7 @@ class TestCase:
         with fs.working_dir(self.exec_dir):
             with tty.log_output(self.logfile, mode="a"):
                 with tty.timestamps():
-                    args = self.command_line_args(analyze_only=analyze_only)
+                    args = self.command_line_args(**kwds)
                     env = self.rc_environ()
                     with tmp_environ(**env):
                         python(*args, fail_on_error=False, timeout=self.timeout)
@@ -422,15 +422,29 @@ class TestCase:
         self.dump()
         return
 
-    def command_line_args(self, analyze_only: bool = False) -> list[str]:
+    @staticmethod
+    def kwds_to_command_line_args(**kwds: Any) -> list[str]:
+        args: list = []
+        for (key, val) in kwds.items():
+            prefix = "-" if len(key) == 1 else "--"
+            opt = f"{prefix}{key.replace('_', '-')}"
+            if val is True:
+                args.append(opt)
+            elif len(key) == 1:
+                args.append(f"{opt}{val}")
+            else:
+                args.append(f"{opt}={val}")
+        return args
+
+    def command_line_args(self, **kwds: Any) -> list[str]:
         if self.analyze and self.analyze.startswith("-"):
             args = [os.path.basename(self.file), self.analyze]
         elif self.analyze:
             args = [self.analyze]
         else:
             args = [os.path.basename(self.file)]
-            if analyze_only:
-                args.append("--execute-analysis-sections")
+            extra_args = self.kwds_to_command_line_args(**kwds)
+            args.extend(extra_args)
         return args
 
     def kill(self):

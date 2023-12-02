@@ -1,5 +1,4 @@
 import os
-import sys
 from typing import TextIO
 
 from .. import config
@@ -9,61 +8,17 @@ from ..test.testcase import TestCase
 from ..util import tty
 from ..util.filesystem import force_remove
 from ..util.filesystem import mkdirp
+from .common import Reporter as _Reporter
 
 
-def report(session: Session) -> None:
-    reporter = Reporter(session)
-    reporter.create_html_reports()
-
-
-class TestData:
-    def __init__(self, session: Session):
-        self.session = session
-        self.start: float = sys.maxsize
-        self.finish: float = -1
-        self.status: int = 0
-        self.cases: list[TestCase] = []
-        cases_to_run: list[TestCase] = [c for c in session.cases if not c.skip]
-        for case in cases_to_run:
-            self.add_test(case)
-
-    def __len__(self):
-        return len(self.cases)
-
-    def __iter__(self):
-        for case in self.cases:
-            yield case
-
-    def update_status(self, case: TestCase) -> None:
-        if case.result == Result.DIFF:
-            self.status |= 2**1
-        elif case.result == Result.FAIL:
-            self.status |= 2**2
-        elif case.result == Result.TIMEOUT:
-            self.status |= 2**3
-        elif case.result == Result.NOTDONE:
-            self.status |= 2**4
-        elif case.result == Result.NOTRUN:
-            self.status |= 2**5
-
-    def add_test(self, case: TestCase) -> None:
-        if self.start > case.start:
-            self.start = case.start
-        if self.finish < case.finish:
-            self.finish = case.finish
-        self.update_status(case)
-        self.cases.append(case)
-
-
-class Reporter:
+class Reporter(_Reporter):
     def __init__(self, session: Session) -> None:
-        self.data = TestData(session)
-        self.session = session
+        super().__init__(session)
         self.html_dir = os.path.join(session.work_tree, "html")
         self.cases_dir = os.path.join(self.html_dir, "cases")
         self.index = os.path.join(session.work_tree, "Results.html")
 
-    def create_html_reports(self):
+    def create(self):
         """Collect information and create reports"""
         force_remove(self.html_dir)
         mkdirp(self.cases_dir)
@@ -78,46 +33,110 @@ class Reporter:
 
     @property
     def style(self) -> str:
-        ts = "<style>"
-        ts += "table{font-family:arial,sans-serif;border-collapse:collapse;}\n\n"
-        ts += "td, th {border: 1px solid #dddddd; text-align: left; padding: 8px;}\n\n"
+        ts = "<style>\n"
+        ts += "table{font-family:arial,sans-serif;border-collapse:collapse;}\n"
+        ts += "td, th {border: 1px solid #dddddd; text-align: left; "
+        ts += "padding: 8px; width=100%}\n"
         ts += "tr:nth-child(even) {background-color: #dddddd;}\n"
         ts += "</style>"
         return ts
 
     @property
     def head(self) -> str:
-        return f"<head>{self.style}</head>"
+        return f"<head>\n{self.style}\n</head>\n"
 
     def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
-        fh.write("<html>")
-        fh.write("<body><table>")
-        fh.write(f"<tr><td><b>Test:</b> {case.display_name}</td></tr>")
-        fh.write(f"<tr><td><b>Status:</b> {case.result.name}</td></tr>")
-        fh.write(f"<tr><td><b>Exit code:</b> {case.returncode}</td></tr>")
-        fh.write(f"<tr><td><b>Duration:</b> {case.duration}</td></tr>")
-        fh.write("</table><br>")
-        fh.write("<b>Test output</b><br><pre>")
+        fh.write("<html>\n")
+        fh.write("<body>\n<table>\n")
+        fh.write(f"<tr><td><b>Test:</b> {case.display_name}</td></tr>\n")
+        fh.write(f"<tr><td><b>Status:</b> {case.result.name}</td></tr>\n")
+        fh.write(f"<tr><td><b>Exit code:</b> {case.returncode}</td></tr>\n")
+        fh.write(f"<tr><td><b>ID:</b> {case.id}</td></tr>\n")
+        fh.write(f"<tr><td><b>Duration:</b> {case.duration}</td></tr>\n")
+        fh.write("</table>\n")
+        fh.write("<h2>Test output</h2>\n<pre>\n")
         with open(case.logfile) as fp:
             fh.write(fp.read())
-        fh.write("</pre></body></html>")
+        fh.write("</pre>\n</body>\n</html>\n")
 
     def generate_index(self, fh: TextIO) -> None:
-        fh.write("<html>")
+        fh.write("<html>\n")
         fh.write(self.head)
-        fh.write("<body><h1> Test Results </h1><table>")
-        fh.write("<tr><th>Test</th><th>ID</th><th>Status</th></tr><br>")
+        fh.write("<body>\n<h1>NVTest Summary</h1>\n")
+        fh.write("<table>\n<tr>")
+        for col in (
+            "Site",
+            "Project",
+            "Not Run",
+            "Timeout",
+            "Fail",
+            "Diff",
+            "Pass",
+            "Total",
+        ):
+            fh.write(f"<th>{col}</th>")
+        fh.write("</tr>\n")
         totals: dict[str, list[TestCase]] = {}
         for case in self.data.cases:
-            totals.setdefault(case.result.name, []).append(case)
-        for member in Result.members:
-            if member not in totals:
-                continue
-            for case in totals[member]:
+            if case.result.name in (Result.NOTRUN, Result.NOTDONE):
+                group = "Not Run"
+            else:
+                group = case.result.name.title()
+            totals.setdefault(group, []).append(case)
+        fh.write("<tr>")
+        fh.write(f"<td>{config.get('system:host')}</td>")
+        fh.write(f"<td>{config.get('build:project')}</td>")
+        for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass"):
+            if group not in totals:
+                fh.write("<td>0</td>")
+            else:
+                n = len(totals[group])
+                file = os.path.join(self.html_dir, "%s.html" % "".join(group.split()))
+                fh.write(f'<td><a href="file://{file}">{n}</a></td>')
+                with open(file, "w") as fp:
+                    self.generate_group_index(totals[group], fp)
+        file = os.path.join(self.html_dir, "Total.html")
+        fh.write(f'<td><a href="file://{file}">{len(self.data.cases)}</a></td>')
+        with open(file, "w") as fp:
+            self.generate_all_tests_index(totals, fp)
+        fh.write("</tr>\n")
+        fh.write("</table>\n</body>\n</html>")
+
+    def generate_group_index(self, cases, fh: TextIO) -> None:
+        assert all([cases[0].result.name == c.result.name for c in cases[1:]])
+        fh.write("<html>\n")
+        fh.write(self.head)
+        fh.write(f"<body>\n<h1> {cases[0].result.name} Summary </h1>\n")
+        fh.write('<table class="sortable">\n')
+        fh.write(
+            "<thead><tr><th>Test</th><th>Duration</th><th>Status</th></tr></thead>\n"
+        )
+        fh.write("<tbody>")
+        for case in sorted(cases, key=lambda c: c.duration):
+            file = os.path.join(self.cases_dir, f"{case.id}.html")
+            if not os.path.exists(file):
+                raise ValueError(f"{file}: html file not found")
+            link = f'<a href="file://{file}">{case.display_name}</a>'
+            fh.write(
+                f"<tr><td>{link}</td><td>{case.duration:.2f}</td>"
+                f"<td>{case.result.html_name}</td></tr>\n"
+            )
+        fh.write("</tbody>")
+        fh.write("</table>\n</body>\n</html>")
+
+    def generate_all_tests_index(self, totals: dict, fh: TextIO) -> None:
+        fh.write("<html>\n")
+        fh.write(self.head)
+        fh.write("<body>\n<h1>Test Results</h1>\n<table>\n")
+        fh.write("<tr><th>Test</th><th>Duration</th><th>Status</th></tr>\n")
+        for (group, cases) in totals.items():
+            for case in sorted(cases, key=lambda c: c.duration):
                 file = os.path.join(self.cases_dir, f"{case.id}.html")
                 if not os.path.exists(file):
                     raise ValueError(f"{file}: html file not found")
                 link = f'<a href="file://{file}">{case.display_name}</a>'
-                st = case.result.html_name
-                fh.write(f"<tr><td>{link}</td><td>{case.id}</td><td>{st}</td></tr><br>")
-        fh.write("</table></body></html>")
+                fh.write(
+                    f"<tr><td>{link}</td><td>{case.duration:.2f}</td>"
+                    f"<td>{case.result.html_name}</td></tr>\n"
+                )
+        fh.write("</table>\n</body>\n</html>")

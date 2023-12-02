@@ -16,9 +16,9 @@ class DirectRunner(Runner):
                 f"DirectRunner is only compatible with list[TestCase], not {s}"
             )
 
-    def __call__(self, case: TestCase, *args: Any) -> dict:
+    def run(self, case: TestCase, **kwds: Any) -> dict[str, dict]:
         try:
-            case.run(*args)
+            case.run(execute_analysis_sections=kwds.get("execute_analysis_sections"))
         except BaseException as e:
             if isinstance(e.args[0], int):
                 case.result = Result.from_returncode(e.args[0])

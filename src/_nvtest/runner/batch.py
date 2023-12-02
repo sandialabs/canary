@@ -25,7 +25,7 @@ class BatchRunner(Runner):
     shell = "/bin/sh"
     command = "/bin/sh"
 
-    def __init__(self, session: "Session", *args: Any):
+    def __init__(self, session: "Session", *args: Any) -> None:
         super().__init__(session, *args)
         self.batchdir = session.batchdir
 
@@ -33,7 +33,7 @@ class BatchRunner(Runner):
     def print_text(text: str):
         sys.stdout.write(f"{text}\n")
 
-    def __call__(self, batch: Partition, *args: Any) -> dict[str, dict]:
+    def run(self, batch: Partition, **kwargs: Any) -> dict[str, dict]:
         batch_no, num_batches = batch.rank
         n = len(batch)
         self.print_text(f"STARTING: Batch {batch_no + 1} of {num_batches} ({n} tests)")

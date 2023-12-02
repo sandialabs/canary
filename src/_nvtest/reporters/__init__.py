@@ -1,1 +1,1 @@
-from . import cdash  # noqa: F401
+from .common import Reporter  # noqa: F401

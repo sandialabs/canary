@@ -248,7 +248,7 @@ class Session:
     def _create_config(self, work_tree: str, **kwds: Any) -> None:
         work_tree = os.path.abspath(work_tree)
         config.set("session:work_tree", work_tree, scope="session")
-        config.set("session:invocation_dir", os.getcwd(), scope="session")
+        config.set("session:invocation_dir", config.invocation_dir, scope="session")
         start = os.path.relpath(work_tree, os.getcwd()) or "."
         config.set("session:start", start, scope="session")
         for key, value in kwds.items():
@@ -257,7 +257,7 @@ class Session:
             value = config.get(f"machine:{attr}", scope="local")
             if value is not None:
                 config.set(f"machine:{attr}", value, scope="session")
-        for section in ("config", "variables"):
+        for section in ("config", "variables", "build"):
             data = config.get(section, scope="local") or {}
             for key, value in data.items():
                 config.set(f"{section}:{key}", value, scope="session")
@@ -370,7 +370,7 @@ class Session:
         timeout: int = 60 * 60,
         runner_options: Optional[list[str]] = None,
         fail_fast: bool = False,
-        analyze_only: bool = False,
+        execute_analysis_sections: bool = False,
     ) -> int:
         if not self.queue:
             raise ValueError("This session's queue was not set up")
@@ -386,7 +386,9 @@ class Session:
             with self.rc_environ():
                 with working_dir(self.work_tree):
                     self.process_testcases(
-                        timeout=timeout, fail_fast=fail_fast, analyze_only=analyze_only
+                        timeout=timeout,
+                        fail_fast=fail_fast,
+                        execute_analysis_sections=execute_analysis_sections,
                     )
         finally:
             self.returncode = compute_returncode(self.queue.cases)
@@ -461,7 +463,7 @@ class Session:
                     ts.done(*group)
 
     def process_testcases(
-        self, *, timeout: int, fail_fast: bool, analyze_only: bool
+        self, *, timeout: int, fail_fast: bool, execute_analysis_sections: bool
     ) -> None:
         self._futures = {}
         timeout_message = f"Test suite execution exceeded time out of {timeout} s."
@@ -473,7 +475,8 @@ class Session:
                             i, entity = self.queue.pop_next()
                         except StopIteration:
                             return
-                        future = self.ppe.submit(self.runner, entity, analyze_only)
+                        kwds = {"execute_analysis_sections": execute_analysis_sections}
+                        future = self.ppe.submit(self.runner, entity, kwds)
                         callback = partial(
                             self.update_from_future, i, entity, fail_fast
                         )

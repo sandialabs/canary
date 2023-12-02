@@ -48,6 +48,7 @@ testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
 build_schema = Schema(
     {
         "build": {
+            Optional("project"): str,
             Optional("type"): str,
             Optional("date"): str,
             Optional("compiler"): {

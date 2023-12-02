@@ -62,6 +62,6 @@ class SlurmRunner(BatchRunner, _Slurm):
             elif value is not None:
                 fh.write(f"#SBATCH {self.fmt_option_string(key):<19} {value}\n")
 
-    def __call__(self, batch: Partition, *args: Any) -> dict[str, dict]:
+    def run(self, batch: Partition, **kwds: Any) -> dict[str, dict]:
         self.calculate_resource_allocations(batch)
-        return super().__call__(batch, *args)
+        return super().run(batch, **kwds)

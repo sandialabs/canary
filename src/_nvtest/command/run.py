@@ -91,7 +91,7 @@ def setup_parser(parser: "Parser"):
         help="Stop after first failed test [default: %(default)s]",
     )
     parser.add_argument(
-        "--analyze",
+        "--execute-analysis-sections",
         action="store_true",
         default=False,
         help="Add --execute-analysis-sections to each test invocation, "
@@ -205,7 +205,7 @@ def run(args: "argparse.Namespace") -> int:
                 runner=args.runner,
                 runner_options=args.runner_options,
                 fail_fast=args.fail_fast,
-                analyze_only=args.analyze,
+                execute_analysis_sections=args.execute_analysis_sections,
             )
         run_duration = timer.duration("run")
         if not args.no_summary:
@@ -447,8 +447,11 @@ def setup_session(args: "argparse.Namespace") -> Session:
     session: Session
     if args.mode == "w":
         tty.print("Setting up test session", centered=True)
-        if args.analyze:
-            tty.die("--analyze: option invalid with creation of new test session")
+        if args.execute_analysis_sections:
+            tty.die(
+                "--execute-analysis-sections: "
+                "option invalid with creation of new test session"
+            )
         bc = Session.BatchConfig(size_t=args.batch_size, size_n=args.batches)
         session = Session.create(
             work_tree=args.work_tree or Session.default_work_tree,
