@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from _nvtest.test.testfile import AbstractTestFile
 
 
-class Marker:
+class Directive:
     def __init__(self, testfile: "AbstractTestFile") -> None:
         self.testfile = testfile
 
@@ -138,8 +138,27 @@ class Marker:
             arg, options=options, platforms=platforms, testname=testname
         )
 
+    def preload(
+        self,
+        arg: str,
+        *,
+        source: bool = False,
+        options: Optional[str] = None,
+        platforms: Optional[str] = None,
+        parameters: Optional[str] = None,
+        testname: Optional[str] = None,
+    ):
+        self.testfile.m_preload(
+            arg,
+            source=source,
+            options=options,
+            platforms=platforms,
+            testname=testname,
+            parameters=parameters,
+        )
 
-class DummyMarker:
+
+class DummyDirective:
     def keywords(self, *args, **kwargs):
         ...
 
@@ -171,4 +190,7 @@ class DummyMarker:
         ...
 
     def depends_on(self, *args, **kwargs):
+        ...
+
+    def preload(self, *args, **kwargs):
         ...

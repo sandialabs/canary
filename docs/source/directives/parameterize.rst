@@ -43,7 +43,7 @@ The following equivalent test specifications result in 4 test instantiations
 .. code-block:: python
 
    # test1
-   nvtest.mark.parameterize("np", (4, 8, 12, 32))
+   nvtest.directives.parameterize("np", (4, 8, 12, 32))
 
 ``test1.vvt``:
 
@@ -69,7 +69,7 @@ The following equivalent test specifications result in 4 test instantiations
 .. code-block:: python
 
    # test1
-   nvtest.mark.parameterize("a,b", ((1, 2), (3, 4), (5, 6)])
+   nvtest.directives.parameterize("a,b", ((1, 2), (3, 4), (5, 6)])
 
 ``test1.vvt``:
 
@@ -94,8 +94,8 @@ The following equivalent test specifications result in 4 test instantiations
 .. code-block:: python
 
    # test1
-   nvtest.mark.parameterize("a,b", [("a1", "b1"), ("a2", "b2")])
-   nvtest.mark.parameterize("x", ["x1", "x2"])
+   nvtest.directives.parameterize("a,b", [("a1", "b1"), ("a2", "b2")])
+   nvtest.directives.parameterize("x", ["x1", "x2"])
 
 results in the following test invocations:
 

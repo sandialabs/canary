@@ -11,14 +11,14 @@ from typing import Sequence
 from typing import Union
 
 from ..compat.vvtest import load_vvt
-from ..mark.match import deselect_by_keyword
-from ..mark.match import deselect_by_name
-from ..mark.match import deselect_by_option
-from ..mark.match import deselect_by_parameter
-from ..mark.match import deselect_by_platform
-from ..mark.structures import AbstractParameterSet
-from ..mark.structures import ParameterSet
-from ..mark.structures import combine_parameter_sets
+from ..directives.match import deselect_by_keyword
+from ..directives.match import deselect_by_name
+from ..directives.match import deselect_by_option
+from ..directives.match import deselect_by_parameter
+from ..directives.match import deselect_by_platform
+from ..directives.structures import AbstractParameterSet
+from ..directives.structures import ParameterSet
+from ..directives.structures import combine_parameter_sets
 from ..third_party import rprobe
 from ..util import tty
 from ..util.filesystem import working_dir
@@ -531,6 +531,7 @@ class AbstractTestFile:
     def m_preload(
         self,
         arg: str,
+        source: bool = False,
         testname: Optional[str] = None,
         options: Optional[str] = None,
         platforms: Optional[str] = None,
@@ -538,6 +539,7 @@ class AbstractTestFile:
     ) -> None:
         ns = FilterNamespace(
             arg,
+            action="source" if source else None,
             testname_expr=testname,
             parameter_expr=parameters,
             platform_expr=platforms,

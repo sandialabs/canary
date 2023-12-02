@@ -117,9 +117,6 @@ class TestCase:
     def matches(self, pattern) -> bool:
         if pattern.startswith("/") and self.id.startswith(pattern[1:]):
             return True
-        elif self.id.startswith(pattern):
-            tty.warn(f"Prefer /{pattern}")
-            return True
         elif self.display_name == pattern:
             return True
         elif self.file_path.endswith(pattern):

@@ -21,16 +21,16 @@ def __getattr__(name):
     import inspect
 
     import _nvtest
-    from _nvtest.mark.marker import DummyMarker
-    from _nvtest.mark.marker import Marker
+    from _nvtest.directives.directive import Directive
+    from _nvtest.directives.directive import DummyDirective
     from _nvtest.test.testinstance import TestInstance
 
-    if name == "mark":
+    if name == "directives":
         for frame_info in inspect.stack():
             if "__testfile__" in frame_info.frame.f_globals:
                 testfile = frame_info.frame.f_globals["__testfile__"]
-                return Marker(testfile)
-        return DummyMarker()
+                return Directive(testfile)
+        return DummyDirective()
     elif name == "FILE_SCANNING":
         return _nvtest.FILE_SCANNING
     elif name == "test":

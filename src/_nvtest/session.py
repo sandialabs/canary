@@ -16,10 +16,10 @@ from typing import Union
 
 from . import config
 from . import plugin
+from .directives.match import deselect_by_keyword
+from .directives.match import deselect_by_parameter
 from .error import StopExecution
 from .finder import Finder
-from .mark.match import deselect_by_keyword
-from .mark.match import deselect_by_parameter
 from .queue import Queue
 from .queue import factory as q_factory
 from .runner import factory as r_factory
@@ -40,6 +40,7 @@ from .util.misc import dedup
 from .util.misc import digits
 from .util.returncode import compute_returncode
 from .util.time import timeout as timeout_context
+from .util.tty.color import colorize
 
 default_batchsize = 30 * 60  # 30 minutes
 
@@ -336,11 +337,11 @@ class Session:
                     case.skip = Skip()
                     case.result = Result("notrun")
                 else:
-                    case.skip = Skip("not explicitly requested")
+                    case.skip = Skip(colorize("deselected by @*b{testspec expression}"))
                 continue
             if case.result not in (Result.NOTDONE, Result.NOTRUN, Result.SETUP):
-                skip_reason = f"previous test result: {case.result.cname}"
-                case.skip = Skip(skip_reason)
+                reason = f"deselected due to previous test result: {case.result.cname}"
+                case.skip = Skip(reason)
                 if not case.exec_dir.startswith(start):
                     continue
                 if max_cores_per_test and case.size > max_cores_per_test:

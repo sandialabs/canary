@@ -8,7 +8,7 @@ Set the name of a test to one different from the filename and/or define multiple
 
 .. code-block:: python
 
-   pytest.mark.name(arg)
+   pytest.directives.name(arg)
 
 .. code-block:: python
 

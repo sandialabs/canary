@@ -11,7 +11,7 @@ Using ``-k`` on the command line, filters (selects) tests based on the keywords 
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.keywords("3D", "mhd", "circuit")
+   nvtest.directives.keywords("3D", "mhd", "circuit")
    print("running test1")
 
 and ``test2.pyt``:
@@ -19,7 +19,7 @@ and ``test2.pyt``:
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.keywords("3D", "mhd", "conduction")
+   nvtest.directives.keywords("3D", "mhd", "conduction")
    print("running test2")
 
 Using the command ``nvtest run -k 3D`` would cause both tests to run, because they both have the keyword ``3D``. Using the command ``nvtest run -k circuit`` would run only ``test2``, because only that test has the ``circuit`` keyword defined.
@@ -36,7 +36,7 @@ When tests define parameters using the ``parameterize`` directive, then the resu
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.parameterize("np", (1, 4))
+   nvtest.directives.parameterize("np", (1, 4))
    print("running test p1")
 
 and the test file ``p2.vvt``:
@@ -44,7 +44,7 @@ and the test file ``p2.vvt``:
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.parameterize("MODEL", ("elastic", "elasticplastic"))
+   nvtest.directives.parameterize("MODEL", ("elastic", "elasticplastic"))
    print("running test p2")
 
 The command ``nvtest run -p np`` would only run test ``p1``, because the ``np`` parameter is only defined in that test file.  In general, specifying a parameter name means include the test if the parameter is defined by the test.
@@ -61,7 +61,7 @@ A test can use the ``enable`` directive to limit the platforms that will run the
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.enable(platforms="Darwin")
+   nvtest.directives.enable(platforms="Darwin")
    ...
 
 will only run if the platform name is ``Darwin``. Expressions are allowed as the ``platform`` attribute value, such as ``platforms="Darwin or Linux"``, or ``platforms="not Darwin"``.

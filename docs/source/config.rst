@@ -16,16 +16,20 @@ Configuration variables can be set on the command line or read from a configurat
 Configuration file
 ------------------
 
-You can explicitly set configuration variables in:
+In addition to the command line, configuration variables can be explicitly set in:
 
 - ``~/.nvtest``.
 - ``./nvtest.cfg``
 
-``~/.nvtest`` is the "global" configuration and ``./nvtest.cfg`` is the local configuration.  Values set in the local configuration take precedence over the global configuration.
+``~/.nvtest`` is the "global" configuration scope while ``./nvtest.cfg`` is the "local" configuration scope.  The order of precedence for configuration scopes is
+
+1. Command line
+2. Local configuration
+3. Global configuration
 
 .. note::
 
-   There is also a "session" configuration that is written when a test session is created.  The values therein are set by the local configuration when the session is launched and take precedence in future invocations.
+   There is also a "session" configuration scope that is written when a test session is created.  The values therein are set by the local configuration when the session is launched and take precedence in future invocations.
 
 .. code-block:: ini
 

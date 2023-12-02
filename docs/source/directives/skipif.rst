@@ -27,7 +27,7 @@ Examples
 
    import sys
    import nvtest
-   nvtest.mark.skipif(sys.platform == "Darwin", reason="Test does not run on Apple hardware")
+   nvtest.directives.skipif(sys.platform == "Darwin", reason="Test does not run on Apple hardware")
 
 .. code:: python
 

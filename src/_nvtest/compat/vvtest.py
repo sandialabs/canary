@@ -12,7 +12,7 @@ from typing import Generator
 from typing import Union
 
 from .. import config
-from ..mark.structures import AbstractParameterSet
+from ..directives.structures import AbstractParameterSet
 from ..util.time import to_seconds
 from ..util.tty.color import colorize
 
@@ -23,12 +23,11 @@ if TYPE_CHECKING:
 
 def load_vvt(file: "AbstractTestFile") -> None:
     try:
-        args = parse_vvt(file.file)
+        args, _ = parse_vvt(file.file)
     except ParseError as e:
         raise ValueError(
             f"Failed to parse {file.file} at command {e.args[0]}"
         ) from None
-
     for arg in args:
         if arg.command == "keywords":
             f_keywords(file, arg)
@@ -53,20 +52,151 @@ def load_vvt(file: "AbstractTestFile") -> None:
         elif arg.command == "depends_on":
             f_depends_on(file, arg)
         else:
-            raise ValueError(f"Unknown command: {arg.command} at {arg.line}")
+            raise ValueError(
+                f"Unknown command: {arg.command} at {arg.line_no}:{arg.line}"
+            )
 
 
-def parse_vvt_directives(code: str) -> list[SimpleNamespace]:
+def to_pyt(file: "AbstractTestFile") -> str:
+    def join_args(string):
+        return ", ".join(repr(_) for _ in string.split())
+
+    def join_kwargs(kwargs):
+        return ", ".join([f"{key}={val!r}" for (key, val) in kwargs.items()])
+
+    try:
+        vvt_args, line_no = parse_vvt(file.file)
+    except ParseError as e:
+        raise ValueError(
+            f"Failed to parse {file.file} at command {e.args[0]}"
+        ) from None
+    new_file = f"{os.path.splitext(file.file)[0]}.pyt"
+    with open(new_file, "w") as fh:
+        fh.write("#!/usr/bin/env python3\n")
+        fh.write("import sys\nimport nvtest\n")
+        for vvt_arg in vvt_args:
+            if vvt_arg.command == "keywords":
+                args = join_args(vvt_arg.argument)
+                if vvt_arg.options:
+                    kwargs = join_kwargs(vvt_arg.options)
+                    fh.write(f"nvtest.directives.keywords({args}, {kwargs})\n")
+                else:
+                    fh.write(f"nvtest.directives.keywords({args})\n")
+            elif vvt_arg.command in ("copy", "link", "sources"):
+                fh.write(f"nvtest.directives.{vvt_arg.command}(")
+                if vvt_arg.options:
+                    kwargs = join_kwargs(vvt_arg.options)
+                if vvt_arg.options and vvt_arg.options.get("rename"):
+                    s = re.sub(",\s*", ",", vvt_arg.argument)
+                    file_pairs = [_.split(",") for _ in s.split()]
+                    for file_pair in file_pairs:
+                        assert len(file_pair) == 2
+                        fh.write(f"{file_pair[0]!r}, {file_pair[1]!r}, {kwargs})\n")
+                else:
+                    args = join_args(vvt_arg.argument)
+                    fh.write(f"{args})\n")
+            elif vvt_arg.command == "preload":
+                parts = vvt_arg.argument.split()
+                if parts[0] == "source-script":
+                    fh.write(f"nvtest.directives.preload({parts[1]!r}, source=True")
+                else:
+                    fh.write(f"nvtest.directives.preload({vvt_arg.argument!r}")
+                if vvt_arg.options:
+                    kwargs = join_kwargs(vvt_arg.options)
+                    fh.write(f", {kwargs}")
+                fh.write(")\n")
+            elif vvt_arg.command == "parameterize":
+                names, values, kwds = p_parameterize(file, vvt_arg)
+                s_names = ",".join(names)
+                if len(names) == 1:
+                    s_values = "[{0}]".format(", ".join(f"{_[0]!r}" for _ in values))
+                else:
+                    s_values = repr(values)
+                fh.write(f"nvtest.directives.parameterize({s_names!r}, {s_values}")
+                if not kwds:
+                    fh.write(")\n")
+                else:
+                    kwargs = join_kwargs(kwds)
+                    fh.write(f", {kwargs})\n")
+            elif vvt_arg.command == "analyze":
+                options = dict(vvt_arg.options)
+                if vvt_arg.argument:
+                    key = "flag" if vvt_arg.argument.startswith("-") else "script"
+                    options[key] = vvt_arg.argument
+                kwargs = join_kwargs(options)
+                fh.write(f"nvtest.directives.enable(True, {kwargs})\n")
+            elif vvt_arg.command in ("name", "testname"):
+                args = join_args(vvt_arg.argument)
+                if not vvt_arg.options:
+                    fh.write(f"nvtest.directives.name({args})\n")
+                else:
+                    kwargs = join_kwargs(vvt_arg.options)
+                    fh.write(f"nvtest.directives.name({args}, {kwargs})\n")
+            elif vvt_arg.command == "timeout":
+                seconds = to_seconds(vvt_arg.argument)
+                if not vvt_arg.options:
+                    fh.write(f"nvtest.directives.timeout({seconds!r})\n")
+                else:
+                    kwargs = join_kwargs(vvt_arg.options)
+                    fh.write(f"nvtest.directives.timeout({seconds!r}, {kwargs})\n")
+            elif vvt_arg.command == "skipif":
+                skip, reason = parse_skipif(
+                    vvt_arg.argument, reason=vvt_arg.options.get("reason")
+                )
+                fh.write(f"nvtest.directives.skipif({skip!r}, reason={reason!r})\n")
+            elif vvt_arg.command == "baseline":
+                argument = re.sub(",\s*", ",", vvt_arg.argument)
+                file_pairs = [_.split(",") for _ in argument.split()]
+                for pair in file_pairs:
+                    if len(pair) != 2:
+                        raise ValueError(
+                            f"{file.file}: invalid baseline command at {vvt_arg.line!r}"
+                        )
+                    fh.write(f"nvtest.directives.baseline({pair[0]!r}, {pair[1]!r})\n")
+            elif vvt_arg.command == "enable":
+                if vvt_arg.argument and vvt_arg.argument.lower() == "true":
+                    arg = True
+                elif vvt_arg.argument and vvt_arg.argument.lower() == "false":
+                    arg = False
+                elif vvt_arg.argument is None:
+                    arg = True
+                else:
+                    arg = True
+                if not vvt_arg.options:
+                    fh.write(f"nvtest.directives.enable({arg!r})\n")
+                else:
+                    kwargs = join_kwargs(vvt_arg.options)
+                    fh.write(f"nvtest.directives.enable({arg!r}, {kwargs})\n")
+            elif vvt_arg.command == "depends_on":
+                arg = vvt_arg.argument.strip()
+                if not vvt_arg.options:
+                    fh.write(f"nvtest.directives.depends_on({arg!r})\n")
+                else:
+                    kwargs = join_kwargs(vvt_arg.options)
+                    fh.write(f"nvtest.directives.depends_on({arg!r}, {kwargs})\n")
+            else:
+                raise ValueError(
+                    f"Unknown command: {vvt_arg.command} at {vvt_arg.line}"
+                )
+        with open(file.file, "r") as fp:
+            lines = fp.readlines()
+            for line in lines[line_no + 1 :]:
+                fh.write(line)
+    return new_file
+
+
+def parse_vvt_directives(code: str) -> tuple[list[SimpleNamespace], int]:
     commands: list[SimpleNamespace] = []
-    for vvt_comment in collect_vvt_comments(code):
+    comments, line_no = collect_vvt_comments(code)
+    for vvt_comment in comments:
         ns = parse_vvt_directive(vvt_comment)
         commands.append(ns)
-    return commands
+    return commands, line_no
 
 
-def parse_vvt(filename: Union[Path, str]) -> list[SimpleNamespace]:
-    commands = parse_vvt_directives(open(filename).read())
-    return commands
+def parse_vvt(filename: Union[Path, str]) -> tuple[list[SimpleNamespace], int]:
+    commands, line_no = parse_vvt_directives(open(filename).read())
+    return commands, line_no
 
 
 def get_tokens(code):
@@ -92,7 +222,7 @@ def strip_vvt_prefix(string: str, continuation: bool = False) -> str:
     return regex.sub("", string).lstrip()
 
 
-def collect_vvt_comments(code: str) -> list[str]:
+def collect_vvt_comments(code: str) -> tuple[list[str], int]:
     tokens = get_tokens(code)
     non_code_token_nums = (
         tokenize.NL,
@@ -115,10 +245,9 @@ def collect_vvt_comments(code: str) -> list[str]:
             elif is_vvt_command(tokval):
                 s = strip_vvt_prefix(tokval)
                 vvt_comments.append(s)
-
         elif toknum not in non_code_token_nums:
             break
-    return vvt_comments
+    return vvt_comments, token.start[0]
 
 
 def is_opening_paren(token: tokenize.TokenInfo) -> bool:
@@ -232,7 +361,11 @@ def parse_vvt_directive(directive: str) -> SimpleNamespace:
         end = token.end[-1]
         args = directive[end:].strip()
     return SimpleNamespace(
-        command=command, options=options or {}, argument=args, line=directive
+        command=command,
+        options=options or {},
+        argument=args,
+        line=directive,
+        line_no=token.start[0],
     )
 
 
@@ -259,10 +392,21 @@ def f_sources(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
 
 def f_preload(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
     assert arg.command == "preload"
+    parts = arg.argument.split()
+    if parts[0] == "source-script":
+        arg.argument = parts[1]
+        arg.options["source"] = True
     file.m_preload(arg.argument, **arg.options)  # type: ignore
 
 
 def f_parameterize(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
+    names, values, kwds = p_parameterize(file, arg)
+    file._paramsets.append(AbstractParameterSet(list(names), values, **kwds))
+
+
+def p_parameterize(
+    file: "AbstractTestFile", arg: SimpleNamespace
+) -> tuple[list, list, dict]:
     part1, part2 = arg.argument.split("=", 1)
     part2 = re.sub(",\s*", ",", part2)
     names = [_.strip() for _ in part1.split(",") if _.split()]
@@ -275,13 +419,15 @@ def f_parameterize(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
                     row.append(json.loads(item))
                 except json.JSONDecodeError:
                     row.append(item)
-                # row[-1].raw = item
         values.append(row)
     if not all(len(values[0]) == len(_) for _ in values[1:]):
-        raise ValueError(f"{file.file}: invalid parameterize command at {arg.line!r}")
-    if arg.options:
-        arg.options.pop("autotype", None)
-    file._paramsets.append(AbstractParameterSet(list(names), values, **arg.options))
+        raise ValueError(
+            f"{file.file}: invalid parameterize command at {arg.line_no}:{arg.line!r}"
+        )
+    kwds = dict(arg.options)
+    for key in ("autotype", "int", "float", "str"):
+        kwds.pop(key, None)
+    return names, values, kwds
 
 
 def f_analyze(file: "AbstractTestFile", arg: SimpleNamespace) -> None:

@@ -12,7 +12,7 @@ Like a normal parameterized test, the test script itself is used to execute each
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.analyze(script="analyze.py)
+   nvtest.directives.analyze(script="analyze.py)
 
 ``.vvt``:
 
@@ -27,8 +27,8 @@ Consider the test file ``converge.pyt``:
 .. code:: python
 
    import nvtest
-   nvtest.mark.parameterize("dh", (0.2, 0.01, 0.005))
-   nvtest.mark.analyze(script="converge.py")
+   nvtest.directives.parameterize("dh", (0.2, 0.01, 0.005))
+   nvtest.directives.analyze(script="converge.py")
    self = nvtest.test.instance
    print(f"executing {self.name} parameters {self.parameters}")
 
@@ -118,7 +118,7 @@ In the previous example, we used an external file to be run for the analysis. Yo
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.analyze(flag="--analyze")
+   nvtest.directives.analyze(flag="--analyze")
 
 ``.vvt``:
 
@@ -136,8 +136,8 @@ The option name can be anything, except that it must start with a dash.  When th
    import sys
    import nvtest
 
-   nvtest.mark.parameterize("dh", (0.2, 0.01, 0.005))
-   nvtest.mark.analyze(flag="--analyze")
+   nvtest.directives.parameterize("dh", (0.2, 0.01, 0.005))
+   nvtest.directives.analyze(flag="--analyze")
 
    def main():
        p = argparse.ArgumentParser()
@@ -190,8 +190,8 @@ It won't take much before the processing gets to be a lot of code, so it is reco
 
    import sys
    import nvtest
-   nvtest.mark.parameterize("dh", (0.2, 0.01, 0.005))
-   nvtest.mark.analyze(flag="--analyze")
+   nvtest.directives.parameterize("dh", (0.2, 0.01, 0.005))
+   nvtest.directives.analyze(flag="--analyze")
 
    def execute():
        # this is a parameter test

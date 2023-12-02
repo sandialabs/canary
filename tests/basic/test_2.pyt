@@ -4,9 +4,9 @@ import time
 
 import nvtest
 
-nvtest.mark.keywords("test_1", "baz", "spam")
-nvtest.mark.parameterize("np,baz", [(1, "foo"), (2, "spam"), (8, "eggs")])
-nvtest.mark.parameterize("method", (1, 2, 3))
+nvtest.directives.keywords("test_1", "baz", "spam")
+nvtest.directives.parameterize("np,baz", [(1, "foo"), (2, "spam"), (8, "eggs")])
+nvtest.directives.parameterize("method", (1, 2, 3))
 
 
 def test():

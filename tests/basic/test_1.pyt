@@ -5,15 +5,15 @@ import time
 
 import nvtest
 
-nvtest.mark.name("test_1.alt")
-nvtest.mark.keywords("baz", "spam")
-nvtest.mark.analyze(True, testname="test_1.alt")
-nvtest.mark.timeout(1.0)
-nvtest.mark.skipif(False, reason="Because")
-nvtest.mark.parameterize("np,baz", [(1, "foo"), (2, "spam"), (8, "eggs")])
-nvtest.mark.parameterize("method", (1, 2, 3))
-nvtest.mark.copy("{name}.inp", testname="test_1.alt")
-nvtest.mark.link("{name}.txt", testname="test_1.alt")
+nvtest.directives.name("test_1.alt")
+nvtest.directives.keywords("baz", "spam")
+nvtest.directives.analyze(True, testname="test_1.alt")
+nvtest.directives.timeout(1.0)
+nvtest.directives.skipif(False, reason="Because")
+nvtest.directives.parameterize("np,baz", [(1, "foo"), (2, "spam"), (8, "eggs")])
+nvtest.directives.parameterize("method", (1, 2, 3))
+nvtest.directives.copy("{name}.inp", testname="test_1.alt")
+nvtest.directives.link("{name}.txt", testname="test_1.alt")
 
 
 def test():

@@ -13,7 +13,7 @@ A single test file can generate many test cases, each having different parameter
    import sys
    import nvtest
 
-   nvtest.mark.parameterize("a", (1, 4))
+   nvtest.directives.parameterize("a", (1, 4))
 
    def test():
       self = nvtest.test.instance
@@ -54,7 +54,7 @@ Multiple parameter names and their values can be defined:
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.parameterize("a,b", [(1, 1.e5), (4, 1.e6), (16, 1.e7)])
+   nvtest.directives.parameterize("a,b", [(1, 1.e5), (4, 1.e6), (16, 1.e7)])
 
 which would result in the following three tests
 
@@ -75,8 +75,8 @@ If multiple ``parameterize`` directives are specified, the cartesian product of 
 
    import nvtest
 
-   nvtest.mark.parameterize("a", (1, 4))
-   nvtest.mark.parameterize("b", (1.e5, 1.e6, 1.e7))
+   nvtest.directives.parameterize("a", (1, 4))
+   nvtest.directives.parameterize("b", (1.e5, 1.e6, 1.e7))
 
    def test():
        self = nvtest.test.instance
@@ -104,8 +104,8 @@ Similarly,
 
    import nvtest
 
-   nvtest.mark.parameterize("a,b", [(1, 1e5), (2, 1e6), (3, 1e7)])
-   nvtest.mark.parameterize("np", (4, 8))
+   nvtest.directives.parameterize("a,b", [(1, 1e5), (2, 1e6), (3, 1e7)])
+   nvtest.directives.parameterize("np", (4, 8))
 
    def test():
        ...

@@ -32,7 +32,7 @@ Link files ``input.txt`` and ``helper.py`` from the source directory to the exec
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.link("input.txt", "helper.py")
+   nvtest.directives.link("input.txt", "helper.py")
 
 .. code-block:: python
 
@@ -45,8 +45,8 @@ Link files ``file1.txt`` and ``file2.txt`` from the source directory to the exec
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.link("file1.txt", "x_file1.txt", rename=True)
-   nvtest.mark.link("file2.txt", "x_file2.txt", rename=True)
+   nvtest.directives.link("file1.txt", "x_file1.txt", rename=True)
+   nvtest.directives.link("file2.txt", "x_file2.txt", rename=True)
 
 .. code-block:: python
 

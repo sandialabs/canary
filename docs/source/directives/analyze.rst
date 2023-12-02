@@ -34,8 +34,8 @@ Examples
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.analyze(flag="--analyze", platforms="not darwin")
-   nvtest.mark.parameterize("a,b", [(1, 2), (3, 4)])
+   nvtest.directives.analyze(flag="--analyze", platforms="not darwin")
+   nvtest.directives.parameterize("a,b", [(1, 2), (3, 4)])
 
 .. code-block:: python
 
@@ -52,8 +52,8 @@ For either file type, the script must query the command line arguments to determ
    import sys
 
    import nvtest
-   nvtest.mark.analyze(flag="--analyze", platforms="not darwin")
-   nvtest.mark.parameterize("a,b", [(1, 2), (3, 4)])
+   nvtest.directives.analyze(flag="--analyze", platforms="not darwin")
+   nvtest.directives.parameterize("a,b", [(1, 2), (3, 4)])
 
 
    def test() -> int:

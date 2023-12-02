@@ -1,0 +1,34 @@
+import os
+from typing import TYPE_CHECKING
+
+from .. import config
+from ..compat import vvtest
+from ..test.testfile import AbstractTestFile
+from ..util import tty
+
+if TYPE_CHECKING:
+    import argparse
+
+    from _nvtest.config.argparsing import Parser
+
+
+description = "Convert .vvt file to .pyt"
+
+
+def setup_parser(parser: "Parser"):
+    parser.add_argument("file", help="Test file")
+
+
+def convert(args: "argparse.Namespace") -> int:
+    if not args.file.endswith(".vvt"):
+        tty.die("Can only convert .vvt to .pyt")
+    file = AbstractTestFile(args.file)
+    new_file = vvtest.to_pyt(file)
+    f1 = os.path.relpath(file.file, config.invocation_dir)
+    f2 = os.path.relpath(new_file, config.invocation_dir)
+    tty.info(
+        f"converted {f1} => {f2}",
+        "NOTE: the conversion only converts the directives.",
+        "The test body will need to be converted manually",
+    )
+    return 0

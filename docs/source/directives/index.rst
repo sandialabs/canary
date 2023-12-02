@@ -3,7 +3,7 @@
 Test Directives
 ===============
 
-Before running a test, ``nvtest`` reads the test file looking for "test directives".   Test directives are instructions for how to setup and allocate resources needed by the test.  The ``.pyt`` and ``.vvt`` file types use different directive styles.  In the ``.pyt`` file type, directives are python commands contained in the ``nvtest.mark`` namespace.  In the ``.vvt`` file type, text directives are preceded with ``#VVT:`` and ``nvtest`` will stop processing further ``#VVT:`` directives once the first non-comment non-whitespace line has been reached in the test script.
+Before running a test, ``nvtest`` reads the test file looking for "test directives".   Test directives are instructions for how to setup and allocate resources needed by the test.  The ``.pyt`` and ``.vvt`` file types use different directive styles.  In the ``.pyt`` file type, directives are python commands contained in the ``nvtest.directives`` namespace.  In the ``.vvt`` file type, text directives are preceded with ``#VVT:`` and ``nvtest`` will stop processing further ``#VVT:`` directives once the first non-comment non-whitespace line has been reached in the test script.
 
 The general format for a directive is
 
@@ -12,7 +12,7 @@ The general format for a directive is
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.directive_name(*args, **kwargs)
+   nvtest.directives.directive_name(*args, **kwargs)
 
 ``.vvt``:
 

@@ -10,12 +10,12 @@ The test file is composed of two parts:
 
 .. rubric:: 1. Directives
 
-These lines provide instructions to ``nvtest`` regarding the setup and cleanup of the test.  For ``.pyt`` files, these instructions are provided through the ``nvtest.mark`` namespace:
+These lines provide instructions to ``nvtest`` regarding the setup and cleanup of the test.  For ``.pyt`` files, these instructions are provided through the ``nvtest.directives`` namespace:
 
 .. code-block:: python
 
     import nvtest
-    nvtest.mark.copy("file.txt")
+    nvtest.directives.copy("file.txt")
 
 For ``.vvt`` files, directives are lines starting with ``#VVT`` and appear at the top of the test file, eg:
 
@@ -49,7 +49,7 @@ Test files define one or more *test cases*.  In the simplest case, a test file d
 .. code-block:: python
 
     import nvtest
-    nvtest.mark.parameterize("np", (1, 4))
+    nvtest.directives.parameterize("np", (1, 4))
 
 ``.vvt``:
 
@@ -64,7 +64,7 @@ would expand into two test instances, one with the parameter ``np=1`` and one wi
 .. code-block:: python
 
     import nvtest
-    nvtest.mark.parameterize("np", (1, 4))
+    nvtest.directives.parameterize("np", (1, 4))
     def test():
         self = nvtest.test.instance
         print(self.parameters.np)
@@ -86,9 +86,9 @@ A complete example
 .. code-block:: python
 
     import nvtest
-    nvtest.mark.parameterize("np", (1, 4))
-    nvtest.mark.keywords("unit", "fracture", "2D")
-    nvtest.mark.link("input.yml")
+    nvtest.directives.parameterize("np", (1, 4))
+    nvtest.directives.keywords("unit", "fracture", "2D")
+    nvtest.directives.link("input.yml")
 
     def test():
         self = nvtest.test.instance

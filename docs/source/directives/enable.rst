@@ -7,7 +7,7 @@ Explicitly mark a test to be enabled (or not)
 
 .. code-block:: python
 
-   nvtest.mark.enable(arg, options=None, platforms=None, testname=None)
+   nvtest.directives.enable(arg, options=None, platforms=None, testname=None)
 
 .. code-block:: python
 
@@ -29,7 +29,7 @@ Explicitly disable a test
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.enable(False)
+   nvtest.directives.enable(False)
 
 .. code-block:: python
 
@@ -42,7 +42,7 @@ Enable the test if the platform name is not "ATS"
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.enable(True, platforms="not ATS")
+   nvtest.directives.enable(True, platforms="not ATS")
 
 .. code-block:: python
 
@@ -55,9 +55,9 @@ More examples:
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.enable(True, testname="foo", platform="Darwin or Linux")
-   nvtest.mark.enable(True, platform="not Windows", options="not debug")
-   nvtest.mark.enable(False, testname="foo")
+   nvtest.directives.enable(True, testname="foo", platform="Darwin or Linux")
+   nvtest.directives.enable(True, platform="not Windows", options="not debug")
+   nvtest.directives.enable(False, testname="foo")
 
 .. code-block:: python
 

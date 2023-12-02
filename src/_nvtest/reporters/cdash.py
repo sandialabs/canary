@@ -95,19 +95,21 @@ class Reporter(_Reporter):
     def site_node(self):
         host = os.uname().nodename
         machine = machine_config()
-        os_release = machine.os.release
-        os_name = machine.platform
-        os_version = machine.os.fullversion
-        os_platform = machine.arch
+        os_release = machine["os"]["release"]
+        os_name = machine["platform"]
+        os_version = machine["os"]["fullversion"]
+        os_platform = machine["arch"]
         doc = xdom.Document()
         root = doc.createElement("Site")
         add_attr(root, "BuildName", self.buildname)
         add_attr(root, "BuildStamp", self.buildstamp)
         add_attr(root, "Name", self.site)
         add_attr(root, "Generator", self.generator)
-        compiler_name, compiler_version = "gnu", "9.3"
-        add_attr(root, "CompilerName", compiler_name)
-        add_attr(root, "CompilerVersion", compiler_version)
+        if config.get("build"):
+            vendor = config.get("build:compiler:vendor")
+            version = config.get("build:compiler:version")
+            add_attr(root, "CompilerName", vendor)
+            add_attr(root, "CompilerVersion", version)
         add_attr(root, "Hostname", host)
         add_attr(root, "OSName", os_name)
         add_attr(root, "OSRelease", os_release)
@@ -115,9 +117,10 @@ class Reporter(_Reporter):
         add_attr(root, "OSPlatform", os_platform)
         return root
 
-    def write_test_xml(self, dest: str = ".") -> str:
-        filename = os.path.join(dest, "Test.xml")
-        tty.info(f"WRITING: Test.xml to {filename}", prefix=None)
+    def write_test_xml(self) -> str:
+        filename = os.path.join(self.xml_dir, "Test.xml")
+        f = os.path.relpath(filename, config.get("session:invocation_dir"))
+        tty.info(f"WRITING: Test.xml to {f}", prefix=None)
         starttime = self.data.start
 
         doc = xdom.Document()
@@ -198,9 +201,10 @@ class Reporter(_Reporter):
             self.dump_xml(doc, fh)
         return filename
 
-    def write_notes_xml(self, dest: str = ".") -> str:
-        filename = os.path.join(dest, "Notes.xml")
-        tty.info(f"WRITING: Notes.xml to {filename}", prefix=None)
+    def write_notes_xml(self) -> str:
+        filename = os.path.join(self.xml_dir, "Notes.xml")
+        f = os.path.relpath(filename, config.get("session:invocation_dir"))
+        tty.info(f"WRITING: Notes.xml to {f}", prefix=None)
         notes: dict[str, str] = {}
         doc = xdom.Document()
         root = self.site_node()

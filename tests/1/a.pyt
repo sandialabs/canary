@@ -4,10 +4,10 @@ import time
 
 import nvtest
 
-nvtest.mark.skipif(sys.platform == "darwin", reason="Test does not run on Darwin")
-nvtest.mark.keywords("baz", "spam")
-nvtest.mark.parameterize("np,baz", [(1, "foo"), (2, "spam"), (8, "eggs")], options="opt")
-nvtest.mark.parameterize("method", (1, 2, 3), platforms="darwin")
+nvtest.directives.skipif(sys.platform == "darwin", reason="Test does not run on Darwin")
+nvtest.directives.keywords("baz", "spam")
+nvtest.directives.parameterize("np,baz", [(1, "foo"), (2, "spam"), (8, "eggs")], options="opt")
+nvtest.directives.parameterize("method", (1, 2, 3), platforms="darwin")
 
 
 def test():

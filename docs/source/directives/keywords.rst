@@ -32,7 +32,7 @@ The following implicit keywords are defined:
   .. code-block::
 
      import nvtest
-     nvtest.mark.parameterize("meshsize", (0.1, 0.01, 0.001))
+     nvtest.directives.parameterize("meshsize", (0.1, 0.01, 0.001))
 
   would have "meshsize" as a keyword.
 * The results of running the test are added as keywords. The result strings are
@@ -49,7 +49,7 @@ Examples
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.keywords("3D", "mhd", "circuit")
+   nvtest.directives.keywords("3D", "mhd", "circuit")
 
 .. code-block:: python
 
@@ -60,7 +60,7 @@ Examples
 .. code-block:: python
 
    import nvtest
-   nvtest.mark.keywords("3D", "mhd", "circuit", testname="spam", parameters="np>1")
+   nvtest.directives.keywords("3D", "mhd", "circuit", testname="spam", parameters="np>1")
 
 .. code-block:: python
 

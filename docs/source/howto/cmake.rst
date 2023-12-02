@@ -28,6 +28,7 @@ Functions
     [NO_DEFAULT_LINK]
     [LINK link1 [link2...]]
     [KEYWORDS kwd1 [kwd2...]]
+    [DEPENDS_ON dep1 [dep2...]]
    )
 
 Generates a ``nvtest`` named ``<name>`` in the current binary directory.  This function is analogous to CMake's ``add_test``.
@@ -48,6 +49,8 @@ CMake generator expressions are supported.
   Optional auxiliary files that should be :ref:`linked <directive-link>` into the test's execution directory.
 ``KEYWORDS``:
   Optional test :ref:`keywords <directive-keywords>`.
+``DEPENDS_ON``:
+  Optional test :ref:`dependencies <directive-depends-on>`.
 
 Exactly one of ``COMMAND`` or ``SCRIPT`` must be provided.
 
@@ -66,11 +69,12 @@ would generate the following file in the current binary directory
    # my_test.pyt
    import sys
    import nvtest
-   nvtest.mark.keywords("fast", "unit_test")
-   nvtest.mark.link("my_test")
+   nvtest.directives.keywords("fast", "unit_test")
+   nvtest.directives.link("my_test")
    def test():
-       cmd = nvtest.Executable("my_test --option=value")
-       cmd(allow_failure=True)
+       cmd = nvtest.Executable("my_test")
+       args = ["--option=value"]
+       cmd(*args, allow_failure=True)
        if cmd.returncode != 0:
            raise nvtest.TestFailed("my_test")
 
@@ -79,13 +83,14 @@ would generate the following file in the current binary directory
 
 .. code-block:: cmake
 
-   add_nvtest(
+   add_parallel_nvtest(
     NAME <name>
     COMMAND <command>
     NPROC <np1 [np2...]>
     [NO_DEFAULT_LINK]
     [LINK link1 [link2...]]
     [KEYWORDS kwd1 [kwd2...]]
+    [DEPENDS_ON dep1 [dep2...]]
    )
 
 Generates a ``nvtest`` named ``<name>`` in the current binary directory that is parameterized on the number of processors.  Parallel jobs are launched using the value of `MPIEXEC_EXECUTABLE <https://cmake.org/cmake/help/latest/module/FindMPI.html#variables-for-using-mpi>`_.
@@ -106,7 +111,8 @@ CMake generator expressions are supported.
   Optional auxiliary files that should be :ref:`linked <directive-link>` into the test's execution directory.
 ``KEYWORDS``:
   Optional test :ref:`keywords <directive-keywords>`.
-
+``DEPENDS_ON``:
+  Optional test :ref:`dependencies <directive-depends-on>`.
 
 .. rubric:: Example
 
@@ -128,9 +134,9 @@ would generate the following file in the current binary directory
    # my_parallel_test.pyt
    import sys
    import nvtest
-   nvtest.mark.keywords("fast", "unit_test")
-   nvtest.mark.link("my_test")
-   nvtest.mark.parameterize("np", [1, 4])
+   nvtest.directives.keywords("fast", "unit_test")
+   nvtest.directives.link("my_test")
+   nvtest.directives.parameterize("np", [1, 4])
    def test():
        self = nvtest.test.instance
        mpi = nvtest.Executable("${MPIEXEC_EXECUTABLE}")
