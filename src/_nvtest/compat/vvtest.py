@@ -57,134 +57,6 @@ def load_vvt(file: "AbstractTestFile") -> None:
             )
 
 
-def to_pyt(file: "AbstractTestFile") -> str:
-    def join_args(string):
-        return ", ".join(repr(_) for _ in string.split())
-
-    def join_kwargs(kwargs):
-        return ", ".join([f"{key}={val!r}" for (key, val) in kwargs.items()])
-
-    try:
-        vvt_args, line_no = parse_vvt(file.file)
-    except ParseError as e:
-        raise ValueError(
-            f"Failed to parse {file.file} at command {e.args[0]}"
-        ) from None
-    new_file = f"{os.path.splitext(file.file)[0]}.pyt"
-    with open(new_file, "w") as fh:
-        fh.write("#!/usr/bin/env python3\n")
-        fh.write("import sys\nimport nvtest\n")
-        for vvt_arg in vvt_args:
-            if vvt_arg.command == "keywords":
-                args = join_args(vvt_arg.argument)
-                if vvt_arg.options:
-                    kwargs = join_kwargs(vvt_arg.options)
-                    fh.write(f"nvtest.directives.keywords({args}, {kwargs})\n")
-                else:
-                    fh.write(f"nvtest.directives.keywords({args})\n")
-            elif vvt_arg.command in ("copy", "link", "sources"):
-                fh.write(f"nvtest.directives.{vvt_arg.command}(")
-                if vvt_arg.options:
-                    kwargs = join_kwargs(vvt_arg.options)
-                if vvt_arg.options and vvt_arg.options.get("rename"):
-                    s = re.sub(",\s*", ",", vvt_arg.argument)
-                    file_pairs = [_.split(",") for _ in s.split()]
-                    for file_pair in file_pairs:
-                        assert len(file_pair) == 2
-                        fh.write(f"{file_pair[0]!r}, {file_pair[1]!r}, {kwargs})\n")
-                else:
-                    args = join_args(vvt_arg.argument)
-                    fh.write(f"{args})\n")
-            elif vvt_arg.command == "preload":
-                parts = vvt_arg.argument.split()
-                if parts[0] == "source-script":
-                    fh.write(f"nvtest.directives.preload({parts[1]!r}, source=True")
-                else:
-                    fh.write(f"nvtest.directives.preload({vvt_arg.argument!r}")
-                if vvt_arg.options:
-                    kwargs = join_kwargs(vvt_arg.options)
-                    fh.write(f", {kwargs}")
-                fh.write(")\n")
-            elif vvt_arg.command == "parameterize":
-                names, values, kwds = p_parameterize(file, vvt_arg)
-                s_names = ",".join(names)
-                if len(names) == 1:
-                    s_values = "[{0}]".format(", ".join(f"{_[0]!r}" for _ in values))
-                else:
-                    s_values = repr(values)
-                fh.write(f"nvtest.directives.parameterize({s_names!r}, {s_values}")
-                if not kwds:
-                    fh.write(")\n")
-                else:
-                    kwargs = join_kwargs(kwds)
-                    fh.write(f", {kwargs})\n")
-            elif vvt_arg.command == "analyze":
-                options = dict(vvt_arg.options)
-                if vvt_arg.argument:
-                    key = "flag" if vvt_arg.argument.startswith("-") else "script"
-                    options[key] = vvt_arg.argument
-                kwargs = join_kwargs(options)
-                fh.write(f"nvtest.directives.enable(True, {kwargs})\n")
-            elif vvt_arg.command in ("name", "testname"):
-                args = join_args(vvt_arg.argument)
-                if not vvt_arg.options:
-                    fh.write(f"nvtest.directives.name({args})\n")
-                else:
-                    kwargs = join_kwargs(vvt_arg.options)
-                    fh.write(f"nvtest.directives.name({args}, {kwargs})\n")
-            elif vvt_arg.command == "timeout":
-                seconds = to_seconds(vvt_arg.argument)
-                if not vvt_arg.options:
-                    fh.write(f"nvtest.directives.timeout({seconds!r})\n")
-                else:
-                    kwargs = join_kwargs(vvt_arg.options)
-                    fh.write(f"nvtest.directives.timeout({seconds!r}, {kwargs})\n")
-            elif vvt_arg.command == "skipif":
-                skip, reason = parse_skipif(
-                    vvt_arg.argument, reason=vvt_arg.options.get("reason")
-                )
-                fh.write(f"nvtest.directives.skipif({skip!r}, reason={reason!r})\n")
-            elif vvt_arg.command == "baseline":
-                argument = re.sub(",\s*", ",", vvt_arg.argument)
-                file_pairs = [_.split(",") for _ in argument.split()]
-                for pair in file_pairs:
-                    if len(pair) != 2:
-                        raise ValueError(
-                            f"{file.file}: invalid baseline command at {vvt_arg.line!r}"
-                        )
-                    fh.write(f"nvtest.directives.baseline({pair[0]!r}, {pair[1]!r})\n")
-            elif vvt_arg.command == "enable":
-                if vvt_arg.argument and vvt_arg.argument.lower() == "true":
-                    arg = True
-                elif vvt_arg.argument and vvt_arg.argument.lower() == "false":
-                    arg = False
-                elif vvt_arg.argument is None:
-                    arg = True
-                else:
-                    arg = True
-                if not vvt_arg.options:
-                    fh.write(f"nvtest.directives.enable({arg!r})\n")
-                else:
-                    kwargs = join_kwargs(vvt_arg.options)
-                    fh.write(f"nvtest.directives.enable({arg!r}, {kwargs})\n")
-            elif vvt_arg.command == "depends_on":
-                arg = vvt_arg.argument.strip()
-                if not vvt_arg.options:
-                    fh.write(f"nvtest.directives.depends_on({arg!r})\n")
-                else:
-                    kwargs = join_kwargs(vvt_arg.options)
-                    fh.write(f"nvtest.directives.depends_on({arg!r}, {kwargs})\n")
-            else:
-                raise ValueError(
-                    f"Unknown command: {vvt_arg.command} at {vvt_arg.line}"
-                )
-        with open(file.file, "r") as fp:
-            lines = fp.readlines()
-            for line in lines[line_no + 1 :]:
-                fh.write(line)
-    return new_file
-
-
 def parse_vvt_directives(code: str) -> tuple[list[SimpleNamespace], int]:
     commands: list[SimpleNamespace] = []
     comments, line_no = collect_vvt_comments(code)
@@ -569,6 +441,134 @@ def get_vvtest_attrs(case: "TestCase") -> dict:
         attrs["DEPDIRS"] = [dep.exec_dir for dep in case.dependencies]
         attrs["DEPDIRMAP"] = {}  # FIXME
     return attrs
+
+
+def to_pyt(file: "AbstractTestFile") -> str:
+    def join_args(string):
+        return ", ".join(repr(_) for _ in string.split())
+
+    def join_kwargs(kwargs):
+        return ", ".join([f"{key}={val!r}" for (key, val) in kwargs.items()])
+
+    try:
+        vvt_args, line_no = parse_vvt(file.file)
+    except ParseError as e:
+        raise ValueError(
+            f"Failed to parse {file.file} at command {e.args[0]}"
+        ) from None
+    new_file = f"{os.path.splitext(file.file)[0]}.pyt"
+    with open(new_file, "w") as fh:
+        fh.write("#!/usr/bin/env python3\n")
+        fh.write("import sys\nimport nvtest\n")
+        for vvt_arg in vvt_args:
+            if vvt_arg.command == "keywords":
+                args = join_args(vvt_arg.argument)
+                if vvt_arg.options:
+                    kwargs = join_kwargs(vvt_arg.options)
+                    fh.write(f"nvtest.directives.keywords({args}, {kwargs})\n")
+                else:
+                    fh.write(f"nvtest.directives.keywords({args})\n")
+            elif vvt_arg.command in ("copy", "link", "sources"):
+                fh.write(f"nvtest.directives.{vvt_arg.command}(")
+                if vvt_arg.options:
+                    kwargs = join_kwargs(vvt_arg.options)
+                if vvt_arg.options and vvt_arg.options.get("rename"):
+                    s = re.sub(",\s*", ",", vvt_arg.argument)
+                    file_pairs = [_.split(",") for _ in s.split()]
+                    for file_pair in file_pairs:
+                        assert len(file_pair) == 2
+                        fh.write(f"{file_pair[0]!r}, {file_pair[1]!r}, {kwargs})\n")
+                else:
+                    args = join_args(vvt_arg.argument)
+                    fh.write(f"{args})\n")
+            elif vvt_arg.command == "preload":
+                parts = vvt_arg.argument.split()
+                if parts[0] == "source-script":
+                    fh.write(f"nvtest.directives.preload({parts[1]!r}, source=True")
+                else:
+                    fh.write(f"nvtest.directives.preload({vvt_arg.argument!r}")
+                if vvt_arg.options:
+                    kwargs = join_kwargs(vvt_arg.options)
+                    fh.write(f", {kwargs}")
+                fh.write(")\n")
+            elif vvt_arg.command == "parameterize":
+                names, values, kwds = p_parameterize(file, vvt_arg)
+                s_names = ",".join(names)
+                if len(names) == 1:
+                    s_values = "[{0}]".format(", ".join(f"{_[0]!r}" for _ in values))
+                else:
+                    s_values = repr(values)
+                fh.write(f"nvtest.directives.parameterize({s_names!r}, {s_values}")
+                if not kwds:
+                    fh.write(")\n")
+                else:
+                    kwargs = join_kwargs(kwds)
+                    fh.write(f", {kwargs})\n")
+            elif vvt_arg.command == "analyze":
+                options = dict(vvt_arg.options)
+                if vvt_arg.argument:
+                    key = "flag" if vvt_arg.argument.startswith("-") else "script"
+                    options[key] = vvt_arg.argument
+                kwargs = join_kwargs(options)
+                fh.write(f"nvtest.directives.enable(True, {kwargs})\n")
+            elif vvt_arg.command in ("name", "testname"):
+                args = join_args(vvt_arg.argument)
+                if not vvt_arg.options:
+                    fh.write(f"nvtest.directives.name({args})\n")
+                else:
+                    kwargs = join_kwargs(vvt_arg.options)
+                    fh.write(f"nvtest.directives.name({args}, {kwargs})\n")
+            elif vvt_arg.command == "timeout":
+                seconds = to_seconds(vvt_arg.argument)
+                if not vvt_arg.options:
+                    fh.write(f"nvtest.directives.timeout({seconds!r})\n")
+                else:
+                    kwargs = join_kwargs(vvt_arg.options)
+                    fh.write(f"nvtest.directives.timeout({seconds!r}, {kwargs})\n")
+            elif vvt_arg.command == "skipif":
+                skip, reason = parse_skipif(
+                    vvt_arg.argument, reason=vvt_arg.options.get("reason")
+                )
+                fh.write(f"nvtest.directives.skipif({skip!r}, reason={reason!r})\n")
+            elif vvt_arg.command == "baseline":
+                argument = re.sub(",\s*", ",", vvt_arg.argument)
+                file_pairs = [_.split(",") for _ in argument.split()]
+                for pair in file_pairs:
+                    if len(pair) != 2:
+                        raise ValueError(
+                            f"{file.file}: invalid baseline command at {vvt_arg.line!r}"
+                        )
+                    fh.write(f"nvtest.directives.baseline({pair[0]!r}, {pair[1]!r})\n")
+            elif vvt_arg.command == "enable":
+                if vvt_arg.argument and vvt_arg.argument.lower() == "true":
+                    arg = True
+                elif vvt_arg.argument and vvt_arg.argument.lower() == "false":
+                    arg = False
+                elif vvt_arg.argument is None:
+                    arg = True
+                else:
+                    arg = True
+                if not vvt_arg.options:
+                    fh.write(f"nvtest.directives.enable({arg!r})\n")
+                else:
+                    kwargs = join_kwargs(vvt_arg.options)
+                    fh.write(f"nvtest.directives.enable({arg!r}, {kwargs})\n")
+            elif vvt_arg.command == "depends_on":
+                arg = vvt_arg.argument.strip()
+                if not vvt_arg.options:
+                    fh.write(f"nvtest.directives.depends_on({arg!r})\n")
+                else:
+                    kwargs = join_kwargs(vvt_arg.options)
+                    fh.write(f"nvtest.directives.depends_on({arg!r}, {kwargs})\n")
+            else:
+                raise ValueError(
+                    f"Unknown command: {vvt_arg.command} at {vvt_arg.line}"
+                )
+        with open(file.file, "r") as fp:
+            lines = fp.readlines()
+            for line in lines[line_no + 1 :]:
+                fh.write(line)
+    return new_file
 
 
 class ParseError(Exception):
