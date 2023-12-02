@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
 
 
-description = "Show various types of objects"
+description = "Show various items associated with a test case"
 
 
 def setup_parser(parser: "Parser"):
@@ -35,14 +35,14 @@ def setup_parser(parser: "Parser"):
         dest="show_exec_dir",
         action="store_true",
         default=False,
-        help="Show the path to the test's execution directory",
+        help="Show the test's execution directory",
     )
     group.add_argument(
         "-D",
         dest="show_source_dir",
         action="store_true",
         default=False,
-        help="Show the path to the test's source directory",
+        help="Show the test's source directory",
     )
     parser.add_argument("testspec", help="Test name or test id")
     parser.epilog = "If no options are give, -l is assumed"
@@ -66,6 +66,7 @@ def show(args: "argparse.Namespace") -> int:
             elif args.show_source_dir:
                 f = case.file_dir
             if os.path.isfile(f):
+                print(f"{f}:")
                 pydoc.pager(open(f).read())
             else:
                 print(f)

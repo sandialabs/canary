@@ -2,7 +2,6 @@ from ..config.argparsing import Parser
 from . import config
 from . import describe
 from . import find
-from . import location
 from . import python
 from . import rebaseline
 from . import report
@@ -15,7 +14,6 @@ def add_commands(parser: Parser) -> None:
     parser.add_command(config)
     parser.add_command(describe)
     parser.add_command(find)
-    parser.add_command(location)
     parser.add_command(python)
     parser.add_command(report)
     parser.add_command(rebaseline)
