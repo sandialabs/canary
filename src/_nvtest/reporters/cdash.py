@@ -30,14 +30,20 @@ class Reporter(_Reporter):
         self,
         project: str,
         buildname: str,
-        buildgroup: Optional[str] = None,
         site: Optional[str] = None,
+        track: Optional[str] = None,
+        build_stamp: Optional[str] = None,
     ) -> None:
         """Collect information and create reports"""
         self.project = project
         self.buildname = buildname
-        self.buildgroup = buildgroup or "Experimental"
         self.site = site or os.uname().nodename
+        if build_stamp is not None and track is not None:
+            raise ValueError("mutually exclusive inputs: track, build_stamp")
+        if build_stamp is None:
+            self.buildstamp = self.generate_buildstamp(track or "Experimental")
+        else:
+            self.buildstamp = build_stamp
         force_remove(self.xml_dir)
         mkdirp(self.xml_dir)
         self.write_test_xml()
@@ -57,7 +63,7 @@ class Reporter(_Reporter):
         data = {
             "project": self.project,
             "buildname": self.buildname,
-            "buildgroup": self.buildgroup,
+            "buildstamp": self.buildstamp,
             "site": self.site,
         }
         with open(f, "w") as fh:
@@ -76,9 +82,8 @@ class Reporter(_Reporter):
     def generator(self):
         return f"nvtest version {nvtest.version}"
 
-    @property
-    def buildstamp(self):
-        fmt = f"%Y%m%d-%H%M-{self.buildgroup}"
+    def generate_buildstamp(self, track):
+        fmt = f"%Y%m%d-%H%M-{track}"
         t = time.localtime(self.data.start)
         return time.strftime(fmt, t)
 
