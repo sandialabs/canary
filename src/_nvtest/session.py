@@ -246,6 +246,24 @@ class Session:
         self.cases = self._load_testcases()
         return self
 
+    @classmethod
+    def load_batch(cls, *, batch_no: int) -> "Session":
+        self = Session.load(mode="a")
+        n = max(3, digits(len(os.listdir(self.batchdir))))
+        f = os.path.join(self.batchdir, f"{batch_no:0{n}d}")
+        case_ids: list[str] = [_.strip() for _ in open(f).readlines() if _.split()]
+        for case in self.cases:
+            if case.id in case_ids:
+                case.skip = Skip()
+                case.result = Result("notrun")
+            elif not case.skip:
+                case.skip = Skip("case is not in batch")
+        cases = self.cases_to_run()
+        self.queue = q_factory(
+            cases, workers=self.max_workers, cpu_count=self.max_cores_per_test
+        )
+        return self
+
     def _create_config(self, work_tree: str, **kwds: Any) -> None:
         work_tree = os.path.abspath(work_tree)
         config.set("session:work_tree", work_tree, scope="session")

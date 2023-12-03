@@ -36,6 +36,10 @@ class BatchQueue(Queue):
         return self._done[batch_no]
 
     @property
+    def allow_keyboard_interaction(self) -> bool:
+        return False
+
+    @property
     def cases(self) -> list[TestCase]:
         return [case for batch in self.work_items for case in batch]
 

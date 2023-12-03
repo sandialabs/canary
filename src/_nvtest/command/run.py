@@ -239,6 +239,7 @@ def parse_pathspec(args: argparse.Namespace) -> None:
     - an input file containing search path information when creating a new session
     - a directory to search for test files when creating a new session
     - a filter when re-using a previous session
+    - a batch number to run
 
     """
     args.start = None
@@ -282,11 +283,17 @@ def _parse_in_session_pathspec(args: argparse.Namespace) -> None:
         if TestCase.spec_like(p):
             setdefault(args, "case_specs", []).append(p)
             args.pathspec[i] = None
+        elif p.startswith("^"):
+            args.mode = "b"
+            setdefault(args, "batch_no", int(p[1:]))
         else:
             pathspec.append(p)
     if getattr(args, "case_specs", None):
         if pathspec:
             tty.die("do not mix /ID with other pathspec arguments")
+    elif getattr(args, "batch_no", None):
+        if pathspec:
+            tty.die("do not mix ^BATCH with other pathspec arguments")
     if len(pathspec) > 1:
         tty.die("incompatible input path arguments")
     if args.wipe:
@@ -464,6 +471,8 @@ def setup_session(args: "argparse.Namespace") -> Session:
             parameter_expr=args.parameter_expr,
             copy_all_resources=args.copy_all_resources,
         )
+    elif args.mode == "b":
+        session = Session.load_batch(batch_no=args.batch_no)
     else:
         assert args.mode == "a"
         tty.print("Setting up test session", centered=True)

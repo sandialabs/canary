@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 from contextlib import contextmanager
@@ -9,9 +10,8 @@ from typing import Union
 from ..test.enums import Result
 from ..test.partition import Partition
 from ..test.testcase import TestCase
-
-from ..util import keyboard
 from ..third_party import rprobe
+from ..util import keyboard
 from ..util.tty.color import clen
 from ..util.tty.color import colorize
 
@@ -28,6 +28,7 @@ class Queue:
         self._running: dict[int, Any] = {}
         self._done: dict[int, Any] = {}
         self._lock: list[int] = []
+        self.allow_kb = os.getenv("NVTEST_DISABLE_KB") is None
 
     def validate(self) -> None:
         raise NotImplementedError
@@ -103,9 +104,10 @@ class Queue:
             if not len(self.queue):
                 raise StopIteration
             for i, item in self.queue.items():
-                key = keyboard.get_key()
-                if isinstance(key, str) and key in "sS":
-                   self.print_status()
+                if self.allow_kb:
+                    key = keyboard.get_key()
+                    if isinstance(key, str) and key in "sS":
+                        self.print_status()
                 with self.lock():
                     avail_workers = self._avail_workers
                     if avail_workers and item.size <= self._avail_cpus and item.ready:

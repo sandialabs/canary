@@ -83,9 +83,8 @@ class BatchRunner(Runner):
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
         fh.write(f"# batch {batch_no + 1} of {num_batches}\n")
-        for case in batch:
-            fh.write(f"\n# --- {case.display_name} ---\n(\n")
-            fh.write(f"  nvtest -C {self.work_tree} run /{case.id}\n)\n")
+        fh.write("(\n  export NVTEST_DISABLE_KB=1\n")
+        fh.write(f"  nvtest -C {self.work_tree} run --max-workers=1 ^{batch_no}\n)\n")
 
     def submit_filename(self, batch_no: int) -> str:
         n = max(digits(batch_no), 3)

@@ -11,6 +11,7 @@ from typing import Sequence
 from typing import Union
 
 import _nvtest.directives.enums as d_enums
+
 from ..compat.vvtest import load_vvt
 from ..directives.match import deselect_by_keyword
 from ..directives.match import deselect_by_name
