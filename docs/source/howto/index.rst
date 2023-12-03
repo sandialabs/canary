@@ -9,6 +9,7 @@ How-to guides
    status
    filter
    parameterizing
+   centered-parameter-space
    execute-and-analyze
    html
    cmake

@@ -1,38 +1,26 @@
-.. _directive-parameterize:
+.. _directive-processors:
 
-parameterize
-============
+processors
+==========
 
-Add new invocations to the test using the list of argvalues for the given argnames.
-
-.. code-block:: python
-
-   parametrize(argnames, argvalues, options=None, platforms=None, testname=None, type=None)
-
+Run the test with this many processors
 
 .. code-block:: python
 
-   #VVT: parametrize (options=...,platforms=...,testname=...) : argnames = argvalues
+   processors(*nprocs, options=None, platforms=None, testname=None)
+
+
+.. code-block:: python
+
+   #VVT: parametrize (options=...,platforms=...,testname=...) : np = nprocs
 
 Parameters
 ----------
 
-* ``argnames``: A comma-separated string denoting one or more argument names, or a list/tuple of argument strings.
-* ``argvalues``: The list of ``argvalues`` determines how often a test is invoked with different argument values.  If only one ``argname`` was specified, ``argvalues`` is a list of values. If ``N`` ``argnames`` were specified, ``argvalues`` must be a list of N-tuples, where each tuple-element specifies a value for its respective ``argname``.
+* ``nprocs``: List of processor counts
 * ``testname``: Restrict processing of the directive to this test name
 * ``platform``: Restrict processing of the directive to certain platform or platforms
 * ``option``: Restrict processing of the directive to command line ``-o`` options
-* ``type``: (``.pyt`` only) Generate parameters using this type
-
-Special argnames
-----------------
-
-The ``np`` parameter is interpreted to mean "number of processing cores".  If the ``np`` parameter is not defined, the test is assumed to use 1 processing core.
-
-References
-----------
-
-* :ref:`Parameterizing Tests <parameterizing>`
 
 Examples
 --------
@@ -44,7 +32,7 @@ The following equivalent test specifications result in 4 test instantiations
 .. code-block:: python
 
    # test1
-   nvtest.directives.parameterize("np", (4, 8, 12, 32))
+   nvtest.directives.processors(4, 8, 12, 32)
 
 ``test1.vvt``:
 

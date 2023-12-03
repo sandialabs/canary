@@ -5,11 +5,12 @@ import os
 from copy import copy
 from string import Template
 from typing import Any
-from typing import Iterable
+from typing import Collection
 from typing import Optional
 from typing import Sequence
 from typing import Union
 
+import _nvtest.directives.enums as d_enums
 from ..compat.vvtest import load_vvt
 from ..directives.match import deselect_by_keyword
 from ..directives.match import deselect_by_name
@@ -54,7 +55,7 @@ class FilterNamespace:
         self,
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, object]] = None,
+        parameters: Optional[dict[str, Any]] = None,
     ) -> bool:
         if testname and self.testname_expr:
             if deselect_by_name({testname}, self.testname_expr):
@@ -289,7 +290,7 @@ class AbstractTestFile:
     def keywords(
         self,
         testname: Optional[str] = None,
-        parameters: Optional[dict[str, object]] = None,
+        parameters: Optional[dict[str, Any]] = None,
     ) -> list[str]:
         keywords: set[str] = set()
         for ns in self._keywords:
@@ -337,7 +338,7 @@ class AbstractTestFile:
         self,
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, object]] = None,
+        parameters: Optional[dict[str, Any]] = None,
     ) -> Union[int, None]:
         for ns in self._timeout:
             if ns.testname_expr is not None and testname:
@@ -397,7 +398,7 @@ class AbstractTestFile:
         self,
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, object]] = None,
+        parameters: Optional[dict[str, Any]] = None,
     ) -> list[tuple[str, str]]:
         baseline: list[tuple[str, str]] = []
         kwds = dict(parameters) if parameters else {}
@@ -429,7 +430,7 @@ class AbstractTestFile:
         self,
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, object]] = None,
+        parameters: Optional[dict[str, Any]] = None,
     ) -> dict[str, list[tuple[str, str]]]:
         kwds = dict(parameters) if parameters else {}
         if testname:
@@ -468,7 +469,7 @@ class AbstractTestFile:
         self,
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, object]] = None,
+        parameters: Optional[dict[str, Any]] = None,
     ) -> list[str]:
         kwds = dict(parameters) if parameters else {}
         if testname:
@@ -550,11 +551,21 @@ class AbstractTestFile:
     def m_parameterize(
         self,
         argnames: Union[str, Sequence[str]],
-        argvalues: Iterable[Union[Sequence[object], object]],
+        argvalues: Collection[Union[Sequence[Any], Any]],
         options: Optional[str] = None,
         platforms: Optional[str] = None,
         testname: Optional[str] = None,
+        type: d_enums.enums = d_enums.default_parameter_space,
     ) -> None:
+        if not isinstance(type, d_enums.enums):
+            raise ValueError(
+                f"parameterize: type: expected "
+                f"nvtest.enums, got {type.__class__.__name__}"
+            )
+        if type is d_enums.centered_parameter_space:
+            argnames, argvalues = AbstractParameterSet.centered_parameter_space(
+                argnames, argvalues
+            )
         self._paramsets.append(
             AbstractParameterSet.parse(
                 argnames,

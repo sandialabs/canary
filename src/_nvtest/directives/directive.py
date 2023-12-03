@@ -1,8 +1,10 @@
 from typing import TYPE_CHECKING
-from typing import Iterable
+from typing import Collection
 from typing import Optional
 from typing import Sequence
 from typing import Union
+
+from . import enums
 
 if TYPE_CHECKING:
     from _nvtest.test.testfile import AbstractTestFile
@@ -23,14 +25,31 @@ class Directive:
     def parameterize(
         self,
         names: Union[str, Sequence[str]],
-        values: Iterable[Union[Sequence[object], object]],
+        values: Collection[Union[Sequence[object], object]],
         *,
+        options: Optional[str] = None,
+        platforms: Optional[str] = None,
+        testname: Optional[str] = None,
+        type: enums.enums = enums.default_parameter_space,
+    ) -> None:
+        self.testfile.m_parameterize(
+            names,
+            values,
+            options=options,
+            platforms=platforms,
+            testname=testname,
+            type=type,
+        )
+
+    def processors(
+        self,
+        *values: int,
         options: Optional[str] = None,
         platforms: Optional[str] = None,
         testname: Optional[str] = None,
     ) -> None:
         self.testfile.m_parameterize(
-            names, values, options=options, platforms=platforms, testname=testname
+            "np", values, options=options, platforms=platforms, testname=testname
         )
 
     def depends_on(
@@ -163,6 +182,9 @@ class DummyDirective:
         ...
 
     def parameterize(self, *args, **kwargs):
+        ...
+
+    def processors(self, *args, **kwargs):
         ...
 
     def analyze(self, *args, **kwargs):

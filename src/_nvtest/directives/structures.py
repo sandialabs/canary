@@ -4,7 +4,7 @@ import tokenize
 from io import StringIO
 from typing import Any
 from typing import Callable
-from typing import Iterable
+from typing import Collection
 from typing import Optional
 from typing import Sequence
 from typing import Type
@@ -16,9 +16,9 @@ from .match import deselect_by_platform
 
 
 class ParameterSet:
-    def __init__(self, keys: list[str], values: Iterable[Sequence[Any]]) -> None:
+    def __init__(self, keys: list[str], values: Collection[Sequence[Any]]) -> None:
         self.keys: list[str] = keys
-        self.values: Iterable[Sequence[Any]] = values
+        self.values: Collection[Sequence[Any]] = values
 
     def describe(self, indent=0) -> str:
         fp = StringIO()
@@ -34,13 +34,13 @@ class AbstractParameterSet:
     def __init__(
         self,
         keys: list[str],
-        values: Iterable[Sequence[Any]],
+        values: Collection[Sequence[Any]],
         options: Optional[str] = None,
         platforms: Optional[str] = None,
         testname: Optional[str] = None,
     ) -> None:
         self.keys: list[str] = keys
-        self.values: Iterable[Sequence[Any]] = values
+        self.values: Collection[Sequence[Any]] = values
         self.option_expr: Union[str, None] = options
         self.platform_expr: Union[str, None] = platforms
         self.testname_expr: Union[str, None] = testname
@@ -73,16 +73,18 @@ class AbstractParameterSet:
     def parse(
         cls: Type["AbstractParameterSet"],
         argnames: Union[str, Sequence[str]],
-        argvalues: Iterable[Union[Sequence[Any], Any]],
+        argvalues: Collection[Union[Sequence[Any], Any]],
         options: Optional[str] = None,
         platforms: Optional[str] = None,
         testname: Optional[str] = None,
         file: Optional[str] = None,
     ):
         names: list[str] = []
-        values: Iterable[Sequence[Any]] = []
+        values: Collection[Sequence[Any]] = []
         if isinstance(argnames, str):
-            names = [x.strip() for x in argnames.split(",") if x.strip()]
+            names.extend([x.strip() for x in argnames.split(",") if x.strip()])
+        else:
+            names.extend(argnames)
         if len(names) == 1:
             values = [(_,) for _ in argvalues]
         else:
@@ -108,15 +110,77 @@ class AbstractParameterSet:
             names, values, options=options, platforms=platforms, testname=testname
         )
 
+    @staticmethod
+    def centered_parameter_space(
+        argnames: Union[str, Sequence[str]],
+        argvalues: Collection[Union[Sequence[Any], Any]],
+    ) -> tuple[list[str], list[list[float]]]:
+        """Generate parameters for a centered parameter study
+
+        Notes
+        -----
+        The centered parameter space computes parameter sets along multiple
+        coordinate-based vectors, one per parameter, centered about the initial
+        values.
+
+        The centered_parameter_space takes steps along each orthogonal dimension.
+        Each dimension is treated independently. The number of steps are taken in
+        each direction, so that the total number of points in the parameter study is
+        :math:`1+ 2\sum{n}`.
+
+        >>> names, values = centered_parameter_space(
+            "name_1,name_2", [(0, 5, 2), (0, 1, 2)]
+        )
+        >>> for row in values:
+        ...     print(", ".join(f"{names[i]}={p}" for (i, p) in enumerate(row)))
+        ...
+        name_1=0, name_2=0
+        name_1=-10, name_2=0
+        name_1=-5, name_2=0
+        name_1=5, name_2=0
+        name_1=10, name_2=0
+        name_1=0, name_2=-2
+        name_1=0, name_2=-1
+        name_1=0, name_2=1
+        name_1=0, name_2=2
+
+        """
+        parameters: list[tuple[str, float, float, int]] = []
+        names: list[str] = []
+        if isinstance(argnames, str):
+            names.extend([x.strip() for x in argnames.split(",") if x.strip()])
+        else:
+            names.extend(argnames)
+        if len(names) <= 1:
+            raise ValueError("Expected more than 1 parameter")
+        if len(names) != len(argvalues):
+            raise ValueError("Expected len(names) == len(values)")
+        for (i, item) in enumerate(argvalues):
+            try:
+                initial_value, step_size, num_steps = item
+            except ValueError:
+                raise ValueError(f"Expected len(argvalues[{i}]) == 3") from None
+            parameters.append((names[i], initial_value, step_size, num_steps))
+        values: list[list[float]] = [[x[1] for x in parameters]]
+        for i, parameter in enumerate(parameters):
+            _, x, dx, steps = parameter
+            for fac in range(-steps, steps + 1):
+                if fac == 0:
+                    continue
+                space = [x[1] for x in parameters]
+                space[i] = x + dx * fac
+                values.append(space)
+        return names, values
+
 
 def append_if_unique(container, item):
     if item not in container:
         container.append(item)
 
 
-def combine_parameter_sets(paramsets: list[ParameterSet]) -> list[dict[str, object]]:
+def combine_parameter_sets(paramsets: list[ParameterSet]) -> list[dict[str, Any]]:
     """Perform a Cartesian product combination of parameter sets"""
-    all_parameters: list[dict[str, object]] = []
+    all_parameters: list[dict[str, Any]] = []
     if not paramsets:
         return all_parameters
     elif len(paramsets) == 1:
@@ -191,7 +255,7 @@ class ParameterExpression:
                 )
         return " ".join(parts)
 
-    def eval(self, parameters: dict[str, object]) -> bool:
+    def eval(self, parameters: dict[str, Any]) -> bool:
         global_vars = dict(parameters)
         global_vars["not_defined"] = not_defined(list(parameters.keys()))
         local_vars: dict = {}

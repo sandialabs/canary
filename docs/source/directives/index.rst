@@ -49,10 +49,12 @@ Which is equivalent to
 
    analyze
    copy
+   depends_on
    enable
    keywords
    link
    parameterize
+   processors
    skipif
    testname
    timeout

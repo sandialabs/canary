@@ -10,7 +10,7 @@ from ..test.enums import Result
 from ..test.partition import Partition
 from ..test.testcase import TestCase
 
-# from ..util import keyboard
+from ..util import keyboard
 from ..third_party import rprobe
 from ..util.tty.color import clen
 from ..util.tty.color import colorize
@@ -103,9 +103,9 @@ class Queue:
             if not len(self.queue):
                 raise StopIteration
             for i, item in self.queue.items():
-                # key = keyboard.get_key()
-                # if isinstance(key, str) and key in "sS":
-                #    self.print_status()
+                key = keyboard.get_key()
+                if isinstance(key, str) and key in "sS":
+                   self.print_status()
                 with self.lock():
                     avail_workers = self._avail_workers
                     if avail_workers and item.size <= self._avail_cpus and item.ready:
