@@ -169,12 +169,11 @@ endfunction()
 
 # --- ADD_NVTEST_TARGET -------------------------------------------------------------- #
 function(add_nvtest_target)
-  set(NVTEST_COMMAND nvtest)
   add_custom_target(
     nvtest
     VERBATIM
     WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-    COMMAND ${NVTEST_COMMAND} -w .
+    COMMAND nvtest run -w .
   )
   set_target_properties(nvtest PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endfunction()
