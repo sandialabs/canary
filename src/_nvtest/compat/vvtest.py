@@ -12,7 +12,7 @@ from typing import Generator
 from typing import Union
 
 from .. import config
-from ..directives.structures import AbstractParameterSet
+from ..directives.enums import list_parameter_space
 from ..util.time import to_seconds
 from ..util.tty.color import colorize
 
@@ -273,7 +273,7 @@ def f_preload(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
 
 def f_parameterize(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
     names, values, kwds = p_parameterize(file, arg)
-    file._paramsets.append(AbstractParameterSet(list(names), values, **kwds))
+    file.m_parameterize(list(names), values, **kwds)
 
 
 def p_parameterize(
@@ -299,6 +299,7 @@ def p_parameterize(
     kwds = dict(arg.options)
     for key in ("autotype", "int", "float", "str"):
         kwds.pop(key, None)
+    kwds["type"] = list_parameter_space
     return names, values, kwds
 
 

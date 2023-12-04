@@ -18,7 +18,7 @@ Parameters
 ----------
 
 * ``argnames``: A comma-separated string denoting one or more argument names, or a list/tuple of argument strings.
-* ``argvalues``: The list of ``argvalues`` determines how often a test is invoked with different argument values.  If only one ``argname`` was specified, ``argvalues`` is a list of values. If ``N`` ``argnames`` were specified, ``argvalues`` must be a list of N-tuples, where each tuple-element specifies a value for its respective ``argname``.
+* ``argvalues``: If only one ``argname`` was specified, ``argvalues`` is a list of values.  If ``N`` ``argnames`` were specified, ``argvalues`` is a 2D list of values where each column are the values for its respective ``argname``.
 * ``testname``: Restrict processing of the directive to this test name
 * ``platform``: Restrict processing of the directive to certain platform or platforms
 * ``option``: Restrict processing of the directive to command line ``-o`` options

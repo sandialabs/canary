@@ -1,5 +1,6 @@
 import io
 import itertools
+import random
 import tokenize
 from io import StringIO
 from typing import Any
@@ -29,56 +30,36 @@ class ParameterSet:
         fp.write("; ".join(p))
         return fp.getvalue()
 
-
-class AbstractParameterSet:
-    def __init__(
-        self,
-        keys: list[str],
-        values: Collection[Sequence[Any]],
-        options: Optional[str] = None,
-        platforms: Optional[str] = None,
-        testname: Optional[str] = None,
-    ) -> None:
-        self.keys: list[str] = keys
-        self.values: Collection[Sequence[Any]] = values
-        self.option_expr: Union[str, None] = options
-        self.platform_expr: Union[str, None] = platforms
-        self.testname_expr: Union[str, None] = testname
-
-    def describe(self, indent=0) -> str:
-        fp = StringIO()
-        fp.write(f"{' ' * indent}{','.join(self.keys)} = ")
-        p = []
-        for row in self.values:
-            p.append(",".join(str(_) for _ in row))
-        fp.write("; ".join(p))
-        return fp.getvalue()
-
-    def freeze(
-        self,
-        on_options: Optional[list[str]] = None,
-        testname: Optional[str] = None,
-    ) -> Union[ParameterSet, None]:
-        if self.platform_expr is not None and deselect_by_platform(self.platform_expr):
-            return None
-        options = set(on_options or [])
-        if self.option_expr and deselect_by_option(options, self.option_expr):
-            return None
-        if self.testname_expr and testname:
-            if deselect_by_name({testname}, self.testname_expr):
-                return None
-        return ParameterSet(self.keys, self.values)
-
     @classmethod
-    def parse(
-        cls: Type["AbstractParameterSet"],
+    def list_parameter_space(
+        cls: Type["ParameterSet"],
         argnames: Union[str, Sequence[str]],
         argvalues: Collection[Union[Sequence[Any], Any]],
-        options: Optional[str] = None,
-        platforms: Optional[str] = None,
-        testname: Optional[str] = None,
         file: Optional[str] = None,
-    ):
+    ) -> "ParameterSet":
+        """
+        Create a ParamterSet
+
+        Parameters
+        ----------
+        argnames :
+          comma-separated string denoting one or more parameter names,
+          r a list/tuple of names
+        argvalues :
+          If only one ``argname`` was specified, ``argvalues`` is a list of values.
+          If ``N`` ``argnames`` were specified, ``argvalues`` is a 2D list of values
+          where each column are the values for its respective ``argname``.
+
+        Examples
+        --------
+        >>> p = ParameterSet.list_parameter_space(
+        ... "a,b", [[1, 2, 3, 4], [5, 6, 7, 8]])
+        >>> p.keys
+        ['a', 'b']
+        >>> p.values
+        [[1, 2], [3, 4]]
+
+        """
         names: list[str] = []
         values: Collection[Sequence[Any]] = []
         if isinstance(argnames, str):
@@ -106,16 +87,27 @@ class AbstractParameterSet:
                         values_len=len(row),
                     )
                 )
-        return cls(
-            names, values, options=options, platforms=platforms, testname=testname
-        )
+        self = cls(names, values)
+        return self
 
-    @staticmethod
+    @classmethod
     def centered_parameter_space(
+        cls: Type["ParameterSet"],
         argnames: Union[str, Sequence[str]],
         argvalues: Collection[Union[Sequence[Any], Any]],
-    ) -> tuple[list[str], list[list[float]]]:
+        file: Optional[str] = None,
+    ) -> "ParameterSet":
         """Generate parameters for a centered parameter study
+
+        Parameters
+        ----------
+        argnames:
+          Same arguments as for ``ParameterSpace.list_parameter_space``
+        argvalues :
+          2D list of values
+            argvalues[i, 0] is the initial value for the ith argname
+            argvalues[i, 1] is the steps size for the ith argname
+            argvalues[i, 2] is the number of steps for the ith argname
 
         Notes
         -----
@@ -145,22 +137,22 @@ class AbstractParameterSet:
         name_1=0, name_2=2
 
         """
-        parameters: list[tuple[str, float, float, int]] = []
         names: list[str] = []
         if isinstance(argnames, str):
             names.extend([x.strip() for x in argnames.split(",") if x.strip()])
         else:
             names.extend(argnames)
         if len(names) <= 1:
-            raise ValueError("Expected more than 1 parameter")
+            raise ValueError("Expected more than 1 parameter name")
         if len(names) != len(argvalues):
             raise ValueError("Expected len(names) == len(values)")
+        parameters: list[tuple[str, float, float, int]] = []
         for (i, item) in enumerate(argvalues):
             try:
                 initial_value, step_size, num_steps = item
             except ValueError:
                 raise ValueError(f"Expected len(argvalues[{i}]) == 3") from None
-            parameters.append((names[i], initial_value, step_size, num_steps))
+            parameters.append((names[i], initial_value, step_size, int(num_steps)))
         values: list[list[float]] = [[x[1] for x in parameters]]
         for i, parameter in enumerate(parameters):
             _, x, dx, steps = parameter
@@ -170,7 +162,36 @@ class AbstractParameterSet:
                 space = [x[1] for x in parameters]
                 space[i] = x + dx * fac
                 values.append(space)
-        return names, values
+        self = cls(names, values)
+        return self
+
+    @classmethod
+    def random_parameter_space(
+        cls: Type["ParameterSet"],
+        argnames: Union[str, Sequence[str]],
+        argvalues: Collection[Union[Sequence[Any], Any]],
+        file: Optional[str] = None,
+    ) -> "ParameterSet":
+        """Generate random parameter space"""
+        names: list[str] = []
+        if isinstance(argnames, str):
+            names.extend([x.strip() for x in argnames.split(",") if x.strip()])
+        else:
+            names.extend(argnames)
+        if len(names) <= 1:
+            raise ValueError("Expected more than 1 parameter name")
+        if len(names) != len(argvalues):
+            raise ValueError("Expected len(names) == len(values)")
+        random_values: list[list[float]] = []
+        for (i, item) in enumerate(argvalues):
+            try:
+                initial_value, final_value, samples = item
+            except ValueError:
+                raise ValueError(f"Expected len(argvalues[{i}]) == 3") from None
+            random_values.append(random_range(initial_value, final_value, int(samples)))
+        values = transpose(random_values)
+        self = cls(names, values)
+        return self
 
 
 def append_if_unique(container, item):
@@ -203,6 +224,14 @@ def combine_parameter_sets(paramsets: list[ParameterSet]) -> list[dict[str, Any]
                     parameters[keys[i][j]] = x
             append_if_unique(all_parameters, parameters)
     return all_parameters
+
+
+def random_range(a: float, b: float, n: int) -> list[float]:
+    return [random.uniform(a, b) for _ in range(n)]
+
+
+def transpose(a: list[list[float]]) -> list[list[float]]:
+    return [list(_) for _ in zip(*a)]
 
 
 def get_tokens(code):

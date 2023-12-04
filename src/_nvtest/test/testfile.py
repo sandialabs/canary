@@ -18,7 +18,6 @@ from ..directives.match import deselect_by_name
 from ..directives.match import deselect_by_option
 from ..directives.match import deselect_by_parameter
 from ..directives.match import deselect_by_platform
-from ..directives.structures import AbstractParameterSet
 from ..directives.structures import ParameterSet
 from ..directives.structures import combine_parameter_sets
 from ..third_party import rprobe
@@ -106,7 +105,7 @@ class AbstractTestFile:
         self.name = os.path.splitext(os.path.basename(self.path))[0]
         self._skip: Skip = Skip()
         self._keywords: list[FilterNamespace] = []
-        self._paramsets: list[AbstractParameterSet] = []
+        self._paramsets: list[FilterNamespace] = []
         self._names: list[FilterNamespace] = []
         self._timeout: list[FilterNamespace] = []
         self._analyze: list[FilterNamespace] = []
@@ -308,10 +307,16 @@ class AbstractTestFile:
         self, testname: Optional[str] = None, on_options: Optional[list[str]] = None
     ) -> list[ParameterSet]:
         paramsets: list[ParameterSet] = []
-        for _paramset in self._paramsets:
-            paramset = _paramset.freeze(on_options=on_options, testname=testname)
-            if paramset:
-                paramsets.append(paramset)
+        for ns in self._paramsets:
+            if ns.testname_expr is not None and testname:
+                if deselect_by_name({testname}, ns.testname_expr):
+                    continue
+            if ns.platform_expr is not None and deselect_by_platform(ns.platform_expr):
+                continue
+            if ns.option_expr is not None and on_options:
+                if deselect_by_option(set(on_options), ns.option_expr):
+                    continue
+            paramsets.append(ns.value)
         return paramsets
 
     def names(self) -> list[str]:
@@ -556,7 +561,7 @@ class AbstractTestFile:
         options: Optional[str] = None,
         platforms: Optional[str] = None,
         testname: Optional[str] = None,
-        type: d_enums.enums = d_enums.default_parameter_space,
+        type: d_enums.enums = d_enums.list_parameter_space,
     ) -> None:
         if not isinstance(type, d_enums.enums):
             raise ValueError(
@@ -564,19 +569,24 @@ class AbstractTestFile:
                 f"nvtest.enums, got {type.__class__.__name__}"
             )
         if type is d_enums.centered_parameter_space:
-            argnames, argvalues = AbstractParameterSet.centered_parameter_space(
-                argnames, argvalues
+            pset = ParameterSet.centered_parameter_space(
+                argnames, argvalues, file=self.file
             )
-        self._paramsets.append(
-            AbstractParameterSet.parse(
-                argnames,
-                argvalues,
-                options=options,
-                platforms=platforms,
-                testname=testname,
-                file=self.file,
+        elif type is d_enums.random_parameter_space:
+            pset = ParameterSet.random_parameter_space(
+                argnames, argvalues, file=self.file
             )
+        else:
+            pset = ParameterSet.list_parameter_space(
+                argnames, argvalues, file=self.file,
+            )
+        ns = FilterNamespace(
+            pset,
+            testname_expr=testname,
+            platform_expr=platforms,
+            option_expr=options,
         )
+        self._paramsets.append(ns)
 
     def add_sources(
         self,

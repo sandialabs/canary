@@ -30,7 +30,7 @@ class Directive:
         options: Optional[str] = None,
         platforms: Optional[str] = None,
         testname: Optional[str] = None,
-        type: enums.enums = enums.default_parameter_space,
+        type: enums.enums = enums.list_parameter_space,
     ) -> None:
         self.testfile.m_parameterize(
             names,
