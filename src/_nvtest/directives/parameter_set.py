@@ -1,19 +1,12 @@
-import io
 import itertools
 import random
-import tokenize
 from io import StringIO
 from typing import Any
-from typing import Callable
 from typing import Collection
 from typing import Optional
 from typing import Sequence
 from typing import Type
 from typing import Union
-
-from .match import deselect_by_name
-from .match import deselect_by_option
-from .match import deselect_by_platform
 
 
 class ParameterSet:
@@ -143,15 +136,24 @@ class ParameterSet:
         else:
             names.extend(argnames)
         if len(names) <= 1:
-            raise ValueError("Expected more than 1 parameter name")
+            raise ValueError(
+                f"{file}: parameterize({argnames}, ...): "
+                f"expected more than 1 parameter name"
+            )
         if len(names) != len(argvalues):
-            raise ValueError("Expected len(names) == len(values)")
+            raise ValueError(
+                f"{file}: parameterize({argnames}, ...): "
+                f"expected len(names) == len(values)"
+            )
         parameters: list[tuple[str, float, float, int]] = []
         for (i, item) in enumerate(argvalues):
             try:
                 initial_value, step_size, num_steps = item
             except ValueError:
-                raise ValueError(f"Expected len(argvalues[{i}]) == 3") from None
+                raise ValueError(
+                    f"{file}: parameterize({argnames}, ...): "
+                    f"expected len(argvalues[{i}]) == 3"
+                ) from None
             parameters.append((names[i], initial_value, step_size, int(num_steps)))
         values: list[list[float]] = [[x[1] for x in parameters]]
         for i, parameter in enumerate(parameters):
@@ -162,6 +164,23 @@ class ParameterSet:
                 space = [x[1] for x in parameters]
                 space[i] = x + dx * fac
                 values.append(space)
+        for row in values:
+            if len(row) != len(names):
+                msg = (
+                    '{file}: in "parametrize" the number of names ({names_len}):\n'
+                    "  {names}\n"
+                    "must be equal to the number of values ({values_len}):\n"
+                    "  {values}"
+                )
+                raise ValueError(
+                    msg.format(
+                        file=file or "",
+                        values=row,
+                        names=names,
+                        names_len=len(names),
+                        values_len=len(row),
+                    )
+                )
         self = cls(names, values)
         return self
 
@@ -179,51 +198,55 @@ class ParameterSet:
         else:
             names.extend(argnames)
         if len(names) <= 1:
-            raise ValueError("Expected more than 1 parameter name")
+            raise ValueError(
+                f"{file}: parameterize({argnames}, ...): "
+                f"expected more than 1 parameter name"
+            )
         if len(names) != len(argvalues):
-            raise ValueError("Expected len(names) == len(values)")
+            raise ValueError(
+                f"{file}: parameterize({argnames}, ...): "
+                f"expected len(names) == len(values)"
+            )
         random_values: list[list[float]] = []
         for (i, item) in enumerate(argvalues):
             try:
                 initial_value, final_value, samples = item
             except ValueError:
-                raise ValueError(f"Expected len(argvalues[{i}]) == 3") from None
+                raise ValueError(
+                    f"{file}: parameterize({argnames}, ...): "
+                    f"expected len(argvalues[{i}]) == 3"
+                ) from None
             random_values.append(random_range(initial_value, final_value, int(samples)))
         values = transpose(random_values)
         self = cls(names, values)
         return self
 
-
-def append_if_unique(container, item):
-    if item not in container:
-        container.append(item)
-
-
-def combine_parameter_sets(paramsets: list[ParameterSet]) -> list[dict[str, Any]]:
-    """Perform a Cartesian product combination of parameter sets"""
-    all_parameters: list[dict[str, Any]] = []
-    if not paramsets:
+    @staticmethod
+    def combine(paramsets: list["ParameterSet"]) -> list[dict[str, Any]]:
+        """Perform a Cartesian product combination of parameter sets"""
+        all_parameters: list[dict[str, Any]] = []
+        if not paramsets:
+            return all_parameters
+        elif len(paramsets) == 1:
+            paramset = paramsets[0]
+            for values in paramset.values:
+                parameters = {}
+                for i, v in enumerate(values):
+                    parameters[paramset.keys[i]] = v
+                append_if_unique(all_parameters, parameters)
+        else:
+            keys, values = [], []
+            for paramset in paramsets:
+                keys.append(paramset.keys)
+                values.append(paramset.values)
+            groups = itertools.product(*values)
+            for group in groups:
+                parameters = {}
+                for i, item in enumerate(group):
+                    for j, x in enumerate(item):
+                        parameters[keys[i][j]] = x
+                append_if_unique(all_parameters, parameters)
         return all_parameters
-    elif len(paramsets) == 1:
-        paramset = paramsets[0]
-        for values in paramset.values:
-            parameters = {}
-            for i, v in enumerate(values):
-                parameters[paramset.keys[i]] = v
-            append_if_unique(all_parameters, parameters)
-    else:
-        keys, values = [], []
-        for paramset in paramsets:
-            keys.append(paramset.keys)
-            values.append(paramset.values)
-        groups = itertools.product(*values)
-        for group in groups:
-            parameters = {}
-            for i, item in enumerate(group):
-                for j, x in enumerate(item):
-                    parameters[keys[i][j]] = x
-            append_if_unique(all_parameters, parameters)
-    return all_parameters
 
 
 def random_range(a: float, b: float, n: int) -> list[float]:
@@ -234,69 +257,6 @@ def transpose(a: list[list[float]]) -> list[list[float]]:
     return [list(_) for _ in zip(*a)]
 
 
-def get_tokens(code):
-    fp = io.BytesIO(code.encode("utf-8"))
-    tokens = tokenize.tokenize(fp.readline)
-    return tokens
-
-
-class ParameterExpression:
-    def __init__(self, expression: Optional[str] = None) -> None:
-        if expression is not None:
-            expression = self.parse_expr(expression)
-        self.expression = expression
-
-    def __bool__(self) -> bool:
-        return self.expression is not None
-
-    @staticmethod
-    def parse_expr(expr: str) -> str:
-        tokens = get_tokens(expr)
-        token = next(tokens)
-        while token == tokenize.ENCODING:
-            token = next(token)
-        negate_next = False
-        parts = []
-        for token in tokens:
-            if negate_next:
-                negate_next = False
-                assert token.type == tokenize.NAME
-                parts.append(f"not_defined({token.string!r})")
-            elif token.type in (tokenize.STRING, tokenize.NUMBER):
-                parts.append(token.string)
-            elif token.type == tokenize.NAME:
-                if parts and parts[-1] in ("==", "!=", ">", ">=", "<", "<="):
-                    parts.append(f"{token.string!r}")
-                else:
-                    parts.append(token.string)
-            elif token.type == tokenize.OP:
-                string = token.string
-                if string == "=":
-                    string = "=="
-                parts.append(string)
-            elif token.type == tokenize.ERRORTOKEN and token.string == "!":
-                negate_next = True
-            elif token.type == tokenize.NEWLINE:
-                break
-            else:
-                raise ValueError(
-                    f"Unknown token type {token} in parameter expression {expr}"
-                )
-        return " ".join(parts)
-
-    def eval(self, parameters: dict[str, Any]) -> bool:
-        global_vars = dict(parameters)
-        global_vars["not_defined"] = not_defined(list(parameters.keys()))
-        local_vars: dict = {}
-        assert isinstance(self.expression, str)
-        try:
-            return bool(eval(self.expression, global_vars, local_vars))
-        except NameError:
-            return False
-
-
-def not_defined(names: list[str]) -> Callable:
-    def inner(name):
-        return name not in names
-
-    return inner
+def append_if_unique(container, item):
+    if item not in container:
+        container.append(item)

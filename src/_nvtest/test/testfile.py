@@ -18,8 +18,7 @@ from ..directives.match import deselect_by_name
 from ..directives.match import deselect_by_option
 from ..directives.match import deselect_by_parameter
 from ..directives.match import deselect_by_platform
-from ..directives.structures import ParameterSet
-from ..directives.structures import combine_parameter_sets
+from ..directives.parameter_set import ParameterSet
 from ..third_party import rprobe
 from ..util import tty
 from ..util.filesystem import working_dir
@@ -197,7 +196,7 @@ class AbstractTestFile:
                 tty.verbose(f"{self}::{name} has been disabled")
             cases: list[TestCase] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
-            for parameters in combine_parameter_sets(paramsets) or [{}]:
+            for parameters in ParameterSet.combine(paramsets) or [{}]:
                 keywords = self.keywords(testname=name, parameters=parameters)
                 if not skip and keyword_expr:
                     kwds = {kw for kw in keywords}
@@ -578,7 +577,9 @@ class AbstractTestFile:
             )
         else:
             pset = ParameterSet.list_parameter_space(
-                argnames, argvalues, file=self.file,
+                argnames,
+                argvalues,
+                file=self.file,
             )
         ns = FilterNamespace(
             pset,

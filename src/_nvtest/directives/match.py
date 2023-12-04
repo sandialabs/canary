@@ -8,6 +8,7 @@ from typing import Union
 
 from .expression import Expression
 from .expression import ParseError
+from .p_expression import ParameterExpression
 
 
 @dataclasses.dataclass
@@ -107,8 +108,6 @@ def deselect_by_platform(platform_expr: str) -> Union[None, bool]:
 def deselect_by_parameter(
     parameters: dict[str, object], parameter_expr: str
 ) -> Union[None, bool]:
-    from .structures import ParameterExpression
-
     try:
         expr = ParameterExpression(parameter_expr)
     except ValueError:
