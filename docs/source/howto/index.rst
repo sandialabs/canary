@@ -12,4 +12,5 @@ How-to guides
    centered-parameter-space
    execute-and-analyze
    html
+   cdash
    cmake
