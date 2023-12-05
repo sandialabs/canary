@@ -11,6 +11,7 @@ How-to guides
    parameterizing
    centered-parameter-space
    execute-and-analyze
+   run-from-file
    html
    cdash
    cmake
