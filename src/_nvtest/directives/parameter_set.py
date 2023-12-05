@@ -2,7 +2,6 @@ import itertools
 import random
 from io import StringIO
 from typing import Any
-from typing import Collection
 from typing import Optional
 from typing import Sequence
 from typing import Type
@@ -10,9 +9,9 @@ from typing import Union
 
 
 class ParameterSet:
-    def __init__(self, keys: list[str], values: Collection[Sequence[Any]]) -> None:
+    def __init__(self, keys: list[str], values: list[Sequence[Any]]) -> None:
         self.keys: list[str] = keys
-        self.values: Collection[Sequence[Any]] = values
+        self.values: list[Sequence[Any]] = values
 
     def describe(self, indent=0) -> str:
         fp = StringIO()
@@ -27,7 +26,7 @@ class ParameterSet:
     def list_parameter_space(
         cls: Type["ParameterSet"],
         argnames: Union[str, Sequence[str]],
-        argvalues: Collection[Union[Sequence[Any], Any]],
+        argvalues: list[Union[Sequence[Any], Any]],
         file: Optional[str] = None,
     ) -> "ParameterSet":
         """
@@ -46,7 +45,7 @@ class ParameterSet:
         Examples
         --------
         >>> p = ParameterSet.list_parameter_space(
-        ... "a,b", [[1, 2, 3, 4], [5, 6, 7, 8]])
+        ... "a,b", [[1, 2], [3, 4]])
         >>> p.keys
         ['a', 'b']
         >>> p.values
@@ -54,15 +53,16 @@ class ParameterSet:
 
         """
         names: list[str] = []
-        values: Collection[Sequence[Any]] = []
+        values: list[Sequence[Any]] = []
         if isinstance(argnames, str):
             names.extend([x.strip() for x in argnames.split(",") if x.strip()])
         else:
             names.extend(argnames)
-        if len(names) == 1:
-            values = [(_,) for _ in argvalues]
-        else:
-            values = [_ for _ in argvalues]
+        for argvalue in argvalues:
+            if is_scalar(argvalue):
+                values.append((argvalue,))
+            else:
+                values.append(argvalue)
         for row in values:
             if len(row) != len(names):
                 msg = (
@@ -87,7 +87,7 @@ class ParameterSet:
     def centered_parameter_space(
         cls: Type["ParameterSet"],
         argnames: Union[str, Sequence[str]],
-        argvalues: Collection[Union[Sequence[Any], Any]],
+        argvalues: list[Union[Sequence[Any], Any]],
         file: Optional[str] = None,
     ) -> "ParameterSet":
         """Generate parameters for a centered parameter study
@@ -146,7 +146,7 @@ class ParameterSet:
                 f"expected len(names) == len(values)"
             )
         parameters: list[tuple[str, float, float, int]] = []
-        for (i, item) in enumerate(argvalues):
+        for i, item in enumerate(argvalues):
             try:
                 initial_value, step_size, num_steps = item
             except ValueError:
@@ -188,7 +188,7 @@ class ParameterSet:
     def random_parameter_space(
         cls: Type["ParameterSet"],
         argnames: Union[str, Sequence[str]],
-        argvalues: Collection[Union[Sequence[Any], Any]],
+        argvalues: list[Union[Sequence[Any], Any]],
         file: Optional[str] = None,
     ) -> "ParameterSet":
         """Generate random parameter space"""
@@ -208,7 +208,7 @@ class ParameterSet:
                 f"expected len(names) == len(values)"
             )
         random_values: list[list[float]] = []
-        for (i, item) in enumerate(argvalues):
+        for i, item in enumerate(argvalues):
             try:
                 initial_value, final_value, samples = item
             except ValueError:
@@ -260,3 +260,7 @@ def transpose(a: list[list[float]]) -> list[list[float]]:
 def append_if_unique(container, item):
     if item not in container:
         container.append(item)
+
+
+def is_scalar(item: Any) -> bool:
+    return isinstance(item, (float, int, str))

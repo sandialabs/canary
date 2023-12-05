@@ -20,9 +20,11 @@ aliases = ["stat"]
 def setup_parser(parser: "Parser"):
     parser.add_argument(
         "--durations",
+        nargs="?",
         type=int,
+        const=10,
         metavar="N",
-        help="Show N slowest test durations (N=0 for all)",
+        help="Show N slowest test durations (N<0 for all) [default: 10]",
     )
     parser.add_argument(
         "-l",

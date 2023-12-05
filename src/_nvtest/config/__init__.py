@@ -399,7 +399,7 @@ def read_config(file: str) -> dict:
                 section_data[key] = value
     config_data: dict[str, Any] = {}
     # expand any keys given as a:b:c
-    for (path, section_data) in data.items():
+    for path, section_data in data.items():
         if path in section_schemas:
             config_data[path] = section_data
         elif ":" in path:
@@ -413,7 +413,7 @@ def read_config(file: str) -> dict:
             x.update(section_data)
         else:
             tty.warn(f"ignoring unrecognized config section: {path}")
-    for (section, section_data) in config_data.items():
+    for section, section_data in config_data.items():
         schema = section_schemas[section]
         try:
             schema.validate({section: section_data})

@@ -404,6 +404,8 @@ class TestCase:
                 with tty.timestamps():
                     args = self.command_line_args(**kwds)
                     env = self.rc_environ()
+                    tty.info(f"Running {self.display_name}")
+                    tty.info(f"Command line: {sys.executable} {' '.join(args)}")
                     with tmp_environ(**env):
                         python(*args, fail_on_error=False, timeout=self.timeout)
                     self._process = None
@@ -422,10 +424,12 @@ class TestCase:
     @staticmethod
     def kwds_to_command_line_args(**kwds: Any) -> list[str]:
         args: list = []
-        for (key, val) in kwds.items():
+        for key, val in kwds.items():
             prefix = "-" if len(key) == 1 else "--"
             opt = f"{prefix}{key.replace('_', '-')}"
-            if val is True:
+            if val is False:
+                continue
+            elif val is True:
                 args.append(opt)
             elif len(key) == 1:
                 args.append(f"{opt}{val}")

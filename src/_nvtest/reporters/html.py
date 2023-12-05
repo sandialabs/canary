@@ -129,7 +129,7 @@ class Reporter(_Reporter):
         fh.write(self.head)
         fh.write("<body>\n<h1>Test Results</h1>\n<table>\n")
         fh.write("<tr><th>Test</th><th>Duration</th><th>Status</th></tr>\n")
-        for (group, cases) in totals.items():
+        for group, cases in totals.items():
             for case in sorted(cases, key=lambda c: c.duration):
                 file = os.path.join(self.cases_dir, f"{case.id}.html")
                 if not os.path.exists(file):

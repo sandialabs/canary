@@ -54,7 +54,7 @@ class Reporter(_Reporter):
         f = os.path.join(self.xml_dir, ".meta.json")
         with open(f, "r") as fh:
             data = json.load(fh)
-        for (key, value) in data.items():
+        for key, value in data.items():
             setattr(self, key, value)
         self.xml_files = glob.glob(os.path.join(self.xml_dir, "*.xml"))
 

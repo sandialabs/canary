@@ -209,7 +209,11 @@ class AbstractTestFile:
                         skip = Skip(colorize("deselected by @*b{keyword expression}"))
 
                 np = parameters.get("np")
-                assert isinstance(np, int) or np is None
+                if not isinstance(np, int) and np is not None:
+                    class_name = np.__class__.__name__
+                    raise ValueError(
+                        f"{self.name}: expected np={np} to be an int, not {class_name}"
+                    )
                 if not skip and np and np > cpu_count:
                     skip = Skip(
                         colorize(

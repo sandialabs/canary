@@ -131,7 +131,7 @@ class Session:
 
         on_options = on_options or []
         if config.get("build:options"):
-            for (opt, val) in config.get("build:options").items():
+            for opt, val in config.get("build:options").items():
                 if val:
                     on_options.append(opt)
         on_options = dedup(on_options)
