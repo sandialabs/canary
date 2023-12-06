@@ -1,5 +1,4 @@
 from typing import TYPE_CHECKING
-from typing import Collection
 from typing import Optional
 from typing import Sequence
 from typing import Union
@@ -25,7 +24,7 @@ class Directive:
     def parameterize(
         self,
         names: Union[str, Sequence[str]],
-        values: Collection[Union[Sequence[object], object]],
+        values: list[Union[Sequence[object], object]],
         *,
         options: Optional[str] = None,
         platforms: Optional[str] = None,
@@ -49,7 +48,7 @@ class Directive:
         testname: Optional[str] = None,
     ) -> None:
         self.testfile.m_parameterize(
-            "np", values, options=options, platforms=platforms, testname=testname
+            "np", list(values), options=options, platforms=platforms, testname=testname
         )
 
     def depends_on(

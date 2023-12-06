@@ -9,9 +9,9 @@ from typing import Union
 
 
 class ParameterSet:
-    def __init__(self, keys: list[str], values: list[Sequence[Any]]) -> None:
+    def __init__(self, keys: list[str], values: Sequence[Sequence[Any]]) -> None:
         self.keys: list[str] = keys
-        self.values: list[Sequence[Any]] = values
+        self.values: Sequence[Sequence[Any]] = values
 
     def describe(self, indent=0) -> str:
         fp = StringIO()

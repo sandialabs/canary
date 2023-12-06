@@ -125,7 +125,9 @@ class Session:
 
         self.exitstatus = -1
         self.max_cores_per_test = max_cores_per_test or config.get("machine:cpu_count")
-        self.max_workers = max_workers or 5
+        if max_workers is None:
+            max_workers = 5 if batch_config else self.max_cores_per_test
+        self.max_workers = max_workers
         self.search_paths = search_paths
         self.batch_config = batch_config or Session.BatchConfig()
 

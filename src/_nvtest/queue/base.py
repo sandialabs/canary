@@ -7,10 +7,10 @@ from typing import Generator
 from typing import Optional
 from typing import Union
 
+from .. import config
 from ..test.enums import Result
 from ..test.partition import Partition
 from ..test.testcase import TestCase
-from ..third_party import rprobe
 from ..util import keyboard
 from ..util.tty.color import clen
 from ..util.tty.color import colorize
@@ -21,7 +21,7 @@ lock_wait_time = 0.00001
 class Queue:
     def __init__(self, cpus: int, workers: int, work_items: Any) -> None:
         self.work_items = work_items
-        self.workers: int = workers or rprobe.cpu_count() or 1
+        self.workers: int = workers or config.get("machine:cpu_count") or 1
         self.cpus = cpus
         self.validate()
         self.queue = self.create_queue(work_items)

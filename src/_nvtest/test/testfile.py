@@ -5,7 +5,6 @@ import os
 from copy import copy
 from string import Template
 from typing import Any
-from typing import Collection
 from typing import Optional
 from typing import Sequence
 from typing import Union
@@ -560,7 +559,7 @@ class AbstractTestFile:
     def m_parameterize(
         self,
         argnames: Union[str, Sequence[str]],
-        argvalues: Collection[Union[Sequence[Any], Any]],
+        argvalues: list[Union[Sequence[Any], Any]],
         options: Optional[str] = None,
         platforms: Optional[str] = None,
         testname: Optional[str] = None,
