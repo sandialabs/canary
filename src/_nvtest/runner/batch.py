@@ -48,7 +48,7 @@ class BatchRunner(Runner):
         stat: dict[str, int] = {}
         attrs: dict[str, dict] = {}
         for case in batch:
-            stat[case.status.name] = stat.get(case.status.name, 0) + 1
+            stat[case.status.value] = stat.get(case.status.value, 0) + 1
             data = {
                 "start": case.start,
                 "finish": case.finish,
