@@ -345,7 +345,6 @@ class Session:
         elif not os.path.isabs(start):
             start = os.path.join(self.work_tree, start)
         start = os.path.normpath(start)
-        print("B", [c for c in self.cases if c.status == "staged"])
         for case in self.cases:
             if case.status == "excluded":
                 continue
@@ -377,7 +376,6 @@ class Session:
         cases = [case for case in self.cases if case.status == "staged"]
         if not cases:
             raise EmptySession()
-        assert 0
         self.queue = q_factory(
             cases, workers=self.max_workers, cpu_count=max_cores_per_test
         )
