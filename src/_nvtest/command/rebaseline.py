@@ -3,7 +3,7 @@ import os
 from typing import TYPE_CHECKING
 
 from ..session import Session
-from ..test.enums import Result
+from ..test.testcase import TestCase
 from ..util import tty
 from ..util.filesystem import copyfile
 
@@ -20,14 +20,16 @@ def setup_parser(parser: "Parser"):
 
 def rebaseline(args: "argparse.Namespace") -> int:
     session = Session.load(mode="r")
-    cases = [c for c in session.cases if c.result != Result.NOTRUN]
+    cases: list[TestCase]
     if args.pathspec:
         cases = [
             c
-            for c in cases
+            for c in session.cases
             if c.matches(args.pathspec)
             or c.exec_dir.startswith(os.path.abspath(args.pathspec))
         ]
+    else:
+        cases = [c for c in session.cases if c.status.value in ("failed", "diffed")]
     for case in cases:
         if not case.baseline:
             tty.warn(f"{case.pretty_repr()} does not define rebaselining instructions")

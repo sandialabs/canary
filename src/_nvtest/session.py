@@ -24,8 +24,6 @@ from .queue import Queue
 from .queue import factory as q_factory
 from .runner import factory as r_factory
 from .test import AbstractTestFile
-from .test.enums import Result
-from .test.enums import Skip
 from .test.partition import Partition
 from .test.partition import partition_n
 from .test.partition import partition_t
@@ -177,7 +175,7 @@ class Session:
             for case in self.cases:
                 hook(self, case)
 
-        cases_to_run = self.cases_to_run()
+        cases_to_run = [case for case in self.cases if case.status == "pending"]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
 
@@ -256,11 +254,10 @@ class Session:
         case_ids: list[str] = [_.strip() for _ in open(f).readlines() if _.split()]
         for case in self.cases:
             if case.id in case_ids:
-                case.skip = Skip()
-                case.result = Result("notrun")
-            elif not case.skip:
-                case.skip = Skip("case is not in batch")
-        cases = self.cases_to_run()
+                case.status.set("staged")
+            elif case.status != "excluded":
+                case.status.set("skipped", f"case is not in batch {batch_no}")
+        cases = [case for case in self.cases if case.status == "staged"]
         self.queue = q_factory(
             cases, workers=self.max_workers, cpu_count=self.max_cores_per_test
         )
@@ -348,39 +345,39 @@ class Session:
         elif not os.path.isabs(start):
             start = os.path.join(self.work_tree, start)
         start = os.path.normpath(start)
+        print("B", [c for c in self.cases if c.status == "staged"])
         for case in self.cases:
-            if case.result != Result.NOTRUN and not case.exec_dir.startswith(start):
-                case.skip = Skip(Skip.UNREACHABLE)
+            if case.status == "excluded":
+                continue
+            if not case.exec_dir.startswith(start):
+                case.status.set("skipped", "Unreachable from start directory")
                 continue
             if case_specs is not None:
                 if any(case.matches(_) for _ in case_specs):
-                    case.skip = Skip()
-                    case.result = Result("notrun")
+                    case.status.set("staged")
                 else:
-                    case.skip = Skip(colorize("deselected by @*b{testspec expression}"))
+                    details = colorize("deselected by @*b{testspec expression}")
+                    case.status.set("skipped", details)
                 continue
-            if case.result not in (Result.NOTDONE, Result.NOTRUN, Result.SETUP):
-                reason = f"deselected due to previous test result: {case.result.cname}"
-                case.skip = Skip(reason)
-                if not case.exec_dir.startswith(start):
-                    continue
+            if case.status != "staged":
+                details = f"deselected due to previous test status: {case.status.cname}"
+                case.status.set("skipped", details)
                 if max_cores_per_test and case.size > max_cores_per_test:
                     continue
                 if parameter_expr:
                     param_skip = deselect_by_parameter(case.parameters, parameter_expr)
                     if not param_skip:
-                        case.skip = Skip()
-                        case.result = Result("notrun")
+                        case.status.set("staged")
                         continue
                 if keyword_expr:
                     kwds = set(case.keywords(implicit=True))
                     kw_skip = deselect_by_keyword(kwds, keyword_expr)
                     if not kw_skip:
-                        case.skip = Skip()
-                        case.result = Result("notrun")
-        cases = self.cases_to_run()
+                        case.status.set("staged")
+        cases = [case for case in self.cases if case.status == "staged"]
         if not cases:
             raise EmptySession()
+        assert 0
         self.queue = q_factory(
             cases, workers=self.max_workers, cpu_count=max_cores_per_test
         )
@@ -417,7 +414,7 @@ class Session:
 
     def teardown(self):
         with self.rc_environ():
-            for case in self.cases_to_run():
+            for case in self.queue.completed_testcases():
                 with working_dir(case.exec_dir):
                     for hook in plugin.plugins("test", "teardown"):
                         tty.debug(f"Calling the {hook.specname} plugin")
@@ -426,14 +423,6 @@ class Session:
                     case.teardown()
         for hook in plugin.plugins("session", "teardown"):
             hook(self)
-
-    def cases_to_run(self) -> list[TestCase]:
-        return [
-            case
-            for case in self.cases
-            if not case.skip
-            and case.result in (Result.NOTRUN, Result.NOTDONE, Result.SETUP)
-        ]
 
     @contextmanager
     def rc_environ(self) -> Generator[None, None, None]:
@@ -475,8 +464,7 @@ class Session:
                         # Since setup is run in a multiprocessing pool, the internal
                         # state is lost and needs to be updated
                         case.update(attrs[case.fullname])
-                        if not case.skip:
-                            case.result = Result("setup")
+                        assert case.status.value in ("skipped", "staged")
                         case.dump()
                         with working_dir(case.exec_dir):
                             for hook in plugin.plugins("test", "setup"):
@@ -508,8 +496,8 @@ class Session:
                 if future.running():
                     entity.kill()
             for case in self.queue.cases:
-                if case.result == Result.SETUP:
-                    case.result = Result("notdone")
+                if case.status == "staged":
+                    case.status.set("failed", "Case failed to start")
                     case.dump()
 
     def update_from_future(
@@ -527,21 +515,21 @@ class Session:
             for case in obj:
                 assert case.id in fd
                 assert case.fullname in attrs
-                assert attrs[case.fullname]["result"] == fd[case.id]["result"]
+                assert attrs[case.fullname]["status"] == fd[case.id]["status"]
                 case.update(fd[case.id])
             for case in obj:
-                if fail_fast and case.result != Result.PASS:
+                if fail_fast and case.status != "success":
                     self.ppe.shutdown(wait=False, cancel_futures=True)
                     code = compute_returncode([case])
                     raise StopExecution(f"fail_fast: {case} did not pass", code)
         else:
             assert isinstance(obj, TestCase)
             obj.update(attrs[obj.fullname])
-            fd = obj.asdict("start", "finish", "result", "returncode")
+            fd = obj.asdict("start", "finish", "status", "returncode")
             with WriteTransaction(self.lock):
                 with open(self.results_file, "a") as fh:
                     fh.write(json.dumps({obj.id: fd}) + "\n")
-            if fail_fast and attrs[obj.fullname].result != Result.PASS:
+            if fail_fast and attrs[obj.fullname].status != "success":
                 self.ppe.shutdown(wait=False, cancel_futures=True)
                 code = compute_returncode([obj])
                 raise StopExecution(f"fail_fast: {obj} did not pass", code)
@@ -582,7 +570,7 @@ class Session:
 
     def save_active_case_data(self, cases: list[TestCase], **kwds: Any):
         mkdirp(self.stage)
-        save_attrs = ["start", "finish", "result"]
+        save_attrs = ["start", "finish", "status"]
 
         with WriteTransaction(self.lock):
             with open(self.results_file, "w") as fh:

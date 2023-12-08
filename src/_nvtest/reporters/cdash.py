@@ -10,7 +10,6 @@ import nvtest
 from .. import config
 from ..config.machine import machine_config
 from ..session import Session
-from ..test.enums import Result
 from ..util import cdash
 from ..util import tty
 from ..util.filesystem import force_remove
@@ -142,24 +141,24 @@ class Reporter(_Reporter):
         for case in self.data:
             exit_value = case.returncode
             fail_reason = None
-            if case.skip or case.result in (Result.NOTDONE, Result.NOTRUN):
+            if case.skipped or case.status == "staged":
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.result == Result.TIMEOUT:
+            elif case.status == "timeout":
                 status = "failed"
                 exit_code = completion_status = "Timeout"
-            elif case.result == Result.DIFF:
+            elif case.status == "diffed":
                 status = "failed"
                 exit_code = "Diffed"
                 completion_status = "Completed"
                 fail_reason = "Test diffed"
-            elif case.result == Result.FAIL:
+            elif case.status == "failed":
                 status = "failed"
                 exit_code = "Failed"
                 completion_status = "Completed"
                 fail_reason = "Test execution failed"
-            elif case.result == Result.PASS:
+            elif case.status == "success":
                 status = "passed"
                 exit_code = "Passed"
                 completion_status = "Completed"

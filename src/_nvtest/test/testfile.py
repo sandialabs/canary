@@ -2,7 +2,6 @@ import errno
 import fnmatch
 import glob
 import os
-from copy import copy
 from string import Template
 from typing import Any
 from typing import Optional
@@ -23,7 +22,6 @@ from ..util import tty
 from ..util.filesystem import working_dir
 from ..util.time import time_in_seconds
 from ..util.tty.color import colorize
-from .enums import Skip
 from .testcase import TestCase
 
 
@@ -101,7 +99,6 @@ class AbstractTestFile:
         if not os.path.exists(self.file):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = os.path.splitext(os.path.basename(self.path))[0]
-        self._skip: Skip = Skip()
         self._keywords: list[FilterNamespace] = []
         self._paramsets: list[FilterNamespace] = []
         self._names: list[FilterNamespace] = []
@@ -112,7 +109,7 @@ class AbstractTestFile:
         self._enable: list[FilterNamespace] = []
         self._preload: list[FilterNamespace] = []
         self._depends_on: list[FilterNamespace] = []
-        self.skip_reason: str = ""
+        self.skip: Optional[str] = None
 
         self.load()
 
@@ -128,19 +125,6 @@ class AbstractTestFile:
     @property
     def type(self):
         return "vvt" if os.path.splitext(self.file)[1] == ".vvt" else "pyt"
-
-    @property
-    def skip(self):
-        return self._skip
-
-    @skip.setter
-    def skip(self, arg: Union[str, bool]):
-        if arg is False:
-            self._skip.reason = ""
-        elif arg is True:
-            self._skip.reason = "Skip set to True"
-        else:
-            self._skip.reason = arg
 
     def _load(self):
         import _nvtest
@@ -182,30 +166,29 @@ class AbstractTestFile:
     ) -> list[TestCase]:
         cpu_count = cpu_count or rprobe.cpu_count()
         testcases: list[TestCase] = []
-        keyword_expr = keyword_expr or "notrun"
+        keyword_expr = keyword_expr or "staged"
         names = ", ".join(self.names())
         tty.verbose(
             f"Generating test cases for {self} using the following test names: {names}"
         )
         for name in self.names():
-            skip = copy(self._skip)
+            skip = self.skip
             enabled, reason = self.enable(testname=name, on_options=on_options)
-            if not enabled and not skip:
-                skip = Skip(f"deselected due to {reason}")
+            if not enabled and skip is None:
+                skip = f"deselected due to {reason}"
                 tty.verbose(f"{self}::{name} has been disabled")
             cases: list[TestCase] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
                 keywords = self.keywords(testname=name, parameters=parameters)
-                if not skip and keyword_expr:
+                if skip is None and keyword_expr:
                     kwds = {kw for kw in keywords}
-                    kwds.add("notrun")
                     kwds.add(name)
                     kwds.update(parameters.keys())
                     kw_skip = deselect_by_keyword(kwds, keyword_expr)
                     if kw_skip:
                         tty.verbose(f"Skipping {self}::{name}")
-                        skip = Skip(colorize("deselected by @*b{keyword expression}"))
+                        skip = colorize("deselected by @*b{keyword expression}")
 
                 np = parameters.get("np")
                 if not isinstance(np, int) and np is not None:
@@ -213,26 +196,19 @@ class AbstractTestFile:
                     raise ValueError(
                         f"{self.name}: expected np={np} to be an int, not {class_name}"
                     )
-                if not skip and np and np > cpu_count:
-                    skip = Skip(
-                        colorize(
-                            "deselected due to @*b{exceeding cpu count of machine}"
-                        )
-                    )
-                if not skip and ("TDD" in keywords or "tdd" in keywords):
-                    skip = Skip(
-                        colorize("deselected because it contained the @*b{TDD keyword}")
-                    )
-                if not skip and parameter_expr:
+                if skip is None and np and np > cpu_count:
+                    s = "deselected due to @*b{exceeding cpu count of machine}"
+                    skip = colorize(s)
+                if skip is None and ("TDD" in keywords or "tdd" in keywords):
+                    skip = colorize("deselected due to @*b{TDD keyword}")
+                if skip is None and parameter_expr:
                     param_skip = deselect_by_parameter(parameters, parameter_expr)
                     if param_skip:
-                        reason = colorize("deselected due to @*b{parameter expression}")
-                        skip = Skip(reason)
+                        skip = colorize("deselected due to @*b{parameter expression}")
 
                 case = TestCase(
                     self.root,
                     self.path,
-                    skip=skip,
                     family=name,
                     keywords=keywords,
                     parameters=parameters,
@@ -240,25 +216,28 @@ class AbstractTestFile:
                     baseline=self.baseline(testname=name, parameters=parameters),
                     sources=self.sources(testname=name, parameters=parameters),
                 )
+                if skip is not None:
+                    case.status.set("excluded", skip)
                 cases.append(case)
 
             analyze = self.analyze(testname=name, on_options=on_options)
             if analyze:
                 # add previous cases as dependencies
-                skip_analyze_case = Skip()
-                if all(bool(case.skip) for case in cases):
-                    skip_analyze_case.reason = "deselected due to skipped dependencies"
+                skip_analyze_case: Optional[str] = None
+                if all(case.status == "excluded" for case in cases):
+                    skip_analyze_case = "deselected due to skipped dependencies"
                 parent = TestCase(
                     self.root,
                     self.path,
                     family=name,
                     analyze=analyze,
-                    skip=skip_analyze_case,
                     keywords=self.keywords(testname=name),
                     timeout=self.timeout(testname=name),
                     baseline=self.baseline(testname=name),
                     sources=self.sources(testname=name),
                 )
+                if skip_analyze_case is not None:
+                    parent.status.set("excluded", skip_analyze_case)
                 for case in cases:
                     parent.add_dependency(case)
                 cases.append(parent)

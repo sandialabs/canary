@@ -8,7 +8,6 @@ from typing import Optional
 from typing import Union
 
 from .. import config
-from ..test.enums import Result
 from ..test.partition import Partition
 from ..test.testcase import TestCase
 from ..util import keyboard
@@ -69,6 +68,9 @@ class Queue:
     def mark_as_complete(self, *args, **kwargs) -> Any:
         raise NotImplementedError
 
+    def mark_as_orphaned(self, *args, **kwargs) -> Any:
+        raise NotImplementedError
+
     @property
     def _avail_workers(self):
         return self.workers - len(self._running)
@@ -110,7 +112,12 @@ class Queue:
                         self.print_status()
                 with self.lock():
                     avail_workers = self._avail_workers
-                    if avail_workers and item.size <= self._avail_cpus and item.ready:
+                    i_ready = item.ready()
+                    if i_ready < 0:
+                        # job is orphaned and will never be ready
+                        self.mark_as_orphaned(i)
+                        continue
+                    elif avail_workers and item.size <= self._avail_cpus and i_ready:
                         self._running[i] = self.queue.pop(i)
                         return i, item
             time.sleep(lock_wait_time)
@@ -122,11 +129,11 @@ class Queue:
         notrun = self.cases_notrun
         total = done + running + notrun
         for case in self.completed_testcases():
-            if case.result == Result.PASS:
+            if case.status == "success":
                 p += 1
-            elif case.result == Result.DIFF:
+            elif case.status == "diffed":
                 d += 1
-            elif case.result == Result.TIMEOUT:
+            elif case.status == "timeout":
                 t += 1
             else:
                 f += 1

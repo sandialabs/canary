@@ -16,11 +16,11 @@ from .testcase import TestCase
 class _Partition(set):
     @property
     def cputime(self):
-        return sum(case.size * case.runtime for case in self if not case.skip)
+        return sum(case.size * case.runtime for case in self if not case.skipped)
 
     @property
     def runtime(self):
-        return sum(case.runtime for case in self if not case.skip)
+        return sum(case.runtime for case in self if not case.skipped)
 
     @property
     def size(self):
@@ -38,21 +38,20 @@ class Partition(list):
                     raise ValueError(f"{case}: missing dependency: {dep}")
         self.extend(graph.static_order(list(partition)))
 
-    @property
     def ready(self):
-        return True
+        return 1
 
     @property
     def size(self):
-        return max(case.size for case in self if not case.skip)
+        return max(case.size for case in self if not case.skipped)
 
     @property
     def cputime(self):
-        return sum(case.size * case.runtime for case in self if not case.skip)
+        return sum(case.size * case.runtime for case in self if not case.skipped)
 
     @property
     def runtime(self):
-        return sum(case.runtime for case in self if not case.skip)
+        return sum(case.runtime for case in self if not case.skipped)
 
     def run(self, log_level: Optional[int] = None) -> dict[str, dict]:
         attrs = {}
@@ -149,8 +148,4 @@ def merge(files: list[str]) -> list[TestCase]:
             case = TestCase.from_dict(case_vars)
             if case.fullname not in cases:
                 cases[case.fullname] = case
-            else:
-                other = cases[case.fullname]
-                if other.skip.reason == "deselected by partition map":
-                    cases[case.fullname] = case
     return list(cases.values())

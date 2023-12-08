@@ -140,9 +140,8 @@ def force_remove(file_or_dir):
         pass
 
 
-def force_copy(src, dst, echo=False):
-    if echo:
-        tty.emit(f"link {src} -> {dst}\n")
+def force_copy(src, dst, echo=lambda x: None):
+    echo(f"link {src} -> {dst}\n")
     if os.path.isfile(src):
         remove(dst)
         copyfile(src, dst)
@@ -326,9 +325,8 @@ def is_exe(path):
     return os.path.isfile(path) and os.access(path, os.X_OK)
 
 
-def force_symlink(src, dest, echo=False):
-    if echo:
-        tty.emit(f"link {src} -> {dest}\n")
+def force_symlink(src, dest, echo=lambda x: None):
+    echo(f"link {src} -> {dest}\n")
     try:
         os.symlink(src, dest)
     except OSError:

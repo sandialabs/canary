@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
 
-from ..test.enums import Result
 from ..test.partition import Partition
+from ..test.status import Status
 from ..util import tty
 from ..util.executable import Executable
 from ..util.filesystem import getuser
@@ -57,7 +57,7 @@ class BatchRunner(Runner):
             attrs[case.fullname] = data
         fmt = "@%s{%d %s}"
         st_stat = ", ".join(
-            colorize(fmt % (Result.colors[n], v, n)) for (n, v) in stat.items()
+            colorize(fmt % (Status.colors[n], v, n)) for (n, v) in stat.items()
         )
         self.print_text(f"FINISHED: Batch {batch_no + 1} of {num_batches}, {st_stat}")
         #        for hook in plugin.plugins("test", "finish"):
@@ -125,12 +125,13 @@ class BatchRunner(Runner):
             try:
                 fd = case.load_results()
             except FileNotFoundError:
-                case.result = Result(
-                    "fail", f"Test case {case} not found batch {batch.rank[0]}'s output"
+                case.status.set(
+                    "failed",
+                    f"Test case {case} not found batch {batch.rank[0]}'s output",
                 )
             else:
-                if fd["result"] == "SETUP":
+                if fd["status"][0] == "staged":
                     # This case was never run
-                    case.result = Result("NOTDONE", "Case never run after setup")
+                    case.status.set("failed", "Case never ran after setup")
                 else:
                     case.update(fd)

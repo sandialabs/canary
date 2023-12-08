@@ -130,14 +130,14 @@ class Finder:
         missing = 0
         ids = [id(case) for case in cases]
         for case in cases:
-            if case.skip:
+            if case.status != "pending":
                 continue
             for dep in case.dependencies:
                 if id(dep) not in ids:
                     tty.error(f"ID of {dep!r} is not in test cases")
                     missing += 1
-                if dep.skip:
-                    case.skip = "deselected due to skipped dependency"
+                if dep.status != "pending":
+                    case.status.set("excluded", "deselected due to skipped dependency")
                     tty.warn(f"Dependency {dep!r} of {case!r} is marked to be skipped")
         if missing:
             raise ValueError("Missing dependencies")
@@ -157,6 +157,7 @@ class Finder:
             "Creating concrete test cases using",
             f"options={o}",
             f"keywords={keyword_expr}",
+            f"parameters={parameter_expr}",
         )
         for abstract_files in tree.values():
             for abstract_file in abstract_files:
@@ -167,6 +168,17 @@ class Finder:
                     on_options=on_options,
                 )
                 cases.extend([case for case in concrete_test_cases if case])
+
+        # this sanity check should not be necessary
+        errors: int = 0
+        for case in cases:
+            if case.status.value not in ("pending", "excluded"):
+                status = case.status.value
+                tty.error(f"{case}: expected status=(pending|excluded), not {status}")
+                errors += 1
+        if errors:
+            raise ValueError("Stopping due to previous errors")
+
         Finder.resolve_dependencies(cases)
         Finder.check_for_skipped_dependencies(cases)
         tty.verbose("Done creating test cases")

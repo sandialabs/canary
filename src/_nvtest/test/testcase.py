@@ -21,8 +21,7 @@ from ..util.filesystem import mkdirp
 from ..util.filesystem import working_dir
 from ..util.hash import hashit
 from ..util.tty.color import colorize
-from .enums import Result
-from .enums import Skip
+from .status import Status
 
 
 def stringify(arg: Any) -> str:
@@ -45,7 +44,6 @@ class TestCase:
         parameters: dict[str, object] = {},
         timeout: Union[None, int] = None,
         runtime: Union[None, float, int] = None,
-        skip: Skip = Skip(),
         baseline: list[tuple[str, str]] = [],
         sources: dict[str, list[tuple[str, str]]] = {},
     ):
@@ -65,7 +63,6 @@ class TestCase:
         self._runtime = runtime
         self.baseline = baseline
         self.sources = sources
-        self._skip: Skip = skip
         # Environment variables specific to this case
         self.variables: dict[str, str] = {}
 
@@ -88,7 +85,7 @@ class TestCase:
         self.exec_path = os.path.join(os.path.dirname(self.file_path), self.name)
         # The process running the test case
         self._process = None
-        self.result: Result = Result("notrun")
+        self.status = Status()
         self.start: float = -1
         self.finish: float = -1
         self.returncode: int = -1
@@ -147,7 +144,7 @@ class TestCase:
     def keywords(self, implicit: bool = False) -> list[str]:
         kwds = {kw for kw in self._keywords}
         if implicit:
-            kwds.add(self.result.name.lower())
+            kwds.add(self.status.name)
             kwds.add(self.name)
             kwds.add(self.family)
             kwds.update(self.parameters.keys())
@@ -178,12 +175,22 @@ class TestCase:
             raise ValueError("exec_root must be set during set up") from None
         return os.path.normpath(os.path.join(exec_root, self.exec_path))
 
-    @property
-    def ready(self) -> bool:
-        for dep in self.dependencies:
-            if dep.result in (Result.SETUP, Result.NOTRUN, Result.NOTDONE):
-                return False
-        return True
+    def ready(self) -> int:
+        """Return whether this case is ready to run or not
+
+        If the return value is 1, it is ready
+        If the return value is 0, it is not ready
+        If the return value is -1, it will never by ready
+
+        """
+        if not self.dependencies:
+            return 1
+        stat = [dep.status.value for dep in self.dependencies]
+        if all([_ in ("success", "diffed") for _ in stat]):
+            return 1
+        elif any([_ in ("failed", "skipped", "timeout") for _ in stat]):
+            return -1
+        return 0
 
     @property
     def size(self) -> int:
@@ -213,19 +220,12 @@ class TestCase:
             return 60 * 60
 
     @property
-    def skip(self):
-        return self._skip
+    def excluded(self) -> bool:
+        return self.status == "excluded"
 
-    @skip.setter
-    def skip(self, arg: Union[str, bool, Skip]):
-        if arg is False:
-            self._skip.reason = ""
-        elif arg is True:
-            self._skip.reason = "Skip set to True"
-        elif isinstance(arg, Skip):
-            self._skip = arg
-        else:
-            self._skip.reason = arg
+    @property
+    def skipped(self) -> bool:
+        return self.status == "skipped"
 
     def add_dependency(self, *cases: Union["TestCase", str]) -> None:
         for case in cases:
@@ -260,23 +260,20 @@ class TestCase:
                     src = os.path.join(self.file_dir, t)
                 dst = os.path.join(workdir, os.path.basename(dst))
                 if not os.path.exists(src):
-                    s = f"{action} resource file {t} not found"
-                    tty.error(s)
-                    self._skip.reason = s
-                    continue
+                    s = f"{self}: {action} resource file {t} not found"
+                    raise MissingSourceError(s)
                 elif os.path.exists(dst):
                     tty.warn(f"{os.path.basename(dst)} already exists in {workdir}")
                     continue
                 if action == "copy" or copy_all_resources:
-                    fs.force_copy(src, dst, echo=True)
+                    fs.force_copy(src, dst, echo=tty.info)
                 else:
                     relsrc = os.path.relpath(src, workdir)
-                    fs.force_symlink(relsrc, dst, echo=True)
+                    fs.force_symlink(relsrc, dst, echo=tty.info)
 
     def asdict(self, *keys):
         data = dict(vars(self))
-        data["result"] = [data["result"].name, data["result"].reason]
-        data["_skip"] = data["_skip"].reason
+        data["status"] = [data["status"].value, data["status"].details]
         for attr in ("file", "_depids", "dep_patterns"):
             data.pop(attr)
         dependencies = list(data.pop("dependencies"))
@@ -319,13 +316,12 @@ class TestCase:
             parameters=kwds.pop("parameters"),
             timeout=kwds.pop("_timeout"),
             runtime=kwds.pop("_runtime"),
-            skip=Skip(kwds.pop("_skip") or None),
             baseline=kwds.pop("baseline"),
             sources=kwds.pop("sources"),
         )
         kwds.pop("fullname", None)
-        result, reason = kwds.pop("result")
-        self.result = Result(result, reason=reason)
+        status, details = kwds.pop("status")
+        self.status = Status(status, details=details)
         self.returncode = kwds.pop("returncode")
         for dep in kwds.pop("dependencies", []):
             self.add_dependency(TestCase.from_dict(dep))
@@ -335,15 +331,15 @@ class TestCase:
 
     def to_json(self):
         data = self.asdict()
-        done = self.result not in (Result.NOTRUN, Result.SKIP, Result.NOTDONE)
+        done = self.status.value in ("failed", "success")
         if self.logfile and done:
             data["log"] = self.compressed_log()
         return json.dumps(data)
 
     def compressed_log(self) -> str:
-        done = self.result not in (Result.NOTRUN, Result.SKIP, Result.NOTDONE)
+        done = self.status.value in ("failed", "success")
         if self.logfile and done:
-            kb_to_keep = 2 if self.result == Result.PASS else 300
+            kb_to_keep = 2 if self.status == "success" else 300
             compressed_log = compress_file(self.logfile, kb_to_keep)
             return compressed_log
         return "Log not found"
@@ -358,35 +354,36 @@ class TestCase:
                 for f in os.listdir("."):
                     fs.force_remove(f)
         with fs.working_dir(self.exec_dir, create=True):
-            with tty.log_output(self.logfile, mode="w"):
-                if self.file_type == "vvt":
-                    fs.force_symlink(self.logfile, "execute.log")
-                with tty.timestamps():
-                    tty.info(f"Preparing test: {self.name}")
-                    tty.info(f"Directory: {os.getcwd()}")
-                    tty.info("Cleaning work directory...")
-                    tty.info("Linking and copying working files...")
-                    if copy_all_resources:
-                        fs.force_copy(self.file, os.path.basename(self.file), echo=True)
-                    else:
-                        relsrc = os.path.relpath(self.file, os.getcwd())
-                        fs.force_symlink(relsrc, os.path.basename(self.file), echo=True)
-                    self.copy_sources_to_workdir(copy_all_resources=copy_all_resources)
-                    if self.file_type == "vvt":
-                        write_vvtest_util(self)
-                    self.dump()
+            self.setup_exec_dir(copy_all_resources=copy_all_resources)
+            self.status.set("staged")
+            self.dump()
         tty.verbose(f"Done setting up {self}")
-        return
+
+    def setup_exec_dir(self, copy_all_resources: bool = False) -> None:
+        with tty.log_output(self.logfile, mode="w"):
+            if self.file_type == "vvt":
+                fs.force_symlink(self.logfile, "execute.log")
+            with tty.timestamps():
+                tty.info(f"Preparing test: {self.name}")
+                tty.info(f"Directory: {os.getcwd()}")
+                tty.info("Cleaning work directory...")
+                tty.info("Linking and copying working files...")
+                if copy_all_resources:
+                    fs.force_copy(self.file, os.path.basename(self.file), echo=tty.info)
+                else:
+                    relsrc = os.path.relpath(self.file, os.getcwd())
+                    fs.force_symlink(relsrc, os.path.basename(self.file), echo=tty.info)
+                self.copy_sources_to_workdir(copy_all_resources=copy_all_resources)
+                if self.file_type == "vvt":
+                    write_vvtest_util(self)
 
     def update(self, attrs: dict[str, object]) -> None:
         for key, val in attrs.items():
-            if key == "result":
+            if key == "status":
                 if isinstance(val, (tuple, list)):
                     assert len(val) == 2
-                    val = Result(val[0], val[1])
-                assert isinstance(val, Result)
-            elif key == "skip":
-                assert isinstance(val, Skip)
+                    val = Status(val[0], val[1])
+                assert isinstance(val, Status)
             setattr(self, key, val)
 
     def register_proc(self, proc) -> None:
@@ -412,11 +409,9 @@ class TestCase:
                     self.cmd_line = python.cmd_line
                     rc = python.returncode
                     self.returncode = rc
-                    self.result = Result.from_returncode(rc)
-                    if self.result == Result.SKIP:
-                        self._skip.reason = "runtime exception"
+                    self.status = Status.from_returncode(rc)
         self.finish = time.time()
-        stat = self.result.cname
+        stat = self.status.cname
         tty.info(f"FINISHED: {self.pretty_repr()} {stat}", prefix=None)
         self.dump()
         return
@@ -451,7 +446,11 @@ class TestCase:
     def kill(self):
         if self._process is not None:
             self._process.kill()
-        self.result = Result("FAIL", "Process killed")
+        self.status = Status("failed", "fail")  # "Process killed")
 
     def teardown(self) -> None:
         ...
+
+
+class MissingSourceError(Exception):
+    pass

@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 from .. import config
 from ..session import Session
-from ..test.enums import Result
+from ..test.status import Status
 from ..test.testcase import TestCase
 from ..util import tty
 
@@ -76,6 +76,14 @@ def setup_parser(parser: "Parser"):
         help="Show tests that were skipped [default: %(default)s]",
     )
     parser.add_argument(
+        "-x",
+        dest="show_excluded",
+        action="store_true",
+        default=False,
+        help="Show tests that were excluded from "
+        "initial test session [default: %(default)s]",
+    )
+    parser.add_argument(
         "-a",
         dest="show_all",
         action="store_true",
@@ -118,38 +126,43 @@ def status(args: "argparse.Namespace") -> int:
         args.show_diff = args.show_fail = args.show_timeout = True
     cases_to_show: list[TestCase] = []
     if args.show_all:
-        cases_to_show = cases
+        if args.show_excluded:
+            cases_to_show = cases
+        else:
+            cases_to_show = [case for case in cases if case.status != "excluded"]
     else:
         for case in cases:
-            if args.show_skip and case.skip:
+            if args.show_excluded and case.status == "excluded":
                 cases_to_show.append(case)
-            elif args.show_pass and case.result == Result.PASS:
+            elif args.show_skip and case.status == "skipped":
                 cases_to_show.append(case)
-            elif args.show_fail and case.result == Result.FAIL:
+            elif args.show_pass and case.status == "success":
                 cases_to_show.append(case)
-            elif args.show_diff and case.result == Result.DIFF:
+            elif args.show_fail and case.status == "failed":
                 cases_to_show.append(case)
-            elif args.show_timeout and case.result == Result.TIMEOUT:
+            elif args.show_diff and case.status == "diffed":
                 cases_to_show.append(case)
-            elif args.show_notrun and case.result in (Result.NOTRUN, Result.NOTDONE):
+            elif args.show_timeout and case.status == "timedout":
+                cases_to_show.append(case)
+            elif args.show_notrun and case.status == "staged":
                 cases_to_show.append(case)
     n: int = 0
     if cases_to_show:
         n = print_status(cases_to_show, show_logs=args.show_logs)
     if args.durations is not None:
-        print_durations(cases, int(args.durations))
+        print_durations(cases_to_show, int(args.durations))
     if n:
-        print_summary(cases)
+        print_footer_summary(cases_to_show)
     return 0
 
 
 def cformat(case: TestCase, show_log: bool) -> str:
     id = tty.color.colorize("@*b{%s}" % case.id[:7])
-    string = "%s %s %s" % (case.result.cname, id, case.pretty_repr())
+    string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
     if case.duration > 0:
         string += " (%.2fs.)" % case.duration
-    if case.result == Result.SKIP:
-        string += ": Skipped due to %s" % case.skip.reason
+    if case.status == "skipped":
+        string += ": Skipped due to %s" % case.status.details
     if show_log:
         f = os.path.relpath(case.logfile, os.getcwd())
         string += tty.color.colorize(": @m{%s}" % f)
@@ -159,9 +172,9 @@ def cformat(case: TestCase, show_log: bool) -> str:
 def print_status(cases: list[TestCase], show_logs: bool = False) -> int:
     totals: dict[str, list[TestCase]] = {}
     for case in cases:
-        totals.setdefault(case.result.name, []).append(case)
+        totals.setdefault(case.status.value, []).append(case)
     nprinted = 0
-    for member in Result.members:
+    for member in Status.colors:
         if member in totals:
             for case in totals[member]:
                 tty.print(cformat(case, show_logs))
@@ -169,17 +182,18 @@ def print_status(cases: list[TestCase], show_logs: bool = False) -> int:
     return nprinted
 
 
-def print_summary(cases: list[TestCase]) -> None:
+def print_footer_summary(cases: list[TestCase]) -> None:
     totals: dict[str, list[TestCase]] = {}
     for case in cases:
-        totals.setdefault(case.result.name, []).append(case)
+        totals.setdefault(case.status.value, []).append(case)
     summary_parts = []
     colorize = tty.color.colorize
-    for member in Result.members:
+    for member in Status.colors:
         n = len(totals.get(member, []))
         if n:
-            c = Result.colors[member]
-            summary_parts.append(colorize("@%s{%d %s}" % (c, n, member.lower())))
+            c = Status.colors[member]
+            stat = totals[member][0].status.name
+            summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
     tty.print(", ".join(summary_parts), centered=True)
 
 

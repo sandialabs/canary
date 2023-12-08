@@ -7,7 +7,6 @@ from _nvtest.error import TestFailed
 from _nvtest.error import TestSkipped
 from _nvtest.main import console_main
 from _nvtest.session import Session
-from _nvtest.test.enums import Result
 from _nvtest.test.testcase import TestCase
 from _nvtest.util import filesystem
 from _nvtest.util import tty

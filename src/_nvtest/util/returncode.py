@@ -6,19 +6,19 @@ def compute_returncode(cases: list[TestCase]) -> int:
 
     results: dict[str, int] = {}
     for case in cases:
-        results[case.result.name] = results.get(case.result.name, 0) + 1
+        results[case.status.value] = results.get(case.status.value, 0) + 1
     for result, n in results.items():
         for i in range(n):
-            if result == "DIFF":
+            if result == "diffed":
                 returncode |= 2**1
-            elif result == "FAIL":
+            elif result == "failed":
                 returncode |= 2**2
-            elif result == "TIMEOUT":
+            elif result == "timeout":
                 returncode |= 2**3
-            elif result == "NOTDONE":
+            elif result == "skipped":  # notdone
                 returncode |= 2**4
-            elif result == "NOTRUN":
+            elif result == "staged":
                 returncode |= 2**5
-            elif result == "SKIP":
+            elif result == "skipped":
                 returncode |= 2**6
     return returncode

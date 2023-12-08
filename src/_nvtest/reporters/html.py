@@ -3,7 +3,6 @@ from typing import TextIO
 
 from .. import config
 from ..session import Session
-from ..test.enums import Result
 from ..test.testcase import TestCase
 from ..util import tty
 from ..util.filesystem import force_remove
@@ -46,10 +45,12 @@ class Reporter(_Reporter):
         return f"<head>\n{self.style}\n</head>\n"
 
     def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
+        if case.status.value in ("excluded", "skipped"):
+            return
         fh.write("<html>\n")
         fh.write("<body>\n<table>\n")
         fh.write(f"<tr><td><b>Test:</b> {case.display_name}</td></tr>\n")
-        fh.write(f"<tr><td><b>Status:</b> {case.result.name}</td></tr>\n")
+        fh.write(f"<tr><td><b>Status:</b> {case.status.name}</td></tr>\n")
         fh.write(f"<tr><td><b>Exit code:</b> {case.returncode}</td></tr>\n")
         fh.write(f"<tr><td><b>ID:</b> {case.id}</td></tr>\n")
         fh.write(f"<tr><td><b>Duration:</b> {case.duration}</td></tr>\n")
@@ -78,10 +79,12 @@ class Reporter(_Reporter):
         fh.write("</tr>\n")
         totals: dict[str, list[TestCase]] = {}
         for case in self.data.cases:
-            if case.result.name in (Result.NOTRUN, Result.NOTDONE):
+            if case.status == "excluded":
+                continue
+            if case.status == "skipped":
                 group = "Not Run"
             else:
-                group = case.result.name.title()
+                group = case.status.name.title()
             totals.setdefault(group, []).append(case)
         fh.write("<tr>")
         fh.write(f"<td>{config.get('system:host')}</td>")
@@ -103,10 +106,10 @@ class Reporter(_Reporter):
         fh.write("</table>\n</body>\n</html>")
 
     def generate_group_index(self, cases, fh: TextIO) -> None:
-        assert all([cases[0].result.name == c.result.name for c in cases[1:]])
+        assert all([cases[0].status.name == c.status.name for c in cases[1:]])
         fh.write("<html>\n")
         fh.write(self.head)
-        fh.write(f"<body>\n<h1> {cases[0].result.name} Summary </h1>\n")
+        fh.write(f"<body>\n<h1> {cases[0].status.name} Summary </h1>\n")
         fh.write('<table class="sortable">\n')
         fh.write(
             "<thead><tr><th>Test</th><th>Duration</th><th>Status</th></tr></thead>\n"
@@ -119,7 +122,7 @@ class Reporter(_Reporter):
             link = f'<a href="file://{file}">{case.display_name}</a>'
             fh.write(
                 f"<tr><td>{link}</td><td>{case.duration:.2f}</td>"
-                f"<td>{case.result.html_name}</td></tr>\n"
+                f"<td>{case.status.html_name}</td></tr>\n"
             )
         fh.write("</tbody>")
         fh.write("</table>\n</body>\n</html>")
@@ -137,6 +140,6 @@ class Reporter(_Reporter):
                 link = f'<a href="file://{file}">{case.display_name}</a>'
                 fh.write(
                     f"<tr><td>{link}</td><td>{case.duration:.2f}</td>"
-                    f"<td>{case.result.html_name}</td></tr>\n"
+                    f"<td>{case.status.html_name}</td></tr>\n"
                 )
         fh.write("</table>\n</body>\n</html>")

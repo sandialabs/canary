@@ -22,6 +22,9 @@ class BatchQueue(Queue):
             queue[i] = Partition(cases_to_run, i, n)
         return queue
 
+    def mark_as_orphaned(self, batch_no: int) -> None:
+        assert 0, "Should never get here"
+
     def mark_as_complete(self, batch_no: int) -> Partition:
         if batch_no not in self._running:
             raise RuntimeError(f"batch {batch_no} is not running")

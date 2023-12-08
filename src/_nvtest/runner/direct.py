@@ -1,6 +1,6 @@
 from typing import Any
 
-from ..test.enums import Result
+from ..test.status import Status
 from ..test.testcase import TestCase
 from .base import Runner
 
@@ -21,7 +21,7 @@ class DirectRunner(Runner):
             case.run(execute_analysis_sections=kwds.get("execute_analysis_sections"))
         except BaseException as e:
             if isinstance(e.args[0], int):
-                case.result = Result.from_returncode(e.args[0])
+                case.status = Status.from_returncode(e.args[0])
             else:
-                case.result = Result("FAIL", reason=e.args[0])
+                case.status.set("failed")  # =e.args[0])
         return {case.fullname: vars(case)}

@@ -78,7 +78,7 @@ def find(args: "argparse.Namespace") -> int:
         parameter_expr=args.parameter_expr,
         on_options=args.on_options,
     )
-    cases_to_run = [case for case in cases if not case.skip]
+    cases_to_run = [case for case in cases if case.status == "pending"]
     if not args.no_header:
         print_testcase_summary(args, cases)
     if args.keywords:
@@ -157,19 +157,20 @@ def print_testcase_summary(args: "argparse.Namespace", cases: "list[TestCase]") 
     files = {case.file for case in cases}
     t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
     print(colorize(t))
-    cases_to_run = [case for case in cases if not case.skip]
+    cases_to_run = [case for case in cases if case.status == "pending"]
     max_workers = getattr(args, "max_workers", None)
     max_workers = max_workers or config.get("machine:cpu_count")
     files = {case.file for case in cases_to_run}
     fmt = "@*g{running} %d test cases from %d files with %s workers"
     print(colorize(fmt % (len(cases_to_run), len(files), max_workers)))
-    skipped = [case for case in cases if case.skip]
-    skipped_reasons: dict[str, int] = {}
-    for case in skipped:
-        reason = case.skip.reason
-        skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
-    print(colorize("@*b{skipping} %d test cases" % len(skipped)))
-    reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
+    excluded = [case for case in cases if case.excluded]
+    excluded_reasons: dict[str, int] = {}
+    for case in excluded:
+        assert case.status.details is not None
+        reason = case.status.details
+        excluded_reasons[reason] = excluded_reasons.get(reason, 0) + 1
+    print(colorize("@*b{skipping} %d test cases" % len(excluded)))
+    reasons = sorted(excluded_reasons, key=lambda x: excluded_reasons[x])
     for reason in reversed(reasons):
-        print(f"  • {skipped_reasons[reason]} {reason.lstrip()}")
+        print(f"  • {excluded_reasons[reason]} {reason.lstrip()}")
     return

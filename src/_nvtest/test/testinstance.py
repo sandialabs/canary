@@ -6,8 +6,7 @@ from typing import Optional
 from typing import Type
 from typing import Union
 
-from .enums import Result
-from .enums import Skip
+from .status import Status
 from .testcase import TestCase
 
 
@@ -24,12 +23,11 @@ class TestInstance:
     parameters: SimpleNamespace
     timeout: Union[None, int]
     runtime: Union[None, float, int]
-    skip: Skip
     baseline: list[tuple[str, str]]
     sources: dict[str, list[tuple[str, str]]]
     exec_root: str
     exec_dir: str
-    result: Result
+    status: Status
     start: float
     finish: float
     id: str
@@ -61,12 +59,11 @@ class TestInstance:
             parameters=SimpleNamespace(**case.parameters),
             timeout=case.timeout,
             runtime=case.runtime,
-            skip=case.skip,
             baseline=case.baseline,
             sources=case.sources,
             exec_root=case.exec_root,  # type: ignore
             exec_dir=case.exec_dir,
-            result=case.result,
+            status=case.status,
             start=case.start,
             finish=case.finish,
             id=case.id,

@@ -16,8 +16,7 @@ from ..error import StopExecution
 from ..runner import valid_runners
 from ..session import ExitCode
 from ..session import Session
-from ..test.enums import Result
-from ..test.enums import Skip
+from ..test.status import Status
 from ..test.testcase import TestCase
 from ..util import tty
 from ..util.filesystem import force_remove
@@ -336,20 +335,24 @@ def print_front_matter(args: "argparse.Namespace"):
 def print_testcase_overview(
     cases: list[TestCase], duration: Optional[float] = None
 ) -> None:
+    def unreachable(c):
+        return c.status == "skipped" and c.status.details.startswith("Unreachable")
+
     files = {case.file for case in cases}
-    _, cases = partition(cases, lambda c: c.skip.reason == Skip.UNREACHABLE)
+    _, cases = partition(cases, lambda c: unreachable(c))
     t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
     if duration is not None:
         t += "@*{ in %.2fs.}" % duration
     tty.print(colorize(t))
-    cases_to_run = [case for case in cases if not case.skip]
+    cases_to_run = [case for case in cases if case.status == "staged"]
     files = {case.file for case in cases_to_run}
     t = "@*g{running} %d test cases from %d files" % (len(cases_to_run), len(files))
     tty.print(colorize(t))
-    skipped = [case for case in cases if case.skip]
+    skipped = [case for case in cases if case.status.value in ("skipped", "excluded")]
     skipped_reasons: dict[str, int] = {}
     for case in skipped:
-        reason = case.skip.reason
+        assert case.status.details is not None
+        reason = case.status.details
         skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
     tty.print(colorize("@*b{skipping} %d test cases" % len(skipped)))
     reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
@@ -361,13 +364,13 @@ def print_testcase_overview(
 def cformat(case: TestCase) -> str:
     id = tty.color.colorize("@*b{%s}" % case.id[:7])
     string = "%s %s %s (%.2f s.)" % (
-        case.result.cname,
+        case.status.cname,
         id,
         case.pretty_repr(),
         case.duration,
     )
-    if case.result == Result.SKIP:
-        string = ": Skipped due to %s" % case.skip.reason
+    if case.skipped:
+        string = ": Skipped due to %s" % case.status.details
     return string
 
 
@@ -388,35 +391,36 @@ def print_testcase_results(
 
     totals: dict[str, list[TestCase]] = {}
     for case in cases:
-        totals.setdefault(case.result.name, []).append(case)
+        totals.setdefault(case.status.iid, []).append(case)
 
-    nonpass = (Result.FAIL, Result.DIFF, Result.TIMEOUT, Result.SKIP, Result.NOTDONE)
+    nonpass = ("skipped", "failed", "diffed", "timeout")
     level = tty.get_log_level()
     if level > tty.INFO and len(totals):
         tty.print("Short test summary info", centered=True)
     elif any(r in totals for r in nonpass):
         tty.print("Short test summary info", centered=True)
-    if level > tty.VERBOSE and Result.NOTRUN in totals:
-        for case in totals[Result.NOTRUN]:
+    if level > tty.VERBOSE and "excluded" in totals:
+        for case in totals["excluded"]:
             tty.print(cformat(case))
     if level > tty.INFO:
-        for result in (Result.SETUP, Result.PASS):
-            if result in totals:
-                for case in totals[Result.SETUP]:
+        for status in ("staged", "success"):
+            if status in totals:
+                for case in totals[status]:
                     tty.print(cformat(case))
-    for result in nonpass:
-        if result in totals:
-            for case in totals[result]:
+    for status in nonpass:
+        if status in totals:
+            for case in totals[status]:
                 tty.print(cformat(case))
 
     summary_parts = []
-    for member in Result.members:
-        if level <= tty.INFO and member == Result.NOTRUN:
+    for member in Status.colors:
+        if level <= tty.INFO and member == "excluded":
             continue
         n = len(totals.get(member, []))
         if n:
-            c = Result.colors[member]
-            summary_parts.append(colorize("@%s{%d %s}" % (c, n, member.lower())))
+            c = Status.colors[member]
+            stat = totals[member][0].status.name
+            summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
     text = ", ".join(summary_parts)
     tty.print(text + f" in {duration:.2f}s.", centered=True)
 
