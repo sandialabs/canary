@@ -348,11 +348,11 @@ def print_testcase_overview(
     files = {case.file for case in cases_to_run}
     t = "@*g{running} %d test cases from %d files" % (len(cases_to_run), len(files))
     tty.print(colorize(t))
-    skipped = [case for case in cases if case.status.value in ("skipped", "excluded")]
+    skipped = [case for case in cases if case.status == "skipped" or case.masked]
     skipped_reasons: dict[str, int] = {}
     for case in skipped:
-        assert case.status.details is not None
-        reason = case.status.details
+        reason = case.mask if case.masked else case.status.details
+        assert isinstance(reason, str)
         skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
     tty.print(colorize("@*b{skipping} %d test cases" % len(skipped)))
     reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
@@ -363,14 +363,14 @@ def print_testcase_overview(
 
 def cformat(case: TestCase) -> str:
     id = tty.color.colorize("@*b{%s}" % case.id[:7])
-    string = "%s %s %s (%.2f s.)" % (
-        case.status.cname,
-        id,
-        case.pretty_repr(),
-        case.duration,
-    )
-    if case.skipped:
-        string = ": Skipped due to %s" % case.status.details
+    if case.masked:
+        string = "@*c{EXCLUDED} %s %s: %s" % (id, case.pretty_repr(), case.mask)
+        return tty.color.colorize(string)
+    string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
+    if case.duration > 0:
+        string += " (%.2fs.)" % case.duration
+    elif case.status == "skipped":
+        string += ": Skipped due to %s" % case.status.details
     return string
 
 
@@ -391,7 +391,10 @@ def print_testcase_results(
 
     totals: dict[str, list[TestCase]] = {}
     for case in cases:
-        totals.setdefault(case.status.iid, []).append(case)
+        if case.masked:
+            totals.setdefault("masked", []).append(case)
+        else:
+            totals.setdefault(case.status.iid, []).append(case)
 
     nonpass = ("skipped", "failed", "diffed", "timeout")
     level = tty.get_log_level()
@@ -399,8 +402,8 @@ def print_testcase_results(
         tty.print("Short test summary info", centered=True)
     elif any(r in totals for r in nonpass):
         tty.print("Short test summary info", centered=True)
-    if level > tty.VERBOSE and "excluded" in totals:
-        for case in totals["excluded"]:
+    if level > tty.VERBOSE and "masked" in totals:
+        for case in totals["masked"]:
             tty.print(cformat(case))
     if level > tty.INFO:
         for status in ("staged", "success"):
@@ -414,8 +417,6 @@ def print_testcase_results(
 
     summary_parts = []
     for member in Status.colors:
-        if level <= tty.INFO and member == "excluded":
-            continue
         n = len(totals.get(member, []))
         if n:
             c = Status.colors[member]

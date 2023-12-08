@@ -137,7 +137,7 @@ class Finder:
                     tty.error(f"ID of {dep!r} is not in test cases")
                     missing += 1
                 if dep.status != "pending":
-                    case.status.set("excluded", "deselected due to skipped dependency")
+                    case.mask = "deselected due to skipped dependency"
                     tty.warn(f"Dependency {dep!r} of {case!r} is marked to be skipped")
         if missing:
             raise ValueError("Missing dependencies")
@@ -172,9 +172,9 @@ class Finder:
         # this sanity check should not be necessary
         errors: int = 0
         for case in cases:
-            if case.status.value not in ("pending", "excluded"):
+            if case.status != "pending":
                 status = case.status.value
-                tty.error(f"{case}: expected status=(pending|excluded), not {status}")
+                tty.error(f"{case}: expected status=pending, not {status}")
                 errors += 1
         if errors:
             raise ValueError("Stopping due to previous errors")

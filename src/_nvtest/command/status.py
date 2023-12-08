@@ -129,10 +129,10 @@ def status(args: "argparse.Namespace") -> int:
         if args.show_excluded:
             cases_to_show = cases
         else:
-            cases_to_show = [case for case in cases if case.status != "excluded"]
+            cases_to_show = [case for case in cases if not case.masked]
     else:
         for case in cases:
-            if args.show_excluded and case.status == "excluded":
+            if args.show_excluded and case.masked:
                 cases_to_show.append(case)
             elif args.show_skip and case.status == "skipped":
                 cases_to_show.append(case)
@@ -158,10 +158,13 @@ def status(args: "argparse.Namespace") -> int:
 
 def cformat(case: TestCase, show_log: bool) -> str:
     id = tty.color.colorize("@*b{%s}" % case.id[:7])
+    if case.masked:
+        string = "@*c{EXCLUDED} %s %s: %s" % (id, case.pretty_repr(), case.mask)
+        return tty.color.colorize(string)
     string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
     if case.duration > 0:
         string += " (%.2fs.)" % case.duration
-    if case.status == "skipped":
+    elif case.status == "skipped":
         string += ": Skipped due to %s" % case.status.details
     if show_log:
         f = os.path.relpath(case.logfile, os.getcwd())
@@ -172,9 +175,22 @@ def cformat(case: TestCase, show_log: bool) -> str:
 def print_status(cases: list[TestCase], show_logs: bool = False) -> int:
     totals: dict[str, list[TestCase]] = {}
     for case in cases:
-        totals.setdefault(case.status.value, []).append(case)
+        if case.masked:
+            totals.setdefault("masked", []).append(case)
+        else:
+            totals.setdefault(case.status.value, []).append(case)
     nprinted = 0
-    for member in Status.colors:
+    members = [
+        "masked",
+        "pending",
+        "staged",
+        "success",
+        "skipped",
+        "diffed",
+        "failed",
+        "timeout",
+    ]
+    for member in members:
         if member in totals:
             for case in totals[member]:
                 tty.print(cformat(case, show_logs))

@@ -75,8 +75,5 @@ _runtimes = Singleton(Runtimes)
 def runtime(
     session: Session, case: "TestCase", on_options: Optional[list[str]] = []
 ) -> None:
-    if (
-        not case.excluded
-        and (rt := _runtimes.get(case, options=on_options)) is not None
-    ):
+    if not case.masked and (rt := _runtimes.get(case, options=on_options)) is not None:
         case.runtime = rt

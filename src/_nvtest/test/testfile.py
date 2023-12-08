@@ -217,14 +217,14 @@ class AbstractTestFile:
                     sources=self.sources(testname=name, parameters=parameters),
                 )
                 if skip is not None:
-                    case.status.set("excluded", skip)
+                    case.mask = skip
                 cases.append(case)
 
             analyze = self.analyze(testname=name, on_options=on_options)
             if analyze:
                 # add previous cases as dependencies
                 skip_analyze_case: Optional[str] = None
-                if all(case.status == "excluded" for case in cases):
+                if all(case.masked for case in cases):
                     skip_analyze_case = "deselected due to skipped dependencies"
                 parent = TestCase(
                     self.root,
@@ -237,7 +237,7 @@ class AbstractTestFile:
                     sources=self.sources(testname=name),
                 )
                 if skip_analyze_case is not None:
-                    parent.status.set("excluded", skip_analyze_case)
+                    parent.mask = skip_analyze_case
                 for case in cases:
                     parent.add_dependency(case)
                 cases.append(parent)

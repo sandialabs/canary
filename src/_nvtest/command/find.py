@@ -163,14 +163,13 @@ def print_testcase_summary(args: "argparse.Namespace", cases: "list[TestCase]") 
     files = {case.file for case in cases_to_run}
     fmt = "@*g{running} %d test cases from %d files with %s workers"
     print(colorize(fmt % (len(cases_to_run), len(files), max_workers)))
-    excluded = [case for case in cases if case.excluded]
-    excluded_reasons: dict[str, int] = {}
-    for case in excluded:
-        assert case.status.details is not None
-        reason = case.status.details
-        excluded_reasons[reason] = excluded_reasons.get(reason, 0) + 1
-    print(colorize("@*b{skipping} %d test cases" % len(excluded)))
-    reasons = sorted(excluded_reasons, key=lambda x: excluded_reasons[x])
+    masked = [case for case in cases if case.masked]
+    masked_reasons: dict[str, int] = {}
+    for case in masked:
+        reason = case.mask
+        masked_reasons[reason] = masked_reasons.get(reason, 0) + 1
+    print(colorize("@*b{skipping} %d test cases" % len(masked)))
+    reasons = sorted(masked_reasons, key=lambda x: masked_reasons[x])
     for reason in reversed(reasons):
-        print(f"  • {excluded_reasons[reason]} {reason.lstrip()}")
+        print(f"  • {masked_reasons[reason]} {reason.lstrip()}")
     return

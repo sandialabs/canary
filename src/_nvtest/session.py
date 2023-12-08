@@ -175,7 +175,7 @@ class Session:
             for case in self.cases:
                 hook(self, case)
 
-        cases_to_run = [case for case in self.cases if case.status == "pending"]
+        cases_to_run = [case for case in self.cases if not case.masked]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
 
@@ -253,10 +253,8 @@ class Session:
         f = os.path.join(self.batchdir, f"{batch_no:0{n}d}")
         case_ids: list[str] = [_.strip() for _ in open(f).readlines() if _.split()]
         for case in self.cases:
-            if case.id in case_ids:
-                case.status.set("staged")
-            elif case.status != "excluded":
-                case.status.set("skipped", f"case is not in batch {batch_no}")
+            if case.id not in case_ids and not case.masked:
+                case.mask = f"case is not in batch {batch_no}"
         cases = [case for case in self.cases if case.status == "staged"]
         self.queue = q_factory(
             cases, workers=self.max_workers, cpu_count=self.max_cores_per_test
@@ -346,21 +344,20 @@ class Session:
             start = os.path.join(self.work_tree, start)
         start = os.path.normpath(start)
         for case in self.cases:
-            if case.status == "excluded":
+            if case.masked:
                 continue
             if not case.exec_dir.startswith(start):
-                case.status.set("skipped", "Unreachable from start directory")
+                case.mask = "Unreachable from start directory"
                 continue
             if case_specs is not None:
                 if any(case.matches(_) for _ in case_specs):
                     case.status.set("staged")
                 else:
-                    details = colorize("deselected by @*b{testspec expression}")
-                    case.status.set("skipped", details)
+                    case.mask = colorize("deselected by @*b{testspec expression}")
                 continue
             if case.status != "staged":
-                details = f"deselected due to previous test status: {case.status.cname}"
-                case.status.set("skipped", details)
+                s = f"deselected due to previous test status: {case.status.cname}"
+                case.mask = s
                 if max_cores_per_test and case.size > max_cores_per_test:
                     continue
                 if parameter_expr:
@@ -398,16 +395,13 @@ class Session:
             self.queue.cases,
             options=runner_options,
         )
-        try:
-            with self.rc_environ():
-                with working_dir(self.work_tree):
-                    self.process_testcases(
-                        timeout=timeout,
-                        fail_fast=fail_fast,
-                        execute_analysis_sections=execute_analysis_sections,
-                    )
-        finally:
-            self.returncode = compute_returncode(self.queue.cases)
+        with self.rc_environ():
+            with working_dir(self.work_tree):
+                self.process_testcases(
+                    timeout=timeout,
+                    fail_fast=fail_fast,
+                    execute_analysis_sections=execute_analysis_sections,
+                )
         return self.returncode
 
     def teardown(self):
@@ -472,7 +466,7 @@ class Session:
     def process_testcases(
         self, *, timeout: int, fail_fast: bool, execute_analysis_sections: bool
     ) -> None:
-        self._futures = {}
+        futures = {}
         timeout_message = f"Test suite execution exceeded time out of {timeout} s."
         try:
             with timeout_context(timeout, timeout_message=timeout_message):
@@ -484,27 +478,27 @@ class Session:
                             return
                         kwds = {"execute_analysis_sections": execute_analysis_sections}
                         future = self.ppe.submit(self.runner, entity, kwds)
-                        callback = partial(
-                            self.update_from_future, i, entity, fail_fast
-                        )
+                        callback = partial(self.update_from_future, i, fail_fast)
                         future.add_done_callback(callback)
-                        self._futures[i] = (entity, future)
+                        futures[i] = (entity, future)
         finally:
-            for entity, future in self._futures.values():
+            for entity, future in futures.values():
                 if future.running():
                     entity.kill()
             for case in self.queue.cases:
                 if case.status == "staged":
+                    tty.error(f"{case}: failed to start!")
                     case.status.set("failed", "Case failed to start")
                     case.dump()
+            self.returncode = compute_returncode(self.queue.cases)
 
     def update_from_future(
         self,
         ent_no: int,
-        entity: Union[Partition, TestCase],
         fail_fast: bool,
         future: Future,
     ) -> None:
+        entity = self.queue._running[ent_no]
         attrs = future.result()
         obj: Union[TestCase, Partition] = self.queue.mark_as_complete(ent_no)
         assert id(obj) == id(entity)

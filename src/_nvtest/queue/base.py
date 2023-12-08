@@ -105,21 +105,24 @@ class Queue:
         while True:
             if not len(self.queue):
                 raise StopIteration
-            for i, item in self.queue.items():
+            ids = list(self.queue.keys())
+            for id in ids:
                 if self.allow_kb:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
                         self.print_status()
+                item = self.queue[id]
                 with self.lock():
                     avail_workers = self._avail_workers
+                    avail_cpus = self._avail_cpus
                     i_ready = item.ready()
                     if i_ready < 0:
                         # job is orphaned and will never be ready
-                        self.mark_as_orphaned(i)
+                        self.mark_as_orphaned(id)
                         continue
-                    elif avail_workers and item.size <= self._avail_cpus and i_ready:
-                        self._running[i] = self.queue.pop(i)
-                        return i, item
+                    elif avail_workers and item.size <= avail_cpus and i_ready:
+                        self._running[id] = self.queue.pop(id)
+                        return id, item
             time.sleep(lock_wait_time)
 
     def print_status(self):

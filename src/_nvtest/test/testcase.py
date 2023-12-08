@@ -54,6 +54,7 @@ class TestCase:
         self.file_dir = os.path.dirname(self.file)
         assert os.path.exists(self.file)
         self.file_type = "vvt" if self.file.endswith(".vvt") else "pyt"
+        self._active: Optional[bool] = None
 
         # Other properties
         self.analyze = analyze
@@ -80,12 +81,14 @@ class TestCase:
         self.id: str = hashit(self.fullname, length=20)
 
         # Execution properties
+        self.status = Status()
+        self._mask: str = ""
+
         self.cmd_line: str = ""
         self.exec_root: Optional[str] = None
         self.exec_path = os.path.join(os.path.dirname(self.file_path), self.name)
         # The process running the test case
         self._process = None
-        self.status = Status()
         self.start: float = -1
         self.finish: float = -1
         self.returncode: int = -1
@@ -119,6 +122,22 @@ class TestCase:
         elif self.file_path.endswith(pattern):
             return True
         return False
+
+    @property
+    def masked(self) -> bool:
+        return bool(self.mask)
+
+    @property
+    def skipped(self) -> bool:
+        return self.status == "skipped"
+
+    @property
+    def mask(self) -> str:
+        return self._mask
+
+    @mask.setter
+    def mask(self, arg: str) -> None:
+        self._mask = " ".join(arg.split())
 
     @staticmethod
     def spec_like(spec: str) -> bool:
@@ -157,6 +176,14 @@ class TestCase:
         return deepcopy(self)
 
     @property
+    def active(self) -> bool:
+        return self._active or False
+
+    @active.setter
+    def active(self, arg: bool) -> None:
+        self._active = bool(arg)
+
+    @property
     def duration(self):
         if self.start == -1 or self.finish == -1:
             return -1
@@ -186,10 +213,11 @@ class TestCase:
         if not self.dependencies:
             return 1
         stat = [dep.status.value for dep in self.dependencies]
-        if all([_ in ("success", "diffed") for _ in stat]):
+        if all([_ in ("success", "diffed", "failed", "timeout") for _ in stat]):
             return 1
-        elif any([_ in ("failed", "skipped", "timeout") for _ in stat]):
-            return -1
+        for dep in self.dependencies:
+            if dep.status == "skipped":
+                return -1
         return 0
 
     @property
@@ -218,14 +246,6 @@ class TestCase:
             return 5 * 60 * 60
         else:
             return 60 * 60
-
-    @property
-    def excluded(self) -> bool:
-        return self.status == "excluded"
-
-    @property
-    def skipped(self) -> bool:
-        return self.status == "skipped"
 
     def add_dependency(self, *cases: Union["TestCase", str]) -> None:
         for case in cases:
@@ -323,6 +343,9 @@ class TestCase:
         status, details = kwds.pop("status")
         self.status = Status(status, details=details)
         self.returncode = kwds.pop("returncode")
+        mask = kwds.pop("mask", "")
+        if mask:
+            self.mask = mask
         for dep in kwds.pop("dependencies", []):
             self.add_dependency(TestCase.from_dict(dep))
         for key, val in kwds.items():

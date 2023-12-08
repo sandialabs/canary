@@ -45,7 +45,7 @@ class Reporter(_Reporter):
         return f"<head>\n{self.style}\n</head>\n"
 
     def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
-        if case.status.value in ("excluded", "skipped"):
+        if case.skipped or case.masked:
             return
         fh.write("<html>\n")
         fh.write("<body>\n<table>\n")
@@ -79,9 +79,9 @@ class Reporter(_Reporter):
         fh.write("</tr>\n")
         totals: dict[str, list[TestCase]] = {}
         for case in self.data.cases:
-            if case.status == "excluded":
+            if case.masked:
                 continue
-            if case.status == "skipped":
+            if case.skipped:
                 group = "Not Run"
             else:
                 group = case.status.name.title()

@@ -198,5 +198,5 @@ _blacklist = Singleton(Blacklist)
 
 @nvtest.plugin.register(scope="test", stage="discovery")
 def blacklisted(session: Session, case: TestCase, **kwargs: Any) -> None:
-    if not case.excluded and (reason := _blacklist.get(case)) is not None:
-        case.status.set("excluded", reason)
+    if not case.masked and (reason := _blacklist.get(case)) is not None:
+        case.mask = reason

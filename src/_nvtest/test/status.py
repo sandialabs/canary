@@ -11,7 +11,6 @@ from ..util.tty.color import colorize
 class Status:
     members = (
         "pending",
-        "excluded",
         "staged",
         "diffed",
         "skipped",
@@ -20,7 +19,6 @@ class Status:
         "success",
     )
     colors = {
-        "excluded": "c",
         "staged": "b",
         "diffed": "y",
         "skipped": "m",
@@ -35,7 +33,10 @@ class Status:
         self.set(arg, details)
 
     def __str__(self):
-        return self.iid
+        string_repr = self.value
+        if self.details:
+            string_repr += f": {self.details}"
+        return string_repr
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, str):
@@ -92,7 +93,7 @@ class Status:
     def set(self, arg: str, details: Optional[str] = None) -> None:
         if arg not in self.members:
             raise ValueError(f"{arg} is not a valid status")
-        if arg in ("excluded", "skipped"):
+        if arg in ("skipped",):
             if details is None:
                 raise ValueError(f"details for status {arg!r} must be provided")
         if arg in ("pending", "staged"):
