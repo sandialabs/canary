@@ -4,6 +4,7 @@ import re
 from typing import Optional
 
 from . import config
+from . import plugin
 from .test import AbstractTestFile
 from .test import TestCase
 from .util import filesystem as fs
@@ -181,6 +182,11 @@ class Finder:
 
         Finder.resolve_dependencies(cases)
         Finder.check_for_skipped_dependencies(cases)
+
+        for hook in plugin.plugins("test", "discovery"):
+            for case in cases:
+                hook(case)
+
         tty.verbose("Done creating test cases")
         return cases
 

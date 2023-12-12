@@ -34,7 +34,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     try:
         os.chdir(pre.C or invocation_dir)
 
-        load_plugins()
+        load_plugins(pre.plugin_dirs)
         add_commands(parser)
 
         args = parser.parse_args(argv)
@@ -86,12 +86,14 @@ def _profile_wrapper(command, args):
         stats.print_stats(nlines)
 
 
-def load_plugins() -> None:
-    import _nvtest.plugins
-
-    path = _nvtest.plugins.__path__
-    namespace = _nvtest.plugins.__name__
-    plugin.load(path, namespace)
+def load_plugins(dirs: Optional[list[str]] = None) -> None:
+    if dirs is None:
+        return
+    for dir in dirs:
+        if not os.path.exists(dir):
+            tty.die(f"{dir}: plugin directory not found")
+        path = os.path.abspath(dir)
+        plugin.load(path)
 
 
 def console_main() -> int:

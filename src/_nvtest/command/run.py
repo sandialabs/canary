@@ -32,6 +32,30 @@ if TYPE_CHECKING:
 
 
 description = "Run the tests"
+epilog = """\
+The behavior %(run)s is context dependent.
+
+For %(new)s test sessions, the %(pathspec)s argument is scanned for test files to add
+to the session.  %(pathspec)s can be one (or more) of the following types:
+  - directory name:  the directory is recursively searched for test files ending in
+    .vvt or .pyt (specific file extensions are configurable);
+  - json or yaml file: file containing specific paths to tests and/or directories; and
+  - .vvt or .pyt file: specific test files.
+
+For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests to rerun.
+%(pathspec)s can be one (or more) of the following types:
+  - directory name: run test files in this directory and its children;
+  - test id: run this specific test, specified as %(id)s;
+  - test file: run the test defined in this file; and
+  - batch number: run this batch of tests, specified as %(batch_no)s.
+""" % {
+    "run": colorize("@*{nvtest run}"),
+    "new": colorize("@*{new}"),
+    "existing": colorize("@*{existing}"),
+    "pathspec": colorize("@*{pathspec}"),
+    "id": colorize("@*{/ID}"),
+    "batch_no": colorize("@*{^BATCH_NO}"),
+}
 
 
 def setup_parser(parser: "Parser"):
@@ -63,6 +87,25 @@ def setup_parser(parser: "Parser"):
         choices=("setup", "run", "postrun"),
         help="Stage to stop after when testing [default: %(default)s]",
     )
+    parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        default=False,
+        help="Stop after first failed test [default: %(default)s]",
+    )
+    parser.add_argument(
+        "--execute-analysis-sections",
+        action="store_true",
+        default=False,
+        help="Add --execute-analysis-sections to each test invocation, "
+        "allowing tests to re-run analysis sections only [default: %(default)s]",
+    )
+    parser.add_argument(
+        "--copy-all-resources",
+        action="store_true",
+        help="Do not link resources to the test "
+        "directory, only copy [default: %(default)s]",
+    )
     group = parser.add_argument_group("resource control")
     group.add_argument(
         "-N",
@@ -83,25 +126,7 @@ def setup_parser(parser: "Parser"):
         "N workers.  For batched runs, the default is 5.  For direct runs, the "
         "max_workers is determined automatically",
     )
-    parser.add_argument(
-        "--fail-fast",
-        action="store_true",
-        default=False,
-        help="Stop after first failed test [default: %(default)s]",
-    )
-    parser.add_argument(
-        "--execute-analysis-sections",
-        action="store_true",
-        default=False,
-        help="Add --execute-analysis-sections to each test invocation, "
-        "allowing tests to re-run analysis sections only [default: %(default)s]",
-    )
-    parser.add_argument(
-        "--copy-all-resources",
-        action="store_true",
-        help="Do not link resources to the test "
-        "directory, only copy [default: %(default)s]",
-    )
+    group = parser.add_argument_group("batching")
     p1 = group.add_mutually_exclusive_group()
     p1.add_argument(
         "--batch-size",
@@ -140,7 +165,7 @@ def setup_parser(parser: "Parser"):
     )
     parser.add_argument(
         "pathspec",
-        metavar="PATHSPEC",
+        metavar="pathspec",
         nargs="*",
         help="Test file[s] or directories to search",
     )

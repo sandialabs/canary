@@ -25,7 +25,7 @@ def add_mark_arguments(parser: "Parser") -> None:
         "-k",
         dest="keyword_expr",
         default="",
-        metavar="EXPRESSION",
+        metavar="expression",
         help="Only run tests matching given keyword expression. "
         "For example: -k 'key1 and not key2'.",
     )
@@ -33,14 +33,14 @@ def add_mark_arguments(parser: "Parser") -> None:
         "-o",
         dest="on_options",
         default=[],
-        metavar="OPTION",
+        metavar="option",
         action="append",
         help="Turn option(s) on, such as '-o dbg' or '-o intel'",
     )
     group.add_argument(
         "-p",
         dest="parameter_expr",
-        metavar="P",
+        metavar="expression",
         default=None,
         help="Filter tests by parameter name and value, such as '-p np=8' or '-p np<8'",
     )
@@ -57,6 +57,7 @@ def add_work_tree_arguments(parser: "Parser") -> None:
         "-d",
         "--work-tree",
         dest="work_tree",
+        metavar="directory",
         default=None,
         help="Set the path to the working tree. It can be an absolute path or a "
         "path relative to the current working directory. [default: ./TestResults]",

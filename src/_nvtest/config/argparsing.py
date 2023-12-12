@@ -204,9 +204,17 @@ def make_argument_parser(**kwargs):
     parser.add_argument(
         "-C",
         default=None,
-        metavar="PATH",
-        help="Run as if nvtest was started in PATH "
+        metavar="path",
+        help="Run as if nvtest was started in path "
         "instead of the current working directory.",
+    )
+    parser.add_argument(
+        "-p",
+        default=None,
+        dest="plugin_dirs",
+        action="append",
+        metavar="directory",
+        help="Search directories for nvtest plugins.",
     )
     group = parser.add_argument_group("console reporting")
     group.add_argument(
@@ -230,7 +238,6 @@ def make_argument_parser(**kwargs):
     )
     group = parser.add_argument_group("profiling")
     group.add_argument(
-        "-p",
         "--profile",
         action="store_true",
         dest="nvtest_profile",
@@ -240,7 +247,7 @@ def make_argument_parser(**kwargs):
     group.add_argument(
         "--sorted-profile",
         default=None,
-        metavar="STAT",
+        metavar="stat",
         help="profile and sort by one or more of:\n[%s]"
         % ",\n ".join([", ".join(line) for line in stat_lines]),
     )
@@ -255,7 +262,7 @@ def make_argument_parser(**kwargs):
         "-c",
         dest="config_mods",
         action="append",
-        metavar="PATH",
+        metavar="path",
         default=[],
         help="Colon-separated path to config that should be "
         "added to the testing environment, e.g. 'config:debug:true'",
@@ -263,11 +270,11 @@ def make_argument_parser(**kwargs):
     group.add_argument(
         "-e",
         dest="env_mods",
-        metavar="ENVAR",
+        metavar="var=val",
         default={},
         action=EnvironmentModification,
         help="Environment variables that should be added to "
-        "the testing environment, e.g. 'NAME=VAL'",
+        "the testing environment, e.g. 'var=val'",
     )
 
     return parser

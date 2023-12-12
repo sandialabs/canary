@@ -1,4 +1,7 @@
 import functools
+import glob
+import os
+import sys
 from typing import Any
 from typing import Callable
 from typing import Generator
@@ -46,14 +49,59 @@ class Manager:
                     return hook
         return None
 
-    def load(self, path: list[str], namespace: str) -> None:
-        import importlib
-        import pkgutil
+    def load(self, path: str) -> None:
+        for file in glob.glob(os.path.join(path, "nvtest_*.py")):
+            basename = os.path.splitext(os.path.basename(file))[0]
+            name = f"nvtest.plugins.{basename}"
+            # importing the module will load the plugins
+            load_module_from_file(name, file)
 
-        for finder, name, ispkg in pkgutil.iter_modules(path, namespace + "."):
-            if name.startswith(f"{namespace}.nvtest_"):
-                # importing the module will load the plugins
-                importlib.import_module(name)
+
+def load_module_from_file(module_name: str, module_path: str):
+    """Loads a python module from the path of the corresponding file.
+
+    If the module is already in ``sys.modules`` it will be returned as
+    is and not reloaded.
+
+    Args:
+        module_name (str): namespace where the python module will be loaded,
+            e.g. ``foo.bar``
+        module_path (str): path of the python file containing the module
+
+    Returns:
+        A valid module object
+
+    Raises:
+        ImportError: when the module can't be loaded
+        FileNotFoundError: when module_path doesn't exist
+    """
+    import importlib.util
+
+    if module_name in sys.modules:
+        return sys.modules[module_name]
+
+    # This recipe is adapted from https://stackoverflow.com/a/67692/771663
+
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None:
+        raise ValueError(f"Could not find spec for plugin {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    if spec is None:
+        raise ImportError(module_name)
+    # The module object needs to exist in sys.modules before the
+    # loader executes the module code.
+    #
+    # See https://docs.python.org/3/reference/import.html#loading
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)  # type: ignore
+    except BaseException:
+        try:
+            del sys.modules[spec.name]
+        except KeyError:
+            pass
+        raise
+    return module
 
 
 _manager = Singleton(Manager)
@@ -82,5 +130,5 @@ def register(*, scope: str, stage: str):
     return decorator
 
 
-def load(path: list[str], namespace: str) -> None:
-    _manager.load(path, namespace)
+def load(path: str) -> None:
+    _manager.load(path)

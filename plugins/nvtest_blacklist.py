@@ -10,7 +10,6 @@ from typing import Any
 from typing import Union
 
 import nvtest
-from _nvtest.session import Session
 from _nvtest.test import TestCase
 from _nvtest.util import tty
 from _nvtest.util.executable import Executable
@@ -197,6 +196,6 @@ _blacklist = Singleton(Blacklist)
 
 
 @nvtest.plugin.register(scope="test", stage="discovery")
-def blacklisted(session: Session, case: TestCase, **kwargs: Any) -> None:
+def blacklisted(case: TestCase, **kwargs: Any) -> None:
     if not case.masked and (reason := _blacklist.get(case)) is not None:
         case.mask = reason

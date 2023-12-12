@@ -171,10 +171,6 @@ class Session:
             parameter_expr=parameter_expr,
         )
 
-        for hook in plugin.plugins("test", "discovery"):
-            for case in self.cases:
-                hook(self, case)
-
         cases_to_run = [case for case in self.cases if not case.masked]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
@@ -410,7 +406,7 @@ class Session:
                 with working_dir(case.exec_dir):
                     for hook in plugin.plugins("test", "teardown"):
                         tty.debug(f"Calling the {hook.specname} plugin")
-                        hook(self, case)
+                        hook(case)
                 with working_dir(self.work_tree):
                     case.teardown()
         for hook in plugin.plugins("session", "teardown"):
@@ -460,7 +456,7 @@ class Session:
                         case.dump()
                         with working_dir(case.exec_dir):
                             for hook in plugin.plugins("test", "setup"):
-                                hook(self, case)
+                                hook(case)
                     ts.done(*group)
 
     def process_testcases(
