@@ -109,7 +109,7 @@ class AbstractTestFile:
         self._enable: list[FilterNamespace] = []
         self._preload: list[FilterNamespace] = []
         self._depends_on: list[FilterNamespace] = []
-        self.skip: Optional[str] = None
+        self.skipif_reason: Optional[str] = None
 
         self.load()
 
@@ -166,29 +166,29 @@ class AbstractTestFile:
     ) -> list[TestCase]:
         cpu_count = cpu_count or rprobe.cpu_count()
         testcases: list[TestCase] = []
-        keyword_expr = keyword_expr or "staged"
         names = ", ".join(self.names())
         tty.verbose(
             f"Generating test cases for {self} using the following test names: {names}"
         )
         for name in self.names():
-            skip = self.skip
+            mask = self.skipif_reason
             enabled, reason = self.enable(testname=name, on_options=on_options)
-            if not enabled and skip is None:
-                skip = f"deselected due to {reason}"
+            if not enabled and mask is None:
+                mask = f"deselected due to {reason}"
                 tty.verbose(f"{self}::{name} has been disabled")
             cases: list[TestCase] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
                 keywords = self.keywords(testname=name, parameters=parameters)
-                if skip is None and keyword_expr:
+                if mask is None and keyword_expr is not None:
                     kwds = {kw for kw in keywords}
                     kwds.add(name)
                     kwds.update(parameters.keys())
-                    kw_skip = deselect_by_keyword(kwds, keyword_expr)
-                    if kw_skip:
+                    kwds.update({"staged"})
+                    kw_mask = deselect_by_keyword(kwds, keyword_expr)
+                    if kw_mask:
                         tty.verbose(f"Skipping {self}::{name}")
-                        skip = colorize("deselected by @*b{keyword expression}")
+                        mask = colorize("deselected by @*b{keyword expression}")
 
                 np = parameters.get("np")
                 if not isinstance(np, int) and np is not None:
@@ -196,15 +196,15 @@ class AbstractTestFile:
                     raise ValueError(
                         f"{self.name}: expected np={np} to be an int, not {class_name}"
                     )
-                if skip is None and np and np > cpu_count:
+                if mask is None and np and np > cpu_count:
                     s = "deselected due to @*b{exceeding cpu count of machine}"
-                    skip = colorize(s)
-                if skip is None and ("TDD" in keywords or "tdd" in keywords):
-                    skip = colorize("deselected due to @*b{TDD keyword}")
-                if skip is None and parameter_expr:
-                    param_skip = deselect_by_parameter(parameters, parameter_expr)
-                    if param_skip:
-                        skip = colorize("deselected due to @*b{parameter expression}")
+                    mask = colorize(s)
+                if mask is None and ("TDD" in keywords or "tdd" in keywords):
+                    mask = colorize("deselected due to @*b{TDD keyword}")
+                if mask is None and parameter_expr:
+                    param_mask = deselect_by_parameter(parameters, parameter_expr)
+                    if param_mask:
+                        mask = colorize("deselected due to @*b{parameter expression}")
 
                 case = TestCase(
                     self.root,
@@ -216,16 +216,16 @@ class AbstractTestFile:
                     baseline=self.baseline(testname=name, parameters=parameters),
                     sources=self.sources(testname=name, parameters=parameters),
                 )
-                if skip is not None:
-                    case.mask = skip
+                if mask is not None:
+                    case.mask = mask
                 cases.append(case)
 
             analyze = self.analyze(testname=name, on_options=on_options)
             if analyze:
                 # add previous cases as dependencies
-                skip_analyze_case: Optional[str] = None
+                mask_analyze_case: Optional[str] = None
                 if all(case.masked for case in cases):
-                    skip_analyze_case = "deselected due to skipped dependencies"
+                    mask_analyze_case = "deselected due to skipped dependencies"
                 parent = TestCase(
                     self.root,
                     self.path,
@@ -236,8 +236,8 @@ class AbstractTestFile:
                     baseline=self.baseline(testname=name),
                     sources=self.sources(testname=name),
                 )
-                if skip_analyze_case is not None:
-                    parent.mask = skip_analyze_case
+                if mask_analyze_case is not None:
+                    parent.mask = mask_analyze_case
                 for case in cases:
                     parent.add_dependency(case)
                 cases.append(parent)
@@ -261,10 +261,10 @@ class AbstractTestFile:
                     if i != k and fnmatch.fnmatchcase(name, pat)
                 ]
                 if matches:
-                    case.dep_patterns[j] = "==None=="
+                    case.dep_patterns[j] = "null"
                     for match in matches:
                         case.add_dependency(match)
-            case.dep_patterns = [_ for _ in case.dep_patterns if _ != "==None=="]
+            case.dep_patterns = [_ for _ in case.dep_patterns if _ != "null"]
 
     # -------------------------------------------------------------------------------- #
 
@@ -704,7 +704,7 @@ class AbstractTestFile:
 
     def m_skipif(self, arg: bool, *, reason: str) -> None:
         if arg:
-            self.skip = reason
+            self.skipif_reason = reason
 
     def m_enable(
         self,

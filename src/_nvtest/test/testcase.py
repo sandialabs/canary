@@ -163,7 +163,7 @@ class TestCase:
     def keywords(self, implicit: bool = False) -> list[str]:
         kwds = {kw for kw in self._keywords}
         if implicit:
-            kwds.add(self.status.name)
+            kwds.add(self.status.name.lower())
             kwds.add(self.name)
             kwds.add(self.family)
             kwds.update(self.parameters.keys())
