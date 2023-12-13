@@ -333,14 +333,20 @@ def _parse_in_session_pathspec(args: argparse.Namespace) -> None:
         args.start = os.path.relpath(path, args.work_tree)
         if os.path.isfile(path):
             if finder.is_test_file(path):
-                args.keyword_expr = os.path.splitext(os.path.basename(path))[0]
+                name = os.path.splitext(os.path.basename(path))[0]
+                if args.keyword_expr:
+                    args.keyword_expr += f" and {name}"
+                else:
+                    args.keyword_expr = name
             else:
                 tty.die(f"{path}: unrecognized file extension")
-        else:
+        elif not args.keyword_expr:
+            kwds: list[str] = []
             for f in os.listdir(path):
                 if finder.is_test_file(f):
-                    args.keyword_expr = os.path.splitext(os.path.basename(f[0]))[0]
-                    break
+                    name = os.path.splitext(os.path.basename(f))[0]
+                    kwds.append(name)
+            args.keyword_expr = " and ".join(kwds)
     return
 
 
