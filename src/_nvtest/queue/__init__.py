@@ -4,7 +4,6 @@ from typing import Union
 from .. import config
 from ..test.partition import Partition
 from ..test.testcase import TestCase
-from ..third_party import rprobe
 from ..util import tty
 from .base import Queue
 from .batch import BatchQueue
