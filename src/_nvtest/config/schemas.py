@@ -53,6 +53,8 @@ build_schema = Schema(
             Optional("project"): str,
             Optional("type"): str,
             Optional("date"): str,
+            Optional("build_directory"): str,
+            Optional("source_directory"): str,
             Optional("compiler"): {
                 Optional("vendor"): str,
                 Optional("version"): str,
