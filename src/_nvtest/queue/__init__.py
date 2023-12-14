@@ -14,6 +14,7 @@ def factory(
     items: Union[list[TestCase], list[Partition]],
     workers: int = 5,
     cpu_count: Optional[int] = None,
+    device_count: Optional[int] = None,
 ) -> Queue:
     tty.verbose("Setting up a test case queue")
     cpus: int = cpu_count or rprobe.cpu_count()

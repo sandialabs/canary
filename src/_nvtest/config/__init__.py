@@ -15,7 +15,7 @@ from ..util.misc import ns2dict
 from ..util.schema import Schema
 from ..util.schema import SchemaError
 from ..util.singleton import Singleton
-from .machine import machine_config
+from . import machine
 from .schemas import any_schema
 from .schemas import build_schema
 from .schemas import config_schema
@@ -52,11 +52,9 @@ class Config:
     """Access to configuration values"""
 
     def __init__(self) -> None:
-        machine = machine_config()
+        static_machine_config = machine.machine_config()
         editable_machine_config = {
-            "cpu_count": machine.pop("cpu_count"),
-            "cores_per_socket": machine.pop("cores_per_socket"),
-            "sockets_per_node": machine.pop("sockets_per_node"),
+            key: static_machine_config.pop(key) for key in machine.editable_properties
         }
         self.scopes = {
             "defaults": {
@@ -66,7 +64,7 @@ class Config:
                     "test_files": r"^[a-zA-Z_]\w*\.(vvt|pyt)$",
                 },
                 "machine": editable_machine_config,
-                "system": machine,
+                "system": static_machine_config,
                 "variables": {},
                 "python": {
                     "executable": sys.executable,

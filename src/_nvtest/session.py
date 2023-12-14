@@ -84,6 +84,7 @@ class Session:
     startdir: str
     exitstatus: int
     max_cores_per_test: int
+    max_devices_per_test: int
     max_workers: int
     search_paths: dict[str, list[str]]
     batch_config: BatchConfig
@@ -109,6 +110,7 @@ class Session:
         work_tree: str,
         search_paths: dict[str, list[str]],
         max_cores_per_test: Optional[int] = None,
+        max_devices_per_test: Optional[int] = None,
         max_workers: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
@@ -123,6 +125,9 @@ class Session:
 
         self.exitstatus = -1
         self.max_cores_per_test = max_cores_per_test or config.get("machine:cpu_count")
+        self.max_devices_per_test = max_devices_per_test or config.get(
+            "machine:device_count"
+        )
         if max_workers is None:
             max_workers = 5 if batch_config else self.max_cores_per_test
         self.max_workers = max_workers
@@ -140,6 +145,7 @@ class Session:
             work_tree,
             search_paths=self.search_paths,
             max_cores_per_test=self.max_cores_per_test,
+            max_devices_per_test=self.max_devices_per_test,
             max_workers=self.max_workers,
             keyword_expr=keyword_expr,
             on_options=on_options,
@@ -158,6 +164,7 @@ class Session:
         tty.debug(
             "Freezing test files with the following options: ",
             f"{max_cores_per_test=}",
+            f"{max_devices_per_test=}",
             f"{on_options=}",
             f"{keyword_expr=}",
             f"{parameter_expr=}",
@@ -166,6 +173,7 @@ class Session:
         self.cases = Finder.freeze(
             tree,
             cpu_count=self.max_cores_per_test,
+            device_count=self.max_devices_per_test,
             on_options=on_options,
             keyword_expr=keyword_expr,
             parameter_expr=parameter_expr,
@@ -196,7 +204,10 @@ class Session:
             work_items = cases_to_run
 
         self.queue = q_factory(
-            work_items, workers=self.max_workers, cpu_count=self.max_cores_per_test
+            work_items,
+            workers=self.max_workers,
+            cpu_count=self.max_cores_per_test,
+            device_count=self.max_devices_per_test,
         )
 
         if batch_config:
@@ -253,7 +264,10 @@ class Session:
                 case.mask = f"case is not in batch {batch_no}"
         cases = [case for case in self.cases if case.status == "staged"]
         self.queue = q_factory(
-            cases, workers=self.max_workers, cpu_count=self.max_cores_per_test
+            cases,
+            workers=self.max_workers,
+            cpu_count=self.max_cores_per_test,
+            device_count=self.max_devices_per_test,
         )
         return self
 
@@ -330,6 +344,7 @@ class Session:
         parameter_expr: Optional[str] = None,
         start: Optional[str] = None,
         max_cores_per_test: Optional[int] = None,
+        max_devices_per_test: Optional[int] = None,
         case_specs: Optional[list[str]] = None,
     ) -> None:
         if not self.cases:
@@ -354,7 +369,9 @@ class Session:
             if case.status != "staged":
                 s = f"deselected due to previous test status: {case.status.cname}"
                 case.mask = s
-                if max_cores_per_test and case.size > max_cores_per_test:
+                if max_cores_per_test and case.cpu_count > max_cores_per_test:
+                    continue
+                if max_devices_per_test and case.device_count > max_devices_per_test:
                     continue
                 if parameter_expr:
                     param_skip = deselect_by_parameter(case.parameters, parameter_expr)
@@ -370,7 +387,10 @@ class Session:
         if not cases:
             raise EmptySession()
         self.queue = q_factory(
-            cases, workers=self.max_workers, cpu_count=max_cores_per_test
+            cases,
+            workers=self.max_workers,
+            cpu_count=max_cores_per_test,
+            device_count=max_devices_per_test,
         )
 
     def run(

@@ -182,7 +182,7 @@ class Reporter(_Reporter):
                 add_measurement(results, name="Fail Reason", value=fail_reason)
             add_measurement(results, name="Completion Status", value=completion_status)
             add_measurement(results, name="Command Line", cdata=case.cmd_line)
-            add_measurement(results, name="Processors", value=int(case.size or 0))
+            add_measurement(results, name="Processors", value=int(case.cpu_count or 0))
             add_measurement(
                 results,
                 value=case.compressed_log(),

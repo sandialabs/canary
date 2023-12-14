@@ -36,6 +36,8 @@ machine_schema = Schema(
             Optional("sockets_per_node"): int,
             Optional("cores_per_socket"): int,
             Optional("cpu_count"): int,
+            Optional("device_count"): int,
+            Optional("devices_per_node"): int,
         },
     }
 )

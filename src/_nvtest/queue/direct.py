@@ -9,9 +9,10 @@ class DirectQueue(Queue):
         for case in self.work_items:
             if case.skipped:
                 continue
-            if case.size > self.cpus:
+            if case.cpu_count > self.cpus:
                 raise ValueError(
-                    f"{case!r}: size ({case.size}) exceeds max cpu count ({self.cpus})"
+                    f"{case!r}: required cpus ({case.cpu_count}) "
+                    f"exceeds max cpu count ({self.cpus})"
                 )
 
     def create_queue(self, work_items: list[TestCase]) -> dict[int, TestCase]:

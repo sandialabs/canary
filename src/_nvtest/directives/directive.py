@@ -51,6 +51,21 @@ class Directive:
             "np", list(values), options=options, platforms=platforms, testname=testname
         )
 
+    def devices(
+        self,
+        *values: int,
+        options: Optional[str] = None,
+        platforms: Optional[str] = None,
+        testname: Optional[str] = None,
+    ) -> None:
+        self.testfile.m_parameterize(
+            "ndevice",
+            list(values),
+            options=options,
+            platforms=platforms,
+            testname=testname,
+        )
+
     def depends_on(
         self,
         arg: str,

@@ -77,7 +77,7 @@ class Queue:
 
     @property
     def _avail_cpus(self):
-        return self.cpus - sum(case.size for case in self._running.values())
+        return self.cpus - sum(case.cpu_count for case in self._running.values())
 
     @property
     def size(self):
@@ -120,7 +120,7 @@ class Queue:
                         # job is orphaned and will never be ready
                         self.mark_as_orphaned(id)
                         continue
-                    elif avail_workers and item.size <= avail_cpus and i_ready:
+                    elif avail_workers and item.cpu_count <= avail_cpus and i_ready:
                         self._running[id] = self.queue.pop(id)
                         return id, item
             time.sleep(lock_wait_time)

@@ -10,6 +10,7 @@ from typing import Union
 
 import _nvtest.directives.enums as d_enums
 
+from .. import config
 from ..compat.vvtest import load_vvt
 from ..directives.match import deselect_by_keyword
 from ..directives.match import deselect_by_name
@@ -17,7 +18,6 @@ from ..directives.match import deselect_by_option
 from ..directives.match import deselect_by_parameter
 from ..directives.match import deselect_by_platform
 from ..directives.parameter_set import ParameterSet
-from ..third_party import rprobe
 from ..util import tty
 from ..util.filesystem import working_dir
 from ..util.time import time_in_seconds
@@ -141,6 +141,7 @@ class AbstractTestFile:
     def freeze(
         self,
         cpu_count: Optional[int] = None,
+        device_count: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -148,6 +149,7 @@ class AbstractTestFile:
         try:
             return self._freeze(
                 cpu_count=cpu_count,
+                device_count=device_count,
                 keyword_expr=keyword_expr,
                 on_options=on_options,
                 parameter_expr=parameter_expr,
@@ -160,11 +162,13 @@ class AbstractTestFile:
     def _freeze(
         self,
         cpu_count: Optional[int] = None,
+        device_count: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
     ) -> list[TestCase]:
-        cpu_count = cpu_count or rprobe.cpu_count()
+        cpu_count = cpu_count or config.get("machine:cpu_count")
+        device_count = device_count or config.get("machine:device_count")
         testcases: list[TestCase] = []
         names = ", ".join(self.names())
         tty.verbose(
@@ -196,8 +200,18 @@ class AbstractTestFile:
                     raise ValueError(
                         f"{self.name}: expected np={np} to be an int, not {class_name}"
                     )
+                nd = parameters.get("ndevice")
+                if not isinstance(nd, int) and nd is not None:
+                    class_name = nd.__class__.__name__
+                    raise ValueError(
+                        f"{self.name}: expected ndevice={nd} "
+                        f"to be an int, not {class_name}"
+                    )
                 if mask is None and np and np > cpu_count:
                     s = "deselected due to @*b{exceeding cpu count of machine}"
+                    mask = colorize(s)
+                if mask is None and nd and nd > device_count:
+                    s = "deselected due to @*b{exceeding device count of machine}"
                     mask = colorize(s)
                 if mask is None and ("TDD" in keywords or "tdd" in keywords):
                     mask = colorize("deselected due to @*b{TDD keyword}")

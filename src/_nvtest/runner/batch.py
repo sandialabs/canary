@@ -108,7 +108,7 @@ class BatchRunner(Runner):
         return f
 
     def max_tasks_required(self, batch: Partition) -> int:
-        return max([case.size for case in batch])
+        return max([case.cpu_count for case in batch])
 
     def load_batch_results(self, batch: Partition):
         """Load the results for cases in this batch

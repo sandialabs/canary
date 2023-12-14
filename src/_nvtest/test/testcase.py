@@ -221,8 +221,12 @@ class TestCase:
         return 0
 
     @property
-    def size(self) -> int:
+    def cpu_count(self) -> int:
         return int(self.parameters.get("np") or 1)  # type: ignore
+
+    @property
+    def device_count(self) -> int:
+        return int(self.parameters.get("ndevice") or 0)  # type: ignore
 
     @property
     def runtime(self) -> Union[float, int]:

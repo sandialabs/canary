@@ -9,7 +9,13 @@ from ..util.filesystem import which
 from . import linux
 from . import macos
 
-editable_properties = ("sockets_per_node", "cores_per_socket", "cpu_count")
+editable_properties = (
+    "sockets_per_node",
+    "cores_per_socket",
+    "cpu_count",
+    "device_count",
+    "devices_per_socket",
+)
 
 
 def machine_config() -> dict:
@@ -51,6 +57,8 @@ def machine_config() -> dict:
         sockets_per_node=ns["sockets_per_node"],
         cores_per_socket=ns["cores_per_socket"],
         cpu_count=ns["cpu_count"],
+        device_count=0,
+        devices_per_socket=0,
         os=os_config,
     )
     return config
