@@ -7,7 +7,6 @@ from typing import Generator
 from typing import Optional
 from typing import Union
 
-from .. import config
 from ..test.partition import Partition
 from ..test.testcase import TestCase
 from ..util import keyboard
@@ -18,10 +17,11 @@ lock_wait_time = 0.00001
 
 
 class Queue:
-    def __init__(self, cpus: int, workers: int, work_items: Any) -> None:
+    def __init__(self, cpus: int, workers: int, devices: int, work_items: Any) -> None:
         self.work_items = work_items
-        self.workers: int = workers or config.get("machine:cpu_count") or 1
+        self.workers = workers
         self.cpus = cpus
+        self.devices = devices
         self.validate()
         self.queue = self.create_queue(work_items)
         self._running: dict[int, Any] = {}
@@ -80,6 +80,14 @@ class Queue:
         return self.cpus - sum(case.cpu_count for case in self._running.values())
 
     @property
+    def _avail_devices(self):
+        return self.devices - sum(case.device_count for case in self._running.values())
+
+    @property
+    def avail_resources(self):
+        return (self._avail_cpus, self._avail_devices)
+
+    @property
     def size(self):
         return len(self.queue)
 
@@ -114,15 +122,15 @@ class Queue:
                 item = self.queue[id]
                 with self.lock():
                     avail_workers = self._avail_workers
-                    avail_cpus = self._avail_cpus
-                    i_ready = item.ready()
-                    if i_ready < 0:
+                    job_is_ready = item.ready()
+                    if job_is_ready < 0:
                         # job is orphaned and will never be ready
                         self.mark_as_orphaned(id)
                         continue
-                    elif avail_workers and item.cpu_count <= avail_cpus and i_ready:
-                        self._running[id] = self.queue.pop(id)
-                        return id, item
+                    elif avail_workers and job_is_ready:
+                        if (item.cpu_count, item.device_count) <= self.avail_resources:
+                            self._running[id] = self.queue.pop(id)
+                            return id, item
             time.sleep(lock_wait_time)
 
     def print_status(self):
