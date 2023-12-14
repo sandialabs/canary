@@ -35,6 +35,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         os.chdir(pre.C or invocation_dir)
 
         load_plugins(pre.plugin_dirs)
+        for hook in plugin.plugins("main", "setup"):
+            hook(parser)
+
         add_commands(parser)
 
         args = parser.parse_args(argv)

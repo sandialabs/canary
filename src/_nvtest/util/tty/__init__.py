@@ -335,3 +335,27 @@ def restore(fd=sys.stdin.fileno()):
         termios.tcsetattr(fd, termios.TCSAFLUSH, save_tty_attr)
     else:
         yield
+
+
+class tee:
+    def __init__(self):
+        self.fh = None
+
+    def open(self, filename):
+        self.fh = open(filename, "w")
+
+    def write(self, *args):
+        if self.fh is None:
+            raise Exception("tee being written to without being initialized")
+        line = " ".join(str(_) for _ in args)
+        self.fh.write(line + "\n")
+        sys.stdout.write(line + "\n")
+
+    def flush(self):
+        if self.fh is not None:
+            self.fh.flush()
+
+    def close(self):
+        if self.fh is not None:
+            self.fh.close()
+        self.fh = None

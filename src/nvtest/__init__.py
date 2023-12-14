@@ -1,5 +1,6 @@
 import _nvtest.plugin as plugin
-from _nvtest.config import Config
+from _nvtest import diffutils
+from _nvtest import config
 from _nvtest.config.argparsing import Parser
 from _nvtest.directives import enums
 from _nvtest.error import TestDiffed

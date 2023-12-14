@@ -20,7 +20,7 @@ def boolean(arg):
 def ns2dict(arg: Union[Namespace, SimpleNamespace]) -> dict:
     value: dict[str, Any] = dict(vars(arg))
     for name, item in value.items():
-        if isinstance(item, SimpleNamespace):
+        if isinstance(item, (SimpleNamespace, Namespace)):
             value[name] = ns2dict(item)
     return value
 

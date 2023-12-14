@@ -2,6 +2,7 @@ import functools
 import glob
 import os
 import sys
+from argparse import Namespace
 from typing import Any
 from typing import Callable
 from typing import Generator
@@ -14,13 +15,23 @@ from .util.singleton import Singleton
 class Manager:
     def __init__(self) -> None:
         self._plugins: dict[str, dict[str, list[Callable]]] = {}
+        self._args: Optional[Namespace] = None
+
+    @property
+    def args(self) -> Namespace:
+        if self._args is None:
+            return Namespace()
+        return self._args
+
+    def set_args(self, arg: Namespace) -> None:
+        self._args = arg
 
     def register(self, func: Callable, scope: str, stage: str) -> None:
         name = func.__name__
         tty.verbose(f"Registering plugin {name}::{scope}::{stage}")
         err_msg = f"register() got unexpected stage '{scope}::{stage}'"
-        if scope == "argparse":
-            if stage not in ("add_command", "add_argument"):
+        if scope == "main":
+            if stage not in ("setup",):
                 raise TypeError(err_msg)
         elif scope == "session":
             if stage not in ("setup", "teardown"):
@@ -105,6 +116,10 @@ def load_module_from_file(module_name: str, module_path: str):
 
 
 _manager = Singleton(Manager)
+
+
+def set_args(args: Namespace) -> None:
+    _manager.set_args(args)
 
 
 def plugins(scope: str, stage: str) -> Generator[Callable, None, None]:

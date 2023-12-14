@@ -6,7 +6,6 @@ try:
 except ImportError:
     yaml = None
 
-from typing import Any
 from typing import Union
 
 import nvtest
@@ -178,11 +177,12 @@ def evaluate_boolean_expression(expression):
     import sys  # noqa
 
     # Variables exist so they can be used in evaluation
-    compiler_vendor = compiler_version = None
-    compiler_spec = None
-    if compiler_spec:
-        compiler_vendor, compiler_version = compiler_spec.split("@")
-    build_type = None  # noqa: F841
+    compiler_vendor = compiler_version = None  # noqa: F841
+    compiler = nvtest.config.get("build:compiler")
+    if compiler:
+        compiler_vendor = nvtest.config.get("build:compiler:vendor")
+        compiler_version = nvtest.config.get("build:compiler:version")
+    build_type = nvtest.config.get("build:type")  # noqa: F841
     snlsystem = os.getenv("SNLSYSTEM")  # noqa: F841
     try:
         result = eval(expression)
@@ -195,7 +195,19 @@ def evaluate_boolean_expression(expression):
 _blacklist = Singleton(Blacklist)
 
 
+@nvtest.plugin.register(scope="main", stage="setup")
+def blacklisted_parser(parser: nvtest.Parser) -> None:
+    parser.add_plugin_argument(
+        "--blacklist",
+        action="store_true",
+        default=False,
+        help="Apply blacklist during test discovery",
+    )
+
+
 @nvtest.plugin.register(scope="test", stage="discovery")
-def blacklisted(case: TestCase, **kwargs: Any) -> None:
+def blacklisted(case: TestCase) -> None:
+    if not nvtest.config.get("option:blacklist"):
+        return
     if not case.masked and (reason := _blacklist.get(case)) is not None:
         case.mask = reason

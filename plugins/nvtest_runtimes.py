@@ -70,7 +70,19 @@ class Runtimes:
 _runtimes = Singleton(Runtimes)
 
 
+@nvtest.plugin.register(scope="main", stage="setup")
+def runtime_parser(parser: nvtest.Parser) -> None:
+    parser.add_plugin_argument(
+        "--runtimes",
+        action="store_true",
+        default=False,
+        help="Apply test case runtimes at test discovery",
+    )
+
+
 @nvtest.plugin.register(scope="test", stage="discovery")
 def runtime(case: "TestCase", on_options: Optional[list[str]] = []) -> None:
+    if not nvtest.config.get("option:runtimes"):
+        return
     if not case.masked and (rt := _runtimes.get(case, options=on_options)) is not None:
         case.runtime = rt

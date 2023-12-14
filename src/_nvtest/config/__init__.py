@@ -11,6 +11,7 @@ from typing import TextIO
 from typing import Union
 
 from ..util import tty
+from ..util.misc import ns2dict
 from ..util.schema import Schema
 from ..util.schema import SchemaError
 from ..util.singleton import Singleton
@@ -137,6 +138,7 @@ class Config:
             scope_data.setdefault("variables", {})[var] = val
         for path in args.config_mods:
             self.add(path, scope="command_line")
+        self.scopes["command_line"]["option"] = ns2dict(args)
 
     def merge(self, skip_scopes: Optional[list[str]] = None) -> dict:
         scopes = list(self.scopes.keys())
