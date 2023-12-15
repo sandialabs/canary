@@ -283,13 +283,14 @@ class Session:
             value = config.get(f"machine:{attr}", scope="local")
             if value is not None:
                 config.set(f"machine:{attr}", value, scope="session")
-        for section in ("config", "variables", "build"):
+        for section in ("build", "config", "machine", "option", "variables"):
+            # transfer options to the session scope and save it for future sessions
             data = config.get(section, scope="local") or {}
             for key, value in data.items():
                 config.set(f"{section}:{key}", value, scope="session")
-        dotdir = os.path.join(work_tree, config.config_dir)
-        mkdirp(dotdir)
-        with open(os.path.join(dotdir, "config"), "w") as fh:
+        file = os.path.join(work_tree, config.config_dir, "config")
+        mkdirp(os.path.dirname(file))
+        with open(file, "w") as fh:
             config.dump(fh, scope="session")
 
     @cached_property

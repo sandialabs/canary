@@ -1,12 +1,8 @@
 import pytest
 
-from _nvtest.config import Config
+import _nvtest.config
 
 
-@pytest.fixture(scope="function", autouse=False)
+@pytest.fixture(scope="function", autouse=True)
 def config():
-    def _config(args, dir):
-        ip = Config.InvocationParams(args=args, dir=dir)
-        return Config(invocation_params=ip)
-
-    return _config
+    _nvtest.config.config = _nvtest.config.Config()

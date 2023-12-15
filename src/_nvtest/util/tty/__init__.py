@@ -328,7 +328,8 @@ def log_output(file_like, mode="w"):
 
 
 @contextmanager
-def restore(fd=sys.stdin.fileno()):
+def restore(fd=None):
+    fd = fd or sys.stdin.fileno()
     if os.isatty(fd):
         save_tty_attr = termios.tcgetattr(fd)
         yield

@@ -40,6 +40,7 @@ section_schemas: dict[str, Schema] = {
     "variables": variables_schema,
     "session": any_schema,
     "system": any_schema,
+    "option": any_schema,
 }
 
 read_only_sections = ("python",)

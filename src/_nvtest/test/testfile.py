@@ -180,6 +180,7 @@ class AbstractTestFile:
             if not enabled and mask is None:
                 mask = f"deselected due to {reason}"
                 tty.verbose(f"{self}::{name} has been disabled")
+            print(mask)
             cases: list[TestCase] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
@@ -308,8 +309,8 @@ class AbstractTestFile:
                     continue
             if ns.platform_expr is not None and deselect_by_platform(ns.platform_expr):
                 continue
-            if ns.option_expr is not None and on_options:
-                if deselect_by_option(set(on_options), ns.option_expr):
+            if ns.option_expr is not None:
+                if deselect_by_option(set(on_options or []), ns.option_expr):
                     continue
             paramsets.append(ns.value)
         return paramsets
@@ -368,6 +369,8 @@ class AbstractTestFile:
                 if deselect_by_name({testname}, ns.testname_expr):
                     # the "enable" does not apply to this test name
                     continue
+                elif ns.value is False:
+                    return False, "disabled by test name"
             if not ns.platform_expr and not ns.option_expr:
                 if ns.value is False:
                     return False, "disabled"
