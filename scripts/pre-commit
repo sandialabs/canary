@@ -8,12 +8,15 @@ cd ${ROOT_DIR}
 
 echo "Formatting imports with isort"
 isort ${DIR}
+isort ./plugins
 
 echo "Formatting code with black"
 black ${DIR}
+black ./plugins
 
 echo "Linting with flake8"
 flake8 ${DIR}
+flake8 ./plugins
 
 echo "Type checking with mypy"
 mypy ${DIR}

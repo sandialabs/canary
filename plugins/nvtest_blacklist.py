@@ -180,8 +180,8 @@ def evaluate_boolean_expression(expression):
     compiler_vendor = compiler_version = None  # noqa: F841
     compiler = nvtest.config.get("build:compiler")
     if compiler:
-        compiler_vendor = nvtest.config.get("build:compiler:vendor")
-        compiler_version = nvtest.config.get("build:compiler:version")
+        compiler_vendor = nvtest.config.get("build:compiler:vendor")  # noqa: F841
+        compiler_version = nvtest.config.get("build:compiler:version")  # noqa: F841
     build_type = nvtest.config.get("build:type")  # noqa: F841
     snlsystem = os.getenv("SNLSYSTEM")  # noqa: F841
     try:
