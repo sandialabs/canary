@@ -16,7 +16,7 @@ class BatchQueue(Queue):
         queue: dict[int, Partition] = {}
         n = len(work_items)
         for i, cases in enumerate(work_items):
-            cases_to_run = [case for case in cases if not case.skip]
+            cases_to_run = [case for case in cases if not case.masked]
             if not cases_to_run:
                 continue
             queue[i] = Partition(cases_to_run, i, n)

@@ -63,5 +63,6 @@ class SlurmRunner(BatchRunner, _Slurm):
                 fh.write(f"#SBATCH {self.fmt_option_string(key):<19} {value}\n")
 
     def run(self, batch: Partition, **kwds: Any) -> dict[str, dict]:
+        self.max_workers = len(batch)
         self.calculate_resource_allocations(batch)
         return super().run(batch, **kwds)

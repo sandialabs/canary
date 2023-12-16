@@ -141,7 +141,7 @@ class Reporter(_Reporter):
         for case in self.data:
             exit_value = case.returncode
             fail_reason = None
-            if case.skipped or case.status == "staged":
+            if case.masked or case.status == "staged":
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"

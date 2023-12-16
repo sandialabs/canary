@@ -13,7 +13,7 @@ from _nvtest.util.filesystem import which
 from _nvtest.util.filesystem import working_dir
 
 
-#@nvtest.plugin.register(scope="main", stage="setup")
+# @nvtest.plugin.register(scope="main", stage="setup")
 def llvm_coverage_parser(parser: nvtest.Parser) -> None:
     parser.add_plugin_argument(
         "--coverage",
@@ -26,7 +26,7 @@ def llvm_coverage_parser(parser: nvtest.Parser) -> None:
     )
 
 
-#@nvtest.plugin.register(scope="test", stage="setup")
+# @nvtest.plugin.register(scope="test", stage="setup")
 def llvm_coverage_setup(case: TestCase) -> None:
     if not nvtest.config.get("option:coverage"):
         return
@@ -40,7 +40,7 @@ def llvm_coverage_setup(case: TestCase) -> None:
     case.variables["LLVM_PROFILE_FILE"] = f"{case.family}-%p.profraw"
 
 
-#@nvtest.plugin.register(scope="test", stage="teardown")
+# @nvtest.plugin.register(scope="test", stage="teardown")
 def llvm_coverage_teardown(case: TestCase, **kwargs: Any) -> None:
     export_profile_data(case)
 

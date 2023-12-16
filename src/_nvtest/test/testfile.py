@@ -180,7 +180,6 @@ class AbstractTestFile:
             if not enabled and mask is None:
                 mask = f"deselected due to {reason}"
                 tty.verbose(f"{self}::{name} has been disabled")
-            print(mask)
             cases: list[TestCase] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:

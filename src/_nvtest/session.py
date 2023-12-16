@@ -212,6 +212,7 @@ class Session:
 
         if batch_config:
             self.save_active_batch_data(work_items)  # type: ignore
+
         self.save_active_case_data(
             cases_to_run,
             keyword_expr=keyword_expr,
@@ -260,9 +261,11 @@ class Session:
         f = os.path.join(self.batchdir, f"{batch_no:0{n}d}")
         case_ids: list[str] = [_.strip() for _ in open(f).readlines() if _.split()]
         for case in self.cases:
-            if case.id not in case_ids and not case.masked:
+            if case.id in case_ids:
+                case.status.set("staged")
+            elif not case.masked:
                 case.mask = f"case is not in batch {batch_no}"
-        cases = [case for case in self.cases if case.status == "staged"]
+        cases = [case for case in self.cases if not case.masked]
         self.queue = q_factory(
             cases,
             workers=self.max_workers,
@@ -518,13 +521,19 @@ class Session:
         entity = self.queue._running[ent_no]
         attrs = future.result()
         obj: Union[TestCase, Partition] = self.queue.mark_as_complete(ent_no)
-        assert id(obj) == id(entity)
+        if id(obj) != id(entity):
+            raise RuntimeError("wrong future entity ID")
         if isinstance(obj, Partition):
             fd = load_test_results(self.stage)
             for case in obj:
-                assert case.id in fd
-                assert case.fullname in attrs
-                assert attrs[case.fullname]["status"] == fd[case.id]["status"]
+                if case.id not in fd:
+                    raise RuntimeError("case ID not in partition")
+                if case.fullname not in attrs:
+                    raise RuntimeError("case fullname not in partition attrs")
+                if attrs[case.fullname]["status"] != fd[case.id]["status"]:
+                    fs = attrs[case.fullname]["status"]
+                    ss = fd[case.id]["status"]
+                    raise RuntimeError(f"future.status ({fs}) != case.status {ss}")
                 case.update(fd[case.id])
             for case in obj:
                 if fail_fast and case.status != "success":
@@ -532,7 +541,8 @@ class Session:
                     code = compute_returncode([case])
                     raise StopExecution(f"fail_fast: {case} did not pass", code)
         else:
-            assert isinstance(obj, TestCase)
+            if not isinstance(obj, TestCase):
+                raise RuntimeError(f"Expected TestCase, got {obj.__class__.__name__}")
             obj.update(attrs[obj.fullname])
             fd = obj.asdict("start", "finish", "status", "returncode")
             with WriteTransaction(self.lock):

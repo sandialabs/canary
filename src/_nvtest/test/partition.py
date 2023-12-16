@@ -16,11 +16,11 @@ from .testcase import TestCase
 class _Partition(set):
     @property
     def cputime(self):
-        return sum(case.cpu_count * case.runtime for case in self if not case.skipped)
+        return sum(case.cpu_count * case.runtime for case in self if not case.masked)
 
     @property
     def runtime(self):
-        return sum(case.runtime for case in self if not case.skipped)
+        return sum(case.runtime for case in self if not case.masked)
 
     @property
     def size(self):
@@ -43,15 +43,19 @@ class Partition(list):
 
     @property
     def cpu_count(self):
-        return max(case.cpu_count for case in self if not case.skipped)
+        return max(case.cpu_count for case in self if not case.masked)
+
+    @property
+    def device_count(self):
+        return max(case.device_count for case in self if not case.masked)
 
     @property
     def cputime(self):
-        return sum(case.cpu_count * case.runtime for case in self if not case.skipped)
+        return sum(case.cpu_count * case.runtime for case in self if not case.masked)
 
     @property
     def runtime(self):
-        return sum(case.runtime for case in self if not case.skipped)
+        return sum(case.runtime for case in self if not case.masked)
 
     def run(self, log_level: Optional[int] = None) -> dict[str, dict]:
         attrs = {}

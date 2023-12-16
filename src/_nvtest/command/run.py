@@ -94,13 +94,6 @@ def setup_parser(parser: "Parser"):
         help="Stop after first failed test [default: %(default)s]",
     )
     parser.add_argument(
-        "--execute-analysis-sections",
-        action="store_true",
-        default=False,
-        help="Add --execute-analysis-sections to each test invocation, "
-        "allowing tests to re-run analysis sections only [default: %(default)s]",
-    )
-    parser.add_argument(
         "--copy-all-resources",
         action="store_true",
         help="Do not link resources to the test "
@@ -108,7 +101,14 @@ def setup_parser(parser: "Parser"):
     )
     group = parser.add_argument_group("resource control")
     group.add_argument(
-        "-N",
+        "--cpu-count",
+        type=int,
+        metavar="N",
+        default=None,
+        help="Number of cpu cores available to run tests.  Can also be set via "
+        "-c machine:cpu_count:N [default: os.cpu_count()]",
+    )
+    group.add_argument(
         "--max-cores-per-test",
         type=int,
         metavar="N",
@@ -117,7 +117,6 @@ def setup_parser(parser: "Parser"):
         "the number of available cores",
     )
     group.add_argument(
-        "-n",
         "--max-workers",
         type=int,
         metavar="N",
@@ -125,6 +124,21 @@ def setup_parser(parser: "Parser"):
         help="Execute tests/batches asynchronously using a pool of at most "
         "N workers.  For batched runs, the default is 5.  For direct runs, the "
         "max_workers is determined automatically",
+    )
+    group.add_argument(
+        "--device-count",
+        type=int,
+        metavar="N",
+        default=None,
+        help="Number of devices available to run tests.  Can also be set via "
+        "-c machine:device_count:N",
+    )
+    group.add_argument(
+        "--max-devices-per-test",
+        type=int,
+        metavar="N",
+        default=None,
+        help="Skip tests requiring more than N devices.",
     )
     group = parser.add_argument_group("batching")
     p1 = group.add_mutually_exclusive_group()
@@ -210,6 +224,18 @@ def run(args: "argparse.Namespace") -> int:
     parse_pathspec(args)
     initstate: int = 0
 
+    if args.max_cores_per_test is not None:
+        if args.cpu_count is not None:
+            if args.max_cores_per_test > args.cpu_count:
+                tty.die("--max-cores-per-test cannot exceed --cpu-count")
+            config.set("machine:cpu_count", args.cpu_count, scope="command_line")
+
+    if args.max_devices_per_test is not None:
+        if args.device_count is not None:
+            if args.max_devices_per_test > args.device_count:
+                tty.die("--max-devices-per-test cannot exceed --device-count")
+            config.set("machine:device_count", args.device_count, scope="command_line")
+
     timer = Timer()
     with timer.timeit("setup"):
         session = setup_session(args)
@@ -229,7 +255,6 @@ def run(args: "argparse.Namespace") -> int:
                 runner=args.runner,
                 runner_options=args.runner_options,
                 fail_fast=args.fail_fast,
-                execute_analysis_sections=args.execute_analysis_sections,
             )
         run_duration = timer.duration("run")
         if not args.no_summary:
@@ -375,11 +400,11 @@ def print_testcase_overview(
     if duration is not None:
         t += "@*{ in %.2fs.}" % duration
     tty.print(colorize(t))
-    cases_to_run = [case for case in cases if case.status == "staged"]
+    cases_to_run = [case for case in cases if not case.masked and not case.skipped]
     files = {case.file for case in cases_to_run}
     t = "@*g{running} %d test cases from %d files" % (len(cases_to_run), len(files))
     tty.print(colorize(t))
-    skipped = [case for case in cases if case.status == "skipped" or case.masked]
+    skipped = [case for case in cases if case.skipped or case.masked]
     skipped_reasons: dict[str, int] = {}
     for case in skipped:
         reason = case.mask if case.masked else case.status.details
@@ -490,16 +515,12 @@ def setup_session(args: "argparse.Namespace") -> Session:
     session: Session
     if args.mode == "w":
         tty.print("Setting up test session", centered=True)
-        if args.execute_analysis_sections:
-            tty.die(
-                "--execute-analysis-sections: "
-                "option invalid with creation of new test session"
-            )
         bc = Session.BatchConfig(size_t=args.batch_size, size_n=args.batches)
         session = Session.create(
             work_tree=args.work_tree or Session.default_work_tree,
             search_paths=args.paths,
             max_cores_per_test=args.max_cores_per_test,
+            max_devices_per_test=args.max_devices_per_test,
             max_workers=args.max_workers,
             keyword_expr=args.keyword_expr,
             on_options=args.on_options,

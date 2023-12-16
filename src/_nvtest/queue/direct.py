@@ -7,7 +7,7 @@ from .base import Queue
 class DirectQueue(Queue):
     def validate(self) -> None:
         for case in self.work_items:
-            if case.skipped:
+            if case.masked:
                 continue
             if case.cpu_count > self.cpus:
                 raise ValueError(
@@ -18,7 +18,7 @@ class DirectQueue(Queue):
     def create_queue(self, work_items: list[TestCase]) -> dict[int, TestCase]:
         queue: dict[int, TestCase] = {}
         for i, case in enumerate(work_items):
-            if not case.skipped:
+            if not case.masked:
                 queue[i] = case
         return queue
 

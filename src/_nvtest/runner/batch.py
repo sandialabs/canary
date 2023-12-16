@@ -28,6 +28,8 @@ class BatchRunner(Runner):
     def __init__(self, session: "Session", *args: Any) -> None:
         super().__init__(session, *args)
         self.batchdir = session.batchdir
+        self.max_workers = 1
+        self.max_cores_per_test = session.max_cores_per_test
 
     @staticmethod
     def print_text(text: str):
@@ -84,7 +86,14 @@ class BatchRunner(Runner):
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
         fh.write(f"# batch {batch_no + 1} of {num_batches}\n")
         fh.write("(\n  export NVTEST_DISABLE_KB=1\n")
-        fh.write(f"  nvtest -C {self.work_tree} run --max-workers=1 ^{batch_no}\n)\n")
+        cpu_count = self.max_tasks_required(batch)
+        fh.write(
+            f"  nvtest -C {self.work_tree} run "
+            f"--max-workers={self.max_workers} "
+            f"--cpu-count={cpu_count} "
+            f"--max-cores-per-test={cpu_count} "
+            f"^{batch_no}\n)\n"
+        )
 
     def submit_filename(self, batch_no: int) -> str:
         n = max(digits(batch_no), 3)
@@ -122,6 +131,7 @@ class BatchRunner(Runner):
 
         """
         for case in batch:
+            fd = case.load_results()
             try:
                 fd = case.load_results()
             except FileNotFoundError:
