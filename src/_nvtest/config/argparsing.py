@@ -13,6 +13,7 @@ from typing import Type
 from typing import Union
 
 from ..util import tty
+from ..util.tty.color import colorize
 
 stat_names = pstats.Stats.sort_arg_dict_default
 
@@ -264,8 +265,8 @@ def make_argument_parser(**kwargs):
         action="append",
         metavar="path",
         default=[],
-        help="Colon-separated path to config that should be "
-        "added to the testing environment, e.g. 'config:debug:true'",
+        help="Add the colon-separated path to test session's configuration, "
+        "e.g. %s" % colorize("@*{-c config:debug:true}"),
     )
     group.add_argument(
         "-e",
@@ -273,8 +274,7 @@ def make_argument_parser(**kwargs):
         metavar="var=val",
         default={},
         action=EnvironmentModification,
-        help="Environment variables that should be added to "
-        "the testing environment, e.g. 'var=val'",
+        help="Add environment variable %s to the testing environment with value %s" % (colorize("@*{var}"), colorize("@*{val}"))
     )
 
     return parser
