@@ -274,7 +274,8 @@ def make_argument_parser(**kwargs):
         metavar="var=val",
         default={},
         action=EnvironmentModification,
-        help="Add environment variable %s to the testing environment with value %s" % (colorize("@*{var}"), colorize("@*{val}"))
+        help="Add environment variable %s to the testing environment with value %s"
+        % (colorize("@*{var}"), colorize("@*{val}")),
     )
 
     return parser
