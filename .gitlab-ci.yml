@@ -22,4 +22,6 @@ pages:
     - docs/*.rst
     - docs/*/*.rst
     - docs/**/*.rst
+    - docs/Makefile
+    - .gitlab-ci.yml
     when: always
