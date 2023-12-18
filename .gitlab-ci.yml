@@ -8,6 +8,7 @@ test-job:
   - /projects/alegranevada/opt/cee/linux_rh7/python/3.9/bin/python -m venv venv
   - source venv/bin/activate
   - python -m pip install -e .
+  - python -m pip install pytest
   - cd tests
   - pytest .
   - cd ..
