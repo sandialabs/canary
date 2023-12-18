@@ -444,7 +444,7 @@ class server:
     @staticmethod
     def empty_test_data():
         test = {}
-        test["fail"] = 0
+        test["fail_fail"] = 0
         test["nfaildiffn"] = 0
         test["nfaildiffp"] = None
         test["notrun"] = 0
@@ -453,8 +453,8 @@ class server:
         test["pass"] = 0
         test["npassdiffn"] = None
         test["npassdiffp"] = None
-        test["diff"] = 0
-        test["timeout"] = 0
+        test["fail_diff"] = 0
+        test["fail_timeout"] = 0
         test["procTime"] = None
         test["procTimeFull"] = None
         test["time"] = None
