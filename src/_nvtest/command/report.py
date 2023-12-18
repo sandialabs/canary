@@ -56,34 +56,41 @@ def setup_parser(parser: "Parser") -> None:
     p.add_argument(
         "--url",
         required=True,
+        metavar="url",
         help="CDash URL",
     )
     p.add_argument(
         "--project",
         required=True,
+        metavar="project",
         help="The name of the CDash project",
     )
     p.add_argument(
         "-t",
         action="append",
+        metavar="track",
         dest="build_groups",
-        help="CDash build groups to fetch",
+        help="CDash build track to fetch",
     )
     p.add_argument(
         "-s",
+        "--skip",
         action="append",
+        metavar="site",
         dest="skip_sites",
         help="Skip builds from these sites",
     )
     p.add_argument(
         "-m",
         action="append",
+        metavar="email",
         dest="mailto",
         help="mail report to these addresses",
     )
     p.add_argument(
         "-o",
         dest="file",
+        metavar="file",
         help="write report to this file",
     )
 
