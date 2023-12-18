@@ -197,7 +197,7 @@ def index_commands():
 def rst_index(out):
     out.write("\n")
     out.write("\n===============\nNVTest Commands\n===============\n")
-    out.write("\n.. hlist::\n   :columns: 2\n\n")
+    out.write("\n.. hlist::\n   :columns: 4\n\n")
     for cmd_module in _nvtest.command.all_commands():
         command = cmd_name(cmd_module)
         out.write("   * :ref:`%s <nvtest-%s>`\n" % (command, command))
