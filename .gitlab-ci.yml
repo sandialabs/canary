@@ -1,5 +1,21 @@
 stages:
+- test
 - deploy
+
+test-job:
+  stage: test
+  script:
+  - /projects/alegranevada/opt/cee/linux_rh7/python/3.9/bin/python -m venv venv
+  - source venv/bin/activate
+  - python -m pip install -e .
+  - cd tests
+  - pytest .
+  - cd ..
+  - deactivate
+  rules:
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
+    when: always
+
 
 pages:
   stage: deploy
