@@ -101,6 +101,7 @@ class AbstractTestFile:
         self.name = os.path.splitext(os.path.basename(self.path))[0]
         self._keywords: list[FilterNamespace] = []
         self._paramsets: list[FilterNamespace] = []
+        self._attributes: list[FilterNamespace] = []
         self._names: list[FilterNamespace] = []
         self._timeout: list[FilterNamespace] = []
         self._analyze: list[FilterNamespace] = []
@@ -219,6 +220,9 @@ class AbstractTestFile:
                     param_mask = deselect_by_parameter(parameters, parameter_expr)
                     if param_mask:
                         mask = colorize("deselected due to @*b{parameter expression}")
+                attributes = self.attributes(
+                    testname=name, on_options=on_options, parameters=parameters
+                )
 
                 case = TestCase(
                     self.root,
@@ -232,6 +236,8 @@ class AbstractTestFile:
                 )
                 if mask is not None:
                     case.mask = mask
+                for (attr, value) in attributes.items():
+                    case.set_attribute(attr, value)
                 cases.append(case)
 
             analyze = self.analyze(testname=name, on_options=on_options)
@@ -313,6 +319,28 @@ class AbstractTestFile:
                     continue
             paramsets.append(ns.value)
         return paramsets
+
+    def attributes(
+        self,
+        testname: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        parameters: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        attributes: dict[str, Any] = {}
+        for ns in self._attributes:
+            if ns.testname_expr is not None and testname:
+                if deselect_by_name({testname}, ns.testname_expr):
+                    continue
+            if ns.platform_expr is not None and deselect_by_platform(ns.platform_expr):
+                continue
+            if ns.option_expr is not None:
+                if deselect_by_option(set(on_options or []), ns.option_expr):
+                    continue
+            if ns.parameter_expr is not None and parameters:
+                if deselect_by_parameter(parameters, ns.parameter_expr):
+                    continue
+            attributes.update(ns.value)
+        return attributes
 
     def names(self) -> list[str]:
         names: list[str] = [ns.value for ns in self._names]
@@ -586,6 +614,23 @@ class AbstractTestFile:
             option_expr=options,
         )
         self._paramsets.append(ns)
+
+    def m_set_attribute(
+        self,
+        options: Optional[str] = None,
+        platforms: Optional[str] = None,
+        testname: Optional[str] = None,
+        parameters: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
+        ns = FilterNamespace(
+            kwargs,
+            testname_expr=testname,
+            platform_expr=platforms,
+            option_expr=options,
+            parameter_expr=parameters,
+        )
+        self._attributes.append(ns)
 
     def add_sources(
         self,

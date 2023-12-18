@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import Optional
 from typing import Sequence
 from typing import Union
@@ -38,6 +39,23 @@ class Directive:
             platforms=platforms,
             testname=testname,
             type=type,
+        )
+
+    def set_attribute(
+        self,
+        *,
+        options: Optional[str] = None,
+        platforms: Optional[str] = None,
+        testname: Optional[str] = None,
+        parameters: Optional[str] = None,
+        **attributes: Any,
+    ) -> None:
+        self.testfile.m_set_attribute(
+            options=options,
+            platforms=platforms,
+            testname=testname,
+            parameters=parameters,
+            **attributes,
         )
 
     def processors(

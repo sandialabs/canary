@@ -10,7 +10,6 @@ from getpass import getuser
 from typing import Optional
 from typing import Union
 
-
 import nvtest
 
 from .. import config
@@ -353,7 +352,7 @@ def generate_cdash_html_summary(
     *,
     groups: Optional[list[str]] = None,
     skip_sites: Optional[list[str]] = None,
-) -> None:
+) -> str:
     """Generates a CDash summary page
 
     Parameters
@@ -377,8 +376,8 @@ def generate_cdash_html_summary(
     return _html_summary(url, project, buildgroups)
 
 
-def groupby_buildgroup(builds: list[str]) -> dict[str, list[str]]:
-    buildgroups = {}
+def groupby_buildgroup(builds: list[dict]) -> dict[str, list[dict]]:
+    buildgroups: dict[str, list[dict]] = {}
     for b in builds:
         buildgroups.setdefault(b["buildgroup"], []).append(b)
     return buildgroups
@@ -388,9 +387,9 @@ def _get_build_data(
     url: str,
     project: str,
     date: str,
-    buildgroups: Union[list[str], None],
-    skip_sites: Union[list[str], None],
-) -> dict:
+    buildgroups: Optional[list[str]] = None,
+    skip_sites: Optional[list[str]] = None,
+) -> list[dict]:
     """Categorize failed tests as diffed, failed, and timedout.  CDash does
     not distinguish diffed, failed, and timed out tests.  But, a test can
     add a qualifier, eg, 'Failed (Diffed)'.  Here we take
@@ -405,7 +404,6 @@ def _get_build_data(
     for b in cdash_builds:
         tty.info(f"Categorizing tests for build {b['buildname']}")
         if "test" not in b:
-            print("HERE I AM")
             b["test"] = server.empty_test_data()
             continue
         num_failed = b["test"]["fail"]

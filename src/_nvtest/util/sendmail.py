@@ -2,10 +2,9 @@ import pwd
 import smtplib
 import socket
 import traceback
-from getpass import getuser
 from email.mime.text import MIMEText
+from getpass import getuser
 from io import StringIO
-
 
 smtp_email_hosts = ["mailgate.sandia.gov", "mailgate2.sandia.gov"]
 

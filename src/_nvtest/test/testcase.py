@@ -169,6 +169,11 @@ class TestCase:
             kwds.update(self.parameters.keys())
         return list(kwds)
 
+    def set_attribute(self, name: str, value: Any) -> None:
+        if name in self.__dict__:
+            raise KeyError(f"{name} is already an attribute of {self}")
+        setattr(self, name, value)
+
     def add_default_env(self, var: str, value: str) -> None:
         self.variables[var] = value
 
