@@ -210,7 +210,7 @@ def make_argument_parser(**kwargs):
         "instead of the current working directory.",
     )
     parser.add_argument(
-        "-p",
+        "-P",
         default=None,
         dest="plugin_dirs",
         action="append",

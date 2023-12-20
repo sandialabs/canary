@@ -16,17 +16,12 @@ import io
 import tokenize
 from typing import Any
 from typing import Callable
-from typing import Optional
 
 
 class ParameterExpression:
-    def __init__(self, expression: Optional[str] = None) -> None:
-        if expression is not None:
-            expression = self.parse_expr(expression)
-        self.expression = expression
-
-    def __bool__(self) -> bool:
-        return self.expression is not None
+    def __init__(self, string: str) -> None:
+        self.string = string
+        self.expression = self.parse_expr(string)
 
     @staticmethod
     def parse_expr(expr: str) -> str:
@@ -63,7 +58,7 @@ class ParameterExpression:
                 )
         return " ".join(parts)
 
-    def eval(self, parameters: dict[str, Any]) -> bool:
+    def evaluate(self, parameters: dict[str, Any]) -> bool:
         global_vars = dict(parameters)
         global_vars["not_defined"] = not_defined(list(parameters.keys()))
         local_vars: dict = {}

@@ -17,7 +17,6 @@ from ..config.machine import machine_config
 from ..session import Session
 from ..util import cdash
 from ..util import tty
-from ..util.filesystem import force_remove
 from ..util.filesystem import mkdirp
 from ..util.sendmail import sendmail
 from ..util.time import strftimestamp
@@ -37,23 +36,40 @@ class Reporter(_Reporter):
         buildname: str,
         site: Optional[str] = None,
         track: Optional[str] = None,
-        build_stamp: Optional[str] = None,
+        buildstamp: Optional[str] = None,
     ) -> None:
         """Collect information and create reports"""
         self.project = project
-        self.buildname = buildname
-        self.site = site or os.uname().nodename
-        if build_stamp is not None and track is not None:
-            raise ValueError("mutually exclusive inputs: track, build_stamp")
-        if build_stamp is None:
-            self.buildstamp = self.generate_buildstamp(track or "Experimental")
+        self.meta = None
+        if isinstance(site, str) and os.path.isfile(site):
+            opts = dict(buildstamp=buildstamp, track=track, buildname=buildname)
+            if any(list(opts.values())):
+                s = ", ".join(list(opts.keys()))
+                raise ValueError(f"site=file incompatible with {s}")
+            self.read_site_info(site)
         else:
-            self.buildstamp = build_stamp
-        force_remove(self.xml_dir)
+            self.buildname = buildname
+            self.site = site or os.uname().nodename
+            if buildstamp is not None and track is not None:
+                raise ValueError("mutually exclusive inputs: track, buildstamp")
+            if buildstamp is None:
+                self.buildstamp = self.generate_buildstamp(track or "Experimental")
+            else:
+                self.buildstamp = self.validate_buildstamp(buildstamp)
         mkdirp(self.xml_dir)
         self.write_test_xml()
         self.write_notes_xml()
         self.dump()
+
+    def read_site_info(self, file):
+        with open(file) as fh:
+            doc = xdom.parse(fh)
+        fs = doc.getElementsByTagName("Site")[0]
+        self.meta = dict(fs.attributes.items())
+        self.site = fs.getAttribute("Name")
+        self.buildname = fs.getAttribute("BuildName")
+        self.buildstamp = fs.getAttribute("BuildStamp")
+        return
 
     def load(self):
         f = os.path.join(self.xml_dir, ".meta.json")
@@ -83,14 +99,22 @@ class Reporter(_Reporter):
         if upload_errors:
             tty.warn(f"{upload_errors} files failed to upload to CDash")
 
-    @property
-    def generator(self):
-        return f"nvtest version {nvtest.version}"
-
     def generate_buildstamp(self, track):
         fmt = f"%Y%m%d-%H%M-{track}"
         t = time.localtime(self.data.start)
         return time.strftime(fmt, t)
+
+    def validate_buildstamp(self, buildstamp):
+        fmt = "%Y%m%d-%H%M"
+        time_part = "-".join(buildstamp.split("-")[:-1], fmt)
+        try:
+            time.strptime(time_part)
+        except ValueError:
+            fmt += "-<track>"
+            raise ValueError(
+                f"expected build stamp should formatted as {fmt!r}, got {buildstamp}"
+            )
+        return buildstamp
 
     def upload_to_cdash(self, url, filename):
         server = cdash.server(url, self.project)
@@ -102,30 +126,34 @@ class Reporter(_Reporter):
         )
         return rc
 
+    @property
     def site_node(self):
-        host = os.uname().nodename
-        machine = machine_config()
-        os_release = machine["os"]["release"]
-        os_name = machine["platform"]
-        os_version = machine["os"]["fullversion"]
-        os_platform = machine["arch"]
-        doc = xdom.Document()
-        root = doc.createElement("Site")
-        add_attr(root, "BuildName", self.buildname)
-        add_attr(root, "BuildStamp", self.buildstamp)
-        add_attr(root, "Name", self.site)
-        add_attr(root, "Generator", self.generator)
-        if config.get("build"):
-            vendor = config.get("build:compiler:vendor")
-            version = config.get("build:compiler:version")
-            add_attr(root, "CompilerName", vendor)
-            add_attr(root, "CompilerVersion", version)
-        add_attr(root, "Hostname", host)
-        add_attr(root, "OSName", os_name)
-        add_attr(root, "OSRelease", os_release)
-        add_attr(root, "OSVersion", os_version)
-        add_attr(root, "OSPlatform", os_platform)
-        return root
+        if self.meta is None:
+            self.meta = {}
+            host = os.uname().nodename
+            machine = machine_config()
+            os_release = machine["os"]["release"]
+            os_name = machine["platform"]
+            os_version = machine["os"]["fullversion"]
+            os_platform = machine["arch"]
+            self.meta["BuildName"] = self.buildname
+            self.meta["BuildStamp"] = self.buildstamp
+            self.meta["Name"] = self.site
+            self.meta["Generator"] = f"nvtest version {nvtest.version}"
+            if config.get("build"):
+                vendor = config.get("build:compiler:vendor")
+                version = config.get("build:compiler:version")
+                self.meta["CompilerName"] = vendor
+                self.meta["CompilerVersion"] = version
+            self.meta["Hostname"] = host
+            self.meta["OSName"] = os_name
+            self.meta["OSRelease"] = os_release
+            self.meta["OSVersion"] = os_version
+            self.meta["OSPlatform"] = os_platform
+        el = xdom.Document().createElement("Site")
+        for (key, value) in self.meta.items():
+            add_attr(el, key, value)
+        return el
 
     def write_test_xml(self) -> str:
         filename = os.path.join(self.xml_dir, "Test.xml")
@@ -134,7 +162,7 @@ class Reporter(_Reporter):
         starttime = self.data.start
 
         doc = xdom.Document()
-        root = self.site_node()
+        root = self.site_node
         l1 = doc.createElement("Testing")
         add_text_node(l1, "StartDateTime", strftimestamp(starttime))
         add_text_node(l1, "StartTestTime", int(starttime))
@@ -217,7 +245,7 @@ class Reporter(_Reporter):
         tty.info(f"WRITING: Notes.xml to {f}", prefix=None)
         notes: dict[str, str] = {}
         doc = xdom.Document()
-        root = self.site_node()
+        root = self.site_node
         notes_el = doc.createElement("Notes")
         for name, text in notes.items():
             t = timestamp()

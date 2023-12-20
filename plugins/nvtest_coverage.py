@@ -26,9 +26,12 @@ def llvm_coverage_parser(parser: nvtest.Parser) -> None:
     )
 
 
-# @nvtest.plugin.register(scope="test", stage="setup")
+@nvtest.plugin.register(scope="test", stage="setup")
 def llvm_coverage_setup(case: TestCase) -> None:
     if not nvtest.config.get("option:coverage"):
+        return
+    elif not hasattr(case, "program"):
+        tty.warn(f"{case} does not define a 'program' attribute, coverage skipped")
         return
     if case.masked:
         return
@@ -40,8 +43,12 @@ def llvm_coverage_setup(case: TestCase) -> None:
     case.variables["LLVM_PROFILE_FILE"] = f"{case.family}-%p.profraw"
 
 
-# @nvtest.plugin.register(scope="test", stage="teardown")
+@nvtest.plugin.register(scope="test", stage="teardown")
 def llvm_coverage_teardown(case: TestCase, **kwargs: Any) -> None:
+    if not nvtest.config.get("option:coverage"):
+        return
+    elif not hasattr(case, "program"):
+        tty.warn(f"{case} does not define a 'program' attribute, coverage skipped")
     export_profile_data(case)
 
 
@@ -85,12 +92,7 @@ def _export_profile_data(case: TestCase, file: str) -> None:
         tty.warn("Unable to find llvm-cov.  Profile data cannot be exported")
         return
     # FIXME
-    args = [
-        "export",
-        self.program,  # noqa: F821
-        f"-instr-profile={file}",
-        "--summary-only",
-    ]
+    args = ["export", case.program, f"-instr-profile={file}", "--summary-only"]
     prog = Executable(path)
     output = prog(*args, output=str)
     data = json.loads(output)

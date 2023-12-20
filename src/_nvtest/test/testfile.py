@@ -13,11 +13,9 @@ import _nvtest.directives.enums as d_enums
 from .. import config
 from ..compat.vvtest import load_vvt
 from ..directives.match import deselect_by_keyword
-from ..directives.match import deselect_by_name
-from ..directives.match import deselect_by_option
 from ..directives.match import deselect_by_parameter
-from ..directives.match import deselect_by_platform
 from ..directives.parameter_set import ParameterSet
+from ..directives.when import When
 from ..util import tty
 from ..util.filesystem import working_dir
 from ..util.time import time_in_seconds
@@ -30,19 +28,13 @@ class FilterNamespace:
         self,
         value: Any,
         *,
-        option_expr: Optional[str] = None,
-        platform_expr: Optional[str] = None,
-        testname_expr: Optional[str] = None,
-        parameter_expr: Optional[str] = None,
+        when: Optional[Union[str, bool]] = None,
         expect: Optional[int] = None,
         result: Optional[str] = None,
         action: Optional[str] = None,
     ):
         self.value: Any = value
-        self.option_expr: Union[None, str] = option_expr
-        self.testname_expr: Union[None, str] = testname_expr
-        self.platform_expr: Union[None, str] = platform_expr
-        self.parameter_expr: Union[None, str] = parameter_expr
+        self.when = When(when)
         self.expect = expect
         self.result = result
         self.action = action
@@ -53,18 +45,10 @@ class FilterNamespace:
         on_options: Optional[list[str]] = None,
         parameters: Optional[dict[str, Any]] = None,
     ) -> bool:
-        if testname and self.testname_expr:
-            if deselect_by_name({testname}, self.testname_expr):
-                return False
-        if self.platform_expr and deselect_by_platform(self.platform_expr):
-            return False
-        if on_options and self.option_expr:
-            if deselect_by_option(set(on_options), self.option_expr):
-                return False
-        if parameters and self.parameter_expr:
-            if deselect_by_parameter(parameters, self.parameter_expr):
-                return False
-        return True
+        result = self.when.evaluate(
+            testname=testname, on_options=on_options, parameters=parameters
+        )
+        return result.value
 
 
 class AbstractTestFile:
@@ -295,12 +279,9 @@ class AbstractTestFile:
     ) -> list[str]:
         keywords: set[str] = set()
         for ns in self._keywords:
-            if ns.testname_expr is not None and testname:
-                if deselect_by_name({testname}, ns.testname_expr):
-                    continue
-            if ns.parameter_expr is not None and parameters:
-                if deselect_by_parameter(parameters, ns.parameter_expr):
-                    continue
+            result = ns.when.evaluate(testname=testname, parameters=parameters)
+            if not result.value:
+                continue
             keywords.update(ns.value)
         return sorted(keywords)
 
@@ -309,14 +290,9 @@ class AbstractTestFile:
     ) -> list[ParameterSet]:
         paramsets: list[ParameterSet] = []
         for ns in self._paramsets:
-            if ns.testname_expr is not None and testname:
-                if deselect_by_name({testname}, ns.testname_expr):
-                    continue
-            if ns.platform_expr is not None and deselect_by_platform(ns.platform_expr):
+            result = ns.when.evaluate(testname=testname, on_options=on_options)
+            if not result.value:
                 continue
-            if ns.option_expr is not None:
-                if deselect_by_option(set(on_options or []), ns.option_expr):
-                    continue
             paramsets.append(ns.value)
         return paramsets
 
@@ -328,17 +304,11 @@ class AbstractTestFile:
     ) -> dict[str, Any]:
         attributes: dict[str, Any] = {}
         for ns in self._attributes:
-            if ns.testname_expr is not None and testname:
-                if deselect_by_name({testname}, ns.testname_expr):
-                    continue
-            if ns.platform_expr is not None and deselect_by_platform(ns.platform_expr):
+            result = ns.when.evaluate(
+                testname=testname, on_options=on_options, parameters=parameters
+            )
+            if not result.value:
                 continue
-            if ns.option_expr is not None:
-                if deselect_by_option(set(on_options or []), ns.option_expr):
-                    continue
-            if ns.parameter_expr is not None and parameters:
-                if deselect_by_parameter(parameters, ns.parameter_expr):
-                    continue
             attributes.update(ns.value)
         return attributes
 
@@ -352,14 +322,9 @@ class AbstractTestFile:
         self, testname: Optional[str] = None, on_options: Optional[list[str]] = None
     ) -> str:
         for ns in self._analyze:
-            if ns.testname_expr is not None and testname:
-                if deselect_by_name({testname}, ns.testname_expr):
-                    continue
-            if ns.platform_expr is not None and deselect_by_platform(ns.platform_expr):
+            result = ns.when.evaluate(testname=testname, on_options=on_options)
+            if not result.value:
                 continue
-            if ns.option_expr is not None and on_options:
-                if deselect_by_option(set(on_options), ns.option_expr):
-                    continue
             return ns.value
         return ""
 
@@ -370,17 +335,11 @@ class AbstractTestFile:
         parameters: Optional[dict[str, Any]] = None,
     ) -> Union[int, None]:
         for ns in self._timeout:
-            if ns.testname_expr is not None and testname:
-                if deselect_by_name({testname}, ns.testname_expr):
-                    continue
-            if ns.platform_expr is not None and deselect_by_platform(ns.platform_expr):
+            result = ns.when.evaluate(
+                testname=testname, on_options=on_options, parameters=parameters
+            )
+            if not result.value:
                 continue
-            if ns.option_expr is not None and on_options:
-                if deselect_by_option(set(on_options), ns.option_expr):
-                    continue
-            if parameters and ns.parameter_expr:
-                if deselect_by_parameter(parameters, ns.parameter_expr):
-                    continue
             return int(ns.value)
         return None
 
@@ -389,40 +348,12 @@ class AbstractTestFile:
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
     ) -> tuple[bool, Union[str, None]]:
-        platform_exprs: list[str] = []
-        option_exprs: list[str] = []
         for ns in self._enable:
-            if ns.testname_expr is not None and testname:
-                if deselect_by_name({testname}, ns.testname_expr):
-                    # the "enable" does not apply to this test name
-                    continue
-                elif ns.value is False:
-                    return False, "disabled by test name"
-            if not ns.platform_expr and not ns.option_expr:
-                if ns.value is False:
-                    return False, "disabled"
-            if ns.platform_expr is not None:
-                platform_exprs.append(ns.platform_expr.strip())
-            if ns.option_expr is not None:
-                option_exprs.append(ns.option_expr)
-        if platform_exprs:
-            if len(platform_exprs) == 1:
-                platform_expr = platform_exprs[0]
-            else:
-                platform_expr = " and ".join(f"({expr})" for expr in platform_exprs)
-            if deselect_by_platform(platform_expr):
-                o = colorize("@*b{%s}" % (platform_expr.strip() or "null"))
-                b = colorize("@*r{False}")
-                return False, f"platform expression {o} evaluated to {b}"
-        if option_exprs and on_options:
-            if len(option_exprs) == 1:
-                option_expr = option_exprs[0]
-            else:
-                option_expr = " and ".join(f"({expr})" for expr in option_exprs)
-            if deselect_by_option(set(on_options), option_expr):
-                o = colorize("@*b{%s}" % option_expr)
-                b = colorize("@*r{False}")
-                return False, f"option expression {o} evaluated to {b}"
+            result = ns.when.evaluate(testname=testname, on_options=on_options)
+            if ns.value is True and not result.value:
+                return False, result.reason
+            elif ns.value is False and result.value:
+                return False, result.reason
         return True, None
 
     def baseline(
@@ -438,17 +369,11 @@ class AbstractTestFile:
         for key in list(kwds.keys()):
             kwds[key.upper()] = kwds[key]
         for ns in self._baseline:
-            if ns.testname_expr is not None and testname:
-                if deselect_by_name({testname}, ns.testname_expr):
-                    continue
-            if ns.platform_expr is not None and deselect_by_platform(ns.platform_expr):
+            result = ns.when.evaluate(
+                testname=testname, on_options=on_options, parameters=parameters
+            )
+            if not result.value:
                 continue
-            if ns.option_expr is not None and on_options:
-                if deselect_by_option(set(on_options), ns.option_expr):
-                    continue
-            if parameters and ns.parameter_expr:
-                if deselect_by_parameter(parameters, ns.parameter_expr):
-                    continue
             arg1, arg2 = ns.value
             file1 = self.safe_substitute(arg1, **kwds)
             if not arg2:
@@ -472,18 +397,11 @@ class AbstractTestFile:
         with working_dir(os.path.join(self.root, os.path.dirname(self.path))):
             for ns in self._sources:
                 assert isinstance(ns.action, str)
-                if ns.testname_expr is not None and testname:
-                    if deselect_by_name({testname}, ns.testname_expr):
-                        continue
-                expr = ns.platform_expr
-                if expr is not None and deselect_by_platform(expr):
+                result = ns.when.evaluate(
+                    testname=testname, on_options=on_options, parameters=parameters
+                )
+                if not result.value:
                     continue
-                if ns.option_expr is not None and on_options:
-                    if deselect_by_option(set(on_options), ns.option_expr):
-                        continue
-                if parameters and ns.parameter_expr:
-                    if deselect_by_parameter(parameters, ns.parameter_expr):
-                        continue
                 src, dst = ns.value
                 src = self.safe_substitute(src, **kwds)
                 if dst is None:
@@ -509,17 +427,11 @@ class AbstractTestFile:
             kwds[key.upper()] = kwds[key]
         dependencies: list[str] = []
         for ns in self._depends_on:
-            if ns.testname_expr is not None and testname:
-                if deselect_by_name({testname}, ns.testname_expr):
-                    continue
-            if ns.platform_expr is not None and deselect_by_platform(ns.platform_expr):
+            result = ns.when.evaluate(
+                testname=testname, on_options=on_options, parameters=parameters
+            )
+            if not result.value:
                 continue
-            if ns.option_expr is not None and on_options:
-                if deselect_by_option(set(on_options), ns.option_expr):
-                    continue
-            if parameters and ns.parameter_expr:
-                if deselect_by_parameter(parameters, ns.parameter_expr):
-                    continue
             dependencies.append(self.safe_substitute(ns.value, **kwds))
         return dependencies
 
@@ -532,60 +444,31 @@ class AbstractTestFile:
 
     # -------------------------------------------------------------------------------- #
 
-    def m_keywords(
-        self,
-        *args: str,
-        parameters: Optional[str] = None,
-        testname: Optional[str] = None,
-    ) -> None:
-        keyword_ns = FilterNamespace(
-            tuple(args), parameter_expr=parameters, testname_expr=testname
-        )
+    def m_keywords(self, *args: str, when: Optional[str] = None) -> None:
+        keyword_ns = FilterNamespace(tuple(args), when=when)
         self._keywords.append(keyword_ns)
 
     def m_depends_on(
         self,
         arg: str,
-        testname: Optional[str] = None,
-        parameters: Optional[str] = None,
+        when: Optional[str] = None,
         result: Optional[str] = None,
         expect: Optional[int] = None,
     ) -> None:
-        ns = FilterNamespace(
-            arg,
-            testname_expr=testname,
-            parameter_expr=parameters,
-            result=result,
-            expect=expect,
-        )
+        ns = FilterNamespace(arg, when=when, result=result, expect=expect)
         self._depends_on.append(ns)
 
     def m_preload(
-        self,
-        arg: str,
-        source: bool = False,
-        testname: Optional[str] = None,
-        options: Optional[str] = None,
-        platforms: Optional[str] = None,
-        parameters: Optional[str] = None,
+        self, arg: str, source: bool = False, when: Optional[str] = None
     ) -> None:
-        ns = FilterNamespace(
-            arg,
-            action="source" if source else None,
-            testname_expr=testname,
-            parameter_expr=parameters,
-            platform_expr=platforms,
-            option_expr=options,
-        )
+        ns = FilterNamespace(arg, action="source" if source else None, when=when)
         self._preload.append(ns)
 
     def m_parameterize(
         self,
         argnames: Union[str, Sequence[str]],
         argvalues: list[Union[Sequence[Any], Any]],
-        options: Optional[str] = None,
-        platforms: Optional[str] = None,
-        testname: Optional[str] = None,
+        when: Optional[str] = None,
         type: d_enums.enums = d_enums.list_parameter_space,
     ) -> None:
         if not isinstance(type, d_enums.enums):
@@ -607,29 +490,11 @@ class AbstractTestFile:
                 argvalues,
                 file=self.file,
             )
-        ns = FilterNamespace(
-            pset,
-            testname_expr=testname,
-            platform_expr=platforms,
-            option_expr=options,
-        )
+        ns = FilterNamespace(pset, when=when)
         self._paramsets.append(ns)
 
-    def m_set_attribute(
-        self,
-        options: Optional[str] = None,
-        platforms: Optional[str] = None,
-        testname: Optional[str] = None,
-        parameters: Optional[str] = None,
-        **kwargs: Any,
-    ) -> None:
-        ns = FilterNamespace(
-            kwargs,
-            testname_expr=testname,
-            platform_expr=platforms,
-            option_expr=options,
-            parameter_expr=parameters,
-        )
+    def m_set_attribute(self, when: Optional[str] = None, **kwargs: Any) -> None:
+        ns = FilterNamespace(kwargs, when=when)
         self._attributes.append(ns)
 
     def add_sources(
@@ -637,10 +502,7 @@ class AbstractTestFile:
         action: str,
         *files: str,
         rename: bool = False,
-        options: Optional[str] = None,
-        platforms: Optional[str] = None,
-        parameters: Optional[str] = None,
-        testname: Optional[str] = None,
+        when: Optional[str] = None,
     ) -> None:
         dst: Union[None, str] = None
         if rename:
@@ -648,69 +510,31 @@ class AbstractTestFile:
                 src, dst = files
             except ValueError:
                 raise ValueError("Expected 2 file arguments with rename=True") from None
-            ns = FilterNamespace(
-                (src, dst),
-                action=action,
-                option_expr=options,
-                platform_expr=platforms,
-                parameter_expr=parameters,
-                testname_expr=testname,
-            )
+            ns = FilterNamespace((src, dst), action=action, when=when)
             self._sources.append(ns)
             return
         for file in files:
-            ns = FilterNamespace(
-                (file, None),
-                action=action,
-                option_expr=options,
-                platform_expr=platforms,
-                parameter_expr=parameters,
-                testname_expr=testname,
-            )
+            ns = FilterNamespace((file, None), action=action, when=when)
             self._sources.append(ns)
 
     def m_copy(
         self,
         *files: str,
-        options: Optional[str] = None,
-        platforms: Optional[str] = None,
-        parameters: Optional[str] = None,
-        testname: Optional[str] = None,
+        when: Optional[str] = None,
     ) -> None:
-        self.add_sources(
-            "copy",
-            *files,
-            options=options,
-            platforms=platforms,
-            parameters=parameters,
-            testname=testname,
-        )
+        self.add_sources("copy", *files, when=when)
 
     def m_link(
-        self,
-        *files: str,
-        rename: bool = False,
-        options: Optional[str] = None,
-        platforms: Optional[str] = None,
-        parameters: Optional[str] = None,
-        testname: Optional[str] = None,
+        self, *files: str, rename: bool = False, when: Optional[str] = None
     ) -> None:
-        self.add_sources(
-            "link",
-            *files,
-            rename=rename,
-            options=options,
-            platforms=platforms,
-            parameters=parameters,
-            testname=testname,
-        )
+        self.add_sources("link", *files, rename=rename, when=when)
 
     def m_sources(
         self,
         *files: str,
-        testname: Optional[str] = None,
+        when: Optional[str] = None,
     ) -> None:
-        self.add_sources("sources", *files, testname=testname)
+        self.add_sources("sources", *files, when=when)
 
     def m_analyze(
         self,
@@ -718,9 +542,7 @@ class AbstractTestFile:
         *,
         flag: Optional[str] = None,
         script: Optional[str] = None,
-        options: Optional[str] = None,
-        platforms: Optional[str] = None,
-        testname: Optional[str] = None,  # FIXME
+        when: Optional[str] = None,
     ) -> None:
         if flag is not None and script is not None:
             raise ValueError(
@@ -733,12 +555,7 @@ class AbstractTestFile:
             string = script
         else:
             string = flag or "--analyze"
-        ns = FilterNamespace(
-            string,
-            platform_expr=platforms,
-            testname_expr=testname,
-            option_expr=options,
-        )
+        ns = FilterNamespace(string, when=when)
         self._analyze.append(ns)
 
     def m_name(self, arg: str) -> None:
@@ -747,20 +564,11 @@ class AbstractTestFile:
     def m_timeout(
         self,
         arg: Union[str, float, int],
-        options: Optional[str] = None,
-        platforms: Optional[str] = None,
-        parameters: Optional[str] = None,
-        testname: Optional[str] = None,
+        when: Optional[str] = None,
     ) -> None:
         "testname parameter parameters platform platforms option options"
         arg = time_in_seconds(arg)
-        ns = FilterNamespace(
-            arg,
-            option_expr=options,
-            platform_expr=platforms,
-            parameter_expr=parameters,
-            testname_expr=testname,
-        )
+        ns = FilterNamespace(arg, when=when)
         self._timeout.append(ns)
 
     def m_skipif(self, arg: bool, *, reason: str) -> None:
@@ -770,36 +578,18 @@ class AbstractTestFile:
     def m_enable(
         self,
         arg: bool,
-        options: Optional[str] = None,
-        platforms: Optional[str] = None,
-        testname: Optional[str] = None,
+        when: Optional[str] = None,
     ) -> None:
-        if arg is False and (platforms is not None or options is not None):
-            raise ValueError(
-                "'enable' with 'platform' or 'option' options cannot specify 'false'"
-            )
-        ns = FilterNamespace(
-            bool(arg),
-            testname_expr=testname,
-            platform_expr=platforms,
-            option_expr=options,
-        )
+        ns = FilterNamespace(bool(arg), when=when)
         self._enable.append(ns)
 
     def m_baseline(
         self,
         arg1: str,
         arg2: Optional[str] = None,
-        options: Optional[str] = None,
-        platforms: Optional[str] = None,
-        parameters: Optional[str] = None,
+        when: Optional[str] = None,
     ) -> None:
-        ns = FilterNamespace(
-            (arg1, arg2),
-            option_expr=options,
-            platform_expr=platforms,
-            parameter_expr=parameters,
-        )
+        ns = FilterNamespace((arg1, arg2), when=when)
         self._baseline.append(ns)
 
 

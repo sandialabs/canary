@@ -112,7 +112,7 @@ def deselect_by_parameter(
         expr = ParameterExpression(parameter_expr)
     except ValueError:
         raise UsageError("Invalid expression passed to '-p'")
-    return not expr.eval(parameters)
+    return not expr.evaluate(parameters)
 
 
 def _parse_expression(

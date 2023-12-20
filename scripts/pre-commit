@@ -20,3 +20,6 @@ flake8 ./plugins
 
 echo "Type checking with mypy"
 mypy ${DIR}
+
+cd tests
+pytest .

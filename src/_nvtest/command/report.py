@@ -24,25 +24,35 @@ def setup_parser(parser: "Parser") -> None:
     p.add_argument(
         "--project",
         required=True,
+        metavar="project",
         help="The name of the project that will be reported to CDash",
     )
     p.add_argument(
         "--build",
-        required=True,
+        metavar="name",
         help="The name of the build that will be reported to CDash.",
     )
     p.add_argument(
         "--site",
-        help=" The site name that will be reported to CDash "
+        metavar="name",
+        help="The site name that will be reported to CDash. "
         "[default: current system hostname]",
+    )
+    p.add_argument(
+        "-f",
+        metavar="file",
+        help="Read site, build, and buildstamp from this XML "
+        "file (eg, Build.xml or Configure.xml)",
     )
     group = p.add_mutually_exclusive_group()
     group.add_argument(
         "--track",
+        metavar="track",
         help="Results will be reported to this group on CDash [default: Experimental]",
     )
     group.add_argument(
         "--build-stamp",
+        metavar="stamp",
         help="Instead of letting the CDash reporter prepare the buildstamp which, "
         "when combined with build name, site and project, uniquely identifies the "
         "build, provide this argument to identify the build yourself. "
@@ -117,12 +127,18 @@ def report(args: "Namespace") -> int:
     if args.parent_command == "cdash":
         reporter = cdash.Reporter(session)
         if args.child_command == "create":
+            if args.f:
+                incompatible_attrs = ("build_stamp", "track", "site", "build")
+                if any([getattr(args, attr) for attr in incompatible_attrs]):
+                    s = ", ".join(f"--{attr}" for attr in incompatible_attrs)
+                    tty.die(f"-f incompatible with {s}")
+                args.site = args.f
             reporter.create(
                 args.project,
                 args.build,
                 site=args.site,
                 track=args.track,
-                build_stamp=args.build_stamp,
+                buildstamp=args.build_stamp,
             )
         elif args.child_command == "post":
             reporter.load()

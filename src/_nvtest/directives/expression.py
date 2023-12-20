@@ -195,10 +195,11 @@ class Expression:
     The expression can be evaluated against different matchers.
     """
 
-    __slots__ = ("code",)
+    __slots__ = ("code", "string")
 
-    def __init__(self, code: types.CodeType) -> None:
+    def __init__(self, code: types.CodeType, string: str) -> None:
         self.code = code
+        self.string = string
 
     @classmethod
     def compile(self, input: str, allow_wildcards: bool = False) -> "Expression":
@@ -213,7 +214,7 @@ class Expression:
             filename="<nvtest match expression>",
             mode="eval",
         )
-        return Expression(code)
+        return Expression(code, input)
 
     def evaluate(self, matcher: Callable[[str], bool]) -> bool:
         """Evaluate the match expression.

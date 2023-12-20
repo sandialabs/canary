@@ -89,7 +89,7 @@ def test_parameterize_3(tmpdir):
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
             fh.write("import nvtest\n")
-            fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3)], options='xxx')\n")
+            fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3)], when='options=xxx')\n")
     finder = Finder()
     finder.add(workdir)
     assert len(finder.roots) == 1
@@ -169,7 +169,7 @@ def test_enable(tmpdir):
         mkdirp("a")
         with open("a/f.pyt", "w") as fh:
             fh.write("import nvtest\n")
-            fh.write("nvtest.directives.enable(True, options='baz and spam')\n")
+            fh.write("nvtest.directives.enable(True, when=\"options='baz and spam'\")\n")
     finder = Finder()
     finder.add(workdir)
     finder.prepare()
@@ -191,7 +191,7 @@ def test_enable_names(tmpdir):
             fh.write("nvtest.directives.name('foo')\n")
             fh.write("nvtest.directives.name('baz')\n")
             fh.write("nvtest.directives.name('spam')\n")
-            fh.write("nvtest.directives.enable(False, testname='foo')\n")
+            fh.write("nvtest.directives.enable(False, when=\"testname=foo\")\n")
     finder = Finder()
     finder.add(workdir)
     finder.prepare()
