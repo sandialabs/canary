@@ -197,6 +197,17 @@ class OptionMatcher:
         return anymatch(self.own_opt_names, name)
 
 
+@dataclasses.dataclass
+class AnyMatcher:
+    """Tries to match on any options, attached to the given items"""
+
+    __slots__ = ("own_names",)
+    own_names: AbstractSet[str]
+
+    def __call__(self, name: str) -> bool:
+        return anymatch(self.own_names, name)
+
+
 class PlatformMatcher:
     """A matcher for platform."""
 
@@ -244,6 +255,29 @@ def remove_surrounding_quotes(arg: str) -> str:
             return s[3:-3]
         return s[1:-1]
     return arg
+
+
+def when(
+    input: Union[str, bool],
+    keywords: Optional[set[str]] = None,
+    parameters: Optional[dict[str, Any]] = None,
+    allow_wildcards: bool = False,
+) -> bool:
+    if isinstance(input, bool):
+        return input
+    assert isinstance(input, str)
+    if keywords is not None and parameters is not None:
+        raise TypeError("mutually exclusive keyword args: keywords, parameters")
+    if keywords is None and parameters is None:
+        raise TypeError("missing keyword args keywords or parameters")
+    expression: Union[Expression, ParameterExpression]
+    if keywords is not None:
+        expression = Expression.compile(input, allow_wildcards=allow_wildcards)
+        return expression.evaluate(AnyMatcher(keywords))
+    else:
+        assert parameters is not None
+        expression = ParameterExpression(input)
+        return expression.evaluate(parameters)
 
 
 class UsageError(Exception):

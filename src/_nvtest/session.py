@@ -15,9 +15,8 @@ from typing import Optional
 from typing import Union
 
 from . import config
+from . import directives
 from . import plugin
-from .directives.match import deselect_by_keyword
-from .directives.match import deselect_by_parameter
 from .error import StopExecution
 from .finder import Finder
 from .queue import Queue
@@ -378,14 +377,14 @@ class Session:
                 if max_devices_per_test and case.device_count > max_devices_per_test:
                     continue
                 if parameter_expr:
-                    param_skip = deselect_by_parameter(case.parameters, parameter_expr)
-                    if not param_skip:
+                    match = directives.when(parameter_expr, parameters=case.parameters)
+                    if match:
                         case.status.set("staged")
                         continue
                 if keyword_expr:
                     kwds = set(case.keywords(implicit=True))
-                    kw_skip = deselect_by_keyword(kwds, keyword_expr)
-                    if not kw_skip:
+                    match = directives.when(keyword_expr, keywords=kwds)
+                    if match:
                         case.status.set("staged")
         cases = [case for case in self.cases if case.status == "staged"]
         if not cases:

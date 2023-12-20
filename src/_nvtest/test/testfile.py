@@ -11,11 +11,9 @@ from typing import Union
 import _nvtest.directives.enums as d_enums
 
 from .. import config
+from .. import directives
 from ..compat.vvtest import load_vvt
-from ..directives.match import deselect_by_keyword
-from ..directives.match import deselect_by_parameter
-from ..directives.parameter_set import ParameterSet
-from ..directives.when import When
+from ..parameter_set import ParameterSet
 from ..util import tty
 from ..util.filesystem import working_dir
 from ..util.time import time_in_seconds
@@ -34,7 +32,7 @@ class FilterNamespace:
         action: Optional[str] = None,
     ):
         self.value: Any = value
-        self.when = When(when)
+        self.when = directives.When(when)
         self.expect = expect
         self.result = result
         self.action = action
@@ -174,8 +172,8 @@ class AbstractTestFile:
                     kwds.add(name)
                     kwds.update(parameters.keys())
                     kwds.update({"staged"})
-                    kw_mask = deselect_by_keyword(kwds, keyword_expr)
-                    if kw_mask:
+                    match = directives.when(keyword_expr, keywords=kwds)
+                    if not match:
                         tty.verbose(f"Skipping {self}::{name}")
                         mask = colorize("deselected by @*b{keyword expression}")
 
@@ -201,8 +199,8 @@ class AbstractTestFile:
                 if mask is None and ("TDD" in keywords or "tdd" in keywords):
                     mask = colorize("deselected due to @*b{TDD keyword}")
                 if mask is None and parameter_expr:
-                    param_mask = deselect_by_parameter(parameters, parameter_expr)
-                    if param_mask:
+                    match = directives.when(parameter_expr, parameters=parameters)
+                    if not match:
                         mask = colorize("deselected due to @*b{parameter expression}")
                 attributes = self.attributes(
                     testname=name, on_options=on_options, parameters=parameters

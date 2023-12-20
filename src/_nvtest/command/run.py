@@ -292,6 +292,15 @@ def parse_pathspec(args: argparse.Namespace) -> None:
 
     """
     args.start = None
+    on_options: list[str] = []
+    pathspec: list[str] = []
+    for item in args.pathspec:
+        if item.startswith("+"):
+            on_options.append(item[1:])
+        else:
+            pathspec.append(item)
+    args.pathspec = pathspec
+    args.on_options.extend(on_options)
     if config.get("session"):
         return _parse_in_session_pathspec(args)
     else:
