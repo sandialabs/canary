@@ -19,7 +19,7 @@ nvtest
    test_file
    howto/index
    reference/index
-   commands
+   commands/index
    directives/index
 
 

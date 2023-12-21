@@ -3,11 +3,10 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
-from __future__ import print_function
-
 import argparse
 import errno
 import io
+import os
 import re
 import sys
 
@@ -275,6 +274,88 @@ class ArgparseRstWriter(ArgparseWriter):
             string += "   * :ref:`{0} <{1}>`\n".format(prog, cmd.prog.replace(" ", "-"))
 
         return string + "\n"
+
+
+class ArgparseMultiRstWriter(ArgparseRstWriter):
+    """Write argparse output as rst sections."""
+
+    def __init__(self, prog, dest, aliases=False, rst_levels=_rst_levels):
+        """Create a new ArgparseRstWriter.
+
+        Parameters:
+            prog (str): program name
+            out (file object): file to write to
+            aliases (bool): whether or not to include subparsers for aliases
+            rst_levels (list of str): list of characters
+                for rst section headings
+        """
+        out = io.StringIO()
+        super().__init__(prog, out, aliases, rst_levels=rst_levels)
+        self.dest = dest
+
+    def format(self, cmd, index=False):
+        string = io.StringIO()
+        if not index:
+            string.write(self.begin_command(cmd.prog))
+
+        if cmd.description:
+            string.write(self.description(cmd.description))
+
+        string.write(self.usage(cmd.usage))
+
+        if cmd.positionals:
+            string.write(self.begin_positionals())
+            for args, help in cmd.positionals:
+                string.write(self.positional(args, help))
+            string.write(self.end_positionals())
+
+        if cmd.optionals:
+            string.write(self.begin_optionals())
+            for flags, dest_flags, help in cmd.optionals:
+                string.write(self.optional(dest_flags, help))
+            string.write(self.end_optionals())
+
+        if not index and cmd.subcommands:
+            string.write(self.begin_subcommands(cmd.subcommands))
+
+        if index:
+            string.write(".. rubric:: Subcommands\n")
+            string.write("\n.. toctree::\n   :maxdepth: 1\n\n")
+            for _, prog in cmd.subcommands:
+                string.write(f"   {prog}<{prog}>\n")
+
+        return string.getvalue()
+
+    def begin_command(self, prog):
+        return """\
+.. _{0}:
+
+{1}
+{2}
+
+""".format(
+            prog.replace(" ", "-"), prog, self.rst_levels[self.level] * len(prog)
+        )
+
+    def _write(self, parser, prog, level=None):
+        """Recursively writes a parser.
+
+        Parameters:
+            parser (argparse.ArgumentParser): the parser
+            prog (str): the command name
+            level (int): the current level
+        """
+        if level is not None:
+            return super()._write(parser, prog, level=level)
+        cmd = self.parse(parser, prog)
+        with open(os.path.join(self.dest, "index.rst"), "w") as fh:
+            fh.write(f".. _{prog}:\n\n")
+            fh.write("Command Reference\n=================\n\n")
+            fh.write(f'.. raw:: html\n\n   <font size="+3">{prog}</font>\n\n')
+            fh.write(self.format(cmd, index=True))
+        for subparser, prog in cmd.subcommands:
+            with open(os.path.join(self.dest, f"{prog}.rst"), "w") as self.out:
+                super()._write(subparser, prog)
 
 
 class ArgparseCompletionWriter(ArgparseWriter):

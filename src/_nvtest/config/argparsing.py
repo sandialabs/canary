@@ -191,7 +191,7 @@ def make_argument_parser(**kwargs):
     """Create an basic argument parser without any subcommands added."""
     parser = Parser(
         formatter_class=HelpFormatter,
-        description="nv.test - an application testing framework",
+        description="nvtest - an application testing framework",
         fromfile_prefix_chars="@",
         prog="nvtest",
         **kwargs,

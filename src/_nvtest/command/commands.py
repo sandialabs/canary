@@ -1,5 +1,4 @@
 import argparse
-import os
 import re
 import sys
 
@@ -48,20 +47,6 @@ def setup_parser(subparser):
         default="names",
         choices=formatters,
         help="format to be used to print the output (default: names)",
-    )
-    subparser.add_argument(
-        "--header",
-        metavar="FILE",
-        default=None,
-        action="store",
-        help="prepend contents of FILE to the output (useful for rst format)",
-    )
-    subparser.add_argument(
-        "--update",
-        metavar="FILE",
-        default=None,
-        action="store",
-        help="write output to the specified file, if any command is newer",
     )
     subparser.add_argument(
         "rst_files",
@@ -243,47 +228,8 @@ def bash(args, out):
     writer.write(parser)
 
 
-def prepend_header(args, out):
-    if not args.header:
-        return
-
-    with open(args.header) as header:
-        out.write(header.read())
-
-
 def commands(args: argparse.Namespace) -> int:
-    """This is the 'regular' command, which can be called multiple times.
-
-    See ``commands()`` below for ``--update-completion`` handling.
-    """
+    """This is the 'regular' command, which can be called multiple times."""
     formatter = formatters[args.format]
-
-    # check header first so we don't open out files unnecessarily
-    if args.header and not os.path.exists(args.header):
-        tty.die("No such file: '%s'" % args.header)
-
-    # if we're updating an existing file, only write output if a command
-    # or the header is newer than the file.
-    if args.update:
-        if os.path.exists(args.update):
-            files = [
-                cmd_module.__file__.rstrip("c")  # pyc -> py
-                for cmd_module in _nvtest.command.all_commands()
-            ]
-            if args.header:
-                files.append(args.header)
-            last_update = os.path.getmtime(args.update)
-            if not any(os.path.getmtime(f) > last_update for f in files):
-                tty.emit("File is up to date: %s\n" % args.update)
-                return 0
-
-        tty.emit("Updating file: %s\n" % args.update)
-        with open(args.update, "w") as f:
-            prepend_header(args, f)
-            formatter(args, f)
-
-    else:
-        prepend_header(args, sys.stdout)
-        formatter(args, sys.stdout)
-
+    formatter(args, sys.stdout)
     return 0

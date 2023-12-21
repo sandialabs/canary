@@ -1,4 +1,5 @@
 from ..config.argparsing import Parser
+from . import autodoc
 from . import commands
 from . import config
 from . import convert
@@ -14,6 +15,7 @@ from . import status
 
 def all_commands():
     return [
+        autodoc,
         commands,
         config,
         convert,
