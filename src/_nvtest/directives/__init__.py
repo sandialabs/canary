@@ -15,6 +15,7 @@ from .set_attribute import set_attribute  # noqa: F401
 from .skipif import skipif  # noqa: F401
 from .sources import sources  # noqa: F401
 from .testname import testname  # noqa: F401
+from .timeout import timeout  # noqa: F401
 from .when import When  # noqa: F401
 from .when import when  # noqa: F401
 
