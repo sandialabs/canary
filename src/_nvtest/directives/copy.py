@@ -8,10 +8,17 @@ from ..test.testfile import AbstractTestFile
 def copy(*args: str, when: Optional[str] = None, rename: bool = False):
     """Copy files from the source directory into the execution directory.
 
+    Usage
+    -----
+
+    ``.pyt``:
+
     .. code-block:: python
 
        copy(*args, rename=False, when=None)
        copy(src, dst, rename=True, when=None)
+
+    ``.vvt``:
 
     .. code-block:: python
 

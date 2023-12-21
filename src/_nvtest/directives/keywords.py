@@ -9,9 +9,16 @@ def keywords(*args: str, when: Optional[str] = None) -> None:
     """Mark a test with keywords.  The main use of test keywords is to filter a
     set of tests, such as selecting which tests to run.
 
+    Usage
+    -----
+
+    ``.pyt``:
+
     .. code-block:: python
 
        keywords(*args, when=None)
+
+    ``.vvt``:
 
     .. code-block:: python
 

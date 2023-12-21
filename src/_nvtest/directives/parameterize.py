@@ -18,10 +18,17 @@ def parameterize(
     """Add new invocations to the test using the list of argvalues for the given
     argnames.
 
+    Usage
+    -----
+
+    ``.pyt``:
+
     .. code-block:: python
 
        parametrize(argnames, argvalues, when=None, type=None)
 
+
+    ``.vvt``:
 
     .. code-block:: python
 

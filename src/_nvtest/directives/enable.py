@@ -8,9 +8,16 @@ from ..test.testfile import AbstractTestFile
 def enable(arg: bool, *, when: Optional[str] = None):
     """Explicitly mark a test to be enabled (or not)
 
+    Usage
+    -----
+
+    ``.pyt``:
+
     .. code-block:: python
 
        nvtest.directives.enable(arg, when=None)
+
+    ``.vvt``:
 
     .. code-block:: python
 

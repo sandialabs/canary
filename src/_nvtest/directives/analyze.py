@@ -14,9 +14,16 @@ def analyze(
     """Create a test instance that depends on all parameterized test instances
     and run it after they have completed.
 
+    Usage
+    -----
+
+    ``.pyt``:
+
     .. code-block:: python
 
        analyze(*, flag=None, script=None, when=None)
+
+    ``.vvt``:
 
     .. code-block:: python
 

@@ -8,10 +8,17 @@ from ..test.testfile import AbstractTestFile
 def link(*args: str, when: Optional[str] = None, rename: bool = False):
     """Link files from the source directory into the execution directory.
 
+    Usage
+    -----
+
+    ``.pyt``:
+
     .. code-block:: python
 
        link(*args, rename=False, when=None)
        link(src, dst, rename=True, when=None)
+
+    ``.vvt``:
 
     .. code-block:: python
 

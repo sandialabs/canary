@@ -50,11 +50,13 @@ Which is equivalent to
    analyze
    copy
    depends_on
+   devices
    enable
    keywords
    link
    parameterize
    processors
+   set_attribute
    skipif
    testname
    timeout

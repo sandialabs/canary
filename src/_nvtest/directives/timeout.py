@@ -9,9 +9,16 @@ from ..test.testfile import AbstractTestFile
 def timeout(arg: Union[str, float, int], *, when: Optional[str] = None):
     """Specify a timeout value for a test
 
+    Usage
+    -----
+
+    ``.pyt``:
+
     .. code-block:: python
 
        timeout(arg, when=None)
+
+    ``.vvt``:
 
     .. code-block:: python
 

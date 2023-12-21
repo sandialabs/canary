@@ -6,9 +6,16 @@ from ..test.testfile import AbstractTestFile
 def skipif(arg: bool, *, reason: str) -> None:
     """Conditionally skip tests
 
+    Usage
+    -----
+
+    ``.pyt``:
+
     .. code:: python
 
        skipif(arg, *, reason)
+
+    ``.vvt``:
 
     .. code:: python
 

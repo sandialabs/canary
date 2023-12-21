@@ -7,9 +7,16 @@ def testname(arg: str) -> None:
     """Set the name of a test to one different from the filename and/or define
     multiple test names (multiple test instances) in the same file.
 
+    Usage
+    -----
+
+    ``.pyt``:
+
     .. code-block:: python
 
        pytest.directives.name(arg)
+
+    ``.vvt``:
 
     .. code-block:: python
 
