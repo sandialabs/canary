@@ -1,3 +1,6 @@
 source/commands
+source/config
 source/directives
+source/session
+source/testfile
 build

@@ -35,16 +35,43 @@ def directives(dest):
 
 def commands(dest):
     mkdirp(dest)
-    tty.color.set_color_when("never")
     parser = make_argument_parser()
     _nvtest.command.add_commands(parser)
     writer = aw.ArgparseMultiRstWriter(parser.prog, dest)
     writer.write(parser)
 
 
+def testfile(dest):
+    mkdirp(dest)
+    with open(os.path.join(dest, "index.rst"), "w") as fh:
+        fh.write(".. _test-testfile:\n\n")
+        fh.write("The test file\n=============\n")
+        fh.write(".. automodule:: _nvtest.test.testfile\n")
+
+
+def session(dest):
+    mkdirp(dest)
+    with open(os.path.join(dest, "index.rst"), "w") as fh:
+        fh.write(".. _session:\n\n")
+        fh.write("The test session\n================\n")
+        fh.write(".. automodule:: _nvtest.session\n")
+
+
+def config(dest):
+    mkdirp(dest)
+    with open(os.path.join(dest, "index.rst"), "w") as fh:
+        fh.write(".. _config-settings:\n\n")
+        fh.write("Configuration settings\n======================\n\n")
+        fh.write(".. automodule:: _nvtest.config.__init__\n")
+
+
 def autodoc(args: argparse.Namespace) -> int:
+    tty.color.set_color_when("never")
     if not os.path.isdir(args.dest):
         mkdirp(args.dest)
     directives(os.path.join(args.dest, "directives"))
     commands(os.path.join(args.dest, "commands"))
+    testfile(os.path.join(args.dest, "testfile"))
+    session(os.path.join(args.dest, "session"))
+    config(os.path.join(args.dest, "config"))
     return 0
