@@ -188,6 +188,7 @@ class AbstractTestFile:
                 if mask is None and np and np > cpu_count:
                     s = "deselected due to @*b{exceeding cpu count of machine}"
                     mask = colorize(s)
+
                 nd = parameters.get("ndevice")
                 if not isinstance(nd, int) and nd is not None:
                     class_name = nd.__class__.__name__
@@ -198,6 +199,7 @@ class AbstractTestFile:
                 if mask is None and nd and nd > device_count:
                     s = "deselected due to @*b{exceeding device count of machine}"
                     mask = colorize(s)
+
                 if mask is None and ("TDD" in keywords or "tdd" in keywords):
                     mask = colorize("deselected due to @*b{TDD keyword}")
                 if mask is None and parameter_expr:
