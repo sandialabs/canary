@@ -37,9 +37,10 @@ pages:
   rules:
   - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     changes:
+    - src/_nvtest/directives/*.py
+    - src/_nvtest/commands/*.py
     - docs/*.rst
     - docs/*/*.rst
     - docs/**/*.rst
     - docs/Makefile
-    - .gitlab-ci.yml
     when: always
