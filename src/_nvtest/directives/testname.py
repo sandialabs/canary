@@ -54,8 +54,6 @@ def testname(arg: str) -> None:
     This file would result in two tests: "foo" and "bar".
 
     """
-    try:
-        file: AbstractTestFile = _nvtest.__FILE_BEING_SCANNED__  # type: ignore
+    if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
+        file = _nvtest.__FILE_BEING_SCANNED__
         file.m_name(arg)
-    except AttributeError:
-        pass

@@ -139,8 +139,6 @@ def parameterize(
        ├── test1[a=a2,b=b2,x=x2]
 
     """  # noqa: E501
-    try:
-        file: AbstractTestFile = _nvtest.__FILE_BEING_SCANNED__  # type: ignore
+    if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
+        file = _nvtest.__FILE_BEING_SCANNED__
         file.m_parameterize(names, values, when=when, type=type)
-    except AttributeError:
-        pass

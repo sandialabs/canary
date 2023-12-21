@@ -75,8 +75,6 @@ def enable(arg: bool, *, when: Optional[str] = None):
        #VVT: enable (testname=foo) : false
 
     """  # noqa: E501
-    try:
-        file: AbstractTestFile = _nvtest.__FILE_BEING_SCANNED__  # type: ignore
+    if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
+        file = _nvtest.__FILE_BEING_SCANNED__
         file.m_enable(arg, when=when)
-    except AttributeError:
-        pass

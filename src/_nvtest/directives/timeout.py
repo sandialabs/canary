@@ -37,8 +37,6 @@ def timeout(arg: Union[str, float, int], *, when: Optional[str] = None):
       names and values
 
     """
-    try:
-        file: AbstractTestFile = _nvtest.__FILE_BEING_SCANNED__  # type: ignore
+    if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
+        file = _nvtest.__FILE_BEING_SCANNED__
         file.m_timeout(arg, when=when)
-    except AttributeError:
-        pass

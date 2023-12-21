@@ -78,8 +78,6 @@ def keywords(*args: str, when: Optional[str] = None) -> None:
 
        #VVT: keywords (testname=spam, parameters="np>1") : 3D mhd
     """
-    try:
-        file: AbstractTestFile = _nvtest.__FILE_BEING_SCANNED__  # type: ignore
+    if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
+        file = _nvtest.__FILE_BEING_SCANNED__
         file.m_keywords(*args, when=when)
-    except AttributeError:
-        pass

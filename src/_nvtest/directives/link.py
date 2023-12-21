@@ -66,8 +66,6 @@ def link(*args: str, when: Optional[str] = None, rename: bool = False):
        #VVT: link (rename) : file1.txt,x_file1.txt file2.txt,x_file2.txt
 
     """  # noqa: E501
-    try:
-        file: AbstractTestFile = _nvtest.__FILE_BEING_SCANNED__  # type: ignore
+    if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
+        file = _nvtest.__FILE_BEING_SCANNED__
         file.m_link(*args, when=when)
-    except AttributeError:
-        pass

@@ -11,8 +11,6 @@ def depends_on(
     expect: Optional[int] = None,
     result: Optional[str] = None,
 ):
-    try:
-        file: AbstractTestFile = _nvtest.__FILE_BEING_SCANNED__  # type: ignore
+    if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
+        file = _nvtest.__FILE_BEING_SCANNED__
         file.m_depends_on(arg, when=when, result=result, expect=expect)
-    except AttributeError:
-        pass

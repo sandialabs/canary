@@ -108,8 +108,6 @@ def processors(*values: int, when: Optional[str] = None) -> None:
        ├── test1[a=a2,b=b2,x=x1]
        ├── test1[a=a2,b=b2,x=x2]
     """
-    try:
-        file: AbstractTestFile = _nvtest.__FILE_BEING_SCANNED__  # type: ignore
+    if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
+        file = _nvtest.__FILE_BEING_SCANNED__
         file.m_parameterize("np", list(values), when=when)
-    except AttributeError:
-        pass

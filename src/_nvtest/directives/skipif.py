@@ -67,8 +67,6 @@ def skipif(arg: bool, *, reason: str) -> None:
 
         self.testfile.m_skipif(arg, reason=reason)
     """
-    try:
-        file: AbstractTestFile = _nvtest.__FILE_BEING_SCANNED__  # type: ignore
+    if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
+        file = _nvtest.__FILE_BEING_SCANNED__
         file.m_skipif(arg, reason=reason)
-    except AttributeError:
-        pass
