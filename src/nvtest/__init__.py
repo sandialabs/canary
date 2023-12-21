@@ -1,6 +1,7 @@
 import _nvtest.plugin as plugin
 from _nvtest import config
 from _nvtest import diffutils
+from _nvtest import directives
 from _nvtest.config.argparsing import Parser
 from _nvtest.directives import enums
 from _nvtest.error import TestDiffed
@@ -19,20 +20,10 @@ version = ".".join(str(_) for _ in version_info)
 
 
 def __getattr__(name):
-    import inspect
-
     import _nvtest
-    from _nvtest.directives.directive import Directive
-    from _nvtest.directives.directive import DummyDirective
     from _nvtest.test.testinstance import TestInstance
 
-    if name == "directives":
-        for frame_info in inspect.stack():
-            if "__testfile__" in frame_info.frame.f_globals:
-                testfile = frame_info.frame.f_globals["__testfile__"]
-                return Directive(testfile)
-        return DummyDirective()
-    elif name == "FILE_SCANNING":
+    if name == "FILE_SCANNING":
         return _nvtest.FILE_SCANNING
     elif name == "test":
         test = type("", (), {})()

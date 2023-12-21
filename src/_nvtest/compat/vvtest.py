@@ -327,7 +327,7 @@ def f_analyze(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
     if arg.argument:
         key = "flag" if arg.argument.startswith("-") else "script"
         options[key] = arg.argument
-    file.m_analyze(True, when=arg.when, **options)
+    file.m_analyze(when=arg.when, **options)
 
 
 def f_timeout(file: "AbstractTestFile", arg: SimpleNamespace) -> None:

@@ -115,11 +115,13 @@ class AbstractTestFile:
         file = self.file
         code = compile(open(file).read(), file, "exec")
         global_vars = {"__name__": "__load__", "__file__": file, "__testfile__": self}
-        _nvtest.FILE_SCANNING = True
         try:
+            _nvtest.FILE_SCANNING = True
+            _nvtest.__FILE_BEING_SCANNED__ = self
             exec(code, global_vars)
         finally:
             _nvtest.FILE_SCANNING = False
+            _nvtest.__FILE_BEING_SCANNED__ = None
 
     def freeze(
         self,
@@ -536,7 +538,6 @@ class AbstractTestFile:
 
     def m_analyze(
         self,
-        arg: Optional[bool] = True,
         *,
         flag: Optional[str] = None,
         script: Optional[str] = None,
@@ -547,8 +548,6 @@ class AbstractTestFile:
                 "TestFile.analyze: 'script' and 'flag' "
                 "keyword arguments are mutually exclusive"
             )
-        if not arg:
-            return
         if script is not None:
             string = script
         else:

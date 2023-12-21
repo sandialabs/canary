@@ -152,7 +152,7 @@ def test_analyze(tmpdir):
             fh.write("import nvtest\n")
             fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
             fh.write("nvtest.directives.parameterize('n', [10,11,12])\n")
-            fh.write("nvtest.directives.analyze(True)\n")
+            fh.write("nvtest.directives.analyze()\n")
     finder = Finder()
     finder.add(workdir)
     finder.prepare()
