@@ -23,3 +23,7 @@ mypy ${DIR}
 
 cd tests
 pytest .
+
+cd ../docs
+make clean
+make html

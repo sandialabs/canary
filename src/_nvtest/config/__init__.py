@@ -1,11 +1,13 @@
 """
-Additional configuration is not required to run ``nvtest``.  To see the current configuration, issue
+Additional configuration is not required to run ``nvtest``.  To see the current
+configuration, issue
 
 .. code-block:: console
 
    nvtest config show
 
-Configuration variables can be set on the command line or read from a configuration file.
+Configuration variables can be set on the command line or read from a
+configuration file.
 
 .. _config-file:
 
