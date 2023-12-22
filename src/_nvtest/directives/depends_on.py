@@ -12,10 +12,7 @@ def depends_on(
     result: Optional[str] = None,
 ):
     """
-    A test can be made to "depend" on another test. If ``testY`` depends on
-    ``testX`` then ``testX`` will be executed before ``testY``. ``testY``
-    will have the location of ``testX`` available in its script A dependency is
-    added to a test in the test header.
+    Require that test ``arg`` run before this test.
 
     Usage
     -----
@@ -25,111 +22,120 @@ def depends_on(
     .. code:: python
 
        import nvtest
-       nvtest.directives.depends_on("testX")
+       nvtest.directives.depends_on(name, when=None, expect=None, result=None)
 
     ``.vvt``:
 
     .. code:: python
 
-       #VVT: depends on : testX
-       import sys, os
+       #VVT: depends on (result=..., expect=..., options=..., platforms=..., testname=...) : arg
 
-    This test would wait on ``testX`` to complete with a pass or diff result
-    status before running. When it does run, the location of ``testY`` is
-    provided in a list variable in the **vvtest_util.py** file as
+    Parameters
+    ----------
+    * ``arg``: The test that should run before this test.  Wildcards are allowed.
+    * ``when``: Restrict processing of the directive to this condition
+    * ``result``: Control whether or not this test runs based on the result of the
+      dependent test.  By default, a test will run if its dependencies pass or diff.
+    * ``expect``: How many dependencies to expect.
 
-    .. code:: python
+    The ``when`` expression is limited to the following conditions:
 
-       DEPDIRS = ["<path>/testX",]
+    * ``testname``: Restrict processing of the directive to this test name
+    * ``platforms``: Restrict processing of the directive to certain platform
+      or platforms
+    * ``options``: Restrict processing of the directive to command line ``-o`` options
+    * ``parameters``: Restrict processing of the directive to certain parameter
+      names and values
 
-    where **<path>/testX** is the directory path to the execution of
-    ``testX``.
+    Examples
+    --------
 
-    Conditional execution of a dependent test
-    -----------------------------------------
+    Run ``spam`` if ``baz`` passes or diffs.
 
-    By default, if a dependency passes or diffs then the dependent test is
-    run. However, this can be controlled with the "result" attribute in the
-    specification header. For example,
+    ``.pyt``:
 
-    .. code:: python
+    .. code-block:: python
 
-       #VVT: depends on (result="pass") : testX
-       import sys, os
-       ...
+       # spam.pyt
+       import nvtest
+       nvtest.directives.depends_on("baz")
 
-    This would only run the dependent test if ``testX`` passed. Expressions
-    are allowed, such as "not fail" or "pass or diff". The special value of
-    a single asterisk, "*", means run the dependent test no matter what the
-    result value is of the dependency test.
+       def test():
+           self = nvtest.test.instance
+           baz = self.dependencies[0]
+           print(f"baz's results can be found in {baz.exec_dir}")
 
-    Dependency glob patterns
-    ------------------------
+    ``.vvt``:
 
-    Test dependencies can be specified with shell-style wild cards, such as
+    .. code-block:: python
 
-    .. code:: python
+       # spam.vvt
+       # VVT: depends on: baz
+       import vvtest_util as vvt
 
-       #VVT: depends on : testX*param=*
+       def test():
+           exec_dir = vvt.DEPDIRS[0]
+           print(f"baz's results can be found in {exec_dir}")
 
-    Tests are matched using the first non-empty list of the following
-    methods:
+    ----------
 
-    1. <homedir>/pattern
-    2. <homedir>/\*\*/pattern
-    3. pattern
-    4. \*pattern
+    Run ``spam`` regardless of ``baz``'s result:
 
-    where the <homedir> is the directory containing the test.
+    ``.pyt``:
 
-    Because a dependency pattern may match more than one test, a second
-    variable is placed in the **vvtest_util.py** file for convenience,
-    called DEPDIRMAP. It maps the pattern given in the header to an
-    alphabetically sorted list of directories (the dependencies).
+    .. code-block:: python
 
-    Constraining the number of glob matches
-    ---------------------------------------
+       # spam.pyt
+       import nvtest
+       nvtest.directives.depends_on("baz", result="*")
 
-    If no dependency tests are found, then the dependent test will not be
-    run (it will be shown as ``notrun`` with reason "failed 'depends on'
-    matching criteria"). This behavior can be controlled with the "expect"
-    attribute. For example,
+       def test():
+           self = nvtest.test.instance
+           baz = self.dependencies[0]
+           print(f"baz's results can be found in {baz.exec_dir}")
 
-    .. code:: python
+    ``.vvt``:
 
-       #VVT: depends on (expect=2) : foo*bar
-       import sys, os
-       ...
+    .. code-block:: python
 
-    This test will only run if the number of tests that match "foo*bar" is
-    exactly two. Possible values for "expect" are
+       # spam.vvt
+       # VVT: depends on (result=*) : baz
+       import vvtest_util as vvt
 
-    1. ``+`` : one or more matches (this is the default)
-    2. ``?`` : zero or one match
-    3. ``*`` : zero or more matches
-    4. N : a non-negative integer number of matches
+       def test():
+           exec_dir = vvt.DEPDIRS[0]
+           print(f"baz's results can be found in {exec_dir}")
 
-    Parameter substitution in dependency patterns
-    ---------------------------------------------
+    ----------
 
-    Variable substitutions can be made in the dependency patterns. Use the
-    construct "${parameter_name}". For example, suppose the test file
-    ``foo.vvt`` had this header:
+    ``spam`` depends only on the serial ``baz`` test:
 
-    .. code:: python
+    ``.pyt``:
 
-       #VVT: parameterize : pet = dog cat
-       #VVT: depends on : store*pet=${pet}*
+    .. code-block:: python
 
-    Then for the test name **foo.pet=dog**, the dependency pattern will
-    resolve to "store*pet=dog\*", and for name **foo.pet=cat** the pattern
-    will be "store*pet=cat\*".
+       # spam.pyt
+       import nvtest
+       nvtest.directives.depends_on("baz.np=1")
 
-    Currently, the substitution is confined to parameter names, and if a the
-    dollar-brace construct does not match a parameter name, the pattern is
-    left untouched.
+       def test():
+           self = nvtest.test.instance
+           baz = self.dependencies[0]
+           print(f"baz's results can be found in {baz.exec_dir}")
 
-    """
+    ``.vvt``:
+
+    .. code-block:: python
+
+       # spam.vvt
+       # VVT: depends on: baz.np=1
+       import vvtest_util as vvt
+
+       def test():
+           exec_dir = vvt.DEPDIRS[0]
+           print(f"baz's results can be found in {exec_dir}")
+
+    """  # noqa: E501
     if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
         file = _nvtest.__FILE_BEING_SCANNED__
         file.m_depends_on(arg, when=when, result=result, expect=expect)

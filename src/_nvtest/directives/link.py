@@ -31,8 +31,6 @@ def link(*args: str, when: Optional[str] = None, rename: bool = False):
     * ``when``: Restrict processing of the directive to this condition
     * ``rename``: Link the target file with a different name from the source file
 
-    Notes
-    -----
     The ``when`` expression is limited to the following conditions:
 
     * ``testname``: Restrict processing of the directive to this test name

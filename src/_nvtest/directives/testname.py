@@ -27,7 +27,6 @@ def testname(arg: str) -> None:
 
     * ``arg``: The alternative test name.
 
-
     Examples
     --------
 

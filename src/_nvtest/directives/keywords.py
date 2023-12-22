@@ -30,8 +30,6 @@ def keywords(*args: str, when: Optional[str] = None) -> None:
     * ``args``: list of keywords
     * ``when``: Restrict processing of the directive to this condition
 
-    Notes
-    -----
     The ``when`` expression is limited to the following conditions:
 
     * ``testname``: Restrict processing of the directive to this test name

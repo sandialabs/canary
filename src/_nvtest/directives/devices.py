@@ -26,16 +26,17 @@ def devices(*ndevices: int, when: Optional[str] = None) -> None:
     * ``ndevices``: List of device counts counts
     * ``when``: Restrict processing of the directive to this condition
 
+    The ``when`` expression is limited to the following conditions:
+
+    * ``testname``: Restrict processing of the directive to this test name
+    * ``platform``: Restrict processing of the directive to certain platform or
+      platforms
+    * ``option``: Restrict processing of the directive to command line ``-o`` options
+
     Notes
     -----
+
     * ``devices(...)`` is equivalent to ``parameterize("ndevice", ...)``
-
-    * The ``when`` expression is limited to the following conditions:
-
-      * ``testname``: Restrict processing of the directive to this test name
-      * ``platform``: Restrict processing of the directive to certain platform or
-        platforms
-      * ``option``: Restrict processing of the directive to command line ``-o`` options
 
     Examples
     --------

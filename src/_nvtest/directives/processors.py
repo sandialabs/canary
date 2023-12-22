@@ -26,17 +26,17 @@ def processors(*values: int, when: Optional[str] = None) -> None:
     * ``nprocs``: List of processor counts
     * ``when``: Restrict processing of the directive to this condition
 
+    The ``when`` expression is limited to the following conditions:
+
+    * ``testname``: Restrict processing of the directive to this test name
+    * ``platform``: Restrict processing of the directive to certain platform or
+      platforms
+    * ``option``: Restrict processing of the directive to command line ``-o`` options
+
     Notes
     -----
 
     * ``processors(...)`` is equivalent to ``parameterize("np", ...)``
-
-    * The ``when`` expression is limited to the following conditions:
-
-      * ``testname``: Restrict processing of the directive to this test name
-      * ``platform``: Restrict processing of the directive to certain platform or
-        platforms
-      * ``option``: Restrict processing of the directive to command line ``-o`` options
 
     Examples
     --------

@@ -38,8 +38,6 @@ def analyze(
       parse this value and perform the appropriate analysis.
     * ``script``: Run ``script`` during the analysis phase (instead of the test file).
 
-    Notes
-    -----
     The ``when`` expression is limited to the following conditions:
 
     * ``testname``: Restrict processing of the directive to this test name

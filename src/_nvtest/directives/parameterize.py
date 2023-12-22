@@ -46,8 +46,6 @@ def parameterize(
     * ``when``: Restrict processing of the directive to this condition
     * ``type``: (``.pyt`` only) Generate parameters using this type
 
-    Notes
-    -----
     The ``when`` expression is limited to the following conditions:
 
     * ``testname``: Restrict processing of the directive to this test name

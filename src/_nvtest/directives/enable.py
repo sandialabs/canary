@@ -15,6 +15,7 @@ def enable(arg: bool, *, when: Optional[str] = None):
 
     .. code-block:: python
 
+       import nvtest
        nvtest.directives.enable(arg, when=None)
 
     ``.vvt``:
@@ -28,8 +29,6 @@ def enable(arg: bool, *, when: Optional[str] = None):
     * ``arg``: If ``True``, enable the test.  If ``False``, disable the test
     * ``when``: Restrict processing of the directive to this condition
 
-    Notes
-    -----
     The ``when`` expression is limited to the following conditions:
 
     * ``testname``: Restrict processing of the directive to this test name
