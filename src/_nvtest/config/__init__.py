@@ -36,33 +36,35 @@ is
 .. code-block:: ini
 
    [config]
-   debug = false
-   log_level = int
+   debug = false  # (bool)
+   log_level = 2  # (int) [0, 4]
    test_files = r"^[a-zA-Z_]\w*\.(pyt|vvt)$"  # regular expression for test file names
 
    [variables]
-   var = str  # environment variables to set for the test session
+   var = value # (str) environment variables to set for the test session
 
    [machine]
-   sockets_per_node = 1
-   cores_per_socket = N  # default computed from os.cpu_count()
-   cpu_count = N  # default computed from os.cpu_count()
+   sockets_per_node = 1 # (int)
+   cores_per_socket = N  # (int) default computed from os.cpu_count()
+   devices_per_socket = N  # (int)
+   cpu_count = N  # (int) default computed from os.cpu_count()
+   device_count = N  # (int) default computed from os.cpu_count()
 
    [build]
-   type = str
-   date = str
+   type = ... # str
+   date = ... # str
 
    [build:compiler]
-   vendor = str
-   version = str
+   vendor = ... # str
+   version = ... # str
 
    [build:compiler:paths]
-   cc = str
-   cxx = str
-   fc = str
+   cc = ... # str
+   cxx = ... # str
+   fc = ... # str
 
    [build:options]
-   opt = str
+   opt = ... # str
 
 .. note::
 
