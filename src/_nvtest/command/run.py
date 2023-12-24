@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import time
 from contextlib import contextmanager
@@ -502,10 +503,15 @@ def print_durations(cases: list[TestCase], N: int) -> None:
 
 
 def read_paths(file: str, paths: dict[str, list[str]]) -> None:
-    import yaml
+    data: dict
+    if file.endswith(".json"):
+        with open(file, "r") as fh:
+            data = json.load(fh)
+    else:
+        import yaml
 
-    with open(file, "r") as fh:
-        data = yaml.safe_load(fh)
+        with open(file, "r") as fh:
+            data = yaml.safe_load(fh)
     testpaths_schema.validate(data)
     for p in data["testpaths"]:
         if isinstance(p, str):
