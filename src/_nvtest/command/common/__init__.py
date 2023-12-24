@@ -24,7 +24,7 @@ def add_mark_arguments(parser: "Parser") -> None:
     group.add_argument(
         "-k",
         dest="keyword_expr",
-        default="",
+        default=None,
         metavar="expression",
         help="Only run tests matching given keyword expression. "
         "For example: -k 'key1 and not key2'.",

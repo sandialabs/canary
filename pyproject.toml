@@ -1,9 +1,19 @@
+[project]
+name = "nvtest"
+dynamic = ["version"]
+readme = "README.md"
+license = {"file" = "LICENSE"}
+description = "nvtest: application testing with Python"
+requires-python = ">=3.9"
+
+[project.scripts]
+nvtest = "nvtest:console_main"
+
+[project.optional-dependencies]
+dev = ["black", "flake8", "isort", "mypy", "pytest", "sphinxcontrib-programoutput==0.17"]
+
 [build-system]
-requires = [
-  # sync with setup.py until we discard non-pep-517/518
-  "setuptools>=45.0",
-  "setuptools-scm[toml]>=6.2.3",
-]
+requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
@@ -12,17 +22,20 @@ write_to = "src/_nvtest/_version.py"
 [tool.isort]
 line_length = 88
 force_single_line = true
-src_paths = ["src/nvtest","src/_nvtest"]
+src_paths = ["src/_nvtest", "src/nvtest"]
 
 [tool.black]
 target-version = ['py39']
 line_length = 88
 
 [tool.mypy]
-exclude = ["scripts", "tests", "src/_nvtest/third_party/distro.py", "src/_nvtest/_session"]
+exclude = [
+    "scripts",
+    "src/_nvtest/third_party/distro.py"
+]
 
 [[tool.mypy.overrides]]
-module = "networkx.*,yaml.*,ruamel.*,pygments.*,toml.*,contextlib2.*,scipy.*"
+module = "networkx.*,yaml.*,ruamel.*,pygments.*,toml.*,contextlib2.*,scipy.*,_nvtest.tests.*"
 ignore_missing_imports = true
 
 

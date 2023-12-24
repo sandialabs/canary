@@ -1,5 +1,4 @@
-.. _writing-an-execute-analyze-test:
-
+"""
 How to write an execute and analyze test
 ========================================
 
@@ -252,3 +251,9 @@ It won't take much before the processing gets to be a lot of code, so it is reco
 
    if __name__ == "__main__":
        sys.exit(main())
+
+"""
+
+
+def test_execute_and_analyze():
+    pass

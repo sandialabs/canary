@@ -168,7 +168,7 @@ def colify(elts, **options):
     # Specify the number of character columns to use.
     if not console_cols:
         console_rows, console_cols = terminal_size()
-    elif type(console_cols) != int:
+    elif not isinstance(console_cols, int):
         raise ValueError("Number of columns must be an int")
     console_cols = max(1, console_cols - indent)
 

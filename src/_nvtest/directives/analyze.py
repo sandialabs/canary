@@ -50,7 +50,7 @@ def analyze(
     References
     ----------
 
-    * :ref:`Writing an execute/analyze test <Writing-an-execute-analyze-test>`
+    * :ref:`Writing an execute/analyze test <howto-execute-and-analyze>`
 
     Examples
     --------

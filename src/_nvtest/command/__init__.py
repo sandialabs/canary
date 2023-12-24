@@ -11,6 +11,7 @@ from . import report
 from . import run
 from . import show
 from . import status
+from . import tree
 
 
 def all_commands():
@@ -27,6 +28,7 @@ def all_commands():
         run,
         show,
         status,
+        tree,
     ]
 
 

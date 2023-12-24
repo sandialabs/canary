@@ -2,6 +2,7 @@ import argparse
 import os
 
 import _nvtest.directives
+import _nvtest.tests.howto
 
 from ..config.argparsing import make_argument_parser
 from ..third_party import argparsewriter as aw
@@ -65,6 +66,21 @@ def config(dest):
         fh.write(".. automodule:: _nvtest.config.__init__\n")
 
 
+def howto(dest):
+    mkdirp(dest)
+    with open(os.path.join(dest, "index.rst"), "w") as fh:
+        fh.write(".. _howto-guides:\n\n")
+        fh.write("How-to guides\n=============\n\n")
+        fh.write(".. toctree::\n   :maxdepth: 1\n\n")
+        for file in os.listdir(os.path.dirname(_nvtest.tests.howto.__file__)):
+            if not file.startswith("_") and file.endswith(".py"):
+                name = os.path.splitext(os.path.basename(file))[0]
+                fh.write(f"   {name}\n")
+                with open(os.path.join(dest, f"{name}.rst"), "w") as fp:
+                    fp.write(f".. _howto-{name.replace('_', '-')}:\n\n")
+                    fp.write(f".. automodule:: _nvtest.tests.howto.{name}\n")
+
+
 def autodoc(args: argparse.Namespace) -> int:
     tty.color.set_color_when("never")
     if not os.path.isdir(args.dest):
@@ -74,4 +90,5 @@ def autodoc(args: argparse.Namespace) -> int:
     testfile(os.path.join(args.dest, "testfile"))
     session(os.path.join(args.dest, "session"))
     config(os.path.join(args.dest, "config"))
+    howto(os.path.join(args.dest, "howto"))
     return 0

@@ -1,3 +1,4 @@
+"""
 How to run tests
 ================
 
@@ -58,3 +59,8 @@ Pass arguments to the scheduler
    nvtest run --runner=slurm -R,ARG1 -R,ARG2 PATH [PATHS...]
 
 where ``ARGI`` are passed directly to the scheduler.  Eg, ``-R,--account=XXYYZZ01``
+"""
+
+
+def test_run():
+    pass

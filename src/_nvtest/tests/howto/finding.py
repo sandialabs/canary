@@ -1,3 +1,4 @@
+"""
 How to find and list test files
 ===============================
 
@@ -116,3 +117,9 @@ Show available keywords
   ferom_csd          mrdynamics                 vumat
   ferom_nlk          msdsf                      xfem
   ferroceramic       mulliken_boyce             xflagrangian
+
+"""
+
+
+def test_finding():
+    pass

@@ -10,6 +10,7 @@ from typing import Optional
 from . import config
 from . import plugin
 from .command import add_commands
+from .command import all_commands
 from .config.argparsing import make_argument_parser
 from .config.argparsing import stat_names
 from .error import StopExecution
@@ -49,6 +50,27 @@ def main(argv: Optional[list[str]] = None) -> int:
             return invoke_command(command, args)
     finally:
         os.chdir(invocation_dir)
+
+
+class NVTestCommand:
+    def __init__(self, command_name: str) -> None:
+        for command in all_commands():
+            name = command.__name__.split(".")[-1]
+            if name == command_name:
+                break
+        else:
+            raise ValueError(f"Unknown command {command_name!r}")
+        self.command = command
+        self.cmdname = command.__name__.split(".")[-1]
+
+    def __call__(self, *args: str) -> int:
+        parser = make_argument_parser()
+        parser.add_command(self.command)
+        command_line = [self.command.__name__]
+        command_line.extend(args)
+        ns = parser.parse_args([self.cmdname] + list(args))
+        cmd = getattr(self.command, self.cmdname)
+        return cmd(ns)
 
 
 def invoke_command(command: FunctionType, args: argparse.Namespace) -> int:

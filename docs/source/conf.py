@@ -11,8 +11,12 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 import os
+import shutil
+import subprocess
 import sys
-sys.path.insert(0, os.path.abspath('../../src'))
+
+docs_source_dir = os.path.abspath(".")
+sys.path.insert(0, os.path.abspath(os.path.join(docs_source_dir, '../../src')))
 
 
 # -- Project information -----------------------------------------------------
@@ -37,6 +41,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.autodoc',
     'sphinx.ext.mathjax',
+    'sphinxcontrib.programoutput',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -79,3 +84,16 @@ html_theme_options = {
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True
+
+# Set an environment variable so that colify will print output like it would to
+# a terminal.
+os.environ["COLIFY_SIZE"] = "25x120"
+os.environ["COLUMNS"] = "120"
+
+# Generate full package list if needed
+for subdir in ("directives", "testfile", "config", "howto"):
+	dir = os.path.join(docs_source_dir, subdir)
+	if os.path.exists(dir):
+		shutil.rmtree(dir)
+args = [sys.executable, "-m", "nvtest", "autodoc", docs_source_dir]
+subprocess.call(args)

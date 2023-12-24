@@ -151,7 +151,7 @@ class Reporter(_Reporter):
             self.meta["OSVersion"] = os_version
             self.meta["OSPlatform"] = os_platform
         el = xdom.Document().createElement("Site")
-        for (key, value) in self.meta.items():
+        for key, value in self.meta.items():
             add_attr(el, key, value)
         return el
 
@@ -500,7 +500,7 @@ def _html_summary(url, project, buildgroups) -> str:
         "Time",
     )
     table_cols = " ".join(f"<th>{_}</th>" for _ in cols)
-    for (buildgroup, builds) in buildgroups.items():
+    for buildgroup, builds in buildgroups.items():
         fh.write(f"<h3>{buildgroup}</h3>\n")
         fh.write('<table style="width:100%" boarder="1">\n')
         fh.write("<tr>")
@@ -568,7 +568,6 @@ def _html_summary(url, project, buildgroups) -> str:
 
             # Test
             if build["hastest"]:
-
                 target = build["test"]["notrun"]
                 filters = ["onlynotrun", f"buildid={id}"]
                 link = _link(url, "viewTest.php", target, *filters)

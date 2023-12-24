@@ -17,6 +17,7 @@ from _nvtest.util.filesystem import which
 
 version_info = (0, 0, 1)
 version = ".".join(str(_) for _ in version_info)
+__version__ = version
 
 
 def __getattr__(name):

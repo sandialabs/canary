@@ -65,7 +65,7 @@ def parameterize(
     References
     ----------
 
-    * :ref:`Parameterizing Tests <parameterizing>`
+    * :ref:`Parameterizing Tests <howto-parameterize>`
 
     Examples
     --------

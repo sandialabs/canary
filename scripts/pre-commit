@@ -21,9 +21,13 @@ flake8 ./plugins
 echo "Type checking with mypy"
 mypy ${DIR}
 
-cd tests
-pytest .
+(
+  cd src/_nvtest/tests
+  pytest .
+)
 
-cd ../docs
-make clean
-make html
+(
+  cd docs
+  make clean
+  make html
+)

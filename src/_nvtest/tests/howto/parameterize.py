@@ -1,5 +1,4 @@
-.. _parameterizing:
-
+"""
 How to parameterize tests
 =========================
 
@@ -154,3 +153,9 @@ Test instances are executed in their own test directories.
    FINISHED: test[a=1] PASS
    FINISHED: test[a=2] PASS
    ================================== 2 pass in 0.34s. =================================
+
+"""
+
+
+def test_howto_parameterize():
+    pass

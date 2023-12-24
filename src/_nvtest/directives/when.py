@@ -77,7 +77,7 @@ class CompositeExpression:
         on_options: Optional[list[str]] = None,
         parameters: Optional[dict[str, Any]] = None,
     ) -> tuple[bool, str]:
-        for (expr_type, expr) in self.expressions.items():
+        for expr_type, expr in self.expressions.items():
             if expr_type == "platforms":
                 if not expr.evaluate(PlatformMatcher()):  # type: ignore
                     return False, expr_type

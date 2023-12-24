@@ -1,5 +1,4 @@
-.. _cmake-integration:
-
+"""
 How to integrate with CMake
 ===========================
 
@@ -214,3 +213,9 @@ would cause the following to be written to the build configuration (:ref:`write-
    [build:options]
    feature1 = true
    feature2 = true
+
+"""
+
+
+def test_cmake_integration():
+    pass
