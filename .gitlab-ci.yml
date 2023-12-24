@@ -8,9 +8,7 @@ test-job:
   - /projects/alegranevada/opt/cee/linux_rh7/python/3.9/bin/python -m venv venv
   - source venv/bin/activate
   - python -m pip install -e .[dev]
-  - cd tests
-  - pytest .
-  - cd ..
+  - pytest src/_nvtest/tests
   - deactivate
   rules:
   - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
@@ -22,7 +20,7 @@ pages:
   script:
   - /projects/alegranevada/opt/cee/linux_rh7/python/3.9/bin/python -m venv venv
   - source venv/bin/activate
-  - python -m pip install -e .
+  - python -m pip install -e .[dev]
   - cd docs
   - make clean
   - make html
