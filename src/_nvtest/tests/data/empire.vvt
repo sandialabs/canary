@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+# Supported Platforms
+# VVT: enable (testname="not run_cable_pregen",platform="TLCC2 or CTS1 or ceelan or iDarwin")
+# VVT: enable (testname="run_cable_pregen")
+#
+# paramterize
+# VVT: parameterize(testname = "not run_cable_pregen or not sver_pregen"): cable = Powerbus2 RG402
+# VVT: parameterize(testname = "run_cable_pregen or sver_pregen"): cable = Powerbus2
+# VVT: parameterize(testname = "not run_cubit and not run_seacas and not run_cable_pregen and not sver_pregen") : spectrum = Pithon7789
+# VVT:                                                                                                          :            Unfold-spectrum-7789
+# VVT:                                                                                                          :            Pithon7789-AXIOM-Unfold
+# VVT:                                                                                                          :            Pithon7789-AXIOM-Unfold-UQ
+# VVT: parameterize(testname = "run_cable_pregen or sver_pregen") : spectrum = Pithon7789
+# VVT: parameterize (testname="run_cubit or run_seacas or run_sceptre or run_cable or plot_cable") : mesh_level = 1
+# VVT: parameterize (testname="run_cable_pregen") : mesh_level = 1 2 3
+# VVT: link: ../../preload
+#
+# VVT: name : create_inputs
+# VVT: preload (testname="create_inputs") : source-script preload/empire_env.sh
+# VVT: link (testname="create_inputs") : spectra cables
+# VVT: timeout (testname="create_inputs") : 5m
+# VVT: keywords (testname="create_inputs") : cce
+# VVT: parameterize (testname="create_inputs") : np =1
+#
+# VVT: name : run_cepxs
+# VVT: preload (testname="run_cepxs") : source-script preload/sceptre_env.sh
+# VVT: depends on (testname="run_cepxs",expect=1,result="pass") : create_inputs.*cable=${cable}*.spectrum=${spectrum}
+# VVT: timeout (testname="run_cepxs") : 5m
+# VVT: keywords (testname="run_cepxs") : cce cepxs
+# VVT: parameterize (testname="run_cepxs") : np = 1
+#
+# VVT: name : run_cubit
+# VVT: link (testname="run_cubit") : cables
+# VVT: preload (testname="run_cubit") : source-script preload/empire_env.sh
+# VVT: timeout (testname="run_cubit") : 5m
+# VVT: keywords (testname="run_cubit") : cce cubit
+# VVT: parameterize (testname="run_cubit") : np = 1
+#
+# VVT: name : run_seacas
+# VVT: depends on (testname="run_seacas",expect=1,result="pass") : run_cubit.*cable=${cable}.*mesh_level=${mesh_level}*
+# VVT: preload (testname="run_seacas") : source-script preload/empire_env.sh
+# VVT: timeout (testname="run_seacas") : 5m
+# VVT: keywords (testname="run_seacas") : cce seacas
+# VVT: parameterize (testname="run_seacas") : np = 1
+# VVT: parameterize (testname="run_seacas",platform="not TLCC2") : target_np = 72
+# VVT: parameterize (testname="run_seacas",platform="TLCC2") : target_np = 64
+#
+# VVT: name : run_sceptre
+## VVT: link (testname="run_sceptre") : sceptre.xml
+## VVT:                               : createCabanaInput.xml
+## VVT:                               : stripExodusData.xml
+# VVT: depends on (testname="run_sceptre",expect=1,result="pass") : create_inputs.*cable=${cable}.*spectrum=${spectrum}
+# VVT: depends on (testname="run_sceptre",expect=1,result="pass") : run_seacas.*cable=${cable}.*mesh_level=${mesh_level}.*target_np=${np}
+# VVT: depends on (testname="run_sceptre",expect=1,result="pass") : run_cepxs.*cable=${cable}.*spectrum=${spectrum}
+# VVT: preload (testname="run_sceptre") : source-script preload/sceptre_env.sh
+# VVT: timeout (testname="run_sceptre") : 3h
+# VVT: keywords (testname="run_sceptre") : cce sceptre
+# VVT: parameterize (testname="run_sceptre",platform="not TLCC2") : np = 72
+# VVT: parameterize (testname="run_sceptre",platform="TLCC2") : np = 64
+#
+# One run uses the CCE's workflow, the other is EMPIRE-only using a pregen file..
+# VVT: name : run_cable
+# VVT: name : run_cable_pregen
+# VVT: depends on (testname="run_cable",expect=1,result="pass") : run_sceptre.*cable=${cable}.*mesh_level=${mesh_level}.*spectrum=${spectrum}
+# VVT: depends on (testname="run_cable*",expect=1,result="pass") : create_inputs.*cable=${cable}.*spectrum=${spectrum}
+# VVT: preload (testname="run_cable*") : source-script preload/empire_env.sh
+# VVT: keywords (testname="run_cable*"): cce
+# VVT: timeout (testname="run_cable*") : 15m
+# VVT: link (testname="run_cable*"): cables spectra experiments
+# VVT: link (testname="run_cable_pregen"): pregen
+# VVT: parameterize (testname="run_cable"): np = 4
+# VVT: parameterize (testname="run_cable_pregen"): np = 1
+#
+# VVT: name : sver_pregen
+# VVT: depends on (testname="sver_pregen",expect=3,result="pass") : run_cable_pregen.*cable=${cable}.*spectrum=${spectrum}*
+# VVT: preload (testname="sver_pregen") : source-script preload/empire_env.sh
+# VVT: keywords (testname="sver_pregen*"): empire empire-cable cable fast small gpu
+# VVT: parameterize (testname="sver_pregen",options="not gpu"): np = 1
+# VVT: parameterize (testname="sver_pregen",options="gpu"): np,ndevice = 1,1
+
+
+import sys
+
+sys.dont_write_bytecode = True
+
+if __name__ == "__main__":
+    import vvtest_util as vvt
+
+    if vvt.NAME == "create_inputs":
+        from workflow import create_inputs
+
+        create_inputs.main(vvt)
+
+    elif vvt.NAME == "run_cubit":
+        from workflow import run_cubit
+
+        run_cubit.main(vvt)
+    elif vvt.NAME == "run_seacas":
+        from workflow import run_seacas
+
+        run_seacas.main(vvt)
+    elif vvt.NAME == "run_cepxs":
+        from workflow import run_cepxs
+
+        run_cepxs.main(vvt)
+    elif vvt.NAME == "run_sceptre":
+        from workflow import run_sceptre
+
+        run_sceptre.main(vvt)
+
+    elif vvt.NAME in ["run_cable", "run_cable_pregen"]:
+        from workflow import run_cable
+
+        run_cable.main(vvt)
+
+    elif vvt.NAME == "sver_pregen":
+        from workflow import run_sver
+
+        run_sver.main(vvt, two_d_convergence=False)
+    else:
+        raise Exception("Test name not recognized: " + vvt.NAME)

@@ -62,5 +62,21 @@ where ``ARGI`` are passed directly to the scheduler.  Eg, ``-R,--account=XXYYZZ0
 """
 
 
-def test_run():
-    pass
+import os
+
+from _nvtest.util.filesystem import working_dir
+
+
+def test_run(tmpdir):
+    from _nvtest.main import NVTestCommand
+
+    run = NVTestCommand("run")
+    with working_dir(tmpdir.strpath, create=True):
+        with open("test.pyt", "w") as fh:
+            fh.write("import nvtest\n")
+            fh.write("nvtest.directives.keywords('a', 'b')\n")
+            fh.write("def test():\n    return 0\ntest()\n")
+        run("-d", "Foo", ".")
+        assert os.path.exists("Foo")
+        assert os.path.exists("Foo/.nvtest/config")
+        assert os.path.exists("Foo/test")

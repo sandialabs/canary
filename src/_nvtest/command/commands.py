@@ -156,7 +156,7 @@ class BashCompletionWriter(aw.ArgparseCompletionWriter):
 @formatter
 def subcommands(args, out):
     parser = make_argument_parser()
-    _nvtest.command.add_commands(parser)
+    _nvtest.command.add_all_commands(parser)
     writer = SubcommandWriter(parser.prog, out, args.aliases)
     writer.write(parser)
 
@@ -193,7 +193,7 @@ def rst(args, out):
     # create a parser with all commands
     tty.color.set_color_when("never")
     parser = make_argument_parser()
-    _nvtest.command.add_commands(parser)
+    _nvtest.command.add_all_commands(parser)
 
     # extract cross-refs of the form `_cmd-nvtest-<cmd>:` from rst files
     documented_commands = set()
@@ -222,7 +222,7 @@ def names(args, out):
 @formatter
 def bash(args, out):
     parser = make_argument_parser()
-    _nvtest.command.add_commands(parser)
+    _nvtest.command.add_all_commands(parser)
 
     writer = BashCompletionWriter(parser.prog, out, args.aliases)
     writer.write(parser)

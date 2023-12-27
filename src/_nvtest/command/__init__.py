@@ -1,3 +1,6 @@
+from types import ModuleType
+from typing import Optional
+
 from ..config.argparsing import Parser
 from . import autodoc
 from . import commands
@@ -14,7 +17,7 @@ from . import status
 from . import tree
 
 
-def all_commands():
+def all_commands() -> list[ModuleType]:
     return [
         autodoc,
         commands,
@@ -32,6 +35,17 @@ def all_commands():
     ]
 
 
-def add_commands(parser: Parser) -> None:
+def add_all_commands(parser: Parser) -> None:
     for command in all_commands():
         parser.add_command(command)
+
+
+def _cmd_name(command_module: ModuleType) -> str:
+    return command_module.__name__.split(".")[-1]
+
+
+def get_command(command_name: str) -> Optional[ModuleType]:
+    for command_module in all_commands():
+        if _cmd_name(command_module) == command_name:
+            return command_module
+    return None

@@ -309,7 +309,6 @@ class AbstractTestFile:
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
                 keywords = self.keywords(testname=name, parameters=parameters)
-                print(f"HERE I AM A.0: {mask=}, {keyword_expr=}")
                 if mask is None and keyword_expr is not None:
                     kwds = {kw for kw in keywords}
                     kwds.add(name)
@@ -320,7 +319,6 @@ class AbstractTestFile:
                         tty.verbose(f"Skipping {self}::{name}")
                         mask = colorize("deselected by @*b{keyword expression}")
 
-                print(f"HERE I AM A.1: {mask=}, {keyword_expr=}")
                 np = parameters.get("np")
                 if not isinstance(np, int) and np is not None:
                     class_name = np.__class__.__name__
@@ -331,7 +329,6 @@ class AbstractTestFile:
                     s = "deselected due to @*b{exceeding cpu count of machine}"
                     mask = colorize(s)
 
-                print(f"HERE I AM A.2: {mask=}, {keyword_expr=}")
                 nd = parameters.get("ndevice")
                 if not isinstance(nd, int) and nd is not None:
                     class_name = nd.__class__.__name__
@@ -342,7 +339,6 @@ class AbstractTestFile:
                 if mask is None and nd and nd > device_count:
                     s = "deselected due to @*b{exceeding device count of machine}"
                     mask = colorize(s)
-                print(f"HERE I AM A.3: {mask=}, {keyword_expr=}")
 
                 if mask is None and ("TDD" in keywords or "tdd" in keywords):
                     mask = colorize("deselected due to @*b{TDD keyword}")
@@ -353,7 +349,6 @@ class AbstractTestFile:
                 attributes = self.attributes(
                     testname=name, on_options=on_options, parameters=parameters
                 )
-                print(f"HERE I AM A.N: {mask=}, {keyword_expr=}")
 
                 case = TestCase(
                     self.root,

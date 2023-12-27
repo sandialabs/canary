@@ -37,7 +37,7 @@ def directives(dest):
 def commands(dest):
     mkdirp(dest)
     parser = make_argument_parser()
-    _nvtest.command.add_commands(parser)
+    _nvtest.command.add_all_commands(parser)
     writer = aw.ArgparseMultiRstWriter(parser.prog, dest)
     writer.write(parser)
 
