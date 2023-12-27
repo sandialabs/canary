@@ -42,4 +42,5 @@ pages:
     - docs/*/*.rst
     - docs/**/*.rst
     - docs/Makefile
+    - docs/source/conf.py
     when: always

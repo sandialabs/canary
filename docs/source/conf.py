@@ -41,7 +41,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.autodoc',
     'sphinx.ext.mathjax',
-    'sphinxcontrib.programoutput',
+#    'sphinxcontrib.programoutput',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
