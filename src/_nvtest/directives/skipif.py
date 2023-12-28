@@ -72,7 +72,6 @@ def skipif(arg: bool, *, reason: str) -> None:
     ``python_expression`` is evaluated in a minimal namespace consisting of the
     ``os`` module, ``sys`` module, and ``importable`` function.
 
-        self.testfile.m_skipif(arg, reason=reason)
     """
     if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
         file = _nvtest.__FILE_BEING_SCANNED__
