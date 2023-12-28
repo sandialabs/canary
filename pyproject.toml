@@ -35,7 +35,7 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = "networkx.*,yaml.*,ruamel.*,pygments.*,toml.*,contextlib2.*,scipy.*,_nvtest.tests.*"
+module = "networkx.*,yaml.*,ruamel.*,pygments.*,toml.*,contextlib2.*,scipy.*,_nvtest.tests.*,numpy.*,imageio.*"
 ignore_missing_imports = true
 
 

@@ -71,18 +71,32 @@ def read_machine_info() -> dict:
         cpu_count=rprobe.cpu_count(),
     )
     if which("sinfo"):
-        sinfo = Executable("sinfo")
-        opts = [
-            "%X",  # Number of sockets per node
-            "%Y",  # Number of cores per socket
-            "%Z",  # Number of threads per core
-            "%c",  # Number of CPUs per node
-            "%D",  # Number of nodes
-        ]
-        format = " ".join(opts)
-        out = sinfo("-o", format, fail_on_error=False, output=str)
-        sockets_per_node, cores_per_socket, _, cpus_per_node, node_count = out.split()
-        info["sockets_per_node"] = sockets_per_node
-        info["cores_per_socket"] = cores_per_socket
-        info["cpu_count"] = cpus_per_node * node_count
+        info.update(read_sinfo())
+    return info
+
+
+def read_sinfo() -> dict:
+    path = which("sinfo")
+    assert path is not None
+    sinfo = Executable(path)
+    opts = [
+        "%X",  # Number of sockets per node
+        "%Y",  # Number of cores per socket
+        "%Z",  # Number of threads per core
+        "%c",  # Number of CPUs per node
+        "%D",  # Number of nodes
+    ]
+    format = " ".join(opts)
+    out = sinfo("-o", format, fail_on_error=False, output=str)
+    for line in out.split("\n"):
+        parts = line.split()
+        if not parts:
+            continue
+        elif parts and parts[0].startswith("SOCKETS"):
+            continue
+        spn, cps, _, cpn, nc = [int(_) for _ in parts]
+        break
+    else:
+        raise ValueError("Unable to read sinfo")
+    info = {"sockets_per_node": spn, "cores_per_socket": cps, "cpu_count": cpn * nc}
     return info

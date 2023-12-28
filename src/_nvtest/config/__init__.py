@@ -412,13 +412,16 @@ class Config:
         scope_data[section] = update_data
 
     def describe(self, section: Optional[str] = None) -> str:
-        import yaml
-
         if section is not None:
             merged = {section: self.get_config(section)}
         else:
             merged = self.merge()
-        return yaml.dump(merged, default_flow_style=False)
+        try:
+            import yaml
+
+            return yaml.dump(merged, default_flow_style=False)
+        except ImportError:
+            return json.dumps(merged, indent=2)
 
 
 def _merge(dest, source):

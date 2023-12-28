@@ -53,8 +53,6 @@ class SlurmRunner(BatchRunner, _Slurm):
     def write_header(self, fh: TextIO) -> None:
         """Generate the sbatch script for the current state of arguments."""
         fh.write(f"#!{self.shell}\n")
-        if self.namespace.dont_wait:
-            self.namespace.wait = False
         for key, value in vars(self.namespace).items():
             if isinstance(value, bool):
                 if value is True:

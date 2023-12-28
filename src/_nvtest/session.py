@@ -255,7 +255,9 @@ class Session:
         lock_path = os.path.join(self.dotdir, "lock")
         self.lock = Lock(lock_path, default_timeout=120, desc="session")
 
-        self.setup_testcases(cases_to_run, copy_all_resources=copy_all_resources)
+        self.setup_testcases(
+            cases_to_run, copy_all_resources=copy_all_resources, cpu_count=max_workers
+        )
 
         # Setup the queue
         work_items: Union[list[TestCase], list[Partition]]
@@ -518,7 +520,10 @@ class Session:
                 os.environ.pop(var)
 
     def setup_testcases(
-        self, cases: list[TestCase], copy_all_resources: bool = False
+        self,
+        cases: list[TestCase],
+        copy_all_resources: bool = False,
+        cpu_count: int = 5,
     ) -> None:
         mkdirp(self.work_tree)
         ts: TopologicalSorter = TopologicalSorter()
@@ -532,7 +537,6 @@ class Session:
                     args = zip(
                         group, repeat(self.work_tree), repeat(copy_all_resources)
                     )
-                    cpu_count = config.get("machine:cpu_count")
                     pool = multiprocessing.Pool(processes=cpu_count)
                     result = pool.starmap(_setup_individual_case, args)
                     pool.close()
