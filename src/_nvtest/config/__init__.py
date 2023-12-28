@@ -163,13 +163,15 @@ class Config:
                 },
             }
         }
-        home = os.getenv("HOME")
-        if home is not None:
+        if "NVTEST_GLOBAL_CONFIG" in os.environ:
+            file = os.environ["NVTEST_GLOBAL_CONFIG"]
+            if os.path.exists(file):
+                self.load_config(file, "global")
+        elif "HOME" in os.environ:
+            home = os.environ["HOME"]
             file = os.path.join(home, ".nvtest")
             if os.path.exists(file):
                 self.load_config(file, "global")
-        if os.path.exists("nvtest.cfg"):
-            self.load_config("nvtest.cfg", "local")
         dir = os.getcwd()
         while dir != os.path.sep:
             path = os.path.join(dir, ".nvtest/config")
@@ -181,6 +183,10 @@ class Config:
                 self.set("session:start", start, scope="session")
                 break
             dir = os.path.dirname(dir)
+        else:
+            # only load the local config if not running inside a session
+            if os.path.exists("nvtest.cfg"):
+                self.load_config("nvtest.cfg", "local")
         self.load_env_config()
 
     def load_config(self, file: str, scope: str) -> None:
