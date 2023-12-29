@@ -24,9 +24,15 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
         self._indent_increment = 2
 
     def _split_lines(self, text, width):
-        text = self._whitespace_matcher.sub(" ", text).strip()
+        """Help messages can add new lines by including \n\n"""
         _, cols = tty.terminal_size()
-        return textwrap.wrap(text, int(2 * cols / 3.0))
+        width = int(2.0 * cols / 3.0)
+        lines = []
+        for line in text.split("\n\n"):
+            line = self._whitespace_matcher.sub(" ", line).strip()
+            wrapped = textwrap.wrap(line, width)
+            lines.extend(wrapped or ["\n"])
+        return lines
 
     def _format_actions_usage(self, actions, groups):
         """Formatter with more concise usage strings."""

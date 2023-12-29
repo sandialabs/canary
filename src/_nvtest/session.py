@@ -94,6 +94,7 @@ from .test.partition import Partition
 from .test.partition import partition_n
 from .test.partition import partition_t
 from .test.testcase import TestCase
+from .third_party import rprobe
 from .third_party.lock import Lock
 from .third_party.lock import WriteTransaction
 from .util import tty
@@ -256,7 +257,9 @@ class Session:
         self.lock = Lock(lock_path, default_timeout=120, desc="session")
 
         self.setup_testcases(
-            cases_to_run, copy_all_resources=copy_all_resources, cpu_count=max_workers
+            cases_to_run,
+            copy_all_resources=copy_all_resources,
+            processes=rprobe.cpu_count(),
         )
 
         # Setup the queue
@@ -523,7 +526,7 @@ class Session:
         self,
         cases: list[TestCase],
         copy_all_resources: bool = False,
-        cpu_count: int = 5,
+        processes: int = 5,
     ) -> None:
         mkdirp(self.work_tree)
         ts: TopologicalSorter = TopologicalSorter()
@@ -537,7 +540,7 @@ class Session:
                     args = zip(
                         group, repeat(self.work_tree), repeat(copy_all_resources)
                     )
-                    pool = multiprocessing.Pool(processes=cpu_count)
+                    pool = multiprocessing.Pool(processes=processes)
                     result = pool.starmap(_setup_individual_case, args)
                     pool.close()
                     pool.join()
