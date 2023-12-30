@@ -150,9 +150,11 @@ class Session:
     id: int
     startdir: str
     exitstatus: int
-    max_cores_per_test: int
-    max_devices_per_test: int
-    max_workers: int
+    _avail_cpus: int
+    _avail_devices: int
+    _avail_cpus_per_test: int
+    _avail_devices_per_test: int
+    _avail_workers: int
     search_paths: dict[str, list[str]]
     batch_config: BatchConfig
     cases: list[TestCase]
@@ -169,6 +171,63 @@ class Session:
             raise ValueError(
                 "Session must be created through one of its factory methods"
             )
+        self._avail_cpus = config.get("machine:cpu_count")
+        self._avail_cpus_per_test = self.avail_cpus
+        self._avail_workers = self.avail_cpus
+        self._avail_devices = config.get("machine:device_count")
+        self._avail_devices_per_test = self.avail_devices
+
+    @property
+    def avail_cpus(self) -> int:
+        return self._avail_cpus
+
+    @avail_cpus.setter
+    def avail_cpus(self, arg: int) -> None:
+        if arg > config.get("machine:cpu_count"):
+            n = config.get("machine:cpu_count")
+            raise ValueError(f"avail_cpus={arg} cannot exceed cpu_count={n}")
+
+    @property
+    def avail_cpus_per_test(self) -> int:
+        return self._avail_cpus_per_test
+
+    @avail_cpus_per_test.setter
+    def avail_cpus_per_test(self, arg: int) -> None:
+        if arg > self.avail_cpus:
+            n = self.avail_cpus
+            raise ValueError(f"avail_cpus_per_test={arg} cannot exceed avail_cpus={n}")
+
+    @property
+    def avail_devices(self) -> int:
+        return self._avail_devices
+
+    @avail_devices.setter
+    def avail_devices(self, arg: int) -> None:
+        if arg > config.get("machine:device_count"):
+            n = config.get("machine:device_count")
+            raise ValueError(f"avail_devices={arg} cannot exceed device_count={n}")
+
+    @property
+    def avail_devices_per_test(self) -> int:
+        return self._avail_devices_per_test
+
+    @avail_devices_per_test.setter
+    def avail_devices_per_test(self, arg: int) -> None:
+        if arg > self.avail_devices:
+            n = self.avail_devices
+            raise ValueError(
+                f"avail_devices_per_test={arg} cannot exceed avail_devices={n}"
+            )
+
+    @property
+    def avail_workers(self) -> int:
+        return self._avail_workers
+
+    @avail_workers.setter
+    def avail_workers(self, arg: int) -> None:
+        if arg > self.avail_cpus:
+            n = self.avail_cpus
+            raise ValueError(f"avail_workers={arg} cannot exceed avail_cpus={n}")
 
     @classmethod
     def create(
@@ -176,9 +235,11 @@ class Session:
         *,
         work_tree: str,
         search_paths: dict[str, list[str]],
-        max_cores_per_test: Optional[int] = None,
-        max_devices_per_test: Optional[int] = None,
-        max_workers: Optional[int] = None,
+        avail_cpus: Optional[int] = None,
+        avail_cpus_per_test: Optional[int] = None,
+        avail_devices: Optional[int] = None,
+        avail_devices_per_test: Optional[int] = None,
+        avail_workers: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -189,15 +250,23 @@ class Session:
             raise ValueError("cannot create new session when another session is active")
         self = cls()
         self.mode = "w"
-
         self.exitstatus = -1
-        self.max_cores_per_test = max_cores_per_test or config.get("machine:cpu_count")
-        self.max_devices_per_test = max_devices_per_test or config.get(
-            "machine:device_count"
-        )
-        if max_workers is None:
-            max_workers = 5 if batch_config else self.max_cores_per_test
-        self.max_workers = max_workers
+
+        if avail_cpus is not None:
+            self.avail_cpus = avail_cpus
+        if avail_cpus_per_test is not None:
+            self.avail_cpus_per_test = avail_cpus_per_test
+
+        if avail_devices is not None:
+            self.avail_devices = avail_devices
+        if avail_devices_per_test is not None:
+            self.avail_devices_per_test = avail_devices_per_test
+
+        if avail_workers is not None:
+            self.avail_workers = avail_workers
+        elif batch_config is not None:
+            self.avail_workers = 5
+
         self.search_paths = search_paths
         self.batch_config = batch_config or Session.BatchConfig()
 
@@ -211,9 +280,11 @@ class Session:
         self._create_config(
             work_tree,
             search_paths=self.search_paths,
-            max_cores_per_test=self.max_cores_per_test,
-            max_devices_per_test=self.max_devices_per_test,
-            max_workers=self.max_workers,
+            avail_cpus=self.avail_cpus,
+            avail_cpus_per_test=self.avail_cpus_per_test,
+            avail_devices=self.avail_devices,
+            avail_devices_per_test=self.avail_devices_per_test,
+            avail_workers=self.avail_workers,
             keyword_expr=keyword_expr,
             on_options=on_options,
             parameter_expr=parameter_expr,
@@ -230,8 +301,9 @@ class Session:
 
         tty.debug(
             "Freezing test files with the following options: ",
-            f"{max_cores_per_test=}",
-            f"{max_devices_per_test=}",
+            f"{avail_cpus=}",
+            f"{avail_cpus_per_test=}",
+            f"{avail_devices_per_test=}",
             f"{on_options=}",
             f"{keyword_expr=}",
             f"{parameter_expr=}",
@@ -239,8 +311,8 @@ class Session:
 
         self.cases = Finder.freeze(
             tree,
-            cpu_count=self.max_cores_per_test,
-            device_count=self.max_devices_per_test,
+            avail_cpus_per_test=self.avail_cpus_per_test,
+            avail_devices_per_test=self.avail_devices_per_test,
             on_options=on_options,
             keyword_expr=keyword_expr,
             parameter_expr=parameter_expr,
@@ -276,9 +348,9 @@ class Session:
 
         self.queue = q_factory(
             work_items,
-            workers=self.max_workers,
-            cpu_count=self.max_cores_per_test,
-            device_count=self.max_devices_per_test,
+            avail_workers=self.avail_workers,
+            avail_cpus=self.avail_cpus,
+            avail_devices=self.avail_devices,
         )
 
         if batch_config:
@@ -339,9 +411,9 @@ class Session:
         cases = [case for case in self.cases if not case.masked]
         self.queue = q_factory(
             cases,
-            workers=self.max_workers,
-            cpu_count=self.max_cores_per_test,
-            device_count=self.max_devices_per_test,
+            avail_workers=self.avail_workers,
+            avail_cpus=self.avail_cpus,
+            avail_devices=self.avail_devices,
         )
         return self
 
@@ -418,8 +490,8 @@ class Session:
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
         start: Optional[str] = None,
-        max_cores_per_test: Optional[int] = None,
-        max_devices_per_test: Optional[int] = None,
+        avail_cpus_per_test: Optional[int] = None,
+        avail_devices_per_test: Optional[int] = None,
         case_specs: Optional[list[str]] = None,
     ) -> None:
         if not self.cases:
@@ -444,9 +516,9 @@ class Session:
             if case.status != "staged":
                 s = f"deselected due to previous test status: {case.status.cname}"
                 case.mask = s
-                if max_cores_per_test and case.cpu_count > max_cores_per_test:
+                if avail_cpus_per_test and case.processors > avail_cpus_per_test:
                     continue
-                if max_devices_per_test and case.device_count > max_devices_per_test:
+                if avail_devices_per_test and case.devices > avail_devices_per_test:
                     continue
                 if parameter_expr:
                     match = directives.when(parameter_expr, parameters=case.parameters)
@@ -463,9 +535,9 @@ class Session:
             raise EmptySession()
         self.queue = q_factory(
             cases,
-            workers=self.max_workers,
-            cpu_count=max_cores_per_test,
-            device_count=max_devices_per_test,
+            avail_workers=self.avail_workers,
+            avail_cpus=self.avail_cpus,
+            avail_devices=self.avail_devices,
         )
 
     def run(
@@ -563,7 +635,7 @@ class Session:
         timeout_message = f"Test suite execution exceeded time out of {timeout} s."
         try:
             with timeout_context(timeout, timeout_message=timeout_message):
-                with ProcessPoolExecutor(max_workers=self.max_workers) as self.ppe:
+                with ProcessPoolExecutor(max_workers=self.avail_workers) as self.ppe:
                     while True:
                         try:
                             i, entity = self.queue.pop_next()

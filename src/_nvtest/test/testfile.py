@@ -265,16 +265,16 @@ class AbstractTestFile:
 
     def freeze(
         self,
-        cpu_count: Optional[int] = None,
-        device_count: Optional[int] = None,
+        avail_cpus: Optional[int] = None,
+        avail_devices: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
     ) -> list[TestCase]:
         try:
             return self._freeze(
-                cpu_count=cpu_count,
-                device_count=device_count,
+                avail_cpus=avail_cpus,
+                avail_devices=avail_devices,
                 keyword_expr=keyword_expr,
                 on_options=on_options,
                 parameter_expr=parameter_expr,
@@ -286,14 +286,14 @@ class AbstractTestFile:
 
     def _freeze(
         self,
-        cpu_count: Optional[int] = None,
-        device_count: Optional[int] = None,
+        avail_cpus: Optional[int] = None,
+        avail_devices: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
     ) -> list[TestCase]:
-        cpu_count = cpu_count or config.get("machine:cpu_count")
-        device_count = device_count or config.get("machine:device_count")
+        avail_cpus = avail_cpus or config.get("machine:cpu_count")
+        avail_devices = avail_devices or config.get("machine:device_count")
         testcases: list[TestCase] = []
         names = ", ".join(self.names())
         tty.verbose(
@@ -325,7 +325,7 @@ class AbstractTestFile:
                     raise ValueError(
                         f"{self.name}: expected np={np} to be an int, not {class_name}"
                     )
-                if mask is None and np and np > cpu_count:
+                if mask is None and np and np > avail_cpus:
                     s = "deselected due to @*b{exceeding cpu count of machine}"
                     mask = colorize(s)
 
@@ -336,7 +336,7 @@ class AbstractTestFile:
                         f"{self.name}: expected ndevice={nd} "
                         f"to be an int, not {class_name}"
                     )
-                if mask is None and nd and nd > device_count:
+                if mask is None and nd and nd > avail_devices:
                     s = "deselected due to @*b{exceeding device count of machine}"
                     mask = colorize(s)
 

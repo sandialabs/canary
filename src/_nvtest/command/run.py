@@ -25,8 +25,11 @@ from ..util.misc import partition
 from ..util.time import time_in_seconds
 from ..util.tty.color import colorize
 from .common import add_mark_arguments
+from .common import add_resource_arguments
 from .common import add_timing_arguments
 from .common import add_work_tree_arguments
+from .common import set_default_resource_args
+from .common import setdefault
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
@@ -100,28 +103,9 @@ def setup_parser(parser: "Parser"):
         help="Do not link resources to the test "
         "directory, only copy [default: %(default)s]",
     )
-    group = parser.add_argument_group("resource control")
-    group.add_argument(
-        "-l",
-        action=ResourceSetter,
-        metavar="resource",
-        default=None,
-        help=colorize(
-            "Defines the resources that are required by the test session and "
-            "establishes a limit to the amount of resource that can be consumed. "
-            "The @*{resource} argument is of the form: @*{[scope:]type:value}, where "
-            "@*{scope} (optional) is one of session or test, (session is assumed if "
-            "not provided); @*{type} is one of workers, cpus, or devices; "
-            "and @*{value} is an integer value. By default, nvtest will determine and "
-            "all available cpu cores.\n\n\n\n@*{Examples}\n\n"
-            "@*{* -l test:cpus:5}: Skip tests requiring more than 5 cpu cores.\n\n"
-            "@*{* -l session:cpus:5}: Occupy at most 5 cpu cores at any one time.\n\n"
-            "@*{* -l test:devices:2}: Skip tests requiring more than 2 devices.\n\n"
-            "@*{* -l session:devices:3}: Occupy at most 3 devices at any one time.\n\n"
-            "@*{* -l session:workers:8}: Execute tests/batches asynchronously using "
-            "a pool of at most 8 workers\n\n"
-        ),
-    )
+
+    add_resource_arguments(parser)
+
     group = parser.add_argument_group("batching")
     p1 = group.add_mutually_exclusive_group()
     p1.add_argument(
@@ -167,39 +151,6 @@ def setup_parser(parser: "Parser"):
     )
 
 
-class ResourceError(Exception):
-    def __init__(self, action, values, message):
-        opt = "/".join(action.option_strings)
-        super().__init__(f"{opt} {values}: {message}")
-
-
-class ResourceSetter(argparse.Action):
-    def __call__(self, parser, args, values, option_string=None):
-        parts = values.split(":")
-        if len(parts) == 2:
-            scope = "session"
-            type, string = parts
-        elif len(parts) == 3:
-            scope, type, string = parts
-        else:
-            raise ResourceError(self, values, "invalid resource spec")
-        if scope not in ("session", "test"):
-            raise ResourceError(self, values, f"invalid scope {scope!r}")
-        if type not in ("cores", "cpus", "devices", "gpus", "workers"):
-            raise ResourceError(self, values, f"invalid type {type!r}")
-        else:
-            type = {"cores": "cpus", "gpus": "devices"}.get(type, type)
-        try:
-            value = int(string)
-        except ValueError:
-            raise ResourceError(self, values, f"invalid int {string!r}")
-        if type == "workers" and scope != "session":
-            raise ResourceError(
-                self, values, f"invalid scope {scope!r} (expected session)"
-            )
-        setattr(args, f"{type}_per_{scope}", value)
-
-
 class RunnerOptions(argparse.Action):
     def __call__(
         self,
@@ -240,19 +191,11 @@ def run(args: "argparse.Namespace") -> int:
     parse_pathspec(args)
     initstate: int = 0
 
-    if args.cpus_per_test is not None:
-        cpu_count = config.get("machine:cpu_count")
-        if args.cpus_per_test > cpu_count:
-            tty.die("-l test:cpus:N cannot exceed machine:cpu_count")
-
-    if args.devices_per_test is not None:
-        device_count = config.get("machine:device_count")
-        if args.devices_per_test > device_count:
-            tty.die("--max-devices-per-test cannot exceed machine:device_count")
-
     timer = Timer()
     with timer.timeit("setup"):
         session = setup_session(args)
+    if not args.no_header:
+        print_front_matter(session)
     setup_duration = timer.duration("setup")
 
     initstate = 1
@@ -291,14 +234,6 @@ def run(args: "argparse.Namespace") -> int:
         if initstate >= 2:
             session.teardown()
     return session.exitstatus
-
-
-def set_default_resource_args(args: argparse.Namespace) -> None:
-    setdefault(args, "cpus_per_test", None)
-    setdefault(args, "cpus_per_session", None)
-    setdefault(args, "devices_per_test", None)
-    setdefault(args, "devices_per_session", None)
-    setdefault(args, "workers_per_session", None)
 
 
 def parse_pathspec(args: argparse.Namespace) -> None:
@@ -345,12 +280,6 @@ def _parse_new_session_pathspec(args: argparse.Namespace) -> None:
             args.paths.setdefault(path, [])
         else:
             tty.die(f"{path}: no such file or directory")
-
-
-def setdefault(obj, attr, default):
-    if not hasattr(obj, attr):
-        setattr(obj, attr, default)
-    return getattr(obj, attr)
 
 
 def _parse_in_session_pathspec(args: argparse.Namespace) -> None:
@@ -408,19 +337,16 @@ def _parse_in_session_pathspec(args: argparse.Namespace) -> None:
     return
 
 
-def print_front_matter(args: "argparse.Namespace"):
-    n = config.get("machine:cpu_count")
-    N = args.cpus_per_test or n
+def print_front_matter(session: "Session"):
     p = config.get("system:platform")
     v = config.get("python:version")
-    tty.print(f"platform {p} -- Python {v}, num cores: {n}, max cores: {N}")
-    if hasattr(args, "workers_per_session"):
-        tty.print(
-            f"Maximum number of asynchronous jobs: {args.workers_per_session or 'auto'}"
-        )
-    tty.print(f"Working tree: {args.work_tree or Session.default_work_tree}")
-    if args.mode == "w":
-        paths = "\n  ".join(args.paths)
+    tty.print(f"{p} -- Python {v}")
+    tty.print(f"Available of cpus: {session.avail_cpus}")
+    tty.print(f"Available cpus per test: {session.avail_cpus_per_test}")
+    tty.print(f"Maximum number of asynchronous jobs: {session.avail_workers}")
+    tty.print(f"Working tree: {session.work_tree}")
+    if session.mode == "w":
+        paths = "\n  ".join(session.search_paths)
         tty.print(f"search paths:\n  {paths}")
 
 
@@ -551,8 +477,6 @@ def setup_session(args: "argparse.Namespace") -> Session:
         if args.mode != "w":
             tty.die(f"Cannot wipe work directory with mode={args.mode}")
         force_remove(args.work_tree or Session.default_work_tree)
-    if not args.no_header:
-        print_front_matter(args)
     session: Session
     if args.mode == "w":
         tty.print("Setting up test session", centered=True)
@@ -560,9 +484,11 @@ def setup_session(args: "argparse.Namespace") -> Session:
         session = Session.create(
             work_tree=args.work_tree or Session.default_work_tree,
             search_paths=args.paths,
-            max_cores_per_test=args.cpus_per_test,
-            max_devices_per_test=args.devices_per_test,
-            max_workers=args.workers_per_session,
+            avail_cpus=args.cpus_per_session,
+            avail_cpus_per_test=args.cpus_per_test,
+            avail_devices=args.devices_per_session,
+            avail_devices_per_test=args.devices_per_test,
+            avail_workers=args.workers_per_session,
             keyword_expr=args.keyword_expr,
             on_options=args.on_options,
             batch_config=bc,
@@ -575,12 +501,22 @@ def setup_session(args: "argparse.Namespace") -> Session:
         assert args.mode == "a"
         tty.print("Setting up test session", centered=True)
         session = Session.load(mode=args.mode)
+        if args.cpus_per_session is not None:
+            session.avail_cpus = args.cpus_per_session
+        if args.cpus_per_test is not None:
+            session.avail_cpus_per_test = args.cpus_per_test
+        if args.devices_per_session is not None:
+            session.avail_devices = args.devices_per_session
+        if args.devices_per_test is not None:
+            session.avail_devices_per_test = args.devices_per_test
+        if args.workers_per_session is not None:
+            session.avail_workers = args.workers_per_session
         session.filter(
             keyword_expr=args.keyword_expr,
             start=args.start,
             parameter_expr=args.parameter_expr,
-            max_cores_per_test=args.cpus_per_test,
-            max_devices_per_test=args.devices_per_test,
+            avail_cpus_per_test=args.cpus_per_test,
+            avail_devices_per_test=args.devices_per_test,
             case_specs=getattr(args, "case_specs", None),
         )
     session.exitstatus = ExitCode.OK

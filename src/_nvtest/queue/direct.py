@@ -9,9 +9,9 @@ class DirectQueue(Queue):
         for case in self.work_items:
             if case.masked:
                 continue
-            if case.cpu_count > self.cpus:
+            if case.processors > self.cpus:
                 raise ValueError(
-                    f"{case!r}: required cpus ({case.cpu_count}) "
+                    f"{case!r}: required cpus ({case.processors}) "
                     f"exceeds max cpu count ({self.cpus})"
                 )
 

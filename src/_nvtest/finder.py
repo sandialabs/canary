@@ -147,8 +147,8 @@ class Finder:
     @staticmethod
     def freeze(
         tree: dict[str, set[AbstractTestFile]],
-        cpu_count: Optional[int] = None,
-        device_count: Optional[int] = None,
+        avail_cpus_per_test: Optional[int] = None,
+        avail_devices_per_test: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
@@ -164,8 +164,8 @@ class Finder:
         for abstract_files in tree.values():
             for abstract_file in abstract_files:
                 concrete_test_cases = abstract_file.freeze(
-                    cpu_count=cpu_count,
-                    device_count=device_count,
+                    avail_cpus=avail_cpus_per_test,
+                    avail_devices=avail_devices_per_test,
                     keyword_expr=keyword_expr,
                     parameter_expr=parameter_expr,
                     on_options=on_options,

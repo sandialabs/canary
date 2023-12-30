@@ -17,7 +17,7 @@ lock_wait_time = 0.00001
 
 
 class Queue:
-    def __init__(self, cpus: int, workers: int, devices: int, work_items: Any) -> None:
+    def __init__(self, cpus: int, devices: int, workers: int, work_items: Any) -> None:
         self.work_items = work_items
         self.workers = workers
         self.cpus = cpus
@@ -77,11 +77,11 @@ class Queue:
 
     @property
     def _avail_cpus(self):
-        return self.cpus - sum(case.cpu_count for case in self._running.values())
+        return self.cpus - sum(case.processors for case in self._running.values())
 
     @property
     def _avail_devices(self):
-        return self.devices - sum(case.device_count for case in self._running.values())
+        return self.devices - sum(case.devices for case in self._running.values())
 
     @property
     def avail_resources(self):
@@ -128,7 +128,7 @@ class Queue:
                         self.mark_as_orphaned(id)
                         continue
                     elif avail_workers and job_is_ready:
-                        if (item.cpu_count, item.device_count) <= self.avail_resources:
+                        if (item.processors, item.devices) <= self.avail_resources:
                             self._running[id] = self.queue.pop(id)
                             return id, item
             time.sleep(lock_wait_time)

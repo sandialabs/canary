@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 from typing import TYPE_CHECKING
@@ -10,10 +11,10 @@ from ..util.time import hhmmss
 from ..util.tty.colify import colified
 from ..util.tty.color import colorize
 from .common import add_mark_arguments
+from .common import add_resource_arguments
+from .common import set_default_resource_args
 
 if TYPE_CHECKING:
-    import argparse
-
     from _nvtest.config.argparsing import Parser
     from _nvtest.test.testcase import TestCase
 
@@ -59,12 +60,14 @@ def setup_parser(parser: "Parser"):
         default=False,
         help="Show available keywords",
     )
+    add_resource_arguments(parser)
     parser.add_argument("search_paths", nargs="*", help="Search path[s]")
 
 
 def find(args: "argparse.Namespace") -> int:
+    set_default_resource_args(args)
     if not args.no_header:
-        print_front_matter()
+        print_front_matter(args)
     finder = Finder()
     search_paths = args.search_paths or [os.getcwd()]
     for path in search_paths:
@@ -73,7 +76,8 @@ def find(args: "argparse.Namespace") -> int:
     tree = finder.populate()
     cases = Finder.freeze(
         tree,
-        cpu_count=config.get("machine:cpu_count"),
+        avail_cpus_per_test=args.cpus_per_test,
+        avail_devices_per_test=args.devices_per_test,
         keyword_expr=args.keyword_expr,
         parameter_expr=args.parameter_expr,
         on_options=args.on_options,
@@ -145,12 +149,15 @@ def _print(cases_to_run: "list[TestCase]"):
         tty.emit(summary)
 
 
-def print_front_matter():
-    n = N = config.get("machine:cpu_count")
+def print_front_matter(args: "argparse.Namespace"):
+    avail_cpus = args.cpus_per_session or config.get("machine:cpu_count")
+    avail_cpus_per_test = args.cpus_per_test or avail_cpus
     p = config.get("system:platform")
     v = config.get("python:version")
-    print(f"platform {p} -- Python {v}, num cores: {n}, max cores: {N}")
-    print(f"rootdir: {os.getcwd()}")
+    tty.print(f"{p} -- Python {v}")
+    tty.print(f"Available of cpus: {avail_cpus}")
+    tty.print(f"Available cpus per test: {avail_cpus_per_test}")
+    tty.print(f"rootdir: {os.getcwd()}")
 
 
 def print_testcase_summary(args: "argparse.Namespace", cases: "list[TestCase]") -> None:
@@ -158,8 +165,7 @@ def print_testcase_summary(args: "argparse.Namespace", cases: "list[TestCase]") 
     t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
     print(colorize(t))
     cases_to_run = [case for case in cases if case.status == "pending"]
-    max_workers = getattr(args, "max_workers", None)
-    max_workers = max_workers or config.get("machine:cpu_count")
+    max_workers = args.workers_per_session or config.get("machine:cpu_count")
     files = {case.file for case in cases_to_run}
     fmt = "@*g{running} %d test cases from %d files with %s workers"
     print(colorize(fmt % (len(cases_to_run), len(files), max_workers)))

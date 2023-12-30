@@ -2,10 +2,11 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
-from .. import config
 from ..test.testfile import AbstractTestFile
 from ..util import graph
 from .common import add_mark_arguments
+from .common import add_resource_arguments
+from .common import set_default_resource_args
 
 if TYPE_CHECKING:
     import argparse
@@ -18,10 +19,12 @@ description = "Print information about a test"
 
 def setup_parser(parser: "Parser"):
     add_mark_arguments(parser)
+    add_resource_arguments(parser)
     parser.add_argument("file", help="Test file")
 
 
 def describe(args: "argparse.Namespace") -> int:
+    set_default_resource_args(args)
     file = AbstractTestFile(args.file)
     fp = sys.stdout
     fp.write(f"--- {file.name} ------------\n")
@@ -42,7 +45,8 @@ def describe(args: "argparse.Namespace") -> int:
                     fp.write(f" -> {dst}")
                 fp.write("\n")
     cases = file.freeze(
-        cpu_count=config.get("machine:cpu_count"),
+        avail_cpus=args.cpus_per_test,
+        avail_devices=args.devices_per_test,
         on_options=args.on_options,
         keyword_expr=args.keyword_expr,
     )

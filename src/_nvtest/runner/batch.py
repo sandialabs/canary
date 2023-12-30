@@ -28,8 +28,7 @@ class BatchRunner(Runner):
     def __init__(self, session: "Session", *args: Any) -> None:
         super().__init__(session, *args)
         self.batchdir = session.batchdir
-        self.max_workers = 1
-        self.max_cores_per_test = session.max_cores_per_test
+        self.avail_workers = 1
 
     @staticmethod
     def print_text(text: str):
@@ -86,12 +85,12 @@ class BatchRunner(Runner):
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
         fh.write(f"# batch {batch_no + 1} of {num_batches}\n")
         fh.write("(\n  export NVTEST_DISABLE_KB=1\n")
-        cpu_count = self.max_tasks_required(batch)
+        cpus = self.max_tasks_required(batch)
         fh.write(
             f"  nvtest -C {self.work_tree} run "
-            f"--max-workers={self.max_workers} "
-            f"--cpu-count={cpu_count} "
-            f"--max-cores-per-test={cpu_count} "
+            f"-l session:workers:{self.avail_workers} "
+            f"-l session:cpus:{cpus} "
+            f"-l test:cpus:{cpus} "
             f"^{batch_no}\n)\n"
         )
 
@@ -117,7 +116,7 @@ class BatchRunner(Runner):
         return f
 
     def max_tasks_required(self, batch: Partition) -> int:
-        return max([case.cpu_count for case in batch])
+        return max([case.processors for case in batch])
 
     def load_batch_results(self, batch: Partition):
         """Load the results for cases in this batch

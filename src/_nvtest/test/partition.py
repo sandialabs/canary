@@ -16,7 +16,7 @@ from .testcase import TestCase
 class _Partition(set):
     @property
     def cputime(self):
-        return sum(case.cpu_count * case.runtime for case in self if not case.masked)
+        return sum(case.processors * case.runtime for case in self if not case.masked)
 
     @property
     def runtime(self):
@@ -42,16 +42,16 @@ class Partition(list):
         return 1
 
     @property
-    def cpu_count(self):
-        return max(case.cpu_count for case in self if not case.masked)
+    def processors(self):
+        return max(case.processors for case in self if not case.masked)
 
     @property
-    def device_count(self):
-        return max(case.device_count for case in self if not case.masked)
+    def devices(self):
+        return max(case.devices for case in self if not case.masked)
 
     @property
     def cputime(self):
-        return sum(case.cpu_count * case.runtime for case in self if not case.masked)
+        return sum(case.processors * case.runtime for case in self if not case.masked)
 
     @property
     def runtime(self):

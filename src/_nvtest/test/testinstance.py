@@ -16,8 +16,8 @@ class TestInstance:
     file_path: str
     name: str
     file: str
-    cpu_count: int
-    device_count: int
+    processors: int
+    devices: int
     analyze: str
     family: str
     keywords: list[str]
@@ -53,8 +53,8 @@ class TestInstance:
             file_path=case.file_path,
             name=case.name,
             file=os.path.join(case.file_root, case.file_path),
-            cpu_count=case.cpu_count,
-            device_count=case.device_count,
+            processors=case.processors,
+            devices=case.devices,
             family=case.family,
             analyze=case.analyze or "",
             keywords=case.keywords(),
