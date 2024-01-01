@@ -12,6 +12,7 @@ class Status:
     members = (
         "pending",
         "staged",
+        "notrun",
         "diffed",
         "skipped",
         "failed",
@@ -20,6 +21,7 @@ class Status:
     )
     colors = {
         "staged": "b",
+        "notrun": "m",
         "diffed": "y",
         "skipped": "m",
         "failed": "R",

@@ -39,30 +39,32 @@ class BatchRunner(Runner):
         n = len(batch)
         self.print_text(f"STARTING: Batch {batch_no + 1} of {num_batches} ({n} tests)")
         script = self.write_submission_script(batch)
-        with tty.restore():
-            script_x = Executable(self.command)
-            if self.default_args:
-                script_x.add_default_args(*self.default_args)
-            with open(self.logfile(batch_no), "w") as fh:
-                script_x(script, fail_on_error=False, output=fh, error=fh)
-        self.load_batch_results(batch)
-        stat: dict[str, int] = {}
-        attrs: dict[str, dict] = {}
-        for case in batch:
-            stat[case.status.value] = stat.get(case.status.value, 0) + 1
-            data = {
-                "start": case.start,
-                "finish": case.finish,
-                "status": [case.status.value, case.status.details],
-            }
-            attrs[case.fullname] = data
-        fmt = "@%s{%d %s}"
-        st_stat = ", ".join(
-            colorize(fmt % (Status.colors[n], v, n)) for (n, v) in stat.items()
-        )
-        self.print_text(f"FINISHED: Batch {batch_no + 1} of {num_batches}, {st_stat}")
-        #        for hook in plugin.plugins("test", "finish"):
-        #            hook(case)
+        try:
+            with tty.restore():
+                script_x = Executable(self.command)
+                if self.default_args:
+                    script_x.add_default_args(*self.default_args)
+                with open(self.logfile(batch_no), "w") as fh:
+                    script_x(script, fail_on_error=False, output=fh, error=fh)
+        finally:
+            self.load_batch_results(batch)
+            stat: dict[str, int] = {}
+            attrs: dict[str, dict] = {}
+            for case in batch:
+                stat[case.status.value] = stat.get(case.status.value, 0) + 1
+                data = {
+                    "start": case.start,
+                    "finish": case.finish,
+                    "status": [case.status.value, case.status.details],
+                }
+                attrs[case.fullname] = data
+            fmt = "@%s{%d %s}"
+            st_stat = ", ".join(
+                colorize(fmt % (Status.colors[n], v, n)) for (n, v) in stat.items()
+            )
+            self.print_text(
+                f"FINISHED: Batch {batch_no + 1} of {num_batches}, {st_stat}"
+            )
         return attrs
 
     @classmethod
@@ -130,7 +132,6 @@ class BatchRunner(Runner):
 
         """
         for case in batch:
-            fd = case.load_results()
             try:
                 fd = case.load_results()
             except FileNotFoundError:
@@ -141,6 +142,7 @@ class BatchRunner(Runner):
             else:
                 if fd["status"][0] == "staged":
                     # This case was never run
-                    case.status.set("failed", "Case never ran after setup")
+                    case.status.set("notrun", "Batch case not run for unknown reasons")
+                    case.dump()
                 else:
                     case.update(fd)

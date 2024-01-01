@@ -42,7 +42,7 @@ class TestCase:
         family: Optional[str] = None,
         keywords: list[str] = [],
         parameters: dict[str, object] = {},
-        timeout: Union[None, int] = None,
+        timeout: Optional[int] = None,
         runtime: Union[None, float, int] = None,
         baseline: list[tuple[str, str]] = [],
         sources: dict[str, list[tuple[str, str]]] = {},
@@ -424,8 +424,22 @@ class TestCase:
     def run(self, **kwds: Any) -> None:
         if self.dep_patterns:
             raise RuntimeError("Dependency patterns must be resolved before running")
-        tty.info(f"STARTING: {self.pretty_repr()}", prefix=None)
-        self.start = time.time()
+        try:
+            self.start = time.time()
+            tty.info(f"STARTING: {self.pretty_repr()}", prefix=None)
+            self._run(**kwds)
+        except Exception:
+            self.returncode = 1
+            self.status.set("failed", "unknown failure")
+            raise
+        finally:
+            self.finish = time.time()
+            stat = self.status.cname
+            tty.info(f"FINISHED: {self.pretty_repr()} {stat}", prefix=None)
+            self.dump()
+        return
+
+    def _run(self, **kwds: Any) -> None:
         python = Executable(sys.executable)
         python.add_begin_callback(self.register_proc)
         with fs.working_dir(self.exec_dir):
@@ -442,10 +456,6 @@ class TestCase:
                     rc = python.returncode
                     self.returncode = rc
                     self.status = Status.from_returncode(rc)
-        self.finish = time.time()
-        stat = self.status.cname
-        tty.info(f"FINISHED: {self.pretty_repr()} {stat}", prefix=None)
-        self.dump()
         return
 
     @staticmethod

@@ -186,6 +186,7 @@ class Session:
         if arg > config.get("machine:cpu_count"):
             n = config.get("machine:cpu_count")
             raise ValueError(f"avail_cpus={arg} cannot exceed cpu_count={n}")
+        self._avail_cpus = arg
 
     @property
     def avail_cpus_per_test(self) -> int:
@@ -196,6 +197,7 @@ class Session:
         if arg > self.avail_cpus:
             n = self.avail_cpus
             raise ValueError(f"avail_cpus_per_test={arg} cannot exceed avail_cpus={n}")
+        self._avail_cpus_per_test = arg
 
     @property
     def avail_devices(self) -> int:
@@ -206,6 +208,7 @@ class Session:
         if arg > config.get("machine:device_count"):
             n = config.get("machine:device_count")
             raise ValueError(f"avail_devices={arg} cannot exceed device_count={n}")
+        self._avail_devices = arg
 
     @property
     def avail_devices_per_test(self) -> int:
@@ -218,6 +221,7 @@ class Session:
             raise ValueError(
                 f"avail_devices_per_test={arg} cannot exceed avail_devices={n}"
             )
+        self._avail_devices_per_test = arg
 
     @property
     def avail_workers(self) -> int:
@@ -228,6 +232,7 @@ class Session:
         if arg > self.avail_cpus:
             n = self.avail_cpus
             raise ValueError(f"avail_workers={arg} cannot exceed avail_cpus={n}")
+        self._avail_workers = arg
 
     @classmethod
     def create(
@@ -264,7 +269,7 @@ class Session:
 
         if avail_workers is not None:
             self.avail_workers = avail_workers
-        elif batch_config is not None:
+        elif batch_config:
             self.avail_workers = 5
 
         self.search_paths = search_paths
@@ -693,7 +698,7 @@ class Session:
             with WriteTransaction(self.lock):
                 with open(self.results_file, "a") as fh:
                     fh.write(json.dumps({obj.id: fd}) + "\n")
-            if fail_fast and attrs[obj.fullname].status != "success":
+            if fail_fast and attrs[obj.fullname]["status"] != "success":
                 self.ppe.shutdown(wait=False, cancel_futures=True)
                 code = compute_returncode([obj])
                 raise StopExecution(f"fail_fast: {obj} did not pass", code)

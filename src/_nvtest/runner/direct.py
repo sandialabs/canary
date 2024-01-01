@@ -24,4 +24,5 @@ class DirectRunner(Runner):
                 case.status = Status.from_returncode(e.args[0])
             else:
                 case.status.set("failed", str(e))
+                case.dump()
         return {case.fullname: vars(case)}
