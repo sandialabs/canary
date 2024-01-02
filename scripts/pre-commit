@@ -2,30 +2,30 @@
 set -e
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR=$( cd -- "$( dirname -- "${SCRIPT_DIR}" )" &> /dev/null && pwd )
-DIR=./src
 
 cd ${ROOT_DIR}
 
 echo "Formatting imports with isort"
-isort ${DIR}
+isort ./src
 isort ./plugins
 
 echo "Formatting code with black"
-black ${DIR}
+black ./src
 black ./plugins
 
 echo "Linting with flake8"
-flake8 ${DIR}
+flake8 ./src
 flake8 ./plugins
 
 echo "Type checking with mypy"
-mypy ${DIR}
+mypy ./src
 
 (
   cd src/_nvtest/tests
   pytest .
 )
 
+echo "Making docs"
 (
   cd docs
   make clean

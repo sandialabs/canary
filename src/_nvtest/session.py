@@ -102,7 +102,6 @@ from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
 from .util.misc import dedup
-from .util.misc import digits
 from .util.returncode import compute_returncode
 from .util.time import timeout as timeout_context
 from .util.tty.color import colorize
@@ -123,12 +122,7 @@ class ExitCode:
 
 
 class Session:
-    """Manages the test session
-
-    :param InvocationParams invocation_params:
-        Object containing parameters regarding the :func:`pytest.main`
-        invocation.
-    """
+    """Manages the test session"""
 
     class BatchConfig:
         def __init__(
@@ -405,9 +399,9 @@ class Session:
     @classmethod
     def load_batch(cls, *, batch_no: int) -> "Session":
         self = Session.load(mode="a")
-        n = max(3, digits(len(os.listdir(self.batchdir))))
-        f = os.path.join(self.batchdir, f"{batch_no:0{n}d}")
-        case_ids: list[str] = [_.strip() for _ in open(f).readlines() if _.split()]
+        with open(self.batch_file) as fh:
+            fd = json.load(fh)
+        case_ids = fd["batches"][str(batch_no)]
         for case in self.cases:
             if case.id in case_ids:
                 case.status.set("staged")
@@ -468,8 +462,8 @@ class Session:
         return os.path.join(self.dotdir, "stage")
 
     @property
-    def batchdir(self):
-        path = os.path.join(self.stage, "batch")
+    def batch_file(self):
+        path = os.path.join(self.index_dir, "batches")
         return path
 
     @property
@@ -740,7 +734,6 @@ class Session:
     def save_active_case_data(self, cases: list[TestCase], **kwds: Any):
         mkdirp(self.stage)
         save_attrs = ["start", "finish", "status"]
-
         with WriteTransaction(self.lock):
             with open(self.results_file, "w") as fh:
                 for case in cases:
@@ -752,13 +745,14 @@ class Session:
             json.dump(kwds, fh)
 
     def save_active_batch_data(self, batches: list[Partition]) -> None:
-        mkdirp(self.batchdir)
-        n = max(3, digits(len(batches)))
+        fd: dict[int, list[str]] = {}
         for batch in batches:
-            i, _ = batch.rank
-            with open(os.path.join(self.batchdir, f"{i:0{n}d}"), "w") as fh:
-                for case in batch:
-                    fh.write(f"{case.id}\n")
+            cases = fd.setdefault(batch.rank[0], [])
+            cases.extend([case.id for case in batch])
+        mkdirp(os.path.dirname(self.batch_file))
+        with WriteTransaction(self.lock):
+            with open(self.batch_file, "w") as fh:
+                json.dump({"batches": fd}, fh, indent=2)
 
 
 def _setup_individual_case(case, exec_root, copy_all_resources):

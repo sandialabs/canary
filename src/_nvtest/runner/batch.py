@@ -27,7 +27,7 @@ class BatchRunner(Runner):
 
     def __init__(self, session: "Session", *args: Any) -> None:
         super().__init__(session, *args)
-        self.batchdir = session.batchdir
+        self.stage = session.stage
         self.avail_workers = 1
 
     @staticmethod
@@ -98,13 +98,13 @@ class BatchRunner(Runner):
 
     def submit_filename(self, batch_no: int) -> str:
         n = max(digits(batch_no), 3)
-        basename = f"{batch_no:0{n}}.sh"
-        return os.path.join(self.batchdir, basename)
+        basename = f"batch-{batch_no:0{n}}-submit.sh"
+        return os.path.join(self.stage, basename)
 
     def logfile(self, batch_no: int) -> str:
         n = max(digits(batch_no), 3)
-        basename = f"{batch_no:0{n}}.log"
-        return os.path.join(self.batchdir, basename)
+        basename = f"batch-{batch_no:0{n}}-out.txt"
+        return os.path.join(self.stage, basename)
 
     def write_submission_script(self, batch: Partition) -> str:
         batch_no, _ = batch.rank
@@ -132,6 +132,7 @@ class BatchRunner(Runner):
 
         """
         for case in batch:
+            tty.debug(f"Loading case {case.id}")
             try:
                 fd = case.load_results()
             except FileNotFoundError:
