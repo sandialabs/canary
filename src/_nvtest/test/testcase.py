@@ -424,9 +424,11 @@ class TestCase:
     def run(self, **kwds: Any) -> None:
         if self.dep_patterns:
             raise RuntimeError("Dependency patterns must be resolved before running")
+        id = colorize("@b{%s}" % self.id[:7])
+        fmt = "{{0}}: {0} {1} {{1}}".format(id, self.pretty_repr())
         try:
             self.start = time.time()
-            tty.info(f"STARTING: {self.pretty_repr()}", prefix=None)
+            tty.info(fmt.format("STARTING", ""), prefix=None)
             self._run(**kwds)
         except Exception:
             self.returncode = 1
@@ -434,8 +436,7 @@ class TestCase:
             raise
         finally:
             self.finish = time.time()
-            stat = self.status.cname
-            tty.info(f"FINISHED: {self.pretty_repr()} {stat}", prefix=None)
+            tty.info(fmt.format("FINISHED", self.status.cname), prefix=None)
             self.dump()
         return
 

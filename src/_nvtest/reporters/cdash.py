@@ -27,7 +27,7 @@ from .common import Reporter as _Reporter
 class Reporter(_Reporter):
     def __init__(self, session: Session) -> None:
         super().__init__(session)
-        self.xml_dir = os.path.join(config.get("session:work_tree"), "xml")
+        self.xml_dir = os.path.join(session.work_tree, "_reports/cdash")
         self.xml_files: list[str] = []
 
     def create(

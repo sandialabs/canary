@@ -13,7 +13,7 @@ from .common import Reporter as _Reporter
 class Reporter(_Reporter):
     def __init__(self, session: Session) -> None:
         super().__init__(session)
-        self.html_dir = os.path.join(session.work_tree, "html")
+        self.html_dir = os.path.join(session.work_tree, "_reports/html")
         self.cases_dir = os.path.join(self.html_dir, "cases")
         self.index = os.path.join(session.work_tree, "Results.html")
 
