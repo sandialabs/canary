@@ -5,6 +5,7 @@ TestResults*
 TestPartitions*
 TestBatches*
 _test-cache
+__pycache__
 .nvtest
 .mypy_cache
 vvt

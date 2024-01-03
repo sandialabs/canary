@@ -727,7 +727,7 @@ class Session:
                     ss = fd[case.id]["status"]
                     tty.error(
                         f"batch {obj.rank[0]}, {case}: "
-                        f"expected future.status={ss[0]}, not {fs[0]}"
+                        f"expected status of future.result to be {ss[0]}, not {fs[0]}"
                     )
                     continue
                 case.update(fd[case.id])

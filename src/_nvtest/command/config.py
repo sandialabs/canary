@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 import _nvtest.config
+from ..util import tty
 
 if TYPE_CHECKING:
     import argparse
@@ -15,6 +16,17 @@ def setup_parser(parser: "Parser"):
     sp = parser.add_subparsers(dest="subcommand")
     p = sp.add_parser("show", help="Show the current configuration")
     p.add_argument("section", nargs="?", help="Show only this section")
+    p = sp.add_parser("add", help="Show the current configuration")
+    p.add_argument(
+        "--scope",
+        choices=("local", "global"),
+        default="local",
+        help="Configuration scope",
+    )
+    p.add_argument(
+        "path",
+        help="colon-separated path to config to be set, e.g. 'config:debug:true'",
+    )
 
 
 def pretty_print(text: str):
@@ -35,4 +47,13 @@ def config(args: "argparse.Namespace") -> int:
             pretty_print(text)
         except ImportError:
             print(text)
-    return 0
+        return 0
+    elif args.subcommand == "add":
+        _nvtest.config.add(args.path, scope=args.scope)
+        file = _nvtest.config.config_file(args.scope)
+        assert file is not None
+        with open(file, "w") as fh:
+            _nvtest.config.dump(fh, scope=args.scope)
+    else:
+        tty.die(f"nvtest config: unknown subcommand: {args.subcommand}")
+    return 1

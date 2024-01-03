@@ -1,6 +1,7 @@
 from typing import Any
 
 from ..util.schema import Optional
+from ..util.schema import Or
 from ..util.schema import Schema
 
 
@@ -33,8 +34,8 @@ config_schema = Schema(
 machine_schema = Schema(
     {
         "machine": {
-            Optional("sockets_per_node"): int,
-            Optional("cores_per_socket"): int,
+            Optional("nodes"): Or(int, None),
+            Optional("cores_per_node"): int,
             Optional("cpu_count"): int,
             Optional("device_count"): int,
             Optional("devices_per_node"): int,

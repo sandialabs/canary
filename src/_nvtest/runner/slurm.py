@@ -24,12 +24,10 @@ class SlurmRunner(BatchRunner, _Slurm):
     command = "sbatch"
 
     def __init__(self, session: "Session", *args: Any):
-        sockets_per_node = config.get("machine:sockets_per_node")
-        cores_per_socket = config.get("machine:cores_per_socket")
-        if sockets_per_node is None or cores_per_socket is None:
+        cores_per_node = config.get("machine:cores_per_node")
+        if cores_per_node is None:
             raise ValueError(
-                "slurm runner requires that both the 'machine:sockets_per_node' "
-                "and 'machine:cores_per_socket' be defined"
+                "slurm runner requires that 'machine:cores_per_node' be defined"
             )
         super().__init__(session, *args)
         parser = self.make_argument_parser()
@@ -44,9 +42,7 @@ class SlurmRunner(BatchRunner, _Slurm):
     def calculate_resource_allocations(self, batch: Partition) -> None:
         """Performs basic resource calculations"""
         max_tasks = self.max_tasks_required(batch)
-        sockets_per_node = config.get("machine:sockets_per_node")
-        cores_per_socket = config.get("machine:cores_per_socket")
-        cores_per_node = sockets_per_node * cores_per_socket
+        cores_per_node = config.get("machine:cores_per_node")
         if max_tasks < cores_per_node:
             nodes = 1
             ntasks_per_node = cores_per_node

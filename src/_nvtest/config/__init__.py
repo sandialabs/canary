@@ -163,15 +163,9 @@ class Config:
                 },
             }
         }
-        if "NVTEST_GLOBAL_CONFIG" in os.environ:
-            file = os.environ["NVTEST_GLOBAL_CONFIG"]
-            if os.path.exists(file):
-                self.load_config(file, "global")
-        elif "HOME" in os.environ:
-            home = os.environ["HOME"]
-            file = os.path.join(home, ".nvtest")
-            if os.path.exists(file):
-                self.load_config(file, "global")
+        file = self.config_file("global")
+        if file is not None and os.path.exists(file):
+            self.load_config(file, "global")
         dir = os.getcwd()
         while dir != os.path.sep:
             path = os.path.join(dir, ".nvtest/config")
@@ -184,10 +178,21 @@ class Config:
                 break
             dir = os.path.dirname(dir)
         else:
-            # only load the local config if not running inside a session
-            if os.path.exists("nvtest.cfg"):
-                self.load_config("nvtest.cfg", "local")
+            file = self.config_file("local")
+            if file is not None and os.path.exists(file):
+                self.load_config(file, "local")
         self.load_env_config()
+
+    def config_file(self, scope) -> Optional[str]:
+        if scope == "global":
+            if "NVTEST_GLOBAL_CONFIG" in os.environ:
+                return os.environ["NVTEST_GLOBAL_CONFIG"]
+            elif "HOME" in os.environ:
+                home = os.environ["HOME"]
+                return os.path.join(home, ".nvtest")
+        elif scope == "local":
+            return os.path.abspath("./nvtest.cfg")
+        return None
 
     def load_config(self, file: str, scope: str) -> None:
         self.scopes[scope] = read_config(file)
@@ -201,7 +206,7 @@ class Config:
             level: int = int(os.environ["NVTEST_LOG_LEVEL"])
             tty.set_log_level(level)
             scope_data.setdefault("config", {})["log_level"] = level
-        if os.getenv("NVTEST_DEBUG", "off").lower() in ("on", "1", "true", "yess"):
+        if os.getenv("NVTEST_DEBUG", "off").lower() in ("on", "1", "true", "yes"):
             scope_data = self.scopes.setdefault("environment", {})
             scope_data.setdefault("config", {})["debug"] = True
             tty.set_debug(True)
@@ -550,6 +555,10 @@ config = Singleton(Config)
 
 def dump(fh: TextIO, scope: Optional[str] = None):
     return config.dump(fh, scope=scope)
+
+
+def config_file(scope: str) -> Optional[str]:
+    return config.config_file(scope)
 
 
 def set_main_options(args: argparse.Namespace) -> None:
