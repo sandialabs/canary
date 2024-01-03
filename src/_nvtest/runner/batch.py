@@ -28,13 +28,19 @@ class BatchRunner(Runner):
     def __init__(self, session: "Session", *args: Any) -> None:
         super().__init__(session, *args)
         self.stage = session.stage
-        self.avail_workers = 1
+
+    def avail_workers(self, batch: Partition) -> int:
+        return 1
+
+    def calculate_resource_allocations(self, batch: Partition) -> None:
+        ...
 
     @staticmethod
     def print_text(text: str):
         sys.stdout.write(f"{text}\n")
 
     def run(self, batch: Partition, **kwargs: Any) -> dict[str, dict]:
+        self.calculate_resource_allocations(batch)
         batch_no, num_batches = batch.rank
         n = len(batch)
         self.print_text(f"STARTING: Batch {batch_no + 1} of {num_batches} ({n} tests)")
@@ -82,15 +88,11 @@ class BatchRunner(Runner):
         raise NotImplementedError
 
     def write_body(self, batch: Partition, fh: TextIO) -> None:
-        batch_no, num_batches = batch.rank
-        fh.write(f"# user: {getuser()}\n")
-        fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(f"# batch {batch_no + 1} of {num_batches}\n")
-        fh.write("(\n  export NVTEST_DISABLE_KB=1\n")
+        batch_no, _ = batch.rank
         cpus = self.max_tasks_required(batch)
         fh.write(
-            f"  nvtest -C {self.work_tree} run "
-            f"-l session:workers:{self.avail_workers} "
+            f"(\n  nvtest -C {self.work_tree} run "
+            f"-l session:workers:{self.avail_workers(batch)} "
             f"-l session:cpus:{cpus} "
             f"-l test:cpus:{cpus} "
             f"^{batch_no}\n)\n"
@@ -107,9 +109,13 @@ class BatchRunner(Runner):
         return os.path.join(self.stage, basename)
 
     def write_submission_script(self, batch: Partition) -> str:
-        batch_no, _ = batch.rank
+        batch_no, num_batches = batch.rank
         fh = StringIO()
         self.write_header(fh)
+        fh.write(f"# user: {getuser()}\n")
+        fh.write(f"# date: {datetime.now().strftime('%c')}\n")
+        fh.write(f"# batch {batch_no + 1} of {num_batches}\n")
+        fh.write("export NVTEST_DISABLE_KB=1\n")
         self.write_body(batch, fh)
         f = self.submit_filename(batch_no)
         with open(f, "w") as fp:

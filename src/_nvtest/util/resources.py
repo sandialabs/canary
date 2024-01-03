@@ -46,6 +46,7 @@ def compute_resource_allocations(
         np=ranks,
         ranks=ranks,
         ranks_per_socket=ranks_per_socket,
+        cores_per_node=sockets_per_node * cores_per_socket,
         nodes=nodes,
         sockets=sockets,
     )

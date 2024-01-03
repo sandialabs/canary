@@ -69,6 +69,10 @@ class Partition(list):
 
 
 def group_testcases(cases: list[TestCase]):
+    """Group test cases such that a test and all its dependencies are in the
+    same group
+
+    """
     groups: list[set[TestCase]] = [{case} | set(case.dependencies) for case in cases]
     for i, group in enumerate(groups):
         for j, other in enumerate(groups):
@@ -79,6 +83,7 @@ def group_testcases(cases: list[TestCase]):
 
 
 def partition_n(cases, n=8) -> list[Partition]:
+    """Partition test cases into ``n`` partitions"""
     groups = group_testcases(cases)
     partitions = defaultlist(_Partition, n)
     for group in groups:
@@ -88,6 +93,10 @@ def partition_n(cases, n=8) -> list[Partition]:
 
 
 def partition_t(cases, t=60 * 30) -> list[Partition]:
+    """Partition test cases into partitions having a runtime approximately equal
+    to ``t``
+
+    """
     groups = group_testcases(cases)
     partitions = defaultlist(_Partition)
     for group in groups:
