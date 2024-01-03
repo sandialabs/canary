@@ -69,6 +69,7 @@ import inspect
 import json
 import multiprocessing
 import os
+import signal
 import time
 from concurrent.futures import Future
 from concurrent.futures import ProcessPoolExecutor
@@ -634,36 +635,48 @@ class Session:
     ) -> None:
         futures: dict = {}
         timeout_message = f"Test suite execution exceeded time out of {timeout} s."
+        auto_cleanup: bool = True
         try:
             with timeout_context(timeout, timeout_message=timeout_message):
-                with ProcessPoolExecutor(max_workers=self.avail_workers) as self.ppe:
+                with ProcessPoolExecutor(max_workers=self.avail_workers) as ppe:
                     while True:
                         try:
                             i, entity = self.queue.pop_next(fail_fast=fail_fast)
+                        except KeyboardInterrupt:
+                            auto_cleanup = False
+                            self.returncode = signal.SIGINT.value
+                            for proc in ppe._processes:
+                                if proc != os.getpid():
+                                    os.kill(proc, 9)
+                            tty.reset()
+                            raise
                         except FailFast as ex:
-                            for proc in self.ppe._processes:
+                            auto_cleanup = False
+                            for proc in ppe._processes:
                                 if proc != os.getpid():
                                     os.kill(proc, 9)
                             name, code = ex.args
-                            tty.die(f"fail_fast: {name} did not pass", code=code)
+                            self.returncode = code
+                            tty.reset()
+                            raise StopExecution(f"fail_fast: {name}", code)
                         except StopIteration:
                             return
                         kwds = {"execute_analysis_sections": execute_analysis_sections}
-                        future = self.ppe.submit(self.runner, entity, kwds)
+                        future = ppe.submit(self.runner, entity, kwds)
                         callback = partial(self.update_from_future, i)
                         future.add_done_callback(callback)
                         futures[i] = (entity, future)
         finally:
-            for entity, future in futures.values():
-                if future.running():
-                    entity.kill()
-            if not fail_fast:
+            if auto_cleanup:
+                for entity, future in futures.values():
+                    if future.running():
+                        entity.kill()
                 for case in self.queue.cases:
                     if case.status == "staged":
                         tty.error(f"{case}: failed to start!")
                         case.status.set("failed", "Case failed to start")
                         case.dump()
-            self.returncode = compute_returncode(self.queue.cases)
+                self.returncode = compute_returncode(self.queue.cases)
 
     def update_from_future(
         self,
@@ -676,7 +689,7 @@ class Session:
         try:
             attrs = future.result()
         except BrokenProcessPool:
-            # The future was probably killed by fail_fast
+            # The future was probably killed by fail_fast or a keyboard interrupt
             return
         obj: Union[TestCase, Partition] = self.queue.mark_as_complete(ent_no)
         if id(obj) != id(entity):

@@ -339,6 +339,12 @@ def restore(fd=None):
         yield
 
 
+def reset():
+    fd = sys.stdin.fileno()
+    save_tty_attr = termios.tcgetattr(fd)
+    termios.tcsetattr(fd, termios.TCSAFLUSH, save_tty_attr)
+
+
 class tee:
     def __init__(self):
         self.fh = None

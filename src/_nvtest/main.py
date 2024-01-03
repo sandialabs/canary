@@ -14,7 +14,6 @@ from .command import get_command
 from .config.argparsing import make_argument_parser
 from .config.argparsing import stat_names
 from .error import StopExecution
-from .session import ExitCode
 from .util import tty
 
 
@@ -132,11 +131,11 @@ def console_main() -> int:
         os.dup2(devnull, sys.stdout.fileno())
         return 1  # Python exits with error code 1 on EPIPE
     except StopExecution as e:
-        if e.exit_code == ExitCode.OK:
+        if e.exit_code == 0:
             tty.info(e.message)
         else:
             tty.error(e.message)
-        return 1
+        return e.exit_code
     except TimeoutError as e:
         if config.get("config:debug"):
             raise
