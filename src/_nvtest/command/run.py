@@ -341,7 +341,7 @@ def print_front_matter(session: "Session"):
     p = config.get("system:platform")
     v = config.get("python:version")
     tty.print(f"{p} -- Python {v}")
-    tty.print(f"Available of cpus: {session.avail_cpus}")
+    tty.print(f"Available cpus: {session.avail_cpus}")
     tty.print(f"Available cpus per test: {session.avail_cpus_per_test}")
     tty.print(f"Maximum number of asynchronous jobs: {session.avail_workers}")
     tty.print(f"Working tree: {session.work_tree}")
@@ -497,6 +497,16 @@ def setup_session(args: "argparse.Namespace") -> Session:
         )
     elif args.mode == "b":
         session = Session.load_batch(batch_no=args.batch_no)
+        if args.cpus_per_session is not None:
+            session.avail_cpus = args.cpus_per_session
+        if args.cpus_per_test is not None:
+            session.avail_cpus_per_test = args.cpus_per_test
+        if args.devices_per_session is not None:
+            session.avail_devices = args.devices_per_session
+        if args.devices_per_test is not None:
+            session.avail_devices_per_test = args.devices_per_test
+        if args.workers_per_session is not None:
+            session.avail_workers = args.workers_per_session
     else:
         assert args.mode == "a"
         tty.print("Setting up test session", centered=True)
