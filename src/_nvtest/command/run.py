@@ -203,14 +203,13 @@ def run(args: "argparse.Namespace") -> int:
         if not args.no_header:
             print_testcase_overview(session.cases, duration=setup_duration)
         if args.until == "setup":
+            tty.info("Stopping after setup (--until='setup')")
             return 0
         tty.print("Beginning test session", centered=True)
         initstate = 2
         with timer.timeit("run"):
             session.exitstatus = session.run(
                 timeout=args.timeout,
-                runner=args.runner,
-                runner_options=args.runner_options,
                 fail_fast=args.fail_fast,
             )
         run_duration = timer.duration("run")
@@ -481,6 +480,8 @@ def setup_session(args: "argparse.Namespace") -> Session:
     if args.mode == "w":
         tty.print("Setting up test session", centered=True)
         bc = Session.BatchConfig(size_t=args.batch_size, size_n=args.batches)
+        if bc and args.workers_per_session is None:
+            args.workers_per_session = 5
         session = Session.create(
             work_tree=args.work_tree or Session.default_work_tree,
             search_paths=args.paths,
@@ -491,26 +492,17 @@ def setup_session(args: "argparse.Namespace") -> Session:
             avail_workers=args.workers_per_session,
             keyword_expr=args.keyword_expr,
             on_options=args.on_options,
-            batch_config=bc,
             parameter_expr=args.parameter_expr,
+        )
+        session.setup_new(
+            batch_config=bc,
+            runner=args.runner,
+            runner_options=args.runner_options,
             copy_all_resources=args.copy_all_resources,
         )
-    elif args.mode == "b":
-        session = Session.load_batch(batch_no=args.batch_no)
-        if args.cpus_per_session is not None:
-            session.avail_cpus = args.cpus_per_session
-        if args.cpus_per_test is not None:
-            session.avail_cpus_per_test = args.cpus_per_test
-        if args.devices_per_session is not None:
-            session.avail_devices = args.devices_per_session
-        if args.devices_per_test is not None:
-            session.avail_devices_per_test = args.devices_per_test
-        if args.workers_per_session is not None:
-            session.avail_workers = args.workers_per_session
     else:
-        assert args.mode == "a"
-        tty.print("Setting up test session", centered=True)
-        session = Session.load(mode=args.mode)
+        assert args.mode in "ba"
+        session = Session.load(mode="a")
         if args.cpus_per_session is not None:
             session.avail_cpus = args.cpus_per_session
         if args.cpus_per_test is not None:
@@ -521,13 +513,19 @@ def setup_session(args: "argparse.Namespace") -> Session:
             session.avail_devices_per_test = args.devices_per_test
         if args.workers_per_session is not None:
             session.avail_workers = args.workers_per_session
-        session.filter(
-            keyword_expr=args.keyword_expr,
-            start=args.start,
-            parameter_expr=args.parameter_expr,
-            avail_cpus_per_test=args.cpus_per_test,
-            avail_devices_per_test=args.devices_per_test,
-            case_specs=getattr(args, "case_specs", None),
-        )
+
+        if args.mode == "b":
+            session.setup_single_batch(batch_no=args.batch_no)
+        else:
+            if args.batch_size is not None or args.batches is not None:
+                raise NotImplementedError("logic for batched re-use not done")
+            session.setup_filtered(
+                keyword_expr=args.keyword_expr,
+                start=args.start,
+                parameter_expr=args.parameter_expr,
+                avail_cpus_per_test=args.cpus_per_test,
+                avail_devices_per_test=args.devices_per_test,
+                case_specs=getattr(args, "case_specs", None),
+            )
     session.exitstatus = ExitCode.OK
     return session

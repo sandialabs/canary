@@ -22,6 +22,9 @@ class Runner:
     def validate(cls, *args):
         raise NotImplementedError
 
+    def setup(self, *args, **kwargs):
+        raise NotImplementedError
+
     def __call__(
         self, entity: Union[TestCase, Partition], kwds: dict[str, Any]
     ) -> dict[str, dict]:

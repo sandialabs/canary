@@ -29,6 +29,9 @@ class BatchRunner(Runner):
         super().__init__(session, *args)
         self.stage = session.stage
 
+    def setup(self, batch: Partition) -> None:
+        self.write_submission_script(batch)
+
     def avail_workers(self, batch: Partition) -> int:
         return 1
 
@@ -40,11 +43,14 @@ class BatchRunner(Runner):
         sys.stdout.write(f"{text}\n")
 
     def run(self, batch: Partition, **kwargs: Any) -> dict[str, dict]:
-        self.calculate_resource_allocations(batch)
         batch_no, num_batches = batch.rank
         n = len(batch)
-        self.print_text(f"STARTING: Batch {batch_no + 1} of {num_batches} ({n} tests)")
-        script = self.write_submission_script(batch)
+        self.print_text(
+            f"SUBMITTING: Batch {batch_no + 1} of {num_batches} ({n} tests)"
+        )
+        script = self.submit_filename(batch_no)
+        if not os.path.exists(script):
+            self.write_submission_script(batch)
         try:
             with tty.restore():
                 script_x = Executable(self.command)
@@ -69,7 +75,7 @@ class BatchRunner(Runner):
                 colorize(fmt % (Status.colors[n], v, n)) for (n, v) in stat.items()
             )
             self.print_text(
-                f"FINISHED: Batch {batch_no + 1} of {num_batches}, {st_stat}"
+                f"FINISHED:   Batch {batch_no + 1} of {num_batches}, {st_stat}"
             )
         return attrs
 
@@ -84,7 +90,7 @@ class BatchRunner(Runner):
                 f"{cls.__name__} is only compatible with list[Partition], not {s}"
             )
 
-    def write_header(self, fh: TextIO) -> None:
+    def write_header(self, fh: TextIO, batch_no: int) -> None:
         raise NotImplementedError
 
     def write_body(self, batch: Partition, fh: TextIO) -> None:
@@ -110,10 +116,11 @@ class BatchRunner(Runner):
         basename = f"batch-{batch_no:0{n}}-out.txt"
         return os.path.join(self.stage, basename)
 
-    def write_submission_script(self, batch: Partition) -> str:
+    def write_submission_script(self, batch: Partition) -> None:
+        self.calculate_resource_allocations(batch)
         batch_no, num_batches = batch.rank
         fh = StringIO()
-        self.write_header(fh)
+        self.write_header(fh, batch_no)
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
         fh.write(f"# batch {batch_no + 1} of {num_batches}\n")
@@ -123,7 +130,7 @@ class BatchRunner(Runner):
         with open(f, "w") as fp:
             fp.write(fh.getvalue())
         set_executable(f)
-        return f
+        return
 
     def max_tasks_required(self, batch: Partition) -> int:
         return max([case.processors for case in batch])

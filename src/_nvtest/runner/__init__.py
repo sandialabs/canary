@@ -18,7 +18,6 @@ valid_runners = ("shell", "direct", "slurm")
 def factory(
     name: str,
     session: "Session",
-    work_items: list[Any],
     *,
     options: Optional[list[Any]] = None,
 ) -> Runner:
@@ -30,7 +29,6 @@ def factory(
     else:
         valid = ", ".join(valid_runners)
         raise ValueError(f"Unknown runner {name!r}, choose from {valid}")
-    runner.validate(work_items)
     opts: list[Any] = options or []
     tty.verbose(f"Runner type = {runner.__class__.__name__}")
     return runner(session, *opts)

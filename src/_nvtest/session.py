@@ -153,7 +153,6 @@ class Session:
     _avail_devices_per_test: int
     _avail_workers: int
     search_paths: dict[str, list[str]]
-    batch_config: BatchConfig
     cases: list[TestCase]
     queue: Queue
     lock: Lock
@@ -168,6 +167,7 @@ class Session:
             raise ValueError(
                 "Session must be created through one of its factory methods"
             )
+        self.state: int = 0
         self._avail_cpus = config.get("machine:cpu_count")
         self._avail_cpus_per_test = self.avail_cpus
         self._avail_workers = self.avail_cpus
@@ -245,8 +245,6 @@ class Session:
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
-        batch_config: Optional[BatchConfig] = None,
-        copy_all_resources: bool = False,
     ) -> "Session":
         if config.has_scope("session"):
             raise ValueError("cannot create new session when another session is active")
@@ -266,11 +264,8 @@ class Session:
 
         if avail_workers is not None:
             self.avail_workers = avail_workers
-        elif batch_config:
-            self.avail_workers = 5
 
         self.search_paths = search_paths
-        self.batch_config = batch_config or Session.BatchConfig()
 
         on_options = on_options or []
         if config.get("build:options"):
@@ -290,8 +285,6 @@ class Session:
             keyword_expr=keyword_expr,
             on_options=on_options,
             parameter_expr=parameter_expr,
-            batch_config=self.batch_config.asdict(),
-            copy_all_resources=copy_all_resources,
         )
         tty.debug(f"Creating new nvtest session in {config.get('session:start')}")
 
@@ -330,51 +323,24 @@ class Session:
         lock_path = os.path.join(self.dotdir, "lock")
         self.lock = Lock(lock_path, default_timeout=120, desc="session")
 
-        self.setup_testcases(
-            cases_to_run,
-            copy_all_resources=copy_all_resources,
-            processes=rprobe.cpu_count(),
-        )
-
-        # Setup the queue
-        work_items: Union[list[TestCase], list[Partition]]
-        if batch_config:
-            if batch_config.size_t is not None:
-                work_items = partition_t(cases_to_run, t=batch_config.size_t)
-            elif batch_config.size_n is not None:
-                work_items = partition_n(cases_to_run, n=batch_config.size_n)
-            else:
-                raise ValueError("cannot determine batch configuration")
-        else:
-            work_items = cases_to_run
-
-        self.queue = q_factory(
-            work_items,
-            avail_workers=self.avail_workers,
-            avail_cpus=self.avail_cpus,
-            avail_devices=self.avail_devices,
-        )
-
-        if batch_config:
-            self.save_active_batch_data(work_items)  # type: ignore
-
-        self.save_active_case_data(
-            cases_to_run,
-            keyword_expr=keyword_expr,
-            on_options=on_options,
-            parameter_expr=parameter_expr,
-        )
-
         with open(os.path.join(self.dotdir, "params"), "w") as fh:
             variables = dict(vars(self))
             for attr in ("cases", "queue", "lock"):
-                variables.pop(attr)
-            variables["batch_config"] = self.batch_config.asdict()
+                variables.pop(attr, None)
             json.dump(variables, fh, indent=2)
+        with open(os.path.join(self.stage, "params"), "w") as fh:
+            kwds = dict(
+                keyword_expr=keyword_expr,
+                on_options=on_options,
+                parameter_expr=parameter_expr,
+            )
+            json.dump(kwds, fh, indent=2)
         self.create_index(self.cases)
 
         duration = time.time() - t_start
         tty.debug(f"Done creating test session ({duration:.2f}s.)")
+
+        self.state = 1
         return self
 
     @classmethod
@@ -397,11 +363,63 @@ class Session:
                     value = Session.BatchConfig(**value)
                 setattr(self, attr, value)
         self.cases = self._load_testcases()
+        self.state = 1
         return self
 
-    @classmethod
-    def load_batch(cls, *, batch_no: int) -> "Session":
-        self = Session.load(mode="a")
+    def setup_new(
+        self,
+        batch_config: Optional[BatchConfig] = None,
+        runner: Optional[str] = None,
+        runner_options: Optional[list[str]] = None,
+        copy_all_resources: bool = False,
+    ) -> None:
+        assert self.state == 1
+        tty.debug("Setting up test session")
+        t_start = time.time()
+        batch_config = batch_config or Session.BatchConfig()
+
+        cases_to_run = [case for case in self.cases if not case.masked]
+        work_items: Union[list[TestCase], list[Partition]]
+        if batch_config:
+            if batch_config.size_t is not None:
+                work_items = partition_t(cases_to_run, t=batch_config.size_t)
+            elif batch_config.size_n is not None:
+                work_items = partition_n(cases_to_run, n=batch_config.size_n)
+            else:
+                raise ValueError("cannot determine batch configuration")
+        else:
+            work_items = cases_to_run
+
+        self.queue = q_factory(
+            work_items,
+            avail_workers=self.avail_workers,
+            avail_cpus=self.avail_cpus,
+            avail_devices=self.avail_devices,
+        )
+
+        tty.debug("Setting up test cases")
+        t_start = time.time()
+        cases_to_run = [case for case in self.cases if not case.masked]
+        self.setup_testcases(
+            cases_to_run,
+            copy_all_resources=copy_all_resources,
+            processes=rprobe.cpu_count(),
+        )
+        self.runner = r_factory(runner or "direct", self, options=runner_options)
+        self.runner.validate(self.queue.work_items)
+        for work_item in self.queue.work_items:
+            self.runner.setup(work_item)
+
+        self.save_active_case_data(cases_to_run)
+        if batch_config:
+            self.save_active_batch_data(work_items)  # type: ignore
+
+        duration = time.time() - t_start
+        tty.debug(f"Done setting up test session ({duration:.2f}s.)")
+        self.state = 2
+
+    def setup_single_batch(self, *, batch_no: int) -> None:
+        assert self.state == 1
         with open(self.batch_file) as fh:
             fd = json.load(fh)
         case_ids = fd["batches"][str(batch_no)]
@@ -417,7 +435,67 @@ class Session:
             avail_cpus=self.avail_cpus,
             avail_devices=self.avail_devices,
         )
-        return self
+        self.runner = r_factory("direct", self)
+        self.runner.validate(self.queue.work_items)
+        self.state = 2
+        return None
+
+    def setup_filtered(
+        self,
+        keyword_expr: Optional[str] = None,
+        parameter_expr: Optional[str] = None,
+        start: Optional[str] = None,
+        avail_cpus_per_test: Optional[int] = None,
+        avail_devices_per_test: Optional[int] = None,
+        case_specs: Optional[list[str]] = None,
+    ) -> None:
+        assert self.state == 1
+        if start is None:
+            start = self.work_tree
+        elif not os.path.isabs(start):
+            start = os.path.join(self.work_tree, start)
+        start = os.path.normpath(start)
+        for case in self.cases:
+            if case.masked:
+                continue
+            if not case.exec_dir.startswith(start):
+                case.mask = "Unreachable from start directory"
+                continue
+            if case_specs is not None:
+                if any(case.matches(_) for _ in case_specs):
+                    case.status.set("staged")
+                else:
+                    case.mask = colorize("deselected by @*b{testspec expression}")
+                continue
+            if case.status != "staged":
+                s = f"deselected due to previous test status: {case.status.cname}"
+                case.mask = s
+                if avail_cpus_per_test and case.processors > avail_cpus_per_test:
+                    continue
+                if avail_devices_per_test and case.devices > avail_devices_per_test:
+                    continue
+                if parameter_expr:
+                    match = directives.when(parameter_expr, parameters=case.parameters)
+                    if match:
+                        case.status.set("staged")
+                        continue
+                if keyword_expr:
+                    kwds = set(case.keywords(implicit=True))
+                    match = directives.when(keyword_expr, keywords=kwds)
+                    if match:
+                        case.status.set("staged")
+        cases = [case for case in self.cases if case.status == "staged"]
+        if not cases:
+            raise EmptySession()
+        self.queue = q_factory(
+            cases,
+            avail_workers=self.avail_workers,
+            avail_cpus=self.avail_cpus,
+            avail_devices=self.avail_devices,
+        )
+        self.runner = r_factory("direct", self)
+        self.runner.validate(self.queue.work_items)
+        self.state == 2
 
     def _create_config(self, work_tree: str, **kwds: Any) -> None:
         work_tree = os.path.abspath(work_tree)
@@ -487,79 +565,19 @@ class Session:
         tree = finder.populate()
         return tree
 
-    def filter(
-        self,
-        keyword_expr: Optional[str] = None,
-        parameter_expr: Optional[str] = None,
-        start: Optional[str] = None,
-        avail_cpus_per_test: Optional[int] = None,
-        avail_devices_per_test: Optional[int] = None,
-        case_specs: Optional[list[str]] = None,
-    ) -> None:
-        if not self.cases:
-            raise ValueError("This test session has not been setup")
-        if start is None:
-            start = self.work_tree
-        elif not os.path.isabs(start):
-            start = os.path.join(self.work_tree, start)
-        start = os.path.normpath(start)
-        for case in self.cases:
-            if case.masked:
-                continue
-            if not case.exec_dir.startswith(start):
-                case.mask = "Unreachable from start directory"
-                continue
-            if case_specs is not None:
-                if any(case.matches(_) for _ in case_specs):
-                    case.status.set("staged")
-                else:
-                    case.mask = colorize("deselected by @*b{testspec expression}")
-                continue
-            if case.status != "staged":
-                s = f"deselected due to previous test status: {case.status.cname}"
-                case.mask = s
-                if avail_cpus_per_test and case.processors > avail_cpus_per_test:
-                    continue
-                if avail_devices_per_test and case.devices > avail_devices_per_test:
-                    continue
-                if parameter_expr:
-                    match = directives.when(parameter_expr, parameters=case.parameters)
-                    if match:
-                        case.status.set("staged")
-                        continue
-                if keyword_expr:
-                    kwds = set(case.keywords(implicit=True))
-                    match = directives.when(keyword_expr, keywords=kwds)
-                    if match:
-                        case.status.set("staged")
-        cases = [case for case in self.cases if case.status == "staged"]
-        if not cases:
-            raise EmptySession()
-        self.queue = q_factory(
-            cases,
-            avail_workers=self.avail_workers,
-            avail_cpus=self.avail_cpus,
-            avail_devices=self.avail_devices,
-        )
-
     def run(
         self,
-        runner: Optional[str] = None,
         timeout: int = 60 * 60,
-        runner_options: Optional[list[str]] = None,
         fail_fast: bool = False,
         execute_analysis_sections: bool = False,
     ) -> int:
+        assert self.state == 2
         if not self.queue:
             raise ValueError("This session's queue was not set up")
         if not self.queue.cases:
             raise ValueError("There are no cases to run in this session")
-        self.runner = r_factory(
-            runner or "direct",
-            self,
-            self.queue.cases,
-            options=runner_options,
-        )
+        if not self.runner:
+            raise ValueError("This session's runner was not set up")
         with self.rc_environ():
             with working_dir(self.work_tree):
                 self.process_testcases(
@@ -693,22 +711,30 @@ class Session:
             return
         obj: Union[TestCase, Partition] = self.queue.mark_as_complete(ent_no)
         if id(obj) != id(entity):
-            raise RuntimeError("wrong future entity ID")
+            tty.error(f"{obj}: wrong future entity ID")
+            return
         if isinstance(obj, Partition):
             fd = load_test_results(self.stage)
             for case in obj:
                 if case.id not in fd:
-                    raise RuntimeError("case ID not in partition")
+                    tty.error(f"case ID {case.id} not in batch {obj.rank[0]}")
+                    continue
                 if case.fullname not in attrs:
-                    raise RuntimeError("case fullname not in partition attrs")
+                    tty.error(f"{case.fullname} not in batch {obj.rank[0]}'s attrs")
+                    continue
                 if attrs[case.fullname]["status"] != fd[case.id]["status"]:
                     fs = attrs[case.fullname]["status"]
                     ss = fd[case.id]["status"]
-                    raise RuntimeError(f"future.status ({fs}) != case.status {ss}")
+                    tty.error(
+                        f"batch {obj.rank[0]}, {case}: "
+                        f"expected future.status={ss[0]}, not {fs[0]}"
+                    )
+                    continue
                 case.update(fd[case.id])
         else:
             if not isinstance(obj, TestCase):
-                raise RuntimeError(f"Expected TestCase, got {obj.__class__.__name__}")
+                tty.error(f"Expected TestCase, got {obj.__class__.__name__}")
+                return
             obj.update(attrs[obj.fullname])
             fd = obj.asdict("start", "finish", "status", "returncode")
             with WriteTransaction(self.lock):
@@ -749,9 +775,9 @@ class Session:
         with open(os.path.join(self.index_dir, "cases"), "w") as fh:
             json.dump(indexed, fh, indent=2)
 
-    def save_active_case_data(self, cases: list[TestCase], **kwds: Any):
-        mkdirp(self.stage)
+    def save_active_case_data(self, cases: list[TestCase]) -> None:
         save_attrs = ["start", "finish", "status"]
+        mkdirp(os.path.dirname(self.results_file))
         with WriteTransaction(self.lock):
             with open(self.results_file, "w") as fh:
                 for case in cases:
@@ -759,8 +785,6 @@ class Session:
                     if "dependencies" in idata:
                         idata["dependencies"] = [dep.id for dep in case.dependencies]
                     fh.write(json.dumps({case.id: idata}) + "\n")
-        with open(os.path.join(self.stage, "params"), "w") as fh:
-            json.dump(kwds, fh)
 
     def save_active_batch_data(self, batches: list[Partition]) -> None:
         fd: dict[int, list[str]] = {}

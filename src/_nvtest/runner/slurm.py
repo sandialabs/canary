@@ -1,11 +1,13 @@
 import argparse
 import math
+import os
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
 
 from .. import config
 from ..test.partition import Partition
+from ..util.misc import digits
 from ..util.time import hhmmss
 from ._slurm import _Slurm
 from .batch import BatchRunner
@@ -54,17 +56,20 @@ class SlurmRunner(BatchRunner, _Slurm):
         self.namespace.nodes = nodes
         self.namespace.ntasks_per_node = ntasks_per_node
         self.namespace.cpus_per_task = 1
-        if not hasattr(self.namespace, "time"):
-            qtime = sum([case.runtime for case in batch])
-            self.namespace.time = hhmmss(qtime)
+        qtime = sum([case.runtime for case in batch])
+        self.namespace.time = hhmmss(qtime)
 
     @staticmethod
     def fmt_option_string(key: str) -> str:
         dashes = "-" if len(key) == 1 else "--"
         return f"{dashes}{key.replace('_', '-')}"
 
-    def write_header(self, fh: TextIO) -> None:
+    def write_header(self, fh: TextIO, batch_no: int) -> None:
         """Generate the sbatch script for the current state of arguments."""
+        n = max(digits(batch_no), 3)
+        basename = f"batch-{batch_no:0{n}}-slurm-out.txt"
+        file = os.path.join(self.stage, basename)
+        self.namespace.error = self.namespace.output = file
         fh.write(f"#!{self.shell}\n")
         for key, value in vars(self.namespace).items():
             if isinstance(value, bool):
