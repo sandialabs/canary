@@ -208,8 +208,9 @@ def warn(message, *args, **kwargs):
 def die(message, *args, **kwargs):
     if HAVE_DEBUG:
         kwargs.setdefault("countback", 4)
+    code = kwargs.pop("code", 1)
     error(message, *args, **kwargs)
-    sys.exit(1)
+    sys.exit(code)
 
 
 def hline(label=None, **kwargs):

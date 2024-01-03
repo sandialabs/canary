@@ -7,9 +7,11 @@ from typing import Generator
 from typing import Optional
 from typing import Union
 
+from ..error import FailFast
 from ..test.partition import Partition
 from ..test.testcase import TestCase
 from ..util import keyboard
+from ..util.returncode import compute_returncode
 from ..util.tty.color import clen
 from ..util.tty.color import colorize
 
@@ -109,10 +111,17 @@ class Queue:
     def update(self, *args) -> None:
         raise NotImplementedError
 
-    def pop_next(self) -> tuple[int, Union[TestCase, Partition]]:
+    def pop_next(
+        self, fail_fast: bool = False
+    ) -> tuple[int, Union[TestCase, Partition]]:
         while True:
             if not len(self.queue):
                 raise StopIteration
+            if fail_fast:
+                for case in self.completed_testcases():
+                    if case.status != "success":
+                        code = compute_returncode([case])
+                        raise FailFast(str(case), code)
             ids = list(self.queue.keys())
             for id in ids:
                 if self.allow_kb:

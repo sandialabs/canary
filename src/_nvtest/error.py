@@ -38,6 +38,10 @@ class TestTimedOut(MyException):
     exit_code = timeout_exit_status
 
 
+class FailFast(Exception):
+    pass
+
+
 class StopExecution(Exception):
     def __init__(self, message, exit_code):
         self.message = message

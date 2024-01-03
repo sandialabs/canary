@@ -72,6 +72,7 @@ import os
 import time
 from concurrent.futures import Future
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
 from functools import cached_property
 from functools import partial
@@ -84,6 +85,7 @@ from typing import Union
 from . import config
 from . import directives
 from . import plugin
+from .error import FailFast
 from .error import StopExecution
 from .finder import Finder
 from .queue import Queue
@@ -630,40 +632,52 @@ class Session:
     def process_testcases(
         self, *, timeout: int, fail_fast: bool, execute_analysis_sections: bool
     ) -> None:
-        futures = {}
+        futures: dict = {}
         timeout_message = f"Test suite execution exceeded time out of {timeout} s."
         try:
             with timeout_context(timeout, timeout_message=timeout_message):
                 with ProcessPoolExecutor(max_workers=self.avail_workers) as self.ppe:
                     while True:
                         try:
-                            i, entity = self.queue.pop_next()
+                            i, entity = self.queue.pop_next(fail_fast=fail_fast)
+                        except FailFast as ex:
+                            for proc in self.ppe._processes:
+                                if proc != os.getpid():
+                                    os.kill(proc, 9)
+                            name, code = ex.args
+                            tty.die(f"fail_fast: {name} did not pass", code=code)
                         except StopIteration:
                             return
                         kwds = {"execute_analysis_sections": execute_analysis_sections}
                         future = self.ppe.submit(self.runner, entity, kwds)
-                        callback = partial(self.update_from_future, i, fail_fast)
+                        callback = partial(self.update_from_future, i)
                         future.add_done_callback(callback)
                         futures[i] = (entity, future)
         finally:
             for entity, future in futures.values():
                 if future.running():
                     entity.kill()
-            for case in self.queue.cases:
-                if case.status == "staged":
-                    tty.error(f"{case}: failed to start!")
-                    case.status.set("failed", "Case failed to start")
-                    case.dump()
+            if not fail_fast:
+                for case in self.queue.cases:
+                    if case.status == "staged":
+                        tty.error(f"{case}: failed to start!")
+                        case.status.set("failed", "Case failed to start")
+                        case.dump()
             self.returncode = compute_returncode(self.queue.cases)
 
     def update_from_future(
         self,
         ent_no: int,
-        fail_fast: bool,
         future: Future,
     ) -> None:
+        if future.cancelled():
+            return
         entity = self.queue._running[ent_no]
-        attrs = future.result()
+        try:
+            attrs = future.result()
+        except BrokenProcessPool:
+            # The future was probably killed by fail_fast
+            return
         obj: Union[TestCase, Partition] = self.queue.mark_as_complete(ent_no)
         if id(obj) != id(entity):
             raise RuntimeError("wrong future entity ID")
@@ -679,11 +693,6 @@ class Session:
                     ss = fd[case.id]["status"]
                     raise RuntimeError(f"future.status ({fs}) != case.status {ss}")
                 case.update(fd[case.id])
-            for case in obj:
-                if fail_fast and case.status != "success":
-                    self.ppe.shutdown(wait=False, cancel_futures=True)
-                    code = compute_returncode([case])
-                    raise StopExecution(f"fail_fast: {case} did not pass", code)
         else:
             if not isinstance(obj, TestCase):
                 raise RuntimeError(f"Expected TestCase, got {obj.__class__.__name__}")
@@ -692,10 +701,6 @@ class Session:
             with WriteTransaction(self.lock):
                 with open(self.results_file, "a") as fh:
                     fh.write(json.dumps({obj.id: fd}) + "\n")
-            if fail_fast and attrs[obj.fullname]["status"] != "success":
-                self.ppe.shutdown(wait=False, cancel_futures=True)
-                code = compute_returncode([obj])
-                raise StopExecution(f"fail_fast: {obj} did not pass", code)
 
     def _load_testcases(self) -> list[TestCase]:
         with open(os.path.join(self.index_dir, "cases")) as fh:
