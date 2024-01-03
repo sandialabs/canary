@@ -89,12 +89,14 @@ class BatchRunner(Runner):
 
     def write_body(self, batch: Partition, fh: TextIO) -> None:
         batch_no, _ = batch.rank
-        cpus = self.max_tasks_required(batch)
+        max_test_cpus = self.max_tasks_required(batch)
+        max_workers = self.avail_workers(batch)
+        session_cpus = max(max_workers, max_test_cpus)
         fh.write(
             f"(\n  nvtest -C {self.work_tree} run "
-            f"-l session:workers:{self.avail_workers(batch)} "
-            f"-l session:cpus:{cpus} "
-            f"-l test:cpus:{cpus} "
+            f"-l session:workers:{max_workers} "
+            f"-l session:cpus:{session_cpus} "
+            f"-l test:cpus:{max_test_cpus} "
             f"^{batch_no}\n)\n"
         )
 
