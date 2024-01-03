@@ -44,9 +44,8 @@ is
    var = value # (str) environment variables to set for the test session
 
    [machine]
-   sockets_per_node = 1 # (int)
-   cores_per_socket = N  # (int) default computed from os.cpu_count()
-   devices_per_socket = N  # (int)
+   cores_per_node = N  # (int) default computed from os.cpu_count()
+   devices_per_node = N  # (int)
    cpu_count = N  # (int) default computed from os.cpu_count()
    device_count = N  # (int) default computed from os.cpu_count()
 
