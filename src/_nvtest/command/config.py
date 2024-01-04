@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 import _nvtest.config
+
 from ..util import tty
 
 if TYPE_CHECKING:

@@ -82,11 +82,11 @@ def add_resource_arguments(parser: "Parser") -> None:
         metavar="resource",
         default=None,
         help=colorize(
-            "Defines  resources that are required by the test session and "
+            "Defines resources that are required by the test session and "
             "establishes limits to the amount of resources that can be consumed. "
             "The @*{resource} argument is of the form: @*{[scope:]type:value}, where "
-            "@*{scope} (optional) is one of session or test, (session is assumed if "
-            "not provided); @*{type} is one of workers, cpus, or devices; "
+            "@*{scope} (optional) is one of session, test, or batch, (session is "
+            "assumed if not provided); @*{type} is one of workers, cpus, or devices; "
             "and @*{value} is an integer value. By default, nvtest will determine and "
             "all available cpu cores.\n\n\n\n@*{Examples}\n\n"
             "@*{* -l test:cpus:5}: Skip tests requiring more than 5 cpu cores.\n\n"
@@ -95,6 +95,9 @@ def add_resource_arguments(parser: "Parser") -> None:
             "@*{* -l session:devices:3}: Occupy at most 3 devices at any one time.\n\n"
             "@*{* -l session:workers:8}: Execute tests/batches asynchronously using "
             "a pool of at most 8 workers\n\n"
+            "@*{* -l batch:count:8}: Execute tests in 8 batches.\n\n"
+            "@*{* -l 'batch:time:30 min'}: Execute tests in batches whose runtime is "
+            "approximately 30 minutes.\n\n"
         ),
     )
 
@@ -134,29 +137,50 @@ def set_default_resource_args(args: argparse.Namespace) -> None:
 
 class ResourceSetter(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
-        parts = values.split(":")
-        if len(parts) == 2:
-            scope = "session"
-            type, string = parts
-        elif len(parts) == 3:
-            scope, type, string = parts
+        scope, type, value = self.parse_path(values)
+        if scope == "batch":
+            self.set_batch_args(args, scope, type, value)
         else:
-            raise ResourceError(self, values, "invalid resource spec")
-        if scope not in ("session", "test"):
-            raise ResourceError(self, values, f"invalid scope {scope!r}")
-        if type not in ("cores", "cpus", "devices", "gpus", "workers"):
-            raise ResourceError(self, values, f"invalid type {type!r}")
+            self.set_resource_args(args, scope, type, value)
+
+    def set_batch_args(self, args, scope, type, value):
+        assert scope == "batch"
+        conflicting_type = "time" if type == "count" else "count"
+        if hasattr(args, f"batch_{conflicting_type}"):
+            raise ValueError("batch:count and batch:time are mutually exclusive")
+        setattr(args, f"batch_{type}", value)
+
+    def set_resource_args(self, args, scope, type, value):
+        type = {"cores": "cpus", "gpus": "devices"}.get(type, type)
+        setattr(args, f"{type}_per_{scope}", value)
+
+    def parse_path(self, path):
+        components = [_.strip() for _ in path.split(":") if _.split()]
+        if len(components) == 2:
+            components.insert(0, "session")
+        elif len(components) != 3:
+            raise ResourceError(self, path, "invalid resource spec")
+        scope, type, string = components
+        if scope in ("session", "test"):
+            if type not in ("cores", "cpus", "devices", "gpus", "workers"):
+                raise ResourceError(self, path, f"invalid type {type!r}")
+        elif scope == "batch":
+            if type not in ("count", "time"):
+                raise ResourceError(self, path, f"invalid type {type!r}")
         else:
-            type = {"cores": "cpus", "gpus": "devices"}.get(type, type)
-        try:
-            value = int(string)
-        except ValueError:
-            raise ResourceError(self, values, f"invalid int {string!r}")
+            raise ResourceError(self, path, f"invalid scope {scope!r}")
         if type == "workers" and scope != "session":
             raise ResourceError(
-                self, values, f"invalid scope {scope!r} (expected session)"
+                self, path, f"invalid scope {scope!r} (expected session)"
             )
-        setattr(args, f"{type}_per_{scope}", value)
+        if type == "time":
+            value = time_in_seconds(string)
+        else:
+            try:
+                value = int(string)
+            except ValueError:
+                raise ResourceError(self, path, f"invalid int {string!r}")
+        return scope, type, value
 
 
 class ResourceError(Exception):

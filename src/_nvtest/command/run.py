@@ -22,7 +22,6 @@ from ..test.testcase import TestCase
 from ..util import tty
 from ..util.filesystem import force_remove
 from ..util.misc import partition
-from ..util.time import time_in_seconds
 from ..util.tty.color import colorize
 from .common import add_mark_arguments
 from .common import add_resource_arguments
@@ -106,24 +105,24 @@ def setup_parser(parser: "Parser"):
 
     add_resource_arguments(parser)
 
-    group = parser.add_argument_group("batching")
-    p1 = group.add_mutually_exclusive_group()
-    p1.add_argument(
-        "--batch-size",
-        metavar="T",
-        type=time_in_seconds,
-        default=None,
-        help="Batch size in seconds (accepts human readable times, "
-        "eg 1s, 1 sec, 1h, 2 hrs, etc) [default: 30m]",
-    )
-    p1.add_argument(
-        "--batches",
-        metavar="N",
-        type=int,
-        default=None,
-        help="Number of batches.  Batches will be populated such that their run "
-        "times are approximately the same",
-    )
+    #    group = parser.add_argument_group("batching")
+    #    p1 = group.add_mutually_exclusive_group()
+    #    p1.add_argument(
+    #        "--batch-size",
+    #        metavar="T",
+    #        type=time_in_seconds,
+    #        default=None,
+    #        help="Batch size in seconds (accepts human readable times, "
+    #        "eg 1s, 1 sec, 1h, 2 hrs, etc) [default: 30m]",
+    #    )
+    #    p1.add_argument(
+    #        "--batches",
+    #        metavar="N",
+    #        type=int,
+    #        default=None,
+    #        help="Number of batches.  Batches will be populated such that their run "
+    #        "times are approximately the same",
+    #    )
     group.add_argument(
         "--runner",
         default="direct",
@@ -479,9 +478,12 @@ def setup_session(args: "argparse.Namespace") -> Session:
     session: Session
     if args.mode == "w":
         tty.print("Setting up test session", centered=True)
-        bc = Session.BatchConfig(size_t=args.batch_size, size_n=args.batches)
-        if bc and args.workers_per_session is None:
-            args.workers_per_session = 5
+        batched_run = hasattr(args, "batch_count") or hasattr(args, "batch_time")
+        if batched_run:
+            if args.workers_per_session is None:
+                args.workers_per_session = 5
+        elif args.runner not in ("direct", None):
+            raise ValueError(f"runner={args.runner!r} requires batched execution")
         session = Session.create(
             work_tree=args.work_tree or Session.default_work_tree,
             search_paths=args.paths,
@@ -495,7 +497,8 @@ def setup_session(args: "argparse.Namespace") -> Session:
             parameter_expr=args.parameter_expr,
         )
         session.setup_new(
-            batch_config=bc,
+            batch_count=getattr(args, "batch_count", None),
+            batch_time=getattr(args, "batch_time", None),
             runner=args.runner,
             runner_options=args.runner_options,
             copy_all_resources=args.copy_all_resources,
@@ -517,7 +520,8 @@ def setup_session(args: "argparse.Namespace") -> Session:
         if args.mode == "b":
             session.setup_single_batch(batch_no=args.batch_no)
         else:
-            if args.batch_size is not None or args.batches is not None:
+            batched_run = hasattr(args, "batch_count") or hasattr(args, "batch_time")
+            if batched_run:
                 raise NotImplementedError("logic for batched re-use not done")
             session.setup_filtered(
                 keyword_expr=args.keyword_expr,

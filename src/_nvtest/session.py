@@ -127,21 +127,6 @@ class ExitCode:
 class Session:
     """Manages the test session"""
 
-    class BatchConfig:
-        def __init__(
-            self, *, size_t: Optional[float] = None, size_n: Optional[int] = None
-        ) -> None:
-            self.size_t = size_t
-            self.size_n = size_n
-            if self.size_t is not None and self.size_n is not None:
-                raise TypeError("size_t and size_n are mutually exclusive")
-
-        def __bool__(self) -> bool:
-            return self.size_t is not None or self.size_n is not None
-
-        def asdict(self):
-            return vars(self)
-
     default_work_tree = "./TestResults"
     mode: str
     id: int
@@ -359,8 +344,6 @@ class Session:
         assert os.path.exists(os.path.join(self.dotdir, "stage"))
         with open(os.path.join(self.dotdir, "params")) as fh:
             for attr, value in json.load(fh).items():
-                if attr == "batch_config":
-                    value = Session.BatchConfig(**value)
                 setattr(self, attr, value)
         self.cases = self._load_testcases()
         self.state = 1
@@ -368,25 +351,26 @@ class Session:
 
     def setup_new(
         self,
-        batch_config: Optional[BatchConfig] = None,
+        batch_count: Optional[int] = None,
+        batch_time: Optional[float] = None,
         runner: Optional[str] = None,
         runner_options: Optional[list[str]] = None,
         copy_all_resources: bool = False,
     ) -> None:
         assert self.state == 1
         tty.debug("Setting up test session")
-        t_start = time.time()
-        batch_config = batch_config or Session.BatchConfig()
 
+        batched: bool = batch_count is not None or batch_time is not None
+        if runner not in ("direct", None) and not batched:
+            raise ValueError(f"runner={runner!r} requires batched execution")
+
+        t_start = time.time()
         cases_to_run = [case for case in self.cases if not case.masked]
         work_items: Union[list[TestCase], list[Partition]]
-        if batch_config:
-            if batch_config.size_t is not None:
-                work_items = partition_t(cases_to_run, t=batch_config.size_t)
-            elif batch_config.size_n is not None:
-                work_items = partition_n(cases_to_run, n=batch_config.size_n)
-            else:
-                raise ValueError("cannot determine batch configuration")
+        if batch_count:
+            work_items = partition_n(cases_to_run, n=batch_count)
+        elif batch_time is not None:
+            work_items = partition_t(cases_to_run, t=batch_time)
         else:
             work_items = cases_to_run
 
@@ -411,7 +395,7 @@ class Session:
             self.runner.setup(work_item)
 
         self.save_active_case_data(cases_to_run)
-        if batch_config:
+        if isinstance(work_items[0], Partition):
             self.save_active_batch_data(work_items)  # type: ignore
 
         duration = time.time() - t_start
