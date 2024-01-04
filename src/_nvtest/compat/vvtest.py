@@ -113,7 +113,7 @@ def get_tokens(code):
 
 def make_when_expr(options):
     when_expr = io.StringIO()
-    wildcards = "*?"
+    wildcards = "*?=><!"
     for key in list(options.keys()):
         if key in ("testname", "parameters", "options", "platforms"):
             value = options.pop(key)
