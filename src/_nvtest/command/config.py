@@ -20,7 +20,7 @@ def setup_parser(parser: "Parser"):
     p = sp.add_parser("add", help="Show the current configuration")
     p.add_argument(
         "--scope",
-        choices=("local", "global"),
+        choices=("local", "global", "session"),
         default="local",
         help="Configuration scope",
     )
@@ -55,6 +55,8 @@ def config(args: "argparse.Namespace") -> int:
         assert file is not None
         with open(file, "w") as fh:
             _nvtest.config.dump(fh, scope=args.scope)
+    elif args.command is None:
+        tty.die("nvtest config: missing required subcommand (choose from show, add)")
     else:
         tty.die(f"nvtest config: unknown subcommand: {args.subcommand}")
     return 1

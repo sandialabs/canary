@@ -167,7 +167,7 @@ class Config:
             self.load_config(file, "global")
         dir = os.getcwd()
         while dir != os.path.sep:
-            path = os.path.join(dir, ".nvtest/config")
+            path = os.path.join(dir, config_dir, "config")
             if os.path.exists(path):
                 self.load_config(path, "session")
                 self.set("session:work_tree", dir, scope="session")
@@ -191,6 +191,11 @@ class Config:
                 return os.path.join(home, ".nvtest")
         elif scope == "local":
             return os.path.abspath("./nvtest.cfg")
+        elif scope == "session":
+            dir = self.get("session:work_tree")
+            if not dir:
+                raise ValueError("session:work_tree has not been set")
+            return os.path.join(dir, config_dir, "config")
         return None
 
     def load_config(self, file: str, scope: str) -> None:

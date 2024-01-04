@@ -169,6 +169,8 @@ class Session:
             n = config.get("machine:cpu_count")
             raise ValueError(f"avail_cpus={arg} cannot exceed cpu_count={n}")
         self._avail_cpus = arg
+        if arg < self._avail_cpus_per_test:
+            self._avail_cpus_per_test = arg
 
     @property
     def avail_cpus_per_test(self) -> int:

@@ -103,36 +103,45 @@ def add_resource_arguments(parser: "Parser") -> None:
 
 
 def set_default_resource_args(args: argparse.Namespace) -> None:
-    cpu_count = config.get("machine:cpu_count")
-    cpus_per_test = setdefault(args, "cpus_per_test", None)
-    cpus_per_session = setdefault(args, "cpus_per_session", None)
-    if cpus_per_test is not None:
-        if cpus_per_test > cpu_count:
-            tty.die("-l test:cpus cannot exceed machine:cpu_count")
-    if cpus_per_session is not None:
-        if cpus_per_session > cpu_count:
-            tty.die("-l session:cpus cannot exceed machine:cpu_count")
-        if cpus_per_test is not None and cpus_per_test > cpus_per_session:
-            tty.die("-l test:cpus cannot exceed session:cpus")
+    def _die(name1, n1, name2, n2):
+        tty.die("'-l {0}:{1}' must not exceed {2}:{3}".format(name1, n1, name2, n2))
 
-    device_count = config.get("machine:device_count")
-    devices_per_test = setdefault(args, "devices_per_test", None)
-    devices_per_session = setdefault(args, "devices_per_session", None)
-    if devices_per_test is not None:
-        if devices_per_test > device_count:
-            tty.die("-l test:devices cannot exceed machine:device_count")
-    if devices_per_session is not None:
-        if devices_per_session > device_count:
-            tty.die("-l session:devices cannot exceed machine:device_count")
-        if devices_per_test is not None and devices_per_test > devices_per_session:
-            tty.die("-l test:devices cannot exceed session:devices")
+    np = config.get("machine:cpu_count")
+    npt = setdefault(args, "cpus_per_test", None)
+    nps = setdefault(args, "cpus_per_session", None)
+    if npt is not None:
+        if npt > np:
+            _die("test:cpus", npt, "machine:cpu_count", np)
+    if nps is not None:
+        if nps > np:
+            _die("session:cpus", nps, "machine:cpu_count", np)
+        if npt is not None and npt > nps:
+            _die("test:cpus", npt, "session:cpus", nps)
 
-    workers_per_session = setdefault(args, "workers_per_session", None)
-    if workers_per_session is not None:
-        if workers_per_session > cpu_count:
-            tty.die("-l session:workers cannot exceed machine:cpu_count")
-        if cpus_per_session is not None and workers_per_session > cpus_per_session:
-            tty.die("-l session:workers cannot exceed session:cpus")
+    nd = config.get("machine:device_count")
+    ndt = setdefault(args, "devices_per_test", None)
+    nds = setdefault(args, "devices_per_session", None)
+    if ndt is not None:
+        if ndt > nd:
+            _die("test:devices", ndt, "machine:device_count", nd)
+    if nds is not None:
+        if nds > nd:
+            _die("session:devices", nds, "machine:device_count", nd)
+        if ndt is not None and ndt > nds:
+            _die("test:devices", ndt, "session:devices", nds)
+
+    nw = setdefault(args, "workers_per_session", None)
+    if nw is not None:
+        if nw > np:
+            _die("session:workers", nw, "machine:cpu_count", np)
+        if nps is not None and nw > nps:
+            _die("session:workers", nw, "session:cpus", nps)
+
+    bc = setdefault(args, "batch_count", None)
+    bt = setdefault(args, "batch_time", None)
+    if bc is not None and bt is not None:
+        opt1, opt2 = f"-l batch:time:{bt}", f"-l batch:count:{bc}"
+        tty.die(f"{opt1!r} and {opt2!r} are mutually exclusive")
 
 
 class ResourceSetter(argparse.Action):
