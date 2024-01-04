@@ -5,8 +5,8 @@ import json
 import os
 import sys
 import tokenize
+from collections import namedtuple
 from string import Template
-from types import SimpleNamespace
 from typing import AbstractSet
 from typing import Any
 from typing import Iterator
@@ -34,13 +34,14 @@ class When:
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameters: Optional[dict[str, Any]] = None,
-    ) -> SimpleNamespace:
+    ):
+        result = namedtuple("result", "value, reason")
         if self.input is None:
-            return SimpleNamespace(value=True, reason=None)
+            return result(True, None)
         elif self.input is True:
-            return SimpleNamespace(value=True, reason=None)
+            return result(True, None)
         elif self.input is False:
-            return SimpleNamespace(value=False, reason="when=False")
+            return result(False, "when=False")
 
         kwds: dict[str, Any] = {}
         if testname is not None:
@@ -58,7 +59,7 @@ class When:
             testname=testname, on_options=on_options, parameters=parameters
         )
         if value is True:
-            return SimpleNamespace(value=True, reason=None)
+            return result(True, None)
 
         reason: str
         fmt = f"{a} evaluated to {b} for {expr_type}={{s}}"
@@ -73,7 +74,7 @@ class When:
         else:
             raise ValueError(f"Unknown expr_type {expr_type!r}, should never get here")
 
-        return SimpleNamespace(value=value, reason=reason)
+        return result(value, reason)
 
 
 class CompositeExpression:
