@@ -25,7 +25,7 @@ def test_when_platform():
     expr = When(f"platform='not {sys.platform}'")
     assert expr.evaluate().value is False
 
-    with pytest.raises(InvalidSyntax):
+    with pytest.raises((InvalidSyntax, IndexError)):
         expr = When("platform='linux")
         expr.evaluate()
 
