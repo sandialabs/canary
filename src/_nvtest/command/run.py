@@ -14,7 +14,7 @@ from .. import config
 from .. import finder
 from ..config.schemas import testpaths_schema
 from ..error import StopExecution
-from ..runner import valid_runners
+from ..runner import valid_schedulers
 from ..session import ExitCode
 from ..session import Session
 from ..test.status import Status
@@ -35,33 +35,16 @@ if TYPE_CHECKING:
 
 
 description = "Run the tests"
-epilog = """\
-The behavior %(run)s is context dependent.
-
-For %(new)s test sessions, the %(pathspec)s argument is scanned for test files to add
-to the session.  %(pathspec)s can be one (or more) of the following types:
-  - directory name:  the directory is recursively searched for test files ending in
-    .vvt or .pyt (specific file extensions are configurable);
-  - json or yaml file: file containing specific paths to tests and/or directories; and
-  - .vvt or .pyt file: specific test files.
-
-For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests to rerun.
-%(pathspec)s can be one (or more) of the following types:
-  - directory name: run test files in this directory and its children;
-  - test id: run this specific test, specified as %(id)s;
-  - test file: run the test defined in this file; and
-  - batch number: run this batch of tests, specified as %(batch_no)s.
-""" % {
-    "run": colorize("@*{nvtest run}"),
-    "new": colorize("@*{new}"),
-    "existing": colorize("@*{existing}"),
-    "pathspec": colorize("@*{pathspec}"),
-    "id": colorize("@*{/ID}"),
-    "batch_no": colorize("@*{^BATCH_NO}"),
-}
 
 
 def setup_parser(parser: "Parser"):
+    parser.add_argument(
+        "-H",
+        action=ExtraHelpTopic,
+        metavar=ExtraHelpTopic.metavar,
+        dest="help_topic",
+        help="Request extra help on topic",
+    )
     add_work_tree_arguments(parser)
     add_mark_arguments(parser)
     add_timing_arguments(parser)
@@ -105,40 +88,22 @@ def setup_parser(parser: "Parser"):
 
     add_resource_arguments(parser)
 
-    #    group = parser.add_argument_group("batching")
-    #    p1 = group.add_mutually_exclusive_group()
-    #    p1.add_argument(
-    #        "--batch-size",
-    #        metavar="T",
-    #        type=time_in_seconds,
-    #        default=None,
-    #        help="Batch size in seconds (accepts human readable times, "
-    #        "eg 1s, 1 sec, 1h, 2 hrs, etc) [default: 30m]",
-    #    )
-    #    p1.add_argument(
-    #        "--batches",
-    #        metavar="N",
-    #        type=int,
-    #        default=None,
-    #        help="Number of batches.  Batches will be populated such that their run "
-    #        "times are approximately the same",
-    #    )
     group.add_argument(
-        "--runner",
-        default="direct",
-        choices=valid_runners,
+        "--scheduler",
+        default=None,
+        choices=valid_schedulers,
         help="Work load manager [default: %(default)s]",
     )
     help_msg = colorize(
-        "Pass @*{option} as an option to the runner. "
+        "Pass @*{option} as an option to the scheduler. "
         "If @*{option} contains commas, it is split into multiple options at the "
-        "commas. You can use this syntax to pass an argument to the runner. "
-        "For example, -R,-A,XXXX passes -A XXXX to the runner."
+        "commas. You can use this syntax to pass an argument to the scheduler. "
+        "For example, -R,-A,XXXX passes -A XXXX to the scheduler."
     )
     group.add_argument(
-        "-R",
-        action=RunnerOptions,
-        dest="runner_options",
+        "-S",
+        action=SchedulerOptions,
+        dest="scheduler_options",
         metavar="option",
         help=help_msg,
     )
@@ -150,7 +115,7 @@ def setup_parser(parser: "Parser"):
     )
 
 
-class RunnerOptions(argparse.Action):
+class SchedulerOptions(argparse.Action):
     def __call__(
         self,
         parser: argparse.ArgumentParser,
@@ -158,11 +123,11 @@ class RunnerOptions(argparse.Action):
         option: Union[str, Sequence[Any], None],
         option_str: Optional[str] = None,
     ):
-        runner_opts: list[str] = getattr(namespace, self.dest, None) or []
+        scheduler_opts: list[str] = getattr(namespace, self.dest, None) or []
         assert isinstance(option, str)
         options: list[str] = option.replace(",", " ").split()
-        runner_opts.extend(options)
-        setattr(namespace, self.dest, runner_opts)
+        scheduler_opts.extend(options)
+        setattr(namespace, self.dest, scheduler_opts)
 
 
 class Timer:
@@ -186,6 +151,9 @@ class Timer:
 
 
 def run(args: "argparse.Namespace") -> int:
+    if args.help_topic:
+        ExtraHelpTopic.print(args.help_topic)
+        return 0
     set_default_resource_args(args)
     parse_pathspec(args)
     initstate: int = 0
@@ -478,12 +446,12 @@ def setup_session(args: "argparse.Namespace") -> Session:
     session: Session
     if args.mode == "w":
         tty.print("Setting up test session", centered=True)
-        batched_run = hasattr(args, "batch_count") or hasattr(args, "batch_time")
+        batched_run = args.batch_count is not None or args.batch_time is not None
         if batched_run:
             if args.workers_per_session is None:
                 args.workers_per_session = 5
-        elif args.runner not in ("direct", None):
-            raise ValueError(f"runner={args.runner!r} requires batched execution")
+        elif args.scheduler is not None:
+            raise ValueError(f"scheduler={args.scheduler!r} requires batched execution")
         session = Session.create(
             work_tree=args.work_tree or Session.default_work_tree,
             search_paths=args.paths,
@@ -497,10 +465,10 @@ def setup_session(args: "argparse.Namespace") -> Session:
             parameter_expr=args.parameter_expr,
         )
         session.setup_new(
-            batch_count=getattr(args, "batch_count", None),
-            batch_time=getattr(args, "batch_time", None),
-            runner=args.runner,
-            runner_options=args.runner_options,
+            batch_count=args.batch_count,
+            batch_time=args.batch_time,
+            scheduler=args.scheduler,
+            scheduler_options=args.scheduler_options,
             copy_all_resources=args.copy_all_resources,
         )
     else:
@@ -520,7 +488,7 @@ def setup_session(args: "argparse.Namespace") -> Session:
         if args.mode == "b":
             session.setup_single_batch(batch_no=args.batch_no)
         else:
-            batched_run = hasattr(args, "batch_count") or hasattr(args, "batch_time")
+            batched_run = args.batch_count is not None or args.batch_time is not None
             if batched_run:
                 raise NotImplementedError("logic for batched re-use not done")
             session.setup_filtered(
@@ -533,3 +501,98 @@ def setup_session(args: "argparse.Namespace") -> Session:
             )
     session.exitstatus = ExitCode.OK
     return session
+
+
+def bold(arg: str) -> str:
+    return colorize("@*{%s}" % arg)
+
+
+class ExtraHelpTopic(argparse.Action):
+    choices = ("pathspec", "resource")
+    metavar = "{%s}" % ",".join(choices)
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        option: Union[str, Sequence[Any], None],
+        option_str: Optional[str] = None,
+    ):
+        assert isinstance(option, str)
+        if option in ("path", "pathspec"):
+            topic = "pathspec"
+        elif option in ("resource", "resources"):
+            topic = "resource management"
+        else:
+            choices = ", ".join(self.choices)
+            parser.error(f"invalid choice {option!r} (choose from {choices})")
+        setattr(namespace, self.dest, topic)
+
+    @staticmethod
+    def print(topic: str) -> None:
+        if topic == "pathspec":
+            ExtraHelpTopic.print_pathspec_help()
+        elif topic == "resource management":
+            ExtraHelpTopic.print_resource_help()
+
+    @staticmethod
+    def print_pathspec_help() -> None:
+        pathspec_help = """\
+%(title)s
+
+The behavior %(run)s is context dependent.
+
+For %(new)s test sessions, the %(pathspec)s argument is scanned for test files to add
+to the session.  %(pathspec)s can be one (or more) of the following types:
+
+- directory name:  the directory is recursively searched for test files ending in
+  .vvt or .pyt (specific file extensions are configurable);
+- json or yaml file: file containing specific paths to tests and/or directories; and
+- .vvt or .pyt file: specific test files.
+
+For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests to rerun.
+%(pathspec)s can be one (or more) of the following types:
+
+- directory name: run test files in this directory and its children;
+- test id: run this specific test, specified as %(id)s;
+- test file: run the test defined in this file; and
+- batch number: run this batch of tests, specified as %(batch_no)s.
+""" % {
+            "title": bold("The pathspec argument"),
+            "run": bold("nvtest run"),
+            "new": bold("new"),
+            "existing": bold("existing"),
+            "pathspec": bold("pathspec"),
+            "id": bold("/ID"),
+            "batch_no": bold("^BATCH_NO"),
+        }
+        print(pathspec_help)
+
+    @staticmethod
+    def print_resource_help():
+        resource_help = """\
+%(title)s
+
+The %(r_arg)s argument is of the form: @*{[scope:]type:value}, where %(r_scope)s
+(optional) is one of session, test, or batch, (session is assumed if not provided);
+%(r_type)s is one of workers, cpus, or devices; and %(r_value)s is an integer value. By
+default, nvtest will determine and all available cpu cores.
+
+%(examples)s
+- -l test:cpus:5: Skip tests requiring more than 5 cpu cores.
+- -l session:cpus:5: Occupy at most 5 cpu cores at any one time.
+- -l test:devices:2: Skip tests requiring more than 2 devices.
+- -l session:devices:3: Occupy at most 3 devices at any one time.
+- -l session:workers:8: Execute asynchronously using a pool of at most 8 workers
+- -l batch:count:8: Execute tests in 8 batches.
+- -l 'batch:time:30 min': Execute tests in batches having runtimes of approximately
+    30 minutes.
+""" % {
+            "title": bold("Setting limits on resources"),
+            "r_arg": bold("-l resource"),
+            "r_scope": bold("scope"),
+            "r_type": bold("type"),
+            "r_value": bold("value"),
+            "examples": bold("Examples"),
+        }
+        print(resource_help)

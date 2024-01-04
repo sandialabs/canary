@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 import _nvtest.config as config
 from _nvtest.util import tty
 from _nvtest.util.time import time_in_seconds
-from _nvtest.util.tty.color import colorize
 
 if TYPE_CHECKING:
     from _nvtest.config.argparsing import Parser
@@ -81,24 +80,8 @@ def add_resource_arguments(parser: "Parser") -> None:
         action=ResourceSetter,
         metavar="resource",
         default=None,
-        help=colorize(
-            "Defines resources that are required by the test session and "
-            "establishes limits to the amount of resources that can be consumed. "
-            "The @*{resource} argument is of the form: @*{[scope:]type:value}, where "
-            "@*{scope} (optional) is one of session, test, or batch, (session is "
-            "assumed if not provided); @*{type} is one of workers, cpus, or devices; "
-            "and @*{value} is an integer value. By default, nvtest will determine and "
-            "all available cpu cores.\n\n\n\n@*{Examples}\n\n"
-            "@*{* -l test:cpus:5}: Skip tests requiring more than 5 cpu cores.\n\n"
-            "@*{* -l session:cpus:5}: Occupy at most 5 cpu cores at any one time.\n\n"
-            "@*{* -l test:devices:2}: Skip tests requiring more than 2 devices.\n\n"
-            "@*{* -l session:devices:3}: Occupy at most 3 devices at any one time.\n\n"
-            "@*{* -l session:workers:8}: Execute tests/batches asynchronously using "
-            "a pool of at most 8 workers\n\n"
-            "@*{* -l batch:count:8}: Execute tests in 8 batches.\n\n"
-            "@*{* -l 'batch:time:30 min'}: Execute tests in batches whose runtime is "
-            "approximately 30 minutes.\n\n"
-        ),
+        help="Defines resources that are required by the test session and "
+        "establishes limits to the amount of resources that can be consumed. ",
     )
 
 

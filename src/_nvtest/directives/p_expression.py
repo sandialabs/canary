@@ -23,19 +23,22 @@ class ParameterExpression:
         self.string = string
         self.expression = self.parse_expr(string)
 
+    def __repr__(self) -> str:
+        return self.string
+
     @staticmethod
     def parse_expr(expr: str) -> str:
         tokens = get_tokens(expr)
-        token = next(tokens)
-        while token == tokenize.ENCODING:
-            token = next(token)
-        negate_next = False
         parts = []
-        for token in tokens:
-            if negate_next:
-                negate_next = False
-                assert token.type == tokenize.NAME
-                parts.append(f"not_defined({token.string!r})")
+        while True:
+            try:
+                token = next(tokens)
+            except StopIteration:
+                break
+            if token.type == tokenize.ENDMARKER:
+                break
+            elif token.type in (tokenize.ENCODING, tokenize.NEWLINE):
+                continue
             elif token.type in (tokenize.STRING, tokenize.NUMBER):
                 parts.append(token.string)
             elif token.type == tokenize.NAME:
@@ -49,9 +52,9 @@ class ParameterExpression:
                     string = "=="
                 parts.append(string)
             elif token.type == tokenize.ERRORTOKEN and token.string == "!":
-                negate_next = True
-            elif token.type == tokenize.NEWLINE:
-                break
+                token = next(tokens)
+                assert token.type == tokenize.NAME
+                parts.append(f"not_defined({token.string!r})")
             else:
                 raise ValueError(
                     f"Unknown token type {token} in parameter expression {expr}"

@@ -201,6 +201,9 @@ class Expression:
         self.code = code
         self.string = string
 
+    def __repr__(self):
+        return self.string
+
     @classmethod
     def compile(self, input: str, allow_wildcards: bool = False) -> "Expression":
         """Compile a match expression.

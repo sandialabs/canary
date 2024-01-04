@@ -355,16 +355,16 @@ class Session:
         self,
         batch_count: Optional[int] = None,
         batch_time: Optional[float] = None,
-        runner: Optional[str] = None,
-        runner_options: Optional[list[str]] = None,
+        scheduler: Optional[str] = None,
+        scheduler_options: Optional[list[str]] = None,
         copy_all_resources: bool = False,
     ) -> None:
         assert self.state == 1
         tty.debug("Setting up test session")
 
         batched: bool = batch_count is not None or batch_time is not None
-        if runner not in ("direct", None) and not batched:
-            raise ValueError(f"runner={runner!r} requires batched execution")
+        if batched and scheduler in ("direct", None):
+            raise ValueError(f"scheduler={scheduler!r} requires batched execution")
 
         t_start = time.time()
         cases_to_run = [case for case in self.cases if not case.masked]
@@ -391,7 +391,7 @@ class Session:
             copy_all_resources=copy_all_resources,
             processes=rprobe.cpu_count(),
         )
-        self.runner = r_factory(runner or "direct", self, options=runner_options)
+        self.runner = r_factory(scheduler or "direct", self, options=scheduler_options)
         self.runner.validate(self.queue.work_items)
         for work_item in self.queue.work_items:
             self.runner.setup(work_item)

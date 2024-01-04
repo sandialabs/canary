@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
 from typing import Type
+from typing import Union
 
 from ..util import tty
 from .base import Runner
@@ -12,23 +13,26 @@ from .slurm import SlurmRunner
 if TYPE_CHECKING:
     from _nvtest.session import Session
 
-valid_runners = ("shell", "direct", "slurm")
+valid_schedulers = (ShellRunner.name, SlurmRunner.name)
 
 
 def factory(
-    name: str,
+    name: Union[None, str],
     session: "Session",
     *,
     options: Optional[list[Any]] = None,
 ) -> Runner:
     runner: Type[Runner]
     tty.verbose("Setting up the test runner")
-    for runner in (ShellRunner, SlurmRunner, DirectRunner):
-        if runner.name == name:
-            break
+    if name is None or name == "direct":
+        runner = DirectRunner
+    elif name == "shell":
+        runner = ShellRunner
+    elif name == "slurm":
+        runner = SlurmRunner
     else:
-        valid = ", ".join(valid_runners)
-        raise ValueError(f"Unknown runner {name!r}, choose from {valid}")
+        valid = ", ".join(valid_schedulers)
+        raise ValueError(f"Unknown runner {name!r}, choose from direct, {valid}")
     opts: list[Any] = options or []
-    tty.verbose(f"Runner type = {runner.__class__.__name__}")
+    tty.debug(f"Runner type = {runner.__class__.__name__}")
     return runner(session, *opts)
