@@ -5,4 +5,5 @@ Reference guides
    :maxdepth: 2
 
    discovery
+   results_directory
    status
