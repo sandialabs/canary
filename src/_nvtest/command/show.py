@@ -58,7 +58,7 @@ def show(args: "argparse.Namespace") -> int:
     session = Session.load(mode="r")
     for case in session.cases:
         if case.matches(args.testspec):
-            f: str = case.logfile
+            f: str = case.logfile()
             if args.show_input:
                 f = case.file
             elif args.show_exec_dir:

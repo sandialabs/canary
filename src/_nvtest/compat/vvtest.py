@@ -409,8 +409,10 @@ def parse_skipif(expression: str, **options: dict[str, str]) -> tuple[bool, str]
     return True, reason
 
 
-def write_vvtest_util(case: "TestCase") -> None:
-    attrs = get_vvtest_attrs(case)
+def write_vvtest_util(
+    case: "TestCase", baseline: bool = False, analyze: bool = False
+) -> None:
+    attrs = get_vvtest_attrs(case, baseline, analyze)
     with open("vvtest_util.py", "w") as fh:
         fh.write("import os\n")
         fh.write("import sys\n")
@@ -434,7 +436,7 @@ def unique(sequence: list[str]) -> list[str]:
 
 
 @typing.no_type_check
-def get_vvtest_attrs(case: "TestCase") -> dict:
+def get_vvtest_attrs(case: "TestCase", baseline: bool, analyze: bool) -> dict:
     attrs = {}
     compiler_spec = None
     if config.get("build:compiler:vendor") is None:
@@ -456,9 +458,9 @@ def get_vvtest_attrs(case: "TestCase") -> dict:
     attrs["diff_exit_status"] = 64
     attrs["skip_exit_status"] = 63
     attrs["opt_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"
-    attrs["is_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"
-    attrs["is_baseline"] = False  # FIXME
-    attrs["is_analysis_only"] = False  # FIXME
+    attrs["is_analyze"] = bool(case.analyze)
+    attrs["is_baseline"] = baseline
+    attrs["is_analysis_only"] = analyze
     attrs["PARAM_DICT"] = case.parameters or {}
     for key, val in case.parameters.items():
         attrs[key] = val

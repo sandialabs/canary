@@ -167,7 +167,7 @@ def cformat(case: TestCase, show_log: bool) -> str:
     elif case.status == "skipped":
         string += ": Skipped due to %s" % case.status.details
     if show_log:
-        f = os.path.relpath(case.logfile, os.getcwd())
+        f = os.path.relpath(case.logfile(), os.getcwd())
         string += tty.color.colorize(": @m{%s}" % f)
     return string
 

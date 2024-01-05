@@ -75,7 +75,6 @@ from concurrent.futures import Future
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
-from functools import cached_property
 from functools import partial
 from itertools import repeat
 from typing import Any
@@ -92,7 +91,6 @@ from .finder import Finder
 from .queue import Queue
 from .queue import factory as q_factory
 from .runner import factory as r_factory
-from .test import AbstractTestFile
 from .test.partition import Partition
 from .test.partition import partition_n
 from .test.partition import partition_t
@@ -101,6 +99,7 @@ from .third_party import rprobe
 from .third_party.lock import Lock
 from .third_party.lock import WriteTransaction
 from .util import tty
+from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
@@ -132,6 +131,7 @@ class Session:
     id: int
     startdir: str
     exitstatus: int
+    _work_tree: str
     _avail_cpus: int
     _avail_devices: int
     _avail_cpus_per_test: int
@@ -158,6 +158,43 @@ class Session:
         self._avail_workers = self.avail_cpus
         self._avail_devices = config.get("machine:device_count")
         self._avail_devices_per_test = self.avail_devices
+
+    @property
+    def work_tree(self) -> str:
+        return self._work_tree
+
+    @work_tree.setter
+    def work_tree(self, arg: str) -> None:
+        self._work_tree = arg
+
+    @property
+    def dotdir(self) -> str:
+        path = os.path.join(self.work_tree, ".nvtest")
+        return path
+
+    @property
+    def index_dir(self):
+        path = os.path.join(self.dotdir, "index")
+        return path
+
+    @property
+    def config_file(self):
+        path = os.path.join(self.dotdir, "config")
+        return path
+
+    @property
+    def stage(self) -> str:
+        return os.path.join(self.dotdir, "stage")
+
+    @property
+    def batch_file(self):
+        path = os.path.join(self.index_dir, "batches")
+        return path
+
+    @property
+    def results_file(self):
+        p = os.path.join(self.stage, "tests")
+        return p
 
     @property
     def avail_cpus(self) -> int:
@@ -232,13 +269,123 @@ class Session:
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
+        copy_all_resources: bool = False,
+        batch_count: Optional[int] = None,
+        batch_time: Optional[float] = None,
+        scheduler: Optional[str] = None,
+        scheduler_options: Optional[list[str]] = None,
     ) -> "Session":
         if config.has_scope("session"):
             raise ValueError("cannot create new session when another session is active")
         self = cls()
         self.mode = "w"
         self.exitstatus = -1
+        tty.debug(f"Creating new test session in {work_tree}")
+        t_start = time.time()
 
+        if batch_count is not None or batch_time is not None:
+            if scheduler is None:
+                raise ValueError("batched execution requires a scheduler")
+
+        try:
+            self.initialize(
+                work_tree,
+                search_paths=search_paths,
+                avail_cpus=avail_cpus,
+                avail_cpus_per_test=avail_cpus_per_test,
+                avail_devices=avail_devices,
+                avail_devices_per_test=avail_devices_per_test,
+                avail_workers=avail_workers,
+                keyword_expr=keyword_expr,
+                on_options=on_options,
+                parameter_expr=parameter_expr,
+            )
+        except Exception:
+            force_remove(self.work_tree)
+            raise
+
+        self.populate(
+            on_options=on_options,
+            keyword_expr=keyword_expr,
+            parameter_expr=parameter_expr,
+            copy_all_resources=copy_all_resources,
+        )
+
+        for hook in plugin.plugins("session", "setup"):
+            hook(self)
+
+        if batch_count is not None or batch_time is not None:
+            self.setup_batch_queue(batch_count=batch_count, batch_time=batch_time)
+            self.runner = r_factory(scheduler, self, options=scheduler_options)
+        else:
+            self.setup_direct_queue()
+            self.runner = r_factory("direct", self)
+        self.runner.validate(self.queue.work_items)
+        for work_item in self.queue.work_items:
+            self.runner.setup(work_item)
+
+        with open(os.path.join(self.dotdir, "params"), "w") as fh:
+            variables = dict(vars(self))
+            for attr in ("cases", "queue", "lock", "runner"):
+                variables.pop(attr, None)
+            json.dump(variables, fh, indent=2)
+        with open(os.path.join(self.stage, "params"), "w") as fh:
+            kwds = dict(
+                keyword_expr=keyword_expr,
+                on_options=on_options,
+                parameter_expr=parameter_expr,
+            )
+            json.dump(kwds, fh, indent=2)
+
+        duration = time.time() - t_start
+        tty.debug(f"Done creating test session ({duration:.2f}s.)")
+
+        self.state = 1
+        return self
+
+    @classmethod
+    def load(cls, *, mode: str = "r") -> "Session":
+        assert mode in "ra"
+        self = cls()
+        self.work_tree = config.get("session:work_tree")
+        if not self.work_tree:
+            raise ValueError(
+                "not a nvtest session (or any of the parent directories): .nvtest"
+            )
+        self.mode = mode
+        self.exitstatus = -1
+        lock_path = os.path.join(self.dotdir, "lock")
+        self.lock = Lock(lock_path, default_timeout=120, desc="session")
+        assert os.path.exists(os.path.join(self.dotdir, "stage"))
+        with open(os.path.join(self.dotdir, "params")) as fh:
+            for attr, value in json.load(fh).items():
+                setattr(self, attr, value)
+        self.cases = self._load_testcases()
+        self.state = 1
+        return self
+
+    def initialize(
+        self,
+        work_tree: str,
+        search_paths: dict[str, list[str]],
+        avail_cpus: Optional[int] = None,
+        avail_cpus_per_test: Optional[int] = None,
+        avail_devices: Optional[int] = None,
+        avail_devices_per_test: Optional[int] = None,
+        avail_workers: Optional[int] = None,
+        **kwds: Any,
+    ) -> None:
+        """Create the work tree and auxiliary directories, and setup session
+        configuration
+
+        """
+        self.work_tree = os.path.abspath(work_tree)
+        if os.path.exists(self.work_tree):
+            raise ValueError(f"{self.work_tree}: directory exists")
+        mkdirp(self.work_tree)
+
+        t_start = time.time()
+        tty.debug("Initializing session")
         if avail_cpus is not None:
             self.avail_cpus = avail_cpus
         if avail_cpus_per_test is not None:
@@ -254,6 +401,54 @@ class Session:
 
         self.search_paths = search_paths
 
+        config.set("session:work_tree", self.work_tree, scope="session")
+        config.set("session:invocation_dir", config.invocation_dir, scope="session")
+        start = os.path.relpath(self.work_tree, os.getcwd()) or "."
+        config.set("session:start", start, scope="session")
+        for key, value in kwds.items():
+            config.set(f"session:{key}", value, scope="session")
+        for attr in ("sockets_per_node", "cores_per_socket", "cpu_count"):
+            value = config.get(f"machine:{attr}", scope="local")
+            if value is not None:
+                config.set(f"machine:{attr}", value, scope="session")
+        for section in ("build", "config", "machine", "option", "variables"):
+            # transfer options to the session scope and save it for future sessions
+            data = config.get(section, scope="local") or {}
+            for key, value in data.items():
+                config.set(f"{section}:{key}", value, scope="session")
+
+        file = os.path.join(self.work_tree, config.config_dir, "config")
+        mkdirp(os.path.dirname(file))
+        with open(file, "w") as fh:
+            config.dump(fh, scope="session")
+
+        mkdirp(self.index_dir)
+        mkdirp(self.stage)
+
+        lock_path = os.path.join(self.dotdir, "lock")
+        self.lock = Lock(lock_path, default_timeout=120, desc="session")
+
+        duration = time.time() - t_start
+        tty.debug(f"Done initializing session ({duration:.2f}s.)")
+
+    def populate(
+        self,
+        keyword_expr: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        parameter_expr: Optional[str] = None,
+        copy_all_resources: bool = False,
+    ) -> None:
+        assert self.mode == "w"
+
+        t_start = time.time()
+        tty.debug("Populating work tree")
+
+        finder = Finder()
+        for root, _paths in self.search_paths.items():
+            finder.add(root, *_paths)
+        finder.prepare()
+        tree = finder.populate()
+
         on_options = on_options or []
         if config.get("build:options"):
             for opt, val in config.get("build:options").items():
@@ -261,36 +456,15 @@ class Session:
                     on_options.append(opt)
         on_options = dedup(on_options)
 
-        self._create_config(
-            work_tree,
-            search_paths=self.search_paths,
-            avail_cpus=self.avail_cpus,
-            avail_cpus_per_test=self.avail_cpus_per_test,
-            avail_devices=self.avail_devices,
-            avail_devices_per_test=self.avail_devices_per_test,
-            avail_workers=self.avail_workers,
-            keyword_expr=keyword_expr,
-            on_options=on_options,
-            parameter_expr=parameter_expr,
-        )
-        tty.debug(f"Creating new nvtest session in {config.get('session:start')}")
-
-        t_start: float = time.time()
-        for hook in plugin.plugins("session", "setup"):
-            hook(self)
-
-        tree = self.populate(search_paths)
-
         tty.debug(
             "Freezing test files with the following options: ",
-            f"{avail_cpus=}",
-            f"{avail_cpus_per_test=}",
-            f"{avail_devices_per_test=}",
+            f"{self.avail_cpus=}",
+            f"{self.avail_cpus_per_test=}",
+            f"{self.avail_devices_per_test=}",
             f"{on_options=}",
             f"{keyword_expr=}",
             f"{parameter_expr=}",
         )
-
         self.cases = Finder.freeze(
             tree,
             avail_cpus_per_test=self.avail_cpus_per_test,
@@ -304,107 +478,60 @@ class Session:
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
 
-        mkdirp(self.index_dir)
-        mkdirp(self.stage)
-
-        lock_path = os.path.join(self.dotdir, "lock")
-        self.lock = Lock(lock_path, default_timeout=120, desc="session")
-
-        with open(os.path.join(self.dotdir, "params"), "w") as fh:
-            variables = dict(vars(self))
-            for attr in ("cases", "queue", "lock"):
-                variables.pop(attr, None)
-            json.dump(variables, fh, indent=2)
-        with open(os.path.join(self.stage, "params"), "w") as fh:
-            kwds = dict(
-                keyword_expr=keyword_expr,
-                on_options=on_options,
-                parameter_expr=parameter_expr,
-            )
-            json.dump(kwds, fh, indent=2)
         self.create_index(self.cases)
+        self.setup_testcases(cases_to_run, copy_all_resources=copy_all_resources)
+
+        save_attrs = ["start", "finish", "status"]
+        mkdirp(os.path.dirname(self.results_file))
+        with WriteTransaction(self.lock):
+            with open(self.results_file, "w") as fh:
+                for case in cases_to_run:
+                    idata = case.asdict(*save_attrs)
+                    if "dependencies" in idata:
+                        idata["dependencies"] = [dep.id for dep in case.dependencies]
+                    fh.write(json.dumps({case.id: idata}) + "\n")
 
         duration = time.time() - t_start
-        tty.debug(f"Done creating test session ({duration:.2f}s.)")
+        tty.debug(f"Done populating work tree ({duration:.2f}s.)")
 
-        self.state = 1
-        return self
-
-    @classmethod
-    def load(cls, *, mode: str = "r") -> "Session":
-        work_tree = config.get("session:work_tree")
-        if not work_tree:
-            raise ValueError(
-                "not a nvtest session (or any of the parent directories): .nvtest"
-            )
-        assert mode in "ra"
-        self = cls()
-        self.mode = mode
-        self.exitstatus = -1
-        lock_path = os.path.join(self.dotdir, "lock")
-        self.lock = Lock(lock_path, default_timeout=120, desc="session")
-        assert os.path.exists(os.path.join(self.dotdir, "stage"))
-        with open(os.path.join(self.dotdir, "params")) as fh:
-            for attr, value in json.load(fh).items():
-                setattr(self, attr, value)
-        self.cases = self._load_testcases()
-        self.state = 1
-        return self
-
-    def setup_new(
-        self,
-        batch_count: Optional[int] = None,
-        batch_time: Optional[float] = None,
-        scheduler: Optional[str] = None,
-        scheduler_options: Optional[list[str]] = None,
-        copy_all_resources: bool = False,
-    ) -> None:
-        assert self.state == 1
-        tty.debug("Setting up test session")
-
-        batched: bool = batch_count is not None or batch_time is not None
-        if batched and scheduler in ("direct", None):
-            raise ValueError(f"scheduler={scheduler!r} requires batched execution")
-
-        t_start = time.time()
-        cases_to_run = [case for case in self.cases if not case.masked]
-        work_items: Union[list[TestCase], list[Partition]]
-        if batch_count:
-            work_items = partition_n(cases_to_run, n=batch_count)
-        elif batch_time is not None:
-            work_items = partition_t(cases_to_run, t=batch_time)
-        else:
-            work_items = cases_to_run
-
+    def setup_direct_queue(self) -> None:
         self.queue = q_factory(
-            work_items,
+            [case for case in self.cases if not case.masked],
             avail_workers=self.avail_workers,
             avail_cpus=self.avail_cpus,
             avail_devices=self.avail_devices,
         )
 
-        tty.debug("Setting up test cases")
-        t_start = time.time()
+    def setup_batch_queue(
+        self,
+        batch_count: Optional[int] = None,
+        batch_time: Optional[float] = None,
+    ) -> None:
+        batched: bool = batch_count is not None or batch_time is not None
+        assert batched is True
+
         cases_to_run = [case for case in self.cases if not case.masked]
-        self.setup_testcases(
-            cases_to_run,
-            copy_all_resources=copy_all_resources,
-            processes=rprobe.cpu_count(),
+        batches: list[Partition]
+        if batch_count:
+            batches = partition_n(cases_to_run, n=batch_count)
+        else:
+            batches = partition_t(cases_to_run, t=batch_time)
+        self.queue = q_factory(
+            batches,
+            avail_workers=self.avail_workers,
+            avail_cpus=self.avail_cpus,
+            avail_devices=self.avail_devices,
         )
-        self.runner = r_factory(scheduler or "direct", self, options=scheduler_options)
-        self.runner.validate(self.queue.work_items)
-        for work_item in self.queue.work_items:
-            self.runner.setup(work_item)
+        fd: dict[int, list[str]] = {}
+        for batch in batches:
+            cases = fd.setdefault(batch.rank[0], [])
+            cases.extend([case.id for case in batch])
+        mkdirp(os.path.dirname(self.batch_file))
+        with WriteTransaction(self.lock):
+            with open(self.batch_file, "w") as fh:
+                json.dump({"batches": fd}, fh, indent=2)
 
-        self.save_active_case_data(cases_to_run)
-        if isinstance(work_items[0], Partition):
-            self.save_active_batch_data(work_items)  # type: ignore
-
-        duration = time.time() - t_start
-        tty.debug(f"Done setting up test session ({duration:.2f}s.)")
-        self.state = 2
-
-    def setup_single_batch(self, *, batch_no: int) -> None:
+    def filter_batch(self, *, batch_no: int) -> None:
         assert self.state == 1
         with open(self.batch_file) as fh:
             fd = json.load(fh)
@@ -414,19 +541,12 @@ class Session:
                 case.status.set("staged")
             elif not case.masked:
                 case.mask = f"case is not in batch {batch_no}"
-        cases = [case for case in self.cases if not case.masked]
-        self.queue = q_factory(
-            cases,
-            avail_workers=self.avail_workers,
-            avail_cpus=self.avail_cpus,
-            avail_devices=self.avail_devices,
-        )
+        self.setup_direct_queue()
         self.runner = r_factory("direct", self)
         self.runner.validate(self.queue.work_items)
         self.state = 2
-        return None
 
-    def setup_filtered(
+    def filter(
         self,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
@@ -472,86 +592,13 @@ class Session:
                     if match:
                         case.status.set("staged")
                         case.unmask()
-        cases = [case for case in self.cases if case.status == "staged"]
+        cases = [case for case in self.cases if not case.masked]
         if not cases:
             raise EmptySession()
-        self.queue = q_factory(
-            cases,
-            avail_workers=self.avail_workers,
-            avail_cpus=self.avail_cpus,
-            avail_devices=self.avail_devices,
-        )
+        self.setup_direct_queue()
         self.runner = r_factory("direct", self)
         self.runner.validate(self.queue.work_items)
         self.state = 2
-
-    def _create_config(self, work_tree: str, **kwds: Any) -> None:
-        work_tree = os.path.abspath(work_tree)
-        config.set("session:work_tree", work_tree, scope="session")
-        config.set("session:invocation_dir", config.invocation_dir, scope="session")
-        start = os.path.relpath(work_tree, os.getcwd()) or "."
-        config.set("session:start", start, scope="session")
-        for key, value in kwds.items():
-            config.set(f"session:{key}", value, scope="session")
-        for attr in ("sockets_per_node", "cores_per_socket", "cpu_count"):
-            value = config.get(f"machine:{attr}", scope="local")
-            if value is not None:
-                config.set(f"machine:{attr}", value, scope="session")
-        for section in ("build", "config", "machine", "option", "variables"):
-            # transfer options to the session scope and save it for future sessions
-            data = config.get(section, scope="local") or {}
-            for key, value in data.items():
-                config.set(f"{section}:{key}", value, scope="session")
-        file = os.path.join(work_tree, config.config_dir, "config")
-        mkdirp(os.path.dirname(file))
-        with open(file, "w") as fh:
-            config.dump(fh, scope="session")
-
-    @cached_property
-    def work_tree(self) -> str:
-        return config.get("session:work_tree", scope="session")
-
-    @property
-    def dotdir(self) -> str:
-        path = os.path.join(self.work_tree, ".nvtest")
-        return path
-
-    @property
-    def index_dir(self):
-        path = os.path.join(self.dotdir, "index")
-        return path
-
-    @property
-    def config_file(self):
-        path = os.path.join(self.dotdir, "config")
-        return path
-
-    @property
-    def stage(self) -> str:
-        return os.path.join(self.dotdir, "stage")
-
-    @property
-    def batch_file(self):
-        path = os.path.join(self.index_dir, "batches")
-        return path
-
-    @property
-    def results_file(self):
-        p = os.path.join(self.stage, "tests")
-        return p
-
-    def populate(
-        self, treeish: dict[str, list[str]]
-    ) -> dict[str, set[AbstractTestFile]]:
-        assert self.mode == "w"
-        tty.debug("Populating test session")
-        finder = Finder()
-        for root, _paths in treeish.items():
-            tty.debug(f"Adding tests in {root}")
-            finder.add(root, *_paths)
-        finder.prepare()
-        tree = finder.populate()
-        return tree
 
     def run(
         self,
@@ -606,9 +653,8 @@ class Session:
         self,
         cases: list[TestCase],
         copy_all_resources: bool = False,
-        processes: int = 5,
     ) -> None:
-        mkdirp(self.work_tree)
+        processes: int = rprobe.cpu_count()
         ts: TopologicalSorter = TopologicalSorter()
         for case in cases:
             ts.add(case, *case.dependencies)
@@ -762,27 +808,6 @@ class Session:
             json.dump({k: list(v) for (k, v) in files.items()}, fh, indent=2)
         with open(os.path.join(self.index_dir, "cases"), "w") as fh:
             json.dump(indexed, fh, indent=2)
-
-    def save_active_case_data(self, cases: list[TestCase]) -> None:
-        save_attrs = ["start", "finish", "status"]
-        mkdirp(os.path.dirname(self.results_file))
-        with WriteTransaction(self.lock):
-            with open(self.results_file, "w") as fh:
-                for case in cases:
-                    idata = case.asdict(*save_attrs)
-                    if "dependencies" in idata:
-                        idata["dependencies"] = [dep.id for dep in case.dependencies]
-                    fh.write(json.dumps({case.id: idata}) + "\n")
-
-    def save_active_batch_data(self, batches: list[Partition]) -> None:
-        fd: dict[int, list[str]] = {}
-        for batch in batches:
-            cases = fd.setdefault(batch.rank[0], [])
-            cases.extend([case.id for case in batch])
-        mkdirp(os.path.dirname(self.batch_file))
-        with WriteTransaction(self.lock):
-            with open(self.batch_file, "w") as fh:
-                json.dump({"batches": fd}, fh, indent=2)
 
 
 def _setup_individual_case(case, exec_root, copy_all_resources):

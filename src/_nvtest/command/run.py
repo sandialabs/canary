@@ -463,8 +463,6 @@ def setup_session(args: "argparse.Namespace") -> Session:
             keyword_expr=args.keyword_expr,
             on_options=args.on_options,
             parameter_expr=args.parameter_expr,
-        )
-        session.setup_new(
             batch_count=args.batch_count,
             batch_time=args.batch_time,
             scheduler=args.scheduler,
@@ -484,14 +482,13 @@ def setup_session(args: "argparse.Namespace") -> Session:
             session.avail_devices_per_test = args.devices_per_test
         if args.workers_per_session is not None:
             session.avail_workers = args.workers_per_session
-
         if args.mode == "b":
-            session.setup_single_batch(batch_no=args.batch_no)
+            session.filter_batch(batch_no=args.batch_no)
         else:
             batched_run = args.batch_count is not None or args.batch_time is not None
             if batched_run:
                 raise NotImplementedError("logic for batched re-use not done")
-            session.setup_filtered(
+            session.filter(
                 keyword_expr=args.keyword_expr,
                 start=args.start,
                 parameter_expr=args.parameter_expr,

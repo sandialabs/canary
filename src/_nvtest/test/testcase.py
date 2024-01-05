@@ -17,6 +17,7 @@ from ..util import tty
 from ..util.compression import compress_file
 from ..util.environ import tmp_environ
 from ..util.executable import Executable
+from ..util.filesystem import copyfile
 from ..util.filesystem import mkdirp
 from ..util.filesystem import working_dir
 from ..util.hash import hashit
@@ -197,9 +198,10 @@ class TestCase:
             return -1
         return self.finish - self.start
 
-    @property
-    def logfile(self) -> str:
-        return os.path.join(self.exec_dir, "nvtest-out.txt")
+    def logfile(self, stage: Optional[str] = None) -> str:
+        if stage is None:
+            return os.path.join(self.exec_dir, "nvtest-out.txt")
+        return os.path.join(self.exec_dir, f"nvtest-{stage}-out.txt")
 
     @property
     def exec_dir(self) -> str:
@@ -367,15 +369,15 @@ class TestCase:
     def to_json(self):
         data = self.asdict()
         done = self.status.value in ("failed", "success")
-        if self.logfile and done:
+        if done:
             data["log"] = self.compressed_log()
         return json.dumps(data)
 
     def compressed_log(self) -> str:
         done = self.status.value in ("failed", "success")
-        if self.logfile and done:
+        if done:
             kb_to_keep = 2 if self.status == "success" else 300
-            compressed_log = compress_file(self.logfile, kb_to_keep)
+            compressed_log = compress_file(self.logfile(), kb_to_keep)
             return compressed_log
         return "Log not found"
 
@@ -395,9 +397,7 @@ class TestCase:
         tty.verbose(f"Done setting up {self}")
 
     def setup_exec_dir(self, copy_all_resources: bool = False) -> None:
-        with tty.log_output(self.logfile, mode="w"):
-            if self.file_type == "vvt":
-                fs.force_symlink(self.logfile, "execute.log")
+        with tty.log_output(self.logfile("setup"), mode="w"):
             with tty.timestamps():
                 tty.info(f"Preparing test: {self.name}")
                 tty.info(f"Directory: {os.getcwd()}")
@@ -409,8 +409,6 @@ class TestCase:
                     relsrc = os.path.relpath(self.file, os.getcwd())
                     fs.force_symlink(relsrc, os.path.basename(self.file), echo=tty.info)
                 self.copy_sources_to_workdir(copy_all_resources=copy_all_resources)
-                if self.file_type == "vvt":
-                    write_vvtest_util(self)
 
     def update(self, attrs: dict[str, object]) -> None:
         for key, val in attrs.items():
@@ -423,6 +421,26 @@ class TestCase:
 
     def register_proc(self, proc) -> None:
         self._process = proc
+
+    def do_baseline(self) -> None:
+        if not self.baseline:
+            return
+        tty.info(f"Rebaselining {self.pretty_repr()}")
+        with fs.working_dir(self.exec_dir):
+            if self.file_type == "vvt":
+                write_vvtest_util(self, baseline=True)
+            for arg in self.baseline:
+                if isinstance(arg, tuple):
+                    a, b = arg
+                    src = os.path.join(self.exec_dir, a)
+                    dst = os.path.join(self.file_dir, b)
+                    if os.path.exists(src):
+                        tty.print(f"    Replacing {b} with {a}")
+                        copyfile(src, dst)
+                else:
+                    python = Executable(sys.executable)
+                    args = [os.path.basename(self.file), self.baseline]
+                    python(*args, fail_on_error=False)
 
     def run(self, **kwds: Any) -> None:
         if os.getenv("NVTEST_RESETUP"):
@@ -441,6 +459,13 @@ class TestCase:
             self.status.set("failed", "unknown failure")
             raise
         finally:
+            with open(self.logfile(), "w") as fh:
+                for stage in ("setup", "test"):
+                    file = self.logfile(stage)
+                    if os.path.exists(file):
+                        fh.write(open(file).read())
+            if self.file_type == "vvt":
+                fs.force_symlink(self.logfile(), "execute.log")
             self.finish = time.time()
             tty.info(fmt.format("FINISHED", self.status.cname), prefix=None)
             self.dump()
@@ -450,7 +475,9 @@ class TestCase:
         python = Executable(sys.executable)
         python.add_begin_callback(self.register_proc)
         with fs.working_dir(self.exec_dir):
-            with tty.log_output(self.logfile, mode="a"):
+            if self.file_type == "vvt":
+                write_vvtest_util(self)
+            with tty.log_output(self.logfile("test"), mode="w"):
                 with tty.timestamps():
                     args = self.command_line_args(**kwds)
                     env = self.rc_environ()
@@ -482,10 +509,11 @@ class TestCase:
         return args
 
     def command_line_args(self, **kwds: Any) -> list[str]:
-        if self.analyze and self.analyze.startswith("-"):
-            args = [os.path.basename(self.file), self.analyze]
-        elif self.analyze:
-            args = [self.analyze]
+        if self.analyze:
+            if self.analyze.startswith("-"):
+                args = [os.path.basename(self.file), self.analyze]
+            else:
+                args = [self.analyze]
         else:
             args = [os.path.basename(self.file)]
             extra_args = self.kwds_to_command_line_args(**kwds)

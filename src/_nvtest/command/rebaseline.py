@@ -1,11 +1,10 @@
 import argparse
 import os
 from typing import TYPE_CHECKING
+from typing import Union
 
 from ..session import Session
 from ..test.testcase import TestCase
-from ..util import tty
-from ..util.filesystem import copyfile
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
@@ -20,29 +19,19 @@ def setup_parser(parser: "Parser"):
 
 def rebaseline(args: "argparse.Namespace") -> int:
     session = Session.load(mode="r")
-    cases: list[TestCase]
-    if args.pathspec:
-        cases = [
-            c
-            for c in session.cases
-            if c.matches(args.pathspec)
-            or c.exec_dir.startswith(os.path.abspath(args.pathspec))
-        ]
-    else:
-        cases = [c for c in session.cases if c.status.value in ("failed", "diffed")]
+    cases = filter_cases(session.cases, args.pathspec)
     for case in cases:
-        if not case.baseline:
-            tty.warn(f"{case.pretty_repr()} does not define rebaselining instructions")
-            continue
-        tty.info(f"Rebaselining {case.pretty_repr()}")
-        for arg in case.baseline:
-            if isinstance(arg, tuple):
-                a, b = arg
-                src = os.path.join(case.exec_dir, a)
-                dst = os.path.join(case.file_dir, b)
-                if os.path.exists(src):
-                    tty.print(f"    Replacing {b} with {a}")
-                    copyfile(src, dst)
-            else:
-                raise ValueError(f"Support for baseline type {arg} not complete")
+        case.do_baseline()
     return 0
+
+
+def filter_cases(cases: list[TestCase], pathspec: Union[str, None]) -> list[TestCase]:
+    filtered_cases: list[TestCase]
+    if pathspec is None:
+        filtered_cases = [c for c in cases if c.status.value in ("failed", "diffed")]
+    else:
+        prefix = os.path.abspath(pathspec)
+        filtered_cases = [
+            c for c in cases if c.matches(pathspec) or c.exec_dir.startswith(prefix)
+        ]
+    return filtered_cases
