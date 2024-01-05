@@ -464,12 +464,14 @@ class Session:
                     match = directives.when(parameter_expr, parameters=case.parameters)
                     if match:
                         case.status.set("staged")
+                        case.unmask()
                         continue
                 if keyword_expr:
                     kwds = set(case.keywords(implicit=True))
                     match = directives.when(keyword_expr, keywords=kwds)
                     if match:
                         case.status.set("staged")
+                        case.unmask()
         cases = [case for case in self.cases if case.status == "staged"]
         if not cases:
             raise EmptySession()
@@ -481,7 +483,7 @@ class Session:
         )
         self.runner = r_factory("direct", self)
         self.runner.validate(self.queue.work_items)
-        self.state == 2
+        self.state = 2
 
     def _create_config(self, work_tree: str, **kwds: Any) -> None:
         work_tree = os.path.abspath(work_tree)

@@ -44,7 +44,7 @@ class TestCase:
         parameters: dict[str, object] = {},
         timeout: Optional[int] = None,
         runtime: Union[None, float, int] = None,
-        baseline: list[tuple[str, str]] = [],
+        baseline: list[Union[str, tuple[str, str]]] = [],
         sources: dict[str, list[tuple[str, str]]] = {},
     ):
         # file properties
@@ -138,6 +138,9 @@ class TestCase:
     @mask.setter
     def mask(self, arg: str) -> None:
         self._mask = " ".join(arg.split())
+
+    def unmask(self) -> None:
+        self._mask = ""
 
     @staticmethod
     def spec_like(spec: str) -> bool:
@@ -422,6 +425,9 @@ class TestCase:
         self._process = proc
 
     def run(self, **kwds: Any) -> None:
+        if os.getenv("NVTEST_RESETUP"):
+            assert isinstance(self.exec_root, str)
+            self.setup(self.exec_root)
         if self.dep_patterns:
             raise RuntimeError("Dependency patterns must be resolved before running")
         id = colorize("@b{%s}" % self.id[:7])

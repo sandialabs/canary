@@ -344,9 +344,12 @@ def f_baseline(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
     argument = re.sub(",\s*", ",", arg.argument)
     file_pairs = [_.split(",") for _ in argument.split()]
     for file_pair in file_pairs:
-        if len(file_pair) != 2:
+        if len(file_pair) == 1 and file_pair[0].startswith("--"):
+            file.m_baseline(when=arg.when, flag=file_pair[0], **arg.options)
+        elif len(file_pair) != 2:
             raise ValueError(f"{file.file}: invalid baseline command at {arg.line!r}")
-        file.m_baseline(file_pair[0], file_pair[1], when=arg.when, **arg.options)
+        else:
+            file.m_baseline(file_pair[0], file_pair[1], when=arg.when, **arg.options)
 
 
 def f_enable(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
@@ -412,7 +415,14 @@ def write_vvtest_util(case: "TestCase") -> None:
         fh.write("import os\n")
         fh.write("import sys\n")
         for key, value in attrs.items():
-            fh.write(f"{key} = {json.dumps(value, indent=3)}\n")
+            if isinstance(value, bool):
+                fh.write(f"{key} = {value!r}\n")
+            elif value is None:
+                fh.write(f"{key} = None\n")
+            elif isinstance(value, str) and "in sys.argv" in value:
+                fh.write(f"{key} = {value}\n")
+            else:
+                fh.write(f"{key} = {json.dumps(value, indent=3)}\n")
 
 
 def unique(sequence: list[str]) -> list[str]:
@@ -446,6 +456,9 @@ def get_vvtest_attrs(case: "TestCase") -> dict:
     attrs["diff_exit_status"] = 64
     attrs["skip_exit_status"] = 63
     attrs["opt_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"
+    attrs["is_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"
+    attrs["is_baseline"] = False  # FIXME
+    attrs["is_analysis_only"] = False  # FIXME
     attrs["PARAM_DICT"] = case.parameters or {}
     for key, val in case.parameters.items():
         attrs[key] = val

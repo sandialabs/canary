@@ -503,8 +503,8 @@ class AbstractTestFile:
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameters: Optional[dict[str, Any]] = None,
-    ) -> list[tuple[str, str]]:
-        baseline: list[tuple[str, str]] = []
+    ) -> list[Union[str, tuple[str, str]]]:
+        baseline: list[Union[str, tuple[str, str]]] = []
         kwds = dict(parameters) if parameters else {}
         if testname:
             kwds["name"] = testname
@@ -516,12 +516,16 @@ class AbstractTestFile:
             )
             if not result.value:
                 continue
-            arg1, arg2 = ns.value
-            file1 = self.safe_substitute(arg1, **kwds)
-            if not arg2:
-                arg2 = os.path.basename(file1)
-            file2 = self.safe_substitute(arg2, **kwds)
-            baseline.append((file1, file2))
+            if isinstance(ns.value, str):
+                flag = ns.value
+                baseline.append(flag)
+            else:
+                arg1, arg2 = ns.value
+                file1 = self.safe_substitute(arg1, **kwds)
+                if not arg2:
+                    arg2 = os.path.basename(file1)
+                file2 = self.safe_substitute(arg2, **kwds)
+                baseline.append((file1, file2))
         return baseline
 
     def sources(
@@ -724,11 +728,15 @@ class AbstractTestFile:
 
     def m_baseline(
         self,
-        arg1: str,
+        arg1: Optional[str] = None,
         arg2: Optional[str] = None,
         when: Optional[str] = None,
+        flag: Optional[str] = None,
     ) -> None:
-        ns = FilterNamespace((arg1, arg2), when=when)
+        if flag is not None:
+            ns = FilterNamespace(flag, when=when)
+        else:
+            ns = FilterNamespace((arg1, arg2), when=when)
         self._baseline.append(ns)
 
 

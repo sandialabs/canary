@@ -35,10 +35,14 @@ def rebaseline(args: "argparse.Namespace") -> int:
             tty.warn(f"{case.pretty_repr()} does not define rebaselining instructions")
             continue
         tty.info(f"Rebaselining {case.pretty_repr()}")
-        for a, b in case.baseline:
-            src = os.path.join(case.exec_dir, a)
-            dst = os.path.join(case.file_dir, b)
-            if os.path.exists(src):
-                tty.print(f"    Replacing {b} with {a}")
-                copyfile(src, dst)
+        for arg in case.baseline:
+            if isinstance(arg, tuple):
+                a, b = arg
+                src = os.path.join(case.exec_dir, a)
+                dst = os.path.join(case.file_dir, b)
+                if os.path.exists(src):
+                    tty.print(f"    Replacing {b} with {a}")
+                    copyfile(src, dst)
+            else:
+                raise ValueError(f"Support for baseline type {arg} not complete")
     return 0

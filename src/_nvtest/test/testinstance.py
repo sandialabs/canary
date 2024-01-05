@@ -24,7 +24,7 @@ class TestInstance:
     parameters: SimpleNamespace
     timeout: Union[None, int]
     runtime: Union[None, float, int]
-    baseline: list[tuple[str, str]]
+    baseline: list[Union[str, tuple[str, str]]]
     sources: dict[str, list[tuple[str, str]]]
     exec_root: str
     exec_dir: str
