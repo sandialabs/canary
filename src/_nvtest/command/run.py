@@ -101,7 +101,7 @@ def setup_parser(parser: "Parser"):
         "For example, -R,-A,XXXX passes -A XXXX to the scheduler."
     )
     group.add_argument(
-        "-S",
+        "-R",
         action=SchedulerOptions,
         dest="scheduler_options",
         metavar="option",
