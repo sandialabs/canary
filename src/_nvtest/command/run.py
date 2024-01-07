@@ -88,6 +88,7 @@ def setup_parser(parser: "Parser"):
 
     add_resource_arguments(parser)
 
+    group = parser.add_argument_group("batch scheduling options")
     group.add_argument(
         "--scheduler",
         default=None,
@@ -125,9 +126,33 @@ class SchedulerOptions(argparse.Action):
     ):
         scheduler_opts: list[str] = getattr(namespace, self.dest, None) or []
         assert isinstance(option, str)
-        options: list[str] = option.replace(",", " ").split()
+        options: list[str] = self.split_on_comma(option)
         scheduler_opts.extend(options)
         setattr(namespace, self.dest, scheduler_opts)
+
+    @staticmethod
+    def split_on_comma(string: str) -> list[str]:
+        if not string:
+            return []
+        args: list[str] = []
+        quoted = False
+        tokens = iter(string[1:] if string[0] == "," else string)
+        arg = ""
+        while True:
+            try:
+                token = next(tokens)
+            except StopIteration:
+                args.append(arg)
+                break
+            if not quoted and token == ",":
+                args.append(arg)
+                arg = ""
+                continue
+            else:
+                arg = f"{arg}{token}"
+            if token in ("'", '"'):
+                quoted = not quoted
+        return args
 
 
 class Timer:

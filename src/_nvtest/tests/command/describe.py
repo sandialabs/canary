@@ -1,10 +1,10 @@
 import os
 
 
-def test_describe(capsys):
+def test_command_describe(capsys):
     from _nvtest.main import NVTestCommand
 
-    data_dir = os.path.join(os.path.dirname(__file__), "data")
+    data_dir = os.path.join(os.path.dirname(__file__), "../data")
     command = NVTestCommand("describe")
 
     assert command(os.path.join(data_dir, "empire.pyt")) == 0
