@@ -32,6 +32,7 @@ class When:
     def evaluate(
         self,
         testname: Optional[str] = None,
+        keywords: Optional[list[str]] = None,
         on_options: Optional[list[str]] = None,
         parameters: Optional[dict[str, Any]] = None,
     ):
@@ -56,7 +57,10 @@ class When:
         a = colorize('@*b{when="%s"}' % string)
         b = colorize("@*r{False}")
         value, expr_type = expression(
-            testname=testname, on_options=on_options, parameters=parameters
+            testname=testname,
+            on_options=on_options,
+            keywords=keywords,
+            parameters=parameters,
         )
         if value is True:
             return result(True, None)
@@ -67,6 +71,8 @@ class When:
             reason = fmt.format(s=testname)
         elif expr_type == "options":
             reason = fmt.format(s=json.dumps(on_options))
+        elif expr_type == "keywords":
+            reason = fmt.format(s=json.dumps(keywords))
         elif expr_type == "parameters":
             reason = fmt.format(s=json.dumps(parameters))
         elif expr_type == "platforms":
@@ -78,6 +84,8 @@ class When:
 
 
 class CompositeExpression:
+    attrs = ("options", "keywords", "parameters", "testname", "platforms")
+
     def __init__(self, *, __x=False) -> None:
         if not __x:
             raise ValueError(
@@ -88,6 +96,7 @@ class CompositeExpression:
         self,
         *,
         testname: Optional[str] = None,
+        keywords: Optional[list[str]] = None,
         on_options: Optional[list[str]] = None,
         parameters: Optional[dict[str, Any]] = None,
     ) -> tuple[bool, str]:
@@ -112,6 +121,13 @@ class CompositeExpression:
             if not expr.evaluate(OptionMatcher(set(on_options))):
                 return False, "options"
 
+        expr = getattr(self, "keywords", None)
+        if expr is not None:
+            if keywords is None:
+                return False, "keywords"
+            if not expr.evaluate(AnyMatcher(set(keywords))):
+                return False, "keywords"
+
         expr = getattr(self, "parameters", None)
         if expr is not None:
             if parameters is None:
@@ -123,7 +139,7 @@ class CompositeExpression:
 
     @classmethod
     def parse(cls, input: str) -> "CompositeExpression":
-        """[testname=expr] [parameters=expr] [options=expr]"""
+        """[testname=expr] [parameters=expr] [options=expr] [keywords=expr]"""
         name_map = dict(
             option="options",
             parameter="parameters",
@@ -149,13 +165,14 @@ class CompositeExpression:
                 raise InvalidSyntax(token)
 
             name = name_map.get(token.string, token.string)
-            if name not in ("options", "parameters", "testname", "platforms"):
+            if name not in self.attrs:
                 raise TypeError(f"when: got an unexpected keyword argument {name!r}")
             if hasattr(self, name):
                 raise InvalidSyntax(token, msg=f"keyword argument repeated: {name}")
 
             try:
                 token = next(tokens)
+                print(token)
             except StopIteration:
                 raise InvalidSyntax(token)
 
@@ -171,7 +188,7 @@ class CompositeExpression:
                 raise InvalidSyntax(token)
 
             value = remove_surrounding_quotes(token.string)
-            if name in ("testname", "options", "platforms"):
+            if name in ("testname", "options", "keywords", "platforms"):
                 try:
                     setattr(self, name, Expression.compile(value, allow_wildcards=True))
                 except ParseError:
@@ -275,25 +292,22 @@ def remove_surrounding_quotes(arg: str) -> str:
 
 def when(
     input: Union[str, bool],
-    keywords: Optional[set[str]] = None,
+    keywords: Optional[list[str]] = None,
     parameters: Optional[dict[str, Any]] = None,
-    allow_wildcards: bool = False,
+    testname: Optional[str] = None,
+    on_options: Optional[list[str]] = None,
 ) -> bool:
     if isinstance(input, bool):
         return input
     assert isinstance(input, str)
-    if keywords is not None and parameters is not None:
-        raise TypeError("mutually exclusive keyword args: keywords, parameters")
-    if keywords is None and parameters is None:
-        raise TypeError("missing keyword args keywords or parameters")
-    expression: Union[Expression, ParameterExpression]
-    if keywords is not None:
-        expression = Expression.compile(input, allow_wildcards=allow_wildcards)
-        return expression.evaluate(AnyMatcher(keywords))
-    else:
-        assert parameters is not None
-        expression = ParameterExpression(input)
-        return expression.evaluate(parameters)
+    expression = When(input)
+    result = expression.evaluate(
+        keywords=keywords,
+        parameters=parameters,
+        testname=testname,
+        on_options=on_options,
+    )
+    return bool(result.value)
 
 
 class InvalidSyntax(SyntaxError):

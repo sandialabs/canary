@@ -531,23 +531,9 @@ class Session:
             with open(self.batch_file, "w") as fh:
                 json.dump({"batches": fd}, fh, indent=2)
 
-    def filter_batch(self, *, batch_no: int) -> None:
-        assert self.state == 1
-        with open(self.batch_file) as fh:
-            fd = json.load(fh)
-        case_ids = fd["batches"][str(batch_no)]
-        for case in self.cases:
-            if case.id in case_ids:
-                case.status.set("staged")
-            elif not case.masked:
-                case.mask = f"case is not in batch {batch_no}"
-        self.setup_direct_queue()
-        self.runner = r_factory("direct", self)
-        self.runner.validate(self.queue.work_items)
-        self.state = 2
-
     def filter(
         self,
+        batch_no: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
         start: Optional[str] = None,
@@ -561,7 +547,20 @@ class Session:
         elif not os.path.isabs(start):
             start = os.path.join(self.work_tree, start)
         start = os.path.normpath(start)
+        case_ids: list[str] = []
+        if batch_no is not None:
+            with open(self.batch_file) as fh:
+                fd = json.load(fh)
+            case_ids.extend(fd["batches"][str(batch_no)])
+        # mask tests and then later enable based on additional conditions
         for case in self.cases:
+            if batch_no is not None:
+                if case.id in case_ids:
+                    case.status.set("staged")
+                    case.unmask()
+                else:
+                    case.mask = f"case is not in batch {batch_no}"
+                continue
             if case.masked:
                 continue
             if not case.exec_dir.startswith(start):
@@ -574,21 +573,23 @@ class Session:
                     case.mask = colorize("deselected by @*b{testspec expression}")
                 continue
             if case.status != "staged":
-                s = f"deselected due to previous test status: {case.status.cname}"
+                s = f"deselected due to previous status: {case.status.cname}"
                 case.mask = s
                 if avail_cpus_per_test and case.processors > avail_cpus_per_test:
                     continue
                 if avail_devices_per_test and case.devices > avail_devices_per_test:
                     continue
+                when_expr: list[str] = []
                 if parameter_expr:
-                    match = directives.when(parameter_expr, parameters=case.parameters)
-                    if match:
-                        case.status.set("staged")
-                        case.unmask()
-                        continue
+                    when_expr.append(f"parameters={parameter_expr!r}")
                 if keyword_expr:
-                    kwds = set(case.keywords(implicit=True))
-                    match = directives.when(keyword_expr, keywords=kwds)
+                    when_expr.append(f"keywords={keyword_expr!r}")
+                if when_expr:
+                    match = directives.when(
+                        " ".join(when_expr),
+                        parameters=case.parameters,
+                        keywords=case.keywords(implicit=True),
+                    )
                     if match:
                         case.status.set("staged")
                         case.unmask()

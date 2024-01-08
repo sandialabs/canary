@@ -314,7 +314,9 @@ class AbstractTestFile:
                     kwds.add(name)
                     kwds.update(parameters.keys())
                     kwds.update({"staged"})
-                    match = directives.when(keyword_expr, keywords=kwds)
+                    match = directives.when(
+                        f"keywords={keyword_expr!r}", keywords=list(kwds)
+                    )
                     if not match:
                         tty.verbose(f"Skipping {self}::{name}")
                         mask = colorize("deselected by @*b{keyword expression}")
@@ -343,7 +345,9 @@ class AbstractTestFile:
                 if mask is None and ("TDD" in keywords or "tdd" in keywords):
                     mask = colorize("deselected due to @*b{TDD keyword}")
                 if mask is None and parameter_expr:
-                    match = directives.when(parameter_expr, parameters=parameters)
+                    match = directives.when(
+                        f"parameters={parameter_expr!r}", parameters=parameters
+                    )
                     if not match:
                         mask = colorize("deselected due to @*b{parameter expression}")
                 attributes = self.attributes(

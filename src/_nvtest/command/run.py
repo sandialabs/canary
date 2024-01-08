@@ -508,7 +508,7 @@ def setup_session(args: "argparse.Namespace") -> Session:
         if args.workers_per_session is not None:
             session.avail_workers = args.workers_per_session
         if args.mode == "b":
-            session.filter_batch(batch_no=args.batch_no)
+            session.filter(batch_no=args.batch_no)
         else:
             batched_run = args.batch_count is not None or args.batch_time is not None
             if batched_run:
