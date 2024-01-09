@@ -1,5 +1,7 @@
 import argparse
+import os
 from typing import TYPE_CHECKING
+from typing import Union
 
 import _nvtest.config as config
 from _nvtest.util import tty
@@ -7,6 +9,7 @@ from _nvtest.util.time import time_in_seconds
 
 if TYPE_CHECKING:
     from _nvtest.config.argparsing import Parser
+    from _nvtest.test.testcase import TestCase
 
 default_timeout = 60 * 60
 
@@ -173,6 +176,19 @@ class ResourceSetter(argparse.Action):
             except ValueError:
                 raise ResourceError(self, path, f"invalid int {string!r}")
         return scope, type, value
+
+
+def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:
+    prefix = os.path.abspath(pathspec)
+    return [c for c in cases if c.matches(pathspec) or c.exec_dir.startswith(prefix)]
+
+
+def filter_cases_by_status(
+    cases: list["TestCase"], status: Union[tuple, str]
+) -> list["TestCase"]:
+    if isinstance(status, str):
+        status = (status,)
+    return [c for c in cases if c.status.value in status]
 
 
 class ResourceError(Exception):

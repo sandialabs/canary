@@ -146,19 +146,19 @@ from string import Template
 from typing import Any
 from typing import Optional
 from typing import Sequence
+from typing import TYPE_CHECKING
 from typing import Union
 
-import _nvtest.directives.enums as d_enums
-
 from .. import config
-from .. import directives
-from ..compat.vvtest import load_vvt
 from ..parameter_set import ParameterSet
 from ..util import tty
 from ..util.filesystem import working_dir
 from ..util.time import time_in_seconds
 from ..util.tty.color import colorize
 from .testcase import TestCase
+
+if TYPE_CHECKING:
+    import _nvtest.directives.enums
 
 
 class FilterNamespace:
@@ -171,8 +171,9 @@ class FilterNamespace:
         result: Optional[str] = None,
         action: Optional[str] = None,
     ):
+        import _nvtest.directives
         self.value: Any = value
-        self.when = directives.When(when)
+        self.when = _nvtest.directives.When(when)
         self.expect = expect
         self.result = result
         self.action = action
@@ -241,6 +242,8 @@ class AbstractTestFile:
 
     def load(self):
         if self.path.endswith(".vvt"):
+            from _nvtest.compat.vvtest import load_vvt
+
             load_vvt(self)
         else:
             self._load()
@@ -299,6 +302,7 @@ class AbstractTestFile:
         tty.verbose(
             f"Generating test cases for {self} using the following test names: {names}"
         )
+        import _nvtest.directives
         for name in self.names():
             mask = self.skipif_reason
             enabled, reason = self.enable(testname=name, on_options=on_options)
@@ -314,7 +318,7 @@ class AbstractTestFile:
                     kwds.add(name)
                     kwds.update(parameters.keys())
                     kwds.update({"staged"})
-                    match = directives.when(
+                    match = _nvtest.directives.when(
                         f"keywords={keyword_expr!r}", keywords=list(kwds)
                     )
                     if not match:
@@ -345,7 +349,7 @@ class AbstractTestFile:
                 if mask is None and ("TDD" in keywords or "tdd" in keywords):
                     mask = colorize("deselected due to @*b{TDD keyword}")
                 if mask is None and parameter_expr:
-                    match = directives.when(
+                    match = _nvtest.directives.when(
                         f"parameters={parameter_expr!r}", parameters=parameters
                     )
                     if not match:
@@ -619,18 +623,21 @@ class AbstractTestFile:
         argnames: Union[str, Sequence[str]],
         argvalues: list[Union[Sequence[Any], Any]],
         when: Optional[str] = None,
-        type: d_enums.enums = d_enums.list_parameter_space,
+        type: Optional["_nvtest.directives.enums.enums"] = None,
     ) -> None:
-        if not isinstance(type, d_enums.enums):
+        import _nvtest.directives.enums
+
+        type = type or _nvtest.directives.enums.list_parameter_space
+        if not isinstance(type, _nvtest.directives.enums.enums):
             raise ValueError(
                 f"parameterize: type: expected "
                 f"nvtest.enums, got {type.__class__.__name__}"
             )
-        if type is d_enums.centered_parameter_space:
+        if type is _nvtest.directives.enums.centered_parameter_space:
             pset = ParameterSet.centered_parameter_space(
                 argnames, argvalues, file=self.file
             )
-        elif type is d_enums.random_parameter_space:
+        elif type is _nvtest.directives.enums.random_parameter_space:
             pset = ParameterSet.random_parameter_space(
                 argnames, argvalues, file=self.file
             )

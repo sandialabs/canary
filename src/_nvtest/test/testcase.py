@@ -11,7 +11,6 @@ from typing import Optional
 from typing import Union
 
 from .. import config
-from ..compat.vvtest import write_vvtest_util
 from ..util import filesystem as fs
 from ..util import tty
 from ..util.compression import compress_file
@@ -428,7 +427,7 @@ class TestCase:
         tty.info(f"Rebaselining {self.pretty_repr()}")
         with fs.working_dir(self.exec_dir):
             if self.file_type == "vvt":
-                write_vvtest_util(self, baseline=True)
+                self.write_vvtest_util(baseline=True)
             for arg in self.baseline:
                 if isinstance(arg, tuple):
                     a, b = arg
@@ -441,6 +440,17 @@ class TestCase:
                     python = Executable(sys.executable)
                     args = [os.path.basename(self.file), self.baseline]
                     python(*args, fail_on_error=False)
+
+    def write_vvtest_util(self, baseline: bool = False) -> None:
+        from _nvtest.compat.vvtest import write_vvtest_util
+
+        write_vvtest_util(self, baseline=baseline)
+
+    def do_analyze(self) -> None:
+        kwds: dict = {}
+        if not self.analyze:
+            kwds["execute_analysis_sections"] = True
+        return self.run()
 
     def run(self, **kwds: Any) -> None:
         if os.getenv("NVTEST_RESETUP"):
@@ -476,7 +486,7 @@ class TestCase:
         python.add_begin_callback(self.register_proc)
         with fs.working_dir(self.exec_dir):
             if self.file_type == "vvt":
-                write_vvtest_util(self)
+                self.write_vvtest_util()
             with tty.log_output(self.logfile("test"), mode="w"):
                 with tty.timestamps():
                     args = self.command_line_args(**kwds)

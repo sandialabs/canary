@@ -42,7 +42,7 @@ class BatchRunner(Runner):
     def print_text(text: str):
         sys.stdout.write(f"{text}\n")
 
-    def run(self, batch: Partition, **kwargs: Any) -> dict[str, dict]:
+    def run(self, batch: Partition, **kwds: Any) -> dict[str, dict]:
         batch_no, num_batches = batch.rank
         n = len(batch)
         self.print_text(

@@ -26,7 +26,7 @@ class Runner:
         raise NotImplementedError
 
     def __call__(
-        self, entity: Union[TestCase, Partition], kwds: dict[str, Any]
+        self, entity: Union[TestCase, Partition], **kwds: Any
     ) -> dict[str, dict]:
         return self.run(entity, **kwds)
 

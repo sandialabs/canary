@@ -10,20 +10,27 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
 
 
-description = "Rebaseline tests"
+description = "Run the analysis section of tests by passing \
+    ``--execute-analysis-sections`` to their command line"
+epilog = """\
+An "analyze" run only makes sense in the following conditions:
+
+1. The test has already been run; and
+2. The test has logic for handling ``--execute-analysis-sections`` on the command line
+"""
 
 
 def setup_parser(parser: "Parser"):
     parser.add_argument("pathspec", nargs="?", help="Limit rebaselining to this path")
 
 
-def rebaseline(args: "argparse.Namespace") -> int:
+def analyze(args: "argparse.Namespace") -> int:
     session = Session.load(mode="r")
     cases: list[TestCase]
     if args.pathspec:
         cases = filter_cases_by_path(session.cases, args.pathspec)
     else:
-        cases = filter_cases_by_status(session.cases, ("failed", "diffed"))
+        cases = filter_cases_by_status(session.cases, ("failed", "diffed", "success"))
     for case in cases:
-        case.do_baseline()
+        case.do_analyze()
     return 0

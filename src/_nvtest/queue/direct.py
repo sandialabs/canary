@@ -1,7 +1,10 @@
+from typing import TYPE_CHECKING
 from typing import Generator
 
-from ..test import TestCase
 from .base import Queue
+
+if TYPE_CHECKING:
+    from ..test.testcase import TestCase
 
 
 class DirectQueue(Queue):
@@ -15,8 +18,8 @@ class DirectQueue(Queue):
                     f"exceeds max cpu count ({self.cpus})"
                 )
 
-    def create_queue(self, work_items: list[TestCase]) -> dict[int, TestCase]:
-        queue: dict[int, TestCase] = {}
+    def create_queue(self, work_items: list["TestCase"]) -> dict[int, "TestCase"]:
+        queue: dict[int, "TestCase"] = {}
         for i, case in enumerate(work_items):
             if not case.masked:
                 queue[i] = case
@@ -31,7 +34,7 @@ class DirectQueue(Queue):
                     if dep.id == self._done[case_no].id:
                         case.dependencies[i] = self._done[case_no]
 
-    def mark_as_complete(self, case_no: int) -> TestCase:
+    def mark_as_complete(self, case_no: int) -> "TestCase":
         if case_no not in self._running:
             raise RuntimeError(f"case {case_no} is not running")
         with self.lock():
@@ -58,6 +61,6 @@ class DirectQueue(Queue):
     def cases_notrun(self) -> int:
         return len(self.queue.values())
 
-    def completed_testcases(self) -> Generator[TestCase, None, None]:
+    def completed_testcases(self) -> Generator["TestCase", None, None]:
         for case in self._done.values():
             yield case

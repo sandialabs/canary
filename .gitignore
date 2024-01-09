@@ -13,7 +13,7 @@ nvtest.cfg
 scripts/sbatch
 docs/source/commands.rst
 
-src/UNKNOWN.egg-info/
+src/*.egg-info/
 src/_nvtest/_version.py
 
 docs/build

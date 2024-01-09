@@ -21,7 +21,7 @@ class DirectRunner(Runner):
 
     def run(self, case: TestCase, **kwds: Any) -> dict[str, dict]:
         try:
-            case.run(execute_analysis_sections=kwds.get("execute_analysis_sections"))
+            case.run()
         except BaseException as e:
             if isinstance(e.args[0], int):
                 case.status = Status.from_returncode(e.args[0])

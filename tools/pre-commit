@@ -5,17 +5,9 @@ ROOT_DIR=$( cd -- "$( dirname -- "${SCRIPT_DIR}" )" &> /dev/null && pwd )
 
 cd ${ROOT_DIR}
 
-echo "Formatting imports with isort"
-isort ./src
-isort ./plugins
-
-echo "Formatting code with black"
-black ./src
-black ./plugins
-
-echo "Linting with flake8"
-flake8 ./src
-flake8 ./plugins
+echo "Formatting code with ruff"
+ruff ./src
+ruff ./plugins
 
 echo "Type checking with mypy"
 mypy ./src

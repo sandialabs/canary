@@ -33,8 +33,8 @@ class SchemaError(Exception):
     """Error during Schema validation."""
 
     def __init__(self, autos, errors=None):
-        self.autos = autos if type(autos) is list else [autos]
-        self.errors = errors if type(errors) is list else [errors]
+        self.autos = autos if isinstance(autos, list) else [autos]
+        self.errors = errors if isinstance(errors, list) else [errors]
         Exception.__init__(self, self.code)
 
     @property
@@ -272,7 +272,7 @@ def _priority(s):
     """Return priority for a given object."""
     if type(s) in (list, tuple, set, frozenset):
         return ITERABLE
-    if type(s) is dict:
+    if isinstance(s, dict):
         return DICT
     if issubclass(type(s), type):
         return TYPE

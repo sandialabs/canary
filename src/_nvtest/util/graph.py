@@ -1,16 +1,18 @@
 import sys
 from graphlib import TopologicalSorter
 from pathlib import Path
+from typing import TYPE_CHECKING
 from typing import TextIO
 from typing import Union
 
-from ..test import TestCase
+if TYPE_CHECKING:
+    from ..test.testcase import TestCase
 
 builtin_print = print
 
 
-def static_order(cases: list[TestCase]) -> list[TestCase]:
-    graph: dict[TestCase, list[TestCase]] = {}
+def static_order(cases: list["TestCase"]) -> list["TestCase"]:
+    graph: dict["TestCase", list["TestCase"]] = {}
     for case in cases:
         graph[case] = case.dependencies
     ts = TopologicalSorter(graph)
@@ -18,7 +20,7 @@ def static_order(cases: list[TestCase]) -> list[TestCase]:
 
 
 def print_case(
-    case: TestCase,
+    case: "TestCase",
     level: int = -1,
     file=None,
     indent="",
@@ -31,7 +33,7 @@ def print_case(
     tee = "├── "
     last = "└── "
 
-    def inner(case: TestCase, prefix: str = "", level=-1):
+    def inner(case: "TestCase", prefix: str = "", level=-1):
         if not level:
             return  # 0, stop iterating
         dependencies = case.dependencies
@@ -50,7 +52,7 @@ def print_case(
         file.write(f"{branch}{indent}{line}\n")
 
 
-def print(cases: list[TestCase], file: Union[str, Path, TextIO] = sys.stdout) -> None:
+def print(cases: list["TestCase"], file: Union[str, Path, TextIO] = sys.stdout) -> None:
     def streamify(arg) -> tuple[TextIO, bool]:
         if isinstance(arg, str):
             arg = Path(arg)

@@ -340,12 +340,13 @@ class Session:
         duration = time.time() - t_start
         tty.debug(f"Done creating test session ({duration:.2f}s.)")
 
-        self.state = 1
+        self.state = 2
         return self
 
     @classmethod
     def load(cls, *, mode: str = "r") -> "Session":
-        assert mode in "ra"
+        if mode not in "ra":
+            raise ValueError(f"Incorrect mode {mode!r}")
         self = cls()
         self.work_tree = config.get("session:work_tree")
         if not self.work_tree:
@@ -438,7 +439,8 @@ class Session:
         parameter_expr: Optional[str] = None,
         copy_all_resources: bool = False,
     ) -> None:
-        assert self.mode == "w"
+        if self.mode != "w":
+            raise ValueError(f"Incorrect mode {self.mode!r}")
 
         t_start = time.time()
         tty.debug("Populating work tree")
@@ -508,7 +510,8 @@ class Session:
         batch_time: Optional[float] = None,
     ) -> None:
         batched: bool = batch_count is not None or batch_time is not None
-        assert batched is True
+        if not batched:
+            raise ValueError("Expected batched == True")
 
         cases_to_run = [case for case in self.cases if not case.masked]
         batches: list[Partition]
@@ -541,7 +544,8 @@ class Session:
         avail_devices_per_test: Optional[int] = None,
         case_specs: Optional[list[str]] = None,
     ) -> None:
-        assert self.state == 1
+        if self.state != 1:
+            raise ValueError(f"Expected state == 1 (got {self.state})")
         if start is None:
             start = self.work_tree
         elif not os.path.isabs(start):
@@ -605,9 +609,9 @@ class Session:
         self,
         timeout: int = 60 * 60,
         fail_fast: bool = False,
-        execute_analysis_sections: bool = False,
     ) -> int:
-        assert self.state == 2
+        if self.state != 2:
+            raise ValueError(f"Expected state == 2 (got {self.state})")
         if not self.queue:
             raise ValueError("This session's queue was not set up")
         if not self.queue.cases:
@@ -616,11 +620,7 @@ class Session:
             raise ValueError("This session's runner was not set up")
         with self.rc_environ():
             with working_dir(self.work_tree):
-                self.process_testcases(
-                    timeout=timeout,
-                    fail_fast=fail_fast,
-                    execute_analysis_sections=execute_analysis_sections,
-                )
+                self.process_testcases(timeout=timeout, fail_fast=fail_fast)
         return self.returncode
 
     def teardown(self):
@@ -683,9 +683,7 @@ class Session:
                                 hook(case)
                     ts.done(*group)
 
-    def process_testcases(
-        self, *, timeout: int, fail_fast: bool, execute_analysis_sections: bool
-    ) -> None:
+    def process_testcases(self, *, timeout: int, fail_fast: bool) -> None:
         futures: dict = {}
         timeout_message = f"Test suite execution exceeded time out of {timeout} s."
         auto_cleanup: bool = True
@@ -701,7 +699,6 @@ class Session:
                             for proc in ppe._processes:
                                 if proc != os.getpid():
                                     os.kill(proc, 9)
-                            tty.reset()
                             raise
                         except FailFast as ex:
                             auto_cleanup = False
@@ -710,16 +707,15 @@ class Session:
                                     os.kill(proc, 9)
                             name, code = ex.args
                             self.returncode = code
-                            tty.reset()
                             raise StopExecution(f"fail_fast: {name}", code)
                         except StopIteration:
-                            return
-                        kwds = {"execute_analysis_sections": execute_analysis_sections}
-                        future = ppe.submit(self.runner, entity, kwds)
+                            break
+                        future = ppe.submit(self.runner, entity)
                         callback = partial(self.update_from_future, i)
                         future.add_done_callback(callback)
                         futures[i] = (entity, future)
         finally:
+            tty.reset()
             if auto_cleanup:
                 for entity, future in futures.values():
                     if future.running():

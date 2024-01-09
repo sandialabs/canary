@@ -5,8 +5,8 @@ from typing import Optional
 
 from . import config
 from . import plugin
-from .test import AbstractTestFile
-from .test import TestCase
+from .test.testcase import TestCase
+from .test.testfile import AbstractTestFile
 from .util import filesystem as fs
 from .util import tty
 

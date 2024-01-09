@@ -2,6 +2,7 @@ from types import ModuleType
 from typing import Optional
 
 from ..config.argparsing import Parser
+from . import analyze
 from . import autodoc
 from . import commands
 from . import config
@@ -19,6 +20,7 @@ from . import tree
 
 def all_commands() -> list[ModuleType]:
     return [
+        analyze,
         autodoc,
         commands,
         config,
