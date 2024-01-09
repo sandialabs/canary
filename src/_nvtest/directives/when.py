@@ -158,6 +158,7 @@ class CompositeExpression:
                 break
             if token.type == tokenize.ENDMARKER:
                 break
+
             if token.type in (tokenize.ENCODING, tokenize.NEWLINE):
                 continue
 
@@ -172,7 +173,6 @@ class CompositeExpression:
 
             try:
                 token = next(tokens)
-                print(token)
             except StopIteration:
                 raise InvalidSyntax(token)
 
@@ -184,7 +184,7 @@ class CompositeExpression:
             except StopIteration:
                 raise InvalidSyntax(token)
 
-            if token.type not in (tokenize.NAME, tokenize.STRING):
+            if token.type not in (tokenize.NAME, tokenize.STRING, tokenize.NEWLINE):
                 raise InvalidSyntax(token)
 
             value = remove_surrounding_quotes(token.string)
