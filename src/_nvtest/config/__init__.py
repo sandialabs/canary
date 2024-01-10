@@ -49,7 +49,7 @@ is
    cpu_count = N  # (int) default computed from os.cpu_count()
    device_count = N  # (int) default computed from os.cpu_count()
 
-   [build]
+  [build]
    type = ... # str
    date = ... # str
 
@@ -220,11 +220,35 @@ class Config:
             merged = self.scopes[scope]
         else:
             merged = self.merge()
-        for section, data in merged.items():
+        table = self.flatten(merged)
+        for section in sorted(table):
             fh.write(f"[{section}]\n")
-            for key, value in data.items():
-                fh.write(f"{key} = {json.dumps(value)}\n")
+            subsections: list[str] = []
+            for key, value in table[section].items():
+                if isinstance(value, dict):
+                    subsections.append(key)
+                else:
+                    fh.write(f"{key} = {json.dumps(value)}\n")
             fh.write("\n")
+            for subsection in subsections:
+                fh.write(f"[{section}:{subsection}]\n")
+                for key, value in table[section][subsection].items():
+                    fh.write(f"{key} = {json.dumps(value)}\n")
+                fh.write("\n")
+
+    @staticmethod
+    def flatten(mapping: dict) -> dict:
+        fd = {}
+        for (s, sd) in mapping.items():
+            if not isinstance(sd, dict):
+                fd[s] = sd
+            else:
+                for p, pd in sd.items():
+                    if not isinstance(pd, dict):
+                        fd.setdefault(s, {})[p] = pd
+                    else:
+                        fd[f"{s}:{p}"] = Config.flatten(pd)
+        return fd
 
     def set_main_options(self, args: argparse.Namespace) -> None:
         scope_data = self.scopes.setdefault("command_line", {})
