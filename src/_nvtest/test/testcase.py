@@ -447,10 +447,10 @@ class TestCase:
         write_vvtest_util(self, baseline=baseline)
 
     def do_analyze(self) -> None:
-        kwds: dict = {}
+        kwds: dict = {"stage": "analyze"}
         if not self.analyze:
             kwds["execute_analysis_sections"] = True
-        return self.run()
+        return self.run(**kwds)
 
     def run(self, **kwds: Any) -> None:
         if os.getenv("NVTEST_RESETUP"):
@@ -470,7 +470,7 @@ class TestCase:
             raise
         finally:
             with open(self.logfile(), "w") as fh:
-                for stage in ("setup", "test"):
+                for stage in ("setup", "test", "analyze"):
                     file = self.logfile(stage)
                     if os.path.exists(file):
                         fh.write(open(file).read())
@@ -484,10 +484,11 @@ class TestCase:
     def _run(self, **kwds: Any) -> None:
         python = Executable(sys.executable)
         python.add_begin_callback(self.register_proc)
+        stage = kwds.pop("stage", "analyze" if self.analyze else "test")
         with fs.working_dir(self.exec_dir):
             if self.file_type == "vvt":
                 self.write_vvtest_util()
-            with tty.log_output(self.logfile("test"), mode="w"):
+            with tty.log_output(self.logfile(stage), mode="w"):
                 with tty.timestamps():
                     args = self.command_line_args(**kwds)
                     env = self.rc_environ()

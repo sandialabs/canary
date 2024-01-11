@@ -35,19 +35,13 @@ class TestInstance:
     cmd_line: str
     returncode: int
     variables: dict[str, str]
-    dependencies: list["TestCase"]
+    dependencies: list["TestInstance"]
 
     @classmethod
-    def load(
-        cls: Type["TestInstance"], arg_path: Optional[str] = None
-    ) -> "TestInstance":
-        if arg_path is None:
-            arg_path = "./.nvtest/case.json"
-        elif arg_path.endswith((".vvt", ".pyt")):
-            arg_path = os.path.join(os.path.dirname(arg_path), ".nvtest/case.json")
-        with open(arg_path) as fh:
-            kwds = json.load(fh)
-        case = TestCase.from_dict(kwds)
+    def from_case(cls: Type["TestInstance"], case: TestCase) -> "TestInstance":
+        dependencies: list[TestInstance] = []
+        for dep in case.dependencies:
+            dependencies.append(TestInstance.from_case(dep))
         self = cls(
             file_root=case.file_root,
             file_path=case.file_path,
@@ -72,6 +66,19 @@ class TestInstance:
             cmd_line=case.cmd_line,
             returncode=case.returncode,
             variables=case.variables,
-            dependencies=case.dependencies,
+            dependencies=dependencies,
         )
         return self
+
+    @classmethod
+    def load(
+        cls: Type["TestInstance"], arg_path: Optional[str] = None
+    ) -> "TestInstance":
+        if arg_path is None:
+            arg_path = "./.nvtest/case.json"
+        elif arg_path.endswith((".vvt", ".pyt")):
+            arg_path = os.path.join(os.path.dirname(arg_path), ".nvtest/case.json")
+        with open(arg_path) as fh:
+            kwds = json.load(fh)
+        case = TestCase.from_dict(kwds)
+        return TestInstance.from_case(case)

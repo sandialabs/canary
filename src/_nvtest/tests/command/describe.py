@@ -5,12 +5,14 @@ def test_command_describe(capsys):
     from _nvtest.main import NVTestCommand
 
     data_dir = os.path.join(os.path.dirname(__file__), "../data")
-    command = NVTestCommand("describe")
+    describe = NVTestCommand("describe")
 
-    assert command(os.path.join(data_dir, "empire.pyt")) == 0
+    describe(os.path.join(data_dir, "empire.pyt"))
     captured = capsys.readouterr()
+    assert describe.returncode == 0
     pyt_out = captured.out
 
-    assert command(os.path.join(data_dir, "empire.vvt")) == 0
+    describe(os.path.join(data_dir, "empire.vvt"))
     captured = capsys.readouterr()
+    assert describe.returncode == 0
     vvt_out = captured.out

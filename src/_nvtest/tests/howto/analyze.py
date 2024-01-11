@@ -13,13 +13,14 @@ command
    def test():
        # Run the test
        self = nvtest.test.instance
-       ntest.filesystem.touchp(f'{self.name}.txt')
+       nvtest.filesystem.touchp(f'{self.name}.txt')
        return 0
 
    def analyze_parameterized_test():
        # Analyze a single parameterized test
        self = nvtest.test.instance
-       assert os.path.exists(f'{self.name}.txt')
+       f = f'{self.name}.txt'
+       assert os.path.exists(f), f"File {os.getcwd()}/{f} not found"
 
    def main():
        parser = nvtest.make_std_parser()
@@ -40,6 +41,8 @@ To execute, first run the tests.  Then, navigate to the test directory and run
    nvtest analyze .
 
 """
+
+import os
 import _nvtest.util.filesystem as fs
 
 
@@ -54,13 +57,14 @@ import nvtest
 def test():
     # Run the test
     self = nvtest.test.instance
-    ntest.filesystem.touchp(f'{self.name}.txt')
+    nvtest.filesystem.touchp(f'{self.name}.txt')
     return 0
 
 def analyze_parameterized_test():
     # Analyze a single parameterized test
     self = nvtest.test.instance
     assert os.path.exists(f'{self.name}.txt')
+    nvtest.filesystem.touchp(f'{self.name}.analyzed.txt')
 
 def main():
     parser = nvtest.make_std_parser()
@@ -78,4 +82,8 @@ if __name__ == '__main__':
         run("-w", ".")
         with fs.working_dir("TestResults/baz"):
             analyze = NVTestCommand("analyze")
+            analyze.python.add_default_env(NVTEST_DEBUG="1")
             analyze()
+            print(os.listdir())
+            assert analyze.returncode == 0
+            assert os.path.exists("baz.analyzed.txt")

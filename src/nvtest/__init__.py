@@ -26,8 +26,10 @@ __version__ = version
 
 def make_std_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--analyze", action="store_true")
-    parser.add_argument("--execute-analysis-sections", action="store_true")
+    parser.add_argument("--baseline", action="store_true")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--analyze", action="store_true")
+    group.add_argument("--execute-analysis-sections", action="store_true")
     return parser
 
 

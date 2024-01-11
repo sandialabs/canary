@@ -48,7 +48,7 @@ Example
        # Run the test
        self = nvtest.test.instance
        f = f'{self.parameters.a}.txt'
-       ntest.filesystem.touchp(f)
+       nvtest.filesystem.touchp(f)
        return 0
 
    def analyze_parameterized_test():
@@ -94,7 +94,7 @@ def test():
     # Run the test
     self = nvtest.test.instance
     f = f'{self.parameters.a}.txt'
-    ntest.filesystem.touchp(f)
+    nvtest.filesystem.touchp(f)
     return 0
 
 def analyze_parameterized_test():

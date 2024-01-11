@@ -53,18 +53,19 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 class NVTestCommand:
     def __init__(self, command_name: str) -> None:
+        from _nvtest.util.executable import Executable
         command_module = get_command(command_name)
         if command_module is None:
             raise ValueError(f"Unknown command {command_name!r}")
-        self.command_module = command_module
-        self.command_name = command_name
+        self.python = Executable(sys.executable)
+        self.python.add_default_args("-m", "nvtest", command_name)
 
-    def __call__(self, *args: str) -> int:
-        parser = make_argument_parser()
-        parser.add_command(self.command_module)
-        ns = parser.parse_args([self.command_name] + list(args))
-        cmd = getattr(self.command_module, self.command_name)
-        return cmd(ns)
+    @property
+    def returncode(self) -> int:
+        return self.python.returncode
+
+    def __call__(self, *args: str) -> None:
+        self.python(*args)
 
 
 def invoke_command(command: FunctionType, args: argparse.Namespace) -> int:
