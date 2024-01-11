@@ -1,3 +1,5 @@
+import argparse
+
 import _nvtest.plugin as plugin
 from _nvtest import config
 from _nvtest import diffutils
@@ -15,9 +17,18 @@ from _nvtest.util import tty
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import which
 
+from . import patterns
+
 version_info = (0, 0, 1)
 version = ".".join(str(_) for _ in version_info)
 __version__ = version
+
+
+def make_std_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--analyze", action="store_true")
+    parser.add_argument("--execute-analysis-sections", action="store_true")
+    return parser
 
 
 def __getattr__(name):

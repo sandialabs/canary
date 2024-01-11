@@ -5,6 +5,10 @@ stages:
 test-job:
   stage: test
   script:
+  - module use /projects/aue/modules/cee/x86_64/rhel7 > /dev/null 2>&1 || true
+  - module load aue/cmake/3.27.7 > /dev/null 2>&1 || true
+  - module load aue/gcc/12.1.0 > /dev/null 2>&1 || true
+  - module load aue/openmpi/4.1.4-gcc-12.1.0 > /dev/null 2>&1 || true
   - /projects/alegranevada/opt/cee/linux_rh7/python/3.9/bin/python -m venv venv
   - source venv/bin/activate
   - python -m pip install -e .[dev]
@@ -13,7 +17,6 @@ test-job:
   rules:
   - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     when: always
-
 
 pages:
   stage: deploy

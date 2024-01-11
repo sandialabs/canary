@@ -56,8 +56,11 @@ class Reporter(_Reporter):
         fh.write(f"<tr><td><b>Duration:</b> {case.duration}</td></tr>\n")
         fh.write("</table>\n")
         fh.write("<h2>Test output</h2>\n<pre>\n")
-        with open(case.logfile()) as fp:
-            fh.write(fp.read())
+        if os.path.exists(case.logfile()):
+            with open(case.logfile()) as fp:
+                fh.write(fp.read())
+        else:
+            fh.write("Log file does not exist\n")
         fh.write("</pre>\n</body>\n</html>\n")
 
     def generate_index(self, fh: TextIO) -> None:
