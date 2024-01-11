@@ -33,6 +33,12 @@ command
    if __name__ == '__main__':
        main()
 
+To execute, first run the tests.  Then, navigate to the test directory and run
+
+.. code-block:: console
+
+   nvtest analyze .
+
 """
 import _nvtest.util.filesystem as fs
 
