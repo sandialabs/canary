@@ -17,11 +17,9 @@ from _nvtest.util import filesystem
 from _nvtest.util import tty
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import which
-
-
-version_info = (0, 0, 1)
-version = ".".join(str(_) for _ in version_info)
-__version__ = version
+from _nvtest._version import version_tuple
+from _nvtest._version import version
+from _nvtest._version import __version__
 
 
 def make_std_parser() -> argparse.ArgumentParser:

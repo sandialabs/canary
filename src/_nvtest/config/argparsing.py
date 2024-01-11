@@ -12,6 +12,7 @@ from typing import Sequence
 from typing import Type
 from typing import Union
 
+import _nvtest._version
 from ..util import tty
 from ..util.tty.color import colorize
 
@@ -205,7 +206,7 @@ def make_argument_parser(**kwargs):
     parser.add_argument(
         "--version",
         action="version",
-        version="nvtest 0.1",
+        version=_nvtest._version.version,
         help="show version and exit",
     )
     parser.add_argument(

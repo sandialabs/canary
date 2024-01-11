@@ -18,12 +18,11 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 write_to = "src/_nvtest/_version.py"
+version_scheme = "guess-next-dev"
+local_scheme = "node-and-date"
 
 [tool.mypy]
-exclude = [
-    "scripts",
-    "src/_nvtest/third_party/distro.py"
-]
+exclude = ["src/_nvtest/third_party/distro.py"]
 
 [[tool.mypy.overrides]]
 module = "networkx.*,yaml.*,ruamel.*,pygments.*,toml.*,contextlib2.*,scipy.*,_nvtest.tests.*,numpy.*,imageio.*"
