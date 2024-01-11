@@ -98,10 +98,10 @@ from typing import Optional
 from typing import TextIO
 from typing import Union
 
+from ..third_party.schema import Schema
+from ..third_party.schema import SchemaError
 from ..util import tty
 from ..util.misc import ns2dict
-from ..util.schema import Schema
-from ..util.schema import SchemaError
 from ..util.singleton import Singleton
 from . import machine
 from .schemas import any_schema

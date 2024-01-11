@@ -1,8 +1,8 @@
 from typing import Any
 
-from ..util.schema import Optional
-from ..util.schema import Or
-from ..util.schema import Schema
+from ..third_party.schema import Optional
+from ..third_party.schema import Or
+from ..third_party.schema import Schema
 
 
 def list_of_str(arg: Any) -> bool:

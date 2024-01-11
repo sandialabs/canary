@@ -2,7 +2,6 @@ import argparse
 
 import _nvtest.plugin as plugin
 from _nvtest import config
-from _nvtest import diffutils
 from _nvtest import directives
 from _nvtest.config.argparsing import Parser
 from _nvtest.directives import enums
@@ -12,12 +11,13 @@ from _nvtest.error import TestSkipped
 from _nvtest.main import console_main
 from _nvtest.session import Session
 from _nvtest.test.testcase import TestCase
+from _nvtest.user import diffutils
+from _nvtest.user import patterns
 from _nvtest.util import filesystem
 from _nvtest.util import tty
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import which
 
-from . import patterns
 
 version_info = (0, 0, 1)
 version = ".".join(str(_) for _ in version_info)
