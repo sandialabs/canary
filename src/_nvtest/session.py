@@ -447,7 +447,7 @@ class Session:
 
         finder = Finder()
         for root, _paths in self.search_paths.items():
-            finder.add(root, *_paths)
+            finder.add(root, *_paths, tolerant=True)
         finder.prepare()
         tree = finder.populate()
 

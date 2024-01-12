@@ -1,6 +1,7 @@
 import fnmatch
 import os
 import re
+from typing import Any
 from typing import Optional
 
 from . import config
@@ -23,7 +24,8 @@ class Finder:
     def prepare(self):
         self._ready = True
 
-    def add(self, root: str, *paths: str) -> None:
+    def add(self, root: str, *paths: str, **kwargs: Any) -> None:
+        tolerant: bool = kwargs.get("tolerant", False)
         if self._ready:
             raise ValueError("Cannot call add() after calling prepare()")
         root = os.path.abspath(root)
@@ -33,7 +35,11 @@ class Finder:
         for path in paths:
             file = os.path.join(root, path)
             if not os.path.exists(file):
-                raise ValueError(f"{path} not found in {root}")
+                if tolerant:
+                    tty.warn(f"{path} not found in {root}")
+                    continue
+                else:
+                    raise ValueError(f"{path} not found in {root}")
             self.roots[root].append(path)  # type: ignore
 
     def populate(self) -> dict[str, set[AbstractTestFile]]:
