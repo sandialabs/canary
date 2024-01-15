@@ -226,7 +226,7 @@ def _parse_vvt_command_option(string: str) -> tuple[str, object]:
 
 
 def _parse_vvt_command_options(
-    tokens: Generator[tokenize.TokenInfo, None, None]
+    tokens: Generator[tokenize.TokenInfo, None, None],
 ) -> dict[str, object]:
     i = 0
     stack = [i]

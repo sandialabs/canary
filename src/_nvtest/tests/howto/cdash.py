@@ -12,10 +12,13 @@ After completing a test session
 """
 
 import os
+
 import _nvtest.util.filesystem as fs
+
 
 def test_howto_cdash(tmpdir):
     import _nvtest.main
+
     with fs.working_dir(tmpdir.strpath, create=True):
         with open("test.pyt", "w") as fh:
             fh.write("import sys\ndef test():\n    return 0\ntest()")

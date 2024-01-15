@@ -3,6 +3,9 @@ import argparse
 import _nvtest.plugin as plugin
 from _nvtest import config
 from _nvtest import directives
+from _nvtest._version import __version__
+from _nvtest._version import version
+from _nvtest._version import version_tuple
 from _nvtest.config.argparsing import Parser
 from _nvtest.directives import enums
 from _nvtest.error import TestDiffed
@@ -17,9 +20,6 @@ from _nvtest.util import filesystem
 from _nvtest.util import tty
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import which
-from _nvtest._version import version_tuple
-from _nvtest._version import version
-from _nvtest._version import __version__
 
 
 def make_std_parser() -> argparse.ArgumentParser:

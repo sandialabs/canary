@@ -143,10 +143,10 @@ import fnmatch
 import glob
 import os
 from string import Template
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
 from typing import Sequence
-from typing import TYPE_CHECKING
 from typing import Union
 
 from .. import config
@@ -172,6 +172,7 @@ class FilterNamespace:
         action: Optional[str] = None,
     ):
         import _nvtest.directives
+
         self.value: Any = value
         self.when = _nvtest.directives.When(when)
         self.expect = expect
@@ -303,6 +304,7 @@ class AbstractTestFile:
             f"Generating test cases for {self} using the following test names: {names}"
         )
         import _nvtest.directives
+
         for name in self.names():
             mask = self.skipif_reason
             enabled, reason = self.enable(testname=name, on_options=on_options)

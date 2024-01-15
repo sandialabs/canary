@@ -28,20 +28,32 @@ exclude = ["src/_nvtest/third_party/distro.py"]
 module = "networkx.*,yaml.*,ruamel.*,pygments.*,toml.*,contextlib2.*,scipy.*,_nvtest.tests.*,numpy.*,imageio.*"
 ignore_missing_imports = true
 
-
 # check-wheel-contents is executed by the build-and-inspect-python-package action.
 [tool.check-wheel-contents]
 # W009: Wheel contains multiple toplevel library entries
 ignore = "W009"
 
 [tool.ruff]
+select = ["F", "I"]
 target-version = "py39"
+line-length = 88
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.isort]
+force-single-line = true
+
+[tool.ruff.lint]
+ignore = ["E741", "F841", "E731"]
 
 [tool.ruff.per-file-ignores]
 "src/_nvtest/schemas/__init__.py" = ["F401"]
 "src/nvtest/__init__.py" = ["F401"]
 "src/_nvtest/user/diffutils/__init__.py" = ["F401"]
 "src/_nvtest/reporters/__init__.py" = ["F401"]
-
-[tool.ruff.lint]
-ignore = ["E741", "F841", "E731"]

@@ -115,9 +115,7 @@ class BashCompletionWriter(aw.ArgparseCompletionWriter):
     else
         {1}
     fi
-""".format(
-                self.optionals(optionals), self.positionals(positionals)
-            )
+""".format(self.optionals(optionals), self.positionals(positionals))
         elif subcommands:
             return """
     if $list_options
@@ -126,15 +124,11 @@ class BashCompletionWriter(aw.ArgparseCompletionWriter):
     else
         {1}
     fi
-""".format(
-                self.optionals(optionals), self.subcommands(subcommands)
-            )
+""".format(self.optionals(optionals), self.subcommands(subcommands))
         else:
             return """
     {0}
-""".format(
-                self.optionals(optionals)
-            )
+""".format(self.optionals(optionals))
 
     def positionals(self, positionals):
         # If match found, return function name

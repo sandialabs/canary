@@ -1,5 +1,6 @@
 import functools
 import glob
+import importlib.metadata as im
 import os
 import sys
 from argparse import Namespace
@@ -66,6 +67,12 @@ class Manager:
             name = f"nvtest.plugins.{basename}"
             # importing the module will load the plugins
             load_module_from_file(name, file)
+
+    def load_from_entry_points(self):
+        entry_points = im.entry_points().select().get("nvtest.plugin")
+        if entry_points:
+            for entry_point in entry_points:
+                entry_point.load()
 
 
 def load_module_from_file(module_name: str, module_path: str):
@@ -147,3 +154,7 @@ def register(*, scope: str, stage: str):
 
 def load(path: str) -> None:
     _manager.load(path)
+
+
+def load_from_entry_points() -> None:
+    _manager.load_from_entry_points()

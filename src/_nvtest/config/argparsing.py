@@ -13,6 +13,7 @@ from typing import Type
 from typing import Union
 
 import _nvtest._version
+
 from ..util import tty
 from ..util.tty.color import colorize
 

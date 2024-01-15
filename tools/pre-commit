@@ -3,11 +3,9 @@ set -e
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR=$( cd -- "$( dirname -- "${SCRIPT_DIR}" )" &> /dev/null && pwd )
 
-cd ${ROOT_DIR}
-
 echo "Formatting code with ruff"
-ruff ./src
-ruff ./plugins
+ruff check --fix ./src
+ruff format ./src
 
 echo "Type checking with mypy"
 mypy ./src

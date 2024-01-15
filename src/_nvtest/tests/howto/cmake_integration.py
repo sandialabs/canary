@@ -238,16 +238,20 @@ would cause the following to be written to the build configuration
 """
 
 import os
-import pytest
-import _nvtest.util.filesystem as fs
+
 import _nvtest.util.executable as ex
+import _nvtest.util.filesystem as fs
+import pytest
 
 f1 = fs.which("gcc") or os.getenv("CC")
 f2 = fs.which("cmake")
 good = f1 is not None and f2 is not None
+
+
 @pytest.mark.skipif(not good, reason="Components not found on PATH")
 def test_cmake_integration(tmpdir):
     from _nvtest.main import NVTestCommand
+
     with fs.working_dir(tmpdir.strpath, create=True):
         f = os.path.join(os.path.dirname(__file__), "../../../../tools/NVTest.cmake")
         with open("foo.c", "w") as fh:
@@ -276,10 +280,13 @@ def test_cmake_integration(tmpdir):
 
 f3 = fs.which("mpirun")
 good = good and f3 is not None
+
+
 @pytest.mark.skipif(not good, reason="Components not found on PATH")
 def test_cmake_integration_parallel(tmpdir):
     mpi_home = os.path.dirname(os.path.dirname(f3))
     from _nvtest.main import NVTestCommand
+
     with fs.working_dir(tmpdir.strpath, create=True):
         f = os.path.join(os.path.dirname(__file__), "../../../../tools/NVTest.cmake")
         with open("foo.c", "w") as fh:
@@ -304,6 +311,8 @@ def test_cmake_integration_parallel(tmpdir):
 
 f3 = fs.which("mpirun")
 good = good and f3 is not None
+
+
 @pytest.mark.skipif(not good, reason="Components not found on PATH")
 def test_cmake_integration_parallel_override(tmpdir):
     mpi_home = os.path.dirname(os.path.dirname(f3))
@@ -324,7 +333,7 @@ def test_cmake_integration_parallel_override(tmpdir):
                 f"-DCMAKE_PREFIX_PATH={mpi_home}",
                 "-DMPIEXEC_EXECUTABLE_OVERRIDE=my-mpirun",
                 "-DMPIEXEC_NUMPROC_FLAG_OVERRIDE=-x",
-                ".."
+                "..",
             )
             with open("foo.pyt") as fh:
                 lines = fh.read()

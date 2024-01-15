@@ -239,7 +239,7 @@ class Config:
     @staticmethod
     def flatten(mapping: dict) -> dict:
         fd = {}
-        for (s, sd) in mapping.items():
+        for s, sd in mapping.items():
             if not isinstance(sd, dict):
                 fd[s] = sd
             else:
@@ -395,7 +395,7 @@ class Config:
             path += colon + name
 
             # Test whether there is an existing value at this level
-            existing = get(path, scope=scope)
+            existing = self.get(path, scope=scope)
 
             if existing is None:
                 has_existing_value = False
@@ -412,7 +412,7 @@ class Config:
         if has_existing_value:
             path, _, value = fullpath.rpartition(":")
             value = json.loads(value)
-            existing = get(path, scope=scope)
+            existing = self.get(path, scope=scope)
 
         # append values to lists
         if isinstance(existing, list) and not isinstance(value, list):

@@ -1,7 +1,6 @@
 import sys
 
 import pytest
-
 from _nvtest.directives.when import InvalidSyntax
 from _nvtest.directives.when import When
 

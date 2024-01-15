@@ -43,14 +43,17 @@ To execute, first run the tests.  Then, navigate to the test directory and run
 """
 
 import os
+
 import _nvtest.util.filesystem as fs
 
 
 def test_analyze(tmpdir):
     from _nvtest.main import NVTestCommand
+
     with fs.working_dir(tmpdir.strpath, create=True):
         with open("baz.pyt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import os
 import nvtest
 
@@ -77,7 +80,8 @@ def main():
 
 if __name__ == '__main__':
     main()
-""")
+"""
+            )
         run = NVTestCommand("run")
         run("-w", ".")
         with fs.working_dir("TestResults/baz"):

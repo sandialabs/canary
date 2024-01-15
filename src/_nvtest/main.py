@@ -33,7 +33,6 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     try:
         os.chdir(pre.C or invocation_dir)
-
         load_plugins(pre.plugin_dirs)
         for hook in plugin.plugins("main", "setup"):
             hook(parser)
@@ -54,6 +53,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 class NVTestCommand:
     def __init__(self, command_name: str) -> None:
         from _nvtest.util.executable import Executable
+
         command_module = get_command(command_name)
         if command_module is None:
             raise ValueError(f"Unknown command {command_name!r}")
@@ -107,6 +107,7 @@ def _profile_wrapper(command, args):
 
 
 def load_plugins(dirs: Optional[list[str]] = None) -> None:
+    plugin.load_from_entry_points()
     if dirs is None:
         return
     for dir in dirs:

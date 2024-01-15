@@ -213,9 +213,7 @@ class ArgparseRstWriter(ArgparseWriter):
 {1}
 {2}
 
-""".format(
-            prog.replace(" ", "-"), prog, self.rst_levels[self.level] * len(prog)
-        )
+""".format(prog.replace(" ", "-"), prog, self.rst_levels[self.level] * len(prog))
 
     def description(self, description):
         return description + "\n\n"
@@ -226,9 +224,7 @@ class ArgparseRstWriter(ArgparseWriter):
 
     {0}
 
-""".format(
-            usage
-        )
+""".format(usage)
 
     def begin_positionals(self):
         return "\n**Positional arguments**\n\n"
@@ -238,9 +234,7 @@ class ArgparseRstWriter(ArgparseWriter):
 {0}
   {1}
 
-""".format(
-            name, help
-        )
+""".format(name, help)
 
     def end_positionals(self):
         return ""
@@ -253,9 +247,7 @@ class ArgparseRstWriter(ArgparseWriter):
 ``{0}``
   {1}
 
-""".format(
-            opts, help
-        )
+""".format(opts, help)
 
     def end_optionals(self):
         return ""
@@ -333,9 +325,7 @@ class ArgparseMultiRstWriter(ArgparseRstWriter):
 {1}
 {2}
 
-""".format(
-            prog.replace(" ", "-"), prog, self.rst_levels[self.level] * len(prog)
-        )
+""".format(prog.replace(" ", "-"), prog, self.rst_levels[self.level] * len(prog))
 
     def _write(self, parser, prog, level=None):
         """Recursively writes a parser.
