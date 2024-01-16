@@ -72,7 +72,7 @@ class Manager:
         try:
             entry_points = im.entry_points().select().get("nvtest.plugin")
         except AttributeError:
-            entry_points = im.entry_points()..get("nvtest.plugin")
+            entry_points = im.entry_points().get("nvtest.plugin")
         if entry_points:
             for entry_point in entry_points:
                 entry_point.load()
