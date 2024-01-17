@@ -8,13 +8,21 @@ Python 3.9+
 
 ## Install
 
+### Default
+
 ```console
-git clone git@cee-gitlab.sandia.gov:tfuller/nvtest
+pip install "nvtest git+ssh://git@@cee-gitlab.sandia.gov/alegra/tools/nvtest"
+```
+
+### Developers
+
+```console
+git clone git@cee-gitlab.sandia.gov:alegra/tools/nvtest
 cd nvtest
-pip install -e .
+pip install -e .[dev]
 ```
 
 ## Documentation
 
-- [website](http://tfuller.cee-gitlab.lan/nvtest/)
+- [website](http://alegra.cee-gitlab.lan/tools/nvtest/)
 - [documentation source](./docs/source/index.rst)
