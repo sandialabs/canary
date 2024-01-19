@@ -475,7 +475,8 @@ class TestCase:
                     if os.path.exists(file):
                         fh.write(open(file).read())
             if self.file_type == "vvt":
-                fs.force_symlink(self.logfile(), "execute.log")
+                f = os.path.join(self.exec_dir, "execute.log")
+                fs.force_symlink(self.logfile(), f)
             self.finish = time.time()
             tty.info(fmt.format("FINISHED", self.status.cname), prefix=None)
             self.dump()

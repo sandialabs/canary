@@ -303,13 +303,7 @@ def p_parameterize(
     names = [_.strip() for _ in part1.split(",") if _.split()]
     values = []
     for group in part2.split():
-        row = []
-        for item in group.split(","):
-            if item.split():
-                try:
-                    row.append(json.loads(item))
-                except json.JSONDecodeError:
-                    row.append(item)
+        row = [loads(_) for _ in group.split(",") if _.split()]
         values.append(row)
     if not all(len(values[0]) == len(_) for _ in values[1:]):
         raise ValueError(
@@ -380,6 +374,18 @@ def importable(module: str) -> bool:
     except (ModuleNotFoundError, ImportError):
         return False
     return True
+
+
+def loads(arg: str) -> Union[int, float, str]:
+    try:
+        return int(arg)
+    except ValueError:
+        pass
+    try:
+        return float(arg)
+    except ValueError:
+        pass
+    return arg
 
 
 def safe_eval(expression: str) -> object:

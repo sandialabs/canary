@@ -128,6 +128,8 @@ class Queue:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
                         self.print_status()
+                    elif isinstance(key, str) and key in "kK":
+                        self.kill_running()
                 item = self.queue[id]
                 with self.lock():
                     avail_workers = self._avail_workers
@@ -166,3 +168,7 @@ class Queue:
         pad = colorize("@*c{====}")
         sys.stdout.write(f"\n{header}\n{pad} {text} {pad}\n{footer}\n\n")
         sys.stdout.flush()
+
+    def kill_running(self):
+        for case in self.cases_running:
+            case.kill()
