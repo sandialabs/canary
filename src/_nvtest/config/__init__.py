@@ -521,10 +521,19 @@ def read_config(file: str) -> dict:
     cfg = ConfigParser()
     cfg.read(file)
     data: dict[str, Any] = {}
+    variables = dict(os.environ)
+    # make variables available in other config sections
+    if cfg.has_section("variables"):
+        section_data = data.setdefault("variables", {})
+        for key, val in cfg.items("variables", raw=True):
+            section_data[key] = Template(val).safe_substitute(variables)
+            variables[key] = section_data[key]
     for section in cfg.sections():
+        if section == "variables":
+            continue
         section_data = data.setdefault(section, {})
         for key, value in cfg.items(section, raw=True):
-            value = Template(value).safe_substitute(os.environ)
+            value = Template(value).safe_substitute(variables)
             try:
                 section_data[key] = json.loads(value)
             except json.decoder.JSONDecodeError:
