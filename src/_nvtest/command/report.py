@@ -4,6 +4,7 @@ from .. import config
 from ..reporters import Reporter
 from ..reporters import cdash
 from ..reporters import html
+from ..reporters import markdown
 from ..session import Session
 from ..util import tty
 
@@ -108,6 +109,10 @@ def setup_parser(parser: "Parser") -> None:
     sp = html_parser.add_subparsers(dest="child_command", metavar="")
     p = sp.add_parser("create", help="Create local HTML report files")
 
+    md_parser = parent.add_parser("markdown", help="Generate markdown reports")
+    sp = md_parser.add_subparsers(dest="child_command", metavar="")
+    p = sp.add_parser("create", help="Create local markdown report files")
+
 
 def report(args: "Namespace") -> int:
     if args.parent_command == "cdash" and args.child_command == "summary":
@@ -152,6 +157,15 @@ def report(args: "Namespace") -> int:
             reporter.create()
         else:
             tty.die(f"{args.child_command}: unknown `nvtest report html` subcommand")
+        return 0
+    elif args.parent_command == "markdown":
+        reporter = markdown.Reporter(session)
+        if args.child_command == "create":
+            reporter.create()
+        else:
+            tty.die(
+                f"{args.child_command}: unknown `nvtest report markdown` subcommand"
+            )
         return 0
     else:
         tty.die(f"{args.parent_command}: unknown subcommand")
