@@ -83,8 +83,8 @@ class Reporter(_Reporter):
     def generate_group_index(self, cases, fh: TextIO) -> None:
         assert all([cases[0].status.name == c.status.name for c in cases[1:]])
         fh.write(f"# {cases[0].status.name} Summary\n\n")
-        fh.write("| Test | Duration | Status |\n")
-        fh.write("| --- | --- | --- |\n")
+        fh.write("| Test | ID | Duration | Status |\n")
+        fh.write("| --- | --- | --- | --- |\n")
         for case in sorted(cases, key=lambda c: c.duration):
             file = os.path.join(self.md_dir, f"{case.id}.md")
             if not os.path.exists(file):
@@ -92,7 +92,7 @@ class Reporter(_Reporter):
             link = f"[{case.display_name}](./{os.path.basename(file)})"
             duration = f"{case.duration:.2f}"
             status = case.status.name
-            fh.write(f"| {link} | {duration} | {status} |\n")
+            fh.write(f"| {link} | {case.id} | {duration} | {status} |\n")
 
     def generate_all_tests_index(self, totals: dict, fh: TextIO) -> None:
         fh.write("# Test Results\n")

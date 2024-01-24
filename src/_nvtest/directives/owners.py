@@ -1,6 +1,3 @@
-from typing import Optional
-from typing import Union
-
 import _nvtest
 
 from ..test.testfile import AbstractTestFile

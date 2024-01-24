@@ -90,6 +90,12 @@ def setup_parser(parser: "Parser"):
         default=False,
         help="Show status for all tests (implies -ptdfn) [default: %(default)s]",
     )
+    parser.add_argument(
+        "--sort-by",
+        default="duration",
+        choices=("duration", "name"),
+        help="Sort cases by this field [default: %(default)s]",
+    )
     parser.add_argument("pathspec", nargs="?", help="Limit status results to this path")
     parser.epilog = "-fdt is assumed if no other selection flags are passed"
 
@@ -152,7 +158,7 @@ def status(args: "argparse.Namespace") -> int:
     if args.durations is not None:
         print_durations(cases_to_show, int(args.durations))
     if n:
-        print_footer_summary(cases_to_show)
+        print_footer_summary(cases)
     return 0
 
 
@@ -172,7 +178,15 @@ def cformat(case: TestCase, show_log: bool) -> str:
     return string
 
 
-def print_status(cases: list[TestCase], show_logs: bool = False) -> int:
+def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
+    return sorted(cases, key=lambda case: getattr(case, field))
+
+
+def print_status(
+    cases: list[TestCase],
+    show_logs: bool = False,
+    sortby: str = "duration",
+) -> int:
     totals: dict[str, list[TestCase]] = {}
     for case in cases:
         if case.masked:
@@ -192,7 +206,7 @@ def print_status(cases: list[TestCase], show_logs: bool = False) -> int:
     ]
     for member in members:
         if member in totals:
-            for case in totals[member]:
+            for case in sort_cases_by(totals[member], field=sortby):
                 tty.print(cformat(case, show_logs))
                 nprinted += 1
     return nprinted
@@ -201,6 +215,8 @@ def print_status(cases: list[TestCase], show_logs: bool = False) -> int:
 def print_footer_summary(cases: list[TestCase]) -> None:
     totals: dict[str, list[TestCase]] = {}
     for case in cases:
+        if case.masked:
+            continue
         totals.setdefault(case.status.value, []).append(case)
     summary_parts = []
     colorize = tty.color.colorize
