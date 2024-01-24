@@ -158,6 +158,7 @@ class Finder:
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
+        owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         cases: list[TestCase] = []
         o = ",".join(on_options or [])
@@ -175,6 +176,7 @@ class Finder:
                     keyword_expr=keyword_expr,
                     parameter_expr=parameter_expr,
                     on_options=on_options,
+                    owners=owners,
                 )
                 cases.extend([case for case in concrete_test_cases if case])
 

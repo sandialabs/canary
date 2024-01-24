@@ -223,6 +223,7 @@ class AbstractTestFile:
         if not os.path.exists(self.file):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = os.path.splitext(os.path.basename(self.path))[0]
+        self.owners: list[str] = []
         self._keywords: list[FilterNamespace] = []
         self._paramsets: list[FilterNamespace] = []
         self._attributes: list[FilterNamespace] = []
@@ -274,6 +275,7 @@ class AbstractTestFile:
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
+        owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         try:
             return self._freeze(
@@ -282,6 +284,7 @@ class AbstractTestFile:
                 keyword_expr=keyword_expr,
                 on_options=on_options,
                 parameter_expr=parameter_expr,
+                owners=owners,
             )
         except Exception as e:
             if tty.HAVE_DEBUG:
@@ -295,6 +298,7 @@ class AbstractTestFile:
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
+        owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         avail_cpus = avail_cpus or config.get("machine:cpu_count")
         avail_devices = avail_devices or config.get("machine:device_count")
@@ -307,6 +311,8 @@ class AbstractTestFile:
 
         for name in self.names():
             mask = self.skipif_reason
+            if owners and not owners.intersection(self.owners):
+                mask = colorize("deselected by @*b{owner expression}")
             enabled, reason = self.enable(testname=name, on_options=on_options)
             if not enabled and mask is None:
                 mask = f"deselected due to {reason}"
@@ -603,6 +609,9 @@ class AbstractTestFile:
     def m_keywords(self, *args: str, when: Optional[str] = None) -> None:
         keyword_ns = FilterNamespace(tuple(args), when=when)
         self._keywords.append(keyword_ns)
+
+    def m_owners(self, *args: str) -> None:
+        self.owners.extend(args)
 
     def m_depends_on(
         self,

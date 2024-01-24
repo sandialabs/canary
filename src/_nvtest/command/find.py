@@ -60,6 +60,9 @@ def setup_parser(parser: "Parser"):
         default=False,
         help="Show available keywords",
     )
+    parser.add_argument(
+        "--owner", dest="owners", action="append", help="Show tests owned by 'owner'"
+    )
     add_resource_arguments(parser)
     parser.add_argument("search_paths", nargs="*", help="Search path[s]")
 
@@ -81,6 +84,7 @@ def find(args: "argparse.Namespace") -> int:
         keyword_expr=args.keyword_expr,
         parameter_expr=args.parameter_expr,
         on_options=args.on_options,
+        owners=None if not args.owners else set(args.owners),
     )
     cases_to_run = [case for case in cases if case.status == "pending"]
     if not args.no_header:
