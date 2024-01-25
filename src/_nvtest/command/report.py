@@ -1,3 +1,5 @@
+import glob
+import os
 from typing import TYPE_CHECKING
 
 from .. import config
@@ -23,12 +25,6 @@ def setup_parser(parser: "Parser") -> None:
     sp = cdash_parser.add_subparsers(dest="child_command", metavar="")
     p = sp.add_parser("create", help="Create CDash XML files")
     p.add_argument(
-        "--project",
-        required=True,
-        metavar="project",
-        help="The name of the project that will be reported to CDash",
-    )
-    p.add_argument(
         "--build",
         metavar="name",
         help="The name of the build that will be reported to CDash.",
@@ -45,6 +41,11 @@ def setup_parser(parser: "Parser") -> None:
         help="Read site, build, and buildstamp from this XML "
         "file (eg, Build.xml or Configure.xml)",
     )
+    p.add_argument(
+        "-d",
+        metavar="directory",
+        help="Write reports to this directory [default: $session/_reports/cdash]",
+    )
     group = p.add_mutually_exclusive_group()
     group.add_argument(
         "--track",
@@ -53,6 +54,7 @@ def setup_parser(parser: "Parser") -> None:
     )
     group.add_argument(
         "--build-stamp",
+        dest="buildstamp",
         metavar="stamp",
         help="Instead of letting the CDash reporter prepare the buildstamp which, "
         "when combined with build name, site and project, uniquely identifies the "
@@ -61,7 +63,16 @@ def setup_parser(parser: "Parser") -> None:
     )
 
     p = sp.add_parser("post", help="Post CDash XML files")
-    p.add_argument("url", help="The URL of the CDash server")
+    p.add_argument(
+        "--project",
+        required=True,
+        metavar="project",
+        help="The name of the project that will be reported to CDash",
+    )
+    p.add_argument(
+        "--url", metavar="url", required=True, help="The URL of the CDash server"
+    )
+    p.add_argument("files", nargs="*", help="XML files to post")
 
     p = sp.add_parser("summary", help="Create HTML summary of CDash site")
     p.add_argument(
@@ -130,24 +141,31 @@ def report(args: "Namespace") -> int:
     session = Session.load(mode="r")
     reporter: Reporter
     if args.parent_command == "cdash":
-        reporter = cdash.Reporter(session)
+        reporter = cdash.Reporter(session, dest=args.d)
         if args.child_command == "create":
             if args.f:
-                incompatible_attrs = ("build_stamp", "track", "site", "build")
-                if any([getattr(args, attr) for attr in incompatible_attrs]):
-                    s = ", ".join(f"--{attr}" for attr in incompatible_attrs)
-                    tty.die(f"-f incompatible with {s}")
-                args.site = args.f
+                opts = dict(
+                    buildstamp=args.buildstamp,
+                    track=args.track,
+                    buildname=args.buildname,
+                )
+                if any(list(opts.values())):
+                    s = ", ".join(list(opts.keys()))
+                    raise ValueError(f"-f {args.f!r} incompatible with {s}")
+                reporter.read_site_info(namespace=args)
             reporter.create(
                 args.project,
                 args.build,
                 site=args.site,
                 track=args.track,
-                buildstamp=args.build_stamp,
+                buildstamp=args.buildstamp,
             )
         elif args.child_command == "post":
-            reporter.load()
-            reporter.post(args.url)
+            if not args.files:
+                args.files = glob.glob(os.path.join(reporter.xml_dir, "*.xml"))
+            if not args.files:
+                tty.die("nvtest report cdash post: no xml files to post")
+            reporter.post(args.url, args.project, *args.files)
         else:
             tty.die(f"{args.child_command}: unknown `nvtest report cdash` subcommand")
         return 0

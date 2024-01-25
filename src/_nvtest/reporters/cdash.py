@@ -1,7 +1,6 @@
+import argparse
 import datetime
-import glob
 import io
-import json
 import os
 import sys
 import time
@@ -25,9 +24,10 @@ from .common import Reporter as _Reporter
 
 
 class Reporter(_Reporter):
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, dest: Optional[str] = None) -> None:
         super().__init__(session)
-        self.xml_dir = os.path.join(session.work_tree, "_reports/cdash")
+        dest = dest or os.path.join(session.work_tree, "_reports/cdash")
+        self.xml_dir = os.path.abspath(dest)
         self.xml_files: list[str] = []
 
     def create(
@@ -41,63 +41,31 @@ class Reporter(_Reporter):
         """Collect information and create reports"""
         self.project = project
         self.meta = None
-        if isinstance(site, str) and os.path.isfile(site):
-            opts = dict(buildstamp=buildstamp, track=track, buildname=buildname)
-            if any(list(opts.values())):
-                s = ", ".join(list(opts.keys()))
-                raise ValueError(f"site=file incompatible with {s}")
-            self.read_site_info(site)
+        self.buildname = buildname
+        self.site = site or os.uname().nodename
+        if buildstamp is not None and track is not None:
+            raise ValueError("mutually exclusive inputs: track, buildstamp")
+        if buildstamp is None:
+            self.buildstamp = self.generate_buildstamp(track or "Experimental")
         else:
-            self.buildname = buildname
-            self.site = site or os.uname().nodename
-            if buildstamp is not None and track is not None:
-                raise ValueError("mutually exclusive inputs: track, buildstamp")
-            if buildstamp is None:
-                self.buildstamp = self.generate_buildstamp(track or "Experimental")
-            else:
-                self.buildstamp = self.validate_buildstamp(buildstamp)
+            self.buildstamp = self.validate_buildstamp(buildstamp)
         mkdirp(self.xml_dir)
         self.write_test_xml()
         self.write_notes_xml()
-        self.dump()
 
-    def read_site_info(self, file):
+    @staticmethod
+    def read_site_info(
+        file, namespace: Optional[argparse.Namespace] = None
+    ) -> argparse.Namespace:
         with open(file) as fh:
             doc = xdom.parse(fh)
+        if namespace is None:
+            namespace = argparse.Namespace()
         fs = doc.getElementsByTagName("Site")[0]
-        self.meta = dict(fs.attributes.items())
-        self.site = fs.getAttribute("Name")
-        self.buildname = fs.getAttribute("BuildName")
-        self.buildstamp = fs.getAttribute("BuildStamp")
-        return
-
-    def load(self):
-        f = os.path.join(self.xml_dir, ".meta.json")
-        with open(f, "r") as fh:
-            data = json.load(fh)
-        for key, value in data.items():
-            setattr(self, key, value)
-        self.xml_files = glob.glob(os.path.join(self.xml_dir, "*.xml"))
-
-    def dump(self) -> None:
-        f = os.path.join(self.xml_dir, ".meta.json")
-        data = {
-            "project": self.project,
-            "buildname": self.buildname,
-            "buildstamp": self.buildstamp,
-            "site": self.site,
-        }
-        with open(f, "w") as fh:
-            json.dump(data, fh, indent=2)
-
-    def post(self, url: str) -> None:
-        if not self.xml_files:
-            self.load()
-        upload_errors = 0
-        for filename in self.xml_files:
-            upload_errors += self.upload_to_cdash(url, filename)
-        if upload_errors:
-            tty.warn(f"{upload_errors} files failed to upload to CDash")
+        namespace.site = fs.getAttribute("Name")
+        namespace.buildname = fs.getAttribute("BuildName")
+        namespace.buildstamp = fs.getAttribute("BuildStamp")
+        return namespace
 
     def generate_buildstamp(self, track):
         fmt = f"%Y%m%d-%H%M-{track}"
@@ -116,15 +84,23 @@ class Reporter(_Reporter):
             )
         return buildstamp
 
-    def upload_to_cdash(self, url, filename):
-        server = cdash.server(url, self.project)
-        rc = server.upload(
-            filename=filename,
-            sitename=self.site,
-            buildname=self.buildname,
-            buildstamp=self.buildstamp,
-        )
-        return rc
+    @staticmethod
+    def post(url: str, project: str, *files: str) -> None:
+        if not files:
+            raise ValueError("No files to post")
+        server = cdash.server(url, project)
+        ns = Reporter.read_site_info(files[0])
+        upload_errors = 0
+        for file in files:
+            upload_errors += server.upload(
+                filename=file,
+                sitename=ns.site,
+                buildname=ns.buildname,
+                buildstamp=ns.buildstamp,
+            )
+        if upload_errors:
+            tty.warn(f"{upload_errors} files failed to upload to CDash")
+        return
 
     @property
     def site_node(self):
