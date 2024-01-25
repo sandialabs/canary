@@ -26,6 +26,7 @@ def setup_parser(parser: "Parser") -> None:
     p = sp.add_parser("create", help="Create CDash XML files")
     p.add_argument(
         "--build",
+        dest="buildname",
         metavar="name",
         help="The name of the build that will be reported to CDash.",
     )
@@ -155,7 +156,7 @@ def report(args: "Namespace") -> int:
                 reporter.read_site_info(namespace=args)
             reporter.create(
                 args.project,
-                args.build,
+                args.buildname,
                 site=args.site,
                 track=args.track,
                 buildstamp=args.buildstamp,
