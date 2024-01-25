@@ -107,6 +107,7 @@ def _profile_wrapper(command, args):
 
 
 def load_plugins(dirs: Optional[list[str]] = None) -> None:
+    plugin.load_builtin_plugins()
     plugin.load_from_entry_points()
     if dirs is None:
         return

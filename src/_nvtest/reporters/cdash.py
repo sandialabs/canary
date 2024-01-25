@@ -84,7 +84,7 @@ class Reporter(_Reporter):
         return buildstamp
 
     @staticmethod
-    def post(url: str, project: str, *files: str) -> None:
+    def post(url: str, project: str, *files: str) -> Optional[str]:
         if not files:
             raise ValueError("No files to post")
         server = cdash.server(url, project)
@@ -99,7 +99,12 @@ class Reporter(_Reporter):
             )
         if upload_errors:
             tty.warn(f"{upload_errors} files failed to upload to CDash")
-        return
+        buildid = server.buildid(
+            sitename=ns.site, buildname=ns.buildname, buildstamp=ns.buildstamp
+        )
+        if buildid is None:
+            return None
+        return f"{url}/buildSummary.php?buildid={buildid}"
 
     @property
     def site_node(self):
@@ -629,7 +634,6 @@ def create_issues_from_failed_tests(
     filtergroups: Optional[list[str]] = None,
     skip_sites: Optional[list[str]] = None,
     dont_close_missing: bool = False,
-    skip_timeout: bool = False,
 ) -> None:
     """Create issues on GitLab from failing tests on CDash
 
@@ -644,18 +648,14 @@ def create_issues_from_failed_tests(
         skip_sites: Sites (systems) on which to ignore issues. Accepts Python
           regular expressions
         dont_close_missing: Don't close GitLab issues that are missing from CDash
-        skip_timeout : Don't create issues for timed out tests
 
     """
-    filtergroups = filtergroups or ["Latest"]
+    filtergroups = filtergroups or ["Nightly"]
     server = cdash.server(cdash_url, cdash_project)
-    tests = server.get_failed_tests(
-        date=date,
-        buildgroups=filtergroups,
-        skip_missing=True,
-        skip_timeout=skip_timeout,
-        skip_sites=skip_sites,
-    )
+    builds = server.builds(date=date, buildgroups=filtergroups, skip_sites=skip_sites)
+    tests: list[dict] = []
+    for build in builds:
+        tests.extend(server.get_failed_tests(build, skip_missing=True))
     test_groups = groupby_status_and_testname(tests)
     issue_data = []
     for _, group in test_groups.items():

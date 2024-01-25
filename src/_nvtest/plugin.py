@@ -1,6 +1,7 @@
 import functools
 import glob
 import importlib.metadata as im
+import importlib.resources as ir
 import os
 import sys
 from argparse import Namespace
@@ -153,6 +154,14 @@ def register(*, scope: str, stage: str):
         return wrapper
 
     return decorator
+
+
+def load_builtin_plugins() -> None:
+    dirname = ir.files("_nvtest").joinpath("plugins")
+    if dirname.exists():  # type: ignore
+        for file in dirname.iterdir():
+            if file.name.startswith("nvtest_"):
+                _manager.load(str(file))
 
 
 def load(path: str) -> None:

@@ -127,13 +127,6 @@ def setup_parser(parser: "Parser") -> None:
         metavar="site",
         help="Sites to skip (accepts Python regular expression) [default: %(default)s]",
     )
-    parser.add_argument(
-        "--skip-timeout",
-        default=False,
-        dest="skip_timeout",
-        action="store_true",
-        help="Skip tests that failed due to timeout [default: %(default)s]",
-    )
 
     p = sp.add_parser("summary", help="Create HTML summary of CDash site")
     p.add_argument(
@@ -210,17 +203,15 @@ def report(args: "Namespace") -> int:
             tty.die("gitlab project required")
         if args.gitlab_project_id is None:
             tty.die("gitlab project id required")
-        args.gitlab_project_id = int(args.gitlab_project_id)
         cdash.create_issues_from_failed_tests(
-            access_token=args.access_token,
-            cdash_url=args.url,
-            cdash_project=args.project,
-            gitlab_url=args.gitlab_url,
-            gitlab_project_id=args.gitlab_project_id,
+            access_token=str(args.access_token),
+            cdash_url=str(args.url),
+            cdash_project=str(args.project),
+            gitlab_url=str(args.gitlab_url),
+            gitlab_project_id=int(str(args.gitlab_project_id)),
             date=args.date,
             filtergroups=args.filtergroups,
             skip_sites=args.skip_sites,
-            skip_timeout=args.skip_timeout,
         )
         return 0
     if not config.get("session:work_tree"):
@@ -239,7 +230,7 @@ def report(args: "Namespace") -> int:
                 if any(list(opts.values())):
                     s = ", ".join(list(opts.keys()))
                     raise ValueError(f"-f {args.f!r} incompatible with {s}")
-                reporter.read_site_info(namespace=args)
+                reporter.read_site_info(args.f, namespace=args)
             reporter.create(
                 args.buildname,
                 site=args.site,
