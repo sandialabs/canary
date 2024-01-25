@@ -85,7 +85,7 @@ class Reporter(_Reporter):
         fh.write(f"# {cases[0].status.name} Summary\n\n")
         fh.write("| Test | ID | Duration | Status |\n")
         fh.write("| --- | --- | --- | --- |\n")
-        for case in sorted(cases, key=lambda c: c.name):
+        for case in sorted(cases, key=lambda c: c.name.lower()):
             file = os.path.join(self.md_dir, f"{case.id}.md")
             if not os.path.exists(file):
                 raise ValueError(f"{file}: markdown file not found")
