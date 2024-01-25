@@ -115,7 +115,7 @@ def load_plugins(dirs: Optional[list[str]] = None) -> None:
         if not os.path.exists(dir):
             tty.die(f"{dir}: plugin directory not found")
         path = os.path.abspath(dir)
-        plugin.load(path)
+        plugin.load_from_directory(path)
 
 
 def console_main() -> int:

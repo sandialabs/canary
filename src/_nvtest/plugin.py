@@ -62,12 +62,15 @@ class Manager:
                     return hook
         return None
 
-    def load(self, path: str) -> None:
+    def load_from_directory(self, path: str) -> None:
         for file in glob.glob(os.path.join(path, "nvtest_*.py")):
-            basename = os.path.splitext(os.path.basename(file))[0]
-            name = f"nvtest.plugins.{basename}"
-            # importing the module will load the plugins
-            load_module_from_file(name, file)
+            self.load_from_file(file)
+
+    def load_from_file(self, file: str) -> None:
+        basename = os.path.splitext(os.path.basename(file))[0]
+        name = f"nvtest.plugins.{basename}"
+        # importing the module will load the plugins
+        load_module_from_file(name, file)
 
     def load_from_entry_points(self):
         try:
@@ -161,12 +164,13 @@ def load_builtin_plugins() -> None:
     if dirname.exists():  # type: ignore
         for file in dirname.iterdir():
             if file.name.startswith("nvtest_"):
-                _manager.load(str(file))
-
-
-def load(path: str) -> None:
-    _manager.load(path)
+                tty.debug(f"Loading {file.name} builtin plugin")
+                _manager.load_from_file(str(file))
 
 
 def load_from_entry_points() -> None:
     _manager.load_from_entry_points()
+
+
+def load_from_directory(path: str) -> None:
+    _manager.load_from_directory(path)
