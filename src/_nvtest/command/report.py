@@ -68,12 +68,72 @@ def setup_parser(parser: "Parser") -> None:
         "--project",
         required=True,
         metavar="project",
-        help="The name of the project that will be reported to CDash",
+        help="The CDash project",
     )
     p.add_argument(
-        "--url", metavar="url", required=True, help="The URL of the CDash server"
+        "--url",
+        metavar="url",
+        required=True,
+        help="The base CDash url (do not include project)",
     )
     p.add_argument("files", nargs="*", help="XML files to post")
+
+    p = sp.add_parser("create-gitlab-issues")
+    p.add_argument(
+        "--project",
+        required=True,
+        metavar="project",
+        help="The CDash project",
+    )
+    p.add_argument(
+        "--url",
+        required=True,
+        help="The base CDash url (do not include project)",
+    )
+    parser.add_argument(
+        "--gitlab-url",
+        default=os.getenv("CI_PROJECT_URL"),
+        help="The GitLab project url [default: %(default)s]",
+    )
+    parser.add_argument(
+        "--gitlab-project-id",
+        default=os.getenv("CI_PROJECT_ID"),
+        help="The GitLab project's ID [default: %(default)s]",
+    )
+    for var in ("GITLAB_ACCESS_TOKEN", "ACCESS_TOKEN"):
+        if var in os.environ:
+            default_access_token = os.environ[var]
+            break
+    else:
+        default_access_token = None
+    parser.add_argument(
+        "-a",
+        dest="access_token",
+        default=default_access_token,
+        help="The GitLab read/write API access token [default: %(default)s]",
+    )
+    parser.add_argument("-d", "--date", help="Date to retrieve from CDash")
+    parser.add_argument(
+        "-f",
+        "--filtergroups",
+        action="append",
+        help="Groups to pull down from CDash [default: Latest]",
+    )
+    parser.add_argument(
+        "--skip-site",
+        default=None,
+        dest="skip_sites",
+        action="append",
+        metavar="site",
+        help="Sites to skip (accepts Python regular expression) [default: %(default)s]",
+    )
+    parser.add_argument(
+        "--skip-timeout",
+        default=False,
+        dest="skip_timeout",
+        action="store_true",
+        help="Skip tests that failed due to timeout [default: %(default)s]",
+    )
 
     p = sp.add_parser("summary", help="Create HTML summary of CDash site")
     p.add_argument(
@@ -140,6 +200,28 @@ def report(args: "Namespace") -> int:
         return 0
     elif command == ("cdash", "post") and args.files:
         cdash.Reporter.post(args.url, args.project, *args.files)
+        return 0
+    elif command == ("cdash", "create-gitlab-issues"):
+        if args.access_token is None:
+            tty.die("gitlab access token required")
+        if args.gitlab_url is None:
+            tty.die("gitlab project url required")
+        if args.gitlab_project is None:
+            tty.die("gitlab project required")
+        if args.gitlab_project_id is None:
+            tty.die("gitlab project id required")
+        args.gitlab_project_id = int(args.gitlab_project_id)
+        cdash.create_issues_from_failed_tests(
+            access_token=args.access_token,
+            cdash_url=args.url,
+            cdash_project=args.project,
+            gitlab_url=args.gitlab_url,
+            gitlab_project_id=args.gitlab_project_id,
+            date=args.date,
+            filtergroups=args.filtergroups,
+            skip_sites=args.skip_sites,
+            skip_timeout=args.skip_timeout,
+        )
         return 0
     if not config.get("session:work_tree"):
         tty.die("not a nvtest session (or any of the parent directories): .nvtest")
