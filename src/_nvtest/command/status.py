@@ -92,7 +92,7 @@ def setup_parser(parser: "Parser"):
     )
     parser.add_argument(
         "--sort-by",
-        default="duration",
+        default="name",
         choices=("duration", "name"),
         help="Sort cases by this field [default: %(default)s]",
     )
@@ -154,7 +154,7 @@ def status(args: "argparse.Namespace") -> int:
                 cases_to_show.append(case)
     n: int = 0
     if cases_to_show:
-        n = print_status(cases_to_show, show_logs=args.show_logs)
+        n = print_status(cases_to_show, show_logs=args.show_logs, sortby=args.sort_by)
     if args.durations is not None:
         print_durations(cases_to_show, int(args.durations))
     if n:
@@ -179,6 +179,8 @@ def cformat(case: TestCase, show_log: bool) -> str:
 
 
 def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
+    if cases and isinstance(getattr(cases[0], field), str):
+        return sorted(cases, key=lambda case: getattr(case, field).lower())
     return sorted(cases, key=lambda case: getattr(case, field))
 
 
