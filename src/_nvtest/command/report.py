@@ -127,7 +127,8 @@ def setup_parser(parser: "Parser") -> None:
 
 
 def report(args: "Namespace") -> int:
-    if args.parent_command == "cdash" and args.child_command == "summary":
+    command = (args.parent_command, args.child_command)
+    if command == ("cdash", "summary"):
         cdash.cdash_summary(
             url=args.url,
             project=args.project,
@@ -136,6 +137,9 @@ def report(args: "Namespace") -> int:
             skip_sites=args.skip_sites,
             file=args.file,
         )
+        return 0
+    elif command == ("cdash", "post") and args.files:
+        cdash.Reporter.post(args.url, args.project, *args.files)
         return 0
     if not config.get("session:work_tree"):
         tty.die("not a nvtest session (or any of the parent directories): .nvtest")
@@ -155,7 +159,6 @@ def report(args: "Namespace") -> int:
                     raise ValueError(f"-f {args.f!r} incompatible with {s}")
                 reporter.read_site_info(namespace=args)
             reporter.create(
-                args.project,
                 args.buildname,
                 site=args.site,
                 track=args.track,

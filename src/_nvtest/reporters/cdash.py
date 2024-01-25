@@ -32,14 +32,12 @@ class Reporter(_Reporter):
 
     def create(
         self,
-        project: str,
         buildname: str,
         site: Optional[str] = None,
         track: Optional[str] = None,
         buildstamp: Optional[str] = None,
     ) -> None:
         """Collect information and create reports"""
-        self.project = project
         self.meta = None
         self.buildname = buildname
         self.site = site or os.uname().nodename
@@ -74,9 +72,9 @@ class Reporter(_Reporter):
 
     def validate_buildstamp(self, buildstamp):
         fmt = "%Y%m%d-%H%M"
-        time_part = "-".join(buildstamp.split("-")[:-1], fmt)
+        time_part = "-".join(buildstamp.split("-")[:-1])
         try:
-            time.strptime(time_part)
+            time.strptime(time_part, fmt)
         except ValueError:
             fmt += "-<track>"
             raise ValueError(
