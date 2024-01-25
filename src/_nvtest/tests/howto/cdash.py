@@ -26,8 +26,6 @@ def test_howto_cdash(tmpdir):
         run("-w", ".")
         with fs.working_dir("TestResults"):
             report = _nvtest.main.NVTestCommand("report")
-            report(
-                "cdash", "create", "--project=nvtest", "--build=SPAM", "--track=Nightly"
-            )
+            report("cdash", "create", "--build=SPAM", "--track=Nightly")
         assert os.path.exists("TestResults/_reports/cdash/Test.xml")
         assert os.path.exists("TestResults/_reports/cdash/Notes.xml")
