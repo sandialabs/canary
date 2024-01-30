@@ -20,3 +20,4 @@ docs/build
 build
 
 .pre-commit.log
+.DS_Store
