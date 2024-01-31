@@ -517,6 +517,18 @@ def _merge(dest, source):
     return copy.copy(source)
 
 
+def safe_loads(arg):
+    try:
+        return json.loads(arg)
+    except json.decoder.JSONDecodeError:
+        return arg
+
+
+def expandvars(arg: str, mapping: dict) -> str:
+    t = Template(arg)
+    return t.safe_substitute(mapping)
+
+
 def read_config(file: str) -> dict:
     cfg = ConfigParser()
     cfg.read(file)
@@ -525,19 +537,17 @@ def read_config(file: str) -> dict:
     # make variables available in other config sections
     if cfg.has_section("variables"):
         section_data = data.setdefault("variables", {})
-        for key, val in cfg.items("variables", raw=True):
-            section_data[key] = Template(val).safe_substitute(variables)
+        for key, raw_value in cfg.items("variables", raw=True):
+            value = expandvars(raw_value, variables)
+            section_data[key] = str(safe_loads(value))
             variables[key] = section_data[key]
     for section in cfg.sections():
         if section == "variables":
             continue
         section_data = data.setdefault(section, {})
-        for key, value in cfg.items(section, raw=True):
-            value = Template(value).safe_substitute(variables)
-            try:
-                section_data[key] = json.loads(value)
-            except json.decoder.JSONDecodeError:
-                section_data[key] = value
+        for key, raw_value in cfg.items(section, raw=True):
+            value = expandvars(raw_value, variables)
+            section_data[key] = safe_loads(value)
     config_data: dict[str, Any] = {}
     # expand any keys given as a:b:c
     for path, section_data in data.items():
