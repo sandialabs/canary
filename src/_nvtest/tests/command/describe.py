@@ -1,10 +1,11 @@
+import importlib.resources
 import os
 
 
 def test_command_describe(capsys):
     from _nvtest.main import NVTestCommand
 
-    data_dir = os.path.join(os.path.dirname(__file__), "../data")
+    data_dir = str(importlib.resources.files("_nvtest").joinpath("tests/data"))
     describe = NVTestCommand("describe")
 
     describe(os.path.join(data_dir, "empire.pyt"))

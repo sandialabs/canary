@@ -1,4 +1,5 @@
 import difflib
+import importlib.resources
 import os
 import re
 import subprocess
@@ -7,7 +8,6 @@ from typing import Optional
 from typing import TextIO
 
 from . import tty
-from .filesystem import ancestor
 
 shells: list[str] = []
 
@@ -77,7 +77,7 @@ class bash(shell):
 
     @staticmethod
     def init():
-        prefix = ancestor(os.path.dirname(__file__), n=1)
+        prefix = os.path.dirname(str(importlib.resources.files("_nvtest")))
         py_path = f'PYTHONPATH="{prefix}:${{PYTHONPATH}}"'
         with open(bash.rcfile, "a") as fh:
             fh.write("\n\n# >>> modulecmd initialize >>>\n")

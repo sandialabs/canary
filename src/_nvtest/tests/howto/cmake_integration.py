@@ -237,6 +237,7 @@ would cause the following to be written to the build configuration
 
 """
 
+import importlib.resources
 import os
 
 import _nvtest.util.executable as ex
@@ -245,7 +246,8 @@ import pytest
 
 f1 = fs.which("gcc") or os.getenv("CC")
 f2 = fs.which("cmake")
-good = f1 is not None and f2 is not None
+nvf = str(importlib.resources.files("_nvtest").joinpath("../../tools/NVTest.cmake"))
+good = f1 is not None and f2 is not None and os.path.exists(nvf)
 
 
 @pytest.mark.skipif(not good, reason="Components not found on PATH")
@@ -253,7 +255,6 @@ def test_cmake_integration(tmpdir):
     from _nvtest.main import NVTestCommand
 
     with fs.working_dir(tmpdir.strpath, create=True):
-        f = os.path.join(os.path.dirname(__file__), "../../../../tools/NVTest.cmake")
         with open("foo.c", "w") as fh:
             fh.write("int main() { return 0; }\n")
         with open("baz.pyt", "w") as fh:
@@ -261,7 +262,7 @@ def test_cmake_integration(tmpdir):
         with open("CMakeLists.txt", "w") as fh:
             fh.write("cmake_minimum_required(VERSION 3.1...3.28)\n")
             fh.write("project(Foo VERSION 1.0 LANGUAGES C)\n")
-            fh.write(f"include({f})\n")
+            fh.write(f"include({nvf})\n")
             fh.write("add_executable(foo foo.c)\n")
             fh.write("add_nvtest(NAME foo COMMAND foo)\n")
             fh.write("add_nvtest(NAME baz SCRIPT baz.pyt)\n")
@@ -288,14 +289,13 @@ def test_cmake_integration_parallel(tmpdir):
     from _nvtest.main import NVTestCommand
 
     with fs.working_dir(tmpdir.strpath, create=True):
-        f = os.path.join(os.path.dirname(__file__), "../../../../tools/NVTest.cmake")
         with open("foo.c", "w") as fh:
             fh.write("int main() { return 0; }\n")
         with open("CMakeLists.txt", "w") as fh:
             fh.write("cmake_minimum_required(VERSION 3.1...3.28)\n")
             fh.write("project(Foo VERSION 1.0 LANGUAGES C)\n")
             fh.write("find_package(MPI)\n")
-            fh.write(f"include({f})\n")
+            fh.write(f"include({nvf})\n")
             fh.write("add_executable(foo foo.c)\n")
             fh.write("add_parallel_nvtest(NAME foo COMMAND foo NPROC 4)\n")
         with fs.working_dir("build", create=True):
@@ -317,14 +317,13 @@ good = good and f3 is not None
 def test_cmake_integration_parallel_override(tmpdir):
     mpi_home = os.path.dirname(os.path.dirname(f3))
     with fs.working_dir(tmpdir.strpath, create=True):
-        f = os.path.join(os.path.dirname(__file__), "../../../../tools/NVTest.cmake")
         with open("foo.c", "w") as fh:
             fh.write("int main() { return 0; }\n")
         with open("CMakeLists.txt", "w") as fh:
             fh.write("cmake_minimum_required(VERSION 3.1...3.28)\n")
             fh.write("project(Foo VERSION 1.0 LANGUAGES C)\n")
             fh.write("find_package(MPI)\n")
-            fh.write(f"include({f})\n")
+            fh.write(f"include({nvf})\n")
             fh.write("add_executable(foo foo.c)\n")
             fh.write("add_parallel_nvtest(NAME foo COMMAND foo NPROC 4)\n")
         with fs.working_dir("build", create=True):
