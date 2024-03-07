@@ -4,7 +4,8 @@ stages:
 
 test-job:
   tags:
-  - bnb
+  - cee
+  - linux_rh7
   stage: test
   script:
   - module use /projects/aue/modules/cee/x86_64/rhel7 > /dev/null 2>&1 || true
@@ -23,7 +24,8 @@ test-job:
 pages:
   stage: deploy
   tags:
-  - bnb
+  - cee
+  - linux_rh7
   script:
   - /projects/alegranevada/opt/cee/linux_rh7/python/3.9/bin/python -m venv venv
   - source venv/bin/activate
