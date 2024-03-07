@@ -300,6 +300,8 @@ class Session:
                 on_options=on_options,
                 parameter_expr=parameter_expr,
             )
+        except DirectoryExistsError:
+            raise
         except Exception:
             force_remove(self.work_tree)
             raise
@@ -382,7 +384,7 @@ class Session:
         """
         self.work_tree = os.path.abspath(work_tree)
         if os.path.exists(self.work_tree):
-            raise ValueError(f"{self.work_tree}: directory exists")
+            raise DirectoryExistsError(f"{self.work_tree}: directory exists")
         mkdirp(self.work_tree)
 
         t_start = time.time()
@@ -825,3 +827,7 @@ def load_test_results(stage: str) -> dict[str, dict]:
 class EmptySession(Exception):
     def __init__(self):
         super().__init__("No test cases to run")
+
+
+class DirectoryExistsError(Exception):
+    pass
