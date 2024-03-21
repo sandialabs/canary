@@ -40,6 +40,7 @@ description = "Run the tests"
 def setup_parser(parser: "Parser"):
     parser.add_argument(
         "-H",
+        "--help-topic",
         action=ExtraHelpTopic,
         metavar=ExtraHelpTopic.metavar,
         dest="help_topic",
@@ -390,9 +391,6 @@ def print_testcase_results(
         tty.info("Nothing to report")
         return
 
-    if durations is not None:
-        print_durations(cases, int(durations))
-
     if duration == -1:
         finish = max(_.finish for _ in cases)
         start = min(_.start for _ in cases)
@@ -405,24 +403,27 @@ def print_testcase_results(
         else:
             totals.setdefault(case.status.iid, []).append(case)
 
-    nonpass = ("skipped", "failed", "diffed", "timeout")
+    nonpass = ("skipped", "diffed", "timeout", "failed")
     level = tty.get_log_level()
     if level > tty.INFO and len(totals):
         tty.print("Short test summary info", centered=True)
     elif any(r in totals for r in nonpass):
         tty.print("Short test summary info", centered=True)
     if level > tty.VERBOSE and "masked" in totals:
-        for case in totals["masked"]:
+        for case in sorted(totals["masked"], key=lambda t: t.name):
             tty.print(cformat(case))
     if level > tty.INFO:
         for status in ("staged", "success"):
             if status in totals:
-                for case in totals[status]:
+                for case in sorted(totals[status], key=lambda t: t.name):
                     tty.print(cformat(case))
     for status in nonpass:
         if status in totals:
-            for case in totals[status]:
+            for case in sorted(totals[status], key=lambda t: t.name):
                 tty.print(cformat(case))
+
+    if durations is not None:
+        print_durations(cases, int(durations))
 
     summary_parts = []
     for member in Status.colors:
@@ -569,8 +570,21 @@ to the session.  %(pathspec)s can be one (or more) of the following types:
 
 - directory name:  the directory is recursively searched for test files ending in
   .vvt or .pyt (specific file extensions are configurable);
-- json or yaml file: file containing specific paths to tests and/or directories; and
-- .vvt or .pyt file: specific test files.
+- .vvt or .pyt file: specific test files; and
+- json or yaml file: file containing specific paths to tests and/or directories.
+
+The json input file has the following schema:
+
+{
+  "testpaths": [
+    {
+      "root": str,
+      "paths": list_of_str
+    }
+  ]
+}
+
+where %(paths)s is a list of file paths relative to %(root)s.
 
 For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests to rerun.
 %(pathspec)s can be one (or more) of the following types:
@@ -587,6 +601,8 @@ For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests t
             "pathspec": bold("pathspec"),
             "id": bold("/ID"),
             "batch_no": bold("^BATCH_NO"),
+            "paths": bold("paths"),
+            "root": bold("root"),
         }
         print(pathspec_help)
 
