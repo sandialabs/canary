@@ -86,7 +86,7 @@ def find(args: "argparse.Namespace") -> int:
         on_options=args.on_options,
         owners=None if not args.owners else set(args.owners),
     )
-    cases_to_run = [case for case in cases if case.status == "pending"]
+    cases_to_run = [case for case in cases if not case.masked]
     if not args.no_header:
         print_testcase_summary(args, cases)
     if args.keywords:
@@ -159,7 +159,7 @@ def print_front_matter(args: "argparse.Namespace"):
     p = config.get("system:platform")
     v = config.get("python:version")
     tty.print(f"{p} -- Python {v}")
-    tty.print(f"Available of cpus: {avail_cpus}")
+    tty.print(f"Available cpus: {avail_cpus}")
     tty.print(f"Available cpus per test: {avail_cpus_per_test}")
     tty.print(f"rootdir: {os.getcwd()}")
 
@@ -168,7 +168,7 @@ def print_testcase_summary(args: "argparse.Namespace", cases: "list[TestCase]") 
     files = {case.file for case in cases}
     t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
     print(colorize(t))
-    cases_to_run = [case for case in cases if case.status == "pending"]
+    cases_to_run = [case for case in cases if not case.masked]
     max_workers = args.workers_per_session or config.get("machine:cpu_count")
     files = {case.file for case in cases_to_run}
     fmt = "@*g{running} %d test cases from %d files with %s workers"
