@@ -5,6 +5,7 @@ import re
 import sys
 import tokenize
 import typing
+from functools import wraps
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -393,6 +394,18 @@ def safe_eval(expression: str) -> object:
     return eval(expression, globals, {})
 
 
+def cached(func):
+    cache = {}
+
+    @wraps(func)
+    def inner(expression, *args, **kwargs):
+        if expression not in cache:
+            cache[expression] = func(expression, *args, **kwargs)
+        return cache[expression]
+
+    return inner
+
+
 def evaluate_boolean_expression(expression: str) -> Union[bool, None]:
     try:
         result = safe_eval(expression)
@@ -401,6 +414,7 @@ def evaluate_boolean_expression(expression: str) -> Union[bool, None]:
     return bool(result)
 
 
+@cached
 def parse_skipif(expression: str, **options: dict[str, str]) -> tuple[bool, str]:
     skip = evaluate_boolean_expression(expression)
     if skip is None:

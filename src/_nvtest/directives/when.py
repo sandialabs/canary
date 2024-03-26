@@ -23,6 +23,8 @@ class When:
     def __init__(self, input: Union[None, bool, str]) -> None:
         if input is not None and not isinstance(input, (bool, str)):
             raise ValueError("expected input to be None, bool, or str")
+        if isinstance(input, str) and not input:
+            input = None
         self.input = input
 
     def __repr__(self):
@@ -140,6 +142,9 @@ class CompositeExpression:
     @classmethod
     def parse(cls, input: str) -> "CompositeExpression":
         """[testname=expr] [parameters=expr] [options=expr] [keywords=expr]"""
+        if input in _composite_expression_cache:
+            return _composite_expression_cache[input]
+
         name_map = dict(
             option="options",
             parameter="parameters",
@@ -199,7 +204,11 @@ class CompositeExpression:
                 except ValueError:
                     raise InvalidSyntax(token, msg=f"invalid {name} expression")
 
+        _composite_expression_cache[input] = self
         return self
+
+
+_composite_expression_cache: dict[str, CompositeExpression] = {}
 
 
 @dataclasses.dataclass
@@ -317,6 +326,10 @@ class InvalidSyntax(SyntaxError):
         end = token.end[1]
         details = ("<expr>", 1, start + 7, line, 1, end + 7)
         super().__init__(msg or "invalid syntax", details)
+
+
+class InvalidExpression(Exception):
+    pass
 
 
 class UsageError(Exception):

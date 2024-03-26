@@ -162,6 +162,7 @@ class Config:
                 },
             }
         }
+        self._cache: dict[tuple[str, Optional[str]], Any] = {}
         file = self.config_file("global")
         if file is not None and os.path.exists(file):
             self.load_config(file, "global")
@@ -305,19 +306,21 @@ class Config:
         """
         self.validate_section_name(section)
         cfg_scopes: list[dict[str, Any]]
+        cache_key = (section, scope)
+        if cache_key in self._cache:
+            return self._cache[cache_key]
         if scope is None:
             cfg_scopes = list(self.scopes.values())
         else:
             cfg_scopes = [self.validate_scope(scope)]
-        merged_section: dict[str, Any] = {}
+        merged: dict[str, Any] = {}
         for cfg_scope in cfg_scopes:
             data = cfg_scope.get(section)
             if not data or not isinstance(data, dict):
                 continue
-            merged_section = _merge(merged_section, {section: data})
-        if section not in merged_section:
-            return {}
-        return merged_section[section]
+            merged = _merge(merged, {section: data})
+        self._cache[cache_key] = {} if section not in merged else merged[section]
+        return self._cache[cache_key]
 
     def get(
         self, path: str, default: Optional[Any] = None, scope: Optional[str] = None
@@ -422,6 +425,12 @@ class Config:
         new = _merge(existing, value)
         self.set(path, new, scope=scope)
 
+    def invalidate_cache(self, section):
+        keys = list(self._cache.keys())
+        for key in keys:
+            if key[0] == section:
+                self._cache.pop(key)
+
     def update_config(self, section, update_data, scope=None):
         """Update the configuration file for a particular scope.
 
@@ -443,6 +452,7 @@ class Config:
         self.validate_section_name(section)
         scope_data = self.validate_scope(scope)
         scope_data[section] = update_data
+        self.invalidate_cache(section)
 
     def describe(self, section: Optional[str] = None) -> str:
         if section is not None:
