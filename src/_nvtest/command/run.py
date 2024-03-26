@@ -135,10 +135,12 @@ class SchedulerOptions(argparse.Action):
     def split_on_comma(string: str) -> list[str]:
         if not string:
             return []
+        single_quote = "'"
+        double_quote = '"'
         args: list[str] = []
-        quoted = False
         tokens = iter(string[1:] if string[0] == "," else string)
         arg = ""
+        quoted = None
         while True:
             try:
                 token = next(tokens)
@@ -150,9 +152,14 @@ class SchedulerOptions(argparse.Action):
                 arg = ""
                 continue
             else:
-                arg = f"{arg}{token}"
-            if token in ("'", '"'):
-                quoted = not quoted
+                arg += token
+            if token in (single_quote, double_quote):
+                if quoted is None:
+                    # starting a quoted string
+                    quoted = token
+                elif token == quoted:
+                    # ending a quoted string
+                    quoted = None
         return args
 
 

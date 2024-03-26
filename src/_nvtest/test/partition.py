@@ -89,7 +89,7 @@ def partition_n(cases, n=8) -> list[Partition]:
     for group in groups:
         partition = min(partitions, key=lambda p: p.cputime)
         partition.update(group)
-    return [Partition(p, i, n) for i, p in enumerate(partitions)]
+    return [Partition(p, i, n) for i, p in enumerate(partitions) if p.size]
 
 
 def partition_t(cases, t=60 * 30) -> list[Partition]:
