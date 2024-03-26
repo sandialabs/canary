@@ -4,9 +4,11 @@ import os
 import re
 import sys
 import time
+from contextlib import contextmanager
 from copy import deepcopy
 from string import Template
 from typing import Any
+from typing import Generator
 from typing import Optional
 from typing import Union
 
@@ -14,7 +16,6 @@ from .. import config
 from ..util import filesystem as fs
 from ..util import tty
 from ..util.compression import compress_file
-from ..util.environ import tmp_environ
 from ..util.executable import Executable
 from ..util.filesystem import copyfile
 from ..util.filesystem import mkdirp
@@ -333,10 +334,20 @@ class TestCase:
         with open(file) as fh:
             return json.load(fh)
 
-    def rc_environ(self) -> dict[str, str]:
-        env = dict(PYTHONPATH=self.pythonpath)
-        env.update(self.variables)
-        return env
+    @contextmanager
+    def rc_environ(self) -> Generator[None, None, None]:
+        save_env: dict[str, Optional[str]] = {}
+        variables = dict(PYTHONPATH=self.pythonpath)
+        variables.update(self.variables)
+        for var, val in variables.items():
+            save_env[var] = os.environ.pop(var, None)
+            os.environ[var] = val
+        yield
+        for var, save_val in save_env.items():
+            if save_val is not None:
+                os.environ[var] = save_val
+            else:
+                os.environ.pop(var)
 
     @classmethod
     def from_dict(cls, kwds) -> "TestCase":
@@ -429,17 +440,22 @@ class TestCase:
             if self.file_type == "vvt":
                 self.write_vvtest_util(baseline=True)
             for arg in self.baseline:
-                if isinstance(arg, tuple):
+                if isinstance(arg, str):
+                    if os.path.exists(arg):
+                        args = []
+                        exe = Executable(arg)
+                    else:
+                        args = [os.path.basename(self.file), arg]
+                        exe = Executable(sys.executable)
+                    with self.rc_environ():
+                        exe(*args, fail_on_error=False)
+                else:
                     a, b = arg
                     src = os.path.join(self.exec_dir, a)
                     dst = os.path.join(self.file_dir, b)
                     if os.path.exists(src):
                         tty.print(f"    Replacing {b} with {a}")
                         copyfile(src, dst)
-                else:
-                    python = Executable(sys.executable)
-                    args = [os.path.basename(self.file), self.baseline]
-                    python(*args, fail_on_error=False)
 
     def write_vvtest_util(self, baseline: bool = False) -> None:
         from _nvtest.compat.vvtest import write_vvtest_util
@@ -492,10 +508,9 @@ class TestCase:
             with tty.log_output(self.logfile(stage), mode="w"):
                 with tty.timestamps():
                     args = self.command_line_args(**kwds)
-                    env = self.rc_environ()
                     tty.info(f"Running {self.display_name}")
                     tty.info(f"Command line: {sys.executable} {' '.join(args)}")
-                    with tmp_environ(**env):
+                    with self.rc_environ():
                         python(*args, fail_on_error=False, timeout=self.timeout)
                     self._process = None
                     self.cmd_line = python.cmd_line
