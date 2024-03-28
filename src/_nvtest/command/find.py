@@ -69,8 +69,6 @@ def setup_parser(parser: "Parser"):
 
 def find(args: "argparse.Namespace") -> int:
     set_default_resource_args(args)
-    if not args.no_header:
-        print_front_matter(args)
     finder = Finder()
     search_paths = args.search_paths or [os.getcwd()]
     for path in search_paths:
@@ -151,17 +149,6 @@ def _print(cases_to_run: "list[TestCase]"):
         tty.emit(cols + "\n")
         summary = f"found {len(lines)} test cases\n"
         tty.emit(summary)
-
-
-def print_front_matter(args: "argparse.Namespace"):
-    avail_cpus = args.cpus_per_session or config.get("machine:cpu_count")
-    avail_cpus_per_test = args.cpus_per_test or avail_cpus
-    p = config.get("system:platform")
-    v = config.get("python:version")
-    tty.print(f"{p} -- Python {v}")
-    tty.print(f"Available cpus: {avail_cpus}")
-    tty.print(f"Available cpus per test: {avail_cpus_per_test}")
-    tty.print(f"rootdir: {os.getcwd()}")
 
 
 def print_testcase_summary(args: "argparse.Namespace", cases: "list[TestCase]") -> None:

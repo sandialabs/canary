@@ -11,151 +11,56 @@ from typing import AbstractSet
 from typing import Any
 from typing import Iterator
 from typing import Optional
+from typing import Type
 from typing import Union
 
 from ..util.tty.color import colorize
 from .expression import Expression
-from .expression import ParseError
 from .p_expression import ParameterExpression
 
 
 class When:
-    def __init__(self, input: Union[None, bool, str]) -> None:
-        if input is not None and not isinstance(input, (bool, str)):
-            raise ValueError("expected input to be None, bool, or str")
-        if isinstance(input, str) and not input:
-            input = None
-        self.input = input
-
-    def __repr__(self):
-        items = (f"{k}={v!r}" for k, v in self.__dict__.items())
-        return "{}({})".format(type(self).__name__, ", ".join(items))
-
-    def evaluate(
-        self,
-        testname: Optional[str] = None,
-        keywords: Optional[list[str]] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
-    ):
-        result = namedtuple("result", "value, reason")
-        if self.input is None:
-            return result(True, None)
-        elif self.input is True:
-            return result(True, None)
-        elif self.input is False:
-            return result(False, "when=False")
-
-        kwds: dict[str, Any] = {}
-        if testname is not None:
-            kwds["testname"] = kwds["name"] = None
-        if parameters is not None:
-            kwds.update(parameters)
-        for key in list(kwds.keys()):
-            kwds[key.upper()] = kwds[key]
-        string = safe_substitute(self.input, **kwds)
-        expression = CompositeExpression.parse(string)
-
-        a = colorize('@*b{when="%s"}' % string)
-        b = colorize("@*r{False}")
-        value, expr_type = expression(
-            testname=testname,
-            on_options=on_options,
-            keywords=keywords,
-            parameters=parameters,
-        )
-        if value is True:
-            return result(True, None)
-
-        reason: str
-        fmt = f"{a} evaluated to {b} for {expr_type}={{s}}"
-        if expr_type == "testname":
-            reason = fmt.format(s=testname)
-        elif expr_type == "options":
-            reason = fmt.format(s=json.dumps(on_options))
-        elif expr_type == "keywords":
-            reason = fmt.format(s=json.dumps(keywords))
-        elif expr_type == "parameters":
-            reason = fmt.format(s=json.dumps(parameters))
-        elif expr_type == "platforms":
-            reason = fmt.format(s=",".join(PlatformMatcher().own_platform_names))
-        else:
-            raise ValueError(f"Unknown expr_type {expr_type!r}, should never get here")
-
-        return result(value, reason)
-
-
-class CompositeExpression:
-    attrs = ("options", "keywords", "parameters", "testname", "platforms")
-
-    def __init__(self, *, __x=False) -> None:
-        if not __x:
-            raise ValueError(
-                "CompositeExpression must be initialized through factory methods"
-            )
-
-    def __call__(
+    def __init__(
         self,
         *,
+        options: Optional[str] = None,
+        keywords: Optional[str] = None,
+        parameters: Optional[str] = None,
         testname: Optional[str] = None,
-        keywords: Optional[list[str]] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
-    ) -> tuple[bool, str]:
-        expr: Union[Expression, ParameterExpression, None]
-
-        expr = getattr(self, "platforms", None)
-        if expr is not None:
-            if not expr.evaluate(PlatformMatcher()):
-                return False, "platforms"
-
-        expr = getattr(self, "testname", None)
-        if expr is not None:
-            if testname is None:
-                return False, "testname"
-            if not expr.evaluate(NameMatcher({testname})):
-                return False, "testname"
-
-        expr = getattr(self, "options", None)
-        if expr is not None:
-            if on_options is None:
-                return False, "options"
-            if not expr.evaluate(OptionMatcher(set(on_options))):
-                return False, "options"
-
-        expr = getattr(self, "keywords", None)
-        if expr is not None:
-            if keywords is None:
-                return False, "keywords"
-            if not expr.evaluate(AnyMatcher(set(keywords))):
-                return False, "keywords"
-
-        expr = getattr(self, "parameters", None)
-        if expr is not None:
-            if parameters is None:
-                return False, "parameters"
-            if not expr.evaluate(parameters):
-                return False, "parameters"
-
-        return True, ""
+        platforms: Optional[str] = None,
+    ):
+        self.option_expr = options
+        self.keyword_expr = keywords
+        self.parameter_expr = parameters
+        self.testname_expr = testname
+        self.platform_expr = platforms
 
     @classmethod
-    def parse(cls, input: str) -> "CompositeExpression":
-        """[testname=expr] [parameters=expr] [options=expr] [keywords=expr]"""
-        if input in _composite_expression_cache:
-            return _composite_expression_cache[input]
+    def from_string(cls: "Type[When]", input: Optional[str]) -> "When":
+        """Parse expression, such as
 
-        name_map = dict(
-            option="options",
-            parameter="parameters",
-            platform="platforms",
-            name="testname",
-        )
-        self = cls(_CompositeExpression__x=True)  # type: ignore
-        setattr(self, "string", input)
+        ``when="options='not dbg' keywords='fast and regression'"``
+
+        and return {"options": "not dbg", "keywords": "fast and regression"}
+
+        """
+        attrs = ("options", "keywords", "parameters", "testname", "platforms")
+        name_map = {
+            "option": "options",
+            "parameter": "parameters",
+            "platform": "platforms",
+            "name": "testname",
+        }
+        if input in _when_cache:
+            return _when_cache[input]
+        elif input is None:
+            self = cls()
+            _when_cache[None] = self
+            return self
         if not isinstance(input, str):
             raise TypeError("Expected input to be None, bool, or str")
         tokens = get_tokens(input)
+        expressions: dict[str, str] = {}
         while True:
             try:
                 token = next(tokens)
@@ -171,9 +76,9 @@ class CompositeExpression:
                 raise InvalidSyntax(token)
 
             name = name_map.get(token.string, token.string)
-            if name not in self.attrs:
+            if name not in attrs:
                 raise TypeError(f"when: got an unexpected keyword argument {name!r}")
-            if hasattr(self, name):
+            if name in expressions:
                 raise InvalidSyntax(token, msg=f"keyword argument repeated: {name}")
 
             try:
@@ -193,22 +98,139 @@ class CompositeExpression:
                 raise InvalidSyntax(token)
 
             value = remove_surrounding_quotes(token.string)
-            if name in ("testname", "options", "keywords", "platforms"):
-                try:
-                    setattr(self, name, Expression.compile(value, allow_wildcards=True))
-                except ParseError:
-                    raise InvalidSyntax(token, msg=f"invalid {name} expression")
-            else:
-                try:
-                    setattr(self, name, ParameterExpression(value))
-                except ValueError:
-                    raise InvalidSyntax(token, msg=f"invalid {name} expression")
+            if name in ("testname", "options", "keywords", "platforms", "parameters"):
+                expressions[name] = value
 
-        _composite_expression_cache[input] = self
+        self = cls(**expressions)
+        _when_cache[input] = self
         return self
 
+    def evaluate_platform_expression(self, **kwds: str) -> Optional[str]:
+        assert self.platform_expr is not None
+        string = safe_substitute(self.platform_expr, **kwds)
+        string = remove_surrounding_quotes(string)
+        expr = Expression.compile(string, allow_wildcards=True)
+        if not expr.evaluate(PlatformMatcher()):
+            fmt = "@*{{platforms={0}}} evaluated to @*r{{False}} for platforms={1}"
+            input = ",".join(PlatformMatcher().own_platform_names)
+            reason = colorize(fmt.format(expr.string, input))
+            return reason
+        return None
 
-_composite_expression_cache: dict[str, CompositeExpression] = {}
+    def evaluate_testname_expression(
+        self, testname_arg: Union[str, None], **kwds: str
+    ) -> Optional[str]:
+        assert self.testname_expr is not None
+        if testname_arg is None:
+            fmt = "@*{{testname={0}}} evaluated to @*r{{False}} for testname=None"
+            reason = colorize(fmt.format(self.testname_expr))
+            return reason
+        string = safe_substitute(self.testname_expr, **kwds)
+        string = remove_surrounding_quotes(string)
+        expr = Expression.compile(string, allow_wildcards=True)
+        if not expr.evaluate(NameMatcher({testname_arg})):
+            fmt = "@*{{testname={0}}} evaluated to @*r{{False}} for testname={1}"
+            reason = colorize(fmt.format(expr.string, testname_arg))
+            return reason
+        return None
+
+    def evaluate_option_expression(
+        self, options_arg: Union[list[str], None], **kwds: str
+    ) -> Optional[str]:
+        assert self.option_expr is not None
+        if options_arg is None:
+            fmt = "@*{{options={0}}} evaluated to @*r{{False}} for options=None"
+            reason = colorize(fmt.format(self.option_expr))
+            return reason
+        string = safe_substitute(self.option_expr, **kwds)
+        string = remove_surrounding_quotes(string)
+        expr = Expression.compile(string, allow_wildcards=True)
+        if not expr.evaluate(OptionMatcher(set(options_arg))):
+            fmt = "@*{{options={0}}} evaluated to @*r{{False}} for options={1}"
+            reason = colorize(fmt.format(expr.string, json.dumps(options_arg)))
+            return reason
+        return None
+
+    def evaluate_keyword_expression(
+        self, keywords_arg: Union[list[str], None], **kwds: str
+    ) -> Optional[str]:
+        assert self.keyword_expr is not None
+        if keywords_arg is None:
+            fmt = "@*{{keywords={0}}} evaluated to @*r{{False}} for keywords=None"
+            reason = colorize(fmt.format(self.keyword_expr))
+            return reason
+        string = safe_substitute(self.keyword_expr, **kwds)
+        string = remove_surrounding_quotes(string)
+        expr = Expression.compile(string, allow_wildcards=True)
+        if not expr.evaluate(AnyMatcher(set(keywords_arg))):
+            fmt = "@*{{keywords={0}}} evaluated to @*r{{False}} for keywords={1}"
+            reason = colorize(fmt.format(expr.string, json.dumps(keywords_arg)))
+            return reason
+        return None
+
+    def evaluate_parameter_expression(
+        self, parameters_arg: Union[dict[str, Any], None], **kwds: str
+    ) -> Optional[str]:
+        assert self.parameter_expr is not None
+        if parameters_arg is None:
+            fmt = "@*{{parameters={0}}} evaluated to @*r{{False}} for parameters=None"
+            reason = colorize(fmt.format(self.parameter_expr))
+            return reason
+        string = safe_substitute(self.parameter_expr, **kwds)
+        string = remove_surrounding_quotes(string)
+        expr = ParameterExpression(string)
+        if not expr.evaluate(parameters_arg):
+            fmt = "@*{{parameters={0}}} evaluated to @*r{{False}} for parameters={1}"
+            reason = colorize(fmt.format(expr.string, json.dumps(parameters_arg)))
+            return reason
+        return None
+
+    def evaluate(
+        self,
+        *,
+        testname: Optional[str] = None,
+        keywords: Optional[list[str]] = None,
+        on_options: Optional[list[str]] = None,
+        parameters: Optional[dict[str, Any]] = None,
+    ):
+        result = namedtuple("result", "value, reason")
+        kwds: dict[str, Any] = {}
+        if testname is not None:
+            kwds["testname"] = kwds["name"] = None
+        if parameters is not None:
+            kwds.update(parameters)
+        for key in list(kwds.keys()):
+            kwds[key.upper()] = kwds[key]
+
+        if self.platform_expr is not None:
+            reason = self.evaluate_platform_expression(**kwds)
+            if reason is not None:
+                return result(False, reason)
+
+        if self.testname_expr is not None:
+            reason = self.evaluate_testname_expression(testname, **kwds)
+            if reason is not None:
+                return result(False, reason)
+
+        if self.option_expr is not None:
+            reason = self.evaluate_option_expression(on_options, **kwds)
+            if reason is not None:
+                return result(False, reason)
+
+        if self.keyword_expr is not None:
+            reason = self.evaluate_keyword_expression(keywords, **kwds)
+            if reason is not None:
+                return result(False, reason)
+
+        if self.parameter_expr is not None:
+            reason = self.evaluate_parameter_expression(parameters, **kwds)
+            if reason is not None:
+                return result(False, reason)
+
+        return result(True, None)
+
+
+_when_cache: dict[Union[None, str], When] = {}
 
 
 @dataclasses.dataclass
@@ -300,7 +322,7 @@ def remove_surrounding_quotes(arg: str) -> str:
 
 
 def when(
-    input: Union[str, bool],
+    input: Union[str, bool, dict],
     keywords: Optional[list[str]] = None,
     parameters: Optional[dict[str, Any]] = None,
     testname: Optional[str] = None,
@@ -308,8 +330,12 @@ def when(
 ) -> bool:
     if isinstance(input, bool):
         return input
-    assert isinstance(input, str)
-    expression = When(input)
+    expression: When
+    assert isinstance(input, (str, dict))
+    if isinstance(input, dict):
+        expression = When(**input)
+    else:
+        expression = When.from_string(input)
     result = expression.evaluate(
         keywords=keywords,
         parameters=parameters,

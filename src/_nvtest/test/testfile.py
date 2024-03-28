@@ -166,7 +166,7 @@ class FilterNamespace:
         self,
         value: Any,
         *,
-        when: Optional[Union[str, bool]] = None,
+        when: Optional[str] = None,
         expect: Optional[int] = None,
         result: Optional[str] = None,
         action: Optional[str] = None,
@@ -174,7 +174,7 @@ class FilterNamespace:
         import _nvtest.directives
 
         self.value: Any = value
-        self.when = _nvtest.directives.When(when)
+        self.when = _nvtest.directives.When.from_string(when)
         self.expect = expect
         self.result = result
         self.action = action
@@ -511,7 +511,8 @@ class AbstractTestFile:
             if ns.value is True and not result.value:
                 return False, result.reason
             elif ns.value is False and result.value:
-                return False, result.reason
+                reason = result.reason or colorize("enable=@*r{False}")
+                return False, reason
         return True, None
 
     def baseline(
