@@ -15,7 +15,7 @@ test-job:
   - /projects/alegranevada/opt/cee/linux_rh7/python/3.9/bin/python -m venv venv
   - source venv/bin/activate
   - python -m pip install -e .[dev]
-  - pytest src/_nvtest/tests
+  - pytest ./tests
   - deactivate
   rules:
   - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
