@@ -246,7 +246,7 @@ import pytest
 
 f1 = fs.which("gcc") or os.getenv("CC")
 f2 = fs.which("cmake")
-nvf = str(importlib.resources.files("_nvtest").joinpath("../../tools/NVTest.cmake"))
+nvf = str(importlib.resources.files("_nvtest").joinpath("../nvtest/tools/NVTest.cmake"))
 good = f1 is not None and f2 is not None and os.path.exists(nvf)
 
 
