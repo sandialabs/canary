@@ -5,7 +5,6 @@ import json
 import os
 import sys
 import tokenize
-from collections import namedtuple
 from string import Template
 from typing import AbstractSet
 from typing import Any
@@ -17,6 +16,14 @@ from typing import Union
 from ..util.tty.color import colorize
 from .expression import Expression
 from .p_expression import ParameterExpression
+
+
+class WhenResult:
+    __slots__ = ("value", "reason")
+
+    def __init__(self, value: bool, reason: Union[str, None]):
+        self.value = value
+        self.reason = reason
 
 
 class When:
@@ -192,8 +199,7 @@ class When:
         keywords: Optional[list[str]] = None,
         on_options: Optional[list[str]] = None,
         parameters: Optional[dict[str, Any]] = None,
-    ):
-        result = namedtuple("result", "value, reason")
+    ) -> WhenResult:
         kwds: dict[str, Any] = {}
         if testname is not None:
             kwds["testname"] = kwds["name"] = None
@@ -205,29 +211,29 @@ class When:
         if self.platform_expr is not None:
             reason = self.evaluate_platform_expression(**kwds)
             if reason is not None:
-                return result(False, reason)
+                return WhenResult(False, reason)
 
         if self.testname_expr is not None:
             reason = self.evaluate_testname_expression(testname, **kwds)
             if reason is not None:
-                return result(False, reason)
+                return WhenResult(False, reason)
 
         if self.option_expr is not None:
             reason = self.evaluate_option_expression(on_options, **kwds)
             if reason is not None:
-                return result(False, reason)
+                return WhenResult(False, reason)
 
         if self.keyword_expr is not None:
             reason = self.evaluate_keyword_expression(keywords, **kwds)
             if reason is not None:
-                return result(False, reason)
+                return WhenResult(False, reason)
 
         if self.parameter_expr is not None:
             reason = self.evaluate_parameter_expression(parameters, **kwds)
             if reason is not None:
-                return result(False, reason)
+                return WhenResult(False, reason)
 
-        return result(True, None)
+        return WhenResult(True, None)
 
 
 _when_cache: dict[Union[None, str], When] = {}

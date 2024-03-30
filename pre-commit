@@ -6,12 +6,14 @@ ROOT_DIR=$( cd -- "$( dirname -- "${SCRIPT_DIR}" )" &> /dev/null && pwd )
 echo "Formatting code with ruff"
 ruff check --fix ./src
 ruff format ./src
+ruff check --fix ./tests
+ruff format ./tests
 
 echo "Type checking with mypy"
 mypy ./src
 
 (
-  cd src/_nvtest/tests
+  cd tests
   pytest .
 )
 

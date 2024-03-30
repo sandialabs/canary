@@ -13,7 +13,7 @@ from .util import tty
 
 
 class Finder:
-    skip_dirs = ["__pycache__", ".git", ".svn", ".nvtest"]
+    skip_dirs = ["__nvcache__", "__pycache__", ".git", ".svn", ".nvtest"]
     version_info = (1, 0, 3)
 
     def __init__(self) -> None:
@@ -50,7 +50,7 @@ class Finder:
         for root, paths in self.roots.items():
             tty.verbose(f"Searching {root} for test files")
             if os.path.isfile(root):
-                f = AbstractTestFile(root)
+                f = AbstractTestFile.factory(root)
                 root = f.root
                 testfiles = self.tree.setdefault(root, set())
                 testfiles.add(f)
@@ -59,7 +59,7 @@ class Finder:
                 for path in paths:
                     p = os.path.join(root, path)
                     if os.path.isfile(p):
-                        testfiles.add(AbstractTestFile(root, path))
+                        testfiles.add(AbstractTestFile.factory(root, path))
                     elif os.path.isdir(p):
                         testfiles.update(self.rfind(root, subdir=path))
                     else:
@@ -95,7 +95,7 @@ class Finder:
                 for f in files
                 if is_test_file(f)
             ]
-            testfiles.extend([AbstractTestFile(root, path) for path in paths])
+            testfiles.extend([AbstractTestFile.factory(root, path) for path in paths])
         return testfiles
 
     @property
@@ -202,7 +202,8 @@ class Finder:
 
 
 def is_test_file(file):
-    file_pattern = config.get("config:test_files") or r"^[a-zA-Z_]\w*\.(vvt|pyt)$"
+    default_file_pattern = r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$"
+    file_pattern = config.get("config:test_files") or default_file_pattern
     return bool(re.search(file_pattern, os.path.basename(file)))
 
 

@@ -1,6 +1,5 @@
 import argparse
 import os
-import pstats
 import signal
 import sys
 import traceback
@@ -12,7 +11,6 @@ from . import plugin
 from .command import add_all_commands
 from .command import get_command
 from .config.argparsing import make_argument_parser
-from .config.argparsing import stat_names
 from .error import StopExecution
 from .util import tty
 
@@ -73,9 +71,39 @@ def invoke_command(command: FunctionType, args: argparse.Namespace) -> int:
     return command(args)
 
 
-def _profile_wrapper(command, args):
-    import cProfile
+class Profiler:
+    def __init__(self, nlines: int = -1):
+        self.nlines = nlines
+        try:
+            import pyinstrument
 
+            self.profiler = pyinstrument.Profiler()
+            self.type = 1
+        except ImportError:
+            import cProfile
+
+            self.profiler = cProfile.Profile()
+            self.type = 2
+
+    def __enter__(self):
+        if self.type == 1:
+            self.profiler.start()
+        else:
+            self.profiler.enable()
+
+    def __exit__(self, *args):
+        if self.type == 1:
+            self.profiler.stop()
+            self.profiler.print()
+        else:
+            import pstats
+
+            self.profiler.disable()
+            stats = pstats.Stats(self.profiler)
+            stats.print_stats(self.nlines)
+
+
+def _profile_wrapper(command, args):
     try:
         nlines = int(args.lines)
     except ValueError:
@@ -83,27 +111,9 @@ def _profile_wrapper(command, args):
             tty.die("Invalid number for --lines: %s" % args.lines)
         nlines = -1
 
-    # allow comma-separated list of fields
-    sortby = ["time"]
-    if args.sorted_profile:
-        sortby = args.sorted_profile.split(",")
-        for stat in sortby:
-            if stat not in stat_names:
-                tty.die("Invalid sort field: %s" % stat)
-
-    try:
-        # make a profiler and run the code.
-        pr = cProfile.Profile()
-        pr.enable()
-        return invoke_command(command, args)
-
-    finally:
-        pr.disable()
-
-        # print out profile stats.
-        stats = pstats.Stats(pr)
-        stats.sort_stats(*sortby)
-        stats.print_stats(nlines)
+    with Profiler(nlines=nlines):
+        rc = invoke_command(command, args)
+    return rc
 
 
 def load_plugins(dirs: Optional[list[str]] = None) -> None:

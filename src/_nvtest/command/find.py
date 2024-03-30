@@ -85,7 +85,7 @@ def find(args: "argparse.Namespace") -> int:
         owners=None if not args.owners else set(args.owners),
     )
     cases_to_run = [case for case in cases if not case.masked]
-    if not args.no_header:
+    if not args.files and not args.no_header:
         print_testcase_summary(args, cases)
     if args.keywords:
         _print_keywords(cases_to_run)
@@ -113,11 +113,8 @@ def _print_paths(cases_to_run: "list[TestCase]"):
 
 
 def _print_files(cases_to_run: "list[TestCase]"):
-    unique_files: set[str] = set()
-    for case in cases_to_run:
-        unique_files.add(case.file)
-    for file in sorted(unique_files):
-        tty.emit(file + "\n")
+    for file in sorted(set([case.file for case in cases_to_run])):
+        tty.emit(os.path.relpath(file, os.getcwd()) + "\n")
 
 
 def _print_keywords(cases_to_run: "list[TestCase]"):

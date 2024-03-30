@@ -2,7 +2,6 @@ import argparse
 import os
 
 import _nvtest.directives
-import _nvtest.tests.howto
 
 from ..config.argparsing import make_argument_parser
 from ..third_party import argparsewriter as aw
@@ -72,13 +71,17 @@ def howto(dest):
         fh.write(".. _howto-guides:\n\n")
         fh.write("How-to guides\n=============\n\n")
         fh.write(".. toctree::\n   :maxdepth: 1\n\n")
-        for file in os.listdir(os.path.dirname(_nvtest.tests.howto.__file__)):
+        root = os.path.dirname(_nvtest.__file__)
+        tests = os.path.join(root, "../../tests")
+        howto = os.path.join(tests, "howto")
+        assert os.path.exists(os.path.join(howto, "__init__.py"))
+        for file in os.listdir(howto):
             if not file.startswith("_") and file.endswith(".py"):
                 name = os.path.splitext(os.path.basename(file))[0]
                 fh.write(f"   {name}\n")
                 with open(os.path.join(dest, f"{name}.rst"), "w") as fp:
                     fp.write(f".. _howto-{name.replace('_', '-')}:\n\n")
-                    fp.write(f".. automodule:: _nvtest.tests.howto.{name}\n")
+                    fp.write(f".. automodule:: howto.{name}\n")
 
 
 def autodoc(args: argparse.Namespace) -> int:

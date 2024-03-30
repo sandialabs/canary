@@ -1,3 +1,4 @@
+import importlib
 import io
 import json
 import os
@@ -92,17 +93,12 @@ def parse_vvt_directive(directive: str) -> SimpleNamespace:
     )
 
 
-def parse_vvt_directives(code: str) -> tuple[list[SimpleNamespace], int]:
+def parse_vvt(filename: Union[Path, str]) -> tuple[list[SimpleNamespace], int]:
     commands: list[SimpleNamespace] = []
-    comments, line_no = collect_vvt_comments(code)
+    comments, line_no = collect_vvt_comments(filename)
     for vvt_comment in comments:
         ns = parse_vvt_directive(vvt_comment)
         commands.append(ns)
-    return commands, line_no
-
-
-def parse_vvt(filename: Union[Path, str]) -> tuple[list[SimpleNamespace], int]:
-    commands, line_no = parse_vvt_directives(open(filename).read())
     return commands, line_no
 
 
@@ -143,8 +139,8 @@ def strip_vvt_prefix(string: str, continuation: bool = False) -> str:
     return regex.sub("", string).lstrip()
 
 
-def collect_vvt_comments(code: str) -> tuple[list[str], int]:
-    tokens = get_tokens(code)
+def collect_vvt_comments(filename: Union[Path, str]) -> tuple[list[str], int]:
+    tokens = tokenize.tokenize(open(filename, "rb").readline)
     non_code_token_nums = (
         tokenize.NL,
         tokenize.NEWLINE,
@@ -369,12 +365,8 @@ def f_depends_on(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
     file.m_depends_on(arg.argument.strip(), when=arg.when, **arg.options)
 
 
-def importable(module: str) -> bool:
-    try:
-        __import__(module)
-    except (ModuleNotFoundError, ImportError):
-        return False
-    return True
+def importable(module_name: str) -> bool:
+    return importlib.util.find_spec(module_name) is not None
 
 
 def loads(arg: str) -> Union[int, float, str]:
@@ -424,7 +416,7 @@ def parse_skipif(expression: str, **options: dict[str, str]) -> tuple[bool, str]
     reason = str(options.get("reason") or "")
     if not reason:
         reason = colorize(
-            "deselected because @*b{%s} evaluated to @*g{True}" % expression
+            "deselected due to @*b{skipif=%s} evaluating to @*g{True}" % expression
         )
     return True, reason
 

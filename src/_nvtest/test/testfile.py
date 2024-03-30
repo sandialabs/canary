@@ -142,23 +142,30 @@ import errno
 import fnmatch
 import glob
 import os
+import pickle
+import sys
 from string import Template
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
 from typing import Sequence
+from typing import Type
 from typing import Union
 
 from .. import config
 from ..parameter_set import ParameterSet
 from ..util import tty
-from ..util.filesystem import working_dir
+from ..util.filesystem import mkdirp
+from ..util.misc import boolean
 from ..util.time import time_in_seconds
 from ..util.tty.color import colorize
 from .testcase import TestCase
 
 if TYPE_CHECKING:
     import _nvtest.directives.enums
+
+
+WRITE_CACHE = boolean(os.getenv("NVTEST_WRITE_CACHE"))
 
 
 class FilterNamespace:
@@ -242,6 +249,38 @@ class AbstractTestFile:
     def __repr__(self):
         return self.path
 
+    @classmethod
+    def factory(
+        cls: "Type[AbstractTestFile]", root_arg: str, path_arg: Optional[str] = None
+    ) -> "AbstractTestFile":
+        if path_arg is None:
+            root, path = os.path.split(root_arg)
+        else:
+            root, path = root_arg, path_arg
+        file = os.path.join(root, path)
+        cache = cls.cache_from_source(file)
+        self: AbstractTestFile
+        if os.path.exists(cache) and os.path.getmtime(cache) >= os.path.getmtime(file):
+            self = pickle.load(open(cache, "rb"))
+        else:
+            self = AbstractTestFile(root_arg, path=path_arg)
+            if WRITE_CACHE:
+                try:
+                    mkdirp(os.path.dirname(cache))
+                    with open(cache, "wb") as fh:
+                        pickle.dump(self, fh)
+                except OSError:
+                    pass
+        return self
+
+    @staticmethod
+    def cache_from_source(path: str) -> str:
+        dirname, basename = os.path.split(path)
+        name, _ = os.path.splitext(basename)
+        return os.path.join(
+            dirname, "__nvcache__", f"{name}.{sys.implementation.cache_tag}.pickle"
+        )
+
     def load(self):
         if self.path.endswith(".vvt"):
             from _nvtest.compat.vvtest import load_vvt
@@ -278,7 +317,7 @@ class AbstractTestFile:
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         try:
-            return self._freeze(
+            cases = self._freeze(
                 avail_cpus=avail_cpus,
                 avail_devices=avail_devices,
                 keyword_expr=keyword_expr,
@@ -286,6 +325,7 @@ class AbstractTestFile:
                 parameter_expr=parameter_expr,
                 owners=owners,
             )
+            return cases
         except Exception as e:
             if tty.HAVE_DEBUG:
                 raise
@@ -511,7 +551,7 @@ class AbstractTestFile:
             if ns.value is True and not result.value:
                 return False, result.reason
             elif ns.value is False and result.value:
-                reason = result.reason or colorize("enable=@*r{False}")
+                reason = result.reason or colorize("@*{enable=False}")
                 return False, reason
         return True, None
 
@@ -557,24 +597,24 @@ class AbstractTestFile:
         for key in list(kwds.keys()):
             kwds[key.upper()] = kwds[key]
         sources: dict[str, list[tuple[str, str]]] = {}
-        with working_dir(os.path.join(self.root, os.path.dirname(self.path))):
-            for ns in self._sources:
-                assert isinstance(ns.action, str)
-                result = ns.when.evaluate(
-                    testname=testname, on_options=on_options, parameters=parameters
-                )
-                if not result.value:
-                    continue
-                src, dst = ns.value
-                src = self.safe_substitute(src, **kwds)
-                if dst is None:
-                    files = glob.glob(src)
-                    for file in files:
-                        dst = os.path.basename(file)
-                        sources.setdefault(ns.action, []).append((file, dst))
-                else:
-                    dst = self.safe_substitute(dst, **kwds)
-                    sources.setdefault(ns.action, []).append((src, dst))
+        dirname = os.path.join(self.root, os.path.dirname(self.path))
+        for ns in self._sources:
+            assert isinstance(ns.action, str)
+            result = ns.when.evaluate(
+                testname=testname, on_options=on_options, parameters=parameters
+            )
+            if not result.value:
+                continue
+            src, dst = ns.value
+            src = self.safe_substitute(src, **kwds)
+            if dst is None:
+                files = glob.glob(os.path.join(dirname, src))
+                for file in files:
+                    dst = os.path.basename(file)
+                    sources.setdefault(ns.action, []).append((file, dst))
+            else:
+                dst = self.safe_substitute(dst, **kwds)
+                sources.setdefault(ns.action, []).append((src, dst))
         return sources
 
     def depends_on(

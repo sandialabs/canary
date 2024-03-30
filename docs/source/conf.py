@@ -17,6 +17,9 @@ import sys
 
 docs_source_dir = os.path.abspath(".")
 sys.path.insert(0, os.path.abspath(os.path.join(docs_source_dir, '../../src')))
+tests_dir = os.path.abspath(os.path.join(docs_source_dir, '../../tests'))
+assert os.path.exists(tests_dir)
+sys.path.insert(0, tests_dir)
 
 
 # -- Project information -----------------------------------------------------
@@ -71,7 +74,7 @@ html_theme = 'alabaster'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = []
 
 html_theme_options = {
     "sidebar_collapse": True,

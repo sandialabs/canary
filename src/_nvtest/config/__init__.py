@@ -38,7 +38,7 @@ is
    [config]
    debug = false  # (bool)
    log_level = 2  # (int) [0, 4]
-   test_files = r"^[a-zA-Z_]\w*\.(pyt|vvt)$"  # regular expression for test file names
+   test_files = r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$" # regular expression for test file names
 
    [variables]
    var = value # (str) environment variables to set for the test session
@@ -150,7 +150,7 @@ class Config:
                 "config": {
                     "debug": False,
                     "log_level": 2,
-                    "test_files": r"^[a-zA-Z_]\w*\.(vvt|pyt)$",
+                    "test_files": r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$",
                 },
                 "machine": editable_machine_config,
                 "system": static_machine_config,
