@@ -1,4 +1,5 @@
 import fnmatch
+import multiprocessing
 import os
 import re
 from typing import Any
@@ -10,6 +11,8 @@ from .test.testcase import TestCase
 from .test.testfile import AbstractTestFile
 from .util import filesystem as fs
 from .util import tty
+
+default_file_pattern = r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$"
 
 
 class Finder:
@@ -74,8 +77,6 @@ class Finder:
         return self.tree
 
     def rfind(self, root: str, subdir: Optional[str] = None) -> list[AbstractTestFile]:
-        testfiles: list[AbstractTestFile] = []
-
         def skip_dir(dirname):
             if os.path.basename(dirname) in self.skip_dirs:
                 return True
@@ -85,17 +86,29 @@ class Finder:
                 return True
             return False
 
+        file_pattern = config.get("config:test_files") or default_file_pattern
         start = root if subdir is None else os.path.join(root, subdir)
+        paths: list[tuple[str, str]] = []
         for dirname, dirs, files in os.walk(start):
             if skip_dir(dirname):
                 del dirs[:]
                 continue
-            paths = [
-                os.path.relpath(os.path.join(dirname, f), root)
-                for f in files
-                if is_test_file(f)
-            ]
-            testfiles.extend([AbstractTestFile.factory(root, path) for path in paths])
+            paths.extend(
+                [
+                    (root, os.path.relpath(os.path.join(dirname, f), root))
+                    for f in files
+                    if _is_test_file(f, file_pattern)
+                ]
+            )
+        testfiles: list[AbstractTestFile]
+        # only pay the cost of mulitprocessing startup if there are enough
+        # files.  The 100 file count is not set in stone.
+        if len(paths) >= 100:
+            cpu_count: int = os.cpu_count() or 8
+            p = multiprocessing.Pool(processes=cpu_count)
+            testfiles = p.starmap(AbstractTestFile.factory, paths)
+        else:
+            testfiles = [AbstractTestFile.factory(r, p) for r, p in paths]
         return testfiles
 
     @property
@@ -201,9 +214,12 @@ class Finder:
         return cases
 
 
-def is_test_file(file):
-    default_file_pattern = r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$"
+def is_test_file(file: str) -> bool:
     file_pattern = config.get("config:test_files") or default_file_pattern
+    return _is_test_file(file, file_pattern)
+
+
+def _is_test_file(file: str, file_pattern: str) -> bool:
     return bool(re.search(file_pattern, os.path.basename(file)))
 
 
