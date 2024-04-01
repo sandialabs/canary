@@ -41,7 +41,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         command = parser.get_command(args.command)
 
         if args.nvtest_profile:
-            return _profile_wrapper(command, args)
+            return invoke_profiled_command(command, args)
         else:
             return invoke_command(command, args)
     finally:
@@ -103,7 +103,7 @@ class Profiler:
             stats.print_stats(self.nlines)
 
 
-def _profile_wrapper(command, args):
+def invoke_profiled_command(command, args):
     try:
         nlines = int(args.lines)
     except ValueError:

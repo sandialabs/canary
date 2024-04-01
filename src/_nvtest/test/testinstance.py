@@ -2,12 +2,28 @@ import dataclasses
 import json
 import os
 from types import SimpleNamespace
+from typing import Any
 from typing import Optional
 from typing import Type
 from typing import Union
 
 from .status import Status
 from .testcase import TestCase
+
+
+class Parameters(SimpleNamespace):
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, (Parameters, SimpleNamespace)):
+            return self == other
+        assert isinstance(other, dict)
+        if len(self.__dict__) != len(other):
+            return False
+        for key, value in other.items():
+            if key not in self.__dict__:
+                return False
+            if self.__dict__[key] != value:
+                return False
+        return True
 
 
 @dataclasses.dataclass(frozen=True)
@@ -21,7 +37,7 @@ class TestInstance:
     analyze: str
     family: str
     keywords: list[str]
-    parameters: SimpleNamespace
+    parameters: Parameters
     timeout: Union[None, int]
     runtime: Union[None, float, int]
     baseline: list[Union[str, tuple[str, str]]]
@@ -52,7 +68,7 @@ class TestInstance:
             family=case.family,
             analyze=case.analyze or "",
             keywords=case.keywords(),
-            parameters=SimpleNamespace(**case.parameters),
+            parameters=Parameters(**case.parameters),
             timeout=case.timeout,
             runtime=case.runtime,
             baseline=case.baseline,
@@ -82,3 +98,9 @@ class TestInstance:
             kwds = json.load(fh)
         case = TestCase.from_dict(kwds)
         return TestInstance.from_case(case)
+
+    def get_dependency(self, **params: Any) -> "Optional[TestInstance]":
+        for dep in self.dependencies:
+            if dep.parameters == params:
+                return dep
+        return None

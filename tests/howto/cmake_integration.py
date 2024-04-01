@@ -250,7 +250,7 @@ nvf = str(importlib.resources.files("_nvtest").joinpath("../nvtest/tools/NVTest.
 good = f1 is not None and f2 is not None and os.path.exists(nvf)
 
 
-@pytest.mark.skipif(not good, reason="Components not found on PATH")
+@pytest.mark.skipif(not good, reason="gcc and/or cmake not on PATH")
 def test_cmake_integration(tmpdir):
     from _nvtest.main import NVTestCommand
 
@@ -283,7 +283,7 @@ f3 = fs.which("mpirun")
 good = good and f3 is not None
 
 
-@pytest.mark.skipif(not good, reason="Components not found on PATH")
+@pytest.mark.skipif(not good, reason="gcc, cmake, and/or mpirun not found on PATH")
 def test_cmake_integration_parallel(tmpdir):
     mpi_home = os.path.dirname(os.path.dirname(f3))
     from _nvtest.main import NVTestCommand
@@ -313,7 +313,7 @@ f3 = fs.which("mpirun")
 good = good and f3 is not None
 
 
-@pytest.mark.skipif(not good, reason="Components not found on PATH")
+@pytest.mark.skipif(not good, reason="gcc, cmake, and/or mpirun not found on PATH")
 def test_cmake_integration_parallel_override(tmpdir):
     mpi_home = os.path.dirname(os.path.dirname(f3))
     with fs.working_dir(tmpdir.strpath, create=True):
