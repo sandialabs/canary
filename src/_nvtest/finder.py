@@ -13,6 +13,8 @@ from .util import filesystem as fs
 from .util import tty
 
 default_file_pattern = r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$"
+multiprocess_threshold = 100
+default_cpu_count = 8
 
 
 class Finder:
@@ -103,8 +105,8 @@ class Finder:
         testfiles: list[AbstractTestFile]
         # only pay the cost of mulitprocessing startup if there are enough
         # files.  The 100 file count is not set in stone.
-        if len(paths) >= 100:
-            cpu_count: int = os.cpu_count() or 8
+        if len(paths) >= multiprocess_threshold:
+            cpu_count: int = os.cpu_count() or default_cpu_count
             p = multiprocessing.Pool(processes=cpu_count)
             testfiles = p.starmap(AbstractTestFile.factory, paths)
         else:
@@ -181,17 +183,22 @@ class Finder:
             f"keywords={keyword_expr}",
             f"parameters={parameter_expr}",
         )
-        for abstract_files in tree.values():
-            for abstract_file in abstract_files:
-                concrete_test_cases = abstract_file.freeze(
-                    avail_cpus=avail_cpus_per_test,
-                    avail_devices=avail_devices_per_test,
-                    keyword_expr=keyword_expr,
-                    parameter_expr=parameter_expr,
-                    on_options=on_options,
-                    owners=owners,
-                )
-                cases.extend([case for case in concrete_test_cases if case])
+        kwds = dict(
+            avail_cpus=avail_cpus_per_test,
+            avail_devices=avail_devices_per_test,
+            keyword_expr=keyword_expr,
+            parameter_expr=parameter_expr,
+            on_options=on_options,
+            owners=owners,
+        )
+        args = [(f, kwds) for files in tree.values() for f in files]
+        concrete_test_groups: list[list[TestCase]]
+        if len(args) > multiprocess_threshold:
+            pool = multiprocessing.Pool(processes=os.cpu_count() or default_cpu_count)
+            concrete_test_groups = pool.starmap(freeze_abstract_file, args)
+        else:
+            concrete_test_groups = [freeze_abstract_file(*arg) for arg in args]
+        cases.extend([case for group in concrete_test_groups for case in group if case])
 
         # this sanity check should not be necessary
         errors: int = 0
@@ -221,6 +228,11 @@ def is_test_file(file: str) -> bool:
 
 def _is_test_file(file: str, file_pattern: str) -> bool:
     return bool(re.search(file_pattern, os.path.basename(file)))
+
+
+def freeze_abstract_file(file: AbstractTestFile, kwds: dict) -> list[TestCase]:
+    concrete_test_cases = file.freeze(**kwds)
+    return concrete_test_cases
 
 
 class FinderError(Exception):
