@@ -129,9 +129,7 @@ def load_partition(path: str) -> Partition:
     return Partition(list(cases.values()), i, n)
 
 
-def dump_partitions(
-    partitions: list[Partition], dest: str = "TestPartitions"
-) -> list[str]:
+def dump_partitions(partitions: list[Partition], dest: str = "TestPartitions") -> list[str]:
     files = []
     mkdirp(dest)
     n = len(partitions)

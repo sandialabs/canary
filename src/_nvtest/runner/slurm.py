@@ -26,9 +26,7 @@ class SlurmRunner(BatchRunner, _Slurm):
     def __init__(self, session: "Session", *args: Any):
         cores_per_node = config.get("machine:cores_per_node")
         if cores_per_node is None:
-            raise ValueError(
-                "slurm runner requires that 'machine:cores_per_node' be defined"
-            )
+            raise ValueError("slurm runner requires that 'machine:cores_per_node' be defined")
         super().__init__(session, *args)
         parser = self.make_argument_parser()
         self.namespace = argparse.Namespace(wait=True)  # always block

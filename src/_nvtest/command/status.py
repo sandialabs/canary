@@ -80,8 +80,7 @@ def setup_parser(parser: "Parser"):
         dest="show_excluded",
         action="store_true",
         default=False,
-        help="Show tests that were excluded from "
-        "initial test session [default: %(default)s]",
+        help="Show tests that were excluded from " "initial test session [default: %(default)s]",
     )
     parser.add_argument(
         "-a",

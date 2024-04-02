@@ -29,9 +29,7 @@ def load_vvt(file: "AbstractTestFile") -> None:
     try:
         args, _ = parse_vvt(file.file)
     except ParseError as e:
-        raise ValueError(
-            f"Failed to parse {file.file} at command {e.args[0]}"
-        ) from None
+        raise ValueError(f"Failed to parse {file.file} at command {e.args[0]}") from None
     for arg in args:
         if arg.command == "keywords":
             f_keywords(file, arg)
@@ -56,9 +54,7 @@ def load_vvt(file: "AbstractTestFile") -> None:
         elif arg.command == "depends_on":
             f_depends_on(file, arg)
         else:
-            raise ValueError(
-                f"Unknown command: {arg.command} at {arg.line_no}:{arg.line}"
-            )
+            raise ValueError(f"Unknown command: {arg.command} at {arg.line_no}:{arg.line}")
 
 
 def parse_vvt_directive(directive: str) -> SimpleNamespace:
@@ -264,9 +260,7 @@ def f_keywords(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
 
 def f_sources(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
     assert arg.command in ("copy", "link", "sources")
-    fun = {"copy": file.m_copy, "link": file.m_link, "sources": file.m_sources}[
-        arg.command
-    ]
+    fun = {"copy": file.m_copy, "link": file.m_link, "sources": file.m_sources}[arg.command]
     if arg.options and arg.options.get("rename"):
         s = re.sub(",\s*", ",", arg.argument)
         file_pairs = [_.split(",") for _ in s.split()]
@@ -292,9 +286,7 @@ def f_parameterize(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
     file.m_parameterize(list(names), values, when=arg.when, **kwds)
 
 
-def p_parameterize(
-    file: "AbstractTestFile", arg: SimpleNamespace
-) -> tuple[list, list, dict]:
+def p_parameterize(file: "AbstractTestFile", arg: SimpleNamespace) -> tuple[list, list, dict]:
     part1, part2 = arg.argument.split("=", 1)
     part2 = re.sub(",\s*", ",", part2)
     names = [_.strip() for _ in part1.split(",") if _.split()]
@@ -415,15 +407,11 @@ def parse_skipif(expression: str, **options: dict[str, str]) -> tuple[bool, str]
         return False, ""
     reason = str(options.get("reason") or "")
     if not reason:
-        reason = colorize(
-            "deselected due to @*b{skipif=%s} evaluating to @*g{True}" % expression
-        )
+        reason = colorize("deselected due to @*b{skipif=%s} evaluating to @*g{True}" % expression)
     return True, reason
 
 
-def write_vvtest_util(
-    case: "TestCase", baseline: bool = False, analyze: bool = False
-) -> None:
+def write_vvtest_util(case: "TestCase", baseline: bool = False, analyze: bool = False) -> None:
     attrs = get_vvtest_attrs(case, baseline, analyze)
     with open("vvtest_util.py", "w") as fh:
         fh.write("import os\n")
@@ -502,9 +490,7 @@ def to_pyt(file: "AbstractTestFile") -> str:
     try:
         vvt_args, line_no = parse_vvt(file.file)
     except ParseError as e:
-        raise ValueError(
-            f"Failed to parse {file.file} at command {e.args[0]}"
-        ) from None
+        raise ValueError(f"Failed to parse {file.file} at command {e.args[0]}") from None
     new_file = f"{os.path.splitext(file.file)[0]}.pyt"
     fh = io.StringIO()
     fh.write("#!/usr/bin/env python3\n")
@@ -582,18 +568,14 @@ def to_pyt(file: "AbstractTestFile") -> str:
                 fh.write(f", {kwargs})\n")
             fh.write(")\n")
         elif vvt_arg.command == "skipif":
-            skip, reason = parse_skipif(
-                vvt_arg.argument, reason=vvt_arg.options.get("reason")
-            )
+            skip, reason = parse_skipif(vvt_arg.argument, reason=vvt_arg.options.get("reason"))
             fh.write(f"nvtest.directives.skipif({skip!r}, reason={reason!r})\n")
         elif vvt_arg.command == "baseline":
             argument = re.sub(",\s*", ",", vvt_arg.argument)
             file_pairs = [_.split(",") for _ in argument.split()]
             for pair in file_pairs:
                 if len(pair) != 2:
-                    raise ValueError(
-                        f"{file.file}: invalid baseline command at {vvt_arg.line!r}"
-                    )
+                    raise ValueError(f"{file.file}: invalid baseline command at {vvt_arg.line!r}")
                 fh.write(f"nvtest.directives.baseline({pair[0]!r}, {pair[1]!r})\n")
         elif vvt_arg.command == "enable":
             if vvt_arg.argument and vvt_arg.argument.lower() == "true":

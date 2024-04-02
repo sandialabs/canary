@@ -26,13 +26,9 @@ def test_keywords(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write(
-                "import nvtest\nnvtest.directives.keywords('a', 'b', 'c', 'd', 'e')"
-            )
+            fh.write("import nvtest\nnvtest.directives.keywords('a', 'b', 'c', 'd', 'e')")
         with open("b.pyt", "w") as fh:
-            fh.write(
-                "import nvtest\nnvtest.directives.keywords('e', 'f', 'g', 'h', 'i')"
-            )
+            fh.write("import nvtest\nnvtest.directives.keywords('e', 'f', 'g', 'h', 'i')")
     finder = Finder()
     finder.add(workdir)
     assert len(finder.roots) == 1
@@ -93,9 +89,7 @@ def test_parameterize_3(tmpdir):
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
             fh.write("import nvtest\n")
-            fh.write(
-                "nvtest.directives.parameterize('a,b', [(0,1),(2,3)], when='options=xxx')\n"
-            )
+            fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3)], when='options=xxx')\n")
     finder = Finder()
     finder.add(workdir)
     assert len(finder.roots) == 1
@@ -175,9 +169,7 @@ def test_enable(tmpdir):
         mkdirp("a")
         with open("a/f.pyt", "w") as fh:
             fh.write("import nvtest\n")
-            fh.write(
-                "nvtest.directives.enable(True, when=\"options='baz and spam'\")\n"
-            )
+            fh.write("nvtest.directives.enable(True, when=\"options='baz and spam'\")\n")
     finder = Finder()
     finder.add(workdir)
     finder.prepare()

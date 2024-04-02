@@ -304,9 +304,7 @@ def get_tokens(code) -> Iterator[tokenize.TokenInfo]:
     return tokenize.tokenize(fp.readline)
 
 
-def anymatch(
-    items: AbstractSet[str], pattern: str, case_sensitive: bool = True
-) -> bool:
+def anymatch(items: AbstractSet[str], pattern: str, case_sensitive: bool = True) -> bool:
     if not case_sensitive:
         items = {item.lower() for item in items}
         pattern = pattern.lower()

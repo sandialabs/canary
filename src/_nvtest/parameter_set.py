@@ -141,13 +141,11 @@ class ParameterSet:
             names.extend(argnames)
         if len(names) <= 1:
             raise ValueError(
-                f"{file}: parameterize({argnames}, ...): "
-                f"expected more than 1 parameter name"
+                f"{file}: parameterize({argnames}, ...): " f"expected more than 1 parameter name"
             )
         if len(names) != len(argvalues):
             raise ValueError(
-                f"{file}: parameterize({argnames}, ...): "
-                f"expected len(names) == len(values)"
+                f"{file}: parameterize({argnames}, ...): " f"expected len(names) == len(values)"
             )
         parameters: list[tuple[str, float, float, int]] = []
         for i, item in enumerate(argvalues):
@@ -155,8 +153,7 @@ class ParameterSet:
                 initial_value, step_size, num_steps = item
             except ValueError:
                 raise ValueError(
-                    f"{file}: parameterize({argnames}, ...): "
-                    f"expected len(argvalues[{i}]) == 3"
+                    f"{file}: parameterize({argnames}, ...): " f"expected len(argvalues[{i}]) == 3"
                 ) from None
             parameters.append((names[i], initial_value, step_size, int(num_steps)))
         values: list[list[float]] = [[x[1] for x in parameters]]
@@ -203,13 +200,11 @@ class ParameterSet:
             names.extend(argnames)
         if len(names) <= 1:
             raise ValueError(
-                f"{file}: parameterize({argnames}, ...): "
-                f"expected more than 1 parameter name"
+                f"{file}: parameterize({argnames}, ...): " f"expected more than 1 parameter name"
             )
         if len(names) != len(argvalues):
             raise ValueError(
-                f"{file}: parameterize({argnames}, ...): "
-                f"expected len(names) == len(values)"
+                f"{file}: parameterize({argnames}, ...): " f"expected len(names) == len(values)"
             )
         random_values: list[list[float]] = []
         for i, item in enumerate(argvalues):
@@ -217,8 +212,7 @@ class ParameterSet:
                 initial_value, final_value, samples = item
             except ValueError:
                 raise ValueError(
-                    f"{file}: parameterize({argnames}, ...): "
-                    f"expected len(argvalues[{i}]) == 3"
+                    f"{file}: parameterize({argnames}, ...): " f"expected len(argvalues[{i}]) == 3"
                 ) from None
             random_values.append(random_range(initial_value, final_value, int(samples)))
         values = transpose(random_values)

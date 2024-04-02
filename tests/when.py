@@ -77,11 +77,7 @@ def test_when_parameters():
 def test_when_composite():
     params = {"np": 4}
     opts = ["spam", "baz"]
-    expr = When.from_string(
-        f"parameters='np>2' options='spam and baz' platforms={sys.platform}"
-    )
+    expr = When.from_string(f"parameters='np>2' options='spam and baz' platforms={sys.platform}")
     assert expr.evaluate(parameters=params, on_options=opts).value is True
-    expr = When.from_string(
-        f"parameters='np=2' options='spam and baz' platforms={sys.platform}"
-    )
+    expr = When.from_string(f"parameters='np=2' options='spam and baz' platforms={sys.platform}")
     assert expr.evaluate(parameters=params, on_options=opts).value is False

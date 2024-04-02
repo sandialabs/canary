@@ -585,9 +585,7 @@ class LinuxDistribution(object):
         * :py:exc:`UnicodeError`: A data source has unexpected characters or
           uses an unexpected encoding.
         """
-        self.os_release_file = os_release_file or os.path.join(
-            _UNIXCONFDIR, _OS_RELEASE_BASENAME
-        )
+        self.os_release_file = os_release_file or os.path.join(_UNIXCONFDIR, _OS_RELEASE_BASENAME)
         self.distro_release_file = distro_release_file or ""  # updated later
         self._os_release_info = self._get_os_release_info()
         self._lsb_release_info = self._get_lsb_release_info() if include_lsb else {}
@@ -660,9 +658,7 @@ class LinuxDistribution(object):
             or self.distro_release_attr("name")
         )
         if pretty:
-            name = self.os_release_attr("pretty_name") or self.lsb_release_attr(
-                "description"
-            )
+            name = self.os_release_attr("pretty_name") or self.lsb_release_attr("description")
             if not name:
                 name = self.distro_release_attr("name")
                 version = self.version(pretty=True)
@@ -683,9 +679,9 @@ class LinuxDistribution(object):
             self._parse_distro_release_content(self.os_release_attr("pretty_name")).get(
                 "version_id", ""
             ),
-            self._parse_distro_release_content(
-                self.lsb_release_attr("description")
-            ).get("version_id", ""),
+            self._parse_distro_release_content(self.lsb_release_attr("description")).get(
+                "version_id", ""
+            ),
         ]
         version = ""
         if best:

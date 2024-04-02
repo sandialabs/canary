@@ -323,9 +323,7 @@ class Config:
         self._cache[cache_key] = {} if section not in merged else merged[section]
         return self._cache[cache_key]
 
-    def get(
-        self, path: str, default: Optional[Any] = None, scope: Optional[str] = None
-    ) -> Any:
+    def get(self, path: str, default: Optional[Any] = None, scope: Optional[str] = None) -> Any:
         """Get a config section or a single value from one.
 
         Accepts a path syntax that allows us to grab nested config map

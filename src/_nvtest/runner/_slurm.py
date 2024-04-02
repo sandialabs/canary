@@ -106,20 +106,14 @@ class _Slurm:
         parser.add_argument("-e", "--error", metavar="<filename_pattern>")
         parser.add_argument("-x", "--exclude", metavar="<node_name_list>")
         parser.add_argument("--exclusive", metavar="[{user|mcs}]")
-        parser.add_argument(
-            "--export", metavar="{[ALL,]<environment_variables>|ALL|NONE}"
-        )
+        parser.add_argument("--export", metavar="{[ALL,]<environment_variables>|ALL|NONE}")
         parser.add_argument("--export-file", metavar="{<filename>|<fd>}")
         parser.add_argument("--extra", metavar="<string>")
-        parser.add_argument(
-            "-B", "--extra-node-info", metavar="<sockets>[:cores[:threads]]"
-        )
+        parser.add_argument("-B", "--extra-node-info", metavar="<sockets>[:cores[:threads]]")
         parser.add_argument("--get-user-env", metavar="[timeout][mode]")
         parser.add_argument("--gid", metavar="<group>")
         parser.add_argument("--gpu-bind", metavar="[verbose,]<type>")
-        parser.add_argument(
-            "--gpu-freq", metavar="[<type]value>[,<typevalue>][,verbose]"
-        )
+        parser.add_argument("--gpu-freq", metavar="[<type]value>[,<typevalue>][,verbose]")
         parser.add_argument("--gpus-per-node", metavar="[type:]<number>")
         parser.add_argument("--gpus-per-socket", metavar="[type:]<number>")
         parser.add_argument("--gpus-per-task", metavar="[type:]<number>")
@@ -151,9 +145,7 @@ class _Slurm:
         parser.add_argument("--no_requeue", action="store_true", default=False)
         parser.add_argument("-F", "--nodefile", metavar="<node_file>")
         parser.add_argument("-w", "--nodelist", metavar="<node_name_list>")
-        parser.add_argument(
-            "-N", "--nodes", metavar="<minnodes>[-maxnodes]|<size_string>"
-        )
+        parser.add_argument("-N", "--nodes", metavar="<minnodes>[-maxnodes]|<size_string>")
         parser.add_argument("--ntasks-per-core", metavar="<ntasks>")
         parser.add_argument("--ntasks-per-gpu", metavar="<ntasks>")
         parser.add_argument("--ntasks-per-node", metavar="<ntasks>")

@@ -53,9 +53,7 @@ class Reporter(_Reporter):
         self.write_notes_xml()
 
     @staticmethod
-    def read_site_info(
-        file, namespace: Optional[argparse.Namespace] = None
-    ) -> argparse.Namespace:
+    def read_site_info(file, namespace: Optional[argparse.Namespace] = None) -> argparse.Namespace:
         with open(file) as fh:
             doc = xdom.parse(fh)
         if namespace is None:
@@ -78,9 +76,7 @@ class Reporter(_Reporter):
             time.strptime(time_part, fmt)
         except ValueError:
             fmt += "-<track>"
-            raise ValueError(
-                f"expected build stamp should formatted as {fmt!r}, got {buildstamp}"
-            )
+            raise ValueError(f"expected build stamp should formatted as {fmt!r}, got {buildstamp}")
         return buildstamp
 
     @staticmethod
@@ -406,9 +402,7 @@ def _get_build_data(
 
     """
     server = cdash.server(url, project)
-    cdash_builds = server.builds(
-        date=date, buildgroups=buildgroups, skip_sites=skip_sites
-    )
+    cdash_builds = server.builds(date=date, buildgroups=buildgroups, skip_sites=skip_sites)
     for b in cdash_builds:
         tty.info(f"Categorizing tests for build {b['buildname']}")
         if "test" not in b:

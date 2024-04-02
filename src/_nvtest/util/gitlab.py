@@ -99,9 +99,7 @@ class repo:
             path = path[:-4]
         return path
 
-    def clone(
-        self, protocol="https", branch=None, recurse=False, shallow=False, quiet=False
-    ):
+    def clone(self, protocol="https", branch=None, recurse=False, shallow=False, quiet=False):
         url = self.clone_url(protocol)
         self.path = repo._clone(
             url=url, branch=branch, recurse=recurse, shallow=shallow, quiet=quiet
@@ -283,9 +281,7 @@ class repo:
             "description": f"{self.name} release {name}",
         }
         encoded_params = urlencode(params)
-        url = self.build_api_url(
-            path=f"projects/{self.project_id}/releases", query=encoded_params
-        )
+        url = self.build_api_url(path=f"projects/{self.project_id}/releases", query=encoded_params)
         request = Request(url=url, headers=headers, method="POST")
         request.get_method = lambda: "POST"
         opener = build_opener(HTTPHandler)
@@ -302,9 +298,7 @@ class repo:
 
     @api_access_required
     def link(self, *, tag, filename, fileurl):
-        url = self.build_api_url(
-            path=f"projects/{self.project_id}/releases/{tag}/assets/links"
-        )
+        url = self.build_api_url(path=f"projects/{self.project_id}/releases/{tag}/assets/links")
         headers = {"PRIVATE-TOKEN": self.access_token}
         data = urlencode({"name": filename, "url": fileurl}).encode("utf-8")
         request = Request(url=url, headers=headers, data=data, method="POST")
@@ -375,9 +369,7 @@ class repo:
         # the --form argument to curl does
         header = ["--header", f"PRIVATE-TOKEN: {self.access_token}"]
         form = ["--form", f"to_project_id={to_project_id}"]
-        url = self.build_api_url(
-            path=f"projects/{self.project_id}/issues/{issue_no}/move"
-        )
+        url = self.build_api_url(path=f"projects/{self.project_id}/issues/{issue_no}/move")
         args = header + form + [url]
         curl(*args)
 
@@ -390,9 +382,7 @@ class repo:
         if isinstance(notes, str):
             notes = {"body": notes}
         headers = {"PRIVATE-TOKEN": self.access_token}
-        base_url = self.build_api_url(
-            path=f"projects/{self.project_id}/issues/{issue_no}"
-        )
+        base_url = self.build_api_url(path=f"projects/{self.project_id}/issues/{issue_no}")
         encoded_params = urlencode(data or notes)
 
         if data is not None:

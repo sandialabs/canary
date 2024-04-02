@@ -224,8 +224,7 @@ def hline(label=None, **kwargs):
     max_width = kwargs.pop("max_width", 64)
     if kwargs:
         raise TypeError(
-            "'%s' is an invalid keyword argument for this function."
-            % next(kwargs.iterkeys())
+            "'%s' is an invalid keyword argument for this function." % next(kwargs.iterkeys())
         )
 
     _, cols = terminal_size()

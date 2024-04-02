@@ -33,8 +33,7 @@ def setup_parser(parser: "Parser") -> None:
     p.add_argument(
         "--site",
         metavar="name",
-        help="The site name that will be reported to CDash. "
-        "[default: current system hostname]",
+        help="The site name that will be reported to CDash. " "[default: current system hostname]",
     )
     p.add_argument(
         "-f",
@@ -258,9 +257,7 @@ def report(args: "Namespace") -> int:
         if args.child_command == "create":
             reporter.create()
         else:
-            tty.die(
-                f"{args.child_command}: unknown `nvtest report markdown` subcommand"
-            )
+            tty.die(f"{args.child_command}: unknown `nvtest report markdown` subcommand")
         return 0
     else:
         tty.die(f"{args.parent_command}: unknown subcommand")

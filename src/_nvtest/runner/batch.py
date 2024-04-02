@@ -44,9 +44,7 @@ class BatchRunner(Runner):
     def run(self, batch: Partition, **kwds: Any) -> dict[str, dict]:
         batch_no, num_batches = batch.rank
         n = len(batch)
-        self.print_text(
-            f"SUBMITTING: Batch {batch_no + 1} of {num_batches} ({n} tests)"
-        )
+        self.print_text(f"SUBMITTING: Batch {batch_no + 1} of {num_batches} ({n} tests)")
         script = self.submit_filename(batch_no)
         if not os.path.exists(script):
             self.write_submission_script(batch)
@@ -73,9 +71,7 @@ class BatchRunner(Runner):
             st_stat = ", ".join(
                 colorize(fmt % (Status.colors[n], v, n)) for (n, v) in stat.items()
             )
-            self.print_text(
-                f"FINISHED:   Batch {batch_no + 1} of {num_batches}, {st_stat}"
-            )
+            self.print_text(f"FINISHED:   Batch {batch_no + 1} of {num_batches}, {st_stat}")
         return attrs
 
     @classmethod
@@ -85,9 +81,7 @@ class BatchRunner(Runner):
             raise ValueError(f"Required command {cls.command} not found")
         if not isinstance(items, list) and not isinstance(items[0], Partition):
             s = f"{items.__class__.__name__}"
-            raise ValueError(
-                f"{cls.__name__} is only compatible with list[Partition], not {s}"
-            )
+            raise ValueError(f"{cls.__name__} is only compatible with list[Partition], not {s}")
 
     def write_header(self, fh: TextIO, batch_no: int) -> None:
         raise NotImplementedError

@@ -21,9 +21,7 @@ def llvm_coverage_parser(parser: nvtest.Parser) -> None:
         default=False,
         help="Perform test case coverage",
     )
-    parser.add_plugin_argument(
-        "--cov-prefix", help="Code prefix to strip from coverage maps"
-    )
+    parser.add_plugin_argument("--cov-prefix", help="Code prefix to strip from coverage maps")
 
 
 # @nvtest.plugin.register(scope="test", stage="setup")

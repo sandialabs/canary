@@ -206,9 +206,7 @@ class Lock(object):
     overlapping byte ranges in the same file).
     """
 
-    def __init__(
-        self, path, start=0, length=0, default_timeout=None, debug=False, desc=""
-    ):
+    def __init__(self, path, start=0, length=0, default_timeout=None, debug=False, desc=""):
         """Construct a new lock on the file at ``path``.
 
         By default, the lock applies to the whole file.  Optionally,
@@ -640,18 +638,14 @@ class Lock(object):
 
     def _get_counts_desc(self):
         return (
-            "(reads {0}, writes {1})".format(self._reads, self._writes)
-            if tty.is_verbose()
-            else ""
+            "(reads {0}, writes {1})".format(self._reads, self._writes) if tty.is_verbose() else ""
         )
 
     def _log_acquired(self, locktype, wait_time, nattempts):
         attempts_part = _attempts_str(wait_time, nattempts)
         now = datetime.now()
         desc = "Acquired at %s" % now.strftime("%H:%M:%S.%f")
-        self._log_debug(
-            self._status_msg(locktype, "{0}{1}".format(desc, attempts_part))
-        )
+        self._log_debug(self._status_msg(locktype, "{0}{1}".format(desc, attempts_part)))
 
     def _log_acquiring(self, locktype):
         self._log_debug(self._status_msg(locktype, "Acquiring"), level=3)
@@ -665,9 +659,7 @@ class Lock(object):
         attempts_part = _attempts_str(wait_time, nattempts)
         now = datetime.now()
         desc = "Downgraded at %s" % now.strftime("%H:%M:%S.%f")
-        self._log_debug(
-            self._status_msg("READ LOCK", "{0}{1}".format(desc, attempts_part))
-        )
+        self._log_debug(self._status_msg("READ LOCK", "{0}{1}".format(desc, attempts_part)))
 
     def _log_downgrading(self):
         self._log_debug(self._status_msg("WRITE LOCK", "Downgrading"), level=3)
@@ -684,9 +676,7 @@ class Lock(object):
         attempts_part = _attempts_str(wait_time, nattempts)
         now = datetime.now()
         desc = "Upgraded at %s" % now.strftime("%H:%M:%S.%f")
-        self._log_debug(
-            self._status_msg("WRITE LOCK", "{0}{1}".format(desc, attempts_part))
-        )
+        self._log_debug(self._status_msg("WRITE LOCK", "{0}{1}".format(desc, attempts_part)))
 
     def _log_upgrading(self):
         self._log_debug(self._status_msg("READ LOCK", "Upgrading"), level=3)

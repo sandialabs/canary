@@ -81,9 +81,7 @@ class bash(shell):
         py_path = f'PYTHONPATH="{prefix}:${{PYTHONPATH}}"'
         with open(bash.rcfile, "a") as fh:
             fh.write("\n\n# >>> modulecmd initialize >>>\n")
-            fh.write(
-                "# !! Contents within this block are managed by 'module init' !!\n"
-            )
+            fh.write("# !! Contents within this block are managed by 'module init' !!\n")
             fh.write("# Define the modulecmd shell function\n")
             fh.write("module()\n")
             fh.write("{\n")

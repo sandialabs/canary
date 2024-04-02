@@ -165,9 +165,7 @@ class ResourceSetter(argparse.Action):
         else:
             raise ResourceError(self, path, f"invalid scope {scope!r}")
         if type == "workers" and scope != "session":
-            raise ResourceError(
-                self, path, f"invalid scope {scope!r} (expected session)"
-            )
+            raise ResourceError(self, path, f"invalid scope {scope!r} (expected session)")
         if type == "time":
             value = time_in_seconds(string)
         else:
@@ -183,9 +181,7 @@ def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCa
     return [c for c in cases if c.matches(pathspec) or c.exec_dir.startswith(prefix)]
 
 
-def filter_cases_by_status(
-    cases: list["TestCase"], status: Union[tuple, str]
-) -> list["TestCase"]:
+def filter_cases_by_status(cases: list["TestCase"], status: Union[tuple, str]) -> list["TestCase"]:
     if isinstance(status, str):
         status = (status,)
     return [c for c in cases if c.status.value in status]

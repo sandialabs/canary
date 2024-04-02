@@ -381,9 +381,7 @@ class server:
         )
         return failed
 
-    def get_tests_from_build(
-        self, build, skip_missing=False, include_details=True, **kwargs
-    ):
+    def get_tests_from_build(self, build, skip_missing=False, include_details=True, **kwargs):
         return self._get_tests_from_build(
             build,
             skip_missing=skip_missing,

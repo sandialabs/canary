@@ -57,9 +57,7 @@ class ParameterExpression:
                 assert token.type == tokenize.NAME
                 parts.append(f"not_defined({token.string!r})")
             else:
-                raise ValueError(
-                    f"Unknown token type {token} in parameter expression {expr}"
-                )
+                raise ValueError(f"Unknown token type {token} in parameter expression {expr}")
         return " ".join(parts)
 
     def evaluate(self, parameters: dict[str, Any]) -> bool:

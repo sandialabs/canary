@@ -100,9 +100,7 @@ class Finder:
                     if _is_test_file(f, file_pattern)
                 ]
             )
-        testfiles: list[AbstractTestFile] = parallel.starmap(
-            AbstractTestFile.factory, paths
-        )
+        testfiles: list[AbstractTestFile] = parallel.starmap(AbstractTestFile.factory, paths)
         return testfiles
 
     @property
@@ -184,9 +182,7 @@ class Finder:
             owners=owners,
         )
         args = [(f, kwds) for files in tree.values() for f in files]
-        concrete_test_groups: list[list[TestCase]] = parallel.starmap(
-            freeze_abstract_file, args
-        )
+        concrete_test_groups: list[list[TestCase]] = parallel.starmap(freeze_abstract_file, args)
         cases.extend([case for group in concrete_test_groups for case in group if case])
 
         # this sanity check should not be necessary

@@ -114,9 +114,7 @@ class Reporter(_Reporter):
         fh.write(self.head)
         fh.write(f"<body>\n<h1> {cases[0].status.name} Summary </h1>\n")
         fh.write('<table class="sortable">\n')
-        fh.write(
-            "<thead><tr><th>Test</th><th>Duration</th><th>Status</th></tr></thead>\n"
-        )
+        fh.write("<thead><tr><th>Test</th><th>Duration</th><th>Status</th></tr></thead>\n")
         fh.write("<tbody>")
         for case in sorted(cases, key=lambda c: c.duration):
             file = os.path.join(self.cases_dir, f"{case.id}.html")

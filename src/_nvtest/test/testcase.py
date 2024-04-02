@@ -104,9 +104,7 @@ class TestCase:
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, TestCase):
-            raise ValueError(
-                f"Cannot compare TestCase with type {other.__class__.__name__}"
-            )
+            raise ValueError(f"Cannot compare TestCase with type {other.__class__.__name__}")
         return self.id == other.id
 
     def __str__(self) -> str:

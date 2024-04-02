@@ -142,8 +142,7 @@ def colify(elts, **options):
 
     if options:
         raise TypeError(
-            "'%s' is an invalid keyword argument for this function."
-            % next(x for x in options)
+            "'%s' is an invalid keyword argument for this function." % next(x for x in options)
         )
 
     # elts needs to be an array of strings so we can count the elements

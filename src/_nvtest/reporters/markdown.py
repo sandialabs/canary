@@ -49,9 +49,7 @@ class Reporter(_Reporter):
 
     def generate_index(self, fh: TextIO) -> None:
         fh.write("# NVTest Summary\n\n")
-        fh.write(
-            "| Site | Project | Not Run | Timeout | Fail | Diff | Pass | Total |\n"
-        )
+        fh.write("| Site | Project | Not Run | Timeout | Fail | Diff | Pass | Total |\n")
         fh.write("| --- | --- | --- | --- | --- | --- | --- | --- |\n")
         totals: dict[str, list[TestCase]] = {}
         for case in self.data.cases:

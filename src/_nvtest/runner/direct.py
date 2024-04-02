@@ -12,9 +12,7 @@ class DirectRunner(Runner):
     def validate(items):
         if not isinstance(items, list) and not isinstance(items[0], TestCase):
             s = f"{items.__class__.__name__}"
-            raise ValueError(
-                f"DirectRunner is only compatible with list[TestCase], not {s}"
-            )
+            raise ValueError(f"DirectRunner is only compatible with list[TestCase], not {s}")
 
     def setup(self, case: TestCase) -> None: ...
 

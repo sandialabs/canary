@@ -178,9 +178,7 @@ class match_to_ansi(object):
         elif m == "@.":
             return self.escape(0)
         elif m == "@":
-            raise ColorParseError(
-                "Incomplete color format: '%s' in %s" % (m, match.string)
-            )
+            raise ColorParseError("Incomplete color format: '%s' in %s" % (m, match.string))
 
         string = styles[style]
         if color:

@@ -87,9 +87,7 @@ class TestInstance:
         return self
 
     @classmethod
-    def load(
-        cls: Type["TestInstance"], arg_path: Optional[str] = None
-    ) -> "TestInstance":
+    def load(cls: Type["TestInstance"], arg_path: Optional[str] = None) -> "TestInstance":
         if arg_path is None:
             arg_path = "./.nvtest/case.json"
         elif arg_path.endswith((".vvt", ".pyt")):

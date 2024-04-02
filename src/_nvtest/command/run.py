@@ -83,8 +83,7 @@ def setup_parser(parser: "Parser"):
     parser.add_argument(
         "--copy-all-resources",
         action="store_true",
-        help="Do not link resources to the test "
-        "directory, only copy [default: %(default)s]",
+        help="Do not link resources to the test " "directory, only copy [default: %(default)s]",
     )
 
     add_resource_arguments(parser)
@@ -349,9 +348,7 @@ def print_front_matter(session: "Session"):
         tty.print(f"search paths:\n  {paths}")
 
 
-def print_testcase_overview(
-    cases: list[TestCase], duration: Optional[float] = None
-) -> None:
+def print_testcase_overview(cases: list[TestCase], duration: Optional[float] = None) -> None:
     def unreachable(c):
         return c.status == "skipped" and c.status.details.startswith("Unreachable")
 

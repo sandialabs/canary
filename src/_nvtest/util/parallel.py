@@ -115,9 +115,7 @@ def num_processes(max_processes: Optional[int] = None, _cache: dict = {}) -> int
     return n
 
 
-def map(
-    func: Callable, args: list, processes: Optional[int] = None, debug: bool = False
-) -> Any:
+def map(func: Callable, args: list, processes: Optional[int] = None, debug: bool = False) -> Any:
     """Map a func to the list of arguments, return the list of results.
 
     Parameters

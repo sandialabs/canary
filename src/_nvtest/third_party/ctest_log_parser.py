@@ -115,8 +115,7 @@ class prefilter(object):
 _error_matches = [
     prefilter(
         lambda x: any(
-            s in x
-            for s in ("Error:", "error", "undefined reference", "multiply defined")
+            s in x for s in ("Error:", "error", "undefined reference", "multiply defined")
         ),
         "([^:]+): error[ \\t]*[0-9]+[ \\t]*:",
         "([^:]+): (Error:|error|undefined reference|multiply defined)",
@@ -326,9 +325,7 @@ def _time(times, i):
 
 def _match(matches, exceptions, line):
     """True if line matches a regex in matches and none in exceptions."""
-    return any(m.search(line) for m in matches) and not any(
-        e.search(line) for e in exceptions
-    )
+    return any(m.search(line) for m in matches) and not any(e.search(line) for e in exceptions)
 
 
 def _profile_match(matches, exceptions, line, match_times, exc_times):
@@ -356,8 +353,7 @@ def _profile_match(matches, exceptions, line, match_times, exc_times):
 def _parse(lines, offset, profile):
     def compile(regex_array):
         return [
-            regex if isinstance(regex, prefilter) else re.compile(regex)
-            for regex in regex_array
+            regex if isinstance(regex, prefilter) else re.compile(regex) for regex in regex_array
         ]
 
     error_matches = compile(_error_matches)
@@ -427,9 +423,7 @@ class CTestLogParser(object):
             print()
             print(name)
             for i, elt in enumerate(arr):
-                print(
-                    "%16.2f        %s" % (self.timings[index][i] * 1e6, stringify(elt))
-                )
+                print("%16.2f        %s" % (self.timings[index][i] * 1e6, stringify(elt)))
             index += 1
 
     def parse(self, stream, context=6, jobs=None, serial=False):

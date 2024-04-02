@@ -42,9 +42,7 @@ machine_schema = Schema(
         },
     }
 )
-python_schema = Schema(
-    {"python": {"executable": str, "version": str, "version_info": list}}
-)
+python_schema = Schema({"python": {"executable": str, "version": str, "version_info": list}})
 variables_schema = Schema({"variables": vardict})
 testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
 

@@ -90,8 +90,9 @@ class SendMailError(Exception):
     def __init__(self, recvaddrs, error):
         message = StringIO()
         message.write(
-            "Received the following error when attempting to send email to "
-            "{0}:\n{1}".format(",".join(recvaddrs), error)
+            "Received the following error when attempting to send email to " "{0}:\n{1}".format(
+                ",".join(recvaddrs), error
+            )
         )
         super(SendMailError, self).__init__(message.getvalue())
 

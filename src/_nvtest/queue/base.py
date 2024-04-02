@@ -111,9 +111,7 @@ class Queue:
     def update(self, *args) -> None:
         raise NotImplementedError
 
-    def pop_next(
-        self, fail_fast: bool = False
-    ) -> tuple[int, Union[TestCase, Partition]]:
+    def pop_next(self, fail_fast: bool = False) -> tuple[int, Union[TestCase, Partition]]:
         while True:
             if not len(self.queue):
                 raise StopIteration

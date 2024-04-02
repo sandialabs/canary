@@ -187,8 +187,7 @@ class EnvironmentModification(argparse.Action):
             var, val = [_.strip() for _ in option.split("=", 1)]
         except ValueError:
             raise argparse.ArgumentTypeError(
-                f"Invalid environment variable {option!r} specification. "
-                "Expected form NAME=VAL"
+                f"Invalid environment variable {option!r} specification. " "Expected form NAME=VAL"
             ) from None
         env_mods: dict[str, str] = getattr(namespace, self.dest, None) or {}
         env_mods[var] = val
@@ -214,8 +213,7 @@ def make_argument_parser(**kwargs):
         "-C",
         default=None,
         metavar="path",
-        help="Run as if nvtest was started in path "
-        "instead of the current working directory.",
+        help="Run as if nvtest was started in path " "instead of the current working directory.",
     )
     parser.add_argument(
         "-P",

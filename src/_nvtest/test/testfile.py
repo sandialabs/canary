@@ -344,9 +344,7 @@ class AbstractTestFile:
         avail_devices = avail_devices or config.get("machine:device_count")
         testcases: list[TestCase] = []
         names = ", ".join(self.names())
-        tty.verbose(
-            f"Generating test cases for {self} using the following test names: {names}"
-        )
+        tty.verbose(f"Generating test cases for {self} using the following test names: {names}")
         import _nvtest.directives
 
         for name in self.names():
@@ -387,8 +385,7 @@ class AbstractTestFile:
                 if not isinstance(nd, int) and nd is not None:
                     class_name = nd.__class__.__name__
                     raise ValueError(
-                        f"{self.name}: expected ndevice={nd} "
-                        f"to be an int, not {class_name}"
+                        f"{self.name}: expected ndevice={nd} " f"to be an int, not {class_name}"
                     )
                 if mask is None and nd and nd > avail_devices:
                     s = "deselected due to @*b{exceeding device count of machine}"
@@ -664,9 +661,7 @@ class AbstractTestFile:
         ns = FilterNamespace(arg, when=when, result=result, expect=expect)
         self._depends_on.append(ns)
 
-    def m_preload(
-        self, arg: str, source: bool = False, when: Optional[str] = None
-    ) -> None:
+    def m_preload(self, arg: str, source: bool = False, when: Optional[str] = None) -> None:
         ns = FilterNamespace(arg, action="source" if source else None, when=when)
         self._preload.append(ns)
 
@@ -682,17 +677,12 @@ class AbstractTestFile:
         type = type or _nvtest.directives.enums.list_parameter_space
         if not isinstance(type, _nvtest.directives.enums.enums):
             raise ValueError(
-                f"parameterize: type: expected "
-                f"nvtest.enums, got {type.__class__.__name__}"
+                f"parameterize: type: expected " f"nvtest.enums, got {type.__class__.__name__}"
             )
         if type is _nvtest.directives.enums.centered_parameter_space:
-            pset = ParameterSet.centered_parameter_space(
-                argnames, argvalues, file=self.file
-            )
+            pset = ParameterSet.centered_parameter_space(argnames, argvalues, file=self.file)
         elif type is _nvtest.directives.enums.random_parameter_space:
-            pset = ParameterSet.random_parameter_space(
-                argnames, argvalues, file=self.file
-            )
+            pset = ParameterSet.random_parameter_space(argnames, argvalues, file=self.file)
         else:
             pset = ParameterSet.list_parameter_space(
                 argnames,
@@ -733,9 +723,7 @@ class AbstractTestFile:
     ) -> None:
         self.add_sources("copy", *files, when=when)
 
-    def m_link(
-        self, *files: str, rename: bool = False, when: Optional[str] = None
-    ) -> None:
+    def m_link(self, *files: str, rename: bool = False, when: Optional[str] = None) -> None:
         self.add_sources("link", *files, rename=rename, when=when)
 
     def m_sources(
@@ -754,8 +742,7 @@ class AbstractTestFile:
     ) -> None:
         if flag is not None and script is not None:
             raise ValueError(
-                "TestFile.analyze: 'script' and 'flag' "
-                "keyword arguments are mutually exclusive"
+                "TestFile.analyze: 'script' and 'flag' " "keyword arguments are mutually exclusive"
             )
         if script is not None:
             string = script

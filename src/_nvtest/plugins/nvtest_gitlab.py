@@ -59,9 +59,7 @@ class MergeRequest:
         iid = os.environ["CI_MERGE_REQUEST_IID"]
         project_id = os.environ["CI_PROJECT_ID"]
         api_v4_url = os.environ["CI_API_V4_URL"]
-        self.backend = gitlab.merge_request(
-            api_v4_url, project_id, iid, self.access_token
-        )
+        self.backend = gitlab.merge_request(api_v4_url, project_id, iid, self.access_token)
         self.job_name = os.getenv("CI_JOB_NAME", "Unknown")
         self.iid = self.backend.iid
         self.id = self.backend.id

@@ -149,9 +149,7 @@ class Session:
         if "cls" in frame.f_locals:
             calling_func = getattr(frame.f_locals["cls"], frame.f_code.co_name, None)
         if calling_func not in (Session.create, Session.load):
-            raise ValueError(
-                "Session must be created through one of its factory methods"
-            )
+            raise ValueError("Session must be created through one of its factory methods")
         self.state: int = 0
         self._avail_cpus = config.get("machine:cpu_count")
         self._avail_cpus_per_test = self.avail_cpus
@@ -239,9 +237,7 @@ class Session:
     def avail_devices_per_test(self, arg: int) -> None:
         if arg > self.avail_devices:
             n = self.avail_devices
-            raise ValueError(
-                f"avail_devices_per_test={arg} cannot exceed avail_devices={n}"
-            )
+            raise ValueError(f"avail_devices_per_test={arg} cannot exceed avail_devices={n}")
         self._avail_devices_per_test = arg
 
     @property
@@ -352,9 +348,7 @@ class Session:
         self = cls()
         self.work_tree = config.get("session:work_tree")
         if not self.work_tree:
-            raise ValueError(
-                "not a nvtest session (or any of the parent directories): .nvtest"
-            )
+            raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
         self.mode = mode
         self.exitstatus = -1
         lock_path = os.path.join(self.dotdir, "lock")
@@ -666,9 +660,7 @@ class Session:
                 ts.prepare()
                 while ts.is_active():
                     group = ts.get_ready()
-                    args = zip(
-                        group, repeat(self.work_tree), repeat(copy_all_resources)
-                    )
+                    args = zip(group, repeat(self.work_tree), repeat(copy_all_resources))
                     result = parallel.starmap(_setup_individual_case, list(args))
                     attrs = dict(result)
                     for case in group:

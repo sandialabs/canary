@@ -15,9 +15,7 @@ def setup_parser(parser: "Parser"):
         default=False,
         help="All files are printed. By default, hidden files are not printed",
     )
-    parser.add_argument(
-        "-d", action="store_true", default=False, help="List directories only"
-    )
+    parser.add_argument("-d", action="store_true", default=False, help="List directories only")
     parser.add_argument("-i", action="append", help="Ignore pattern")
     parser.add_argument("directory")
 
