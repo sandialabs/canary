@@ -40,6 +40,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         args = parser.parse_args(argv)
         command = parser.get_command(args.command)
 
+        if command is None:
+            parser.print_help()
+            return -1
+
         if args.nvtest_profile:
             return _profile_wrapper(command, args)
         else:
