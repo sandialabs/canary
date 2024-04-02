@@ -6,6 +6,7 @@
 """
 Routines for printing columnar output.  See ``colify()`` for more information.
 """
+
 from __future__ import division
 
 import os

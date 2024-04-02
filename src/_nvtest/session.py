@@ -67,7 +67,6 @@ the test.
 
 import inspect
 import json
-import multiprocessing
 import os
 import signal
 import time
@@ -98,6 +97,7 @@ from .test.testcase import TestCase
 from .third_party import rprobe
 from .third_party.lock import Lock
 from .third_party.lock import WriteTransaction
+from .util import parallel
 from .util import tty
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
@@ -669,10 +669,7 @@ class Session:
                     args = zip(
                         group, repeat(self.work_tree), repeat(copy_all_resources)
                     )
-                    pool = multiprocessing.Pool(processes=processes)
-                    result = pool.starmap(_setup_individual_case, args)
-                    pool.close()
-                    pool.join()
+                    result = parallel.starmap(_setup_individual_case, list(args))
                     attrs = dict(result)
                     for case in group:
                         # Since setup is run in a multiprocessing pool, the internal

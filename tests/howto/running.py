@@ -61,7 +61,6 @@ Pass arguments to the scheduler
 where ``ARGI`` are passed directly to the scheduler.  Eg, ``-R,--account=XXYYZZ01``
 """
 
-
 import os
 
 from _nvtest.util.filesystem import working_dir

@@ -6,8 +6,7 @@ from .base import Queue
 
 
 class BatchQueue(Queue):
-    def validate(self) -> None:
-        ...
+    def validate(self) -> None: ...
 
     def batch_info(self) -> list[list[str]]:
         return [[case.fullname for case in batch] for batch in self.work_items]

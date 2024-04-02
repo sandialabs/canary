@@ -1,5 +1,4 @@
 import fnmatch
-import multiprocessing
 import os
 import re
 from typing import Any
@@ -10,11 +9,10 @@ from . import plugin
 from .test.testcase import TestCase
 from .test.testfile import AbstractTestFile
 from .util import filesystem as fs
+from .util import parallel
 from .util import tty
 
 default_file_pattern = r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$"
-multiprocess_threshold = 100
-default_cpu_count = 8
 
 
 class Finder:
@@ -102,15 +100,9 @@ class Finder:
                     if _is_test_file(f, file_pattern)
                 ]
             )
-        testfiles: list[AbstractTestFile]
-        # only pay the cost of mulitprocessing startup if there are enough
-        # files.  The 100 file count is not set in stone.
-        if len(paths) >= multiprocess_threshold:
-            cpu_count: int = os.cpu_count() or default_cpu_count
-            p = multiprocessing.Pool(processes=cpu_count)
-            testfiles = p.starmap(AbstractTestFile.factory, paths)
-        else:
-            testfiles = [AbstractTestFile.factory(r, p) for r, p in paths]
+        testfiles: list[AbstractTestFile] = parallel.starmap(
+            AbstractTestFile.factory, paths
+        )
         return testfiles
 
     @property
@@ -192,12 +184,9 @@ class Finder:
             owners=owners,
         )
         args = [(f, kwds) for files in tree.values() for f in files]
-        concrete_test_groups: list[list[TestCase]]
-        if len(args) > multiprocess_threshold:
-            pool = multiprocessing.Pool(processes=os.cpu_count() or default_cpu_count)
-            concrete_test_groups = pool.starmap(freeze_abstract_file, args)
-        else:
-            concrete_test_groups = [freeze_abstract_file(*arg) for arg in args]
+        concrete_test_groups: list[list[TestCase]] = parallel.starmap(
+            freeze_abstract_file, args
+        )
         cases.extend([case for group in concrete_test_groups for case in group if case])
 
         # this sanity check should not be necessary

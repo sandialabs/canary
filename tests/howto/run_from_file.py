@@ -61,6 +61,7 @@ and pass it to ``nvtest run``:
     nvtest run tests.json
 
 """
+
 import json
 
 import _nvtest.util.filesystem as fs

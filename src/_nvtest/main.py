@@ -77,12 +77,12 @@ class Profiler:
         try:
             import pyinstrument
 
-            self.profiler = pyinstrument.Profiler()
+            self.profiler = pyinstrument.Profiler()  # type: ignore
             self.type = 1
         except ImportError:
             import cProfile
 
-            self.profiler = cProfile.Profile()
+            self.profiler = cProfile.Profile()  # type: ignore
             self.type = 2
 
     def __enter__(self):

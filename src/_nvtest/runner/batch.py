@@ -35,8 +35,7 @@ class BatchRunner(Runner):
     def avail_workers(self, batch: Partition) -> int:
         return 1
 
-    def calculate_resource_allocations(self, batch: Partition) -> None:
-        ...
+    def calculate_resource_allocations(self, batch: Partition) -> None: ...
 
     @staticmethod
     def print_text(text: str):

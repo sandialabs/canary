@@ -552,8 +552,7 @@ class TestCase:
             self._process.kill()
         self.status = Status("failed", "fail")  # "Process killed")
 
-    def teardown(self) -> None:
-        ...
+    def teardown(self) -> None: ...
 
 
 class MissingSourceError(Exception):

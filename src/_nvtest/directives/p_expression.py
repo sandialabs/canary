@@ -12,6 +12,7 @@ The semantics are:
 - ident evaluates to True of False according to a provided matcher function.
 - or/and/not evaluate according to the usual boolean semantics.
 """
+
 import io
 import tokenize
 from typing import Any
