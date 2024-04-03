@@ -26,7 +26,7 @@ Batching options
 Scheduler options
 -----------------
 
-Send options directly to the scheduler via ``-S,option``.  Eg, ``-S,--account=XYZ`` will
+Send options directly to the scheduler via ``-R,option``.  Eg, ``-R,--account=XYZ`` will
 pass ``--account=XYZ`` directly to the scheduler.
 
 Supported schedulers

@@ -716,12 +716,8 @@ class AbstractTestFile:
             ns = FilterNamespace((file, None), action=action, when=when)
             self._sources.append(ns)
 
-    def m_copy(
-        self,
-        *files: str,
-        when: Optional[str] = None,
-    ) -> None:
-        self.add_sources("copy", *files, when=when)
+    def m_copy(self, *files: str, rename: bool = False, when: Optional[str] = None) -> None:
+        self.add_sources("copy", *files, rename=rename, when=when)
 
     def m_link(self, *files: str, rename: bool = False, when: Optional[str] = None) -> None:
         self.add_sources("link", *files, rename=rename, when=when)

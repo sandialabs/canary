@@ -615,7 +615,7 @@ For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests t
         resource_help = """\
 %(title)s
 
-The %(r_arg)s argument is of the form: @*{[scope:]type:value}, where %(r_scope)s
+The %(r_arg)s argument is of the form: %(r_form)s, where %(r_scope)s
 (optional) is one of session, test, or batch, (session is assumed if not provided);
 %(r_type)s is one of workers, cpus, or devices; and %(r_value)s is an integer value. By
 default, nvtest will determine and all available cpu cores.
@@ -631,6 +631,7 @@ default, nvtest will determine and all available cpu cores.
     30 minutes.
 """ % {
             "title": bold("Setting limits on resources"),
+            "r_form": bold("[scope:]type:value"),
             "r_arg": bold("-l resource"),
             "r_scope": bold("scope"),
             "r_type": bold("type"),

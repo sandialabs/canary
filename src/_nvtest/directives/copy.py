@@ -73,4 +73,4 @@ def copy(*args: str, when: Optional[str] = None, rename: bool = False):
     """  # noqa: E501
     if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
         file = _nvtest.__FILE_BEING_SCANNED__
-        file.m_copy(*args, when=when)
+        file.m_copy(*args, rename=rename, when=when)
