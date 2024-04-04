@@ -11,8 +11,7 @@ from ..util import tty
 from ..util.tty.colify import colify
 
 description = "list available nvtest subcommands"
-section = "developer"
-level = "long"
+add_help = False
 
 
 section_descriptions = {
@@ -150,7 +149,7 @@ class BashCompletionWriter(aw.ArgparseCompletionWriter):
 @formatter
 def subcommands(args, out):
     parser = make_argument_parser()
-    _nvtest.command.add_all_commands(parser)
+    _nvtest.command.add_all_commands(parser, add_help_override=True)
     writer = SubcommandWriter(parser.prog, out, args.aliases)
     writer.write(parser)
 
@@ -187,7 +186,7 @@ def rst(args, out):
     # create a parser with all commands
     tty.color.set_color_when("never")
     parser = make_argument_parser()
-    _nvtest.command.add_all_commands(parser)
+    _nvtest.command.add_all_commands(parser, add_help_override=True)
 
     # extract cross-refs of the form `_cmd-nvtest-<cmd>:` from rst files
     documented_commands = set()
@@ -216,7 +215,7 @@ def names(args, out):
 @formatter
 def bash(args, out):
     parser = make_argument_parser()
-    _nvtest.command.add_all_commands(parser)
+    _nvtest.command.add_all_commands(parser, add_help_override=True)
 
     writer = BashCompletionWriter(parser.prog, out, args.aliases)
     writer.write(parser)

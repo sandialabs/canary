@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
 
 description = "list contents of directories in a tree-like format"
+add_help = False
 
 
 def setup_parser(parser: "Parser"):

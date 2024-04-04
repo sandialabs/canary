@@ -9,6 +9,7 @@ from ..util import tty
 from ..util.filesystem import mkdirp
 
 description = "Generate rst documentation files"
+add_help = False
 
 
 def setup_parser(subparser):
@@ -36,7 +37,7 @@ def directives(dest):
 def commands(dest):
     mkdirp(dest)
     parser = make_argument_parser()
-    _nvtest.command.add_all_commands(parser)
+    _nvtest.command.add_all_commands(parser, add_help_override=True)
     writer = aw.ArgparseMultiRstWriter(parser.prog, dest)
     writer.write(parser)
 

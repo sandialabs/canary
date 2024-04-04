@@ -68,10 +68,13 @@ def py_name(module: ModuleType) -> str:
 
 class Parser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs) -> None:
+        positionals_title = kwargs.pop("positionals_title", None)
         super().__init__(*args, **kwargs)
         self.register("type", None, identity)
         self.__subcommand_modules: dict[str, ModuleType] = {}
         self.argv: Sequence[str] = sys.argv[1:]
+        if positionals_title:
+            self._positionals.title = positionals_title
 
     def convert_arg_line_to_args(self, arg_line: str) -> list[str]:
         return shlex.split(arg_line.split("#", 1)[0].strip())
@@ -113,7 +116,7 @@ class Parser(argparse.ArgumentParser):
         self.argv = arg_strings
         return arg_strings
 
-    def add_command(self, module: ModuleType) -> None:
+    def add_command(self, module: ModuleType, add_help_override: bool = False) -> None:
         """Add one subcommand to this parser."""
         # lazily initialize any subparsers
         if not hasattr(self, "subparsers"):
@@ -123,15 +126,17 @@ class Parser(argparse.ArgumentParser):
             self.subparsers = self.add_subparsers(metavar="", dest="command")
         self._validate_command_module(module)
         cmdname = cmd_name(module)
-        subparser = self.subparsers.add_parser(
-            cmdname,
+        kwds = dict(
             aliases=getattr(module, "aliases", None) or [],
-            help=module.description,
             description=module.description,
-            epilog=getattr(module, "epilog", None),
-            add_help=getattr(module, "add_help", True),
             formatter_class=HelpFormatter,
         )
+        add_help = getattr(module, "add_help", True)
+        if add_help or add_help_override:
+            kwds["add_help"] = True
+            kwds["epilog"] = getattr(module, "epilog", None)
+            kwds["help"] = module.description
+        subparser = self.subparsers.add_parser(cmdname, **kwds)
         subparser.register("type", None, identity)
         module.setup_parser(subparser)  # type: ignore
         self.__subcommand_modules[cmdname] = module
@@ -187,7 +192,7 @@ class EnvironmentModification(argparse.Action):
             var, val = [_.strip() for _ in option.split("=", 1)]
         except ValueError:
             raise argparse.ArgumentTypeError(
-                f"Invalid environment variable {option!r} specification. " "Expected form NAME=VAL"
+                f"Invalid environment variable {option!r} specification. Expected form NAME=VAL"
             ) from None
         env_mods: dict[str, str] = getattr(namespace, self.dest, None) or {}
         env_mods[var] = val
@@ -201,6 +206,7 @@ def make_argument_parser(**kwargs):
         description="nvtest - an application testing framework",
         fromfile_prefix_chars="@",
         prog="nvtest",
+        positionals_title="subcommands",
         **kwargs,
     )
     parser.add_argument(
@@ -213,10 +219,10 @@ def make_argument_parser(**kwargs):
         "-C",
         default=None,
         metavar="path",
-        help="Run as if nvtest was started in path " "instead of the current working directory.",
+        help=colorize("Run as if nvtest was started in @*{path} instead of the current working directory."),
     )
     parser.add_argument(
-        "-P",
+        "-p",
         default=None,
         dest="plugin_dirs",
         action="append",
@@ -262,7 +268,7 @@ def make_argument_parser(**kwargs):
         "--lines",
         default=20,
         action="store",
-        help="lines of profile output or 'all' (default: 20)",
+        help="lines of profile output or 'all' [default: 20]",
     )
     group = parser.add_argument_group("runtime configuration")
     group.add_argument(

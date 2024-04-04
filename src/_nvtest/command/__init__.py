@@ -11,7 +11,6 @@ from . import describe
 from . import find
 from . import location
 from . import log
-from . import python
 from . import rebaseline
 from . import report
 from . import run
@@ -30,7 +29,6 @@ def all_commands() -> list[ModuleType]:
         find,
         location,
         log,
-        python,
         report,
         rebaseline,
         run,
@@ -39,9 +37,9 @@ def all_commands() -> list[ModuleType]:
     ]
 
 
-def add_all_commands(parser: Parser) -> None:
+def add_all_commands(parser: Parser, add_help_override: bool = False) -> None:
     for command in all_commands():
-        parser.add_command(command)
+        parser.add_command(command, add_help_override=add_help_override)
 
 
 def _cmd_name(command_module: ModuleType) -> str:
