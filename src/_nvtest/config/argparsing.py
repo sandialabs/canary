@@ -219,7 +219,9 @@ def make_argument_parser(**kwargs):
         "-C",
         default=None,
         metavar="path",
-        help=colorize("Run as if nvtest was started in @*{path} instead of the current working directory."),
+        help=colorize(
+            "Run as if nvtest was started in @*{path} instead of the current working directory."
+        ),
     )
     parser.add_argument(
         "-p",

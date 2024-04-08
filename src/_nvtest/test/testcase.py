@@ -400,6 +400,8 @@ class TestCase:
                     fs.force_remove(f)
         with fs.working_dir(self.exec_dir, create=True):
             self.setup_exec_dir(copy_all_resources=copy_all_resources)
+            if self.file_type == "vvt":
+                self.write_vvtest_util()
             self.status.set("staged")
             self.dump()
         tty.verbose(f"Done setting up {self}")
