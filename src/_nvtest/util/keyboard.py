@@ -27,7 +27,7 @@ def key_mapping(char: str) -> str:
     return mapping.get(key, chr(key))
 
 
-def get_key() -> Union[None, str]:
+def _get_key() -> Union[None, str]:
     fd = sys.stdin.fileno()
     oldterm = termios.tcgetattr(fd)
     newattr = termios.tcgetattr(fd)
@@ -44,3 +44,12 @@ def get_key() -> Union[None, str]:
         termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
         fcntl.fcntl(fd, fcntl.F_SETFL, oldflags)
     return None if not char else key_mapping(char)
+
+    def get_key() -> Union[None, str]:
+        if not sys.stdin.isatty() or os.getenv("GITLAB_CI") is not None:
+            return None
+        try:
+            return _get_key()
+        except (Exception, termios.error):
+            return None
+
