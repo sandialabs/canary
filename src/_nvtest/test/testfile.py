@@ -285,7 +285,11 @@ class AbstractTestFile:
         if self.path.endswith(".vvt"):
             from _nvtest.compat.vvtest import load_vvt
 
-            load_vvt(self)
+            try:
+                load_vvt(self)
+            except Exception:
+                tty.error(f"Failed to load {self.file}")
+                raise
         else:
             self._load()
 

@@ -11,7 +11,8 @@ from . import macos
 
 editable_properties = (
     "cpu_count",
-    "cores_per_node",
+    "cores_per_socket",
+    "sockets_per_node",
     "device_count",
     "devices_per_node",
 )
@@ -53,7 +54,8 @@ def machine_config() -> dict:
         host=sitename,
         name=os.getenv("SNLCLUSTER", uname.node),
         platform=uname.system,
-        cores_per_node=ns["cores_per_node"],
+        cores_per_socket=ns["cores_per_socket"],
+        sockets_per_node=ns["sockets_per_node"],
         cpu_count=ns["cpu_count"],
         device_count=0,
         devices_per_node=0,
@@ -65,7 +67,8 @@ def machine_config() -> dict:
 def read_machine_info() -> dict:
     info = dict(
         nodes=1,
-        cores_per_node=rprobe.cpu_count(),
+        cores_per_socket=rprobe.cpu_count(),
+        sockets_per_node=1,
         cpu_count=rprobe.cpu_count(),
     )
     if which("sinfo"):
@@ -97,8 +100,8 @@ def read_sinfo() -> dict:
     else:
         raise ValueError("Unable to read sinfo")
     info = {
-        "cores_per_node": cps * spn,
-        "cpu_count": cpn * nc,
+        "sockets_per_node": spn,
+        "cores_per_socket": cps,
         "nodes": nc,
     }
     return info

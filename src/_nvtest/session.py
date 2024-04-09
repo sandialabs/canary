@@ -78,11 +78,9 @@ from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
 from functools import partial
 from itertools import repeat
-from typing import IO
 from typing import Any
 from typing import Generator
 from typing import Optional
-from typing import Type
 from typing import Union
 
 from . import config
@@ -129,39 +127,48 @@ class ExitCode:
 
 
 class Database:
-    def __init__(self, directory: str) -> None:
+    def __init__(self, directory: str, cases: Optional[list[TestCase]] = None) -> None:
         self.directory = os.path.abspath(directory)
         lock_path = os.path.join(self.directory, "lock")
         self.lock = Lock(lock_path, default_timeout=120, desc="session.database")
-        self.fp: Union[None, IO[Any]] = None
-        self.db = os.path.join(directory, "stage/tests")
+        if cases is not None:
+            self.makeindex(cases)
+        elif not os.path.exists(os.path.join(self.directory, "index/cases")):
+            raise ValueError(f"index not found at {self.directory}")
 
-    @contextmanager
-    def open(self, mode: str = "r"):
-        assert mode in "raw"
-        transaction_type: Union[Type[ReadTransaction], Type[WriteTransaction]]
-        if mode in "aw":
-            transaction_type = WriteTransaction
-        else:
-            transaction_type = ReadTransaction
-        with transaction_type(self.lock):
-            mkdirp(os.path.dirname(self.db))
-            self.fp = open(self.db, mode)
-            try:
-                yield self
-            finally:
-                self.fp.close()
+    def _single_case_entry(self, case: TestCase) -> dict:
+        entry = {
+            "start": case.start,
+            "finish": case.finish,
+            "status": [case.status.value, case.status.details],
+            "returncode": case.returncode,
+            "dependencies": [dep.id for dep in case.dependencies],
+        }
+        return entry
+
+    def update(self, cases: Union[TestCase, list[TestCase]]) -> None:
+        if not isinstance(cases, list):
+            cases = [cases]
+        file = os.path.join(self.directory, "stage/cases")
+        mkdirp(os.path.dirname(file))
+        with WriteTransaction(self.lock):
+            with open(file, "a") as fh:
+                for case in cases:
+                    cd = self._single_case_entry(case)
+                    fh.write(json.dumps({case.id: cd}) + "\n")
 
     def load(self) -> list[TestCase]:
         fd: dict[str, dict]
-        file = os.path.join(self.directory, "index/cases")
-        with open(file) as fh:
-            fd = json.load(fh)
-        assert self.fp is not None
-        for line in self.fp:
-            if line.split():
-                for case_id, value in json.loads(line).items():
-                    fd[case_id].update(value)
+        with ReadTransaction(self.lock):
+            file = os.path.join(self.directory, "index/cases")
+            with open(file, "r") as fh:
+                fd = json.load(fh)
+            file = os.path.join(self.directory, "stage/cases")
+            with open(file, "r") as fh:
+                for line in fh:
+                    if line.split():
+                        for case_id, value in json.loads(line).items():
+                            fd[case_id].update(value)
         ts: TopologicalSorter = TopologicalSorter()
         for id, kwds in fd.items():
             ts.add(id, *kwds["dependencies"])
@@ -176,21 +183,17 @@ class Database:
             cases[case.id] = case
         return list(cases.values())
 
-    def dump(self, cases: Union[TestCase, list[TestCase]]) -> None:
-        if not isinstance(cases, list):
-            cases = [cases]
-        assert self.fp is not None
-        for case in cases:
-            cd = {
-                "start": case.start,
-                "finish": case.finish,
-                "status": [case.status.value, case.status.details],
-                "returncode": case.returncode,
-                "dependencies": [dep.id for dep in case.dependencies] or None,
-            }
-            self.fp.write(json.dumps({case.id: cd}) + "\n")
+    def read(self) -> dict[str, dict]:
+        with ReadTransaction(self.lock):
+            lines = open(os.path.join(self.directory, "stage/cases")).readlines()
+        fd: dict[str, dict] = {}
+        for line in lines:
+            if line.split():
+                for case_id, value in json.loads(line.strip()).items():
+                    fd.setdefault(case_id, {}).update(value)
+        return fd
 
-    def create_index(self, cases: list[TestCase]) -> None:
+    def makeindex(self, cases: list[TestCase]) -> None:
         files: dict[str, set[str]] = {}
         indexed: dict[str, Any] = {}
         for case in cases:
@@ -204,34 +207,29 @@ class Database:
         file = os.path.join(self.directory, "index/cases")
         with open(file, "w") as fh:
             json.dump(indexed, fh, indent=2)
+        file = os.path.join(self.directory, "stage/cases")
+        mkdirp(os.path.dirname(file))
+        with open(file, "w") as fh:
+            for case in cases:
+                if case.masked:
+                    continue
+                cd = self._single_case_entry(case)
+                fh.write(json.dumps({case.id: cd}) + "\n")
 
-    def clean(self) -> None:
-        with self.open(mode="r"):
-            cases = self.load()
+    def reindex(self) -> None:
+        cases = self.load()
         seen: set[str] = set()
         unique: list[TestCase] = []
         for case in reversed(cases):
             if case.id not in seen:
                 unique.append(case)
                 seen.add(case.id)
-        with self.open(mode="w"):
-            self.dump(list(reversed(unique)))
-
-    def dump_batches(self, batches: list[Partition]) -> None:
-        fd: dict[str, list[str]] = {}
-        for batch in batches:
-            cases = fd.setdefault(str(batch.rank[0]), [])
-            cases.extend([case.id for case in batch])
-        file = os.path.join(self.directory, "index/batches")
-        mkdirp(os.path.dirname(file))
-        with open(file, "w") as fh:
-            json.dump({"batches": fd}, fh, indent=2)
-
-    def load_batches(self) -> dict[str, list[str]]:
-        file = os.path.join(self.directory, "index/batches")
-        with open(file) as fh:
-            fd = json.load(fh)
-        return fd["batches"]
+        file = os.path.join(self.directory, "stage/cases")
+        with WriteTransaction(self.lock):
+            with open(file, "w") as fh:
+                for case in reversed(unique):
+                    cd = self._single_case_entry(case)
+                    fh.write(json.dumps({case.id: cd}) + "\n")
 
 
 class Session:
@@ -283,28 +281,8 @@ class Session:
         return path
 
     @property
-    def index_dir(self):
-        path = os.path.join(self.dotdir, "index")
-        return path
-
-    @property
-    def config_file(self):
-        path = os.path.join(self.dotdir, "config")
-        return path
-
-    @property
     def stage(self) -> str:
         return os.path.join(self.dotdir, "stage")
-
-    @property
-    def batch_file(self):
-        path = os.path.join(self.index_dir, "batches")
-        return path
-
-    @property
-    def results_file(self):
-        p = os.path.join(self.stage, "tests")
-        return p
 
     @property
     def avail_cpus(self) -> int:
@@ -436,10 +414,12 @@ class Session:
 
         with open(os.path.join(self.dotdir, "params"), "w") as fh:
             variables = dict(vars(self))
-            for attr in ("cases", "queue", "lock", "runner"):
+            for attr in ("cases", "queue", "db", "runner"):
                 variables.pop(attr, None)
             json.dump(variables, fh, indent=2)
-        with open(os.path.join(self.stage, "params"), "w") as fh:
+        file = os.path.join(self.dotdir, "options")
+        mkdirp(os.path.dirname(file))
+        with open(file, "w") as fh:
             kwds = dict(
                 keyword_expr=keyword_expr,
                 on_options=on_options,
@@ -463,13 +443,12 @@ class Session:
             raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
         self.mode = mode
         self.exitstatus = -1
-        lock_path = os.path.join(self.dotdir, "lock")
-        self.lock = Lock(lock_path, default_timeout=120, desc="session")
-        assert os.path.exists(os.path.join(self.dotdir, "stage"))
+        assert os.path.exists(self.stage)
         with open(os.path.join(self.dotdir, "params")) as fh:
             for attr, value in json.load(fh).items():
                 setattr(self, attr, value)
-        self.cases = self._load_testcases()
+        self.db = Database(self.dotdir)
+        self.cases = self.db.load()
         self.state = 1
         return self
 
@@ -525,18 +504,10 @@ class Session:
             data = config.get(section, scope="local") or {}
             for key, value in data.items():
                 config.set(f"{section}:{key}", value, scope="session")
-
         file = os.path.join(self.work_tree, config.config_dir, "config")
         mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
             config.dump(fh, scope="session")
-
-        mkdirp(self.index_dir)
-        mkdirp(self.stage)
-
-        lock_path = os.path.join(self.dotdir, "lock")
-        self.lock = Lock(lock_path, default_timeout=120, desc="session")
-
         duration = time.time() - t_start
         tty.debug(f"Done initializing session ({duration:.2f}s.)")
 
@@ -588,19 +559,8 @@ class Session:
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
 
-        self.create_index(self.cases)
+        self.db = Database(self.dotdir, self.cases)
         self.setup_testcases(cases_to_run, copy_all_resources=copy_all_resources)
-
-        save_attrs = ["start", "finish", "status"]
-        mkdirp(os.path.dirname(self.results_file))
-        with WriteTransaction(self.lock):
-            with open(self.results_file, "w") as fh:
-                for case in cases_to_run:
-                    idata = case.asdict(*save_attrs)
-                    if "dependencies" in idata:
-                        idata["dependencies"] = [dep.id for dep in case.dependencies]
-                    fh.write(json.dumps({case.id: idata}) + "\n")
-
         duration = time.time() - t_start
         tty.debug(f"Done populating work tree ({duration:.2f}s.)")
 
@@ -637,10 +597,10 @@ class Session:
         for batch in batches:
             cases = fd.setdefault(batch.rank[0], [])
             cases.extend([case.id for case in batch])
-        mkdirp(os.path.dirname(self.batch_file))
-        with WriteTransaction(self.lock):
-            with open(self.batch_file, "w") as fh:
-                json.dump({"batches": fd}, fh, indent=2)
+        file = os.path.join(self.dotdir, "index/batches")
+        mkdirp(os.path.dirname(file))
+        with open(file, "w") as fh:
+            json.dump({"batches": fd}, fh, indent=2)
 
     def filter(
         self,
@@ -661,7 +621,8 @@ class Session:
         start = os.path.normpath(start)
         case_ids: list[str] = []
         if batch_no is not None:
-            with open(self.batch_file) as fh:
+            file = os.path.join(self.dotdir, "index/batches")
+            with open(file, "r") as fh:
                 fd = json.load(fh)
             case_ids.extend(fd["batches"][str(batch_no)])
         # mask tests and then later enable based on additional conditions
@@ -851,7 +812,7 @@ class Session:
             tty.error(f"{obj}: wrong future entity ID")
             return
         if isinstance(obj, Partition):
-            fd = load_test_results(self.stage)
+            fd = self.db.read()
             for case in obj:
                 if case.id not in fd:
                     tty.error(f"case ID {case.id} not in batch {obj.rank[0]}")
@@ -873,59 +834,12 @@ class Session:
                 tty.error(f"Expected TestCase, got {obj.__class__.__name__}")
                 return
             obj.update(attrs[obj.fullname])
-            fd = obj.asdict("start", "finish", "status", "returncode")
-            with WriteTransaction(self.lock):
-                with open(self.results_file, "a") as fh:
-                    fh.write(json.dumps({obj.id: fd}) + "\n")
-
-    def _load_testcases(self) -> list[TestCase]:
-        with open(os.path.join(self.index_dir, "cases")) as fh:
-            fd = json.load(fh)
-        with open(self.results_file) as fh:
-            for line in fh:
-                if line.split():
-                    for case_id, value in json.loads(line).items():
-                        fd[case_id].update(value)
-        ts: TopologicalSorter = TopologicalSorter()
-        for id, kwds in fd.items():
-            ts.add(id, *kwds["dependencies"])
-        cases: dict[str, TestCase] = {}
-        for id in ts.static_order():
-            kwds = fd[id]
-            dependencies = kwds.pop("dependencies")
-            if "exec_root" not in kwds:
-                kwds["exec_root"] = self.work_tree
-            case = TestCase.from_dict(kwds)
-            case.dependencies = [cases[dep] for dep in dependencies]
-            cases[case.id] = case
-        return list(cases.values())
-
-    def create_index(self, cases: list[TestCase]) -> None:
-        files: dict[str, set[str]] = {}
-        indexed: dict[str, Any] = {}
-        for case in cases:
-            files.setdefault(case.file_root, set()).add(case.file_path)
-            indexed[case.id] = case.asdict()
-            indexed[case.id]["dependencies"] = [dep.id for dep in case.dependencies]
-        with open(os.path.join(self.index_dir, "files"), "w") as fh:
-            json.dump({k: list(v) for (k, v) in files.items()}, fh, indent=2)
-        with open(os.path.join(self.index_dir, "cases"), "w") as fh:
-            json.dump(indexed, fh, indent=2)
+            self.db.update([obj])
 
 
 def _setup_individual_case(case, exec_root, copy_all_resources):
     case.setup(exec_root, copy_all_resources=copy_all_resources)
     return (case.fullname, vars(case))
-
-
-def load_test_results(stage: str) -> dict[str, dict]:
-    lines = open(os.path.join(stage, "tests")).readlines()
-    fd: dict[str, dict] = {}
-    for line in lines:
-        if line.split():
-            for case_id, value in json.loads(line.strip()).items():
-                fd.setdefault(case_id, {}).update(value)
-    return fd
 
 
 class EmptySession(Exception):
