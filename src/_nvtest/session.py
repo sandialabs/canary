@@ -69,7 +69,9 @@ import inspect
 import json
 import os
 import signal
+import sys
 import time
+import traceback
 from concurrent.futures import Future
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
@@ -811,6 +813,9 @@ class Session:
                             raise StopExecution(f"fail_fast: {name}", code)
                         except StopIteration:
                             break
+                        except BaseException:
+                            traceback.print_exc(file=sys.stderr)
+                            raise
                         future = ppe.submit(self.runner, entity)
                         callback = partial(self.update_from_future, i)
                         future.add_done_callback(callback)
