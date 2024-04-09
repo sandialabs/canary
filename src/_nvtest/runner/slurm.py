@@ -7,7 +7,6 @@ from typing import TextIO
 
 from .. import config
 from ..test.partition import Partition
-from ..util.misc import digits
 from ..util.time import hhmmss
 from ._slurm import _Slurm
 from .batch import BatchRunner
@@ -23,11 +22,11 @@ class SlurmRunner(BatchRunner, _Slurm):
     shell = "/bin/sh"
     command = "sbatch"
 
-    def __init__(self, session: "Session", *args: Any):
+    def __init__(self, session: "Session", **kwargs: Any):
         cores_per_socket = config.get("machine:cores_per_socket")
         if cores_per_socket is None:
             raise ValueError("slurm runner requires that 'machine:cores_per_socket' be defined")
-        super().__init__(session, *args)
+        super().__init__(session, **kwargs)
         parser = self.make_argument_parser()
         self.namespace = argparse.Namespace(wait=True)  # always block
         self.namespace, unknown_args = parser.parse_known_args(
@@ -62,9 +61,8 @@ class SlurmRunner(BatchRunner, _Slurm):
 
     def write_header(self, fh: TextIO, batch_no: int) -> None:
         """Generate the sbatch script for the current state of arguments."""
-        n = max(digits(batch_no), 3)
-        basename = f"batch-{batch_no:0{n}}-slurm-out.txt"
-        file = os.path.join(self.stage, basename)
+        script = self.submit_filename(batch_no)
+        file = os.path.splitext(script)[0] + "-slurm-out.txt"
         self.namespace.error = self.namespace.output = file
         fh.write(f"#!{self.shell}\n")
         for key, value in vars(self.namespace).items():

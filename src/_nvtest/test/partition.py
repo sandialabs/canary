@@ -1,15 +1,8 @@
-import json
-import os
-from typing import Any
 from typing import Optional
-from typing import TextIO
 from typing import Union
 
 from ..util import graph
-from ..util import tty
 from ..util.collections import defaultlist
-from ..util.filesystem import mkdirp
-from ..util.graph import TopologicalSorter
 from .testcase import TestCase
 
 
@@ -109,54 +102,3 @@ def partition_t(cases, t=60 * 30) -> list[Partition]:
         partition.update(group)
     n = len(partitions)
     return [Partition(p, i, n) for i, p in enumerate(partitions)]
-
-
-def load_partition(path: str) -> Partition:
-    with open(path, "r") as fh:
-        data = json.load(fh)
-
-    ts: TopologicalSorter = TopologicalSorter()
-    for id, kwds in data["cases"].items():
-        ts.add(id, *kwds["dependencies"])
-    cases: dict[str, TestCase] = {}
-    for id in ts.static_order():
-        kwds = data["cases"][id]
-        dependencies = kwds.pop("dependencies")
-        case = TestCase.from_dict(kwds)
-        case.dependencies = [cases[dep] for dep in dependencies]
-        cases[case.id] = case
-    i, n = data["rank"]
-    return Partition(list(cases.values()), i, n)
-
-
-def dump_partitions(partitions: list[Partition], dest: str = "TestPartitions") -> list[str]:
-    files = []
-    mkdirp(dest)
-    n = len(partitions)
-    for i, partition in enumerate(partitions):
-        file = os.path.join(dest, f"batch.json.{n}.{i}")
-        files.append(os.path.abspath(file))
-        with open(file, "w") as fh:
-            dump_partition(partition, fh)
-    return files
-
-
-def dump_partition(partition: Partition, fh: TextIO) -> None:
-    cases: dict[str, Any] = {}
-    for case in partition:
-        cases[case.id] = case.asdict()
-        cases[case.id]["dependencies"] = [dep.id for dep in case.dependencies]
-    data = {"rank": list(partition.rank), "cases": cases}
-    json.dump(data, fh, indent=2)
-
-
-def merge(files: list[str]) -> list[TestCase]:
-    tty.emit(f"Merging partitioned test results from {len(files)} partitions\n")
-    cases: dict[str, TestCase] = {}
-    for file in files:
-        data = json.load(open(file))
-        for case_vars in data:
-            case = TestCase.from_dict(case_vars)
-            if case.fullname not in cases:
-                cases[case.fullname] = case
-    return list(cases.values())

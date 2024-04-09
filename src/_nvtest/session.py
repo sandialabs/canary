@@ -65,6 +65,7 @@ is ultimately executed.  The file ``nvtest-out.txt`` is the output from running
 the test.
 """
 
+import glob
 import inspect
 import json
 import os
@@ -96,7 +97,6 @@ from .test.partition import Partition
 from .test.partition import partition_n
 from .test.partition import partition_t
 from .test.testcase import TestCase
-from .third_party import rprobe
 from .third_party.lock import Lock
 from .third_party.lock import ReadTransaction
 from .third_party.lock import WriteTransaction
@@ -112,6 +112,7 @@ from .util.time import timeout as timeout_context
 from .util.tty.color import colorize
 
 default_batchsize = 30 * 60  # 30 minutes
+REUSE_SCHEDULER = "==REUSE_SCHEDUER=="
 
 
 class ExitCode:
@@ -251,6 +252,7 @@ class Session:
     queue: Queue
     lock: Lock
     db: Database
+    ini_options: dict
 
     def __init__(self) -> None:
         stack = inspect.stack()
@@ -261,9 +263,16 @@ class Session:
         if calling_func not in (Session.create, Session.load):
             raise ValueError("Session must be created through one of its factory methods")
         self.state: int = 0
-        self._avail_cpus = config.get("machine:cpu_count")
+
+        nodes = config.get("machine:nodes") or 1
+        spn = config.get("machine:sockets_per_node")
+        cps = config.get("machine:cores_per_socket")
+        cores_per_node = spn * cps
+        avail_cpus = nodes * cores_per_node
+
+        self._avail_cpus = avail_cpus
         self._avail_cpus_per_test = self.avail_cpus
-        self._avail_workers = self.avail_cpus
+        self._avail_workers = config.get("machine:cpu_count")
         self._avail_devices = config.get("machine:device_count")
         self._avail_devices_per_test = self.avail_devices
 
@@ -290,9 +299,13 @@ class Session:
 
     @avail_cpus.setter
     def avail_cpus(self, arg: int) -> None:
-        if arg > config.get("machine:cpu_count"):
-            n = config.get("machine:cpu_count")
-            raise ValueError(f"avail_cpus={arg} cannot exceed cpu_count={n}")
+        nodes = config.get("machine:nodes") or 1
+        spn = config.get("machine:sockets_per_node") or 1
+        cps = config.get("machine:cores_per_socket") or config.get("machine:cpu_count")
+        cores_per_node = spn * cps
+        avail_cpus = nodes * cores_per_node
+        if arg > avail_cpus:
+            raise ValueError(f"avail_cpus={arg} cannot exceed cpu_count={avail_cpus}")
         self._avail_cpus = arg
         if arg < self._avail_cpus_per_test:
             self._avail_cpus_per_test = arg
@@ -369,10 +382,6 @@ class Session:
         tty.debug(f"Creating new test session in {work_tree}")
         t_start = time.time()
 
-        if batch_count is not None or batch_time is not None:
-            if scheduler is None:
-                raise ValueError("batched execution requires a scheduler")
-
         try:
             self.initialize(
                 work_tree,
@@ -402,30 +411,30 @@ class Session:
         for hook in plugin.plugins("session", "setup"):
             hook(self)
 
-        if batch_count is not None or batch_time is not None:
-            self.setup_batch_queue(batch_count=batch_count, batch_time=batch_time)
-            self.runner = r_factory(scheduler, self, options=scheduler_options)
-        else:
-            self.setup_direct_queue()
-            self.runner = r_factory("direct", self)
-        self.runner.validate(self.queue.work_items)
-        for work_item in self.queue.work_items:
-            self.runner.setup(work_item)
-
-        with open(os.path.join(self.dotdir, "params"), "w") as fh:
+        self.ini_options = dict(
+            keyword_expr=keyword_expr,
+            on_options=on_options,
+            parameter_expr=parameter_expr,
+            batch_count=batch_count,
+            batch_time=batch_time,
+            scheduler=scheduler,
+            scheduler_options=scheduler_options,
+            copy_all_resources=copy_all_resources,
+        )
+        file = os.path.join(self.dotdir, "params")
+        mkdirp(os.path.dirname(file))
+        with open(file, "w") as fh:
             variables = dict(vars(self))
             for attr in ("cases", "queue", "db", "runner"):
                 variables.pop(attr, None)
             json.dump(variables, fh, indent=2)
-        file = os.path.join(self.dotdir, "options")
-        mkdirp(os.path.dirname(file))
-        with open(file, "w") as fh:
-            kwds = dict(
-                keyword_expr=keyword_expr,
-                on_options=on_options,
-                parameter_expr=parameter_expr,
-            )
-            json.dump(kwds, fh, indent=2)
+
+        self.setup_runner(
+            batch_count=batch_count,
+            batch_time=batch_time,
+            scheduler=scheduler,
+            scheduler_options=scheduler_options,
+        )
 
         duration = time.time() - t_start
         tty.debug(f"Done creating test session ({duration:.2f}s.)")
@@ -450,6 +459,7 @@ class Session:
         self.db = Database(self.dotdir)
         self.cases = self.db.load()
         self.state = 1
+        self.mode = mode
         return self
 
     def initialize(
@@ -576,10 +586,13 @@ class Session:
         self,
         batch_count: Optional[int] = None,
         batch_time: Optional[float] = None,
-    ) -> None:
+    ) -> int:
         batched: bool = batch_count is not None or batch_time is not None
         if not batched:
             raise ValueError("Expected batched == True")
+
+        batch_stores = glob.glob(os.path.join(self.dotdir, "stage/batch/*"))
+        batch_store = len(batch_stores)
 
         cases_to_run = [case for case in self.cases if not case.masked]
         batches: list[Partition]
@@ -597,14 +610,31 @@ class Session:
         for batch in batches:
             cases = fd.setdefault(batch.rank[0], [])
             cases.extend([case.id for case in batch])
-        file = os.path.join(self.dotdir, "index/batches")
+
+        file = os.path.join(self.dotdir, "stage/batch", str(batch_store), "index")
         mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
-            json.dump({"batches": fd}, fh, indent=2)
+            json.dump({"index": fd}, fh, indent=2)
+        return batch_store
+
+    def apply_batch_filter(self, batch_store: Optional[int], batch_no: Optional[int]) -> None:
+        file = os.path.join(self.dotdir, "stage/batch", str(batch_store), "index")
+        with open(file, "r") as fh:
+            fd = json.load(fh)
+        case_ids: list[str] = fd["index"][str(batch_no)]
+        # mask tests and then later enable based on additional conditions
+        for case in self.cases:
+            if case.id in case_ids:
+                case.status.set("staged")
+                case.unmask()
+            elif not case.masked:
+                case.mask = f"case is not in batch {batch_no}"
+        return None
 
     def filter(
         self,
         batch_no: Optional[int] = None,
+        batch_store: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
         start: Optional[str] = None,
@@ -614,26 +644,16 @@ class Session:
     ) -> None:
         if self.state != 1:
             raise ValueError(f"Expected state == 1 (got {self.state})")
+        if batch_no is not None:
+            self.apply_batch_filter(batch_store, batch_no)
+            return
         if start is None:
             start = self.work_tree
         elif not os.path.isabs(start):
             start = os.path.join(self.work_tree, start)
         start = os.path.normpath(start)
-        case_ids: list[str] = []
-        if batch_no is not None:
-            file = os.path.join(self.dotdir, "index/batches")
-            with open(file, "r") as fh:
-                fd = json.load(fh)
-            case_ids.extend(fd["batches"][str(batch_no)])
         # mask tests and then later enable based on additional conditions
         for case in self.cases:
-            if batch_no is not None:
-                if case.id in case_ids:
-                    case.status.set("staged")
-                    case.unmask()
-                else:
-                    case.mask = f"case is not in batch {batch_no}"
-                continue
             if case.masked:
                 continue
             if not case.exec_dir.startswith(start):
@@ -669,9 +689,35 @@ class Session:
         cases = [case for case in self.cases if not case.masked]
         if not cases:
             raise EmptySession()
-        self.setup_direct_queue()
-        self.runner = r_factory("direct", self)
+
+    def setup_runner(
+        self,
+        batch_count: Optional[int] = None,
+        batch_time: Optional[float] = None,
+        scheduler: Optional[str] = None,
+        scheduler_options: Optional[list[str]] = None,
+    ):
+        if scheduler is not None:
+            if batch_count is None and batch_time is None:
+                batch_time = default_batchsize
+        if batch_count is not None or batch_time is not None:
+            if scheduler is None:
+                raise ValueError("batched execution requires a scheduler")
+        if scheduler is not None:
+            reuse = scheduler == REUSE_SCHEDULER
+            if reuse:
+                scheduler = self.ini_options["scheduler"]
+                scheduler_options = scheduler_options or self.ini_options["scheduler_options"]
+            batch_store = self.setup_batch_queue(batch_count=batch_count, batch_time=batch_time)
+            self.runner = r_factory(
+                scheduler, self, batch_store=batch_store, options=scheduler_options
+            )
+        else:
+            self.setup_direct_queue()
+            self.runner = r_factory("direct", self)
         self.runner.validate(self.queue.work_items)
+        for work_item in self.queue.work_items:
+            self.runner.setup(work_item)
         self.state = 2
 
     def run(
@@ -680,7 +726,9 @@ class Session:
         fail_fast: bool = False,
     ) -> int:
         if self.state != 2:
-            raise ValueError(f"Expected state == 2 (got {self.state})")
+            raise ValueError(
+                f"Expected state == 2 (got {self.state}), did you forget to call setup_runner?"
+            )
         if not self.queue:
             raise ValueError("This session's queue was not set up")
         if not self.queue.cases:
@@ -711,7 +759,7 @@ class Session:
         for var, val in variables.items():
             save_env[var] = os.environ.pop(var, None)
             os.environ[var] = val
-        os.environ["NVTEST_LOG_LEVEL"] = str(tty.get_log_level())
+        os.environ["NVTEST_LOG_LEVEL"] = tty.get_log_level_name()
         yield
         for var, save_val in save_env.items():
             if save_val is not None:
@@ -724,7 +772,6 @@ class Session:
         cases: list[TestCase],
         copy_all_resources: bool = False,
     ) -> None:
-        processes: int = rprobe.cpu_count()
         ts: TopologicalSorter = TopologicalSorter()
         for case in cases:
             ts.add(case, *case.dependencies)
@@ -775,7 +822,7 @@ class Session:
                         except StopIteration:
                             break
                         except BaseException:
-                            traceback.print_exc(file=sys.stderr)
+                            tty.error(traceback.format_exc())
                             raise
                         future = ppe.submit(self.runner, entity)
                         callback = partial(self.update_from_future, i)

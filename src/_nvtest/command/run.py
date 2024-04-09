@@ -15,8 +15,10 @@ from .. import finder
 from ..config.schemas import testpaths_schema
 from ..error import StopExecution
 from ..runner import valid_schedulers
+from ..session import REUSE_SCHEDULER
 from ..session import ExitCode
 from ..session import Session
+from ..session import default_batchsize
 from ..test.status import Status
 from ..test.testcase import TestCase
 from ..util import tty
@@ -68,12 +70,7 @@ def setup_parser(parser: "Parser"):
         metavar="N",
         help="Show N slowest test durations (N=0 for all)",
     )
-    parser.add_argument(
-        "-u",
-        "--until",
-        choices=("setup", "run", "postrun"),
-        help="Stage to stop after when testing [default: %(default)s]",
-    )
+    parser.add_argument("-u", "--until", choices=("setup",), help=argparse.SUPPRESS)
     parser.add_argument(
         "--fail-fast",
         action="store_true",
@@ -216,8 +213,6 @@ def run(args: "argparse.Namespace") -> int:
             print_testcase_results(
                 session.queue.cases, duration=run_duration, durations=args.durations
             )
-        if args.until == "run":
-            return session.exitstatus
     except KeyboardInterrupt:
         session.exitstatus = ExitCode.INTERRUPTED
     except StopExecution as e:
@@ -269,13 +264,17 @@ def _parse_new_session_pathspec(args: argparse.Namespace) -> None:
         args.paths.setdefault(os.getcwd(), [])
         return
     for path in args.pathspec:
-        if path.endswith((".yaml", ".yml", ".json")):
+        if os.path.exists(path) and path.endswith((".yaml", ".yml", ".json")):
             read_paths(path, args.paths)
         elif os.path.isfile(path) and finder.is_test_file(path):
             root, name = os.path.split(path)
             args.paths.setdefault(root, []).append(name)
         elif os.path.isdir(path):
             args.paths.setdefault(path, [])
+        elif os.pathsep in path and os.path.exists(path.replace(os.pathsep, os.path.sep)):
+            # allow specifying as root:name
+            root, name = path.split(os.pathsep, 1)
+            args.paths.setdefault(root, []).append(name.replace(os.pathsep, os.path.sep))
         else:
             tty.die(f"{path}: no such file or directory")
 
@@ -294,7 +293,9 @@ def _parse_in_session_pathspec(args: argparse.Namespace) -> None:
             args.pathspec[i] = None
         elif p.startswith("^"):
             args.mode = "b"
-            setdefault(args, "batch_no", int(p[1:]))
+            batch_store, batch_no = [int(_) for _ in p[1:].split(":")]
+            setdefault(args, "batch_no", batch_no)
+            setdefault(args, "batch_store", batch_store)
         else:
             pathspec.append(p)
     if getattr(args, "case_specs", None):
@@ -336,11 +337,14 @@ def _parse_in_session_pathspec(args: argparse.Namespace) -> None:
 
 
 def print_front_matter(session: "Session"):
-    p = config.get("system:platform")
+    p = config.get("system:os:name")
     v = config.get("python:version")
     tty.print(f"{p} -- Python {v}")
     tty.print(f"Available cpus: {session.avail_cpus}")
     tty.print(f"Available cpus per test: {session.avail_cpus_per_test}")
+    if session.avail_devices:
+        tty.print(f"Available devices: {session.avail_devices}")
+        tty.print(f"Available devices per test: {session.avail_devices_per_test}")
     tty.print(f"Maximum number of asynchronous jobs: {session.avail_workers}")
     tty.print(f"Working tree: {session.work_tree}")
     if session.mode == "w":
@@ -476,12 +480,14 @@ def setup_session(args: "argparse.Namespace") -> Session:
     session: Session
     if args.mode == "w":
         tty.print("Setting up test session", centered=True)
-        batched_run = args.batch_count is not None or args.batch_time is not None
-        if batched_run:
+        if args.scheduler is not None:
+            if args.batch_count is None and args.batch_time is None:
+                args.batch_time = default_batchsize
+        if args.batch_count is not None or args.batch_time is not None:
+            if args.scheduler is None:
+                raise ValueError("batch count and time require a scheduler argument")
             if args.workers_per_session is None:
                 args.workers_per_session = 5
-        elif args.scheduler is not None:
-            raise ValueError(f"scheduler={args.scheduler!r} requires batched execution")
         session = Session.create(
             work_tree=args.work_tree or Session.default_work_tree,
             search_paths=args.paths,
@@ -513,11 +519,9 @@ def setup_session(args: "argparse.Namespace") -> Session:
         if args.workers_per_session is not None:
             session.avail_workers = args.workers_per_session
         if args.mode == "b":
-            session.filter(batch_no=args.batch_no)
+            session.filter(batch_no=args.batch_no, batch_store=args.batch_store)
         else:
-            batched_run = args.batch_count is not None or args.batch_time is not None
-            if batched_run:
-                raise NotImplementedError("logic for batched re-use not done")
+            scheduler = None
             session.filter(
                 keyword_expr=args.keyword_expr,
                 start=args.start,
@@ -526,6 +530,9 @@ def setup_session(args: "argparse.Namespace") -> Session:
                 avail_devices_per_test=args.devices_per_test,
                 case_specs=getattr(args, "case_specs", None),
             )
+            if session.ini_options.get("scheduler"):
+                scheduler = REUSE_SCHEDULER
+        session.setup_runner(scheduler=scheduler)
     session.exitstatus = ExitCode.OK
     return session
 

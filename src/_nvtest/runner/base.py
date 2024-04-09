@@ -13,8 +13,7 @@ class Runner:
     name: str
     default_args: list[str] = []
 
-    def __init__(self, session: "Session", *args: Any):
-        self.options: list[Any] = list(args)
+    def __init__(self, session: "Session", **kwargs: Any):
         self.work_tree = session.work_tree
         self.stage = session.stage
 

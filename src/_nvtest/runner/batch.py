@@ -25,9 +25,10 @@ class BatchRunner(Runner):
     shell = "/bin/sh"
     command = "/bin/sh"
 
-    def __init__(self, session: "Session", *args: Any) -> None:
-        super().__init__(session, *args)
-        self.stage = session.stage
+    def __init__(self, session: "Session", **kwargs: Any) -> None:
+        super().__init__(session, **kwargs)
+        self.options: list[str] = [str(_) for _ in kwargs.get("options", [])]
+        self.batch_store = kwargs.get("batch_store", 0)
 
     def setup(self, batch: Partition) -> None:
         self.write_submission_script(batch)
@@ -96,13 +97,13 @@ class BatchRunner(Runner):
             f"-l session:workers:{max_workers} "
             f"-l session:cpus:{session_cpus} "
             f"-l test:cpus:{max_test_cpus} "
-            f"^{batch_no}\n)\n"
+            f"^{self.batch_store}:{batch_no}\n)\n"
         )
 
     def submit_filename(self, batch_no: int) -> str:
         n = max(digits(batch_no), 3)
         basename = f"batch-{batch_no:0{n}}-submit.sh"
-        return os.path.join(self.stage, basename)
+        return os.path.join(self.stage, "batch", str(self.batch_store), basename)
 
     def logfile(self, batch_no: int) -> str:
         n = max(digits(batch_no), 3)

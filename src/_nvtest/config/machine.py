@@ -11,10 +11,11 @@ from . import macos
 
 editable_properties = (
     "cpu_count",
+    "nodes",
     "cores_per_socket",
     "sockets_per_node",
     "device_count",
-    "devices_per_node",
+    "devices_per_socket",
 )
 
 
@@ -57,8 +58,9 @@ def machine_config() -> dict:
         cores_per_socket=ns["cores_per_socket"],
         sockets_per_node=ns["sockets_per_node"],
         cpu_count=ns["cpu_count"],
+        nodes=ns["nodes"],
         device_count=0,
-        devices_per_node=0,
+        devices_per_socket=0,
         os=os_config,
     )
     return config

@@ -9,6 +9,7 @@ from . import config
 from . import convert
 from . import describe
 from . import find
+from . import info
 from . import location
 from . import log
 from . import rebaseline
@@ -27,6 +28,7 @@ def all_commands() -> list[ModuleType]:
         convert,
         describe,
         find,
+        info,
         location,
         log,
         report,

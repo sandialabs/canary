@@ -1,6 +1,5 @@
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Optional
 from typing import Type
 from typing import Union
 
@@ -19,11 +18,10 @@ valid_schedulers = (ShellRunner.name, SlurmRunner.name)
 def factory(
     name: Union[None, str],
     session: "Session",
-    *,
-    options: Optional[list[Any]] = None,
+    **kwargs: Any,
 ) -> Runner:
     runner: Type[Runner]
-    tty.verbose("Setting up the test runner")
+    tty.debug("Setting up the test runner")
     if name is None or name == "direct":
         runner = DirectRunner
     elif name == "shell":
@@ -33,6 +31,5 @@ def factory(
     else:
         valid = ", ".join(valid_schedulers)
         raise ValueError(f"Unknown runner {name!r}, choose from direct, {valid}")
-    opts: list[Any] = options or []
-    tty.debug(f"Runner type = {runner.__class__.__name__}")
-    return runner(session, *opts)
+    tty.debug(f"Runner type = {runner.__name__}")
+    return runner(session, **kwargs)

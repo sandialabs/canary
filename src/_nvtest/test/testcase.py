@@ -84,6 +84,7 @@ class TestCase:
         # Execution properties
         self.status = Status()
         self._mask: str = ""
+        self.scheduler: Optional[tuple[str, list[str]]] = None
 
         self.cmd_line: str = ""
         self.exec_root: Optional[str] = None
@@ -306,7 +307,7 @@ class TestCase:
     def asdict(self, *keys):
         data = dict(vars(self))
         data["status"] = [data["status"].value, data["status"].details]
-        for attr in ("file", "_depids", "dep_patterns"):
+        for attr in ("file", "_depids", "dep_patterns", "scheduler"):
             data.pop(attr)
         dependencies = list(data.pop("dependencies"))
         data["dependencies"] = []
@@ -431,6 +432,9 @@ class TestCase:
 
     def register_proc(self, proc) -> None:
         self._process = proc
+
+    def set_scheduler(self, name: str, options: Optional[list[str]]):
+        self.scheduler = (name, options or [])
 
     def do_baseline(self) -> None:
         if not self.baseline:

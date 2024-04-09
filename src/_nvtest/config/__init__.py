@@ -46,7 +46,7 @@ is
    [machine]
    cores_per_socket = N  # (int) default computed from os.cpu_count()
    sockets_per_node = N  # (int) default: 1
-   devices_per_node = N  # (int)
+   devices_per_socket = N  # (int)
    cpu_count = N  # (int) default computed from os.cpu_count()
    device_count = N  # (int) default computed from os.cpu_count()
 
@@ -210,7 +210,7 @@ class Config:
     def load_env_config(self) -> None:
         if "NVTEST_LOG_LEVEL" in os.environ:
             scope_data = self.scopes.setdefault("environment", {})
-            level: int = int(os.environ["NVTEST_LOG_LEVEL"])
+            level: int = tty.log_level_from_name(os.environ["NVTEST_LOG_LEVEL"])
             tty.set_log_level(level)
             scope_data.setdefault("config", {})["log_level"] = level
         if os.getenv("NVTEST_DEBUG", "off").lower() in ("on", "1", "true", "yes"):

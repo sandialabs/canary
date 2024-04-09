@@ -29,7 +29,21 @@ WARN = 1
 ERROR = 0
 
 
-DEFAULT_LOG_LEVEL: int = int(os.getenv("NVTEST_LOG_LEVEL", str(INFO)))
+def log_level_from_name(name: str) -> int:
+    if name == "DEBUG":
+        return 4
+    if name == "VERBOSE":
+        return 3
+    if name == "INFO":
+        return 2
+    if name == "WARN":
+        return 1
+    if name == "ERROR":
+        return 0
+    raise ValueError(name)
+
+
+DEFAULT_LOG_LEVEL: int = log_level_from_name(os.getenv("NVTEST_LOG_LEVEL", "INFO"))
 LOG_LEVEL = DEFAULT_LOG_LEVEL
 builtin_print = print
 
@@ -54,6 +68,20 @@ def is_verbose() -> bool:
 
 def get_log_level() -> int:
     return LOG_LEVEL
+
+
+def get_log_level_name() -> str:
+    if LOG_LEVEL == DEBUG:
+        return "DEBUG"
+    if LOG_LEVEL == VERBOSE:
+        return "VERBOSE"
+    if LOG_LEVEL == INFO:
+        return "INFO"
+    if LOG_LEVEL == WARN:
+        return "WARN"
+    if LOG_LEVEL == ERROR:
+        return "ERROR"
+    raise ValueError(str(LOG_LEVEL))
 
 
 def default_log_level() -> int:
