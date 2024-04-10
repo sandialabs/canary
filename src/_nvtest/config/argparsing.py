@@ -14,8 +14,8 @@ from typing import Union
 
 import _nvtest._version
 
-from ..util import tty
 from ..util.color import colorize
+from ..util.term import terminal_size
 
 stat_names = pstats.Stats.sort_arg_dict_default
 
@@ -27,7 +27,7 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
 
     def _split_lines(self, text, width):
         """Help messages can add new lines by including \n\n"""
-        _, cols = tty.terminal_size()
+        _, cols = terminal_size()
         width = int(2.0 * cols / 3.0)
         lines = []
         for line in text.split("\n\n"):

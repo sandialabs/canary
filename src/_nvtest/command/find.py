@@ -110,12 +110,12 @@ def _print_paths(cases_to_run: "list[TestCase]"):
         label = colorize("@m{%s}" % root)
         logging.hline(label, max_width=max_width)
         cols = colified(sorted(paths), indent=2, width=max_width)
-        logging.puts(cols + "\n")
+        logging.emit(cols)
 
 
 def _print_files(cases_to_run: "list[TestCase]"):
     for file in sorted(set([case.file for case in cases_to_run])):
-        logging.puts(os.path.relpath(file, os.getcwd()) + "\n")
+        logging.emit(os.path.relpath(file, os.getcwd()))
 
 
 def _print_keywords(cases_to_run: "list[TestCase]"):
@@ -127,7 +127,7 @@ def _print_keywords(cases_to_run: "list[TestCase]"):
         label = colorize("@m{%s}" % root)
         logging.hline(label, max_width=max_width)
         cols = colified(sorted(kwds), indent=2, width=max_width)
-        logging.puts(cols + "\n")
+        logging.emit(cols)
 
 
 def _print_graph(cases_to_run: "list[TestCase]"):
@@ -144,9 +144,9 @@ def _print(cases_to_run: "list[TestCase]"):
         cols = colified(lines, indent=2, width=max_width)
         label = colorize("@m{%s}" % root)
         logging.hline(label, max_width=max_width)
-        logging.puts(cols + "\n")
-        summary = f"found {len(lines)} test cases\n"
-        logging.puts(summary)
+        logging.emit(cols)
+        summary = f"found {len(lines)} test cases"
+        logging.emit(summary)
 
 
 def print_testcase_summary(args: "argparse.Namespace", cases: "list[TestCase]") -> None:

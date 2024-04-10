@@ -5,7 +5,7 @@ from .. import config
 from ..session import Session
 from ..test.status import Status
 from ..test.testcase import TestCase
-from ..util import tty
+from ..util import logging
 from ..util.color import colorize
 
 if TYPE_CHECKING:
@@ -97,7 +97,7 @@ def setup_parser(parser: "Parser"):
         help="Sort cases by this field [default: %(default)s]",
     )
     parser.add_argument("pathspec", nargs="?", help="Limit status results to this path")
-    parser.epilog = "-fdt is assumed if no other selection flags are passed"
+    parser.epilog = "-a is assumed if no other selection flags are passed"
 
 
 def matches(pathspec, case):
@@ -129,7 +129,9 @@ def status(args: "argparse.Namespace") -> int:
         if getattr(args, attr):
             break
     else:
-        args.show_diff = args.show_fail = args.show_timeout = True
+        args.show_pass = args.show_diff = args.show_fail = args.show_timeout = args.show_notrun = (
+            True
+        )
     cases_to_show: list[TestCase] = []
     if args.show_all:
         if args.show_excluded:
@@ -209,7 +211,7 @@ def print_status(
     for member in members:
         if member in totals:
             for case in sort_cases_by(totals[member], field=sortby):
-                tty.print(cformat(case, show_logs))
+                logging.emit(cformat(case, show_logs))
                 nprinted += 1
     return nprinted
 
@@ -227,7 +229,7 @@ def print_footer_summary(cases: list[TestCase]) -> None:
             c = Status.colors[member]
             stat = totals[member][0].status.name
             summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-    tty.print(", ".join(summary_parts), centered=True)
+    logging.log(logging.ALWAYS, ", ".join(summary_parts), format="center")
 
 
 def print_durations(cases: list[TestCase], N: int) -> None:
@@ -235,6 +237,6 @@ def print_durations(cases: list[TestCase], N: int) -> None:
     sorted_cases = sorted(cases, key=lambda x: x.duration)
     if N > 0:
         sorted_cases = sorted_cases[-N:]
-    tty.print(f"\nSlowest {len(sorted_cases)} durations\n")
+    logging.emit(f"\nSlowest {len(sorted_cases)} durations")
     for case in sorted_cases:
-        tty.print("  %6.2f     %s" % (case.duration, case.pretty_repr()))
+        logging.emit("  %6.2f     %s" % (case.duration, case.pretty_repr()))

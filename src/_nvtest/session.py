@@ -101,7 +101,6 @@ from .third_party.lock import ReadTransaction
 from .third_party.lock import WriteTransaction
 from .util import logging
 from .util import parallel
-from .util import tty
 from .util.color import colorize
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
@@ -647,6 +646,7 @@ class Session:
         if batch_no is not None:
             self.apply_batch_filter(batch_store, batch_no)
             return
+        explicit_start_path = start is not None
         if start is None:
             start = self.work_tree
         elif not os.path.isabs(start):
@@ -664,6 +664,9 @@ class Session:
                     case.status.set("staged")
                 else:
                     case.mask = colorize("deselected by @*b{testspec expression}")
+                continue
+            elif explicit_start_path:
+                case.status.set("staged")
                 continue
             if case.status != "staged":
                 s = f"deselected due to previous status: {case.status.cname}"
@@ -759,7 +762,8 @@ class Session:
         for var, val in variables.items():
             save_env[var] = os.environ.pop(var, None)
             os.environ[var] = val
-        os.environ["NVTEST_LOG_LEVEL"] = tty.get_log_level_name()
+        level = logging.get_level()
+        os.environ["NVTEST_LOG_LEVEL"] = logging.get_level_name(level)
         yield
         for var, save_val in save_env.items():
             if save_val is not None:
@@ -829,7 +833,6 @@ class Session:
                         future.add_done_callback(callback)
                         futures[i] = (entity, future)
         finally:
-            tty.reset()
             if auto_cleanup:
                 for entity, future in futures.values():
                     if future.running():

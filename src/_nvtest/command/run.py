@@ -22,7 +22,6 @@ from ..session import default_batchsize
 from ..test.status import Status
 from ..test.testcase import TestCase
 from ..util import logging
-from ..util import tty
 from ..util.color import colorize
 from ..util.filesystem import force_remove
 from ..util.misc import partition
@@ -202,7 +201,7 @@ def run(args: "argparse.Namespace") -> int:
         if args.until == "setup":
             logging.info("Stopping after setup (--until='setup')")
             return 0
-        tty.print("Beginning test session", centered=True)
+        logging.log(logging.ALWAYS, "Beginning test session", format="center")
         initstate = 2
         with timer.timeit("run"):
             session.exitstatus = session.run(
@@ -340,17 +339,17 @@ def _parse_in_session_pathspec(args: argparse.Namespace) -> None:
 def print_front_matter(session: "Session"):
     p = config.get("system:os:name")
     v = config.get("python:version")
-    tty.print(f"{p} -- Python {v}")
-    tty.print(f"Available cpus: {session.avail_cpus}")
-    tty.print(f"Available cpus per test: {session.avail_cpus_per_test}")
+    logging.emit(f"{p} -- Python {v}")
+    logging.emit(f"Available cpus: {session.avail_cpus}")
+    logging.emit(f"Available cpus per test: {session.avail_cpus_per_test}")
     if session.avail_devices:
-        tty.print(f"Available devices: {session.avail_devices}")
-        tty.print(f"Available devices per test: {session.avail_devices_per_test}")
-    tty.print(f"Maximum number of asynchronous jobs: {session.avail_workers}")
-    tty.print(f"Working tree: {session.work_tree}")
+        logging.emit(f"Available devices: {session.avail_devices}")
+        logging.emit(f"Available devices per test: {session.avail_devices_per_test}")
+    logging.emit(f"Maximum number of asynchronous jobs: {session.avail_workers}")
+    logging.emit(f"Working tree: {session.work_tree}")
     if session.mode == "w":
         paths = "\n  ".join(session.search_paths)
-        tty.print(f"search paths:\n  {paths}")
+        logging.emit(f"search paths:\n  {paths}")
 
 
 def print_testcase_overview(cases: list[TestCase], duration: Optional[float] = None) -> None:
@@ -362,21 +361,21 @@ def print_testcase_overview(cases: list[TestCase], duration: Optional[float] = N
     t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
     if duration is not None:
         t += "@*{ in %.2fs.}" % duration
-    tty.print(colorize(t))
+    logging.emit(colorize(t))
     cases_to_run = [case for case in cases if not case.masked and not case.skipped]
     files = {case.file for case in cases_to_run}
     t = "@*g{running} %d test cases from %d files" % (len(cases_to_run), len(files))
-    tty.print(colorize(t))
+    logging.emit(colorize(t))
     skipped = [case for case in cases if case.skipped or case.masked]
     skipped_reasons: dict[str, int] = {}
     for case in skipped:
         reason = case.mask if case.masked else case.status.details
         assert isinstance(reason, str)
         skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
-    tty.print(colorize("@*b{skipping} %d test cases" % len(skipped)))
+    logging.emit(colorize("@*b{skipping} %d test cases" % len(skipped)))
     reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
     for reason in reversed(reasons):
-        tty.print(f"  • {skipped_reasons[reason]} {reason.lstrip()}")
+        logging.emit(f"  • {skipped_reasons[reason]} {reason.lstrip()}")
     return
 
 
@@ -415,21 +414,21 @@ def print_testcase_results(
     nonpass = ("skipped", "diffed", "timeout", "failed")
     level = logging.get_level()
     if level < logging.INFO and len(totals):
-        tty.print("Short test summary info", centered=True)
+        logging.log(logging.ALWAYS, "Short test summary info", format="center")
     elif any(r in totals for r in nonpass):
-        tty.print("Short test summary info", centered=True)
+        logging.log(logging.ALWAYS, "Short test summary info", format="center")
     if level < logging.DEBUG and "masked" in totals:
         for case in sorted(totals["masked"], key=lambda t: t.name):
-            tty.print(cformat(case))
+            logging.emit(cformat(case))
     if level < logging.INFO:
         for status in ("staged", "success"):
             if status in totals:
                 for case in sorted(totals[status], key=lambda t: t.name):
-                    tty.print(cformat(case))
+                    logging.emit(cformat(case))
     for status in nonpass:
         if status in totals:
             for case in sorted(totals[status], key=lambda t: t.name):
-                tty.print(cformat(case))
+                logging.emit(cformat(case))
 
     if durations is not None:
         print_durations(cases, int(durations))
@@ -442,7 +441,7 @@ def print_testcase_results(
             stat = totals[member][0].status.name
             summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
     text = ", ".join(summary_parts)
-    tty.print(text + f" in {duration:.2f}s.", centered=True)
+    logging.log(logging.ALWAYS, text + f" in {duration:.2f}s.", format="center")
 
 
 def print_durations(cases: list[TestCase], N: int) -> None:
@@ -450,9 +449,9 @@ def print_durations(cases: list[TestCase], N: int) -> None:
     sorted_cases = sorted(cases, key=lambda x: x.duration)
     if N > 0:
         sorted_cases = sorted_cases[-N:]
-    tty.print(f"Slowest {len(sorted_cases)} durations", centered=True)
+    logging.log(logging.ALWAYS, f"Slowest {len(sorted_cases)} durations", format="center")
     for case in sorted_cases:
-        tty.print("  %6.2f     %s" % (case.duration, case.pretty_repr()))
+        logging.emit("  %6.2f     %s" % (case.duration, case.pretty_repr()))
 
 
 def read_paths(file: str, paths: dict[str, list[str]]) -> None:
@@ -480,7 +479,7 @@ def setup_session(args: "argparse.Namespace") -> Session:
         force_remove(args.work_tree or Session.default_work_tree)
     session: Session
     if args.mode == "w":
-        tty.print("Setting up test session", centered=True)
+        logging.log(logging.ALWAYS, "Setting up test session", format="center")
         if args.scheduler is not None:
             if args.batch_count is None and args.batch_time is None:
                 args.batch_time = default_batchsize
@@ -509,6 +508,7 @@ def setup_session(args: "argparse.Namespace") -> Session:
     else:
         assert args.mode in "ba"
         session = Session.load(mode="a")
+        scheduler = None
         if args.cpus_per_session is not None:
             session.avail_cpus = args.cpus_per_session
         if args.cpus_per_test is not None:
@@ -522,7 +522,6 @@ def setup_session(args: "argparse.Namespace") -> Session:
         if args.mode == "b":
             session.filter(batch_no=args.batch_no, batch_store=args.batch_store)
         else:
-            scheduler = None
             session.filter(
                 keyword_expr=args.keyword_expr,
                 start=args.start,

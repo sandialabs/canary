@@ -15,7 +15,6 @@ from typing import Union
 from .. import config
 from ..util import filesystem as fs
 from ..util import logging
-from ..util import tty
 from ..util.color import colorize
 from ..util.compression import compress_file
 from ..util.executable import Executable
@@ -409,8 +408,8 @@ class TestCase:
         logging.debug(f"Done setting up {self}")
 
     def setup_exec_dir(self, copy_all_resources: bool = False) -> None:
-        with tty.log_output(self.logfile("setup"), mode="w"):
-            with tty.timestamps():
+        with logging.capture(self.logfile("setup"), mode="w"):
+            with logging.timestamps():
                 logging.info(f"Preparing test: {self.name}")
                 logging.info(f"Directory: {os.getcwd()}")
                 logging.info("Cleaning work directory...")
@@ -459,7 +458,7 @@ class TestCase:
                     src = os.path.join(self.exec_dir, a)
                     dst = os.path.join(self.file_dir, b)
                     if os.path.exists(src):
-                        tty.print(f"    Replacing {b} with {a}")
+                        logging.emit(f"    Replacing {b} with {a}")
                         copyfile(src, dst)
 
     def write_vvtest_util(self, baseline: bool = False) -> None:
@@ -483,7 +482,7 @@ class TestCase:
         fmt = "{{0}}: {0} {1} {{1}}".format(id, self.pretty_repr())
         try:
             self.start = time.time()
-            logging.info(fmt.format("STARTING", ""), prefix=None)
+            logging.log(logging.INFO, fmt.format("STARTING", ""), prefix=None)
             self._run(**kwds)
         except Exception:
             self.returncode = 1
@@ -499,7 +498,7 @@ class TestCase:
                 f = os.path.join(self.exec_dir, "execute.log")
                 fs.force_symlink(self.logfile(), f)
             self.finish = time.time()
-            logging.info(fmt.format("FINISHED", self.status.cname), prefix=None)
+            logging.log(logging.INFO, fmt.format("FINISHED", self.status.cname), prefix=None)
             self.dump()
         return
 
@@ -510,8 +509,8 @@ class TestCase:
         with fs.working_dir(self.exec_dir):
             if self.file_type == "vvt":
                 self.write_vvtest_util()
-            with tty.log_output(self.logfile(stage), mode="w"):
-                with tty.timestamps():
+            with logging.capture(self.logfile(stage), mode="w"):
+                with logging.timestamps():
                     args = self.command_line_args(**kwds)
                     logging.info(f"Running {self.display_name}")
                     logging.info(f"Command line: {sys.executable} {' '.join(args)}")

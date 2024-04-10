@@ -1,8 +1,15 @@
 import datetime
+import os
 import sys
+import termios
+from contextlib import contextmanager
 from io import StringIO
+from typing import IO
+from typing import Any
+from typing import Generator
 from typing import Optional
 from typing import TextIO
+from typing import Union
 
 from .color import cescape
 from .color import clen
@@ -15,11 +22,12 @@ INFO = 20
 WARNING = 30
 ERROR = 40
 FATAL = 50
+ALWAYS = 100
 
 
 LEVEL = WARNING
-PRINT_TIMESTAMP = False
-INDENT = "  "
+TIMESTAMP = False
+FORMAT = "%(prefix)s %(timestamp)s%(message)s"
 
 
 builtin_print = print
@@ -27,10 +35,19 @@ builtin_print = print
 
 def get_timestamp():
     """Get a string timestamp"""
-    if LEVEL <= DEBUG or PRINT_TIMESTAMP:
+    if LEVEL <= DEBUG or TIMESTAMP:
         return datetime.datetime.now().strftime("[%Y-%m-%d-%H:%M:%S.%f] ")
     else:
         return ""
+
+
+@contextmanager
+def timestamps() -> Generator[None, None, None]:
+    global TIMESTAMP
+    save = TIMESTAMP
+    TIMESTAMP = True
+    yield
+    TIMESTAMP = save
 
 
 def set_level(level: int) -> None:
@@ -39,110 +56,107 @@ def set_level(level: int) -> None:
     LEVEL = level
 
 
-def get_level() -> int:
-    return LEVEL
+def set_format(format: str) -> None:
+    global FORMAT
+    FORMAT = format
 
 
-def get_level_name() -> str:
-    if LEVEL == TRACE:
+def get_level(name: Optional[str] = None) -> int:
+    if name is None:
+        return LEVEL
+    if name == "TRACE":
+        return TRACE
+    if name == "DEBUG":
+        return DEBUG
+    if name == "INFO":
+        return INFO
+    if name == "WARNING":
+        return WARNING
+    if name == "ERROR":
+        return ERROR
+    if name == "FATAL":
+        return FATAL
+    raise ValueError(name)
+
+
+def get_level_name(level: int) -> str:
+    if level == TRACE:
         return "TRACE"
-    if LEVEL == DEBUG:
+    if level == DEBUG:
         return "DEBUG"
-    if LEVEL == INFO:
+    if level == INFO:
         return "INFO"
-    if LEVEL == WARNING:
+    if level == WARNING:
         return "WARNING"
-    if LEVEL == ERROR:
+    if level == ERROR:
         return "ERROR"
-    if LEVEL == FATAL:
+    if level == FATAL:
         return "FATAL"
-    return "NOTSET"
+    raise ValueError(level)
 
 
 def format_message(
     message: str,
-    color: str = "*b",
+    *,
     end: str = "\n",
-    prefix: Optional[str] = "==>",
+    prefix: Optional[str] = "==> ",
+    format: Optional[str] = None,
 ) -> str:
-    format = "%(timestamp)s%(message)s"
-    if prefix is not None:
-        format = "@%(color)s{%(prefix)s} " + format
-    kwds = {
-        "color": color,
-        "prefix": prefix,
-        "timestamp": get_timestamp(),
-        "message": cescape(str(message)),
-    }
-    text = format % kwds
-    stream = StringIO()
-    cprint(text, stream=stream, end=end)
-    stream.flush()
-    return stream.getvalue()
+    if format == "center":
+        _, width = terminal_size()
+        dots = "." * clen(message)
+        tmp = f" {dots} ".center(width, "-")
+        message = tmp.replace(dots, message)
+        format = "%(message)s"
+    kwds = {"prefix": prefix or "", "timestamp": get_timestamp(), "message": cescape(str(message))}
+    text = (format or FORMAT) % kwds
+    file = StringIO()
+    cprint(text, stream=file, end=end)
+    file.flush()
+    return file.getvalue()
 
 
-def puts(message: str, *, stream: TextIO = sys.stdout) -> None:
-    stream.write(message)
-    stream.flush()
-
-
-def emit(message: str, *, stream: TextIO = sys.stdout, end="\n") -> None:
-    text = format_message(message, end=end, prefix=None)
-    puts(text, stream=stream)
-
-
-def trace(
-    message: str, *, stream: TextIO = sys.stdout, end="\n", prefix: Optional[str] = "==>"
+def log(
+    level: int,
+    message: str,
+    *,
+    file: TextIO = sys.stdout,
+    prefix: Optional[str] = "==> ",
+    end: str = "\n",
+    format: Optional[str] = None,
 ) -> None:
-    if LEVEL > TRACE:
-        return
-    text = format_message(message, end=end, color="*c", prefix=prefix)
-    puts(text, stream=stream)
+    if level >= LEVEL:
+        text = format_message(message, end=end, prefix=prefix, format=format)
+        file.write(text)
+        file.flush()
 
 
-def debug(
-    message: str, *, stream: TextIO = sys.stdout, end="\n", prefix: Optional[str] = "==>"
-) -> None:
-    if LEVEL > DEBUG:
-        return
-    text = format_message(message, end=end, color="*g", prefix=prefix)
-    puts(text, stream=stream)
+def emit(message: str, *, file: TextIO = sys.stdout, end="\n") -> None:
+    log(ALWAYS, message, format="%(message)s", end=end, file=file)
 
 
-def info(
-    message: str, *, stream: TextIO = sys.stdout, end="\n", prefix: Optional[str] = "==>"
-) -> None:
-    if LEVEL > INFO:
-        return
-    text = format_message(message, end=end, color="*b", prefix=prefix)
-    puts(text, stream=stream)
+def trace(message: str, *, file: TextIO = sys.stdout, end="\n") -> None:
+    log(TRACE, message, file=file, prefix="@*c{==>} ", end=end)
 
 
-def warning(
-    message: str, *, stream: TextIO = sys.stderr, end="\n", prefix: Optional[str] = "==>"
-) -> None:
-    if LEVEL > ERROR:
-        return
-    text = format_message(f"Warning: {message}", end=end, color="*Y", prefix=prefix)
-    puts(text, stream=stream)
+def debug(message: str, *, file: TextIO = sys.stdout, end="\n") -> None:
+    log(DEBUG, message, file=file, prefix="@*g{==>} ", end=end)
 
 
-def error(
-    message: str, *, stream: TextIO = sys.stderr, end="\n", prefix: Optional[str] = "==>"
-) -> None:
-    if LEVEL > ERROR:
-        return
-    text = format_message(f"Error: {message}", end=end, color="*r", prefix=prefix)
-    puts(text, stream=stream)
+def info(message: str, *, file: TextIO = sys.stdout, end="\n") -> None:
+    log(INFO, message, file=file, prefix="@*b{==>} ", end=end)
 
 
-def fatal(
-    message: str, *, stream: TextIO = sys.stderr, end="\n", prefix: Optional[str] = "==>"
-) -> None:
-    if LEVEL > FATAL:
-        return
-    text = format_message(f"Fatal: {message}", end=end, color="*r", prefix=prefix)
-    puts(text, stream=stream)
+def warning(message: str, *, file: TextIO = sys.stderr, end="\n") -> None:
+    log(WARNING, message, file=file, prefix="@*Y{==>} Warning: ", end=end)
+
+
+def error(message: str, *, file: TextIO = sys.stderr, end="\n") -> None:
+    log(ERROR, message, file=file, prefix="@*r{==>} Error: ", end=end)
+
+
+def fatal(message: str, *, file: TextIO = sys.stderr, end="\n") -> None:
+    log(FATAL, message, file=file, prefix="@*r{==>} Fatal: ", end=end)
 
 
 def hline(label: Optional[str] = None, char: str = "-", max_width: int = 64) -> None:
@@ -167,14 +181,61 @@ def hline(label: Optional[str] = None, char: str = "-", max_width: int = 64) -> 
         out.write(prefix)
         out.write(label)
         out.write(suffix)
-    out.write("\n")
-    puts(out.getvalue())
+    print(out.getvalue())
 
 
-def centered(level: int, text: str, *, stream: TextIO = sys.stdout, char: str = "-") -> None:
-    if LEVEL > level:
-        return
-    _, width = terminal_size()
-    dots = "." * clen(text)
-    tmp = f" {dots} ".center(width, char)
-    puts(tmp.replace(dots, text), stream=stream)
+def fileno(file_or_fd):
+    if not hasattr(file_or_fd, "fileno"):
+        raise ValueError("Expected a file (`.fileno()`) or a file descriptor")
+    return file_or_fd.fileno()
+
+
+def streamify(arg: Union[TextIO, str], mode: str) -> tuple[IO[Any], bool]:
+    if isinstance(arg, str):
+        return open(arg, mode), True
+    else:
+        return arg, False
+
+
+@contextmanager
+def redirect_stdout(
+    to: Union[str, IO[Any]] = os.devnull, stdout: Optional[TextIO] = None
+) -> Generator[TextIO, None, None]:
+    stdout = stdout or sys.stdout
+    stdout_fd = fileno(stdout)
+    # copy stdout_fd before it is overwritten
+    # NOTE: `copied` is inheritable on Windows when duplicating a standard stream
+    with os.fdopen(os.dup(stdout_fd), "wb") as copied:
+        stdout.flush()  # flush library buffers that dup2 knows nothing about
+        os.dup2(fileno(to), stdout_fd)  # $ exec >&file
+        try:
+            yield stdout  # allow code to be run with the redirected stdout
+        finally:
+            # restore stdout to its previous value
+            # NOTE: dup2 makes stdout_fd inheritable unconditionally
+            stdout.flush()
+            os.dup2(copied.fileno(), stdout_fd)  # $ exec >&copied
+
+
+def merged_stderr_stdout():  # $ exec 2>&1
+    return redirect_stdout(to=sys.stdout, stdout=sys.stderr)
+
+
+@contextmanager
+def capture(file_like: Union[str, TextIO], mode: str = "w") -> Generator[None, None, None]:
+    if file_like is None:
+        yield
+    else:
+        file, fown = streamify(file_like, mode)
+        with redirect_stdout(to=file):
+            with merged_stderr_stdout():
+                yield
+        if fown:
+            file.close()
+
+
+def reset():
+    if sys.stdin.isatty():
+        fd = sys.stdin.fileno()
+        save_tty_attr = termios.tcgetattr(fd)
+        termios.tcsetattr(fd, termios.TCSAFLUSH, save_tty_attr)

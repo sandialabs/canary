@@ -22,11 +22,19 @@ def vardict(arg: Any) -> bool:
     return True
 
 
+def log_levels(arg: Any) -> bool:
+    if not isinstance(arg, str):
+        return False
+    elif arg.upper() not in ("TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "FATAL"):
+        return False
+    return True
+
+
 config_schema = Schema(
     {
         "config": {
             Optional("debug"): bool,
-            Optional("log_level"): int,
+            Optional("log_level"): log_levels,
             Optional("test_files"): str,
         }
     }

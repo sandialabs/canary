@@ -16,7 +16,7 @@ from _nvtest.session import Session
 from _nvtest.test.testcase import TestCase
 from _nvtest.user import patterns
 from _nvtest.util import filesystem
-from _nvtest.util import tty
+from _nvtest.util import logging
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import which
 

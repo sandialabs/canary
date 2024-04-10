@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
 
+from .. import config
 from ..test.partition import Partition
 from ..test.status import Status
 from ..util import logging
-from ..util import tty
 from ..util.color import colorize
 from ..util.executable import Executable
 from ..util.filesystem import getuser
@@ -28,7 +28,7 @@ class BatchRunner(Runner):
 
     def __init__(self, session: "Session", **kwargs: Any) -> None:
         super().__init__(session, **kwargs)
-        self.options: list[str] = [str(_) for _ in kwargs.get("options", [])]
+        self.options: list[str] = [str(_) for _ in kwargs.get("options") or []]
         self.batch_store = kwargs.get("batch_store", 0)
 
     def setup(self, batch: Partition) -> None:
@@ -51,12 +51,11 @@ class BatchRunner(Runner):
         if not os.path.exists(script):
             self.write_submission_script(batch)
         try:
-            with tty.restore():
-                script_x = Executable(self.command)
-                if self.default_args:
-                    script_x.add_default_args(*self.default_args)
-                with open(self.logfile(batch_no), "w") as fh:
-                    script_x(script, fail_on_error=False, output=fh, error=fh)
+            script_x = Executable(self.command)
+            if self.default_args:
+                script_x.add_default_args(*self.default_args)
+            with open(self.logfile(batch_no), "w") as fh:
+                script_x(script, fail_on_error=False, output=fh, error=fh)
         finally:
             self.load_batch_results(batch)
             stat: dict[str, int] = {}
@@ -93,8 +92,9 @@ class BatchRunner(Runner):
         max_test_cpus = self.max_tasks_required(batch)
         max_workers = self.avail_workers(batch)
         session_cpus = max(max_workers, max_test_cpus)
+        dbg_flag = "-d" if config.get("config:debug") else ""
         fh.write(
-            f"(\n  nvtest -C {self.work_tree} run "
+            f"(\n  nvtest {dbg_flag} -C {self.work_tree} run "
             f"-l session:workers:{max_workers} "
             f"-l session:cpus:{session_cpus} "
             f"-l test:cpus:{max_test_cpus} "
@@ -142,7 +142,8 @@ class BatchRunner(Runner):
 
         """
         for case in batch:
-            logging.debug(f"Loading case {case.id}")
+            d = os.path.relpath(case.file_root)
+            logging.debug(f"Loading case {case.id} from {d}/{case.file_path}")
             try:
                 fd = case.load_results()
             except FileNotFoundError:

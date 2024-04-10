@@ -71,6 +71,7 @@ class NVTestCommand:
 
 
 def invoke_command(command: FunctionType, args: argparse.Namespace) -> int:
+    logging.set_level(logging.INFO)
     config.set_main_options(args)
     return command(args)
 

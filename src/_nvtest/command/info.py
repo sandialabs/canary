@@ -4,7 +4,7 @@ import json
 from .. import config
 from ..config.argparsing import Parser
 from ..session import Session
-from ..util import tty
+from ..util import logging
 
 description = "Print information about a test session"
 
@@ -20,15 +20,15 @@ def info(args: argparse.Namespace) -> int:
     session = Session.load(mode="r")
     p = config.get("system:os:name")
     v = config.get("python:version")
-    tty.print(f"{p} -- Python {v}")
-    tty.print(f"Available cpus: {session.avail_cpus}")
-    tty.print(f"Available cpus per test: {session.avail_cpus_per_test}")
+    logging.emit(f"{p} -- Python {v}")
+    logging.emit(f"Available cpus: {session.avail_cpus}")
+    logging.emit(f"Available cpus per test: {session.avail_cpus_per_test}")
     if session.avail_devices:
-        tty.print(f"Available devices: {session.avail_devices}")
-        tty.print(f"Available devices per test: {session.avail_devices_per_test}")
-    tty.print(f"Maximum number of asynchronous jobs: {session.avail_workers}")
-    tty.print(f"Working tree: {session.work_tree}")
-    tty.print("Initialization options:")
+        logging.emit(f"Available devices: {session.avail_devices}")
+        logging.emit(f"Available devices per test: {session.avail_devices_per_test}")
+    logging.emit(f"Maximum number of asynchronous jobs: {session.avail_workers}")
+    logging.emit(f"Working tree: {session.work_tree}")
+    logging.emit("Initialization options:")
     for key, var in session.ini_options.items():
-        tty.print(f"  {key}: {json.dumps(var)}")
+        logging.emit(f"  {key}: {json.dumps(var)}")
     return 0

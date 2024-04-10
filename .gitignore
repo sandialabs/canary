@@ -21,3 +21,5 @@ build
 
 .pre-commit.log
 .DS_Store
+
+mock-tests

@@ -37,7 +37,7 @@ is
 
    [config]
    debug = false  # (bool)
-   log_level = 2  # (int) [0, 4]
+   log_level = INFO  # (str)
    test_files = r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$" # regular expression for test file names
 
    [variables]
@@ -78,7 +78,7 @@ Use yaml path syntax to set any of the above variables.  For example,
 
 .. code-block:: console
 
-   nvtest -c machine:cpu_count:20 -c config:log_level:0 SUBCOMMAND [OPTIONS] ARGUMENTS
+   nvtest -c machine:cpu_count:20 -c config:log_level:DEBUG SUBCOMMAND [OPTIONS] ARGUMENTS
 
 To set environment variables do
 
@@ -103,9 +103,7 @@ from typing import Union
 from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
 from ..util import logging
-from ..util import tty
 from ..util.misc import ns2dict
-from ..util.singleton import Singleton
 from . import machine
 from .schemas import any_schema
 from .schemas import build_schema
@@ -152,7 +150,7 @@ class Config:
             "defaults": {
                 "config": {
                     "debug": False,
-                    "log_level": 2,
+                    "log_level": "INFO",
                     "test_files": r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$",
                 },
                 "machine": editable_machine_config,
@@ -211,13 +209,15 @@ class Config:
     def load_env_config(self) -> None:
         if "NVTEST_LOG_LEVEL" in os.environ:
             scope_data = self.scopes.setdefault("environment", {})
-            level: int = tty.log_level_from_name(os.environ["NVTEST_LOG_LEVEL"])
-            tty.set_log_level(level)
-            scope_data.setdefault("config", {})["log_level"] = level
+            level_name = os.environ["NVTEST_LOG_LEVEL"]
+            level = logging.get_level(level_name.upper())
+            logging.set_level(level)
+            scope_data.setdefault("config", {})["log_level"] = level_name
         if os.getenv("NVTEST_DEBUG", "off").lower() in ("on", "1", "true", "yes"):
             scope_data = self.scopes.setdefault("environment", {})
             scope_data.setdefault("config", {})["debug"] = True
-            tty.set_debug(True)
+            scope_data.setdefault("config", {})["log_level"] = "DEBUG"
+            logging.set_level(logging.DEBUG)
 
     def dump(self, fh: TextIO, scope: Optional[str] = None):
         if scope is not None:
@@ -257,12 +257,13 @@ class Config:
     def set_main_options(self, args: argparse.Namespace) -> None:
         scope_data = self.scopes.setdefault("command_line", {})
         if args.q or args.v:
-            user_log_level = tty.default_log_level() - args.q + args.v
-            level = max(min(user_log_level, tty.max_log_level()), tty.min_log_level())
-            tty.set_log_level(level)
-            scope_data.setdefault("config", {})["log_level"] = level
+            adjust = args.q + args.v
+            level = min(max(logging.TRACE, logging.get_level() + 10 * adjust), logging.FATAL)
+            logging.set_level(level)
+            level_name = logging.get_level_name(level)
+            scope_data.setdefault("config", {})["log_level"] = level_name
         if args.debug:
-            tty.set_debug(True)
+            logging.set_level(logging.DEBUG)
             scope_data.setdefault("config", {})["debug"] = True
         for var, val in args.env_mods.items():
             os.environ[var] = val
@@ -608,7 +609,7 @@ class ConfigSchemaError(Exception):
         super().__init__(msg)
 
 
-config = Singleton(Config)
+config = Config()
 
 
 def dump(fh: TextIO, scope: Optional[str] = None):

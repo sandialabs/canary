@@ -155,7 +155,6 @@ from typing import Union
 from .. import config
 from ..parameter_set import ParameterSet
 from ..util import logging
-from ..util import tty
 from ..util.color import colorize
 from ..util.filesystem import mkdirp
 from ..util.misc import boolean
@@ -307,7 +306,10 @@ class AbstractTestFile:
         try:
             _nvtest.FILE_SCANNING = True
             _nvtest.__FILE_BEING_SCANNED__ = self
-            exec(code, global_vars)
+            try:
+                exec(code, global_vars)
+            except SystemExit:
+                pass
         finally:
             _nvtest.FILE_SCANNING = False
             _nvtest.__FILE_BEING_SCANNED__ = None
@@ -332,7 +334,7 @@ class AbstractTestFile:
             )
             return cases
         except Exception as e:
-            if tty.HAVE_DEBUG:
+            if config.get("config:debug"):
                 raise
             raise ValueError(f"Failed to freeze {self.file}: {e}") from None
 
@@ -792,4 +794,8 @@ class AbstractTestFile:
 
 
 class UsageError(Exception):
+    pass
+
+
+class InvalidFile(Exception):
     pass

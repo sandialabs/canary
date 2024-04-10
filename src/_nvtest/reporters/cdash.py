@@ -134,7 +134,7 @@ class Reporter(_Reporter):
     def write_test_xml(self) -> str:
         filename = os.path.join(self.xml_dir, "Test.xml")
         f = os.path.relpath(filename, config.get("session:invocation_dir"))
-        logging.info(f"WRITING: Test.xml to {f}", prefix=None)
+        logging.log(logging.INFO, f"WRITING: Test.xml to {f}", prefix=None)
         starttime = self.data.start
 
         doc = xdom.Document()
@@ -218,7 +218,7 @@ class Reporter(_Reporter):
     def write_notes_xml(self) -> str:
         filename = os.path.join(self.xml_dir, "Notes.xml")
         f = os.path.relpath(filename, config.get("session:invocation_dir"))
-        logging.info(f"WRITING: Notes.xml to {f}", prefix=None)
+        logging.log(logging.INFO, f"WRITING: Notes.xml to {f}", prefix=None)
         notes: dict[str, str] = {}
         doc = xdom.Document()
         root = self.site_node

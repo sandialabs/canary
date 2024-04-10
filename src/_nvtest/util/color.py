@@ -103,7 +103,7 @@ colors = {
 # Regex to be used for color formatting
 color_re = r"@(?:@|\.|([*_`])?([a-zA-Z])?(?:{((?:[^}]|}})*)})?)"
 
-# Mapping from color arguments to values for tty.set_color
+# Mapping from color arguments to values for logging.set_color
 color_when_values = {"always": True, "auto": None, "never": False}
 
 # Force color; None: Only color if stderr is a tty
