@@ -12,6 +12,7 @@ from .command import add_all_commands
 from .command import get_command
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
+from .util import logging
 from .util import tty
 
 
@@ -151,18 +152,18 @@ def console_main() -> int:
         if e.exit_code == 0:
             tty.info(e.message)
         else:
-            tty.error(e.message)
+            logging.error(e.message)
         return e.exit_code
     except TimeoutError as e:
         if config.get("config:debug"):
             raise
-        tty.error(e.args[0])
+        logging.error(e.args[0])
         return 4
     except KeyboardInterrupt:
         if config.get("config:debug"):
             raise
         sys.stderr.write("\n")
-        tty.error("Keyboard interrupt.")
+        logging.error("Keyboard interrupt.")
         return signal.SIGINT.value
     except SystemExit as e:
         if config.get("config:debug"):
@@ -173,5 +174,5 @@ def console_main() -> int:
     except Exception as e:
         if config.get("config:debug"):
             raise
-        tty.error(e)
+        logging.error(str(e))
         return 3

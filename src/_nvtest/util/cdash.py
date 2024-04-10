@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 from ..third_party.ctest_log_parser import CTestLogParser  # noqa: F401
+from ..util import logging
 from ..util import tty
 from ..util.tty.color import cwrite
 from .executable import Executable
@@ -136,11 +137,11 @@ class server:
                 status = 1
             finally:
                 if doc is None:
-                    tty.error(f"Failed to upload {os.path.basename(file)}: {m}")
+                    logging.error(f"Failed to upload {os.path.basename(file)}: {m}")
                 elif status:
                     m = doc.getElementsByTagName("message")[0].firstChild.data.strip()
                     lines = [_.rstrip() for _ in open(efile).readlines()]
-                    tty.error(f"Failed to upload {os.path.basename(file)}: {m}", *lines)
+                    logging.error(f"Failed to upload {os.path.basename(file)}: {m}", *lines)
                 force_remove(efile)
             return status
 

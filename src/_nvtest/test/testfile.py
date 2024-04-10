@@ -154,6 +154,7 @@ from typing import Union
 
 from .. import config
 from ..parameter_set import ParameterSet
+from ..util import logging
 from ..util import tty
 from ..util.filesystem import mkdirp
 from ..util.misc import boolean
@@ -288,7 +289,7 @@ class AbstractTestFile:
             try:
                 load_vvt(self)
             except Exception:
-                tty.error(f"Failed to load {self.file}")
+                logging.error(f"Failed to load {self.file}")
                 raise
         else:
             self._load()

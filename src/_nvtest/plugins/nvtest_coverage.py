@@ -6,6 +6,7 @@ from typing import Optional
 
 import nvtest
 from _nvtest.test.testcase import TestCase
+from _nvtest.util import logging
 from _nvtest.util import tty
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import force_remove
@@ -76,7 +77,7 @@ def _merge_profile_data(case: TestCase) -> Optional[str]:
     prog = Executable(path)
     prog(*args, fail_on_error=False)
     if prog.returncode != 0:
-        tty.error(f"Failed to merge profile data for {case.name}")
+        logging.error(f"Failed to merge profile data for {case.name}")
     tty.info("Done merging profile data")
     return dst if prog.returncode == 0 else None
 

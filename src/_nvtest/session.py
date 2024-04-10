@@ -70,7 +70,6 @@ import inspect
 import json
 import os
 import signal
-import sys
 import time
 import traceback
 from concurrent.futures import Future
@@ -100,6 +99,7 @@ from .test.testcase import TestCase
 from .third_party.lock import Lock
 from .third_party.lock import ReadTransaction
 from .third_party.lock import WriteTransaction
+from .util import logging
 from .util import parallel
 from .util import tty
 from .util.filesystem import force_remove
@@ -822,7 +822,7 @@ class Session:
                         except StopIteration:
                             break
                         except BaseException:
-                            tty.error(traceback.format_exc())
+                            logging.error(traceback.format_exc())
                             raise
                         future = ppe.submit(self.runner, entity)
                         callback = partial(self.update_from_future, i)
@@ -836,7 +836,7 @@ class Session:
                         entity.kill()
                 for case in self.queue.cases:
                     if case.status == "staged":
-                        tty.error(f"{case}: failed to start!")
+                        logging.error(f"{case}: failed to start!")
                         case.status.set("failed", "Case failed to start")
                         case.dump()
                 self.returncode = compute_returncode(self.queue.cases)
@@ -856,21 +856,21 @@ class Session:
             return
         obj: Union[TestCase, Partition] = self.queue.mark_as_complete(ent_no)
         if id(obj) != id(entity):
-            tty.error(f"{obj}: wrong future entity ID")
+            logging.error(f"{obj}: wrong future entity ID")
             return
         if isinstance(obj, Partition):
             fd = self.db.read()
             for case in obj:
                 if case.id not in fd:
-                    tty.error(f"case ID {case.id} not in batch {obj.rank[0]}")
+                    logging.error(f"case ID {case.id} not in batch {obj.rank[0]}")
                     continue
                 if case.fullname not in attrs:
-                    tty.error(f"{case.fullname} not in batch {obj.rank[0]}'s attrs")
+                    logging.error(f"{case.fullname} not in batch {obj.rank[0]}'s attrs")
                     continue
                 if attrs[case.fullname]["status"] != fd[case.id]["status"]:
                     fs = attrs[case.fullname]["status"]
                     ss = fd[case.id]["status"]
-                    tty.error(
+                    logging.error(
                         f"batch {obj.rank[0]}, {case}: "
                         f"expected status of future.result to be {ss[0]}, not {fs[0]}"
                     )
@@ -878,7 +878,7 @@ class Session:
                 case.update(fd[case.id])
         else:
             if not isinstance(obj, TestCase):
-                tty.error(f"Expected TestCase, got {obj.__class__.__name__}")
+                logging.error(f"Expected TestCase, got {obj.__class__.__name__}")
                 return
             obj.update(attrs[obj.fullname])
             self.db.update([obj])

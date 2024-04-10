@@ -4,6 +4,7 @@ import shlex
 import subprocess
 
 from ..error import timeout_exit_status
+from ..util import logging
 from ..util import tty
 
 __all__ = ["Executable", "ProcessError"]
@@ -211,7 +212,7 @@ class Executable:
             msg = f"{self.exe[0]}: {e.strerror}"
             if fail_on_error:
                 raise ProcessError(msg) from None
-            tty.error(msg)
+            logging.error(msg)
             self.returncode = proc.returncode
 
         except subprocess.TimeoutExpired as e:
@@ -226,7 +227,7 @@ class Executable:
             msg = f"{e}\nExit status {rc} when invoking command: {cmd_line}"
             if fail_on_error:
                 raise ProcessError(msg) from None
-            tty.error(msg)
+            logging.error(msg)
             self.returncode = rc
 
         finally:

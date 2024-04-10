@@ -9,6 +9,7 @@ from . import plugin
 from .test.testcase import TestCase
 from .test.testfile import AbstractTestFile
 from .util import filesystem as fs
+from .util import logging
 from .util import parallel
 from .util import tty
 
@@ -146,7 +147,7 @@ class Finder:
                 continue
             for dep in case.dependencies:
                 if id(dep) not in ids:
-                    tty.error(f"ID of {dep!r} is not in test cases")
+                    logging.error(f"ID of {dep!r} is not in test cases")
                     missing += 1
                 if dep.status != "pending":
                     case.mask = "deselected due to skipped dependency"
@@ -190,7 +191,7 @@ class Finder:
         for case in cases:
             if case.status != "pending":
                 status = case.status.value
-                tty.error(f"{case}: expected status=pending, not {status}")
+                logging.error(f"{case}: expected status=pending, not {status}")
                 errors += 1
         if errors:
             raise ValueError("Stopping due to previous errors")
