@@ -3,7 +3,7 @@ from typing import Any
 from typing import Type
 from typing import Union
 
-from ..util import tty
+from ..util import logging
 from .base import Runner
 from .direct import DirectRunner
 from .shell import ShellRunner
@@ -21,7 +21,7 @@ def factory(
     **kwargs: Any,
 ) -> Runner:
     runner: Type[Runner]
-    tty.debug("Setting up the test runner")
+    logging.debug("Setting up the test runner")
     if name is None or name == "direct":
         runner = DirectRunner
     elif name == "shell":
@@ -31,5 +31,5 @@ def factory(
     else:
         valid = ", ".join(valid_schedulers)
         raise ValueError(f"Unknown runner {name!r}, choose from direct, {valid}")
-    tty.debug(f"Runner type = {runner.__name__}")
+    logging.debug(f"Runner type = {runner.__name__}")
     return runner(session, **kwargs)

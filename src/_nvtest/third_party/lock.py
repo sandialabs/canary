@@ -10,7 +10,7 @@ import sys
 import time
 from datetime import datetime
 
-from ..util import tty
+from ..util import logging
 from ..util.misc import plural
 from ..util.time import pretty_seconds
 
@@ -637,9 +637,8 @@ class Lock(object):
             raise LockError("Attempting to cleanup active lock.")
 
     def _get_counts_desc(self):
-        return (
-            "(reads {0}, writes {1})".format(self._reads, self._writes) if tty.is_verbose() else ""
-        )
+        verbose = logging.get_level() < logging.DEBUG
+        return "(reads {0}, writes {1})".format(self._reads, self._writes) if verbose else ""
 
     def _log_acquired(self, locktype, wait_time, nattempts):
         attempts_part = _attempts_str(wait_time, nattempts)
@@ -652,8 +651,7 @@ class Lock(object):
 
     def _log_debug(self, *args, **kwargs):
         """Output lock debug messages."""
-        kwargs["level"] = kwargs.get("level", 2)
-        tty.debug(*args, **kwargs)
+        logging.debug(" ".join(args))
 
     def _log_downgraded(self, wait_time, nattempts):
         attempts_part = _attempts_str(wait_time, nattempts)

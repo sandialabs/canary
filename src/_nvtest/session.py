@@ -379,7 +379,7 @@ class Session:
         self = cls()
         self.mode = "w"
         self.exitstatus = -1
-        tty.debug(f"Creating new test session in {work_tree}")
+        logging.debug(f"Creating new test session in {work_tree}")
         t_start = time.time()
 
         try:
@@ -437,7 +437,7 @@ class Session:
         )
 
         duration = time.time() - t_start
-        tty.debug(f"Done creating test session ({duration:.2f}s.)")
+        logging.debug(f"Done creating test session ({duration:.2f}s.)")
 
         self.state = 2
         return self
@@ -483,7 +483,7 @@ class Session:
         mkdirp(self.work_tree)
 
         t_start = time.time()
-        tty.debug("Initializing session")
+        logging.debug("Initializing session")
         if avail_cpus is not None:
             self.avail_cpus = avail_cpus
         if avail_cpus_per_test is not None:
@@ -519,7 +519,7 @@ class Session:
         with open(file, "w") as fh:
             config.dump(fh, scope="session")
         duration = time.time() - t_start
-        tty.debug(f"Done initializing session ({duration:.2f}s.)")
+        logging.debug(f"Done initializing session ({duration:.2f}s.)")
 
     def populate(
         self,
@@ -532,7 +532,7 @@ class Session:
             raise ValueError(f"Incorrect mode {self.mode!r}")
 
         t_start = time.time()
-        tty.debug("Populating work tree")
+        logging.debug("Populating work tree")
 
         finder = Finder()
         for root, _paths in self.search_paths.items():
@@ -547,14 +547,14 @@ class Session:
                     on_options.append(opt)
         on_options = dedup(on_options)
 
-        tty.debug(
-            "Freezing test files with the following options: ",
-            f"{self.avail_cpus=}",
-            f"{self.avail_cpus_per_test=}",
-            f"{self.avail_devices_per_test=}",
-            f"{on_options=}",
-            f"{keyword_expr=}",
-            f"{parameter_expr=}",
+        logging.debug(
+            "Freezing test files with the following options:\n"
+            f"  {self.avail_cpus=}\n"
+            f"  {self.avail_cpus_per_test=}\n"
+            f"  {self.avail_devices_per_test=}\n"
+            f"  {on_options=}\n"
+            f"  {keyword_expr=}\n"
+            f"  {parameter_expr=}\n"
         )
         self.cases = Finder.freeze(
             tree,
@@ -572,7 +572,7 @@ class Session:
         self.db = Database(self.dotdir, self.cases)
         self.setup_testcases(cases_to_run, copy_all_resources=copy_all_resources)
         duration = time.time() - t_start
-        tty.debug(f"Done populating work tree ({duration:.2f}s.)")
+        logging.debug(f"Done populating work tree ({duration:.2f}s.)")
 
     def setup_direct_queue(self) -> None:
         self.queue = q_factory(
@@ -745,7 +745,7 @@ class Session:
             for case in self.queue.completed_testcases():
                 with working_dir(case.exec_dir):
                     for hook in plugin.plugins("test", "teardown"):
-                        tty.debug(f"Calling the {hook.specname} plugin")
+                        logging.debug(f"Calling the {hook.specname} plugin")
                         hook(case)
                 with working_dir(self.work_tree):
                     case.teardown()

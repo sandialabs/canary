@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import Union
 
-from . import tty
+from . import logging
 
 __all__ = [
     "ancestor",
@@ -175,7 +175,7 @@ def rmtree2(path, n=5):
         except OSError as e:
             if attempts >= n:
                 raise
-            tty.debug(f"Failed to remove {path} with shutil.rmtree at attempt {n}: {e}")
+            logging.debug(f"Failed to remove {path} with shutil.rmtree at attempt {n}: {e}")
             time.sleep(0.2 * n)
         attempts += 1
 

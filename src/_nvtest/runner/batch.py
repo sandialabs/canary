@@ -8,6 +8,7 @@ from typing import TextIO
 
 from ..test.partition import Partition
 from ..test.status import Status
+from ..util import logging
 from ..util import tty
 from ..util.color import colorize
 from ..util.executable import Executable
@@ -141,7 +142,7 @@ class BatchRunner(Runner):
 
         """
         for case in batch:
-            tty.debug(f"Loading case {case.id}")
+            logging.debug(f"Loading case {case.id}")
             try:
                 fd = case.load_results()
             except FileNotFoundError:
