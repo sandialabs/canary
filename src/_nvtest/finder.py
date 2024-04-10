@@ -40,7 +40,7 @@ class Finder:
             file = os.path.join(root, path)
             if not os.path.exists(file):
                 if tolerant:
-                    tty.warn(f"{path} not found in {root}")
+                    logging.warning(f"{path} not found in {root}")
                     continue
                 else:
                     raise ValueError(f"{path} not found in {root}")
@@ -151,7 +151,7 @@ class Finder:
                     missing += 1
                 if dep.status != "pending":
                     case.mask = "deselected due to skipped dependency"
-                    tty.warn(f"Dependency {dep!r} of {case!r} is marked to be skipped")
+                    logging.warning(f"Dependency {dep!r} of {case!r} is marked to be skipped")
         if missing:
             raise ValueError("Missing dependencies")
         tty.verbose("Done validating test cases")

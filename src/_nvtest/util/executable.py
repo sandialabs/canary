@@ -1,3 +1,4 @@
+import io
 import os
 import re
 import shlex
@@ -158,18 +159,7 @@ class Executable:
         istream, close_istream = streamify(input, "r")
 
         args = [str(_) for _ in args]
-        quoted_args = [arg for arg in args if re.search(r'^"|^\'|"$|\'$', arg)]
-        if quoted_args:
-            tty.warn(
-                "Quotes in command arguments can confuse scripts like" " configure.",
-                "The following arguments may cause problems when executed:",
-                str("\n".join(["    " + arg for arg in quoted_args])),
-                "Quotes aren't needed because a shell is not used.",
-                "Consider removing them",
-            )
-
         cmd = self.exe + list(args)
-
         cmd_line = join_command(cmd)
         self.cmd_line = cmd_line
 
@@ -265,12 +255,12 @@ def join_command(args):
     args = [str(_) for _ in args]
     quoted_args = [arg for arg in args if re.search(r'^"|^\'|"$|\'$', arg)]
     if quoted_args:
-        tty.warn(
-            "Quotes in command arguments can confuse scripts like configure.",
-            "The following arguments may cause problems when executed:",
-            "    " + "\n".join(["    " + arg for arg in quoted_args]),
-            "Quotes aren't needed because a shell is not used.  Consider removing them",
-        )
+        msg = io.StringIO()
+        msg.write("Quotes in command arguments can confuse scripts like configure.\n")
+        msg.write("The following arguments may cause problems when executed:\n")
+        msg.write("    " + "\n".join(["    " + arg for arg in quoted_args]) + "\n")
+        msg.write("Quotes aren't needed because a shell is not used.  Consider removing them\n")
+        logging.warning(msg.getvalue())
     cmd = list(args)
     return "'%s'" % "' '".join(map(lambda arg: arg.replace("'", "'\"'\"'"), cmd))
 

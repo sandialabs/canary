@@ -14,6 +14,7 @@ from typing import Union
 
 from .. import config
 from ..util import filesystem as fs
+from ..util import logging
 from ..util import tty
 from ..util.compression import compress_file
 from ..util.executable import Executable
@@ -296,7 +297,7 @@ class TestCase:
                     s = f"{self}: {action} resource file {t} not found"
                     raise MissingSourceError(s)
                 elif os.path.exists(dst):
-                    tty.warn(f"{os.path.basename(dst)} already exists in {workdir}")
+                    logging.warning(f"{os.path.basename(dst)} already exists in {workdir}")
                     continue
                 if action == "copy" or copy_all_resources:
                     fs.force_copy(src, dst, echo=tty.info)

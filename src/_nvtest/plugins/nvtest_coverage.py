@@ -30,7 +30,7 @@ def llvm_coverage_setup(case: TestCase) -> None:
     if not nvtest.config.get("option:coverage"):
         return
     elif not hasattr(case, "program"):
-        tty.warn(f"{case} does not define a 'program' attribute, coverage skipped")
+        logging.warning(f"{case} does not define a 'program' attribute, coverage skipped")
         return
     if case.masked:
         return
@@ -47,7 +47,7 @@ def llvm_coverage_teardown(case: TestCase, **kwargs: Any) -> None:
     if not nvtest.config.get("option:coverage"):
         return
     elif not hasattr(case, "program"):
-        tty.warn(f"{case} does not define a 'program' attribute, coverage skipped")
+        logging.warning(f"{case} does not define a 'program' attribute, coverage skipped")
         return
     export_profile_data(case)
 
@@ -65,11 +65,11 @@ def _merge_profile_data(case: TestCase) -> Optional[str]:
         cc = nvtest.config.get("build:compiler:paths:cxx")
         path = which("llvm-profdata", path=os.path.dirname(cc))
     if path is None:
-        tty.warn("Unable to find llvm-profdata.  Profile data cannot be exported")
+        logging.warning("Unable to find llvm-profdata.  Profile data cannot be exported")
         return None
     files = glob.glob(f"{case.family}-*.profraw")
     if not files:
-        tty.warn("Profile files not found.  Profile data cannot be exported")
+        logging.warning("Profile files not found.  Profile data cannot be exported")
         return None
     tty.info("Merging profile data")
     dst = f"{case.family}.merged"
@@ -89,7 +89,7 @@ def _export_profile_data(case: TestCase, file: str) -> None:
         cc = nvtest.config.get("build:compiler:paths:cxx")
         path = which("llvm-cov", path=os.path.dirname(cc))
     if path is None:
-        tty.warn("Unable to find llvm-cov.  Profile data cannot be exported")
+        logging.warning("Unable to find llvm-cov.  Profile data cannot be exported")
         return
     program = getattr(case, "program", None)
     if program is None:

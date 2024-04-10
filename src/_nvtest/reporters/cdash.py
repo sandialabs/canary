@@ -16,6 +16,7 @@ from ..config.machine import machine_config
 from ..session import Session
 from ..util import cdash
 from ..util import gitlab
+from ..util import logging
 from ..util import tty
 from ..util.filesystem import mkdirp
 from ..util.sendmail import sendmail
@@ -94,7 +95,7 @@ class Reporter(_Reporter):
                 buildstamp=ns.buildstamp,
             )
         if upload_errors:
-            tty.warn(f"{upload_errors} files failed to upload to CDash")
+            logging.warning(f"{upload_errors} files failed to upload to CDash")
         buildid = server.buildid(
             sitename=ns.site, buildname=ns.buildname, buildstamp=ns.buildstamp
         )
@@ -347,7 +348,7 @@ def cdash_summary(
                 fh.write(html_summary)
         except OSError as e:
             s = "Unknown" if not e.args else e.args[0]
-            tty.warn(f"Could not write HTML summary due to OSError ({s})")
+            logging.warning(f"Could not write HTML summary due to OSError ({s})")
 
 
 def generate_cdash_html_summary(

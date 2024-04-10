@@ -102,6 +102,7 @@ from typing import Union
 
 from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
+from ..util import logging
 from ..util import tty
 from ..util.misc import ns2dict
 from ..util.singleton import Singleton
@@ -566,14 +567,14 @@ def read_config(file: str) -> dict:
         elif ":" in path:
             parts = parse_config_path(path)
             if parts[0] not in section_schemas:
-                tty.warn(f"ignoring unrecognized config section: {parts[0]}")
+                logging.warning(f"ignoring unrecognized config section: {parts[0]}")
                 continue
             x = config_data.setdefault(parts[0], {})
             for part in parts[1:]:
                 x = x.setdefault(part, {})
             x.update(section_data)
         else:
-            tty.warn(f"ignoring unrecognized config section: {path}")
+            logging.warning(f"ignoring unrecognized config section: {path}")
     for section, section_data in config_data.items():
         schema = section_schemas[section]
         try:
