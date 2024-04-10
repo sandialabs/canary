@@ -8,7 +8,7 @@ from _nvtest.reporters import cdash
 from _nvtest.session import Session
 from _nvtest.test.testcase import TestCase
 from _nvtest.util import gitlab
-from _nvtest.util import tty
+from _nvtest.util import logging
 
 
 @_nvtest.plugin.register(scope="session", stage="teardown")
@@ -103,7 +103,7 @@ class MergeRequest:
         if cdash_build_url is not None:
             fp.write(f"See the [CDash entry]({cdash_build_url}) for details.\n\n")
         note = fp.getvalue()
-        tty.info(note)
+        logging.info(note)
         self.add_note(note)
 
 

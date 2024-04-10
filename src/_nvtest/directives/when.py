@@ -13,7 +13,7 @@ from typing import Optional
 from typing import Type
 from typing import Union
 
-from ..util.tty.color import colorize
+from ..util.color import colorize
 from .expression import Expression
 from .p_expression import ParameterExpression
 

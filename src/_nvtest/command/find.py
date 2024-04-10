@@ -6,10 +6,11 @@ from typing import TYPE_CHECKING
 from .. import config
 from ..finder import Finder
 from ..util import graph
-from ..util import tty
+from ..util import logging
+from ..util.colify import colified
+from ..util.color import colorize
+from ..util.term import terminal_size
 from ..util.time import hhmmss
-from ..util.tty.colify import colified
-from ..util.tty.color import colorize
 from .common import add_mark_arguments
 from .common import add_resource_arguments
 from .common import set_default_resource_args
@@ -104,29 +105,29 @@ def _print_paths(cases_to_run: "list[TestCase]"):
     unique_files: dict[str, set[str]] = dict()
     for case in cases_to_run:
         unique_files.setdefault(case.file_root, set()).add(case.file_path)
-    _, max_width = tty.terminal_size()
+    _, max_width = terminal_size()
     for root, paths in unique_files.items():
         label = colorize("@m{%s}" % root)
-        tty.hline(label, max_width=max_width)
+        logging.hline(label, max_width=max_width)
         cols = colified(sorted(paths), indent=2, width=max_width)
-        tty.emit(cols + "\n")
+        logging.puts(cols + "\n")
 
 
 def _print_files(cases_to_run: "list[TestCase]"):
     for file in sorted(set([case.file for case in cases_to_run])):
-        tty.emit(os.path.relpath(file, os.getcwd()) + "\n")
+        logging.puts(os.path.relpath(file, os.getcwd()) + "\n")
 
 
 def _print_keywords(cases_to_run: "list[TestCase]"):
     unique_kwds: dict[str, set[str]] = dict()
     for case in cases_to_run:
         unique_kwds.setdefault(case.file_root, set()).update(case.keywords())
-    _, max_width = tty.terminal_size()
+    _, max_width = terminal_size()
     for root, kwds in unique_kwds.items():
         label = colorize("@m{%s}" % root)
-        tty.hline(label, max_width=max_width)
+        logging.hline(label, max_width=max_width)
         cols = colified(sorted(kwds), indent=2, width=max_width)
-        tty.emit(cols + "\n")
+        logging.puts(cols + "\n")
 
 
 def _print_graph(cases_to_run: "list[TestCase]"):
@@ -134,7 +135,7 @@ def _print_graph(cases_to_run: "list[TestCase]"):
 
 
 def _print(cases_to_run: "list[TestCase]"):
-    _, max_width = tty.terminal_size()
+    _, max_width = terminal_size()
     tree: dict[str, list[str]] = {}
     for case in cases_to_run:
         line = f"{hhmmss(case.runtime)}    {case.name}"
@@ -142,10 +143,10 @@ def _print(cases_to_run: "list[TestCase]"):
     for root, lines in tree.items():
         cols = colified(lines, indent=2, width=max_width)
         label = colorize("@m{%s}" % root)
-        tty.hline(label, max_width=max_width)
-        tty.emit(cols + "\n")
+        logging.hline(label, max_width=max_width)
+        logging.puts(cols + "\n")
         summary = f"found {len(lines)} test cases\n"
-        tty.emit(summary)
+        logging.puts(summary)
 
 
 def print_testcase_summary(args: "argparse.Namespace", cases: "list[TestCase]") -> None:

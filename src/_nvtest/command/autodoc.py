@@ -5,7 +5,7 @@ import _nvtest.directives
 
 from ..config.argparsing import make_argument_parser
 from ..third_party import argparsewriter as aw
-from ..util import tty
+from ..util.color import set_color_when
 from ..util.filesystem import mkdirp
 
 description = "Generate rst documentation files"
@@ -86,7 +86,7 @@ def howto(dest):
 
 
 def autodoc(args: argparse.Namespace) -> int:
-    tty.color.set_color_when("never")
+    set_color_when("never")
     if not os.path.isdir(args.dest):
         mkdirp(args.dest)
     directives(os.path.join(args.dest, "directives"))

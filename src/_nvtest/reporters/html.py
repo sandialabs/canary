@@ -4,7 +4,7 @@ from typing import TextIO
 from .. import config
 from ..session import Session
 from ..test.testcase import TestCase
-from ..util import tty
+from ..util import logging
 from ..util.filesystem import force_remove
 from ..util.filesystem import mkdirp
 from .common import Reporter as _Reporter
@@ -28,7 +28,7 @@ class Reporter(_Reporter):
         with open(self.index, "w") as fh:
             self.generate_index(fh)
         f = os.path.relpath(self.index, config.get("session:invocation_dir"))
-        tty.info(f"HTML report written to {f}")
+        logging.info(f"HTML report written to {f}")
 
     @property
     def style(self) -> str:

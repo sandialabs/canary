@@ -6,6 +6,7 @@ from ..session import Session
 from ..test.status import Status
 from ..test.testcase import TestCase
 from ..util import tty
+from ..util.color import colorize
 
 if TYPE_CHECKING:
     import argparse
@@ -162,10 +163,10 @@ def status(args: "argparse.Namespace") -> int:
 
 
 def cformat(case: TestCase, show_log: bool) -> str:
-    id = tty.color.colorize("@*b{%s}" % case.id[:7])
+    id = colorize("@*b{%s}" % case.id[:7])
     if case.masked:
         string = "@*c{EXCLUDED} %s %s: %s" % (id, case.pretty_repr(), case.mask)
-        return tty.color.colorize(string)
+        return colorize(string)
     string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
     if case.duration > 0:
         string += " (%.2fs.)" % case.duration
@@ -173,7 +174,7 @@ def cformat(case: TestCase, show_log: bool) -> str:
         string += ": Skipped due to %s" % case.status.details
     if show_log:
         f = os.path.relpath(case.logfile(), os.getcwd())
-        string += tty.color.colorize(": @m{%s}" % f)
+        string += colorize(": @m{%s}" % f)
     return string
 
 
@@ -220,7 +221,6 @@ def print_footer_summary(cases: list[TestCase]) -> None:
             continue
         totals.setdefault(case.status.value, []).append(case)
     summary_parts = []
-    colorize = tty.color.colorize
     for member in Status.colors:
         n = len(totals.get(member, []))
         if n:

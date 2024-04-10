@@ -164,7 +164,7 @@ class Executable:
         self.cmd_line = cmd_line
 
         if verbose:
-            tty.info(f"Command line: {cmd_line}")
+            logging.info(f"Command line: {cmd_line}")
         else:
             tty.verbose(cmd_line)
 

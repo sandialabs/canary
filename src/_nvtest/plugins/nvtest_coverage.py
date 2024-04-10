@@ -7,7 +7,6 @@ from typing import Optional
 import nvtest
 from _nvtest.test.testcase import TestCase
 from _nvtest.util import logging
-from _nvtest.util import tty
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import force_remove
 from _nvtest.util.filesystem import which
@@ -71,19 +70,19 @@ def _merge_profile_data(case: TestCase) -> Optional[str]:
     if not files:
         logging.warning("Profile files not found.  Profile data cannot be exported")
         return None
-    tty.info("Merging profile data")
+    logging.info("Merging profile data")
     dst = f"{case.family}.merged"
     args = ["merge", "-sparse"] + files + ["-o", dst]
     prog = Executable(path)
     prog(*args, fail_on_error=False)
     if prog.returncode != 0:
         logging.error(f"Failed to merge profile data for {case.name}")
-    tty.info("Done merging profile data")
+    logging.info("Done merging profile data")
     return dst if prog.returncode == 0 else None
 
 
 def _export_profile_data(case: TestCase, file: str) -> None:
-    tty.info("Exporting profile data")
+    logging.info("Exporting profile data")
     path = which("llvm-cov")
     if path is None and nvtest.config.get("build"):
         cc = nvtest.config.get("build:compiler:paths:cxx")
@@ -101,7 +100,7 @@ def _export_profile_data(case: TestCase, file: str) -> None:
     _filter_profile_data(data)
     with open(f"{case.family}-profile.json", "w") as fh:
         json.dump(data, fh, indent=2)
-    tty.info("Done exporting profile data")
+    logging.info("Done exporting profile data")
 
 
 def _filter_profile_data(fd: dict) -> None:

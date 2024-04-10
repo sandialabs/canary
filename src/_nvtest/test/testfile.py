@@ -156,10 +156,10 @@ from .. import config
 from ..parameter_set import ParameterSet
 from ..util import logging
 from ..util import tty
+from ..util.color import colorize
 from ..util.filesystem import mkdirp
 from ..util.misc import boolean
 from ..util.time import time_in_seconds
-from ..util.tty.color import colorize
 from .testcase import TestCase
 
 if TYPE_CHECKING:

@@ -8,7 +8,8 @@ from ..config.argparsing import cmd_name
 from ..config.argparsing import make_argument_parser
 from ..third_party import argparsewriter as aw
 from ..util import tty
-from ..util.tty.colify import colify
+from ..util.colify import colify
+from ..util.color import set_color_when
 
 description = "list available nvtest subcommands"
 add_help = False
@@ -184,7 +185,7 @@ def rst_index(out):
 @formatter
 def rst(args, out):
     # create a parser with all commands
-    tty.color.set_color_when("never")
+    set_color_when("never")
     parser = make_argument_parser()
     _nvtest.command.add_all_commands(parser, add_help_override=True)
 

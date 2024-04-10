@@ -11,9 +11,9 @@ from ..error import FailFast
 from ..test.partition import Partition
 from ..test.testcase import TestCase
 from ..util import keyboard
+from ..util.color import clen
+from ..util.color import colorize
 from ..util.returncode import compute_returncode
-from ..util.tty.color import clen
-from ..util.tty.color import colorize
 
 lock_wait_time = 0.00001
 

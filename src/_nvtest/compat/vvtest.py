@@ -15,10 +15,10 @@ from typing import Union
 
 from .. import config
 from ..directives.enums import list_parameter_space
+from ..util.color import colorize
 from ..util.executable import Executable
 from ..util.filesystem import which
 from ..util.time import to_seconds
-from ..util.tty.color import colorize
 
 if TYPE_CHECKING:
     from ..test.testcase import TestCase

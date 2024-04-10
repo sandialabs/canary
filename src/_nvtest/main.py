@@ -150,7 +150,7 @@ def console_main() -> int:
         return 1  # Python exits with error code 1 on EPIPE
     except StopExecution as e:
         if e.exit_code == 0:
-            tty.info(e.message)
+            logging.info(e.message)
         else:
             logging.error(e.message)
         return e.exit_code

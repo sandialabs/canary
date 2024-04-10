@@ -13,7 +13,7 @@ from urllib.request import urlopen
 from ..third_party.ctest_log_parser import CTestLogParser  # noqa: F401
 from ..util import logging
 from ..util import tty
-from ..util.tty.color import cwrite
+from ..util.color import cwrite
 from .executable import Executable
 from .filesystem import force_remove
 
@@ -111,7 +111,7 @@ class server:
             params["MD5"] = md5sum
         encoded_params = urlencode(params)
         url = f"{self.baseurl}/submit.php?{encoded_params}"
-        tty.info(f"Uploading {os.path.basename(filename)} to {url}")
+        logging.info(f"Uploading {os.path.basename(filename)} to {url}")
         return self.put(url, filename)
 
     @staticmethod
@@ -212,14 +212,14 @@ class server:
 
         """
         skip_sites = skip_sites or []
-        tty.info(f"Getting build groups for {self.project}")
+        logging.info(f"Getting build groups for {self.project}")
         buildgroups = self.get_buildgroups(date, buildgroups=buildgroups)
         nbuild = sum([len(bg["builds"]) for bg in buildgroups])
-        tty.info(f"Found {len(buildgroups)} build groups with {nbuild} builds")
+        logging.info(f"Found {len(buildgroups)} build groups with {nbuild} builds")
         builds = []
         for buildgroup in buildgroups:
             n = len(buildgroup["builds"])
-            tty.info(f"Getting build summaries for build group {buildgroup['name']}")
+            logging.info(f"Getting build summaries for build group {buildgroup['name']}")
             for i, build in enumerate(buildgroup["builds"], start=1):
                 cwrite("\r@*b{==>} Getting build summary for build %d of %d" % (i, n))
                 if self.contains(build["site"], skip_sites):
@@ -291,7 +291,7 @@ class server:
         failed = []
         builds = self.builds(date=date, buildgroups=buildgroups, skip_sites=skip_sites)
         for i, build in enumerate(builds, start=1):
-            tty.info(f"Getting failed tests for build {i} of {len(builds)}")
+            logging.info(f"Getting failed tests for build {i} of {len(builds)}")
             if skip_timeout:
                 for fail_reason in ("Failed", "Diffed"):
                     tests = self.get_failed_tests(
@@ -301,7 +301,7 @@ class server:
             else:
                 tests = self.get_failed_tests(build, skip_missing=skip_missing)
                 failed.extend(tests)
-        tty.info(f"Found {len(failed)} tests across the {len(builds)} builds")
+        logging.info(f"Found {len(failed)} tests across the {len(builds)} builds")
         return failed
 
     def tests(
@@ -337,7 +337,7 @@ class server:
         tests = []
         builds = self.builds(date=date, buildgroups=buildgroups, skip_sites=skip_sites)
         for i, build in enumerate(builds, start=1):
-            tty.info(f"Getting tests for build {i} of {len(builds)}")
+            logging.info(f"Getting tests for build {i} of {len(builds)}")
             build_tests = self.get_tests_from_build(
                 build, skip_missing=skip_missing, include_details=include_details
             )

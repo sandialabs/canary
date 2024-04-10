@@ -5,7 +5,7 @@ from ..error import diff_exit_status
 from ..error import fail_exit_status
 from ..error import skip_exit_status
 from ..error import timeout_exit_status
-from ..util.tty.color import colorize
+from ..util.color import colorize
 
 
 class Status:

@@ -39,7 +39,7 @@ def set_level(level: int) -> None:
     LEVEL = level
 
 
-def get_level(level: int) -> int:
+def get_level() -> int:
     return LEVEL
 
 
@@ -91,45 +91,57 @@ def emit(message: str, *, stream: TextIO = sys.stdout, end="\n") -> None:
     puts(text, stream=stream)
 
 
-def trace(message: str, *, stream: TextIO = sys.stdout, end="\n") -> None:
+def trace(
+    message: str, *, stream: TextIO = sys.stdout, end="\n", prefix: Optional[str] = "==>"
+) -> None:
     if LEVEL > TRACE:
         return
-    text = format_message(message, end=end, color="*c")
+    text = format_message(message, end=end, color="*c", prefix=prefix)
     puts(text, stream=stream)
 
 
-def debug(message: str, *, stream: TextIO = sys.stdout, end="\n") -> None:
+def debug(
+    message: str, *, stream: TextIO = sys.stdout, end="\n", prefix: Optional[str] = "==>"
+) -> None:
     if LEVEL > DEBUG:
         return
-    text = format_message(message, end=end, color="*g")
+    text = format_message(message, end=end, color="*g", prefix=prefix)
     puts(text, stream=stream)
 
 
-def info(message: str, *, stream: TextIO = sys.stdout, end="\n") -> None:
+def info(
+    message: str, *, stream: TextIO = sys.stdout, end="\n", prefix: Optional[str] = "==>"
+) -> None:
     if LEVEL > INFO:
         return
-    text = format_message(message, end=end, color="*b")
+    text = format_message(message, end=end, color="*b", prefix=prefix)
     puts(text, stream=stream)
 
 
-def warning(message: str, *, stream: TextIO = sys.stderr, end="\n") -> None:
+def warning(
+    message: str, *, stream: TextIO = sys.stderr, end="\n", prefix: Optional[str] = "==>"
+) -> None:
     if LEVEL > ERROR:
         return
-    text = format_message(f"Warning: {message}", end=end, color="*Y")
+    text = format_message(f"Warning: {message}", end=end, color="*Y", prefix=prefix)
     puts(text, stream=stream)
 
 
-def error(message: str, *, stream: TextIO = sys.stderr, end="\n") -> None:
+def error(
+    message: str, *, stream: TextIO = sys.stderr, end="\n", prefix: Optional[str] = "==>"
+) -> None:
     if LEVEL > ERROR:
         return
-    text = format_message(f"Error: {message}", end=end, color="*r")
+    text = format_message(f"Error: {message}", end=end, color="*r", prefix=prefix)
     puts(text, stream=stream)
 
 
-def fatal(message: str, *, stream: TextIO = sys.stderr, end="\n") -> None:
+def fatal(
+    message: str, *, stream: TextIO = sys.stderr, end="\n", prefix: Optional[str] = "==>"
+) -> None:
     if LEVEL > FATAL:
         return
-    text = format_message(f"Fatal: {message}", end=end, color="*r")
+    text = format_message(f"Fatal: {message}", end=end, color="*r", prefix=prefix)
     puts(text, stream=stream)
 
 

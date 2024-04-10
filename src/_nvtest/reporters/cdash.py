@@ -17,7 +17,6 @@ from ..session import Session
 from ..util import cdash
 from ..util import gitlab
 from ..util import logging
-from ..util import tty
 from ..util.filesystem import mkdirp
 from ..util.sendmail import sendmail
 from ..util.time import strftimestamp
@@ -135,7 +134,7 @@ class Reporter(_Reporter):
     def write_test_xml(self) -> str:
         filename = os.path.join(self.xml_dir, "Test.xml")
         f = os.path.relpath(filename, config.get("session:invocation_dir"))
-        tty.info(f"WRITING: Test.xml to {f}", prefix=None)
+        logging.info(f"WRITING: Test.xml to {f}", prefix=None)
         starttime = self.data.start
 
         doc = xdom.Document()
@@ -219,7 +218,7 @@ class Reporter(_Reporter):
     def write_notes_xml(self) -> str:
         filename = os.path.join(self.xml_dir, "Notes.xml")
         f = os.path.relpath(filename, config.get("session:invocation_dir"))
-        tty.info(f"WRITING: Notes.xml to {f}", prefix=None)
+        logging.info(f"WRITING: Notes.xml to {f}", prefix=None)
         notes: dict[str, str] = {}
         doc = xdom.Document()
         root = self.site_node
@@ -323,7 +322,7 @@ def cdash_summary(
         CDash sites to skip. If None, pull from all sites.
 
     """
-    tty.info("Generating the HTML summary")
+    logging.info("Generating the HTML summary")
     html_summary = generate_cdash_html_summary(
         url, project, groups=buildgroups, skip_sites=skip_sites
     )
@@ -334,14 +333,14 @@ def cdash_summary(
     user = getuser()
     today = datetime.date.today()
     if mailto is not None:
-        tty.info(f"Sending HTML summary to {','.join(mailto)}")
+        logging.info(f"Sending HTML summary to {','.join(mailto)}")
         st_time = today.strftime("%m/%d/%Y")
         subject = f"{project} CDash Summary for {st_time}"
         sendmail(f"{user}@sandia.gov", mailto, subject, html_summary, subtype="html")
 
     if file is not None:
         file = os.path.abspath(file)
-        tty.info(f"Writing HTML summary to {file}")
+        logging.info(f"Writing HTML summary to {file}")
         try:
             mkdirp(os.path.dirname(file))
             with open(file, "w") as fh:
@@ -405,7 +404,7 @@ def _get_build_data(
     server = cdash.server(url, project)
     cdash_builds = server.builds(date=date, buildgroups=buildgroups, skip_sites=skip_sites)
     for b in cdash_builds:
-        tty.info(f"Categorizing tests for build {b['buildname']}")
+        logging.info(f"Categorizing tests for build {b['buildname']}")
         if "test" not in b:
             b["test"] = server.empty_test_data()
             continue
@@ -693,16 +692,16 @@ def groupby_status_and_testname(tests):
         "Completed (Failed)": "Failed",
     }
     grouped = {}
-    tty.info("Grouping failed tests by status and name")
+    logging.info("Grouping failed tests by status and name")
     for test in tests:
         name = test["name"].split(".")[0]
         details = test.pop("details")
         status = details_map.get(details, "Unknown")
         test["fail_reason"] = status
         grouped.setdefault(status, {}).setdefault(name, []).append(test)
-    tty.info("Done grouping failed tests by status and name")
+    logging.info("Done grouping failed tests by status and name")
     for gn, gt in grouped.items():
-        tty.info(f"{len(gt)} tests {gn}")
+        logging.info(f"{len(gt)} tests {gn}")
     return grouped
 
 
@@ -772,7 +771,7 @@ def close_test_issues_missing_from_cdash(repo, current_issue_data):
         else:
             # Issue is open, but not in the CDash failed tests. Must have been fixed and
             # not closed.
-            tty.info(f"Closing issue {existing_issue['title']}")
+            logging.info(f"Closing issue {existing_issue['title']}")
             params = {"state_event": "close", "add_labels": "test::fixed"}
             repo.edit_issue(existing_issue["iid"], data=params)
 
@@ -815,7 +814,7 @@ def update_existing_issue(repo, existing, updated_issue_data):
     if existing["state"] == "closed":
         params["state_event"] = "reopen"
     s = "Reopening" if params.get("state_event") else "Updating"
-    tty.info(f"{s} issue {title}")
+    logging.info(f"{s} issue {title}")
     iid = existing["iid"]
     repo.edit_issue(iid, data=params)
     repo.edit_issue(iid, notes=updated_issue_data["notes"])
@@ -829,7 +828,7 @@ def create_new_issue(repo, new_issue_data):
     labels.append("Stage::To Do")
     labels.extend([site_label(_) for _ in new_issue_data["sites"]])
     params = {"title": title, "description": description, "labels": ",".join(labels)}
-    tty.info(f"Creating new issue for {title}, with labels {params['labels']}")
+    logging.info(f"Creating new issue for {title}, with labels {params['labels']}")
     iid = repo.new_issue(data=params)
     if iid:
         repo.edit_issue(iid, notes=new_issue_data["notes"])

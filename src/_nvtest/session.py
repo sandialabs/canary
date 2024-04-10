@@ -102,6 +102,7 @@ from .third_party.lock import WriteTransaction
 from .util import logging
 from .util import parallel
 from .util import tty
+from .util.color import colorize
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
@@ -109,7 +110,6 @@ from .util.graph import TopologicalSorter
 from .util.misc import dedup
 from .util.returncode import compute_returncode
 from .util.time import timeout as timeout_context
-from .util.tty.color import colorize
 
 default_batchsize = 30 * 60  # 30 minutes
 REUSE_SCHEDULER = "==REUSE_SCHEDUER=="

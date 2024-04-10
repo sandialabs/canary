@@ -21,10 +21,11 @@ from ..session import Session
 from ..session import default_batchsize
 from ..test.status import Status
 from ..test.testcase import TestCase
+from ..util import logging
 from ..util import tty
+from ..util.color import colorize
 from ..util.filesystem import force_remove
 from ..util.misc import partition
-from ..util.tty.color import colorize
 from .common import add_mark_arguments
 from .common import add_resource_arguments
 from .common import add_timing_arguments
@@ -199,7 +200,7 @@ def run(args: "argparse.Namespace") -> int:
         if not args.no_header:
             print_testcase_overview(session.cases, duration=setup_duration)
         if args.until == "setup":
-            tty.info("Stopping after setup (--until='setup')")
+            logging.info("Stopping after setup (--until='setup')")
             return 0
         tty.print("Beginning test session", centered=True)
         initstate = 2
@@ -380,10 +381,10 @@ def print_testcase_overview(cases: list[TestCase], duration: Optional[float] = N
 
 
 def cformat(case: TestCase) -> str:
-    id = tty.color.colorize("@*b{%s}" % case.id[:7])
+    id = colorize("@*b{%s}" % case.id[:7])
     if case.masked:
         string = "@*c{EXCLUDED} %s %s: %s" % (id, case.pretty_repr(), case.mask)
-        return tty.color.colorize(string)
+        return colorize(string)
     string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
     if case.duration > 0:
         string += " (%.2fs.)" % case.duration
@@ -396,7 +397,7 @@ def print_testcase_results(
     cases: list[TestCase], duration: float = -1, durations: Optional[int] = None
 ) -> None:
     if not cases:
-        tty.info("Nothing to report")
+        logging.info("Nothing to report")
         return
 
     if duration == -1:
@@ -412,15 +413,15 @@ def print_testcase_results(
             totals.setdefault(case.status.iid, []).append(case)
 
     nonpass = ("skipped", "diffed", "timeout", "failed")
-    level = tty.get_log_level()
-    if level > tty.INFO and len(totals):
+    level = logging.get_level()
+    if level < logging.INFO and len(totals):
         tty.print("Short test summary info", centered=True)
     elif any(r in totals for r in nonpass):
         tty.print("Short test summary info", centered=True)
     if level > tty.VERBOSE and "masked" in totals:
         for case in sorted(totals["masked"], key=lambda t: t.name):
             tty.print(cformat(case))
-    if level > tty.INFO:
+    if level < logging.INFO:
         for status in ("staged", "success"):
             if status in totals:
                 for case in sorted(totals[status], key=lambda t: t.name):

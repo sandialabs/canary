@@ -9,12 +9,12 @@ from typing import TextIO
 from ..test.partition import Partition
 from ..test.status import Status
 from ..util import tty
+from ..util.color import colorize
 from ..util.executable import Executable
 from ..util.filesystem import getuser
 from ..util.filesystem import set_executable
 from ..util.filesystem import which
 from ..util.misc import digits
-from ..util.tty.color import colorize
 from .base import Runner
 
 if TYPE_CHECKING:

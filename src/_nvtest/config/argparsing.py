@@ -15,7 +15,7 @@ from typing import Union
 import _nvtest._version
 
 from ..util import tty
-from ..util.tty.color import colorize
+from ..util.color import colorize
 
 stat_names = pstats.Stats.sort_arg_dict_default
 

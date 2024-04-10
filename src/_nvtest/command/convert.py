@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from .. import config
 from ..compat import vvtest
 from ..test.testfile import AbstractTestFile
+from ..util import logging
 from ..util import tty
 
 if TYPE_CHECKING:
@@ -26,9 +27,9 @@ def convert(args: "argparse.Namespace") -> int:
     new_file = vvtest.to_pyt(file)
     f1 = os.path.relpath(file.file, config.invocation_dir)
     f2 = os.path.relpath(new_file, config.invocation_dir)
-    tty.info(
-        f"converted {f1} => {f2}",
-        "NOTE: the conversion only converts the directives.",
-        "The test body will need to be converted manually",
+    logging.info(
+        f"converted {f1} => {f2}\n"
+        "NOTE: the conversion only converts the directives.\n"
+        "The test body will need to be converted manually"
     )
     return 0

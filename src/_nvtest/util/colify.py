@@ -13,9 +13,9 @@ import os
 import sys
 from io import StringIO
 
-from ..tty import terminal_size
 from .color import cextra
 from .color import clen
+from .term import terminal_size
 
 
 class ColumnConfig:

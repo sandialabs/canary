@@ -16,13 +16,13 @@ from .. import config
 from ..util import filesystem as fs
 from ..util import logging
 from ..util import tty
+from ..util.color import colorize
 from ..util.compression import compress_file
 from ..util.executable import Executable
 from ..util.filesystem import copyfile
 from ..util.filesystem import mkdirp
 from ..util.filesystem import working_dir
 from ..util.hash import hashit
-from ..util.tty.color import colorize
 from .status import Status
 
 
@@ -300,10 +300,10 @@ class TestCase:
                     logging.warning(f"{os.path.basename(dst)} already exists in {workdir}")
                     continue
                 if action == "copy" or copy_all_resources:
-                    fs.force_copy(src, dst, echo=tty.info)
+                    fs.force_copy(src, dst, echo=logging.info)
                 else:
                     relsrc = os.path.relpath(src, workdir)
-                    fs.force_symlink(relsrc, dst, echo=tty.info)
+                    fs.force_symlink(relsrc, dst, echo=logging.info)
 
     def asdict(self, *keys):
         data = dict(vars(self))
@@ -411,15 +411,15 @@ class TestCase:
     def setup_exec_dir(self, copy_all_resources: bool = False) -> None:
         with tty.log_output(self.logfile("setup"), mode="w"):
             with tty.timestamps():
-                tty.info(f"Preparing test: {self.name}")
-                tty.info(f"Directory: {os.getcwd()}")
-                tty.info("Cleaning work directory...")
-                tty.info("Linking and copying working files...")
+                logging.info(f"Preparing test: {self.name}")
+                logging.info(f"Directory: {os.getcwd()}")
+                logging.info("Cleaning work directory...")
+                logging.info("Linking and copying working files...")
                 if copy_all_resources:
-                    fs.force_copy(self.file, os.path.basename(self.file), echo=tty.info)
+                    fs.force_copy(self.file, os.path.basename(self.file), echo=logging.info)
                 else:
                     relsrc = os.path.relpath(self.file, os.getcwd())
-                    fs.force_symlink(relsrc, os.path.basename(self.file), echo=tty.info)
+                    fs.force_symlink(relsrc, os.path.basename(self.file), echo=logging.info)
                 self.copy_sources_to_workdir(copy_all_resources=copy_all_resources)
 
     def update(self, attrs: dict[str, object]) -> None:
@@ -440,7 +440,7 @@ class TestCase:
     def do_baseline(self) -> None:
         if not self.baseline:
             return
-        tty.info(f"Rebaselining {self.pretty_repr()}")
+        logging.info(f"Rebaselining {self.pretty_repr()}")
         with fs.working_dir(self.exec_dir):
             if self.file_type == "vvt":
                 self.write_vvtest_util(baseline=True)
@@ -483,7 +483,7 @@ class TestCase:
         fmt = "{{0}}: {0} {1} {{1}}".format(id, self.pretty_repr())
         try:
             self.start = time.time()
-            tty.info(fmt.format("STARTING", ""), prefix=None)
+            logging.info(fmt.format("STARTING", ""), prefix=None)
             self._run(**kwds)
         except Exception:
             self.returncode = 1
@@ -499,7 +499,7 @@ class TestCase:
                 f = os.path.join(self.exec_dir, "execute.log")
                 fs.force_symlink(self.logfile(), f)
             self.finish = time.time()
-            tty.info(fmt.format("FINISHED", self.status.cname), prefix=None)
+            logging.info(fmt.format("FINISHED", self.status.cname), prefix=None)
             self.dump()
         return
 
@@ -513,8 +513,8 @@ class TestCase:
             with tty.log_output(self.logfile(stage), mode="w"):
                 with tty.timestamps():
                     args = self.command_line_args(**kwds)
-                    tty.info(f"Running {self.display_name}")
-                    tty.info(f"Command line: {sys.executable} {' '.join(args)}")
+                    logging.info(f"Running {self.display_name}")
+                    logging.info(f"Command line: {sys.executable} {' '.join(args)}")
                     with self.rc_environ():
                         python(*args, fail_on_error=False, timeout=self.timeout)
                     self._process = None
