@@ -386,7 +386,7 @@ def cformat(case: TestCase) -> str:
         return colorize(string)
     string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
     if case.duration > 0:
-        string += " (%.2fs.)" % case.duration
+        string += " [%.2fs.]" % case.duration
     elif case.status == "skipped":
         string += ": Skipped due to %s" % case.status.details
     return string

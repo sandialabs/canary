@@ -21,10 +21,29 @@ class _Partition(set):
 
 
 class Partition(list):
+    """A list of test cases
+
+    Parameters
+    ----------
+    world_rank:
+        The index of this partition in the group
+    world_size:
+        The number of partitions in the group
+    global_id:
+        The id of the group
+
+    """
+
     def __init__(
-        self, partition: Union[list[TestCase], _Partition], rank: int, group_size: int
+        self,
+        partition: Union[list[TestCase], _Partition],
+        world_rank: int,
+        world_size: int,
+        world_id: int = 0,
     ) -> None:
-        self.rank = (rank, group_size)
+        self.world_rank = world_rank
+        self.world_size = world_size
+        self.world_id = world_id
         for case in partition:
             for dep in case.dependencies:
                 if dep not in partition:
@@ -75,17 +94,17 @@ def group_testcases(cases: list[TestCase]):
     return sorted(filter(None, groups), key=lambda g: -len(g))
 
 
-def partition_n(cases, n=8) -> list[Partition]:
+def partition_n(cases: list[TestCase], n: int = 8, global_id: int = 0) -> list[Partition]:
     """Partition test cases into ``n`` partitions"""
     groups = group_testcases(cases)
     partitions = defaultlist(_Partition, n)
     for group in groups:
         partition = min(partitions, key=lambda p: p.cputime)
         partition.update(group)
-    return [Partition(p, i, n) for i, p in enumerate(partitions) if p.size]
+    return [Partition(p, i, n, global_id) for i, p in enumerate(partitions) if p.size]
 
 
-def partition_t(cases, t=60 * 30) -> list[Partition]:
+def partition_t(cases: list[TestCase], t: float = 60 * 30, global_id: int = 0) -> list[Partition]:
     """Partition test cases into partitions having a runtime approximately equal
     to ``t``
 
@@ -101,4 +120,4 @@ def partition_t(cases, t=60 * 30) -> list[Partition]:
             partition = partitions.new()
         partition.update(group)
     n = len(partitions)
-    return [Partition(p, i, n) for i, p in enumerate(partitions)]
+    return [Partition(p, i, n, global_id) for i, p in enumerate(partitions)]

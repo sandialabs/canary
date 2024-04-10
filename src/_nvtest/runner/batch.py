@@ -13,9 +13,9 @@ from ..util import logging
 from ..util.color import colorize
 from ..util.executable import Executable
 from ..util.filesystem import getuser
+from ..util.filesystem import mkdirp
 from ..util.filesystem import set_executable
 from ..util.filesystem import which
-from ..util.misc import digits
 from .base import Runner
 
 if TYPE_CHECKING:
@@ -29,7 +29,6 @@ class BatchRunner(Runner):
     def __init__(self, session: "Session", **kwargs: Any) -> None:
         super().__init__(session, **kwargs)
         self.options: list[str] = [str(_) for _ in kwargs.get("options") or []]
-        self.batch_store = kwargs.get("batch_store", 0)
 
     def setup(self, batch: Partition) -> None:
         self.write_submission_script(batch)
@@ -44,17 +43,20 @@ class BatchRunner(Runner):
         sys.stdout.write(f"{text}\n")
 
     def run(self, batch: Partition, **kwds: Any) -> dict[str, dict]:
-        batch_no, num_batches = batch.rank
         n = len(batch)
-        self.print_text(f"SUBMITTING: Batch {batch_no + 1} of {num_batches} ({n} tests)")
-        script = self.submit_filename(batch_no)
+        self.print_text(
+            f"SUBMITTING: Batch {batch.world_rank + 1} of {batch.world_size} ({n} tests)"
+        )
+        script = self.submit_filename(batch)
         if not os.path.exists(script):
             self.write_submission_script(batch)
         try:
             script_x = Executable(self.command)
             if self.default_args:
                 script_x.add_default_args(*self.default_args)
-            with open(self.logfile(batch_no), "w") as fh:
+            f = self.logfile(batch)
+            mkdirp(os.path.dirname(f))
+            with open(f, "w") as fh:
                 script_x(script, fail_on_error=False, output=fh, error=fh)
         finally:
             self.load_batch_results(batch)
@@ -72,7 +74,9 @@ class BatchRunner(Runner):
             st_stat = ", ".join(
                 colorize(fmt % (Status.colors[n], v, n)) for (n, v) in stat.items()
             )
-            self.print_text(f"FINISHED:   Batch {batch_no + 1} of {num_batches}, {st_stat}")
+            self.print_text(
+                f"FINISHED:   Batch {batch.world_rank + 1} of {batch.world_size}, {st_stat}"
+            )
         return attrs
 
     @classmethod
@@ -84,11 +88,10 @@ class BatchRunner(Runner):
             s = f"{items.__class__.__name__}"
             raise ValueError(f"{cls.__name__} is only compatible with list[Partition], not {s}")
 
-    def write_header(self, fh: TextIO, batch_no: int) -> None:
+    def write_header(self, fh: TextIO, batch: Partition) -> None:
         raise NotImplementedError
 
     def write_body(self, batch: Partition, fh: TextIO) -> None:
-        batch_no, _ = batch.rank
         max_test_cpus = self.max_tasks_required(batch)
         max_workers = self.avail_workers(batch)
         session_cpus = max(max_workers, max_test_cpus)
@@ -98,30 +101,28 @@ class BatchRunner(Runner):
             f"-l session:workers:{max_workers} "
             f"-l session:cpus:{session_cpus} "
             f"-l test:cpus:{max_test_cpus} "
-            f"^{self.batch_store}:{batch_no}\n)\n"
+            f"^{batch.world_id}:{batch.world_rank}\n)\n"
         )
 
-    def submit_filename(self, batch_no: int) -> str:
-        n = max(digits(batch_no), 3)
-        basename = f"batch-{batch_no:0{n}}-submit.sh"
-        return os.path.join(self.stage, "batch", str(self.batch_store), basename)
+    def submit_filename(self, batch: Partition) -> str:
+        basename = f"submit.{batch.world_size}.{batch.world_rank}.sh"
+        return os.path.join(self.stage, "batch", str(batch.world_id), basename)
 
-    def logfile(self, batch_no: int) -> str:
-        n = max(digits(batch_no), 3)
-        basename = f"batch-{batch_no:0{n}}-out.txt"
-        return os.path.join(self.stage, basename)
+    def logfile(self, batch: Partition) -> str:
+        basename = f"out.{batch.world_size}.{batch.world_rank}.txt"
+        return os.path.join(self.stage, "batch", str(batch.world_id), basename)
 
     def write_submission_script(self, batch: Partition) -> None:
         self.calculate_resource_allocations(batch)
-        batch_no, num_batches = batch.rank
         fh = StringIO()
-        self.write_header(fh, batch_no)
+        self.write_header(fh, batch)
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(f"# batch {batch_no + 1} of {num_batches}\n")
+        fh.write(f"# batch {batch.world_rank + 1} of {batch.world_size}\n")
         fh.write("export NVTEST_DISABLE_KB=1\n")
         self.write_body(batch, fh)
-        f = self.submit_filename(batch_no)
+        f = self.submit_filename(batch)
+        mkdirp(os.path.dirname(f))
         with open(f, "w") as fp:
             fp.write(fh.getvalue())
         set_executable(f)
@@ -149,7 +150,7 @@ class BatchRunner(Runner):
             except FileNotFoundError:
                 case.status.set(
                     "failed",
-                    f"Test case {case} not found batch {batch.rank[0]}'s output",
+                    f"Test case {case} not found in batch {batch.world_rank}'s output",
                 )
             else:
                 if fd["status"][0] == "staged":

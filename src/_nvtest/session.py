@@ -585,20 +585,21 @@ class Session:
         self,
         batch_count: Optional[int] = None,
         batch_time: Optional[float] = None,
-    ) -> int:
+    ) -> None:
         batched: bool = batch_count is not None or batch_time is not None
         if not batched:
             raise ValueError("Expected batched == True")
 
         batch_stores = glob.glob(os.path.join(self.dotdir, "stage/batch/*"))
-        batch_store = len(batch_stores)
+        batch_store = len(batch_stores) + 1
 
         cases_to_run = [case for case in self.cases if not case.masked]
         batches: list[Partition]
         if batch_count:
-            batches = partition_n(cases_to_run, n=batch_count)
+            batches = partition_n(cases_to_run, n=batch_count, global_id=batch_store)
         else:
-            batches = partition_t(cases_to_run, t=batch_time)
+            assert batch_time is not None
+            batches = partition_t(cases_to_run, t=batch_time, global_id=batch_store)
         self.queue = q_factory(
             batches,
             avail_workers=self.avail_workers,
@@ -607,14 +608,14 @@ class Session:
         )
         fd: dict[int, list[str]] = {}
         for batch in batches:
-            cases = fd.setdefault(batch.rank[0], [])
+            cases = fd.setdefault(batch.world_rank, [])
             cases.extend([case.id for case in batch])
 
         file = os.path.join(self.dotdir, "stage/batch", str(batch_store), "index")
         mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
             json.dump({"index": fd}, fh, indent=2)
-        return batch_store
+        return
 
     def apply_batch_filter(self, batch_store: Optional[int], batch_no: Optional[int]) -> None:
         file = os.path.join(self.dotdir, "stage/batch", str(batch_store), "index")
@@ -711,10 +712,8 @@ class Session:
             if reuse:
                 scheduler = self.ini_options["scheduler"]
                 scheduler_options = scheduler_options or self.ini_options["scheduler_options"]
-            batch_store = self.setup_batch_queue(batch_count=batch_count, batch_time=batch_time)
-            self.runner = r_factory(
-                scheduler, self, batch_store=batch_store, options=scheduler_options
-            )
+            self.setup_batch_queue(batch_count=batch_count, batch_time=batch_time)
+            self.runner = r_factory(scheduler, self, options=scheduler_options)
         else:
             self.setup_direct_queue()
             self.runner = r_factory("direct", self)
@@ -865,16 +864,16 @@ class Session:
             fd = self.db.read()
             for case in obj:
                 if case.id not in fd:
-                    logging.error(f"case ID {case.id} not in batch {obj.rank[0]}")
+                    logging.error(f"case ID {case.id} not in batch {obj.world_rank}")
                     continue
                 if case.fullname not in attrs:
-                    logging.error(f"{case.fullname} not in batch {obj.rank[0]}'s attrs")
+                    logging.error(f"{case.fullname} not in batch {obj.world_rank}'s attrs")
                     continue
                 if attrs[case.fullname]["status"] != fd[case.id]["status"]:
                     fs = attrs[case.fullname]["status"]
                     ss = fd[case.id]["status"]
                     logging.error(
-                        f"batch {obj.rank[0]}, {case}: "
+                        f"batch {obj.world_rank}, {case}: "
                         f"expected status of future.result to be {ss[0]}, not {fs[0]}"
                     )
                     continue

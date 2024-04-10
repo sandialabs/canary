@@ -59,9 +59,9 @@ class SlurmRunner(BatchRunner, _Slurm):
         dashes = "-" if len(key) == 1 else "--"
         return f"{dashes}{key.replace('_', '-')}"
 
-    def write_header(self, fh: TextIO, batch_no: int) -> None:
+    def write_header(self, fh: TextIO, batch: Partition) -> None:
         """Generate the sbatch script for the current state of arguments."""
-        script = self.submit_filename(batch_no)
+        script = self.submit_filename(batch)
         file = os.path.splitext(script)[0] + "-slurm-out.txt"
         self.namespace.error = self.namespace.output = file
         fh.write(f"#!{self.shell}\n")
