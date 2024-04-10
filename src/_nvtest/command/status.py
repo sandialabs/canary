@@ -107,7 +107,7 @@ def matches(pathspec, case):
 def status(args: "argparse.Namespace") -> int:
     work_tree = config.get("session:work_tree")
     if work_tree is None:
-        tty.die("not a nvtest session (or any of the parent directories): .nvtest")
+        raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
     session = Session.load(mode="r")
     cases = session.cases
     if args.pathspec:

@@ -16,7 +16,7 @@ def setup_parser(parser: Parser):
 def info(args: argparse.Namespace) -> int:
     work_tree = config.get("session:work_tree")
     if work_tree is None:
-        tty.die("not a nvtest session (or any of the parent directories): .nvtest")
+        raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
     session = Session.load(mode="r")
     p = config.get("system:os:name")
     v = config.get("python:version")

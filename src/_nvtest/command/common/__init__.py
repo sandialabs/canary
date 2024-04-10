@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 from typing import Union
 
 import _nvtest.config as config
-from _nvtest.util import tty
 from _nvtest.util.time import time_in_seconds
 
 if TYPE_CHECKING:
@@ -90,7 +89,7 @@ def add_resource_arguments(parser: "Parser") -> None:
 
 def set_default_resource_args(args: argparse.Namespace) -> None:
     def _die(name1, n1, name2, n2):
-        tty.die("'-l {0}:{1}' must not exceed {2}:{3}".format(name1, n1, name2, n2))
+        raise ValueError("'-l {0}:{1}' must not exceed {2}:{3}".format(name1, n1, name2, n2))
 
     np = config.get("machine:cpu_count")
     npt = setdefault(args, "cpus_per_test", None)
@@ -127,7 +126,7 @@ def set_default_resource_args(args: argparse.Namespace) -> None:
     bt = setdefault(args, "batch_time", None)
     if bc is not None and bt is not None:
         opt1, opt2 = f"-l batch:time:{bt}", f"-l batch:count:{bc}"
-        tty.die(f"{opt1!r} and {opt2!r} are mutually exclusive")
+        raise ValueError(f"{opt1!r} and {opt2!r} are mutually exclusive")
 
 
 class ResourceSetter(argparse.Action):

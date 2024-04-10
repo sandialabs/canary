@@ -8,7 +8,6 @@ from ..reporters import cdash
 from ..reporters import html
 from ..reporters import markdown
 from ..session import Session
-from ..util import tty
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -195,13 +194,13 @@ def report(args: "Namespace") -> int:
         return 0
     elif command == ("cdash", "create-gitlab-issues"):
         if args.access_token is None:
-            tty.die("gitlab access token required")
+            raise ValueError("gitlab access token required")
         if args.gitlab_url is None:
-            tty.die("gitlab project url required")
+            raise ValueError("gitlab project url required")
         if args.gitlab_project is None:
-            tty.die("gitlab project required")
+            raise ValueError("gitlab project required")
         if args.gitlab_project_id is None:
-            tty.die("gitlab project id required")
+            raise ValueError("gitlab project id required")
         cdash.create_issues_from_failed_tests(
             access_token=str(args.access_token),
             cdash_url=str(args.url),
@@ -214,7 +213,7 @@ def report(args: "Namespace") -> int:
         )
         return 0
     if not config.get("session:work_tree"):
-        tty.die("not a nvtest session (or any of the parent directories): .nvtest")
+        raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
     session = Session.load(mode="r")
     reporter: Reporter
     if args.parent_command == "cdash":
@@ -240,25 +239,25 @@ def report(args: "Namespace") -> int:
             if not args.files:
                 args.files = glob.glob(os.path.join(reporter.xml_dir, "*.xml"))
             if not args.files:
-                tty.die("nvtest report cdash post: no xml files to post")
+                raise ValueError("nvtest report cdash post: no xml files to post")
             reporter.post(args.url, args.project, *args.files)
         else:
-            tty.die(f"{args.child_command}: unknown `nvtest report cdash` subcommand")
+            raise ValueError(f"{args.child_command}: unknown `nvtest report cdash` subcommand")
         return 0
     elif args.parent_command == "html":
         reporter = html.Reporter(session)
         if args.child_command == "create":
             reporter.create()
         else:
-            tty.die(f"{args.child_command}: unknown `nvtest report html` subcommand")
+            raise ValueError(f"{args.child_command}: unknown `nvtest report html` subcommand")
         return 0
     elif args.parent_command == "markdown":
         reporter = markdown.Reporter(session)
         if args.child_command == "create":
             reporter.create()
         else:
-            tty.die(f"{args.child_command}: unknown `nvtest report markdown` subcommand")
+            raise ValueError(f"{args.child_command}: unknown `nvtest report markdown` subcommand")
         return 0
     else:
-        tty.die(f"{args.parent_command}: unknown subcommand")
+        raise ValueError(f"{args.parent_command}: unknown subcommand")
     return 1

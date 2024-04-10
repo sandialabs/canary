@@ -13,7 +13,6 @@ from .command import get_command
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
 from .util import logging
-from .util import tty
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -113,7 +112,7 @@ def invoke_profiled_command(command, args):
         nlines = int(args.lines)
     except ValueError:
         if args.lines != "all":
-            tty.die("Invalid number for --lines: %s" % args.lines)
+            raise ValueError("Invalid number for --lines: %s" % args.lines)
         nlines = -1
 
     with Profiler(nlines=nlines):
@@ -128,7 +127,7 @@ def load_plugins(dirs: Optional[list[str]] = None) -> None:
         return
     for dir in dirs:
         if not os.path.exists(dir):
-            tty.die(f"{dir}: plugin directory not found")
+            raise ValueError(f"{dir}: plugin directory not found")
         path = os.path.abspath(dir)
         plugin.load_from_directory(path)
 

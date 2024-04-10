@@ -7,7 +7,6 @@ import _nvtest.command
 from ..config.argparsing import cmd_name
 from ..config.argparsing import make_argument_parser
 from ..third_party import argparsewriter as aw
-from ..util import tty
 from ..util.colify import colify
 from ..util.color import set_color_when
 
@@ -164,7 +163,7 @@ def index_commands():
         for p in ("description",):
             prop = getattr(cmd_module, p, None)
             if not prop:
-                tty.die("Command doesn't define a property {0!r}: {1}".format(p, cmd))
+                raise ValueError("Command doesn't define a property {0!r}: {1}".format(p, cmd))
 
         # add commands to lists for their level and higher levels
         level_sections = index.setdefault("all", {})

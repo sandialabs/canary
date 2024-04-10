@@ -277,14 +277,14 @@ def _parse_new_session_pathspec(args: argparse.Namespace) -> None:
             root, name = path.split(os.pathsep, 1)
             args.paths.setdefault(root, []).append(name.replace(os.pathsep, os.path.sep))
         else:
-            tty.die(f"{path}: no such file or directory")
+            raise ValueError(f"{path}: no such file or directory")
 
 
 def _parse_in_session_pathspec(args: argparse.Namespace) -> None:
     assert config.get("session") is not None
     args.mode = "a"
     if args.work_tree is not None:
-        tty.die(f"work_tree={args.work_tree} incompatible with path arguments")
+        raise ValueError(f"work_tree={args.work_tree} incompatible with path arguments")
     args.work_tree = config.get("session:work_tree")
 
     pathspec: list[str] = []
@@ -301,22 +301,22 @@ def _parse_in_session_pathspec(args: argparse.Namespace) -> None:
             pathspec.append(p)
     if getattr(args, "case_specs", None):
         if pathspec:
-            tty.die("do not mix /ID with other pathspec arguments")
+            raise ValueError("do not mix /ID with other pathspec arguments")
     elif getattr(args, "batch_no", None):
         if pathspec:
-            tty.die("do not mix ^BATCH with other pathspec arguments")
+            raise ValueError("do not mix ^BATCH with other pathspec arguments")
     if len(pathspec) > 1:
-        tty.die("incompatible input path arguments")
+        raise ValueError("incompatible input path arguments")
     if args.wipe:
-        tty.die("wipe=True incompatible with path arguments")
+        raise ValueError("wipe=True incompatible with path arguments")
     if pathspec:
         path = os.path.abspath(pathspec.pop(0))
         if not os.path.exists(path):
-            tty.die(f"{path}: no such file or directory")
+            raise ValueError(f"{path}: no such file or directory")
         if path.endswith((".yaml", ".yml", ".json")):
-            tty.die(f"path={path} is an illegal pathspec argument in re-use mode")
+            raise ValueError(f"path={path} is an illegal pathspec argument in re-use mode")
         if not path.startswith(args.work_tree):
-            tty.die("path arg must be a child of the work tree")
+            raise ValueError("path arg must be a child of the work tree")
         args.start = os.path.relpath(path, args.work_tree)
         if os.path.isfile(path):
             if finder.is_test_file(path):
@@ -326,7 +326,7 @@ def _parse_in_session_pathspec(args: argparse.Namespace) -> None:
                 else:
                     args.keyword_expr = name
             else:
-                tty.die(f"{path}: unrecognized file extension")
+                raise ValueError(f"{path}: unrecognized file extension")
         elif not args.keyword_expr:
             kwds: list[str] = []
             for f in os.listdir(path):
@@ -476,7 +476,7 @@ def read_paths(file: str, paths: dict[str, list[str]]) -> None:
 def setup_session(args: "argparse.Namespace") -> Session:
     if args.wipe:
         if args.mode != "w":
-            tty.die(f"Cannot wipe work directory with mode={args.mode}")
+            raise ValueError(f"Cannot wipe work directory with mode={args.mode}")
         force_remove(args.work_tree or Session.default_work_tree)
     session: Session
     if args.mode == "w":

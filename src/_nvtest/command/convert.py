@@ -5,7 +5,6 @@ from .. import config
 from ..compat import vvtest
 from ..test.testfile import AbstractTestFile
 from ..util import logging
-from ..util import tty
 
 if TYPE_CHECKING:
     import argparse
@@ -22,7 +21,7 @@ def setup_parser(parser: "Parser"):
 
 def convert(args: "argparse.Namespace") -> int:
     if not args.file.endswith(".vvt"):
-        tty.die("Can only convert .vvt to .pyt")
+        raise ValueError("Can only convert .vvt to .pyt")
     file = AbstractTestFile(args.file)
     new_file = vvtest.to_pyt(file)
     f1 = os.path.relpath(file.file, config.invocation_dir)

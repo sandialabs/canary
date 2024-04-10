@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING
 
 from .. import config
 from ..session import Session
-from ..util import tty
 
 if TYPE_CHECKING:
     import argparse
@@ -50,7 +49,7 @@ def setup_parser(parser: "Parser"):
 def location(args: "argparse.Namespace") -> int:
     work_tree = config.get("session:work_tree")
     if work_tree is None:
-        tty.die("not a nvtest session (or any of the parent directories): .nvtest")
+        raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
 
     session = Session.load(mode="r")
     for case in session.cases:
@@ -68,5 +67,4 @@ def location(args: "argparse.Namespace") -> int:
                 f = case.exec_dir
             print(f)
             return 0
-    tty.die(f"{args.testspec}: no matching test found in {work_tree}")
-    return 1
+    raise ValueError(f"{args.testspec}: no matching test found in {work_tree}")

@@ -2,8 +2,6 @@ from typing import TYPE_CHECKING
 
 import _nvtest.config
 
-from ..util import tty
-
 if TYPE_CHECKING:
     import argparse
 
@@ -56,7 +54,7 @@ def config(args: "argparse.Namespace") -> int:
         with open(file, "w") as fh:
             _nvtest.config.dump(fh, scope=args.scope)
     elif args.command is None:
-        tty.die("nvtest config: missing required subcommand (choose from show, add)")
+        raise ValueError("nvtest config: missing required subcommand (choose from show, add)")
     else:
-        tty.die(f"nvtest config: unknown subcommand: {args.subcommand}")
+        raise ValueError(f"nvtest config: unknown subcommand: {args.subcommand}")
     return 1
