@@ -392,7 +392,7 @@ class TestCase:
         return "Log not found"
 
     def setup(self, exec_root: str, copy_all_resources: bool = False) -> None:
-        tty.verbose(f"Setting up {self}")
+        logging.debug(f"Setting up {self}")
         if self.exec_root is not None:
             assert os.path.samefile(exec_root, self.exec_root)
         self.exec_root = exec_root
@@ -406,7 +406,7 @@ class TestCase:
                 self.write_vvtest_util()
             self.status.set("staged")
             self.dump()
-        tty.verbose(f"Done setting up {self}")
+        logging.debug(f"Done setting up {self}")
 
     def setup_exec_dir(self, copy_all_resources: bool = False) -> None:
         with tty.log_output(self.logfile("setup"), mode="w"):

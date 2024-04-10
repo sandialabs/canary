@@ -10,7 +10,7 @@ from typing import Callable
 from typing import Generator
 from typing import Optional
 
-from .util import tty
+from .util import logging
 from .util.singleton import Singleton
 
 
@@ -30,7 +30,7 @@ class Manager:
 
     def register(self, func: Callable, scope: str, stage: str) -> None:
         name = func.__name__
-        tty.verbose(f"Registering plugin {name}::{scope}::{stage}")
+        logging.debug(f"Registering plugin {name}::{scope}::{stage}")
         err_msg = f"register() got unexpected stage '{scope}::{stage}'"
         if scope == "main":
             if stage not in ("setup",):
@@ -164,7 +164,7 @@ def load_builtin_plugins() -> None:
     if dirname.exists():  # type: ignore
         for file in dirname.iterdir():
             if file.name.startswith("nvtest_"):
-                tty.debug(f"Loading {file.name} builtin plugin")
+                logging.debug(f"Loading {file.name} builtin plugin")
                 _manager.load_from_file(str(file))
 
 

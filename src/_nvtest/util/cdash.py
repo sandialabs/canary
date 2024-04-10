@@ -12,7 +12,6 @@ from urllib.request import urlopen
 
 from ..third_party.ctest_log_parser import CTestLogParser  # noqa: F401
 from ..util import logging
-from ..util import tty
 from ..util.color import cwrite
 from .executable import Executable
 from .filesystem import force_remove
@@ -177,7 +176,7 @@ class server:
         }
         query = urlencode(params)
         url = self.build_api_url(path="getbuildid.php", query=query)
-        tty.verbose(f"Getting build ID from CDash using the following query: {url}")
+        logging.debug(f"Getting build ID from CDash using the following query: {url}")
         curl = Executable("curl")
         try:
             response = curl("-k", url, output=str, error=os.devnull)
@@ -185,7 +184,7 @@ class server:
             buildid = doc.getElementsByTagName("buildid")[0].firstChild.data.strip()
         except xml.parsers.expat.ExpatError:
             buildid = "not found"
-        tty.verbose(f"build id = {buildid}")
+        logging.debug(f"build id = {buildid}")
         return None if buildid == "not found" else int(buildid)
 
     @staticmethod
@@ -249,7 +248,7 @@ class server:
             params["date"] = date
         query = urlencode(params)
         url = self.build_api_url(path="index.php", query=query)
-        tty.verbose(f"Getting build groups from CDash using the following query: {url}")
+        logging.debug(f"Getting build groups from CDash using the following query: {url}")
         data = self.get(url)
         if buildgroups is not None:
             buildgroups = [_ for _ in data["buildgroups"] if _["name"] in buildgroups]
@@ -341,7 +340,7 @@ class server:
             build_tests = self.get_tests_from_build(
                 build, skip_missing=skip_missing, include_details=include_details
             )
-            tty.verbose(f"Found {len(build_tests)} tests for {build['buildname']}")
+            logging.debug(f"Found {len(build_tests)} tests for {build['buildname']}")
             tests.extend(build_tests)
         return tests
 

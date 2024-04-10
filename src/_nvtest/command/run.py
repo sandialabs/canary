@@ -418,7 +418,7 @@ def print_testcase_results(
         tty.print("Short test summary info", centered=True)
     elif any(r in totals for r in nonpass):
         tty.print("Short test summary info", centered=True)
-    if level > tty.VERBOSE and "masked" in totals:
+    if level < logging.DEBUG and "masked" in totals:
         for case in sorted(totals["masked"], key=lambda t: t.name):
             tty.print(cformat(case))
     if level < logging.INFO:

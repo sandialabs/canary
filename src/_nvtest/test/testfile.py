@@ -349,7 +349,7 @@ class AbstractTestFile:
         avail_devices = avail_devices or config.get("machine:device_count")
         testcases: list[TestCase] = []
         names = ", ".join(self.names())
-        tty.verbose(f"Generating test cases for {self} using the following test names: {names}")
+        logging.debug(f"Generating test cases for {self} using the following test names: {names}")
         import _nvtest.directives
 
         for name in self.names():
@@ -359,7 +359,7 @@ class AbstractTestFile:
             enabled, reason = self.enable(testname=name, on_options=on_options)
             if not enabled and mask is None:
                 mask = f"deselected due to {reason}"
-                tty.verbose(f"{self}::{name} has been disabled")
+                logging.debug(f"{self}::{name} has been disabled")
             cases: list[TestCase] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
@@ -373,7 +373,7 @@ class AbstractTestFile:
                         f"keywords={keyword_expr!r}", keywords=list(kwds)
                     )
                     if not match:
-                        tty.verbose(f"Skipping {self}::{name}")
+                        logging.debug(f"Skipping {self}::{name}")
                         mask = colorize("deselected by @*b{keyword expression}")
 
                 np = parameters.get("np")
@@ -455,7 +455,7 @@ class AbstractTestFile:
 
     @staticmethod
     def resolve_dependencies(cases: list[TestCase]) -> None:
-        tty.verbose("Resolving dependencies in test file")
+        logging.debug("Resolving dependencies in test file")
         case_map = dict([(case.name, i) for (i, case) in enumerate(cases)])
         for i, case in enumerate(cases):
             for j, pat in enumerate(case.dep_patterns):

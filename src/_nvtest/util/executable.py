@@ -6,7 +6,6 @@ import subprocess
 
 from ..error import timeout_exit_status
 from ..util import logging
-from ..util import tty
 
 __all__ = ["Executable", "ProcessError"]
 
@@ -166,7 +165,7 @@ class Executable:
         if verbose:
             logging.info(f"Command line: {cmd_line}")
         else:
-            tty.verbose(cmd_line)
+            logging.debug(cmd_line)
 
         try:
             proc = subprocess.Popen(cmd, stdin=istream, stderr=estream, stdout=ostream, env=env)

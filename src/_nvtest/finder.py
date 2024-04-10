@@ -11,7 +11,6 @@ from .test.testfile import AbstractTestFile
 from .util import filesystem as fs
 from .util import logging
 from .util import parallel
-from .util import tty
 
 default_file_pattern = r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$"
 
@@ -52,7 +51,7 @@ class Finder:
         if not self._ready:
             raise ValueError("Cannot call populate() before calling prepare()")
         for root, paths in self.roots.items():
-            tty.verbose(f"Searching {root} for test files")
+            logging.debug(f"Searching {root} for test files")
             if os.path.isfile(root):
                 f = AbstractTestFile.factory(root)
                 root = f.root
@@ -71,10 +70,10 @@ class Finder:
             else:
                 testfiles = self.tree.setdefault(root, set())
                 testfiles.update(self.rfind(root))
-            tty.verbose(f"Found {len(testfiles)} test files in {root}")
+            logging.debug(f"Found {len(testfiles)} test files in {root}")
         n = sum([len(_) for _ in self.tree.values()])
         nr = len(self.tree)
-        tty.verbose(f"Found {n} test files in {nr} search roots")
+        logging.debug(f"Found {n} test files in {nr} search roots")
         return self.tree
 
     def rfind(self, root: str, subdir: Optional[str] = None) -> list[AbstractTestFile]:
@@ -110,7 +109,7 @@ class Finder:
 
     @staticmethod
     def resolve_dependencies(cases: list[TestCase]) -> None:
-        tty.verbose("Resolving dependencies across test suite")
+        logging.debug("Resolving dependencies across test suite")
         case_map = {}
         for i, case in enumerate(cases):
             case_map[case.name] = i
@@ -135,11 +134,11 @@ class Finder:
                 for match in matches:
                     assert isinstance(match, TestCase)
                     case.add_dependency(match)
-        tty.verbose("Done resolving dependencies across test suite")
+        logging.debug("Done resolving dependencies across test suite")
 
     @staticmethod
     def check_for_skipped_dependencies(cases: list[TestCase]) -> None:
-        tty.verbose("Validating test cases")
+        logging.debug("Validating test cases")
         missing = 0
         ids = [id(case) for case in cases]
         for case in cases:
@@ -154,7 +153,7 @@ class Finder:
                     logging.warning(f"Dependency {dep!r} of {case!r} is marked to be skipped")
         if missing:
             raise ValueError("Missing dependencies")
-        tty.verbose("Done validating test cases")
+        logging.debug("Done validating test cases")
 
     @staticmethod
     def freeze(
@@ -168,11 +167,11 @@ class Finder:
     ) -> list[TestCase]:
         cases: list[TestCase] = []
         o = ",".join(on_options or [])
-        tty.verbose(
-            "Creating concrete test cases using",
-            f"options={o}",
-            f"keywords={keyword_expr}",
-            f"parameters={parameter_expr}",
+        logging.debug(
+            "Creating concrete test cases using\n"
+            f"  options={o}\n"
+            f"  keywords={keyword_expr}\n"
+            f"  parameters={parameter_expr}\n"
         )
         kwds = dict(
             avail_cpus=avail_cpus_per_test,
@@ -203,7 +202,7 @@ class Finder:
             for case in cases:
                 hook(case)
 
-        tty.verbose("Done creating test cases")
+        logging.debug("Done creating test cases")
         return cases
 
 
