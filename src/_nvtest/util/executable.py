@@ -168,7 +168,7 @@ class Executable:
             logging.debug(cmd_line)
 
         try:
-            proc = subprocess.Popen(cmd, stdin=istream, stderr=estream, stdout=ostream, env=env)
+            proc = subprocess.Popen(cmd, stdin=istream, stderr=estream, stdout=ostream, env=env, **kwargs)
             if self.begin_callback is not None:
                 self.begin_callback(proc)
             out, err = proc.communicate(timeout=timeout)

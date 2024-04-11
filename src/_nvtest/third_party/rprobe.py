@@ -35,7 +35,7 @@ def read_lscpu(default=4):
     if not which("lscpu"):
         return None
     lscpu = Executable("lscpu")
-    out = lscpu(output=str, allow_failure=True)
+    out = lscpu(output=str, fail_on_error=False)
     cores_per_socket, sockets = default, 1
     if lscpu.returncode == 0:
         for line in out.split("\n"):
@@ -82,7 +82,7 @@ def read_proccpuinfo():
 def read_sysctl():
     if which("sysctl"):
         sysctl = Executable("sysctl")
-        out = sysctl("-n", "hw.physicalcpu", output=str, allow_failure=True)
+        out = sysctl("-n", "hw.physicalcpu", output=str, fail_on_error=False)
         if sysctl.returncode == 0:
             return int(out.strip())
     return None
