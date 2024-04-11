@@ -2,6 +2,8 @@ import itertools
 import json
 import os
 import re
+import signal
+import subprocess
 import sys
 import time
 from contextlib import contextmanager
@@ -90,7 +92,7 @@ class TestCase:
         self.exec_root: Optional[str] = None
         self.exec_path = os.path.join(os.path.dirname(self.file_path), self.name)
         # The process running the test case
-        self._process = None
+        self.pid: Optional[int] = None
         self.start: float = -1
         self.finish: float = -1
         self.returncode: int = -1
@@ -307,7 +309,7 @@ class TestCase:
     def asdict(self, *keys):
         data = dict(vars(self))
         data["status"] = [data["status"].value, data["status"].details]
-        for attr in ("file", "_depids", "dep_patterns", "scheduler"):
+        for attr in ("file", "_depids", "dep_patterns", "scheduler", "pid"):
             data.pop(attr)
         dependencies = list(data.pop("dependencies"))
         data["dependencies"] = []
@@ -430,9 +432,6 @@ class TestCase:
                 assert isinstance(val, Status)
             setattr(self, key, val)
 
-    def register_proc(self, proc) -> None:
-        self._process = proc
-
     def set_scheduler(self, name: str, options: Optional[list[str]]):
         self.scheduler = (name, options or [])
 
@@ -503,24 +502,30 @@ class TestCase:
         return
 
     def _run(self, **kwds: Any) -> None:
-        python = Executable(sys.executable)
-        python.add_begin_callback(self.register_proc)
         stage = kwds.pop("stage", "analyze" if self.analyze else "test")
         with fs.working_dir(self.exec_dir):
             if self.file_type == "vvt":
                 self.write_vvtest_util()
-            with logging.capture(self.logfile(stage), mode="w"):
-                with logging.timestamps():
-                    args = self.command_line_args(**kwds)
-                    logging.info(f"Running {self.display_name}")
-                    logging.info(f"Command line: {sys.executable} {' '.join(args)}")
-                    with self.rc_environ():
-                        python(*args, fail_on_error=False, timeout=self.timeout)
-                    self._process = None
-                    self.cmd_line = python.cmd_line
-                    rc = python.returncode
-                    self.returncode = rc
-                    self.status = Status.from_returncode(rc)
+            with logging.capture(self.logfile(stage), mode="w"), logging.timestamps():
+                args = [sys.executable]
+                args.extend(self.command_line_args(**kwds))
+                self.cmd_line = " ".join(args)
+                logging.info(f"Running {self.display_name}")
+                logging.info(f"Command line: {self.cmd_line}")
+                with self.rc_environ():
+                    start = time.monotonic()
+                    proc = subprocess.Popen(args, start_new_session=True)
+                    self.status = Status("running")
+                    self.pid = proc.pid
+                    while True:
+                        if proc.poll() is not None:
+                            break
+                        if time.monotonic() - start > self.timeout:
+                            os.kill(proc.pid, signal.SIGINT)
+                        time.sleep(0.05)
+                self.pid = None
+                self.returncode = proc.returncode
+                self.status = Status.from_returncode(proc.returncode)
         return
 
     @staticmethod
@@ -552,8 +557,8 @@ class TestCase:
         return args
 
     def kill(self):
-        if self._process is not None:
-            self._process.kill()
+        if self.pid is not None:
+            os.kill(self.pid, signal.SIGINT)
         self.status = Status("failed", "fail")  # "Process killed")
 
     def teardown(self) -> None: ...

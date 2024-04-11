@@ -18,6 +18,7 @@ class Status:
         "failed",
         "timeout",
         "success",
+        "running",
     )
     colors = {
         "staged": "b",
@@ -27,6 +28,7 @@ class Status:
         "failed": "R",
         "timeout": "R",
         "success": "g",
+        "running": "g",
     }
 
     def __init__(self, arg: str = "pending", details: Optional[str] = None) -> None:
@@ -62,6 +64,8 @@ class Status:
         elif arg == fail_exit_status:
             return cls("failed")
         elif arg == timeout_exit_status:
+            return cls("timeout")
+        elif arg == -2:
             return cls("timeout")
         return cls("failed")
 

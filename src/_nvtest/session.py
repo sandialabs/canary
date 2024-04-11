@@ -108,7 +108,6 @@ from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
 from .util.misc import dedup
 from .util.returncode import compute_returncode
-from .util.time import timeout as timeout_context
 
 default_batchsize = 30 * 60  # 30 minutes
 REUSE_SCHEDULER = "==REUSE_SCHEDUER=="
@@ -799,40 +798,45 @@ class Session:
 
     def process_testcases(self, *, timeout: int, fail_fast: bool) -> None:
         futures: dict = {}
-        timeout_message = f"Test suite execution exceeded time out of {timeout} s."
         auto_cleanup: bool = True
+        start = time.monotonic()
+        duration = lambda: time.monotonic() - start
+
         try:
-            with timeout_context(timeout, timeout_message=timeout_message):
-                with ProcessPoolExecutor(max_workers=self.avail_workers) as ppe:
-                    while True:
-                        try:
-                            i, entity = self.queue.pop_next(fail_fast=fail_fast)
-                        except KeyboardInterrupt:
-                            auto_cleanup = False
-                            self.returncode = signal.SIGINT.value
-                            for proc in ppe._processes:
-                                if proc != os.getpid():
-                                    os.kill(proc, 9)
-                            raise
-                        except FailFast as ex:
-                            auto_cleanup = False
-                            for proc in ppe._processes:
-                                if proc != os.getpid():
-                                    os.kill(proc, 9)
-                            name, code = ex.args
-                            self.returncode = code
-                            raise StopExecution(f"fail_fast: {name}", code)
-                        except StopIteration:
-                            break
-                        except BaseException:
-                            logging.error(traceback.format_exc())
-                            raise
-                        future = ppe.submit(self.runner, entity)
-                        callback = partial(self.update_from_future, i)
-                        future.add_done_callback(callback)
-                        futures[i] = (entity, future)
+            with ProcessPoolExecutor(max_workers=self.avail_workers) as ppe:
+                self.queue.prepare()
+                while True:
+                    if duration() > timeout:
+                        raise TimeoutError(
+                            f"Test suite execution exceeded time out of {timeout} s."
+                        )
+                    try:
+                        i, entity = self.queue.get_ready()
+                    except StopIteration:
+                        break
+                    except KeyboardInterrupt:
+                        self.returncode = signal.SIGINT.value
+                        auto_cleanup = False
+                        raise
+                    except FailFast as ex:
+                        name, code = ex.args
+                        self.returncode = code
+                        auto_cleanup = False
+                        raise StopExecution(f"fail_fast: {name}", code)
+                    except BaseException:
+                        logging.error(traceback.format_exc())
+                        raise
+                    future = ppe.submit(self.runner, entity)
+                    callback = partial(self.update_from_future, i, fail_fast)
+                    future.add_done_callback(callback)
+                    futures[i] = (entity, future)
         finally:
+            if ppe._processes:
+                for proc in ppe._processes:
+                    if proc != os.getpid():
+                        os.kill(proc, signal.SIGINT)
             if auto_cleanup:
+                self.returncode = compute_returncode(self.queue.cases)
                 for entity, future in futures.values():
                     if future.running():
                         entity.kill()
@@ -841,22 +845,22 @@ class Session:
                         logging.error(f"{case}: failed to start!")
                         case.status.set("failed", "Case failed to start")
                         case.dump()
-                self.returncode = compute_returncode(self.queue.cases)
 
     def update_from_future(
         self,
         ent_no: int,
+        fail_fast: bool,
         future: Future,
     ) -> None:
         if future.cancelled():
             return
-        entity = self.queue._running[ent_no]
+        entity = self.queue.busy[ent_no]
         try:
             attrs = future.result()
         except BrokenProcessPool:
             # The future was probably killed by fail_fast or a keyboard interrupt
             return
-        obj: Union[TestCase, Partition] = self.queue.mark_as_complete(ent_no)
+        obj: Union[TestCase, Partition] = self.queue.done(ent_no)
         if id(obj) != id(entity):
             logging.error(f"{obj}: wrong future entity ID")
             return
@@ -878,12 +882,18 @@ class Session:
                     )
                     continue
                 case.update(fd[case.id])
+            if fail_fast and any(_.status != "success" for _ in obj):
+                code = compute_returncode(obj)
+                raise FailFast(str(obj), code)
         else:
             if not isinstance(obj, TestCase):
                 logging.error(f"Expected TestCase, got {obj.__class__.__name__}")
                 return
             obj.update(attrs[obj.fullname])
             self.db.update([obj])
+            if fail_fast and obj.status != "success":
+                code = compute_returncode([obj])
+                raise FailFast(str(obj), code)
 
 
 def _setup_individual_case(case, exec_root, copy_all_resources):

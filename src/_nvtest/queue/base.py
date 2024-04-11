@@ -7,13 +7,11 @@ from typing import Generator
 from typing import Optional
 from typing import Union
 
-from ..error import FailFast
 from ..test.partition import Partition
 from ..test.testcase import TestCase
 from ..util import keyboard
 from ..util.color import clen
 from ..util.color import colorize
-from ..util.returncode import compute_returncode
 
 lock_wait_time = 0.00001
 
@@ -24,14 +22,14 @@ class Queue:
         self.workers = workers
         self.cpus = cpus
         self.devices = devices
-        self.validate()
-        self.queue = self.create_queue(work_items)
-        self._running: dict[int, Any] = {}
-        self._done: dict[int, Any] = {}
+        self.ready: dict[int, Any] = {}
+        self.busy: dict[int, Any] = {}
+        self.finished: dict[int, Any] = {}
         self._lock: list[int] = []
         self.allow_kb = os.getenv("NVTEST_DISABLE_KB") is None
+        self.prepared = False
 
-    def validate(self) -> None:
+    def prepare(self) -> None:
         raise NotImplementedError
 
     @contextmanager
@@ -54,9 +52,6 @@ class Queue:
     def locked(self) -> bool:
         return bool(len(self._lock))
 
-    def create_queue(self, *args, **kwargs):
-        raise NotImplementedError
-
     def batch_info(self) -> Optional[list[list[str]]]:
         return None
 
@@ -65,25 +60,25 @@ class Queue:
         raise NotImplementedError
 
     def empty(self) -> bool:
-        return len(self.queue) == 0
+        return len(self.ready) == 0
 
-    def mark_as_complete(self, *args, **kwargs) -> Any:
+    def done(self, *args, **kwargs) -> Any:
         raise NotImplementedError
 
-    def mark_as_orphaned(self, *args, **kwargs) -> Any:
+    def orphaned(self, *args, **kwargs) -> Any:
         raise NotImplementedError
 
     @property
     def _avail_workers(self):
-        return self.workers - len(self._running)
+        return self.workers - len(self.busy)
 
     @property
     def _avail_cpus(self):
-        return self.cpus - sum(case.processors for case in self._running.values())
+        return self.cpus - sum(case.processors for case in self.busy.values())
 
     @property
     def _avail_devices(self):
-        return self.devices - sum(case.devices for case in self._running.values())
+        return self.devices - sum(case.devices for case in self.busy.values())
 
     @property
     def avail_resources(self):
@@ -91,7 +86,7 @@ class Queue:
 
     @property
     def size(self):
-        return len(self.queue)
+        return len(self.ready)
 
     @property
     def cases_done(self) -> int:
@@ -111,16 +106,13 @@ class Queue:
     def update(self, *args) -> None:
         raise NotImplementedError
 
-    def pop_next(self, fail_fast: bool = False) -> tuple[int, Union[TestCase, Partition]]:
+    def get_ready(self) -> tuple[int, Union[TestCase, Partition]]:
+        if not self.prepared:
+            raise ValueError("prepare() must be called first")
         while True:
-            if not len(self.queue):
+            if not len(self.ready):
                 raise StopIteration
-            if fail_fast:
-                for case in self.completed_testcases():
-                    if case.status != "success":
-                        code = compute_returncode([case])
-                        raise FailFast(str(case), code)
-            ids = list(self.queue.keys())
+            ids = list(self.ready.keys())
             for id in ids:
                 if self.allow_kb:
                     key = keyboard.get_key()
@@ -128,17 +120,17 @@ class Queue:
                         self.print_status()
                     elif isinstance(key, str) and key in "kK":
                         self.kill_running()
-                item = self.queue[id]
+                item = self.ready[id]
                 with self.lock():
                     avail_workers = self._avail_workers
                     job_is_ready = item.ready()
                     if job_is_ready < 0:
                         # job is orphaned and will never be ready
-                        self.mark_as_orphaned(id)
+                        self.orphaned(id)
                         continue
                     elif avail_workers and job_is_ready:
                         if (item.processors, item.devices) <= self.avail_resources:
-                            self._running[id] = self.queue.pop(id)
+                            self.busy[id] = self.ready.pop(id)
                             return id, item
             time.sleep(lock_wait_time)
 

@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 
 
 class DirectQueue(Queue):
+
     def validate(self) -> None:
         for case in self.work_items:
             if case.masked:
@@ -18,32 +19,32 @@ class DirectQueue(Queue):
                     f"exceeds max cpu count ({self.cpus})"
                 )
 
-    def create_queue(self, work_items: list["TestCase"]) -> dict[int, "TestCase"]:
-        queue: dict[int, "TestCase"] = {}
-        for i, case in enumerate(work_items):
+    def prepare(self) -> None:
+        self.validate()
+        for i, case in enumerate(self.work_items):
             if not case.masked:
-                queue[i] = case
-        return queue
+                self.ready[len(self.ready)] = case
+        self.prepared = True
 
-    def mark_as_orphaned(self, case_no: int) -> None:
+    def orphaned(self, case_no: int) -> None:
         with self.lock():
-            self._done[case_no] = self.queue.pop(case_no)
-            self._done[case_no].status.set("skipped", "failed dependencies")
-            for case in self.queue.values():
+            self.finished[case_no] = self.ready.pop(case_no)
+            self.finished[case_no].status.set("skipped", "failed dependencies")
+            for case in self.ready.values():
                 for i, dep in enumerate(case.dependencies):
-                    if dep.id == self._done[case_no].id:
-                        case.dependencies[i] = self._done[case_no]
+                    if dep.id == self.finished[case_no].id:
+                        case.dependencies[i] = self.finished[case_no]
 
-    def mark_as_complete(self, case_no: int) -> "TestCase":
-        if case_no not in self._running:
+    def done(self, case_no: int) -> "TestCase":
+        if case_no not in self.busy:
             raise RuntimeError(f"case {case_no} is not running")
         with self.lock():
-            self._done[case_no] = self._running.pop(case_no)
-            for case in self.queue.values():
+            self.finished[case_no] = self.busy.pop(case_no)
+            for case in self.ready.values():
                 for i, dep in enumerate(case.dependencies):
-                    if dep.id == self._done[case_no].id:
-                        case.dependencies[i] = self._done[case_no]
-        return self._done[case_no]
+                    if dep.id == self.finished[case_no].id:
+                        case.dependencies[i] = self.finished[case_no]
+        return self.finished[case_no]
 
     @property
     def cases(self):
@@ -51,16 +52,16 @@ class DirectQueue(Queue):
 
     @property
     def cases_done(self) -> int:
-        return len(self._done.values())
+        return len(self.finished.values())
 
     @property
     def cases_running(self) -> int:
-        return len(self._running.values())
+        return len(self.busy.values())
 
     @property
     def cases_notrun(self) -> int:
-        return len(self.queue.values())
+        return len(self.ready.values())
 
     def completed_testcases(self) -> Generator["TestCase", None, None]:
-        for case in self._done.values():
+        for case in self.finished.values():
             yield case

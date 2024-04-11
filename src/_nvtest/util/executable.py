@@ -18,7 +18,6 @@ class Executable:
         self.default_env = {}
         self.returncode = None
         self.cmd_line = None
-        self.begin_callback = None
 
         if not self.exe:
             raise ProcessError("Cannot construct executable for '%s'" % name)
@@ -74,9 +73,6 @@ class Executable:
             str: The path to the executable
         """
         return self.exe[0]
-
-    def add_begin_callback(self, fun) -> None:
-        self.begin_callback = fun
 
     def __call__(self, *args, **kwargs):
         """Run this executable in a subprocess.
@@ -168,9 +164,9 @@ class Executable:
             logging.debug(cmd_line)
 
         try:
-            proc = subprocess.Popen(cmd, stdin=istream, stderr=estream, stdout=ostream, env=env, **kwargs)
-            if self.begin_callback is not None:
-                self.begin_callback(proc)
+            proc = subprocess.Popen(
+                cmd, stdin=istream, stderr=estream, stdout=ostream, env=env, **kwargs
+            )
             out, err = proc.communicate(timeout=timeout)
 
             result = None
