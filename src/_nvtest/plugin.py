@@ -160,7 +160,7 @@ def register(*, scope: str, stage: str):
 
 
 def load_builtin_plugins() -> None:
-    dirname = ir.files("_nvtest").joinpath("plugins")
+    dirname = ir.files("_nvtest").joinpath("builtin_plugins")
     if dirname.exists():  # type: ignore
         for file in dirname.iterdir():
             if file.name.startswith("nvtest_"):
