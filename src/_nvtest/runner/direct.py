@@ -14,7 +14,8 @@ class DirectRunner(Runner):
             s = f"{items.__class__.__name__}"
             raise ValueError(f"DirectRunner is only compatible with list[TestCase], not {s}")
 
-    def setup(self, case: TestCase) -> None: ...
+    def setup(self, case: TestCase) -> None:
+        ...
 
     def run(self, case: TestCase, **kwds: Any) -> dict[str, dict]:
         try:

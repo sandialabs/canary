@@ -116,4 +116,5 @@ def group_failed_tests(cases: list[TestCase]):
     return failed
 
 
-class MissingCIVariable(Exception): ...
+class MissingCIVariable(Exception):
+    ...

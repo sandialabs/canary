@@ -14,7 +14,7 @@ class BatchQueue(Queue):
             cases_to_run = [case for case in partition if not case.masked]
             if not cases_to_run:
                 continue
-            self.ready[len(self.ready)] = partition
+            self.buffer[len(self.buffer)] = partition
         self.prepared = True
 
     def orphaned(self, batch_no: int) -> None:
@@ -26,7 +26,7 @@ class BatchQueue(Queue):
         with self.lock():
             self.finished[batch_no] = self.busy.pop(batch_no)
             completed = dict([(_.id, _) for _ in self.completed_testcases()])
-            for batch in self.ready.values():
+            for batch in self.buffer.values():
                 for case in batch:
                     for i, dep in enumerate(case.dependencies):
                         if dep.id in completed:
@@ -51,7 +51,7 @@ class BatchQueue(Queue):
 
     @property
     def cases_notrun(self) -> int:
-        return sum(len(batch) for batch in self.ready.values())
+        return sum(len(batch) for batch in self.buffer.values())
 
     def completed_testcases(self) -> Generator[TestCase, None, None]:
         for batch in self.finished.values():

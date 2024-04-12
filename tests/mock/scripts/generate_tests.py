@@ -8,13 +8,15 @@ def main():
             os.makedirs(os.path.dirname(file), exist_ok=True)
             with open(file, "w") as fh:
                 val = 1 if test == "t1" else 64 if test == "t2" else 0
-                fh.write(f"""\
+                fh.write(
+                    f"""\
 import sys
 def main():
     return {val}
 if __name__ == '__main__':
     sys.exit(main())
-""")
+"""
+                )
 
 
 if __name__ == "__main__":

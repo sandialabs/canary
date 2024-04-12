@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 
 class DirectQueue(Queue):
-
     def validate(self) -> None:
         for case in self.work_items:
             if case.masked:
@@ -23,14 +22,14 @@ class DirectQueue(Queue):
         self.validate()
         for i, case in enumerate(self.work_items):
             if not case.masked:
-                self.ready[len(self.ready)] = case
+                self.buffer[len(self.buffer)] = case
         self.prepared = True
 
     def orphaned(self, case_no: int) -> None:
         with self.lock():
-            self.finished[case_no] = self.ready.pop(case_no)
+            self.finished[case_no] = self.buffer.pop(case_no)
             self.finished[case_no].status.set("skipped", "failed dependencies")
-            for case in self.ready.values():
+            for case in self.buffer.values():
                 for i, dep in enumerate(case.dependencies):
                     if dep.id == self.finished[case_no].id:
                         case.dependencies[i] = self.finished[case_no]
@@ -40,7 +39,7 @@ class DirectQueue(Queue):
             raise RuntimeError(f"case {case_no} is not running")
         with self.lock():
             self.finished[case_no] = self.busy.pop(case_no)
-            for case in self.ready.values():
+            for case in self.buffer.values():
                 for i, dep in enumerate(case.dependencies):
                     if dep.id == self.finished[case_no].id:
                         case.dependencies[i] = self.finished[case_no]
@@ -60,7 +59,7 @@ class DirectQueue(Queue):
 
     @property
     def cases_notrun(self) -> int:
-        return len(self.ready.values())
+        return len(self.buffer.values())
 
     def completed_testcases(self) -> Generator["TestCase", None, None]:
         for case in self.finished.values():

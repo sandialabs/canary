@@ -22,7 +22,7 @@ class Queue:
         self.workers = workers
         self.cpus = cpus
         self.devices = devices
-        self.ready: dict[int, Any] = {}
+        self.buffer: dict[int, Any] = {}
         self.busy: dict[int, Any] = {}
         self.finished: dict[int, Any] = {}
         self._lock: list[int] = []
@@ -60,7 +60,7 @@ class Queue:
         raise NotImplementedError
 
     def empty(self) -> bool:
-        return len(self.ready) == 0
+        return len(self.buffer) == 0
 
     def done(self, *args, **kwargs) -> Any:
         raise NotImplementedError
@@ -86,7 +86,7 @@ class Queue:
 
     @property
     def size(self):
-        return len(self.ready)
+        return len(self.buffer)
 
     @property
     def cases_done(self) -> int:
@@ -110,9 +110,9 @@ class Queue:
         if not self.prepared:
             raise ValueError("prepare() must be called first")
         while True:
-            if not len(self.ready):
+            if not len(self.buffer):
                 raise StopIteration
-            ids = list(self.ready.keys())
+            ids = list(self.buffer.keys())
             for id in ids:
                 if self.allow_kb:
                     key = keyboard.get_key()
@@ -120,7 +120,7 @@ class Queue:
                         self.print_status()
                     elif isinstance(key, str) and key in "kK":
                         self.kill_running()
-                item = self.ready[id]
+                item = self.buffer[id]
                 with self.lock():
                     avail_workers = self._avail_workers
                     job_is_ready = item.ready()
@@ -130,7 +130,7 @@ class Queue:
                         continue
                     elif avail_workers and job_is_ready:
                         if (item.processors, item.devices) <= self.avail_resources:
-                            self.busy[id] = self.ready.pop(id)
+                            self.busy[id] = self.buffer.pop(id)
                             return id, item
             time.sleep(lock_wait_time)
 
