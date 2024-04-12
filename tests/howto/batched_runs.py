@@ -37,5 +37,4 @@ At this time, only the ``slurm`` scheduler is supported.
 """
 
 
-def test_howto_scheduler():
-    ...
+def test_howto_scheduler(): ...

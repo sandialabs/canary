@@ -561,8 +561,7 @@ class TestCase:
             os.kill(self.pid, signal.SIGINT)
         self.status = Status("failed", "fail")  # "Process killed")
 
-    def teardown(self) -> None:
-        ...
+    def teardown(self) -> None: ...
 
 
 class MissingSourceError(Exception):

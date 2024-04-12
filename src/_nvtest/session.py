@@ -89,8 +89,10 @@ from . import plugin
 from .error import FailFast
 from .error import StopExecution
 from .finder import Finder
-from .queue import Queue
-from .queue import factory as q_factory
+from .queues import BatchResourceQueue
+from .queues import DirectResourceQueue
+from .queues import Empty as EmptyQueue
+from .queues import ResourceQueue
 from .runner import factory as r_factory
 from .test.partition import Partition
 from .test.partition import partition_n
@@ -247,7 +249,7 @@ class Session:
     _avail_workers: int
     search_paths: dict[str, list[str]]
     cases: list[TestCase]
-    queue: Queue
+    queue: ResourceQueue
     lock: Lock
     db: Database
     ini_options: dict
@@ -573,12 +575,8 @@ class Session:
         logging.debug(f"Done populating work tree ({duration:.2f}s.)")
 
     def setup_direct_queue(self) -> None:
-        self.queue = q_factory(
-            [case for case in self.cases if not case.masked],
-            avail_workers=self.avail_workers,
-            avail_cpus=self.avail_cpus,
-            avail_devices=self.avail_devices,
-        )
+        self.queue = DirectResourceQueue(self.avail_cpus, self.avail_devices, self.avail_workers)
+        self.queue.put(*[case for case in self.cases if not case.masked])
 
     def setup_batch_queue(
         self,
@@ -599,12 +597,8 @@ class Session:
         else:
             assert batch_time is not None
             batches = partition_t(cases_to_run, t=batch_time, global_id=batch_store)
-        self.queue = q_factory(
-            batches,
-            avail_workers=self.avail_workers,
-            avail_cpus=self.avail_cpus,
-            avail_devices=self.avail_devices,
-        )
+        self.queue = BatchResourceQueue(self.avail_cpus, self.avail_devices, self.avail_workers)
+        self.queue.put(*batches)
         fd: dict[int, list[str]] = {}
         for batch in batches:
             cases = fd.setdefault(batch.world_rank, [])
@@ -716,8 +710,9 @@ class Session:
         else:
             self.setup_direct_queue()
             self.runner = r_factory("direct", self)
-        self.runner.validate(self.queue.work_items)
-        for work_item in self.queue.work_items:
+        queued = self.queue.queued()
+        self.runner.validate(queued)
+        for work_item in queued:
             self.runner.setup(work_item)
         self.state = 2
 
@@ -732,7 +727,7 @@ class Session:
             )
         if not self.queue:
             raise ValueError("This session's queue was not set up")
-        if not self.queue.cases:
+        if self.queue.empty():
             raise ValueError("There are no cases to run in this session")
         if not self.runner:
             raise ValueError("This session's runner was not set up")
@@ -742,8 +737,13 @@ class Session:
         return self.returncode
 
     def teardown(self):
+        finished: list[TestCase]
+        if isinstance(self.queue, DirectResourceQueue):
+            finished = self.queue.finished()
+        else:
+            finished = [case for batch in self.queue.finished() for case in batch]
         with self.rc_environ():
-            for case in self.queue.completed_testcases():
+            for case in finished:
                 with working_dir(case.exec_dir):
                     for hook in plugin.plugins("test", "teardown"):
                         logging.debug(f"Calling the {hook.specname} plugin")
@@ -804,15 +804,14 @@ class Session:
 
         try:
             with ProcessPoolExecutor(max_workers=self.avail_workers) as ppe:
-                self.queue.prepare()
                 while True:
                     if duration() > timeout:
                         raise TimeoutError(
                             f"Test suite execution exceeded time out of {timeout} s."
                         )
                     try:
-                        i, entity = self.queue.get_ready()
-                    except StopIteration:
+                        i, entity = self.queue.get()
+                    except EmptyQueue:
                         break
                     except KeyboardInterrupt:
                         self.returncode = signal.SIGINT.value
@@ -836,11 +835,11 @@ class Session:
                     if proc != os.getpid():
                         os.kill(proc, signal.SIGINT)
             if auto_cleanup:
-                self.returncode = compute_returncode(self.queue.cases)
+                self.returncode = compute_returncode(self.queue.cases())
                 for entity, future in futures.values():
                     if future.running():
                         entity.kill()
-                for case in self.queue.cases:
+                for case in self.queue.cases():
                     if case.status == "staged":
                         logging.error(f"{case}: failed to start!")
                         case.status.set("failed", "Case failed to start")
@@ -848,19 +847,19 @@ class Session:
 
     def update_from_future(
         self,
-        ent_no: int,
+        obj_no: int,
         fail_fast: bool,
         future: Future,
     ) -> None:
         if future.cancelled():
             return
-        entity = self.queue.busy[ent_no]
+        entity = self.queue._busy[obj_no]
         try:
             attrs = future.result()
         except BrokenProcessPool:
             # The future was probably killed by fail_fast or a keyboard interrupt
             return
-        obj: Union[TestCase, Partition] = self.queue.done(ent_no)
+        obj: Union[TestCase, Partition] = self.queue.done(obj_no)
         if id(obj) != id(entity):
             logging.error(f"{obj}: wrong future entity ID")
             return

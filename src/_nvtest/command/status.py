@@ -129,9 +129,9 @@ def status(args: "argparse.Namespace") -> int:
         if getattr(args, attr):
             break
     else:
-        args.show_pass = (
-            args.show_diff
-        ) = args.show_fail = args.show_timeout = args.show_notrun = True
+        args.show_pass = args.show_diff = args.show_fail = args.show_timeout = args.show_notrun = (
+            True
+        )
     cases_to_show: list[TestCase] = []
     if args.show_all:
         if args.show_excluded:

@@ -362,5 +362,4 @@ class InvalidExpression(Exception):
     pass
 
 
-class UsageError(Exception):
-    ...
+class UsageError(Exception): ...

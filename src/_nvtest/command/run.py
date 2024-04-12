@@ -211,7 +211,7 @@ def run(args: "argparse.Namespace") -> int:
         run_duration = timer.duration("run")
         if not args.no_summary:
             print_testcase_results(
-                session.queue.cases, duration=run_duration, durations=args.durations
+                session.queue.cases(), duration=run_duration, durations=args.durations
             )
     except KeyboardInterrupt:
         session.exitstatus = ExitCode.INTERRUPTED

@@ -3,6 +3,7 @@ from typing import Union
 
 from ..util import graph
 from ..util.collections import defaultlist
+from ..util.hash import hashit
 from .testcase import TestCase
 
 
@@ -49,16 +50,17 @@ class Partition(list):
                 if dep not in partition:
                     raise ValueError(f"{case}: missing dependency: {dep}")
         self.extend(graph.static_order(list(partition)))
+        self.id: str = hashit("".join(_.id for _ in self), length=20)
 
-    def ready(self):
+    def ready(self) -> int:
         return 1
 
     @property
-    def processors(self):
+    def processors(self) -> int:
         return max(case.processors for case in self if not case.masked)
 
     @property
-    def devices(self):
+    def devices(self) -> int:
         return max(case.devices for case in self if not case.masked)
 
     @property
