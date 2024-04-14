@@ -1,5 +1,4 @@
 import os
-import sys
 from datetime import datetime
 from io import StringIO
 from typing import TYPE_CHECKING
@@ -38,13 +37,9 @@ class BatchRunner(Runner):
 
     def calculate_resource_allocations(self, batch: Partition) -> None: ...
 
-    @staticmethod
-    def print_text(text: str):
-        sys.stdout.write(f"{text}\n")
-
     def run(self, batch: Partition, **kwds: Any) -> dict[str, dict]:
         n = len(batch)
-        self.print_text(
+        logging.emit(
             f"SUBMITTING: Batch {batch.world_rank + 1} of {batch.world_size} ({n} tests)"
         )
         script = self.submit_filename(batch)
@@ -74,7 +69,7 @@ class BatchRunner(Runner):
             st_stat = ", ".join(
                 colorize(fmt % (Status.colors[n], v, n)) for (n, v) in stat.items()
             )
-            self.print_text(
+            logging.emit(
                 f"FINISHED:   Batch {batch.world_rank + 1} of {batch.world_size}, {st_stat}"
             )
         return attrs

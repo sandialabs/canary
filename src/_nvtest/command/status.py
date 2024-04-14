@@ -164,22 +164,6 @@ def status(args: "argparse.Namespace") -> int:
     return 0
 
 
-def cformat(case: TestCase, show_log: bool) -> str:
-    id = colorize("@*b{%s}" % case.id[:7])
-    if case.masked:
-        string = "@*c{EXCLUDED} %s %s: %s" % (id, case.pretty_repr(), case.mask)
-        return colorize(string)
-    string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
-    if case.duration > 0:
-        string += " (%.2fs.)" % case.duration
-    elif case.status == "skipped":
-        string += ": Skipped due to %s" % case.status.details
-    if show_log:
-        f = os.path.relpath(case.logfile(), os.getcwd())
-        string += colorize(": @m{%s}" % f)
-    return string
-
-
 def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
     if cases and isinstance(getattr(cases[0], field), str):
         return sorted(cases, key=lambda case: getattr(case, field).lower())
@@ -211,7 +195,7 @@ def print_status(
     for member in members:
         if member in totals:
             for case in sort_cases_by(totals[member], field=sortby):
-                logging.emit(cformat(case, show_logs))
+                logging.emit(Session.cformat(case, show_log=show_logs))
                 nprinted += 1
     return nprinted
 

@@ -97,18 +97,22 @@ from .runner import factory as r_factory
 from .test.partition import Partition
 from .test.partition import partition_n
 from .test.partition import partition_t
+from .test.status import Status
 from .test.testcase import TestCase
 from .third_party.lock import Lock
 from .third_party.lock import ReadTransaction
 from .third_party.lock import WriteTransaction
+from .util import keyboard
 from .util import logging
 from .util import parallel
+from .util.color import clen
 from .util.color import colorize
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
 from .util.misc import dedup
+from .util.misc import partition
 from .util.returncode import compute_returncode
 
 default_batchsize = 30 * 60  # 30 minutes
@@ -805,12 +809,17 @@ class Session:
         try:
             with ProcessPoolExecutor(max_workers=self.avail_workers) as ppe:
                 while True:
+                    key = keyboard.get_key()
+                    if isinstance(key, str) and key in "sS":
+                        self.print_status()
                     if duration() > timeout:
-                        raise TimeoutError(
-                            f"Test suite execution exceeded time out of {timeout} s."
-                        )
+                        raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
                     try:
-                        i, entity = self.queue.get()
+                        iid_obj = self.queue.get()
+                        if iid_obj is None:
+                            time.sleep(0.001)
+                            continue
+                        iid, obj = iid_obj
                     except EmptyQueue:
                         break
                     except KeyboardInterrupt:
@@ -825,10 +834,11 @@ class Session:
                     except BaseException:
                         logging.error(traceback.format_exc())
                         raise
-                    future = ppe.submit(self.runner, entity)
-                    callback = partial(self.update_from_future, i, fail_fast)
+                    future = ppe.submit(self.runner, obj)
+                    callback = partial(self.update_from_future, iid, fail_fast)
                     future.add_done_callback(callback)
-                    futures[i] = (entity, future)
+                    futures[iid] = (obj, future)
+
         finally:
             if ppe._processes:
                 for proc in ppe._processes:
@@ -836,9 +846,9 @@ class Session:
                         os.kill(proc, signal.SIGINT)
             if auto_cleanup:
                 self.returncode = compute_returncode(self.queue.cases())
-                for entity, future in futures.values():
+                for obj, future in futures.values():
                     if future.running():
-                        entity.kill()
+                        obj.kill()
                 for case in self.queue.cases():
                     if case.status == "staged":
                         logging.error(f"{case}: failed to start!")
@@ -853,16 +863,12 @@ class Session:
     ) -> None:
         if future.cancelled():
             return
-        entity = self.queue._busy[obj_no]
         try:
             attrs = future.result()
         except BrokenProcessPool:
             # The future was probably killed by fail_fast or a keyboard interrupt
             return
         obj: Union[TestCase, Partition] = self.queue.done(obj_no)
-        if id(obj) != id(entity):
-            logging.error(f"{obj}: wrong future entity ID")
-            return
         if isinstance(obj, Partition):
             fd = self.db.read()
             for case in obj:
@@ -893,6 +899,140 @@ class Session:
             if fail_fast and obj.status != "success":
                 code = compute_returncode([obj])
                 raise FailFast(str(obj), code)
+
+    def print_status(self):
+        def count(objs) -> int:
+            return sum([1 if isinstance(obj, TestCase) else len(obj) for obj in objs])
+
+        p = d = f = t = 0
+        done = count(self.queue._finished.values())
+        busy = count(self.queue._busy.values())
+        notrun = count(self.queue._buffer.values())
+        total = done + busy + notrun
+        for case in self.queue.finished():
+            if case.status == "success":
+                p += 1
+            elif case.status == "diffed":
+                d += 1
+            elif case.status == "timeout":
+                t += 1
+            else:
+                f += 1
+        fmt = "%d/%d running, %d/%d done, %d/%d queued "
+        fmt += "(@g{%d pass}, @y{%d diff}, @r{%d fail}, @m{%d timeout})"
+        text = colorize(fmt % (busy, total, done, total, notrun, total, p, d, f, t))
+        n = clen(text)
+        header = colorize("@*c{%s}" % " status ".center(n + 10, "="))
+        footer = colorize("@*c{%s}" % "=" * (n + 10))
+        pad = colorize("@*c{====}")
+        logging.log(logging.ALWAYS, f"\n{header}\n{pad} {text} {pad}\n{footer}\n")
+
+    def print_overview(self, duration: Optional[float] = None) -> None:
+        def unreachable(c):
+            return c.status == "skipped" and c.status.details.startswith("Unreachable")
+
+        cases = self.cases
+        files = {case.file for case in cases}
+        _, cases = partition(cases, lambda c: unreachable(c))
+        t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
+        if duration is not None:
+            t += "@*{ in %.2fs.}" % duration
+        logging.emit(colorize(t))
+        cases_to_run = [case for case in cases if not case.masked and not case.skipped]
+        files = {case.file for case in cases_to_run}
+        t = "@*g{running} %d test cases from %d files" % (len(cases_to_run), len(files))
+        logging.emit(colorize(t))
+        skipped = [case for case in cases if case.skipped or case.masked]
+        skipped_reasons: dict[str, int] = {}
+        for case in skipped:
+            reason = case.mask if case.masked else case.status.details
+            assert isinstance(reason, str)
+            skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
+        logging.emit(colorize("@*b{skipping} %d test cases" % len(skipped)))
+        reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
+        for reason in reversed(reasons):
+            logging.emit(f"  • {skipped_reasons[reason]} {reason.lstrip()}")
+        return
+
+    @staticmethod
+    def cformat(case: TestCase, show_log: bool = False) -> str:
+        id = colorize("@*b{%s}" % case.id[:7])
+        if case.masked:
+            string = "@*c{EXCLUDED} %s %s: %s" % (id, case.pretty_repr(), case.mask)
+            return colorize(string)
+        string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
+        if case.duration > 0:
+            string += " (%.2fs.)" % case.duration
+        elif case.status == "skipped":
+            string += ": Skipped due to %s" % case.status.details
+        if show_log:
+            f = os.path.relpath(case.logfile(), os.getcwd())
+            string += colorize(": @m{%s}" % f)
+        return string
+
+    def print_summary(
+        self,
+        duration: float = -1,
+        durations: Optional[int] = None,
+    ) -> None:
+        cases = self.queue.cases()
+        if not cases:
+            logging.info("Nothing to report")
+            return
+
+        if duration == -1:
+            finish = max(_.finish for _ in cases)
+            start = min(_.start for _ in cases)
+            duration = finish - start
+
+        totals: dict[str, list[TestCase]] = {}
+        for case in cases:
+            if case.masked:
+                totals.setdefault("masked", []).append(case)
+            else:
+                totals.setdefault(case.status.iid, []).append(case)
+
+        nonpass = ("skipped", "diffed", "timeout", "failed")
+        level = logging.get_level()
+        if level < logging.INFO and len(totals):
+            logging.log(logging.ALWAYS, "Short test summary info", format="center")
+        elif any(r in totals for r in nonpass):
+            logging.log(logging.ALWAYS, "Short test summary info", format="center")
+        if level < logging.DEBUG and "masked" in totals:
+            for case in sorted(totals["masked"], key=lambda t: t.name):
+                logging.emit(self.cformat(case))
+        if level < logging.INFO:
+            for status in ("staged", "success"):
+                if status in totals:
+                    for case in sorted(totals[status], key=lambda t: t.name):
+                        logging.emit(self.cformat(case))
+        for status in nonpass:
+            if status in totals:
+                for case in sorted(totals[status], key=lambda t: t.name):
+                    logging.emit(self.cformat(case))
+
+        if durations is not None:
+            self._print_durations(cases, int(durations))
+
+        summary_parts = []
+        for member in Status.colors:
+            n = len(totals.get(member, []))
+            if n:
+                c = Status.colors[member]
+                stat = totals[member][0].status.name
+                summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
+        text = ", ".join(summary_parts)
+        logging.log(logging.ALWAYS, text + f" in {duration:.2f}s.", format="center")
+
+    @staticmethod
+    def _print_durations(cases: list[TestCase], N: int) -> None:
+        cases = [case for case in cases if case.duration > 0]
+        sorted_cases = sorted(cases, key=lambda x: x.duration)
+        if N > 0:
+            sorted_cases = sorted_cases[-N:]
+        logging.log(logging.ALWAYS, f"Slowest {len(sorted_cases)} durations", format="center")
+        for case in sorted_cases:
+            logging.emit("  %6.2f     %s" % (case.duration, case.pretty_repr()))
 
 
 def _setup_individual_case(case, exec_root, copy_all_resources):

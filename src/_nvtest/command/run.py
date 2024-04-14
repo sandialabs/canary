@@ -19,12 +19,10 @@ from ..session import REUSE_SCHEDULER
 from ..session import ExitCode
 from ..session import Session
 from ..session import default_batchsize
-from ..test.status import Status
 from ..test.testcase import TestCase
 from ..util import logging
 from ..util.color import colorize
 from ..util.filesystem import force_remove
-from ..util.misc import partition
 from .common import add_mark_arguments
 from .common import add_resource_arguments
 from .common import add_timing_arguments
@@ -197,7 +195,7 @@ def run(args: "argparse.Namespace") -> int:
     initstate = 1
     try:
         if not args.no_header:
-            print_testcase_overview(session.cases, duration=setup_duration)
+            session.print_overview(duration=setup_duration)
         if args.until == "setup":
             logging.info("Stopping after setup (--until='setup')")
             return 0
@@ -210,9 +208,7 @@ def run(args: "argparse.Namespace") -> int:
             )
         run_duration = timer.duration("run")
         if not args.no_summary:
-            print_testcase_results(
-                session.queue.cases(), duration=run_duration, durations=args.durations
-            )
+            session.print_summary(duration=run_duration, durations=args.durations)
     except KeyboardInterrupt:
         session.exitstatus = ExitCode.INTERRUPTED
     except StopExecution as e:
@@ -350,108 +346,6 @@ def print_front_matter(session: "Session"):
     if session.mode == "w":
         paths = "\n  ".join(session.search_paths)
         logging.emit(f"search paths:\n  {paths}")
-
-
-def print_testcase_overview(cases: list[TestCase], duration: Optional[float] = None) -> None:
-    def unreachable(c):
-        return c.status == "skipped" and c.status.details.startswith("Unreachable")
-
-    files = {case.file for case in cases}
-    _, cases = partition(cases, lambda c: unreachable(c))
-    t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
-    if duration is not None:
-        t += "@*{ in %.2fs.}" % duration
-    logging.emit(colorize(t))
-    cases_to_run = [case for case in cases if not case.masked and not case.skipped]
-    files = {case.file for case in cases_to_run}
-    t = "@*g{running} %d test cases from %d files" % (len(cases_to_run), len(files))
-    logging.emit(colorize(t))
-    skipped = [case for case in cases if case.skipped or case.masked]
-    skipped_reasons: dict[str, int] = {}
-    for case in skipped:
-        reason = case.mask if case.masked else case.status.details
-        assert isinstance(reason, str)
-        skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
-    logging.emit(colorize("@*b{skipping} %d test cases" % len(skipped)))
-    reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
-    for reason in reversed(reasons):
-        logging.emit(f"  • {skipped_reasons[reason]} {reason.lstrip()}")
-    return
-
-
-def cformat(case: TestCase) -> str:
-    id = colorize("@*b{%s}" % case.id[:7])
-    if case.masked:
-        string = "@*c{EXCLUDED} %s %s: %s" % (id, case.pretty_repr(), case.mask)
-        return colorize(string)
-    string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
-    if case.duration > 0:
-        string += " [%.2fs.]" % case.duration
-    elif case.status == "skipped":
-        string += ": Skipped due to %s" % case.status.details
-    return string
-
-
-def print_testcase_results(
-    cases: list[TestCase], duration: float = -1, durations: Optional[int] = None
-) -> None:
-    if not cases:
-        logging.info("Nothing to report")
-        return
-
-    if duration == -1:
-        finish = max(_.finish for _ in cases)
-        start = min(_.start for _ in cases)
-        duration = finish - start
-
-    totals: dict[str, list[TestCase]] = {}
-    for case in cases:
-        if case.masked:
-            totals.setdefault("masked", []).append(case)
-        else:
-            totals.setdefault(case.status.iid, []).append(case)
-
-    nonpass = ("skipped", "diffed", "timeout", "failed")
-    level = logging.get_level()
-    if level < logging.INFO and len(totals):
-        logging.log(logging.ALWAYS, "Short test summary info", format="center")
-    elif any(r in totals for r in nonpass):
-        logging.log(logging.ALWAYS, "Short test summary info", format="center")
-    if level < logging.DEBUG and "masked" in totals:
-        for case in sorted(totals["masked"], key=lambda t: t.name):
-            logging.emit(cformat(case))
-    if level < logging.INFO:
-        for status in ("staged", "success"):
-            if status in totals:
-                for case in sorted(totals[status], key=lambda t: t.name):
-                    logging.emit(cformat(case))
-    for status in nonpass:
-        if status in totals:
-            for case in sorted(totals[status], key=lambda t: t.name):
-                logging.emit(cformat(case))
-
-    if durations is not None:
-        print_durations(cases, int(durations))
-
-    summary_parts = []
-    for member in Status.colors:
-        n = len(totals.get(member, []))
-        if n:
-            c = Status.colors[member]
-            stat = totals[member][0].status.name
-            summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-    text = ", ".join(summary_parts)
-    logging.log(logging.ALWAYS, text + f" in {duration:.2f}s.", format="center")
-
-
-def print_durations(cases: list[TestCase], N: int) -> None:
-    cases = [case for case in cases if case.duration > 0]
-    sorted_cases = sorted(cases, key=lambda x: x.duration)
-    if N > 0:
-        sorted_cases = sorted_cases[-N:]
-    logging.log(logging.ALWAYS, f"Slowest {len(sorted_cases)} durations", format="center")
-    for case in sorted_cases:
-        logging.emit("  %6.2f     %s" % (case.duration, case.pretty_repr()))
 
 
 def read_paths(file: str, paths: dict[str, list[str]]) -> None:

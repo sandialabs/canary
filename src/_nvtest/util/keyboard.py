@@ -3,7 +3,23 @@ import fcntl
 import os
 import sys
 import termios
+from typing import Optional
 from typing import Union
+
+DISABLE_KEYBOARD_QUERY: Optional[bool] = None
+
+
+def disable_keyboard_query() -> bool:
+    global DISABLE_KEYBOARD_QUERY
+    envbool = lambda x: os.getenv(x, "").upper() in ("TRUE", "ON", "1", "YES")
+    if DISABLE_KEYBOARD_QUERY is None:
+        if not sys.stdin.isatty():
+            DISABLE_KEYBOARD_QUERY = True
+        elif any(envbool(_) for _ in ("GITLAB_CI", "NVTEST_DISABLE_KB")):
+            DISABLE_KEYBOARD_QUERY = True
+        else:
+            DISABLE_KEYBOARD_QUERY = False
+    return DISABLE_KEYBOARD_QUERY
 
 
 def key_mapping(char: str) -> str:
@@ -47,7 +63,7 @@ def _get_key() -> Union[None, str]:
 
 
 def get_key() -> Union[None, str]:
-    if not sys.stdin.isatty() or os.getenv("GITLAB_CI") is not None:
+    if disable_keyboard_query():
         return None
     try:
         return _get_key()

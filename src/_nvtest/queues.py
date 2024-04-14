@@ -1,14 +1,9 @@
-import os
-import sys
-import time
 from typing import Any
+from typing import Optional
 from typing import Union
 
 from .test.partition import Partition
 from .test.testcase import TestCase
-from .util import keyboard
-from .util.color import clen
-from .util.color import colorize
 
 
 class ResourceQueue:
@@ -20,8 +15,6 @@ class ResourceQueue:
         self._buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
         self._finished: dict[int, Any] = {}
-
-        self.allow_kb = os.getenv("NVTEST_DISABLE_KB") is None
 
     def done(self, Any) -> Any:
         raise NotImplementedError()
@@ -64,54 +57,21 @@ class ResourceQueue:
         for obj in objs:
             self._buffer[len(self._buffer)] = obj
 
-    def get(self) -> tuple[int, Union[TestCase, Partition]]:
-        while True:
-            if not len(self._buffer):
-                raise Empty
-            for i in list(self._buffer.keys()):
-                if self.allow_kb:
-                    key = keyboard.get_key()
-                    if isinstance(key, str) and key in "sS":
-                        self.print_status()
-                obj = self._buffer[i]
-                ready_flag = obj.ready()
-                if ready_flag < 0:
-                    # job is orphaned and will never be ready
-                    self.orphaned(i)
-                    continue
-                elif self.available_workers() and ready_flag:
-                    if (obj.processors, obj.devices) <= self.available_resources():
-                        self._busy[i] = self._buffer.pop(i)
-                        return (i, self._busy[i])
-            time.sleep(0.0001)
-
-    def print_status(self):
-        def count(objs) -> int:
-            return sum([1 if isinstance(obj, TestCase) else len(obj) for obj in objs])
-
-        p = d = f = t = 0
-        done = count(self._finished.values())
-        busy = count(self._busy.values())
-        notrun = count(self._buffer.values())
-        total = done + busy + notrun
-        for case in self.finished():
-            if case.status == "success":
-                p += 1
-            elif case.status == "diffed":
-                d += 1
-            elif case.status == "timeout":
-                t += 1
-            else:
-                f += 1
-        fmt = "%d/%d running, %d/%d done, %d/%d queued "
-        fmt += "(@g{%d pass}, @y{%d diff}, @r{%d fail}, @m{%d timeout})"
-        text = colorize(fmt % (busy, total, done, total, notrun, total, p, d, f, t))
-        n = clen(text)
-        header = colorize("@*c{%s}" % " status ".center(n + 10, "="))
-        footer = colorize("@*c{%s}" % "=" * (n + 10))
-        pad = colorize("@*c{====}")
-        sys.stdout.write(f"\n{header}\n{pad} {text} {pad}\n{footer}\n\n")
-        sys.stdout.flush()
+    def get(self) -> Optional[tuple[int, Union[TestCase, Partition]]]:
+        if not len(self._buffer):
+            raise Empty
+        for i in list(self._buffer.keys()):
+            obj = self._buffer[i]
+            ready_flag = obj.ready()
+            if ready_flag < 0:
+                # job is orphaned and will never be ready
+                self.orphaned(i)
+                continue
+            elif self.available_workers() and ready_flag:
+                if (obj.processors, obj.devices) <= self.available_resources():
+                    self._busy[i] = self._buffer.pop(i)
+                    return (i, self._busy[i])
+        return None
 
 
 class DirectResourceQueue(ResourceQueue):
@@ -179,12 +139,9 @@ class BatchResourceQueue(ResourceQueue):
 
     def cases(self) -> list[TestCase]:
         cases: list[TestCase] = []
-        for batch in self._buffer.values():
-            cases.extend(batch)
-        for batch in self._busy.values():
-            cases.extend(batch)
-        for batch in self._finished.values():
-            cases.extend(batch)
+        cases.extend([case for batch in self._buffer.values() for case in batch])
+        cases.extend([case for batch in self._busy.values() for case in batch])
+        cases.extend([case for batch in self._finished.values() for case in batch])
         return cases
 
     def queued(self) -> list[Partition]:
