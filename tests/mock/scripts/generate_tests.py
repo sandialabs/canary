@@ -11,7 +11,9 @@ def main():
                 fh.write(
                     f"""\
 import sys
+import time
 def main():
+    time.sleep(1)
     return {val}
 if __name__ == '__main__':
     sys.exit(main())

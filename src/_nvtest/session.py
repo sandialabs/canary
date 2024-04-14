@@ -905,19 +905,22 @@ class Session:
             return sum([1 if isinstance(obj, TestCase) else len(obj) for obj in objs])
 
         p = d = f = t = 0
-        done = count(self.queue._finished.values())
-        busy = count(self.queue._busy.values())
-        notrun = count(self.queue._buffer.values())
+        done = count(self.queue.finished())
+        busy = count(self.queue.busy())
+        notrun = count(self.queue.queued())
         total = done + busy + notrun
-        for case in self.queue.finished():
-            if case.status == "success":
-                p += 1
-            elif case.status == "diffed":
-                d += 1
-            elif case.status == "timeout":
-                t += 1
-            else:
-                f += 1
+        for obj in self.queue.finished():
+            if isinstance(obj, TestCase):
+                obj = [obj]
+            for case in obj:
+                if case.status == "success":
+                    p += 1
+                elif case.status == "diffed":
+                    d += 1
+                elif case.status == "timeout":
+                    t += 1
+                else:
+                    f += 1
         fmt = "%d/%d running, %d/%d done, %d/%d queued "
         fmt += "(@g{%d pass}, @y{%d diff}, @r{%d fail}, @m{%d timeout})"
         text = colorize(fmt % (busy, total, done, total, notrun, total, p, d, f, t))
