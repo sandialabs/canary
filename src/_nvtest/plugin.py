@@ -1,6 +1,5 @@
 import functools
 import glob
-import importlib.metadata as im
 import importlib.resources as ir
 import os
 import sys
@@ -10,6 +9,7 @@ from typing import Callable
 from typing import Generator
 from typing import Optional
 
+from .compat import get_entry_points
 from .util import logging
 from .util.singleton import Singleton
 
@@ -73,10 +73,7 @@ class Manager:
         load_module_from_file(name, file)
 
     def load_from_entry_points(self):
-        try:
-            entry_points = im.entry_points().select().get("nvtest.plugin")
-        except AttributeError:
-            entry_points = im.entry_points().get("nvtest.plugin")
+        entry_points = get_entry_points(group="nvtest.plugin")
         if entry_points:
             for entry_point in entry_points:
                 entry_point.load()

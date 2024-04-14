@@ -39,9 +39,7 @@ class BatchRunner(Runner):
 
     def run(self, batch: Partition, **kwds: Any) -> dict[str, dict]:
         n = len(batch)
-        logging.emit(
-            f"SUBMITTING: Batch {batch.world_rank + 1} of {batch.world_size} ({n} tests)"
-        )
+        logging.emit(f"SUBMITTING: Batch {batch.world_rank + 1} of {batch.world_size} ({n} tests)")
         script = self.submit_filename(batch)
         if not os.path.exists(script):
             self.write_submission_script(batch)
