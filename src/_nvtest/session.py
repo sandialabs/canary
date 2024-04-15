@@ -743,7 +743,7 @@ class Session:
                 self.process_testcases(timeout=timeout, fail_fast=fail_fast)
         return self.returncode
 
-    def teardown(self):
+    def teardown(self) -> None:
         finished: list[TestCase]
         if isinstance(self.queue, DirectResourceQueue):
             finished = self.queue.finished()

@@ -14,9 +14,18 @@ from .util import logging
 from .util.singleton import Singleton
 
 
+class PluginHook:
+    def __init__(self, func: Callable) -> None:
+        self.func = func
+        self.specname = f"{func.__name__}_impl"  # type: ignore
+
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+
+
 class Manager:
     def __init__(self) -> None:
-        self._plugins: dict[str, dict[str, list[Callable]]] = {}
+        self._plugins: dict[str, dict[str, list[PluginHook]]] = {}
         self._args: Optional[Namespace] = None
 
     @property
@@ -46,15 +55,14 @@ class Manager:
 
         scope_plugins = self._plugins.setdefault(scope, {})
         stage_plugins = scope_plugins.setdefault(stage, [])
-        hook: Callable = func
-        hook.specname = f"{func.__name__}_impl"  # type: ignore
+        hook = PluginHook(func)
         stage_plugins.append(hook)
 
-    def plugins(self, scope: str, stage: str) -> Generator[Callable, None, None]:
+    def plugins(self, scope: str, stage: str) -> Generator[PluginHook, None, None]:
         for hook in self._plugins.get(scope, {}).get(stage, []):
             yield hook
 
-    def get_plugin(self, scope: str, stage: str, name: str) -> Optional[Callable]:
+    def get_plugin(self, scope: str, stage: str, name: str) -> Optional[PluginHook]:
         if scope in self._plugins and stage in self._plugins[scope]:
             specname = f"{name}_impl"
             for hook in self._plugins[scope][stage]:
@@ -133,11 +141,11 @@ def set_args(args: Namespace) -> None:
     _manager.set_args(args)
 
 
-def plugins(scope: str, stage: str) -> Generator[Callable, None, None]:
+def plugins(scope: str, stage: str) -> Generator[PluginHook, None, None]:
     return _manager.plugins(scope, stage)
 
 
-def get(scope: str, stage: str, name: str) -> Optional[Callable]:
+def get(scope: str, stage: str, name: str) -> Optional[PluginHook]:
     return _manager.get(scope, stage, name)
 
 
