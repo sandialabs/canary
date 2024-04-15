@@ -165,7 +165,6 @@ class Finder:
         on_options: Optional[list[str]] = None,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
-        cases: list[TestCase] = []
         o = ",".join(on_options or [])
         logging.debug(
             "Creating concrete test cases using\n"
@@ -183,17 +182,11 @@ class Finder:
         )
         args = [(f, kwds) for files in tree.values() for f in files]
         concrete_test_groups: list[list[TestCase]] = parallel.starmap(freeze_abstract_file, args)
-        cases.extend([case for group in concrete_test_groups for case in group if case])
+        cases: list[TestCase] = [case for group in concrete_test_groups for case in group if case]
 
         # this sanity check should not be necessary
-        errors: int = 0
-        for case in cases:
-            if case.status != "pending":
-                status = case.status.value
-                logging.error(f"{case}: expected status=pending, not {status}")
-                errors += 1
-        if errors:
-            raise ValueError("Stopping due to previous errors")
+        if any(case.status != "pending" for case in cases):
+            raise ValueError("One or more test cases is not in pending state")
 
         Finder.resolve_dependencies(cases)
         Finder.check_for_skipped_dependencies(cases)

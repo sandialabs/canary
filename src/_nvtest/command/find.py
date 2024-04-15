@@ -85,7 +85,7 @@ def find(args: "argparse.Namespace") -> int:
         on_options=args.on_options,
         owners=None if not args.owners else set(args.owners),
     )
-    cases_to_run = [case for case in cases if not case.masked]
+    cases_to_run = sorted([case for case in cases if not case.masked], key=lambda x: x.name)
     if not args.files and not args.no_header:
         print_testcase_summary(args, cases)
     if args.keywords:
