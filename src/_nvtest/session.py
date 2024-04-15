@@ -281,6 +281,10 @@ class Session:
         self._avail_devices_per_test = self.avail_devices
 
     @property
+    def active_cases(self) -> list[TestCase]:
+        return [case for case in self.cases if not case.masked]
+
+    @property
     def work_tree(self) -> str:
         return self._work_tree
 
@@ -569,7 +573,7 @@ class Session:
             parameter_expr=parameter_expr,
         )
 
-        cases_to_run = [case for case in self.cases if not case.masked]
+        cases_to_run = self.active_cases
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
 
@@ -580,7 +584,7 @@ class Session:
 
     def setup_direct_queue(self) -> None:
         self.queue = DirectResourceQueue(self.avail_cpus, self.avail_devices, self.avail_workers)
-        self.queue.put(*[case for case in self.cases if not case.masked])
+        self.queue.put(*self.active_cases)
 
     def setup_batch_queue(
         self,
@@ -594,7 +598,7 @@ class Session:
         batch_stores = glob.glob(os.path.join(self.dotdir, "stage/batch/*"))
         batch_store = len(batch_stores) + 1
 
-        cases_to_run = [case for case in self.cases if not case.masked]
+        cases_to_run = self.active_cases
         batches: list[Partition]
         if batch_count:
             batches = partition_n(cases_to_run, n=batch_count, global_id=batch_store)
@@ -687,8 +691,7 @@ class Session:
                     if match:
                         case.status.set("staged")
                         case.unmask()
-        cases = [case for case in self.cases if not case.masked]
-        if not cases:
+        if not self.active_cases:
             raise EmptySession()
 
     def setup_runner(
