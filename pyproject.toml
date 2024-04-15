@@ -5,13 +5,14 @@ readme = "README.md"
 license = {"file" = "LICENSE"}
 description = "nvtest: application testing with Python"
 requires-python = ">=3.9"
-dependencies = ["requests"]
+dependencies = []
 
 [project.scripts]
 nvtest = "nvtest:console_main"
 
 [project.optional-dependencies]
 dev = ["ruff", "mypy", "pytest", "sphinxcontrib-programoutput==0.17"]
+requests = ["requests"]
 
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]

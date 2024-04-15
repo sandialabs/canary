@@ -264,7 +264,11 @@ class repo:
 
     @api_access_required
     def upload(self, *, file):
-        import requests
+        try:
+            import requests
+        except ImportError:
+            logging.warning("uploading files requires the requests library")
+            return None
 
         url = self.build_api_url(path=f"projects/{self.project_id}/uploads")
         headers = {"PRIVATE-TOKEN": self.access_token}
