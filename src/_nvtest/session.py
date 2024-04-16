@@ -1,70 +1,3 @@
-"""
-Phases of a test session
-------------------------
-
-A test session consists of the following phases:
-
-Discovery:
-  Search for test scripts in a test suite.
-
-Setup:
-  Order test scripts, create unique execution directories for each test, and
-  copy/link necessary resources into the execution directory.
-
-Run:
-  For each test, move to its execution directory and run the test script, first
-  ensuring that dependencies have been satisfied.
-
-Cleanup:
-  Remove artifacts created by the test.
-
-Test session execution
-----------------------
-
-When ``nvtest run PATH`` is executed, ``PATH`` is searched for test files and
-the session begun.  Once collected, tests are run in a separate execution
-directory (default: ``./TestResults``).  Each test is run in its own
-subdirectory with the following naming scheme:
-
-.. code-block:: console
-
-    TestResults/$path/$name.p1=v1.p2=v2...pn=vn
-
-where ``$path`` is the directory name (including parents), relative to the
-search path, of the test file, and ``$name`` is the basename of the test. The
-``px=vx`` are the names of values of the test parameters (if any).
-
-Consider, for example, the search path
-
-.. code-block:: console
-
-   $ tree tests
-   tests/
-   └── regression
-       └── 2D
-           ├── test_1.pyt
-           └── test_2.pyt
-
-and the corresponding test results directory tree:
-
-.. code-block:: console
-
-   $ tree TestResults
-   TestResults/
-   └── regression
-       └── 2D
-           ├── test_1
-           │   ├── nvtest-out.txt
-           │   └── test_1.pyt -> ../../../../tests/regressions/2D/test_1.pyt
-           └── test_2
-               ├── nvtest-out.txt
-               └── test_2.pyt -> ../../../../tests/regressions/2D/test_2.pyt
-
-The test's script is symbolically linked into the execution directory, where it
-is ultimately executed.  The file ``nvtest-out.txt`` is the output from running
-the test.
-"""
-
 import glob
 import inspect
 import json
@@ -132,6 +65,21 @@ class ExitCode:
 
 
 class Database:
+    """Manages the test session database
+
+    Writes an index file containing information about all tests found during
+    discovery (index/cases) and a results file for tests that are run
+    (stage/cases).  The results file is updated after the completion of each
+    test case.
+
+    Reads and writes to the results file are locked to allow running tests in parallel
+
+    Args:
+        directory: Where to store database assets
+        cases: The list of test cases
+
+    """
+
     def __init__(self, directory: str, cases: Optional[list[TestCase]] = None) -> None:
         self.directory = os.path.abspath(directory)
         lock_path = os.path.join(self.directory, "lock")
@@ -152,6 +100,12 @@ class Database:
         return entry
 
     def update(self, cases: Union[TestCase, list[TestCase]]) -> None:
+        """Add test case results to the database
+
+        Args:
+            cases: list of test cases to add to the database
+
+        """
         if not isinstance(cases, list):
             cases = [cases]
         file = os.path.join(self.directory, "stage/cases")
@@ -163,6 +117,12 @@ class Database:
                     fh.write(json.dumps({case.id: cd}) + "\n")
 
     def load(self) -> list[TestCase]:
+        """Load the test results
+
+        Returns:
+            The list of ``TestCase``s
+
+        """
         fd: dict[str, dict]
         with ReadTransaction(self.lock):
             file = os.path.join(self.directory, "index/cases")
@@ -189,6 +149,7 @@ class Database:
         return list(cases.values())
 
     def read(self) -> dict[str, dict]:
+        """Read the results file and return a dictionary of the stored ``TestCase`` attributions"""
         with ReadTransaction(self.lock):
             lines = open(os.path.join(self.directory, "stage/cases")).readlines()
         fd: dict[str, dict] = {}
@@ -199,6 +160,7 @@ class Database:
         return fd
 
     def makeindex(self, cases: list[TestCase]) -> None:
+        """Store each ``TestCase`` in ``cases`` as a dictionary in the index file"""
         files: dict[str, set[str]] = {}
         indexed: dict[str, Any] = {}
         for case in cases:
@@ -222,6 +184,7 @@ class Database:
                 fh.write(json.dumps({case.id: cd}) + "\n")
 
     def reindex(self) -> None:
+        """Filter the results file to contain only the latest test results"""
         cases = self.load()
         seen: set[str] = set()
         unique: list[TestCase] = []
@@ -238,7 +201,13 @@ class Database:
 
 
 class Session:
-    """Manages the test session"""
+    """Manages the test session
+
+    This object should not be directly instantiated but should be instantiated
+    through one of the two factory methods: ``Session.create`` and
+    ``Session.load``
+
+    """
 
     default_work_tree = "./TestResults"
     mode: str
@@ -617,6 +586,17 @@ class Session:
         with open(file, "w") as fh:
             json.dump({"index": fd}, fh, indent=2)
         return
+
+    def batch_log(self, batch_no: int, batch_store: Optional[int]) -> str:
+        dir = os.path.join(self.dotdir, "stage/batch")
+        if batch_store is None:
+            batch_store = len(os.listdir(dir))  # use latest
+        index = os.path.join(dir, str(batch_store), "index")
+        with open(index) as fh:
+            fd = json.load(fh)
+            n = len(fd["index"])
+        f = os.path.join(dir, str(batch_store), f"out.{n}.{batch_no}.txt")
+        return f
 
     def apply_batch_filter(self, batch_store: Optional[int], batch_no: Optional[int]) -> None:
         file = os.path.join(self.dotdir, "stage/batch", str(batch_store), "index")

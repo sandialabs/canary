@@ -27,7 +27,7 @@ ALWAYS = 100
 
 LEVEL = WARNING
 TIMESTAMP = False
-FORMAT = "%(prefix)s %(timestamp)s%(message)s"
+FORMAT = "%(prefix)s%(timestamp)s%(message)s"
 
 
 builtin_print = print

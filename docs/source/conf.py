@@ -94,7 +94,7 @@ os.environ["COLIFY_SIZE"] = "25x120"
 os.environ["COLUMNS"] = "120"
 
 # Generate full package list if needed
-for subdir in ("directives", "testfile", "config", "howto"):
+for subdir in ("directives", "howto"):
 	dir = os.path.join(docs_source_dir, subdir)
 	if os.path.exists(dir):
 		shutil.rmtree(dir)

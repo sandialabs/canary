@@ -11,9 +11,9 @@ To use the ``nvtest`` CMake integration:
 1. Copy the ``NVTest.cmake`` file into your project's CMake modules directory.
 2. Include the module in your ``CMakeLists.txt``:
 
-   ```cmake
-   include(NVTest)
-   ```
+   .. code-block:: cmake
+
+      include(NVTest)
 
 Functions
 ---------

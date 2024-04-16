@@ -38,8 +38,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         add_all_commands(parser)
 
         args = parser.parse_args(argv)
-        command = parser.get_command(args.command)
 
+        config.set_main_options(args)
+
+        command = parser.get_command(args.command)
         if command is None:
             parser.print_help()
             return -1
@@ -71,8 +73,6 @@ class NVTestCommand:
 
 
 def invoke_command(command: FunctionType, args: argparse.Namespace) -> int:
-    logging.set_level(logging.INFO)
-    config.set_main_options(args)
     return command(args)
 
 

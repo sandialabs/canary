@@ -42,30 +42,6 @@ def commands(dest):
     writer.write(parser)
 
 
-def testfile(dest):
-    mkdirp(dest)
-    with open(os.path.join(dest, "index.rst"), "w") as fh:
-        fh.write(".. _test-testfile:\n\n")
-        fh.write("The test file\n=============\n")
-        fh.write(".. automodule:: _nvtest.test.testfile\n")
-
-
-def session(dest):
-    mkdirp(dest)
-    with open(os.path.join(dest, "index.rst"), "w") as fh:
-        fh.write(".. _session:\n\n")
-        fh.write("The test session\n================\n")
-        fh.write(".. automodule:: _nvtest.session\n")
-
-
-def config(dest):
-    mkdirp(dest)
-    with open(os.path.join(dest, "index.rst"), "w") as fh:
-        fh.write(".. _config-settings:\n\n")
-        fh.write("Configuration settings\n======================\n\n")
-        fh.write(".. automodule:: _nvtest.config.__init__\n")
-
-
 def howto(dest):
     mkdirp(dest)
     with open(os.path.join(dest, "index.rst"), "w") as fh:
@@ -76,13 +52,15 @@ def howto(dest):
         tests = os.path.join(root, "../../tests")
         howto = os.path.join(tests, "howto")
         assert os.path.exists(os.path.join(howto, "__init__.py"))
-        for file in os.listdir(howto):
-            if not file.startswith("_") and file.endswith(".py"):
-                name = os.path.splitext(os.path.basename(file))[0]
+        for file in sorted(os.listdir(howto)):
+            if file.startswith("howto_") and file.endswith(".py"):
+                module = os.path.splitext(os.path.basename(file))[0]
+                name = module.split("_", 2)[-1]
                 fh.write(f"   {name}\n")
+                print(file, name)
                 with open(os.path.join(dest, f"{name}.rst"), "w") as fp:
                     fp.write(f".. _howto-{name.replace('_', '-')}:\n\n")
-                    fp.write(f".. automodule:: howto.{name}\n")
+                    fp.write(f".. automodule:: howto.{module}\n")
 
 
 def autodoc(args: argparse.Namespace) -> int:
@@ -91,8 +69,5 @@ def autodoc(args: argparse.Namespace) -> int:
         mkdirp(args.dest)
     directives(os.path.join(args.dest, "directives"))
     commands(os.path.join(args.dest, "commands"))
-    testfile(os.path.join(args.dest, "testfile"))
-    session(os.path.join(args.dest, "session"))
-    config(os.path.join(args.dest, "config"))
     howto(os.path.join(args.dest, "howto"))
     return 0

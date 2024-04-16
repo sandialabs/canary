@@ -16,14 +16,14 @@ Filter tests to run by keyword
 
    nvtest run -k KEYWORD_EXPR PATH [PATHS...]
 
-where ``KEYWORD_EXPR`` is a Python expression.  For example, ``-k 'key1 and not key2``.
+where ``KEYWORD_EXPR`` is a Python expression.  For example, ``-k 'key1 and not key2'``.
 
 Limit the number of concurrent tests
 ------------------------------------
 
 .. code-block:: console
 
-   nvtest run --max-workers=N PATH [PATHS...]
+   nvtest run -l session:workers:N PATH [PATHS...]
 
 Set a timeout on the test session
 ---------------------------------
@@ -34,31 +34,6 @@ Set a timeout on the test session
 
 where ``TIME_EXPR`` is a number or a human-readable number representation like ``1 sec``, ``1s``, etc.
 
-Run tests in a batch scheduler
-------------------------------
-
-Basic usage
-^^^^^^^^^^^
-
-.. code-block:: console
-
-   nvtest run [--batches=N|--batch-size=T] [OPTIONS] PATH [PATHS...]
-
-Use slurm scheduler
-^^^^^^^^^^^^^^^^^^^
-
-.. code-block:: console
-
-   nvtest run --runner=slurm PATH [PATHS...]
-
-Pass arguments to the scheduler
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. code-block:: console
-
-   nvtest run --runner=slurm -R,ARG1 -R,ARG2 PATH [PATHS...]
-
-where ``ARGI`` are passed directly to the scheduler.  Eg, ``-R,--account=XXYYZZ01``
 """
 
 import os
