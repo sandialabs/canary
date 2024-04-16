@@ -18,7 +18,6 @@ from _nvtest.user import patterns
 from _nvtest.util import filesystem
 from _nvtest.util import logging
 from _nvtest.util.executable import Executable
-from _nvtest.util.filesystem import which
 
 
 def make_std_parser() -> argparse.ArgumentParser:

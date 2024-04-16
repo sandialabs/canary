@@ -775,7 +775,7 @@ class Session:
                     for case in group:
                         # Since setup is run in a multiprocessing pool, the internal
                         # state is lost and needs to be updated
-                        case.update(attrs[case.fullname])
+                        case.update(attrs[case.id])
                         assert case.status.value in ("skipped", "staged")
                         case.dump()
                         with working_dir(case.exec_dir):
@@ -1023,7 +1023,7 @@ class Session:
 
 def _setup_individual_case(case, exec_root, copy_all_resources):
     case.setup(exec_root, copy_all_resources=copy_all_resources)
-    return (case.fullname, vars(case))
+    return (case.id, vars(case))
 
 
 class EmptySession(Exception):
