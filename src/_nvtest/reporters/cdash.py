@@ -9,8 +9,6 @@ from getpass import getuser
 from typing import Optional
 from typing import Union
 
-import nvtest
-
 from .. import config
 from ..config.machine import machine_config
 from ..session import Session
@@ -104,6 +102,8 @@ class Reporter(_Reporter):
 
     @property
     def site_node(self):
+        import nvtest
+
         if self.meta is None:
             self.meta = {}
             host = os.uname().nodename

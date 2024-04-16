@@ -79,7 +79,7 @@ would generate the following file in the current binary directory
    def test():
        cmd = nvtest.Executable("my_test")
        args = ["--option=value"]
-       cmd(*args, allow_failure=True)
+       cmd(*args, fail_on_error=False)
        if cmd.returncode != 0:
            raise nvtest.TestFailed("my_test")
 
@@ -152,7 +152,7 @@ would generate the following file in the current binary directory
        self = nvtest.test.instance
        mpi = nvtest.Executable("${MPIEXEC_EXECUTABLE}")
        args = ["${MPIEXEC_NUMPROC_FLAG}", self.parameters.np, "my_parallel_test", "--option=value"]
-       mpi(*args, allow_failure=True)
+       mpi(*args, fail_on_error=False)
        if mpi.returncode != 0:
            raise nvtest.TestFailed("my_parallel_test")
 
