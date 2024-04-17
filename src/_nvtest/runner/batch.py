@@ -1,3 +1,4 @@
+import math
 import os
 from datetime import datetime
 from io import StringIO
@@ -15,6 +16,7 @@ from ..util.filesystem import getuser
 from ..util.filesystem import mkdirp
 from ..util.filesystem import set_executable
 from ..util.filesystem import which
+from ..util.time import hhmmss
 from .base import Runner
 
 if TYPE_CHECKING:
@@ -39,18 +41,15 @@ class BatchRunner(Runner):
 
     def run(self, batch: Partition, **kwds: Any) -> dict[str, dict]:
         n = len(batch)
-        logging.emit(f"SUBMITTING: Batch {batch.world_rank + 1} of {batch.world_size} ({n} tests)")
+        logging.log(
+            logging.ALWAYS,
+            f"SUBMITTING: Batch {batch.world_rank} of {batch.world_size} ({n} tests)",
+        )
         script = self.submit_filename(batch)
         if not os.path.exists(script):
             self.write_submission_script(batch)
         try:
-            script_x = Executable(self.command)
-            if self.default_args:
-                script_x.add_default_args(*self.default_args)
-            f = self.logfile(batch)
-            mkdirp(os.path.dirname(f))
-            with open(f, "w") as fh:
-                script_x(script, fail_on_error=False, output=fh, error=fh)
+            self._run(script)
         finally:
             self.load_batch_results(batch)
             stat: dict[str, int] = {}
@@ -67,10 +66,19 @@ class BatchRunner(Runner):
             st_stat = ", ".join(
                 colorize(fmt % (Status.colors[n], v, n)) for (n, v) in stat.items()
             )
-            logging.emit(
-                f"FINISHED:   Batch {batch.world_rank + 1} of {batch.world_size}, {st_stat}"
+            logging.log(
+                logging.ALWAYS,
+                f"FINISHED:   Batch {batch.world_rank} of {batch.world_size}, {st_stat}",
             )
         return attrs
+
+    def _run(self, script: str) -> None:
+        script_x = Executable(self.command)
+        if self.default_args:
+            script_x.add_default_args(*self.default_args)
+        f = os.path.splitext(script.replace("/submit.", "/out."))[0] + ".txt"
+        with open(f, "w") as fh:
+            script_x(script, fail_on_error=False, output=fh, error=fh)
 
     @classmethod
     def validate(cls, items):
@@ -111,7 +119,14 @@ class BatchRunner(Runner):
         self.write_header(fh, batch)
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(f"# batch {batch.world_rank + 1} of {batch.world_size}\n")
+        qtime = self.approximate_runtime(batch)
+        fh.write(f"#!{self.shell}\n")
+        fh.write(f"# approximate runtime: {hhmmss(qtime)}\n")
+        fh.write(f"# batch {batch.world_rank} of {batch.world_size}\n")
+        fh.write("# test cases:\n")
+        for case in batch:
+            fh.write(f"# - {case.fullname}\n")
+        fh.write(f"# total: {len(batch)} test cases\n")
         fh.write("export NVTEST_DISABLE_KB=1\n")
         self.write_body(batch, fh)
         f = self.submit_filename(batch)
@@ -152,3 +167,12 @@ class BatchRunner(Runner):
                     case.dump()
                 else:
                     case.update(fd)
+
+    def approximate_runtime(self, batch: Partition) -> float:
+        max_tasks = self.max_tasks_required(batch)
+        cores_per_socket = config.get("machine:cores_per_socket")
+        sockets_per_node = config.get("machine:sockets_per_node") or 1
+        cores_per_node = cores_per_socket * sockets_per_node
+        nodes = 1 if max_tasks < cores_per_node else int(math.ceil(max_tasks / cores_per_node))
+        qtime = batch.cputime / (cores_per_node * nodes) * 1.05
+        return qtime

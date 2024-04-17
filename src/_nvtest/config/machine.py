@@ -104,6 +104,7 @@ def read_sinfo() -> dict:
     info = {
         "sockets_per_node": spn,
         "cores_per_socket": cps,
+        "cpu_count": spn * cps * nc,
         "nodes": nc,
     }
     return info

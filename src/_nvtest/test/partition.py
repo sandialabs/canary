@@ -1,6 +1,8 @@
+import math
 from typing import Optional
 from typing import Union
 
+from .. import config
 from ..util import graph
 from ..util.collections import defaultlist
 from ..util.hash import hashit
@@ -24,14 +26,10 @@ class _Partition(set):
 class Partition(list):
     """A list of test cases
 
-    Parameters
-    ----------
-    world_rank:
-        The index of this partition in the group
-    world_size:
-        The number of partitions in the group
-    global_id:
-        The id of the group
+    Args:
+      world_rank: The index of this partition in the group
+      world_size: The number of partitions in the group
+      world_id: The id of the group
 
     """
 
@@ -40,7 +38,7 @@ class Partition(list):
         partition: Union[list[TestCase], _Partition],
         world_rank: int,
         world_size: int,
-        world_id: int = 0,
+        world_id: int = 1,
     ) -> None:
         self.world_rank = world_rank
         self.world_size = world_size
@@ -82,7 +80,7 @@ class Partition(list):
             case.kill()
 
 
-def group_testcases(cases: list[TestCase]):
+def group_testcases(cases: list[TestCase]) -> list[set[TestCase]]:
     """Group test cases such that a test and all its dependencies are in the
     same group
 
@@ -96,30 +94,68 @@ def group_testcases(cases: list[TestCase]):
     return sorted(filter(None, groups), key=lambda g: -len(g))
 
 
-def partition_n(cases: list[TestCase], n: int = 8, global_id: int = 0) -> list[Partition]:
+def partition_n(cases: list[TestCase], n: int = 8, world_id: int = 0) -> list[Partition]:
     """Partition test cases into ``n`` partitions"""
     groups = group_testcases(cases)
     partitions = defaultlist(_Partition, n)
     for group in groups:
         partition = min(partitions, key=lambda p: p.cputime)
         partition.update(group)
-    return [Partition(p, i, n, global_id) for i, p in enumerate(partitions) if p.size]
+    return [Partition(p, i, n, world_id) for i, p in enumerate(partitions, start=1) if p.size]
 
 
-def partition_t(cases: list[TestCase], t: float = 60 * 30, global_id: int = 0) -> list[Partition]:
+def partition_t(cases: list[TestCase], t: float = 60 * 30, world_id: int = 1) -> list[Partition]:
     """Partition test cases into partitions having a runtime approximately equal
     to ``t``
+
+    The partitioning is as follows:
+
+    - Put any test requiring more than one node into its own partition
+    - Fill each partition with all other
 
     """
     groups = group_testcases(cases)
     partitions = defaultlist(_Partition)
+    sockets_per_node = config.get("machine:sockets_per_node")
+    cores_per_socket = config.get("machine:cores_per_socket")
+    cores_per_node = sockets_per_node * cores_per_socket
+
     for group in groups:
-        runtime = sum(c.runtime for c in group)
+        # first pass: put all groups requiring > 1 node into their own group
+        if all(case.processors <= cores_per_node for case in group):
+            # only requires one node, will fill in next
+            continue
+        g_max_processors = max(case.processors for case in group)
+        g_nodes = math.ceil(g_max_processors / cores_per_node)
+        g_cputime = sum(case.cputime for case in group)
         for partition in partitions:
-            if partition.runtime + runtime <= t:
+            p_max_processors = max(case.processors for case in partition)
+            p_nodes = math.ceil(p_max_processors / cores_per_node)
+            total_cputime = partition.cputime + g_cputime
+            if p_nodes == g_nodes and total_cputime <= t:
+                partition.update(group)
                 break
         else:
             partition = partitions.new()
-        partition.update(group)
+            partition.update(group)
+
+    for group in groups:
+        # second pass: fill in with groups requiring only 1 node
+        if any(case.processors > cores_per_node for case in group):
+            # requires > 1 node, already in a partition
+            continue
+        g_cputime = sum(case.cputime for case in group)
+        for partition in partitions:
+            p_max_processors = max(case.processors for case in partition)
+            p_nodes = math.ceil(p_max_processors / cores_per_node)
+            total_cputime = partition.cputime + g_cputime
+            runtime = total_cputime / (p_nodes * cores_per_node)
+            if runtime <= t:
+                partition.update(group)
+                break
+        else:
+            partition = partitions.new()
+            partition.update(group)
+
     n = len(partitions)
-    return [Partition(p, i, n, global_id) for i, p in enumerate(partitions)]
+    return [Partition(p, i, n, world_id) for i, p in enumerate(partitions, start=1)]

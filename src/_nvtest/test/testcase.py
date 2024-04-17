@@ -240,6 +240,10 @@ class TestCase:
         return int(self.parameters.get("ndevice") or 0)  # type: ignore
 
     @property
+    def cputime(self) -> Union[float, int]:
+        return self.runtime * self.processors
+
+    @property
     def runtime(self) -> Union[float, int]:
         if self._runtime is None:
             return self.timeout

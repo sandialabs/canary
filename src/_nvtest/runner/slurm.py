@@ -1,12 +1,17 @@
 import argparse
 import math
 import os
+import subprocess
+import time
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Optional
 from typing import TextIO
 
 from .. import config
 from ..test.partition import Partition
+from ..util import logging
+from ..util.executable import Executable
 from ..util.time import hhmmss
 from .batch import BatchRunner
 
@@ -27,7 +32,7 @@ class SlurmRunner(BatchRunner):
             raise ValueError("slurm runner requires that 'machine:cores_per_socket' be defined")
         super().__init__(session, **kwargs)
         parser = self.make_argument_parser()
-        self.namespace = argparse.Namespace(wait=True)  # always block
+        self.namespace = argparse.Namespace()
         self.namespace, unknown_args = parser.parse_known_args(
             self.options, namespace=self.namespace
         )
@@ -50,7 +55,7 @@ class SlurmRunner(BatchRunner):
         self.namespace.nodes = nodes
         self.namespace.ntasks_per_node = ntasks_per_node
         self.namespace.cpus_per_task = 1
-        qtime = sum([case.runtime for case in batch])
+        qtime = batch.cputime / (cores_per_node * nodes) * 1.05
         self.namespace.time = hhmmss(qtime)
 
     @staticmethod
@@ -75,6 +80,53 @@ class SlurmRunner(BatchRunner):
         if self.namespace.nodes == 1:
             return self.namespace.ntasks_per_node
         return 1
+
+    def _run(self, script: str) -> None:
+        args = [self.command]
+        if self.default_args:
+            args.extend(self.default_args)
+        args.append(script)
+        p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        out, _ = p.communicate()
+        result = str(out.decode("utf-8")).strip()
+        i = result.find("Submitted batch job")
+        if i >= 0:
+            parts = result[i:].split()
+            if len(parts) > 3 and parts[3]:
+                jobid = parts[3]
+        else:
+            return
+
+        time.sleep(1)
+        try:
+            while True:
+                state = self.query(jobid)
+                if state is None:
+                    return
+                time.sleep(0.5)
+        except BaseException as e:
+            logging.log(logging.ALWAYS, f"killing sbatch job {jobid}")
+            self.cancel(jobid)
+            if isinstance(e, KeyboardInterrupt):
+                return
+            raise
+
+    def query(self, jobid: str) -> Optional[str]:
+        squeue = Executable("squeue")
+        out = squeue("--noheader", "-o", "%i %t", "--clusters=all", output=str)
+        for line in out.splitlines():
+            # a line should be something like "16004759 PD"
+            try:
+                id, state = line.split()
+            except ValueError:
+                continue
+            if id == jobid:
+                return state
+        return None
+
+    def cancel(self, jobid: str) -> None:
+        scancel = Executable("scancel")
+        scancel(jobid, "--clusters=all")
 
     @staticmethod
     def make_argument_parser():
@@ -186,7 +238,7 @@ class SlurmRunner(BatchRunner):
         parser.add_argument("--uid", metavar="<user>")
         parser.add_argument("--use-min-nodes", action="store_true", default=False)
         parser.add_argument("-v", "--verbose", metavar="<value>")
-        parser.add_argument("--wait-all-nodes", metavar="<value>")
+        # parser.add_argument("--wait-all-nodes", metavar="<value>")
         # g.add_argument("-W", "--wait", action="store_true", default=False)
         parser.add_argument("--wckey", metavar="<wckey>")
         parser.add_argument("--wrap", metavar="<command_string>")

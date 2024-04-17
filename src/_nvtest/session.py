@@ -570,10 +570,10 @@ class Session:
         cases_to_run = self.active_cases
         batches: list[Partition]
         if batch_count:
-            batches = partition_n(cases_to_run, n=batch_count, global_id=batch_store)
+            batches = partition_n(cases_to_run, n=batch_count, world_id=batch_store)
         else:
             assert batch_time is not None
-            batches = partition_t(cases_to_run, t=batch_time, global_id=batch_store)
+            batches = partition_t(cases_to_run, t=batch_time, world_id=batch_store)
         self.queue = BatchResourceQueue(self.avail_cpus, self.avail_devices, self.avail_workers)
         self.queue.put(*batches)
         fd: dict[int, list[str]] = {}
@@ -599,6 +599,9 @@ class Session:
         return f
 
     def apply_batch_filter(self, batch_store: Optional[int], batch_no: Optional[int]) -> None:
+        dir = os.path.join(self.dotdir, "stage/batch")
+        if batch_store is None:
+            batch_store = len(os.listdir(dir))  # use latest
         file = os.path.join(self.dotdir, "stage/batch", str(batch_store), "index")
         with open(file, "r") as fh:
             fd = json.load(fh)
@@ -805,38 +808,32 @@ class Session:
                         iid, obj = iid_obj
                     except EmptyQueue:
                         break
-                    except KeyboardInterrupt:
-                        self.returncode = signal.SIGINT.value
-                        auto_cleanup = False
-                        raise
-                    except FailFast as ex:
-                        name, code = ex.args
-                        self.returncode = code
-                        auto_cleanup = False
-                        raise StopExecution(f"fail_fast: {name}", code)
-                    except BaseException:
-                        logging.error(traceback.format_exc())
-                        raise
                     future = ppe.submit(self.runner, obj)
                     callback = partial(self.update_from_future, iid, fail_fast)
                     future.add_done_callback(callback)
                     futures[iid] = (obj, future)
-
-        finally:
+        except BaseException as e:
             if ppe._processes:
                 for proc in ppe._processes:
-                    if proc != os.getpid():
-                        os.kill(proc, signal.SIGINT)
-            if auto_cleanup:
+                    os.kill(proc, signal.SIGINT)
+            ppe.shutdown(wait=True)
+            if isinstance(e, KeyboardInterrupt):
+                self.returncode = signal.SIGINT.value
+            elif isinstance(e, FailFast):
+                name, code = e.args
+                self.returncode = code
+                raise StopExecution(f"fail_fast: {name}", code)
+            else:
+                logging.error(traceback.format_exc())
                 self.returncode = compute_returncode(self.queue.cases())
-                for obj, future in futures.values():
-                    if future.running():
-                        obj.kill()
-                for case in self.queue.cases():
-                    if case.status == "staged":
-                        logging.error(f"{case}: failed to start!")
-                        case.status.set("failed", "Case failed to start")
-                        case.dump()
+                raise
+        else:
+            self.returncode = compute_returncode(self.queue.cases())
+        finally:
+            for case in self.queue.cases():
+                if case.status == "staged":
+                    case.status.set("failed", "Case failed to start")
+                    case.dump()
 
     def update_from_future(
         self,
