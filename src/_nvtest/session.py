@@ -47,7 +47,6 @@ from .util.graph import TopologicalSorter
 from .util.misc import dedup
 from .util.misc import partition
 from .util.returncode import compute_returncode
-from .util.time import pretty_time
 
 default_batchsize = 30 * 60  # 30 minutes
 REUSE_SCHEDULER = "==REUSE_SCHEDUER=="
@@ -357,7 +356,7 @@ class Session:
         self = cls()
         self.mode = "w"
         self.exitstatus = -1
-        logging.debug(f"Creating new test session in {work_tree}")
+        logging.info(f"Creating new test session in {work_tree}")
         t_start = time.time()
 
         try:
@@ -378,6 +377,13 @@ class Session:
         except Exception:
             force_remove(self.work_tree)
             raise
+
+        logging.info(f"Available cpus: {self.avail_cpus}")
+        logging.info(f"Available cpus per test: {self.avail_cpus_per_test}")
+        if self.avail_devices:
+            logging.info(f"Available devices: {self.avail_devices}")
+            logging.info(f"Available devices per test: {self.avail_devices_per_test}")
+        logging.info(f"Maximum number of asynchronous jobs: {self.avail_workers}")
 
         self.populate(
             on_options=on_options,
@@ -426,6 +432,7 @@ class Session:
             raise ValueError(f"Incorrect mode {mode!r}")
         self = cls()
         self.work_tree = config.get("session:work_tree")
+        logging.info(f"Loading session from {self.work_tree}")
         if not self.work_tree:
             raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
         self.mode = mode
@@ -438,6 +445,14 @@ class Session:
         self.cases = self.db.load()
         self.state = 1
         self.mode = mode
+
+        logging.info(f"Available cpus: {self.avail_cpus}")
+        logging.info(f"Available cpus per test: {self.avail_cpus_per_test}")
+        if self.avail_devices:
+            logging.info(f"Available devices: {self.avail_devices}")
+            logging.info(f"Available devices per test: {self.avail_devices_per_test}")
+        logging.info(f"Maximum number of asynchronous jobs: {self.avail_workers}")
+
         return self
 
     def initialize(
@@ -510,13 +525,16 @@ class Session:
             raise ValueError(f"Incorrect mode {self.mode!r}")
 
         t_start = time.time()
-        logging.debug("Populating work tree")
+        paths = ", ".join([os.path.relpath(p) for p in self.search_paths])
+        logging.info(f"Searching for test files in {paths}")
 
         finder = Finder()
         for root, _paths in self.search_paths.items():
             finder.add(root, *_paths, tolerant=True)
         finder.prepare()
         tree = finder.populate()
+        n = sum([len(_fs) for _, _fs in tree.items()])
+        logging.info(f"Found {n} test files")
 
         on_options = on_options or []
         if config.get("build:options"):
@@ -525,6 +543,7 @@ class Session:
                     on_options.append(opt)
         on_options = dedup(on_options)
 
+        logging.info("Freezing test files")
         logging.debug(
             "Freezing test files with the following options:\n"
             f"  {self.avail_cpus=}\n"
@@ -542,6 +561,7 @@ class Session:
             keyword_expr=keyword_expr,
             parameter_expr=parameter_expr,
         )
+        self.print_overview()
 
         cases_to_run = self.active_cases
         if not cases_to_run:
@@ -765,6 +785,7 @@ class Session:
         cases: list[TestCase],
         copy_all_resources: bool = False,
     ) -> None:
+        logging.info("Setting up test case directories")
         ts: TopologicalSorter = TopologicalSorter()
         for case in cases:
             ts.add(case, *case.dependencies)
@@ -984,9 +1005,9 @@ class Session:
         nonpass = ("skipped", "diffed", "timeout", "failed")
         level = logging.get_level()
         if level < logging.INFO and len(totals):
-            logging.info("Short test summary info")
+            logging.info(colorize("@*{Short test summary info}"))
         elif any(r in totals for r in nonpass):
-            logging.info("Short test summary info")
+            logging.info(colorize("@*{Short test summary info}"))
         if level < logging.DEBUG and "masked" in totals:
             for case in sorted(totals["masked"], key=lambda t: t.name):
                 logging.emit(self.cformat(case))
@@ -1010,8 +1031,8 @@ class Session:
                 c = Status.colors[member]
                 stat = totals[member][0].status.name
                 summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-        text = ", ".join(summary_parts) + f" in {pretty_time(duration)}"
-        logging.info(text)
+        ts = time.strftime("%H hr. %M min. %S sec.", time.gmtime(duration))
+        logging.info(colorize("@*{Session done} -- %s in %s" % (", ".join(summary_parts), ts)))
 
     @staticmethod
     def _print_durations(cases: list[TestCase], N: int) -> None:
