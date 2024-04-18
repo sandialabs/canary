@@ -65,6 +65,7 @@ class SlurmRunner(BatchRunner):
 
     def write_header(self, fh: TextIO, batch: Partition) -> None:
         """Generate the sbatch script for the current state of arguments."""
+        self.calculate_resource_allocations(batch)
         script = self.submit_filename(batch)
         file = os.path.splitext(script)[0] + "-slurm-out.txt"
         self.namespace.error = self.namespace.output = file

@@ -37,8 +37,6 @@ class BatchRunner(Runner):
     def avail_workers(self, batch: Partition) -> int:
         return 1
 
-    def calculate_resource_allocations(self, batch: Partition) -> None: ...
-
     def run(self, batch: Partition, **kwds: Any) -> dict[str, dict]:
         n = len(batch)
         logging.log(
@@ -114,7 +112,6 @@ class BatchRunner(Runner):
         return os.path.join(self.stage, "batch", str(batch.world_id), basename)
 
     def write_submission_script(self, batch: Partition) -> None:
-        self.calculate_resource_allocations(batch)
         fh = StringIO()
         self.write_header(fh, batch)
         fh.write(f"# user: {getuser()}\n")
