@@ -354,7 +354,7 @@ def setup_session(args: "argparse.Namespace") -> Session:
             raise ValueError(f"Cannot wipe work directory with mode={args.mode}")
         work_tree = args.work_tree or Session.default_work_tree
         if os.path.exists(work_tree):
-            logging.info(f"Removing work tree {work_tree}")
+            logging.warning(f"Removing work tree {work_tree}")
             force_remove(work_tree)
     session: Session
     if args.mode == "w":
