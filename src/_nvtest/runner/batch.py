@@ -39,8 +39,7 @@ class BatchRunner(Runner):
 
     def run(self, batch: Partition, **kwds: Any) -> dict[str, dict]:
         n = len(batch)
-        logging.log(
-            logging.ALWAYS,
+        logging.info(
             f"SUBMITTING: Batch {batch.world_rank} of {batch.world_size} ({n} tests)",
         )
         script = self.submit_filename(batch)
@@ -64,8 +63,7 @@ class BatchRunner(Runner):
             st_stat = ", ".join(
                 colorize(fmt % (Status.colors[n], v, n)) for (n, v) in stat.items()
             )
-            logging.log(
-                logging.ALWAYS,
+            logging.info(
                 f"FINISHED:   Batch {batch.world_rank} of {batch.world_size}, {st_stat}",
             )
         return attrs

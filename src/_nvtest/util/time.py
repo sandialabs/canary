@@ -5,6 +5,7 @@ import re
 import signal
 import time
 from datetime import datetime
+from io import StringIO
 from typing import Callable
 from typing import Union
 
@@ -176,6 +177,19 @@ def pretty_seconds(seconds: Union[int, float]) -> str:
         str: Time string with units
     """
     return pretty_seconds_formatter(seconds)(seconds)
+
+
+def pretty_time(seconds: Union[int, float]) -> str:
+    seconds = time_in_seconds(seconds)
+    minutes = seconds // 60
+    hours = minutes // 60
+    s = StringIO()
+    if hours:
+        s.write(f"{hours} hour{'' if hours == 1 else 's'} ")
+    if minutes:
+        s.write(f"{minutes % 60} minute{'' if minutes == 1 else 's'} ")
+    s.write(f"{seconds % 60} second{'' if seconds == 1 else 's'}")
+    return s.getvalue()
 
 
 class InvalidTimeFormat(Exception):

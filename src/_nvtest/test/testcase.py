@@ -485,7 +485,7 @@ class TestCase:
         fmt = "{{0}}: {0} {1} {{1}}".format(id, self.pretty_repr())
         try:
             self.start = time.time()
-            logging.log(logging.ALWAYS, fmt.format("STARTING", ""), prefix=None)
+            logging.info(fmt.format("STARTING", ""))
             self._run(**kwds)
         except Exception:
             self.returncode = 1
@@ -501,7 +501,7 @@ class TestCase:
                 f = os.path.join(self.exec_dir, "execute.log")
                 fs.force_symlink(self.logfile(), f)
             self.finish = time.time()
-            logging.log(logging.ALWAYS, fmt.format("FINISHED", self.status.cname), prefix=None)
+            logging.info(fmt.format("FINISHED", self.status.cname))
             self.dump()
         return
 

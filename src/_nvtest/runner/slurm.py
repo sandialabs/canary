@@ -97,6 +97,7 @@ class SlurmRunner(BatchRunner):
                 jobid = parts[3]
         else:
             return
+        logging.debug(f"Submitted batch with jobid={jobid}")
 
         time.sleep(1)
         try:
@@ -106,7 +107,7 @@ class SlurmRunner(BatchRunner):
                     return
                 time.sleep(0.5)
         except BaseException as e:
-            logging.log(logging.ALWAYS, f"killing sbatch job {jobid}")
+            logging.log(logging.ALWAYS, f"cancelling sbatch job {jobid}")
             self.cancel(jobid)
             if isinstance(e, KeyboardInterrupt):
                 return

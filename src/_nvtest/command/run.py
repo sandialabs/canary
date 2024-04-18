@@ -186,6 +186,7 @@ def run(args: "argparse.Namespace") -> int:
     initstate: int = 0
 
     timer = Timer()
+    logging.log(logging.ALWAYS, banner, prefix=None)
     with timer.timeit("setup"):
         session = setup_session(args)
     if not args.no_header:
@@ -199,7 +200,7 @@ def run(args: "argparse.Namespace") -> int:
         if args.until == "setup":
             logging.info("Stopping after setup (--until='setup')")
             return 0
-        logging.log(logging.ALWAYS, "Beginning test session", format="center")
+        logging.info("Beginning test session")
         initstate = 2
         with timer.timeit("run"):
             session.exitstatus = session.run(
@@ -335,17 +336,17 @@ def _parse_in_session_pathspec(args: argparse.Namespace) -> None:
 def print_front_matter(session: "Session"):
     p = config.get("system:os:name")
     v = config.get("python:version")
-    logging.emit(f"{p} -- Python {v}")
-    logging.emit(f"Available cpus: {session.avail_cpus}")
-    logging.emit(f"Available cpus per test: {session.avail_cpus_per_test}")
+    logging.info(f"Platform: {p} -- Python {v}")
+    logging.info(f"Available cpus: {session.avail_cpus}")
+    logging.info(f"Available cpus per test: {session.avail_cpus_per_test}")
     if session.avail_devices:
-        logging.emit(f"Available devices: {session.avail_devices}")
-        logging.emit(f"Available devices per test: {session.avail_devices_per_test}")
-    logging.emit(f"Maximum number of asynchronous jobs: {session.avail_workers}")
-    logging.emit(f"Working tree: {session.work_tree}")
+        logging.info(f"Available devices: {session.avail_devices}")
+        logging.info(f"Available devices per test: {session.avail_devices_per_test}")
+    logging.info(f"Maximum number of asynchronous jobs: {session.avail_workers}")
+    logging.info(f"Working tree: {session.work_tree}")
     if session.mode == "w":
-        paths = "\n  ".join(session.search_paths)
-        logging.emit(f"search paths:\n  {paths}")
+        paths = "\n    ".join(session.search_paths)
+        logging.info(f"search paths:\n    {paths}")
 
 
 def read_paths(file: str, paths: dict[str, list[str]]) -> None:
@@ -367,13 +368,16 @@ def read_paths(file: str, paths: dict[str, list[str]]) -> None:
 
 
 def setup_session(args: "argparse.Namespace") -> Session:
+    logging.info("Setting up test session")
     if args.wipe:
         if args.mode != "w":
             raise ValueError(f"Cannot wipe work directory with mode={args.mode}")
-        force_remove(args.work_tree or Session.default_work_tree)
+        work_tree = args.work_tree or Session.default_work_tree
+        if os.path.exists(work_tree):
+            logging.info(f"Removing work tree {work_tree}")
+            force_remove(work_tree)
     session: Session
     if args.mode == "w":
-        logging.log(logging.ALWAYS, "Setting up test session", format="center")
         if args.scheduler is not None:
             if args.batch_count is None and args.batch_time is None:
                 args.batch_time = default_batchsize
@@ -400,6 +404,7 @@ def setup_session(args: "argparse.Namespace") -> Session:
             copy_all_resources=args.copy_all_resources,
         )
     else:
+        logging.info(f"Loading test session in {config.get('session:work_tree')}")
         assert args.mode in "ba"
         session = Session.load(mode="a")
         scheduler = None
@@ -540,3 +545,12 @@ default, nvtest will determine and all available cpu cores.
             "examples": bold("Examples"),
         }
         print(resource_help)
+
+
+banner = """\
+               __            __
+   ____ _   __/ /____  _____/ /_
+  / __ \ | / / __/ _ \/ ___/ __/
+ / / / / |/ / /_/  __(__  ) /_
+/_/ /_/|___/\__/\___/____/\__/
+"""

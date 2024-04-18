@@ -291,7 +291,7 @@ class AbstractTestFile:
                 # add previous cases as dependencies
                 mask_analyze_case: Optional[str] = None
                 if all(case.masked for case in cases):
-                    mask_analyze_case = "deselected due to skipped dependencies"
+                    mask_analyze_case = colorize("deselected due to @*b{skipped dependencies}")
                 parent = TestCase(
                     self.root,
                     self.path,

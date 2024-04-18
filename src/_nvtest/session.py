@@ -47,6 +47,7 @@ from .util.graph import TopologicalSorter
 from .util.misc import dedup
 from .util.misc import partition
 from .util.returncode import compute_returncode
+from .util.time import pretty_time
 
 default_batchsize = 30 * 60  # 30 minutes
 REUSE_SCHEDULER = "==REUSE_SCHEDUER=="
@@ -819,9 +820,11 @@ class Session:
             ppe.shutdown(wait=True)
             if isinstance(e, KeyboardInterrupt):
                 self.returncode = signal.SIGINT.value
+                auto_cleanup = False
             elif isinstance(e, FailFast):
                 name, code = e.args
                 self.returncode = code
+                auto_cleanup = False
                 raise StopExecution(f"fail_fast: {name}", code)
             else:
                 logging.error(traceback.format_exc())
@@ -830,10 +833,11 @@ class Session:
         else:
             self.returncode = compute_returncode(self.queue.cases())
         finally:
-            for case in self.queue.cases():
-                if case.status == "staged":
-                    case.status.set("failed", "Case failed to start")
-                    case.dump()
+            if auto_cleanup:
+                for case in self.queue.cases():
+                    if case.status == "staged":
+                        case.status.set("failed", "Case failed to start")
+                        case.dump()
 
     def update_from_future(
         self,
@@ -908,7 +912,7 @@ class Session:
         header = colorize("@*c{%s}" % " status ".center(n + 10, "="))
         footer = colorize("@*c{%s}" % "=" * (n + 10))
         pad = colorize("@*c{====}")
-        logging.log(logging.ALWAYS, f"\n{header}\n{pad} {text} {pad}\n{footer}\n")
+        logging.log(logging.ALWAYS, f"\n{header}\n{pad} {text} {pad}\n{footer}\n", prefix=None)
 
     def print_overview(self, duration: Optional[float] = None) -> None:
         def unreachable(c):
@@ -920,21 +924,23 @@ class Session:
         t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
         if duration is not None:
             t += "@*{ in %.2fs.}" % duration
-        logging.emit(colorize(t))
+        logging.info(colorize(t))
         cases_to_run = [case for case in cases if not case.masked and not case.skipped]
         files = {case.file for case in cases_to_run}
         t = "@*g{running} %d test cases from %d files" % (len(cases_to_run), len(files))
-        logging.emit(colorize(t))
+        logging.info(colorize(t))
         skipped = [case for case in cases if case.skipped or case.masked]
         skipped_reasons: dict[str, int] = {}
         for case in skipped:
             reason = case.mask if case.masked else case.status.details
             assert isinstance(reason, str)
             skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
-        logging.emit(colorize("@*b{skipping} %d test cases" % len(skipped)))
+        logging.info(colorize("@*b{skipping} %d test cases" % len(skipped)))
         reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
         for reason in reversed(reasons):
-            logging.emit(f"  • {skipped_reasons[reason]} {reason.lstrip()}")
+            logging.log(
+                logging.ALWAYS, f"• {skipped_reasons[reason]} {reason.lstrip()}", prefix=None
+            )
         return
 
     @staticmethod
@@ -978,9 +984,9 @@ class Session:
         nonpass = ("skipped", "diffed", "timeout", "failed")
         level = logging.get_level()
         if level < logging.INFO and len(totals):
-            logging.log(logging.ALWAYS, "Short test summary info", format="center")
+            logging.info("Short test summary info")
         elif any(r in totals for r in nonpass):
-            logging.log(logging.ALWAYS, "Short test summary info", format="center")
+            logging.info("Short test summary info")
         if level < logging.DEBUG and "masked" in totals:
             for case in sorted(totals["masked"], key=lambda t: t.name):
                 logging.emit(self.cformat(case))
@@ -1004,8 +1010,8 @@ class Session:
                 c = Status.colors[member]
                 stat = totals[member][0].status.name
                 summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-        text = ", ".join(summary_parts)
-        logging.log(logging.ALWAYS, text + f" in {duration:.2f}s.", format="center")
+        text = ", ".join(summary_parts) + f" in {pretty_time(duration)}"
+        logging.info(text)
 
     @staticmethod
     def _print_durations(cases: list[TestCase], N: int) -> None:
@@ -1013,7 +1019,7 @@ class Session:
         sorted_cases = sorted(cases, key=lambda x: x.duration)
         if N > 0:
             sorted_cases = sorted_cases[-N:]
-        logging.log(logging.ALWAYS, f"Slowest {len(sorted_cases)} durations", format="center")
+        logging.info(f"Slowest {len(sorted_cases)} durations")
         for case in sorted_cases:
             logging.emit("  %6.2f     %s" % (case.duration, case.pretty_repr()))
 
