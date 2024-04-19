@@ -490,7 +490,7 @@ For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests t
             "existing": bold("existing"),
             "pathspec": bold("pathspec"),
             "id": bold("/ID"),
-            "batch_no": bold("^BATCH_NO"),
+            "batch_no": bold("^[BATCH_ID]:BATCH_NO"),
             "paths": bold("paths"),
             "root": bold("root"),
         }
@@ -507,14 +507,16 @@ The %(r_arg)s argument is of the form: %(r_form)s, where %(r_scope)s
 default, nvtest will determine and all available cpu cores.
 
 %(examples)s
-- -l test:cpus:5: Skip tests requiring more than 5 cpu cores.
-- -l session:cpus:5: Occupy at most 5 cpu cores at any one time.
-- -l test:devices:2: Skip tests requiring more than 2 devices.
-- -l session:devices:3: Occupy at most 3 devices at any one time.
-- -l session:workers:8: Execute asynchronously using a pool of at most 8 workers
-- -l batch:count:8: Execute tests in 8 batches.
-- -l 'batch:time:30 min': Execute tests in batches having runtimes of approximately
-    30 minutes.
+• -l session:workers:N: Execute asynchronously using a pool of at most N workers
+• -l session:cpus:N: Occupy at most N cpu cores at any one time.
+• -l session:devices:N: Occupy at most N devices at any one time.
+
+• -l test:cpus:N: Skip tests requiring more than N cpu cores.
+• -l test:devices:N: Skip tests requiring more than N devices.
+
+• -l batch:count:N: Execute tests in N batches.
+• -l batch:time:N': Execute tests in batches having runtimes of approximately N seconds.
+  Times can be specified in human readable forms, eg, 10 min, 1 hour, 2 hrs 30 min, etc
 """ % {
             "title": bold("Setting limits on resources"),
             "r_form": bold("[scope:]type:value"),
