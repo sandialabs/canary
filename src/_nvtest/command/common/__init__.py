@@ -77,13 +77,16 @@ def add_work_tree_arguments(parser: "Parser") -> None:
 
 def add_resource_arguments(parser: "Parser") -> None:
     group = parser.add_argument_group("resource control")
+    help_str = (
+        "Defines resources that are required by the test session and "
+        "establishes limits to the amount of resources that can be consumed. "
+        "The resource argument is of the form: [scope:]type:value, where scope "
+        "(optional) is one of session, test, or batch, (session is assumed if not provided); "
+        "type is one of workers, cpus, or devices; and value is the value. By "
+        "default, nvtest will determine and use all available cpu cores."
+    )
     group.add_argument(
-        "-l",
-        action=ResourceSetter,
-        metavar="resource",
-        default=None,
-        help="Defines resources that are required by the test session and "
-        "establishes limits to the amount of resources that can be consumed. ",
+        "-l", action=ResourceSetter, metavar="resource", default=None, help=help_str
     )
 
 
