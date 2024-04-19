@@ -99,7 +99,7 @@ class SlurmRunner(BatchRunner):
                 jobid = parts[3]
         else:
             logging.error(f"Failed to find jobid for batch {batch.world_id}:{batch.world_rank}")
-            logging.error(out)
+            logging.error(result)
             return
         logging.debug(f"Submitted batch with jobid={jobid}")
 
