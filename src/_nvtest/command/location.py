@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 from .. import config
 from ..session import Session
+from ..util import logging
 
 if TYPE_CHECKING:
     import argparse
@@ -51,7 +52,9 @@ def location(args: "argparse.Namespace") -> int:
     if work_tree is None:
         raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
 
-    session = Session.load(mode="r")
+    with logging.level(logging.WARNING):
+        session = Session.load(mode="r")
+
     for case in session.cases:
         if case.matches(args.testspec):
             f: str

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from ..session import Session
 from ..test.testcase import TestCase
+from ..util import logging
 from .common import filter_cases_by_path
 from .common import filter_cases_by_status
 
@@ -18,7 +19,8 @@ def setup_parser(parser: "Parser"):
 
 
 def rebaseline(args: "argparse.Namespace") -> int:
-    session = Session.load(mode="r")
+    with logging.level(logging.WARNING):
+        session = Session.load(mode="r")
     cases: list[TestCase]
     if args.pathspec:
         cases = filter_cases_by_path(session.cases, args.pathspec)

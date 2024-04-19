@@ -8,6 +8,7 @@ from ..reporters import cdash
 from ..reporters import html
 from ..reporters import markdown
 from ..session import Session
+from ..util import logging
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -214,7 +215,8 @@ def report(args: "Namespace") -> int:
         return 0
     if not config.get("session:work_tree"):
         raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
-    session = Session.load(mode="r")
+    with logging.level(logging.WARNING):
+        session = Session.load(mode="r")
     reporter: Reporter
     if args.parent_command == "cdash":
         reporter = cdash.Reporter(session, dest=args.d)

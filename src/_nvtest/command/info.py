@@ -17,10 +17,11 @@ def info(args: argparse.Namespace) -> int:
     work_tree = config.get("session:work_tree")
     if work_tree is None:
         raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
-    session = Session.load(mode="r")
+    with logging.level(logging.WARNING):
+        session = Session.load(mode="r")
     p = config.get("system:os:name")
     v = config.get("python:version")
-    logging.emit(f"{p} -- Python {v}")
+    logging.emit(f"Platform: {p} -- Python {v}")
     logging.emit(f"Available cpus: {session.avail_cpus}")
     logging.emit(f"Available cpus per test: {session.avail_cpus_per_test}")
     if session.avail_devices:

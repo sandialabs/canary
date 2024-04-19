@@ -50,6 +50,15 @@ def timestamps() -> Generator[None, None, None]:
     TIMESTAMP = save
 
 
+@contextmanager
+def level(level: int) -> Generator[None, None, None]:
+    global LEVEL
+    save_level = LEVEL
+    set_level(level)
+    yield
+    set_level(save_level)
+
+
 def set_level(level: int) -> None:
     global LEVEL
     assert level in (TRACE, DEBUG, INFO, WARNING, ERROR, FATAL)

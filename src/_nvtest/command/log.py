@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from .. import config
 from ..session import Session
+from ..util import logging
 
 if TYPE_CHECKING:
     import argparse
@@ -24,7 +25,9 @@ def log(args: "argparse.Namespace") -> int:
     if work_tree is None:
         raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
 
-    session = Session.load(mode="r")
+    with logging.level(logging.WARNING):
+        session = Session.load(mode="r")
+
     if args.testspec.startswith("^"):
         try:
             batch_store, batch_no = [int(_) for _ in args.testspec[1:].split(":")]
