@@ -98,8 +98,8 @@ class SlurmRunner(BatchRunner):
             if len(parts) > 3 and parts[3]:
                 jobid = parts[3]
         else:
-            logging.error(f"Failed to find jobid for batch {batch.world_id}:{batch.world_rank}")
             logging.error(result)
+            logging.error(f"Failed to find jobid for batch {batch.world_id}:{batch.world_rank}")
             return
         logging.debug(f"Submitted batch with jobid={jobid}")
 
