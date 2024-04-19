@@ -111,7 +111,7 @@ class SlurmRunner(BatchRunner):
                     return
                 time.sleep(0.5)
         except BaseException as e:
-            logging.log(logging.ALWAYS, f"cancelling sbatch job {jobid}")
+            logging.warning(f"cancelling sbatch job {jobid}")
             self.cancel(jobid)
             if isinstance(e, KeyboardInterrupt):
                 return
