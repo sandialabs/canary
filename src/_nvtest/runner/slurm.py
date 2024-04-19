@@ -99,7 +99,11 @@ class SlurmRunner(BatchRunner):
                 jobid = parts[3]
         else:
             logging.error(f"Failed to find jobid for batch {batch.world_size}:{batch.world_rank}")
-            logging.error(f"The following output was received from {self.command}:")
+            logging.log(
+                logging.ERROR,
+                f"    The following output was received from {self.command}:",
+                prefix=None,
+            )
             for line in result.split("\n"):
                 logging.log(logging.ERROR, f"    {line}", prefix=None)
             return
