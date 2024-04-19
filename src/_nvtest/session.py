@@ -886,11 +886,10 @@ class Session:
                 if attrs[case.fullname]["status"] != fd[case.id]["status"]:
                     fs = attrs[case.fullname]["status"]
                     ss = fd[case.id]["status"]
-                    logging.error(
+                    logging.debug(
                         f"batch {obj.world_rank}, {case}: "
                         f"expected status of future.result to be {ss[0]}, not {fs[0]}"
                     )
-                    continue
                 case.update(fd[case.id])
             if fail_fast and any(_.status != "success" for _ in obj):
                 code = compute_returncode(obj)
