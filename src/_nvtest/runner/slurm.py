@@ -119,7 +119,7 @@ class SlurmRunner(BatchRunner):
 
     def query(self, jobid: str) -> Optional[str]:
         squeue = Executable("squeue")
-        out = squeue("--noheader", "-o", "%i %t", "--clusters=all", output=str)
+        out = squeue("--noheader", "-o", "%i %t", output=str)
         for line in out.splitlines():
             # a line should be something like "16004759 PD"
             try:
