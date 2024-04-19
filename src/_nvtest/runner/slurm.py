@@ -98,7 +98,7 @@ class SlurmRunner(BatchRunner):
             if len(parts) > 3 and parts[3]:
                 jobid = parts[3]
         else:
-            logging.error(f"Failed to find jobid for batch {batch.world_size}:{batch.world_rank}")
+            logging.error(f"Failed to find jobid for batch {batch.world_rank}/{batch.world_size}")
             logging.log(
                 logging.ERROR,
                 f"    The following output was received from {self.command}:",
