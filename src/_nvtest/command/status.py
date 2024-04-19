@@ -213,7 +213,7 @@ def print_footer_summary(cases: list[TestCase]) -> None:
             c = Status.colors[member]
             stat = totals[member][0].status.name
             summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-    logging.log(logging.ALWAYS, ", ".join(summary_parts), format="center")
+    logging.info("%s %s" % (colorize("@*{Summary}:"), ", ".join(summary_parts)))
 
 
 def print_durations(cases: list[TestCase], N: int) -> None:
