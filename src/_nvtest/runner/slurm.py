@@ -66,8 +66,7 @@ class SlurmRunner(BatchRunner):
     def write_header(self, fh: TextIO, batch: Partition) -> None:
         """Generate the sbatch script for the current state of arguments."""
         self.calculate_resource_allocations(batch)
-        script = self.submit_filename(batch)
-        file = os.path.splitext(script)[0] + "-slurm-out.txt"
+        file = self.logfile(batch)
         self.namespace.error = self.namespace.output = file
         fh.write(f"#!{self.shell}\n")
         for key, value in vars(self.namespace).items():
@@ -82,7 +81,10 @@ class SlurmRunner(BatchRunner):
             return self.namespace.ntasks_per_node
         return 1
 
-    def _run(self, script: str) -> None:
+    def _run(self, batch: Partition) -> None:
+        script = self.submit_filename(batch)
+        if not os.path.exists(script):
+            self.write_submission_script(batch)
         args = [self.command]
         if self.default_args:
             args.extend(self.default_args)
@@ -96,6 +98,8 @@ class SlurmRunner(BatchRunner):
             if len(parts) > 3 and parts[3]:
                 jobid = parts[3]
         else:
+            logging.error(f"Failed to find jobid for batch {batch.world_id}:{batch.world_rank}")
+            logging.error(out)
             return
         logging.debug(f"Submitted batch with jobid={jobid}")
 

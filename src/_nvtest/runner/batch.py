@@ -42,11 +42,8 @@ class BatchRunner(Runner):
         logging.info(
             f"SUBMITTING: Batch {batch.world_rank} of {batch.world_size} ({n} tests)",
         )
-        script = self.submit_filename(batch)
-        if not os.path.exists(script):
-            self.write_submission_script(batch)
         try:
-            self._run(script)
+            self._run(batch)
         finally:
             self.load_batch_results(batch)
             stat: dict[str, int] = {}
@@ -68,7 +65,10 @@ class BatchRunner(Runner):
             )
         return attrs
 
-    def _run(self, script: str) -> None:
+    def _run(self, batch: Partition) -> None:
+        script = self.submit_filename(batch)
+        if not os.path.exists(script):
+            self.write_submission_script(batch)
         script_x = Executable(self.command)
         if self.default_args:
             script_x.add_default_args(*self.default_args)
