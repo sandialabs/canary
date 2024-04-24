@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 from .. import config
 from ..compat import vvtest
-from ..test.testfile import AbstractTestFile
+from ..test.file import AbstractTestFile
 from ..util import logging
 
 if TYPE_CHECKING:

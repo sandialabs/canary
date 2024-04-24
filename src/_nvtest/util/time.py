@@ -5,7 +5,9 @@ import re
 import signal
 import time
 from datetime import datetime
+from datetime import timezone
 from typing import Callable
+from typing import Optional
 from typing import Union
 
 DEFAULT_TIMEOUT_MESSAGE = os.strerror(errno.ETIME)
@@ -120,11 +122,14 @@ def _time_in_seconds(arg: str) -> Union[int, float]:
     return seconds
 
 
-def hhmmss(arg):
-    seconds = time_in_seconds(arg)
-    minutes = seconds // 60
-    hours = minutes // 60
-    return "%02d:%02d:%02d" % (hours, minutes % 60, seconds % 60)
+def hhmmss(seconds: Optional[float], threshold: float = 2.0) -> str:
+    if seconds is None:
+        return "--:--:--"
+    t = datetime.fromtimestamp(seconds)
+    utc = datetime.fromtimestamp(seconds, timezone.utc)
+    if seconds < threshold:
+        return datetime.strftime(utc, "%H:%M:%S.%f")[:-4]
+    return datetime.strftime(utc, "%H:%M:%S")
 
 
 class timeout(contextlib.ContextDecorator):

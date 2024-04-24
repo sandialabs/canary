@@ -31,15 +31,15 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     try:
         os.chdir(pre.C or invocation_dir)
-        load_plugins(pre.plugin_dirs)
+        config.set_main_options(pre)
+
+        load_plugins(pre.plugin_dirs or [])
         for hook in plugin.plugins("main", "setup"):
             hook(parser)
 
         add_all_commands(parser)
 
         args = parser.parse_args(argv)
-
-        config.set_main_options(args)
 
         command = parser.get_command(args.command)
         if command is None:
@@ -121,14 +121,18 @@ def invoke_profiled_command(command, args):
     return rc
 
 
-def load_plugins(dirs: Optional[list[str]] = None) -> None:
+def load_plugins(paths: list[str]) -> None:
+    disable, dirs = [], []
+    for path in paths:
+        if path.startswith("no:"):
+            disable.append(path)
+        elif not os.path.exists(path):
+            logging.warning(f"{path}: plugin directory not found")
+        else:
+            dirs.append(path)
     plugin.load_builtin_plugins()
-    plugin.load_from_entry_points()
-    if dirs is None:
-        return
+    plugin.load_from_entry_points(disable=disable)
     for dir in dirs:
-        if not os.path.exists(dir):
-            raise ValueError(f"{dir}: plugin directory not found")
         path = os.path.abspath(dir)
         plugin.load_from_directory(path)
 

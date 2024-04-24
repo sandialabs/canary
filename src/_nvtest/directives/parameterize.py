@@ -4,7 +4,7 @@ from typing import Union
 
 import _nvtest
 
-from ..test.testfile import AbstractTestFile
+from ..test.file import AbstractTestFile
 from . import enums
 
 

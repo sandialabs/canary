@@ -15,14 +15,14 @@ from typing import Union
 
 from .. import config
 from ..directives.enums import list_parameter_space
-from ..util.color import colorize
+from ..third_party.color import colorize
 from ..util.executable import Executable
 from ..util.filesystem import which
 from ..util.time import to_seconds
 
 if TYPE_CHECKING:
-    from ..test.testcase import TestCase
-    from ..test.testfile import AbstractTestFile
+    from ..test.case import TestCase
+    from ..test.file import AbstractTestFile
 
 
 def load_vvt(file: "AbstractTestFile") -> None:

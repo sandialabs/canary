@@ -2,7 +2,7 @@ import argparse
 from typing import TYPE_CHECKING
 
 from ..session import Session
-from ..test.testcase import TestCase
+from ..test.case import TestCase
 from ..util import logging
 from .common import filter_cases_by_path
 from .common import filter_cases_by_status

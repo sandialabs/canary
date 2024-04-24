@@ -5,7 +5,7 @@ import _nvtest.directives
 
 from ..config.argparsing import make_argument_parser
 from ..third_party import argparsewriter as aw
-from ..util.color import set_color_when
+from ..third_party.color import set_color_when
 from ..util.filesystem import mkdirp
 
 description = "Generate rst documentation files"

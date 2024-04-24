@@ -48,6 +48,10 @@ def _cmd_name(command_module: ModuleType) -> str:
     return command_module.__name__.split(".")[-1]
 
 
+def command_names() -> list[str]:
+    return [_cmd_name(m) for m in all_commands()]
+
+
 def get_command(command_name: str) -> Optional[ModuleType]:
     for command_module in all_commands():
         if _cmd_name(command_module) == command_name:

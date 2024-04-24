@@ -1,7 +1,7 @@
-from ..test.testcase import TestCase
+from ..test.case import TestCase
 
 
-def compute_returncode(cases: list[TestCase]) -> int:
+def compute_returncode(cases: list[TestCase] | set[TestCase]) -> int:
     returncode: int = 0
 
     results: dict[str, int] = {}
@@ -17,7 +17,7 @@ def compute_returncode(cases: list[TestCase]) -> int:
                 returncode |= 2**3
             elif result == "skipped":  # notdone
                 returncode |= 2**4
-            elif result == "staged":
+            elif result == "ready":
                 returncode |= 2**5
             elif result == "skipped":
                 returncode |= 2**6

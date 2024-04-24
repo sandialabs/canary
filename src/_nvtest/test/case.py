@@ -1,6 +1,7 @@
 import itertools
 import json
 import os
+import pickle
 import re
 import signal
 import subprocess
@@ -15,15 +16,16 @@ from typing import Optional
 from typing import Union
 
 from .. import config
+from ..third_party.color import colorize
+from ..util import cache
 from ..util import filesystem as fs
 from ..util import logging
-from ..util.color import colorize
 from ..util.compression import compress_file
 from ..util.executable import Executable
 from ..util.filesystem import copyfile
 from ..util.filesystem import mkdirp
-from ..util.filesystem import working_dir
 from ..util.hash import hashit
+from .runner import Runner
 from .status import Status
 
 
@@ -35,7 +37,7 @@ def stringify(arg: Any) -> str:
     return str(arg)
 
 
-class TestCase:
+class TestCase(Runner):
     def __init__(
         self,
         root: str,
@@ -46,7 +48,7 @@ class TestCase:
         keywords: list[str] = [],
         parameters: dict[str, object] = {},
         timeout: Optional[int] = None,
-        runtime: Union[None, float, int] = None,
+        timeout_multiplier: float = 1.0,
         baseline: list[Union[str, tuple[str, str]]] = [],
         sources: dict[str, list[tuple[str, str]]] = {},
     ):
@@ -63,8 +65,6 @@ class TestCase:
         self.analyze = analyze
         self._keywords = keywords
         self.parameters = {} if parameters is None else dict(parameters)
-        self._timeout = timeout
-        self._runtime = runtime
         self.baseline = baseline
         self.sources = sources
         # Environment variables specific to this case
@@ -84,15 +84,12 @@ class TestCase:
         self.id: str = hashit(self.fullname, length=20)
 
         # Execution properties
-        self.status = Status()
-        self._mask: str = ""
-        self.scheduler: Optional[tuple[str, list[str]]] = None
+        self._status = Status("created")
 
         self.cmd_line: str = ""
         self.exec_root: Optional[str] = None
         self.exec_path = os.path.join(os.path.dirname(self.file_path), self.name)
         # The process running the test case
-        self.pid: Optional[int] = None
         self.start: float = -1
         self.finish: float = -1
         self.returncode: int = -1
@@ -100,7 +97,10 @@ class TestCase:
         # Dependency management
         self.dep_patterns: list[str] = []
         self.dependencies: list["TestCase"] = []
-        self._depids: list[int] = []
+
+        self._timeout = timeout
+        self.timeout_multiplier = timeout_multiplier
+        self._runtimes = self.load_runtimes()
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -116,6 +116,51 @@ class TestCase:
     def __repr__(self) -> str:
         return self.display_name
 
+    @classmethod
+    def load(cls, fh) -> "TestCase":
+        self = pickle.load(fh)
+        return self
+
+    @property
+    def dbfile(self) -> str:
+        file = os.path.join(self.exec_dir, ".nvtest", "case.data.p")
+        mkdirp(os.path.dirname(file))
+        return file
+
+    @property
+    def masked(self) -> bool:
+        return self.status == "masked"
+
+    @property
+    def skipped(self) -> bool:
+        return self.status == "skipped"
+
+    @property
+    def status(self) -> Status:
+        if self._status.value == "pending":
+            # Determine if dependent cases have completed and, if so, flip status to 'ready'
+            if not self.dependencies:
+                raise ValueError("should never have a pending case without dependencies")
+            stat = [dep.status.value for dep in self.dependencies]
+            if all([_ in ("success", "diffed") for _ in stat]):
+                self._status.set("ready")
+            elif any([_ == "skipped" for _ in stat]):
+                self._status.set("skipped", "one or more dependency was skipped")
+            elif any([_ == "cancelled" for _ in stat]):
+                self._status.set("skipped", "one or more dependency was cancelled")
+            elif any([_ == "timeout" for _ in stat]):
+                self._status.set("skipped", "one or more dependency timed out")
+            elif any([_ == "failed" for _ in stat]):
+                self._status.set("skipped", "one or more dependency failed")
+        return self._status
+
+    @status.setter
+    def status(self, arg: Union[Status, list[str]]) -> None:
+        if isinstance(arg, Status):
+            self._status.set(arg.value, details=arg.details)
+        else:
+            self._status.set(arg[0], details=arg[1])
+
     def matches(self, pattern) -> bool:
         if pattern.startswith("/") and self.id.startswith(pattern[1:]):
             return True
@@ -124,25 +169,6 @@ class TestCase:
         elif self.file_path.endswith(pattern):
             return True
         return False
-
-    @property
-    def masked(self) -> bool:
-        return bool(self.mask)
-
-    @property
-    def skipped(self) -> bool:
-        return self.status == "skipped"
-
-    @property
-    def mask(self) -> str:
-        return self._mask
-
-    @mask.setter
-    def mask(self, arg: str) -> None:
-        self._mask = " ".join(arg.split())
-
-    def unmask(self) -> None:
-        self._mask = ""
 
     @staticmethod
     def spec_like(spec: str) -> bool:
@@ -213,24 +239,6 @@ class TestCase:
             raise ValueError("exec_root must be set during set up") from None
         return os.path.normpath(os.path.join(exec_root, self.exec_path))
 
-    def ready(self) -> int:
-        """Return whether this case is ready to run or not
-
-        If the return value is 1, it is ready
-        If the return value is 0, it is not ready
-        If the return value is -1, it will never by ready
-
-        """
-        if not self.dependencies:
-            return 1
-        stat = [dep.status.value for dep in self.dependencies]
-        if all([_ in ("success", "diffed", "failed", "timeout") for _ in stat]):
-            return 1
-        for dep in self.dependencies:
-            if dep.status == "skipped":
-                return -1
-        return 0
-
     @property
     def processors(self) -> int:
         return int(self.parameters.get("np") or 1)  # type: ignore
@@ -245,32 +253,28 @@ class TestCase:
 
     @property
     def runtime(self) -> Union[float, int]:
-        if self._runtime is None:
-            return self.timeout
-        return self._runtime
-
-    @runtime.setter
-    def runtime(self, arg: Union[None, int, float]):
-        if arg is not None:
-            assert isinstance(arg, (int, float))
-            self._runtime = arg
+        if self._runtimes[0] is None:
+            return self.timeout / self.timeout_multiplier
+        return self._runtimes[0]
 
     @property
-    def timeout(self) -> int:
+    def timeout(self) -> float:
         if self._timeout is not None:
-            return int(self._timeout)
+            timeout = self.timeout_multiplier * int(self._timeout)
+        elif self._runtimes[2] is not None:
+            timeout = 2.0 * self._runtimes[2]
         elif "fast" in self._keywords:
-            return 5 * 30
+            timeout = 5 * 30
         elif "long" in self._keywords:
-            return 5 * 60 * 60
+            timeout = 5 * 60 * 60
         else:
-            return 60 * 60
+            timeout = 60 * 60
+        return self.timeout_multiplier * timeout
 
     def add_dependency(self, *cases: Union["TestCase", str]) -> None:
         for case in cases:
             if isinstance(case, TestCase):
                 self.dependencies.append(case)
-                self._depids.append(id(case))
             else:
                 self.dep_patterns.append(case)
 
@@ -310,34 +314,25 @@ class TestCase:
                     relsrc = os.path.relpath(src, workdir)
                     fs.force_symlink(relsrc, dst, echo=logging.info)
 
-    def asdict(self, *keys):
-        data = dict(vars(self))
-        data["status"] = [data["status"].value, data["status"].details]
-        for attr in ("file", "_depids", "dep_patterns", "scheduler", "pid"):
-            data.pop(attr)
-        dependencies = list(data.pop("dependencies"))
-        data["dependencies"] = []
-        for dependency in dependencies:
-            data["dependencies"].append(dependency.asdict())
-        if not keys:
-            return data
-        return {key: data[key] for key in keys}
+    def save(self):
+        with open(self.dbfile, "wb") as fh:
+            self.dump(fh)
 
-    def dump(self) -> None:
-        dest = os.path.join(self.exec_dir, ".nvtest")
-        mkdirp(dest)
-        with working_dir(dest):
-            with open("case.json", "w") as fh:
-                json.dump(self.asdict(), fh, indent=2)
-            with open("environment.json", "w") as fh:
-                json.dump({"PYTHONPATH": self.pythonpath}, fh, indent=2)
+    def dump(self, fh) -> None:
+        pickle.dump(self, fh)
 
-    def load_results(self):
-        file = os.path.join(self.exec_dir, ".nvtest/case.json")
+    def refresh(self) -> None:
+        file = self.dbfile
         if not os.path.exists(file):
             raise FileNotFoundError(file)
-        with open(file) as fh:
-            return json.load(fh)
+        with open(file, "rb") as fh:
+            case = pickle.load(fh)
+        self.start = case.start
+        self.finish = case.finish
+        self.returncode = case.returncode
+        self.status.set(case.status.value, details=case.status.details)
+        for dep in self.dependencies:
+            dep.refresh()
 
     @contextmanager
     def rc_environ(self) -> Generator[None, None, None]:
@@ -354,40 +349,6 @@ class TestCase:
             else:
                 os.environ.pop(var)
 
-    @classmethod
-    def from_dict(cls, kwds) -> "TestCase":
-        self = cls(
-            kwds.pop("file_root"),
-            kwds.pop("file_path"),
-            analyze=kwds.pop("analyze"),
-            family=kwds.pop("family"),
-            keywords=kwds.pop("_keywords"),
-            parameters=kwds.pop("parameters"),
-            timeout=kwds.pop("_timeout"),
-            runtime=kwds.pop("_runtime"),
-            baseline=kwds.pop("baseline"),
-            sources=kwds.pop("sources"),
-        )
-        kwds.pop("fullname", None)
-        status, details = kwds.pop("status")
-        self.status = Status(status, details=details)
-        self.returncode = kwds.pop("returncode")
-        mask = kwds.pop("mask", "")
-        if mask:
-            self.mask = mask
-        for dep in kwds.pop("dependencies", []):
-            self.add_dependency(TestCase.from_dict(dep))
-        for key, val in kwds.items():
-            setattr(self, key, val)
-        return self
-
-    def to_json(self):
-        data = self.asdict()
-        done = self.status.value in ("failed", "success")
-        if done:
-            data["log"] = self.compressed_log()
-        return json.dumps(data)
-
     def compressed_log(self) -> str:
         done = self.status.value in ("failed", "success")
         if done:
@@ -396,8 +357,11 @@ class TestCase:
             return compressed_log
         return "Log not found"
 
-    def setup(self, exec_root: str, copy_all_resources: bool = False) -> None:
-        logging.debug(f"Setting up {self}")
+    def setup(
+        self, exec_root: str, copy_all_resources: bool = False, timeout_multiplier: float = 1.0
+    ) -> None:
+        logging.trace(f"Setting up {self}")
+        self.timeout_multiplier = timeout_multiplier
         if self.exec_root is not None:
             assert os.path.samefile(exec_root, self.exec_root)
         self.exec_root = exec_root
@@ -409,9 +373,9 @@ class TestCase:
             self.setup_exec_dir(copy_all_resources=copy_all_resources)
             if self.file_type == "vvt":
                 self.write_vvtest_util()
-            self.status.set("staged")
-            self.dump()
-        logging.debug(f"Done setting up {self}")
+            self._status.set("ready" if not self.dependencies else "pending")
+            self.save()
+        logging.trace(f"Done setting up {self}")
 
     def setup_exec_dir(self, copy_all_resources: bool = False) -> None:
         with logging.capture(self.logfile("setup"), mode="w"):
@@ -429,15 +393,12 @@ class TestCase:
 
     def update(self, attrs: dict[str, object]) -> None:
         for key, val in attrs.items():
-            if key == "status":
+            if key == "_status":
                 if isinstance(val, (tuple, list)):
                     assert len(val) == 2
                     val = Status(val[0], val[1])
                 assert isinstance(val, Status)
             setattr(self, key, val)
-
-    def set_scheduler(self, name: str, options: Optional[list[str]]):
-        self.scheduler = (name, options or [])
 
     def do_baseline(self) -> None:
         if not self.baseline:
@@ -461,7 +422,7 @@ class TestCase:
                     src = os.path.join(self.exec_dir, a)
                     dst = os.path.join(self.file_dir, b)
                     if os.path.exists(src):
-                        logging.emit(f"    Replacing {b} with {a}")
+                        logging.emit(f"    Replacing {b} with {a}\n")
                         copyfile(src, dst)
 
     def write_vvtest_util(self, baseline: bool = False) -> None:
@@ -470,28 +431,44 @@ class TestCase:
         write_vvtest_util(self, baseline=baseline)
 
     def do_analyze(self) -> None:
-        kwds: dict = {"stage": "analyze"}
+        args: list[str] = []
         if not self.analyze:
-            kwds["execute_analysis_sections"] = True
-        return self.run(**kwds)
+            args.append("--execute-analysis-sections")
+        return self.run(*args, stage="analyze")
 
-    def run(self, **kwds: Any) -> None:
+    def start_msg(self) -> str:
+        id = colorize("@b{%s}" % self.id[:7])
+        return "STARTING: {0} {1}".format(id, self.pretty_repr())
+
+    def end_msg(self) -> str:
+        id = colorize("@b{%s}" % self.id[:7])
+        return "FINISHED: {0} {1} {2}".format(id, self.pretty_repr(), self.status.cname)
+
+    def run(self, *args: str, stage: Optional[str] = None) -> None:
         if os.getenv("NVTEST_RESETUP"):
             assert isinstance(self.exec_root, str)
             self.setup(self.exec_root)
         if self.dep_patterns:
             raise RuntimeError("Dependency patterns must be resolved before running")
-        id = colorize("@b{%s}" % self.id[:7])
-        fmt = "{{0}}: {0} {1} {{1}}".format(id, self.pretty_repr())
         try:
-            self.start = time.time()
-            logging.info(fmt.format("STARTING", ""))
-            self._run(**kwds)
-        except Exception:
+            self.start = time.monotonic()
+            self.finish = -1
+            self.status.set("running")
+            self.save()
+            self.returncode = self._run(*args, stage=stage)
+            self.status.set_from_code(self.returncode)
+        except KeyboardInterrupt:
+            self.returncode = 2
+            self.status.set("cancelled", "keyboard interrupt")
+            raise
+        except BaseException:
             self.returncode = 1
             self.status.set("failed", "unknown failure")
             raise
         finally:
+            self.finish = time.monotonic()
+            self.cache_runtime()
+            self.save()
             with open(self.logfile(), "w") as fh:
                 for stage in ("setup", "test", "analyze"):
                     file = self.logfile(stage)
@@ -500,72 +477,75 @@ class TestCase:
             if self.file_type == "vvt":
                 f = os.path.join(self.exec_dir, "execute.log")
                 fs.force_symlink(self.logfile(), f)
-            self.finish = time.time()
-            logging.info(fmt.format("FINISHED", self.status.cname))
-            self.dump()
         return
 
-    def _run(self, **kwds: Any) -> None:
-        stage = kwds.pop("stage", "analyze" if self.analyze else "test")
+    def _run(self, *args: str, stage: Optional[str] = None) -> int:
+        stage = stage or ("analyze" if self.analyze else "test")
         with fs.working_dir(self.exec_dir):
             if self.file_type == "vvt":
                 self.write_vvtest_util()
             with logging.capture(self.logfile(stage), mode="w"), logging.timestamps():
-                args = [sys.executable]
-                args.extend(self.command_line_args(**kwds))
-                self.cmd_line = " ".join(args)
+                cmd = [sys.executable]
+                cmd.extend(self.command_line_args(*args))
+                self.cmd_line = " ".join(cmd)
                 logging.info(f"Running {self.display_name}")
                 logging.info(f"Command line: {self.cmd_line}")
                 with self.rc_environ():
                     start = time.monotonic()
-                    proc = subprocess.Popen(args, start_new_session=True)
-                    self.status = Status("running")
-                    self.pid = proc.pid
+                    proc = subprocess.Popen(cmd, start_new_session=True)
                     while True:
                         if proc.poll() is not None:
                             break
                         if time.monotonic() - start > self.timeout:
                             os.kill(proc.pid, signal.SIGINT)
+                            return -2
                         time.sleep(0.05)
-                self.pid = None
-                self.returncode = proc.returncode
-                self.status = Status.from_returncode(proc.returncode)
-        return
+                    return proc.returncode
 
-    @staticmethod
-    def kwds_to_command_line_args(**kwds: Any) -> list[str]:
-        args: list = []
-        for key, val in kwds.items():
-            prefix = "-" if len(key) == 1 else "--"
-            opt = f"{prefix}{key.replace('_', '-')}"
-            if val is False:
-                continue
-            elif val is True:
-                args.append(opt)
-            elif len(key) == 1:
-                args.append(f"{opt}{val}")
-            else:
-                args.append(f"{opt}={val}")
-        return args
-
-    def command_line_args(self, **kwds: Any) -> list[str]:
+    def command_line_args(self, *args: str) -> list[str]:
         if self.analyze:
             if self.analyze.startswith("-"):
-                args = [os.path.basename(self.file), self.analyze]
+                command_line_args = [os.path.basename(self.file), self.analyze]
             else:
-                args = [self.analyze]
+                command_line_args = [self.analyze]
         else:
-            args = [os.path.basename(self.file)]
-            extra_args = self.kwds_to_command_line_args(**kwds)
-            args.extend(extra_args)
-        return args
-
-    def kill(self):
-        if self.pid is not None:
-            os.kill(self.pid, signal.SIGINT)
-        self.status = Status("failed", "fail")  # "Process killed")
+            command_line_args = [os.path.basename(self.file)]
+        command_line_args.extend(args)
+        return command_line_args
 
     def teardown(self) -> None: ...
+
+    def cache_file(self, path):
+        return os.path.join(path, f"timing/{self.id[:2]}/{self.id[2:]}.json")
+
+    def cache_runtime(self) -> None:
+        # store mean, min, max runtimes
+        if self.status.value not in ("success", "diffed"):
+            return
+        cache_dir = cache.create_cache_dir(self.file_root)
+        if cache_dir is None:
+            return
+        file = self.cache_file(cache_dir)
+        if not os.path.exists(file):
+            n = 0
+            mean = minimum = maximum = self.duration
+        else:
+            n, mean, minimum, maximum = json.load(open(file))
+            mean = (self.duration + mean * n) / (n + 1)
+            minimum = min(minimum, self.duration)
+            maximum = max(maximum, self.duration)
+        mkdirp(os.path.dirname(file))
+        with open(file, "w") as fh:
+            json.dump([n + 1, mean, minimum, maximum], fh)
+
+    def load_runtimes(self):
+        # return mean, min, max runtimes
+        cache_dir = cache.get_cache_dir(self.file_root)
+        file = self.cache_file(cache_dir)
+        if not os.path.exists(file):
+            return [None, None, None]
+        _, mean, minimum, maximum = json.load(open(file))
+        return [mean, minimum, maximum]
 
 
 class MissingSourceError(Exception):

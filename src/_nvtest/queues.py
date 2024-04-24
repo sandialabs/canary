@@ -1,27 +1,14 @@
-import time
+import threading
 from typing import Any
 from typing import Optional
 from typing import Union
 
-from .test.partition import Partition
-from .test.testcase import TestCase
-
-
-class Lock:
-    def __init__(self) -> None:
-        self.enabled = False
-
-    def __enter__(self):
-        while self.enabled:
-            time.sleep(0.01)
-        self.enabled = True
-
-    def __exit__(self, *args):
-        self.enabled = False
+from .test.batch import Batch
+from .test.case import TestCase
 
 
 class ResourceQueue:
-    def __init__(self, cpus: int, devices: int, workers: int) -> None:
+    def __init__(self, cpus: int, devices: int, workers: int, lock: threading.Lock) -> None:
         self.cpus = cpus
         self.workers = workers
         self.devices = devices
@@ -29,7 +16,7 @@ class ResourceQueue:
         self._buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
         self._finished: dict[int, Any] = {}
-        self.lock = Lock()
+        self.lock = lock
 
     def done(self, Any) -> Any:
         raise NotImplementedError()
@@ -49,7 +36,7 @@ class ResourceQueue:
     def empty(self) -> bool:
         return len(self._buffer) == 0
 
-    def orphaned(self, obj_id: int) -> None:
+    def _skipped(self, obj_id: int) -> None:
         raise NotImplementedError
 
     def available_workers(self):
@@ -72,18 +59,20 @@ class ResourceQueue:
         for obj in objs:
             self._buffer[len(self._buffer)] = obj
 
-    def get(self) -> Optional[tuple[int, Union[TestCase, Partition]]]:
+    def get(self) -> Optional[tuple[int, Union[TestCase, Batch]]]:
         with self.lock:
+            if not self.available_workers():
+                return None
             if not len(self._buffer):
                 raise Empty
             for i in list(self._buffer.keys()):
                 obj = self._buffer[i]
-                ready_flag = obj.ready()
-                if ready_flag < 0:
-                    # job is orphaned and will never be ready
-                    self.orphaned(i)
+                status = obj.status
+                if status == "skipped":
+                    # job is skipped and will never be ready
+                    self._skipped(i)
                     continue
-                elif self.available_workers() and ready_flag:
+                elif status == "ready":
                     if (obj.processors, obj.devices) <= self.available_resources():
                         self._busy[i] = self._buffer.pop(i)
                         return (i, self._busy[i])
@@ -100,14 +89,12 @@ class DirectResourceQueue(ResourceQueue):
                 )
             super().put(obj)
 
-    def orphaned(self, obj_no: int) -> None:
-        with self.lock:
-            self._finished[obj_no] = self._buffer.pop(obj_no)
-            self._finished[obj_no].status.set("skipped", "failed dependencies")
-            for case in self._buffer.values():
-                for i, dep in enumerate(case.dependencies):
-                    if dep.id == self._finished[obj_no].id:
-                        case.dependencies[i] = self._finished[obj_no]
+    def _skipped(self, obj_no: int) -> None:
+        self._finished[obj_no] = self._buffer.pop(obj_no)
+        for case in self._buffer.values():
+            for i, dep in enumerate(case.dependencies):
+                if dep.id == self._finished[obj_no].id:
+                    case.dependencies[i] = self._finished[obj_no]
 
     def done(self, obj_no: int) -> "TestCase":
         with self.lock:
@@ -134,7 +121,7 @@ class DirectResourceQueue(ResourceQueue):
 
 
 class BatchResourceQueue(ResourceQueue):
-    def put(self, *objs: Partition) -> None:
+    def put(self, *objs: Batch) -> None:
         for obj in objs:
             if obj.processors > self.cpus:
                 raise ValueError(
@@ -143,7 +130,16 @@ class BatchResourceQueue(ResourceQueue):
                 )
             super().put(obj)
 
-    def done(self, obj_no: int) -> Partition:
+    def _skipped(self, obj_no: int) -> None:
+        self._finished[obj_no] = self._buffer.pop(obj_no)
+        finished = {case.id: case for case in self._finished[obj_no]}
+        for batch in self._buffer.values():
+            for case in batch:
+                for i, dep in enumerate(case.dependencies):
+                    if dep.id in finished:
+                        case.dependencies[i] = finished[dep.id]
+
+    def done(self, obj_no: int) -> Batch:
         with self.lock:
             if obj_no not in self._busy:
                 raise RuntimeError(f"batch {obj_no} is not running")
@@ -163,13 +159,13 @@ class BatchResourceQueue(ResourceQueue):
         cases.extend([case for batch in self._finished.values() for case in batch])
         return cases
 
-    def queued(self) -> list[Partition]:
+    def queued(self) -> list[Batch]:
         return list(self._buffer.values())
 
-    def busy(self) -> list[Partition]:
+    def busy(self) -> list[Batch]:
         return list(self._busy.values())
 
-    def finished(self) -> list[Partition]:
+    def finished(self) -> list[Batch]:
         return list(self._finished.values())
 
 

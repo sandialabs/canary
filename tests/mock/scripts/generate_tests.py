@@ -10,10 +10,11 @@ def main():
                 val = 1 if test == "t1" else 64 if test == "t2" else 0
                 fh.write(
                     f"""\
+import random
 import sys
 import time
 def main():
-    time.sleep(1)
+    time.sleep(random.random())
     return {val}
 if __name__ == '__main__':
     sys.exit(main())

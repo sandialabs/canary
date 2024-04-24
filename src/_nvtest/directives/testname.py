@@ -1,6 +1,6 @@
 import _nvtest
 
-from ..test.testfile import AbstractTestFile
+from ..test.file import AbstractTestFile
 
 
 def testname(arg: str) -> None:

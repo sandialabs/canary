@@ -5,33 +5,38 @@ from ..error import diff_exit_status
 from ..error import fail_exit_status
 from ..error import skip_exit_status
 from ..error import timeout_exit_status
-from ..util.color import colorize
+from ..third_party.color import colorize
 
 
 class Status:
     members = (
+        "masked",
+        "created",
         "pending",
-        "staged",
-        "notrun",
-        "diffed",
+        "ready",
+        "running",
+        "cancelled",
         "skipped",
+        "diffed",
         "failed",
         "timeout",
         "success",
-        "running",
     )
     colors = {
-        "staged": "b",
-        "notrun": "m",
-        "diffed": "y",
+        "masked": "y",
+        "created": "b",
+        "pending": "b",
+        "ready": "b",
+        "running": "g",
+        "cancelled": "y",
         "skipped": "m",
+        "diffed": "y",
         "failed": "R",
         "timeout": "R",
         "success": "g",
-        "running": "g",
     }
 
-    def __init__(self, arg: str = "pending", details: Optional[str] = None) -> None:
+    def __init__(self, arg: str = "created", details: Optional[str] = None) -> None:
         self.value: str
         self.details: Union[None, str]
         self.set(arg, details)
@@ -52,22 +57,22 @@ class Status:
     def __hash__(self) -> int:
         return hash(f"{self.value}%{self.details}")
 
-    @classmethod
-    def from_returncode(cls, arg: int) -> "Status":
+    def set_from_code(self, arg: int) -> None:
         assert isinstance(arg, int)
         if arg == 0:
-            return cls("success")
+            self.set("success")
         elif arg == diff_exit_status:
-            return cls("diffed")
+            self.set("diffed")
         elif arg == skip_exit_status:
-            return cls("skipped", "runtime exception")
+            self.set("skipped", "runtime exception")
         elif arg == fail_exit_status:
-            return cls("failed")
+            self.set("failed")
         elif arg == timeout_exit_status:
-            return cls("timeout")
+            self.set("timeout")
         elif arg == -2:
-            return cls("timeout")
-        return cls("failed")
+            self.set("timeout")
+        else:
+            self.set("failed")
 
     @property
     def name(self) -> str:
@@ -75,8 +80,6 @@ class Status:
             return "PASS"
         elif self.value == "diffed":
             return "DIFF"
-        elif self.value == "timeout":
-            return "TIMEOUT"
         elif self.value == "failed":
             return "FAIL"
         else:
@@ -102,7 +105,7 @@ class Status:
         if arg in ("skipped",):
             if details is None:
                 raise ValueError(f"details for status {arg!r} must be provided")
-        if arg in ("pending", "staged"):
+        if arg in ("pending", "ready", "created"):
             if details is not None:
                 raise ValueError(f"details not compatible with Status({arg!r})")
         self.value = arg

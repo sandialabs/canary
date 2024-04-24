@@ -3,7 +3,7 @@ from typing import Optional
 
 import _nvtest
 
-from ..test.testfile import AbstractTestFile
+from ..test.file import AbstractTestFile
 
 
 def set_attribute(*, when: Optional[str] = None, **attributes: Any) -> None:

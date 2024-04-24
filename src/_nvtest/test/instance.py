@@ -1,5 +1,4 @@
 import dataclasses
-import json
 import os
 from types import SimpleNamespace
 from typing import Any
@@ -7,8 +6,8 @@ from typing import Optional
 from typing import Type
 from typing import Union
 
+from .case import TestCase
 from .status import Status
-from .testcase import TestCase
 
 
 class Parameters(SimpleNamespace):
@@ -38,7 +37,7 @@ class TestInstance:
     family: str
     keywords: list[str]
     parameters: Parameters
-    timeout: Union[None, int]
+    timeout: Union[None, float, int]
     runtime: Union[None, float, int]
     baseline: list[Union[str, tuple[str, str]]]
     sources: dict[str, list[tuple[str, str]]]
@@ -89,12 +88,11 @@ class TestInstance:
     @classmethod
     def load(cls: Type["TestInstance"], arg_path: Optional[str] = None) -> "TestInstance":
         if arg_path is None:
-            arg_path = "./.nvtest/case.json"
+            arg_path = "./.nvtest/case.data.p"
         elif arg_path.endswith((".vvt", ".pyt")):
-            arg_path = os.path.join(os.path.dirname(arg_path), ".nvtest/case.json")
-        with open(arg_path) as fh:
-            kwds = json.load(fh)
-        case = TestCase.from_dict(kwds)
+            arg_path = os.path.join(os.path.dirname(arg_path), ".nvtest/case.data.p")
+        with open(arg_path, "rb") as fh:
+            case = TestCase.load(fh)
         return TestInstance.from_case(case)
 
     def get_dependency(self, **params: Any) -> "Optional[TestInstance]":

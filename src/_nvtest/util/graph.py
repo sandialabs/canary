@@ -6,12 +6,12 @@ from typing import TextIO
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..test.testcase import TestCase
+    from ..test.case import TestCase
 
 builtin_print = print
 
 
-def static_order(cases: list["TestCase"]) -> list["TestCase"]:
+def static_order(cases: list["TestCase"] | set["TestCase"]) -> list["TestCase"]:
     graph: dict["TestCase", list["TestCase"]] = {}
     for case in cases:
         graph[case] = case.dependencies
