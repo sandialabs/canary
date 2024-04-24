@@ -14,7 +14,7 @@ from typing import Union
 
 import _nvtest._version
 
-from ..util.color import colorize
+from ..third_party.color import colorize
 from ..util.term import terminal_size
 
 stat_names = pstats.Stats.sort_arg_dict_default
@@ -80,8 +80,15 @@ class Parser(argparse.ArgumentParser):
         return shlex.split(arg_line.split("#", 1)[0].strip())
 
     def preparse(self, args: Optional[list[str]] = None, namespace=None):
+        import _nvtest.command
+
+        subcommands = _nvtest.command.command_names()
         argv: list[str] = sys.argv[1:] if args is None else args
-        args = [_ for _ in argv if _ not in ("-h", "--help")]
+        args = []
+        for arg in argv:
+            if arg in subcommands:
+                break
+            args.append(arg)
         return super().parse_known_args(args, namespace=namespace)[0]
 
     @staticmethod

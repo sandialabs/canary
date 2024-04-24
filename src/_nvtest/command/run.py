@@ -15,22 +15,22 @@ from .. import config
 from .. import finder
 from ..config.schemas import testpaths_schema
 from ..error import StopExecution
-from ..runner import valid_schedulers
-from ..session import REUSE_SCHEDULER
 from ..session import ExitCode
 from ..session import Session
 from ..session import default_batchsize
-from ..test.testcase import TestCase
+from ..test.case import TestCase
+from ..third_party.color import colorize
 from ..util import logging
 from ..util.banner import banner
-from ..util.color import colorize
 from ..util.filesystem import force_remove
+from .common import ResourceSetter
 from .common import add_mark_arguments
 from .common import add_resource_arguments
-from .common import add_timing_arguments
 from .common import add_work_tree_arguments
 from .common import set_default_resource_args
 from .common import setdefault
+
+valid_schedulers = (None, "shell", "slurm")
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
@@ -50,8 +50,20 @@ def setup_parser(parser: "Parser"):
     )
     add_work_tree_arguments(parser)
     add_mark_arguments(parser)
-    add_timing_arguments(parser)
     group = parser.add_argument_group("console reporting")
+    group.add_argument(
+        "-v",
+        action="store_true",
+        default=False,
+        help="Print each test case as it starts/finished, "
+        "otherwise print a progress bar [default: %(default)s]",
+    )
+    group.add_argument(
+        "--no-header",
+        action="store_true",
+        default=False,
+        help="Disable printing header [default: %(default)s]",
+    )
     group.add_argument(
         "--no-summary",
         action="store_true",
@@ -74,7 +86,7 @@ def setup_parser(parser: "Parser"):
     parser.add_argument(
         "--copy-all-resources",
         action="store_true",
-        help="Do not link resources to the test " "directory, only copy [default: %(default)s]",
+        help="Do not link resources to the test directory, only copy [default: %(default)s]",
     )
 
     add_resource_arguments(parser)
@@ -99,6 +111,19 @@ def setup_parser(parser: "Parser"):
         metavar="option",
         help=help_msg,
     )
+    u_help_msg = colorize(
+        "Pass @*{option} as an option to the test script. "
+        "If @*{option} contains commas, it is split into multiple options at the "
+        "commas. You can use this syntax to pass an argument to the script. "
+        "For example, -U,-A,XXXX passes -A XXXX to the script."
+    )
+    group.add_argument(
+        "-U",
+        action=SchedulerOptions,
+        dest="script_options",
+        metavar="option",
+        help=u_help_msg,
+    )
     parser.add_argument(
         "pathspec",
         metavar="pathspec",
@@ -115,11 +140,10 @@ class SchedulerOptions(argparse.Action):
         option: Union[str, Sequence[Any], None],
         option_str: Optional[str] = None,
     ):
-        scheduler_opts: list[str] = getattr(namespace, self.dest, None) or []
         assert isinstance(option, str)
-        options: list[str] = self.split_on_comma(option)
-        scheduler_opts.extend(options)
-        setattr(namespace, self.dest, scheduler_opts)
+        options: list[str] = getattr(namespace, self.dest, None) or []
+        options.extend(self.split_on_comma(option))
+        setattr(namespace, self.dest, options)
 
     @staticmethod
     def split_on_comma(string: str) -> list[str]:
@@ -182,10 +206,9 @@ def run(args: "argparse.Namespace") -> int:
     initstate: int = 0
 
     timer = Timer()
-    logging.log(logging.ALWAYS, banner(), prefix=None)
+    logging.emit(banner() + "\n")
     with timer.timeit("setup"):
         session = setup_session(args)
-    setup_duration = timer.duration("setup")
 
     initstate = 1
     try:
@@ -195,13 +218,16 @@ def run(args: "argparse.Namespace") -> int:
         logging.info(colorize("@*{Beginning test session}"))
         initstate = 2
         with timer.timeit("run"):
+            opts: list[str] = args.script_options or []
             session.exitstatus = session.run(
-                timeout=args.timeout,
-                fail_fast=args.fail_fast,
+                *opts, timeout=args.session_timeout, fail_fast=args.fail_fast, verbose=args.v
             )
-        run_duration = timer.duration("run")
         if not args.no_summary:
-            session.print_summary(duration=run_duration, durations=args.durations)
+            session.print_summary()
+        if args.durations:
+            session.print_durations(args.durations)
+        run_duration = timer.duration("run")
+        session.print_footer(duration=run_duration)
     except KeyboardInterrupt:
         session.exitstatus = ExitCode.INTERRUPTED
     except StopExecution as e:
@@ -348,7 +374,7 @@ def setup_session(args: "argparse.Namespace") -> Session:
     logging.info(colorize("@*{Setting up test session}"))
     p = config.get("system:os:name")
     v = config.get("python:version")
-    logging.info(f"Platform: {p} -- Python {v}")
+    logging.debug(f"Platform: {p} -- Python {v}")
     if args.wipe:
         if args.mode != "w":
             raise ValueError(f"Cannot wipe work directory with mode={args.mode}")
@@ -377,11 +403,18 @@ def setup_session(args: "argparse.Namespace") -> Session:
             keyword_expr=args.keyword_expr,
             on_options=args.on_options,
             parameter_expr=args.parameter_expr,
+            test_timeout=args.test_timeout,
+            timeout_multiplier=args.test_timeoutx or 1.0,
+        )
+        if not args.no_header:
+            session.print_overview()
+        session.setup(
+            copy_all_resources=args.copy_all_resources,
+            workers_per_batch=args.workers_per_batch,
             batch_count=args.batch_count,
             batch_time=args.batch_time,
             scheduler=args.scheduler,
             scheduler_options=args.scheduler_options,
-            copy_all_resources=args.copy_all_resources,
         )
     else:
         logging.info(f"Loading test session in {config.get('session:work_tree')}")
@@ -410,8 +443,12 @@ def setup_session(args: "argparse.Namespace") -> Session:
                 case_specs=getattr(args, "case_specs", None),
             )
             if session.ini_options.get("scheduler"):
-                scheduler = REUSE_SCHEDULER
-        session.setup_runner(scheduler=scheduler)
+                scheduler = session.ini_options["scheduler"]
+                if args.scheduler and scheduler != args.scheduler:
+                    raise ValueError("rerun scheduler is not the same as the original scheduler")
+                scheduler_options = session.ini_options["scheduler_options"]
+                args.scheduler_options = args.scheduler_options or scheduler_options
+        session.setup_queue(scheduler=scheduler, scheduler_options=args.scheduler_options)
     session.exitstatus = ExitCode.OK
     return session
 
@@ -498,32 +535,4 @@ For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests t
 
     @staticmethod
     def print_resource_help():
-        resource_help = """\
-%(title)s
-
-The %(r_arg)s argument is of the form: %(r_form)s, where %(r_scope)s
-(optional) is one of session, test, or batch, (session is assumed if not provided);
-%(r_type)s is one of workers, cpus, or devices; and %(r_value)s is an integer value. By
-default, nvtest will determine and all available cpu cores.
-
-%(examples)s
-• -l session:workers:N: Execute asynchronously using a pool of at most N workers
-• -l session:cpus:N: Occupy at most N cpu cores at any one time.
-• -l session:devices:N: Occupy at most N devices at any one time.
-
-• -l test:cpus:N: Skip tests requiring more than N cpu cores.
-• -l test:devices:N: Skip tests requiring more than N devices.
-
-• -l batch:count:N: Execute tests in N batches.
-• -l batch:time:N': Execute tests in batches having runtimes of approximately N seconds.
-  Times can be specified in human readable forms, eg, 10 min, 1 hour, 2 hrs 30 min, etc
-""" % {
-            "title": bold("Setting limits on resources"),
-            "r_form": bold("[scope:]type:value"),
-            "r_arg": bold("-l resource"),
-            "r_scope": bold("scope"),
-            "r_type": bold("type"),
-            "r_value": bold("value"),
-            "examples": bold("Examples"),
-        }
-        print(resource_help)
+        print(ResourceSetter.help_page())

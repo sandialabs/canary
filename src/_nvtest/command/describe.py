@@ -2,7 +2,7 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
-from ..test.testfile import AbstractTestFile
+from ..test.file import AbstractTestFile
 from ..util import graph
 from .common import add_mark_arguments
 from .common import add_resource_arguments

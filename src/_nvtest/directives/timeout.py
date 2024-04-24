@@ -3,7 +3,7 @@ from typing import Union
 
 import _nvtest
 
-from ..test.testfile import AbstractTestFile
+from ..test.file import AbstractTestFile
 
 
 def timeout(arg: Union[str, float, int], *, when: Optional[str] = None):

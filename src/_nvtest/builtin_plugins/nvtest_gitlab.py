@@ -6,7 +6,7 @@ from typing import Optional
 import _nvtest.plugin
 from _nvtest.reporters import cdash
 from _nvtest.session import Session
-from _nvtest.test.testcase import TestCase
+from _nvtest.test.case import TestCase
 from _nvtest.util import gitlab
 from _nvtest.util import logging
 

@@ -2,7 +2,7 @@ from typing import Optional
 
 import _nvtest
 
-from ..test.testfile import AbstractTestFile
+from ..test.file import AbstractTestFile
 
 
 def enable(arg: bool, *, when: Optional[str] = None):

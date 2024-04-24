@@ -6,8 +6,8 @@ from typing import Optional
 
 from . import config
 from . import plugin
-from .test.testcase import TestCase
-from .test.testfile import AbstractTestFile
+from .test.case import TestCase
+from .test.file import AbstractTestFile
 from .util import filesystem as fs
 from .util import logging
 from .util import parallel
@@ -142,14 +142,14 @@ class Finder:
         missing = 0
         ids = [id(case) for case in cases]
         for case in cases:
-            if case.status != "pending":
+            if case.status != "created":
                 continue
             for dep in case.dependencies:
                 if id(dep) not in ids:
                     logging.error(f"ID of {dep!r} is not in test cases")
                     missing += 1
-                if dep.status != "pending":
-                    case.mask = "deselected due to skipped dependency"
+                if dep.status != "created":
+                    case.status.set("masked", "deselected due to skipped dependency")
                     logging.warning(f"Dependency {dep!r} of {case!r} is marked to be skipped")
         if missing:
             raise ValueError("Missing dependencies")
@@ -162,6 +162,8 @@ class Finder:
         avail_devices_per_test: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
+        timelimit: Optional[float] = None,
+        timeout_multiplier: float = 1.0,
         on_options: Optional[list[str]] = None,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
@@ -176,6 +178,8 @@ class Finder:
             avail_cpus=avail_cpus_per_test,
             avail_devices=avail_devices_per_test,
             keyword_expr=keyword_expr,
+            timelimit=timelimit,
+            timeout_multiplier=timeout_multiplier,
             parameter_expr=parameter_expr,
             on_options=on_options,
             owners=owners,
@@ -185,8 +189,8 @@ class Finder:
         cases: list[TestCase] = [case for group in concrete_test_groups for case in group if case]
 
         # this sanity check should not be necessary
-        if any(case.status != "pending" for case in cases):
-            raise ValueError("One or more test cases is not in pending state")
+        if any(case.status.value not in ("created", "masked") for case in cases):
+            raise ValueError("One or more test cases is not in created state")
 
         Finder.resolve_dependencies(cases)
         Finder.check_for_skipped_dependencies(cases)

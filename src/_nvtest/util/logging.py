@@ -1,4 +1,5 @@
 import datetime
+import math
 import os
 import sys
 import termios
@@ -11,10 +12,11 @@ from typing import Optional
 from typing import TextIO
 from typing import Union
 
-from .color import cescape
-from .color import clen
-from .color import cprint
+from ..third_party.color import cescape
+from ..third_party.color import clen
+from ..third_party.color import cprint
 from .term import terminal_size
+from .time import hhmmss
 
 TRACE = 0
 DEBUG = 10
@@ -35,7 +37,7 @@ builtin_print = print
 
 def get_timestamp():
     """Get a string timestamp"""
-    if LEVEL <= DEBUG or TIMESTAMP:
+    if TIMESTAMP:
         return datetime.datetime.now().strftime("[%Y-%m-%d-%H:%M:%S.%f] ")
     else:
         return ""
@@ -136,12 +138,12 @@ def log(
 ) -> None:
     if level >= LEVEL:
         text = format_message(message, end=end, prefix=prefix, format=format)
-        file.write(text)
-        file.flush()
+        emit(text, file=file)
 
 
-def emit(message: str, *, file: TextIO = sys.stdout, end="\n") -> None:
-    log(ALWAYS, message, format="%(message)s", end=end, file=file)
+def emit(message: str, *, file: TextIO = sys.stdout) -> None:
+    file.write(message)
+    file.flush()
 
 
 def trace(message: str, *, file: TextIO = sys.stdout, end="\n") -> None:
@@ -166,6 +168,47 @@ def error(message: str, *, file: TextIO = sys.stderr, end="\n") -> None:
 
 def fatal(message: str, *, file: TextIO = sys.stderr, end="\n") -> None:
     log(FATAL, message, file=file, prefix="@*r{==>} Fatal: ", end=end)
+
+
+def progress_bar(
+    total: int,
+    complete: int,
+    elapsed: float,
+    average: Optional[float] = None,
+    width: Optional[int] = None,
+    level: int = ALWAYS,
+) -> None:
+    """Display test session progress
+
+    Args:
+    ----------
+    case : Active test cases
+
+    """
+    blocks = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
+    lsep, rsep = "▏", "▕"
+
+    total_width = width or (terminal_size()[1] - 3)
+
+    frac = complete / total
+    percent = frac * 100
+    eta = None if not complete else round(elapsed * (1.0 - frac) / frac)
+
+    w = len(str(total))
+    info = f"  {complete:{w}d}/{total} {percent:5.1f}% "
+    info += f"[elapsed: {hhmmss(elapsed)} eta: {hhmmss(eta)} ave: {hhmmss(average)}]   "
+
+    bar_width = total_width - len(info)
+    v = frac * bar_width
+    x = math.floor(v)
+    y = v - x
+    base = 0.125
+    prec = 3
+    i = int(round(base * math.floor(float(y) / base), prec) / base)
+    bar = "█" * x + blocks[i]
+    n = bar_width - len(bar)
+    pad = " " * n
+    return log(level, f"\r{lsep}{bar}{pad}{rsep}{info}", prefix=None, end="")
 
 
 def hline(label: Optional[str] = None, char: str = "-", max_width: int = 64) -> None:

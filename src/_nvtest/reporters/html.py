@@ -3,7 +3,7 @@ from typing import TextIO
 
 from .. import config
 from ..session import Session
-from ..test.testcase import TestCase
+from ..test.case import TestCase
 from ..util import logging
 from ..util.filesystem import force_remove
 from ..util.filesystem import mkdirp

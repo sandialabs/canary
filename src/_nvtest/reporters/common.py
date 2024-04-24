@@ -1,7 +1,7 @@
 import sys
 
 from ..session import Session
-from ..test.testcase import TestCase
+from ..test.case import TestCase
 
 
 class Reporter:
@@ -37,7 +37,7 @@ class TestData:
             self.status |= 2**3
         elif case.status == "skipped":  # notdone
             self.status |= 2**4
-        elif case.status == "staged":
+        elif case.status == "ready":
             self.status |= 2**5
         elif case.status == "skipped":
             self.status |= 2**6

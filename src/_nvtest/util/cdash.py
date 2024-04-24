@@ -10,9 +10,9 @@ from types import SimpleNamespace
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
+from ..third_party.color import cwrite
 from ..third_party.ctest_log_parser import CTestLogParser  # noqa: F401
 from ..util import logging
-from ..util.color import cwrite
 from .executable import Executable
 from .filesystem import force_remove
 

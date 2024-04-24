@@ -7,8 +7,8 @@ import _nvtest.command
 from ..config.argparsing import cmd_name
 from ..config.argparsing import make_argument_parser
 from ..third_party import argparsewriter as aw
-from ..util.colify import colify
-from ..util.color import set_color_when
+from ..third_party.colify import colify
+from ..third_party.color import set_color_when
 
 description = "list available nvtest subcommands"
 add_help = False

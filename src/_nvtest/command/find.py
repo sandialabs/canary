@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING
 
 from .. import config
 from ..finder import Finder
+from ..third_party.colify import colified
+from ..third_party.color import colorize
 from ..util import graph
 from ..util import logging
-from ..util.colify import colified
-from ..util.color import colorize
 from ..util.term import terminal_size
 from ..util.time import hhmmss
 from .common import add_mark_arguments
@@ -17,7 +17,7 @@ from .common import set_default_resource_args
 
 if TYPE_CHECKING:
     from _nvtest.config.argparsing import Parser
-    from _nvtest.test.testcase import TestCase
+    from _nvtest.test.case import TestCase
 
 
 description = "Search paths for test files"
@@ -110,12 +110,12 @@ def _print_paths(cases_to_run: "list[TestCase]"):
         label = colorize("@m{%s}" % root)
         logging.hline(label, max_width=max_width)
         cols = colified(sorted(paths), indent=2, width=max_width)
-        logging.emit(cols)
+        logging.emit(cols + "\n")
 
 
 def _print_files(cases_to_run: "list[TestCase]"):
     for file in sorted(set([case.file for case in cases_to_run])):
-        logging.emit(os.path.relpath(file, os.getcwd()))
+        logging.emit(os.path.relpath(file, os.getcwd()) + "\n")
 
 
 def _print_keywords(cases_to_run: "list[TestCase]"):
@@ -127,7 +127,7 @@ def _print_keywords(cases_to_run: "list[TestCase]"):
         label = colorize("@m{%s}" % root)
         logging.hline(label, max_width=max_width)
         cols = colified(sorted(kwds), indent=2, width=max_width)
-        logging.emit(cols)
+        logging.emit(cols + "\n")
 
 
 def _print_graph(cases_to_run: "list[TestCase]"):
@@ -144,9 +144,8 @@ def _print(cases_to_run: "list[TestCase]"):
         cols = colified(lines, indent=2, width=max_width)
         label = colorize("@m{%s}" % root)
         logging.hline(label, max_width=max_width)
-        logging.emit(cols)
-        summary = f"found {len(lines)} test cases"
-        logging.emit(summary)
+        logging.emit(cols + "\n")
+        logging.emit(f"found {len(lines)} test cases\n")
 
 
 def print_testcase_summary(args: "argparse.Namespace", cases: "list[TestCase]") -> None:
@@ -161,7 +160,7 @@ def print_testcase_summary(args: "argparse.Namespace", cases: "list[TestCase]") 
     masked = [case for case in cases if case.masked]
     masked_reasons: dict[str, int] = {}
     for case in masked:
-        reason = case.mask
+        reason = case.status.details or "unknown"
         masked_reasons[reason] = masked_reasons.get(reason, 0) + 1
     print(colorize("@*b{skipping} %d test cases" % len(masked)))
     reasons = sorted(masked_reasons, key=lambda x: masked_reasons[x])

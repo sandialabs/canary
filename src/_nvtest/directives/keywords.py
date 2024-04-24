@@ -2,7 +2,7 @@ from typing import Optional
 
 import _nvtest
 
-from ..test.testfile import AbstractTestFile
+from ..test.file import AbstractTestFile
 
 
 def keywords(*args: str, when: Optional[str] = None) -> None:
@@ -52,7 +52,7 @@ def keywords(*args: str, when: Optional[str] = None) -> None:
 
       would have "meshsize" as a keyword.
     * The results of running the test are added as keywords. The result strings are
-       * ``staged``: the test is ready to be run
+       * ``ready``: the test is ready to be run
        * ``pass`` : the test ran and completed successfully
        * ``diff`` : the test ran and completed with a numerical difference
        * ``fail`` : the test ran but crashed for some reason (exited with a

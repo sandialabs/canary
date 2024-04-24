@@ -80,10 +80,15 @@ class Manager:
         # importing the module will load the plugins
         load_module_from_file(name, file)
 
-    def load_from_entry_points(self):
+    def load_from_entry_points(self, disable: Optional[list[str]] = None):
+        disable = disable or []
         entry_points = get_entry_points(group="nvtest.plugin")
         if entry_points:
             for entry_point in entry_points:
+                if entry_point.name in disable or entry_point.module in disable:
+                    logging.debug(f"Skipping disabled plugin {entry_point.name}")
+                    continue
+                logging.debug(f"Loading the {entry_point.name} plugin from {entry_point.module}")
                 entry_point.load()
 
 
@@ -165,17 +170,20 @@ def register(*, scope: str, stage: str):
 
 
 def load_builtin_plugins() -> None:
-    dirname = ir.files("_nvtest").joinpath("builtin_plugins")
-    if dirname.exists():  # type: ignore
-        for file in dirname.iterdir():
+    path = ir.files("_nvtest").joinpath("builtin_plugins")
+    logging.debug(f"Loading builtin plugins from {path}")
+    if path.exists():  # type: ignore
+        for file in path.iterdir():
             if file.name.startswith("nvtest_"):
                 logging.debug(f"Loading {file.name} builtin plugin")
                 _manager.load_from_file(str(file))
 
 
-def load_from_entry_points() -> None:
-    _manager.load_from_entry_points()
+def load_from_entry_points(disable: Optional[list[str]] = None) -> None:
+    logging.debug("Loading plugins from entry points")
+    _manager.load_from_entry_points(disable=disable)
 
 
 def load_from_directory(path: str) -> None:
+    logging.debug(f"Loading plugins from {path}")
     _manager.load_from_directory(path)

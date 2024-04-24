@@ -3,10 +3,10 @@ from typing import TYPE_CHECKING
 
 from .. import config
 from ..session import Session
+from ..test.case import TestCase
 from ..test.status import Status
-from ..test.testcase import TestCase
+from ..third_party.color import colorize
 from ..util import logging
-from ..util.color import colorize
 
 if TYPE_CHECKING:
     import argparse
@@ -153,7 +153,12 @@ def status(args: "argparse.Namespace") -> int:
                 cases_to_show.append(case)
             elif args.show_timeout and case.status == "timedout":
                 cases_to_show.append(case)
-            elif args.show_notrun and case.status == "staged":
+            elif args.show_notrun and case.status.value in (
+                "ready",
+                "created",
+                "pending",
+                "cancelled",
+            ):
                 cases_to_show.append(case)
     n: int = 0
     if cases_to_show:
@@ -185,8 +190,9 @@ def print_status(
     nprinted = 0
     members = [
         "masked",
+        "created",
         "pending",
-        "staged",
+        "ready",
         "success",
         "skipped",
         "diffed",
@@ -196,7 +202,7 @@ def print_status(
     for member in members:
         if member in totals:
             for case in sort_cases_by(totals[member], field=sortby):
-                logging.emit(Session.cformat(case, show_log=show_logs))
+                logging.emit(Session.cformat(case, show_log=show_logs) + "\n")
                 nprinted += 1
     return nprinted
 
@@ -222,6 +228,6 @@ def print_durations(cases: list[TestCase], N: int) -> None:
     sorted_cases = sorted(cases, key=lambda x: x.duration)
     if N > 0:
         sorted_cases = sorted_cases[-N:]
-    logging.emit(f"\nSlowest {len(sorted_cases)} durations")
+    logging.emit(f"\nSlowest {len(sorted_cases)} durations\n")
     for case in sorted_cases:
-        logging.emit("  %6.2f     %s" % (case.duration, case.pretty_repr()))
+        logging.emit("  %6.2f     %s\n" % (case.duration, case.pretty_repr()))

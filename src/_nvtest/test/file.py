@@ -14,12 +14,12 @@ from typing import Union
 
 from .. import config
 from ..parameter_set import ParameterSet
+from ..third_party.color import colorize
 from ..util import logging
-from ..util.color import colorize
 from ..util.filesystem import mkdirp
 from ..util.misc import boolean
 from ..util.time import time_in_seconds
-from .testcase import TestCase
+from .case import TestCase
 
 if TYPE_CHECKING:
     import _nvtest.directives.enums
@@ -181,6 +181,8 @@ class AbstractTestFile:
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
+        timelimit: Optional[float] = None,
+        timeout_multiplier: float = 1.0,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         try:
@@ -189,6 +191,8 @@ class AbstractTestFile:
                 avail_devices=avail_devices,
                 keyword_expr=keyword_expr,
                 on_options=on_options,
+                timelimit=timelimit,
+                timeout_multiplier=timeout_multiplier,
                 parameter_expr=parameter_expr,
                 owners=owners,
             )
@@ -205,6 +209,8 @@ class AbstractTestFile:
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
+        timelimit: Optional[float] = None,
+        timeout_multiplier: float = 1.0,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         avail_cpus = avail_cpus or config.get("machine:cpu_count")
@@ -230,7 +236,7 @@ class AbstractTestFile:
                     kwds = {kw for kw in keywords}
                     kwds.add(name)
                     kwds.update(parameters.keys())
-                    kwds.update({"staged"})
+                    kwds.update({"ready"})
                     match = _nvtest.directives.when(
                         f"keywords={keyword_expr!r}", keywords=list(kwds)
                     )
@@ -277,11 +283,14 @@ class AbstractTestFile:
                     keywords=keywords,
                     parameters=parameters,
                     timeout=self.timeout(testname=name, parameters=parameters),
+                    timeout_multiplier=timeout_multiplier,
                     baseline=self.baseline(testname=name, parameters=parameters),
                     sources=self.sources(testname=name, parameters=parameters),
                 )
                 if mask is not None:
-                    case.mask = mask
+                    case.status.set("masked", mask)
+                elif timelimit is not None and case.runtime > timelimit:
+                    case.status.set("masked", "runtime excceeds timelimt")
                 for attr, value in attributes.items():
                     case.set_attribute(attr, value)
                 cases.append(case)
@@ -299,11 +308,12 @@ class AbstractTestFile:
                     analyze=analyze,
                     keywords=self.keywords(testname=name),
                     timeout=self.timeout(testname=name),
+                    timeout_multiplier=timeout_multiplier,
                     baseline=self.baseline(testname=name),
                     sources=self.sources(testname=name),
                 )
                 if mask_analyze_case is not None:
-                    parent.mask = mask_analyze_case
+                    parent.status.set("masked", mask_analyze_case)
                 for case in cases:
                     parent.add_dependency(case)
                 cases.append(parent)
