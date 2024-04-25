@@ -1,7 +1,9 @@
+from typing import Union
+
 from ..test.case import TestCase
 
 
-def compute_returncode(cases: list[TestCase] | set[TestCase]) -> int:
+def compute_returncode(cases: Union[list[TestCase], set[TestCase]]) -> int:
     returncode: int = 0
 
     results: dict[str, int] = {}
