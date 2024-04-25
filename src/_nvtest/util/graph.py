@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 builtin_print = print
 
 
-def static_order(cases: list["TestCase"] | set["TestCase"]) -> list["TestCase"]:
+def static_order(cases: Union[list["TestCase"], set["TestCase"]]) -> list["TestCase"]:
     graph: dict["TestCase", list["TestCase"]] = {}
     for case in cases:
         graph[case] = case.dependencies
