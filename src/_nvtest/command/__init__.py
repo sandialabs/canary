@@ -6,7 +6,6 @@ from . import analyze
 from . import autodoc
 from . import commands
 from . import config
-from . import convert
 from . import describe
 from . import find
 from . import info
@@ -25,7 +24,6 @@ def all_commands() -> list[ModuleType]:
         autodoc,
         commands,
         config,
-        convert,
         describe,
         find,
         info,

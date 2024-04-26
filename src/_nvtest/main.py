@@ -55,14 +55,17 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 
 class NVTestCommand:
-    def __init__(self, command_name: str) -> None:
+    def __init__(self, command_name: str, debug: bool = False) -> None:
         from _nvtest.util.executable import Executable
 
         command_module = get_command(command_name)
         if command_module is None:
             raise ValueError(f"Unknown command {command_name!r}")
         self.python = Executable(sys.executable)
-        self.python.add_default_args("-m", "nvtest", command_name)
+        self.python.add_default_args("-m", "nvtest")
+        if debug:
+            self.python.add_default_args("-d")
+        self.python.add_default_args(command_name)
 
     @property
     def returncode(self) -> int:

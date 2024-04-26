@@ -5,7 +5,7 @@ def test_command_describe(capsys):
     from _nvtest.main import NVTestCommand
 
     data_dir = os.path.join(os.path.dirname(__file__), "../data")
-    describe = NVTestCommand("describe")
+    describe = NVTestCommand("describe", debug=True)
 
     describe(os.path.join(data_dir, "empire.pyt"))
     captured = capsys.readouterr()
