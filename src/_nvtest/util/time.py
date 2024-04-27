@@ -10,7 +10,6 @@ from typing import Callable
 from typing import Optional
 from typing import Union
 
-DEFAULT_TIMEOUT_MESSAGE = os.strerror(errno.ETIME)
 
 
 def strftimestamp(timestamp: float, fmt: str = "%b %d %H:%M") -> str:
