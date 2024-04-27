@@ -1,6 +1,4 @@
-import errno
 import io
-import os
 import re
 import time
 import tokenize
@@ -9,7 +7,6 @@ from datetime import timezone
 from typing import Callable
 from typing import Optional
 from typing import Union
-
 
 
 def strftimestamp(timestamp: float, fmt: str = "%b %d %H:%M") -> str:
@@ -69,14 +66,14 @@ def to_seconds(
                 continue
             fac = units.get(token.string.lower())
             if fac is None:
-                raise ValueError(f"{arg}: illegal unit: {token.string}")
+                raise InvalidTimeFormat(arg)
             if not stack:
                 stack.append(1)
             stack[-1] *= fac
         elif token.type == tokenize.OP and token.string in (".",):
             continue
         else:
-            raise ValueError(f"{arg}: unknown token: {token.string}")
+            raise InvalidTimeFormat(arg)
     seconds = sum(stack)
     if seconds < 0 and not negatives:
         raise ValueError(f"negative seconds from {arg!r}")
@@ -128,4 +125,4 @@ def pretty_seconds(seconds: Union[str, int, float]) -> str:
 
 class InvalidTimeFormat(Exception):
     def __init__(self, fmt):
-        super(InvalidTimeFormat, self).__init__(f"invalid time format {fmt!r}")
+        super().__init__(f"invalid time format: {fmt!r}")
