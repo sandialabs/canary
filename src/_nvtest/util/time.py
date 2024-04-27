@@ -1,9 +1,9 @@
-import contextlib
 import errno
+import io
 import os
 import re
-import signal
 import time
+import tokenize
 from datetime import datetime
 from datetime import timezone
 from typing import Callable
@@ -23,103 +23,70 @@ def timestamp(local: bool = True) -> float:
     return time.mktime(time.localtime()) if local else time.time()
 
 
-def is_float(arg: str) -> bool:
-    try:
-        float(arg)
-        return True
-    except ValueError:
-        return False
-
-
-def is_hhmmss(arg: str) -> bool:
-    return bool(re.search("^\d{1,2}:\d{1,2}:\d{1,2}$", arg))
-
-
-def is_mmss(arg: str) -> bool:
-    return bool(re.search("^\d{1,2}:\d{1,2}$", arg))
-
-
-def dhms_to_s(day: int = 0, hour: int = 0, minute: int = 0, second: int = 0) -> int:
-    return 24 * 60 * 60 * day + 60 * 60 * hour + 60 * minute + 1 * second
-
-
-def hhmmss_to_s(arg: str) -> int:
-    parts = [int(_) for _ in arg.split(":")]
-    kwds = dict(zip(["second", "minute", "day"], parts[::-1]))
-    return dhms_to_s(**kwds)
-
-
-def time_in_seconds(
+def to_seconds(
     arg: Union[str, int, float], round: bool = False, negatives: bool = False
 ) -> Union[int, float]:
-    """Parse a string to num seconds. The string can be an integer or floating
-    point number, or format HH:MM:SS, or 3d 10h 26m 10s. A value of None just
-    returns None.
+    if isinstance(arg, (int, float)):
+        return arg
+    units = {
+        "second": 1,
+        "minute": 60,  # 60 sec/min * 1 min
+        "hour": 3600,  # 60 min/hr * 60 sec/min * 1hr
+        "day": 86400,  # 24 hr/day * 60 min/hr * 60 sec/min * 1 day
+        "month": 2592000,  # 30 day/mo 24 hr/day * 60 min/hr * 60 sec/min * 1 mo
+        "year": 31536000,  # 365 day/yr * 30 day/mo * 24 hr/day * 60 min/hr * 60 sec/min * 1 year
+    }
+    units["s"] = units["sec"] = units["secs"] = units["seconds"] = units["second"]
+    units["m"] = units["min"] = units["mins"] = units["minutes"] = units["minute"]
+    units["h"] = units["hr"] = units["hrs"] = units["hours"] = units["hour"]
+    units["d"] = units["days"] = units["day"]
+    units["mo"] = units["mos"] = units["months"] = units["month"]
+    units["y"] = units["yr"] = units["yrs"] = units["years"] = units["year"]
 
-    :round: True means make the value an integer if parsed as a float
-    :negatives: True means allow negative number of seconds
-    """
-    if not isinstance(arg, (str, int, float)):
-        raise TypeError("expected string or number")
-    elif isinstance(arg, (int, float)):
-        value = arg
-    elif not isinstance(arg, str) or not arg.strip():
-        raise InvalidTimeFormat(arg)
-    elif arg.isdigit():
-        value = int(arg)
-    elif is_float(arg):
-        value = float(arg)
-    elif is_hhmmss(arg):
-        value = hhmmss_to_s(arg)
-    elif is_mmss(arg):
-        value = hhmmss_to_s(arg)
-    else:
-        try:
-            value = _time_in_seconds(arg)
-        except Exception:
-            raise InvalidTimeFormat(arg) from None
-    if value < 0 and not negatives:
+    if re.search("^\d{1,2}:\d{1,2}:\d{1,2}(\.\d+)?$", arg):
+        hours, minutes, seconds = [float(_) for _ in arg.split(":")]
+        return hours * units["hours"] + minutes * units["minutes"] + seconds * units["seconds"]
+    elif re.search("^\d{1,2}:\d{1,2}(\.\d+)?$", arg):
+        minutes, seconds = [float(_) for _ in arg.split(":")]
+        return minutes * units["minutes"] + seconds * units["seconds"]
+
+    tokens = [
+        token
+        for token in tokenize.tokenize(io.BytesIO(arg.encode("utf-8")).readline)
+        if token.type not in (tokenize.NEWLINE, tokenize.ENDMARKER, tokenize.ENCODING)
+    ]
+    stack = []
+    for token in tokens:
+        if token.type == tokenize.OP and token.string == "-":
+            stack.append(-1.0)
+        elif token.type == tokenize.NUMBER:
+            number = float(token.string)
+            if stack and stack[-1] == -1.0:
+                stack[-1] *= number
+            else:
+                stack.append(number)
+        elif token.type == tokenize.NAME:
+            if token.string.lower() in ("and", "plus"):
+                continue
+            fac = units.get(token.string.lower())
+            if fac is None:
+                raise ValueError(f"{arg}: illegal unit: {token.string}")
+            if not stack:
+                stack.append(1)
+            stack[-1] *= fac
+        elif token.type == tokenize.OP and token.string in (".",):
+            continue
+        else:
+            raise ValueError(f"{arg}: unknown token: {token.string}")
+    seconds = sum(stack)
+    if seconds < 0 and not negatives:
         raise ValueError(f"negative seconds from {arg!r}")
     if round:
-        value = int(value)
-    return value
-
-
-to_seconds = time_in_seconds
-
-
-def _time_in_seconds(arg: str) -> Union[int, float]:
-    parts = [_.strip() for _ in re.split("[, ]", arg) if _.split()]
-    if not parts:
-        raise Exception(arg)
-    seconds = 0
-    units_map = {"d": "day", "h": "hour", "m": "minute", "s": "second"}
-    d_tokens = ("days", "day", "d")
-    h_tokens = ("hours", "hour", "hr", "h")
-    m_tokens = ("minutes", "minute", "mins", "min", "m")
-    s_tokens = ("seconds", "second", "secs", "sec", "s")
-    t_tokens = d_tokens + h_tokens + m_tokens + s_tokens
-    while parts:
-        token = parts.pop(0)
-        if token.isdigit():
-            value = int(token)
-            units = parts.pop(0)
-        elif is_float(token):
-            value = float(token)  # type: ignore
-            units = parts.pop(0)
-        else:
-            for i, char in enumerate(token):
-                if not char.isdigit():
-                    value = int(token[:i])
-                    units = token[i:]
-                    break
-            else:
-                raise ValueError(arg)
-        if units not in t_tokens:
-            raise ValueError(f"invalid units {units!r}")
-        kwds = {units_map[units[0]]: value}
-        seconds += dhms_to_s(**kwds)
+        return int(seconds)
     return seconds
+
+
+time_in_seconds = to_seconds
 
 
 def hhmmss(seconds: Optional[float], threshold: float = 2.0) -> str:
@@ -130,31 +97,6 @@ def hhmmss(seconds: Optional[float], threshold: float = 2.0) -> str:
     if seconds < threshold:
         return datetime.strftime(utc, "%H:%M:%S.%f")[:-4]
     return datetime.strftime(utc, "%H:%M:%S")
-
-
-class timeout(contextlib.ContextDecorator):
-    def __init__(
-        self,
-        seconds,
-        *,
-        timeout_message=DEFAULT_TIMEOUT_MESSAGE,
-        suppress_timeout_errors=False,
-    ):
-        self.seconds = int(seconds)
-        self.timeout_message = timeout_message
-        self.suppress = bool(suppress_timeout_errors)
-
-    def _timeout_handler(self, signum, frame):
-        raise TimeoutError(self.timeout_message)
-
-    def __enter__(self):
-        signal.signal(signal.SIGALRM, self._timeout_handler)
-        signal.alarm(self.seconds)
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        signal.alarm(0)
-        if self.suppress and exc_type is TimeoutError:
-            return True
 
 
 def pretty_seconds_formatter(seconds: Union[int, float]) -> Callable:
@@ -171,7 +113,7 @@ def pretty_seconds_formatter(seconds: Union[int, float]) -> Callable:
     return lambda s: "%.3f%s" % (multiplier * s, unit)
 
 
-def pretty_seconds(seconds: Union[int, float]) -> str:
+def pretty_seconds(seconds: Union[str, int, float]) -> str:
     """Seconds to string with appropriate units
 
     Arguments:
@@ -180,6 +122,8 @@ def pretty_seconds(seconds: Union[int, float]) -> str:
     Returns:
         str: Time string with units
     """
+    if isinstance(seconds, str):
+        seconds = to_seconds(seconds)
     return pretty_seconds_formatter(seconds)(seconds)
 
 
