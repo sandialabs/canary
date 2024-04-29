@@ -21,6 +21,8 @@ tests_dir = os.path.abspath(os.path.join(docs_source_dir, '../../tests'))
 assert os.path.exists(tests_dir)
 sys.path.insert(0, tests_dir)
 
+os.environ["NVTEST_MAKE_DOCS"] = "1"
+
 
 # -- Project information -----------------------------------------------------
 

@@ -91,6 +91,7 @@ class Parser(argparse.ArgumentParser):
             if arg in subcommands:
                 break
             args.append(arg)
+        args = [_ for _ in args if _ not in ("-h", "--help")]
         return super().parse_known_args(args, namespace=namespace)[0]
 
     @staticmethod

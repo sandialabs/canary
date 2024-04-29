@@ -1,3 +1,4 @@
+import os
 from typing import TYPE_CHECKING
 
 import _nvtest.config
@@ -43,7 +44,10 @@ def config(args: "argparse.Namespace") -> int:
     if args.subcommand == "show":
         text = _nvtest.config.describe(section=args.section)
         try:
-            pretty_print(text)
+            if "NVTEST_MAKE_DOCS" in os.environ:
+                print(text)
+            else:
+                pretty_print(text)
         except ImportError:
             print(text)
         return 0

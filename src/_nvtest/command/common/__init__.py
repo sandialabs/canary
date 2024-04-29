@@ -49,6 +49,7 @@ def add_work_tree_arguments(parser: "Parser") -> None:
     parser.add_argument(
         "-w",
         dest="wipe",
+        default=True if "NVTEST_MAKE_DOCS" in os.environ else False,
         action="store_true",
         help="Remove test execution directory, if it exists [default: %(default)s]",
     )
@@ -65,14 +66,6 @@ def add_work_tree_arguments(parser: "Parser") -> None:
 
 def add_resource_arguments(parser: "Parser") -> None:
     group = parser.add_argument_group("resource control")
-    help_str = (
-        "Defines resources that are required by the test session and "
-        "establishes limits to the amount of resources that can be consumed. "
-        "The resource argument is of the form: [scope:]type:value, where scope "
-        "(optional) is one of session, test, or batch, (session is assumed if not provided); "
-        "type is one of workers, cpus, or devices; and value is the value. See -H resources "
-        "for more help and examples."
-    )
     group.add_argument(
         "-l",
         action=ResourceSetter,

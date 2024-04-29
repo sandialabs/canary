@@ -7,7 +7,7 @@ An execute/analyze test is one that uses parameters to expand into multiple test
 
 The addition of the ``nvtest.directives.analyze`` directive marks a test as an execute/analyze test and will create a separate test for performing the analysis.
 
-Consider the following test file ``test.pyt``
+Consider the following test file ``examples/execute_and_analyze/test.pyt``
 
 .. literalinclude:: /examples/execute_and_analyze/test.pyt
     :language: python

@@ -45,7 +45,7 @@ def setup_parser(parser: "Parser"):
     group.add_argument(
         "-v",
         action="store_true",
-        default=False,
+        default=True if "NVTEST_MAKE_DOCS" in os.environ else False,
         help="Print each test case as it starts/finished, "
         "otherwise print a progress bar [default: %(default)s]",
     )
@@ -367,7 +367,8 @@ def setup_session(args: "argparse.Namespace") -> Session:
             raise ValueError(f"Cannot wipe work directory with mode={args.mode}")
         work_tree = args.work_tree or Session.default_work_tree
         if os.path.exists(work_tree):
-            logging.warning(f"Removing work tree {work_tree}")
+            if "NVTEST_MAKE_DOCS" not in os.environ:
+                logging.warning(f"Removing work tree {work_tree}")
             force_remove(work_tree)
     session: Session
     if args.mode == "w":

@@ -1,14 +1,13 @@
+.. _getting-help:
+
 Getting help
 ============
 
-``nvtest`` has several subcommands.  To get the list of subcommands, issue
+``nvtest`` has several :ref:`subcommands <nvtest>`.  To get the list of subcommands, issue
 
-.. code-block:: console
+.. command-output:: nvtest -h
 
-   nvtest -h
 
-To get help on an individual subcommand, issue
+To get help on an individual subcommand, issue, for example:
 
-.. code-block:: console
-
-   nvtest SUBCOMMAND -h
+.. command-output:: nvtest run -h

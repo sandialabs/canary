@@ -5,9 +5,8 @@ Configuration settings
 
 Additional configuration is not required to run ``nvtest``.  To see the current configuration, issue
 
-.. code-block:: console
-
-   nvtest config show
+.. command-output:: nvtest config show
+   :ellipsis: 4
 
 Configuration variables can be set on the command line or read from a
 configuration file.

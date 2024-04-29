@@ -39,7 +39,7 @@ Alternatively, the package can be installed from a source checkout:
 
    .. code-block:: console
 
-      git clone git@@cee-gitlab.gov:alegra/tools/nvtest
+      git clone git@cee-gitlab.gov:alegra/tools/nvtest
 
 3. Install via ``pip`` into the virtual environment with the ``-e`` flag
 
