@@ -22,7 +22,7 @@ def xfail(*, code: int = -1, when: Optional[str] = None):
     Parameters
     ----------
 
-    * ``code``: The return code.
+    * ``code``: The expected return code.  ``-1`` considers any non-zero return code to be a pass.
     * ``when``: Restrict processing of the directive to this condition
 
     The ``when`` expression is limited to the following conditions:
