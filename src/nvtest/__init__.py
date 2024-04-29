@@ -16,10 +16,11 @@ from _nvtest.main import console_main
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.test.instance import TestInstance
-from _nvtest.user import patterns
 from _nvtest.util import filesystem
 from _nvtest.util import logging
 from _nvtest.util.executable import Executable
+
+from . import patterns
 
 
 def make_std_parser() -> argparse.ArgumentParser:

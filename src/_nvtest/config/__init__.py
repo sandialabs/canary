@@ -80,9 +80,10 @@ class Config:
             self.load_config(file, "global")
         dir = os.getcwd()
         while dir != os.path.sep:
-            path = os.path.join(dir, config_dir, "config")
+            path = os.path.join(dir, ".nvtest/RESULTS.tag")
             if os.path.exists(path):
-                self.load_config(path, "session")
+                file = os.path.join(dir, ".nvtest/config")
+                self.load_config(file, "session")
                 self.set("session:work_tree", dir, scope="session")
                 self.set("session:invocation_dir", invocation_dir, scope="session")
                 start = os.path.relpath(dir, os.getcwd()) or "."

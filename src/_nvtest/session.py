@@ -19,7 +19,6 @@ from typing import Optional
 from typing import Union
 
 from . import config
-from . import directives
 from . import plugin
 from .error import FailFast
 from .error import StopExecution
@@ -51,6 +50,7 @@ from .util.partition import partition_t
 from .util.progress import progress
 from .util.returncode import compute_returncode
 from .util.time import hhmmss
+from .when import when
 
 default_batchsize = 30 * 60  # 30 minutes
 default_timeout = 60 * 60  # 60 minutes
@@ -415,8 +415,13 @@ class Session:
                 "copy_all_resources": copy_all_resources,
             }
         )
-        file = os.path.join(self.dotdir, "params")
+        file = os.path.join(self.dotdir, "RESULTS.TAG")
         mkdirp(os.path.dirname(file))
+        with open(file, "w") as fh:
+            fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
+            fh.write("# This file is a results directory tag automatically created by nvtest.\n")
+
+        file = os.path.join(self.dotdir, "params")
         with open(file, "w") as fh:
             variables = dict(vars(self))
             for attr in ("cases", "queue", "db", "lock"):
@@ -710,7 +715,7 @@ class Session:
                 if keyword_expr:
                     when_expr.append(f"keywords={keyword_expr!r}")
                 if when_expr:
-                    match = directives.when(
+                    match = when(
                         " ".join(when_expr),
                         parameters=case.parameters,
                         keywords=case.keywords(implicit=True),

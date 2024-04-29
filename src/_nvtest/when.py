@@ -13,9 +13,9 @@ from typing import Optional
 from typing import Type
 from typing import Union
 
-from ..third_party.color import colorize
 from .expression import Expression
-from .p_expression import ParameterExpression
+from .expression import ParameterExpression
+from .third_party.color import colorize
 
 
 class WhenResult:

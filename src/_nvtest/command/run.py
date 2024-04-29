@@ -23,6 +23,7 @@ from ..third_party.color import colorize
 from ..util import logging
 from ..util.banner import banner
 from ..util.filesystem import force_remove
+from ..util.filesystem import working_dir
 from .common import add_mark_arguments
 from .common import add_resource_arguments
 from .common import add_work_tree_arguments
@@ -350,11 +351,13 @@ def read_paths(file: str, paths: dict[str, list[str]]) -> None:
         with open(file, "r") as fh:
             data = yaml.safe_load(fh)
     testpaths_schema.validate(data)
-    for p in data["testpaths"]:
-        if isinstance(p, str):
-            paths.setdefault(p, [])
-        else:
-            paths.setdefault(p["root"], []).extend(p["paths"])
+    file_dir = os.path.abspath(os.path.dirname(file) or ".")
+    with working_dir(file_dir):
+        for p in data["testpaths"]:
+            if isinstance(p, str):
+                paths.setdefault(os.path.abspath(p), [])
+            else:
+                paths.setdefault(os.path.abspath(p["root"]), []).extend(p["paths"])
 
 
 def setup_session(args: "argparse.Namespace") -> Session:

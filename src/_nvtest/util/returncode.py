@@ -23,4 +23,6 @@ def compute_returncode(cases: Union[list[TestCase], set[TestCase]]) -> int:
                 returncode |= 2**5
             elif result == "skipped":
                 returncode |= 2**6
+            elif result == "cancelled":
+                returncode |= 2**7
     return returncode

@@ -64,8 +64,6 @@ from .skipif import skipif
 from .sources import sources
 from .testname import testname
 from .timeout import timeout
-from .when import When  # noqa: F401
-from .when import when  # noqa: F401
 from .xdiff import xdiff
 from .xfail import xfail
 

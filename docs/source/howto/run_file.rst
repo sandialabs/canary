@@ -15,48 +15,17 @@ Select tests can be executed by specifying their paths in a ``json`` or ``yaml``
       ...
       - <path_n>
 
-where ``<root>`` is a parent directory of the tests and ``<path_i>`` are the file paths relative to ``<root>``.  Consider, for example the following directory tree:
+where ``<root>`` is a parent directory of the tests and ``<path_i>`` are the file paths relative to ``<root>``.  If ``<root>`` is a relative path, it is considered relative to the path of the configuration file.  Consider, for example, the examples directory tree:
 
-.. code-block:: console
+.. command-output:: nvtest tree --exclude-results .
+    :cwd: /examples
 
-   $ nvtest tree tests
-   tests/
-   └── regression
-       └── 2D
-           ├── test_1.pyt
-           └── test_2.pyt
-   └── verification
-       └── 2D
-           ├── test_1.pyt
-           └── test_2.pyt
-       └── 3D
-           ├── test_1.pyt
-           └── test_2.pyt
-   └── prototype
-       └── a
-           ├── test_1.pyt
-           └── test_2.pyt
-       └── b
-           ├── test_1.pyt
-           └── test_2.pyt
+To run only ``centered_space/test.pyt`` and ``parameterize/test2.pyt``, write the following to ``tests.json``
 
-To run only ``regression/2D/test_1.pyt``, ``verification/3D/test_2.pyt``, and ``prototype/b/test_1.pyt``, write the following to ``tests.json``
-
-.. code-block:: json
-
-   {
-     "testpaths": [
-       "root": "tests",
-       "paths": [
-          "regression/2D/test_1.pyt",
-          "verification/3D/test_2.pyt",
-          "prototype/b/test_1.pyt"
-       ]
-     ]
-   }
+.. literalinclude:: /examples/tests.json
+    :language: json
 
 and pass it to ``nvtest run``:
 
-.. code-block:: console
-
-    nvtest run tests.json
+.. command-output:: nvtest run tests.json
+    :cwd: /examples

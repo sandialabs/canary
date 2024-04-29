@@ -5,8 +5,9 @@ import _nvtest
 from ..test.file import AbstractTestFile
 
 
-def enable(arg: bool, *, when: Optional[str] = None):
-    """Explicitly mark a test to be enabled (or not)
+def enable(*args: bool, when: Optional[str] = None):
+    """
+    Explicitly mark a test to be enabled (or not)
 
     Usage
     -----
@@ -26,7 +27,7 @@ def enable(arg: bool, *, when: Optional[str] = None):
 
     Parameters
     ----------
-    * ``arg``: If ``True``, enable the test.  If ``False``, disable the test
+    * ``arg``: Optional (default: ``True``).  If ``True``, enable the test.  If ``False``, disable the test
     * ``when``: Restrict processing of the directive to this condition
 
     The ``when`` expression is limited to the following conditions:
@@ -57,7 +58,7 @@ def enable(arg: bool, *, when: Optional[str] = None):
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.enable(True, platforms="not ATS")
+       nvtest.directives.enable(True, when="platforms='not ATS'")
 
     .. code-block:: python
 
@@ -70,9 +71,20 @@ def enable(arg: bool, *, when: Optional[str] = None):
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.enable(True, testname="foo", platform="Darwin or Linux")
-       nvtest.directives.enable(True, platform="not Windows", options="not debug")
-       nvtest.directives.enable(False, testname="foo")
+       nvtest.directives.enable(True, when="testname=foo platform='Darwin or Linux'")
+       nvtest.directives.enable(True, when="platform='not Windows' options='not debug'")
+       nvtest.directives.enable(False, when="testname=foo")
+
+    The above examples are equivalent to:
+
+    .. code-block:: python
+
+       import nvtest
+       nvtest.directives.enable(True, when={"testname": "foo", "platform": "Darwin or Linux"})
+       nvtest.directives.enable(True, when={"platform": "not Windows", "options": "not debug"})
+       nvtest.directives.enable(False, when={"testname": "foo"})
+
+    The ``vvt`` equivalent are
 
     .. code-block:: python
 
@@ -82,5 +94,6 @@ def enable(arg: bool, *, when: Optional[str] = None):
 
     """  # noqa: E501
     if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):
+        arg = True if not args else args[0]
         file = _nvtest.__FILE_BEING_SCANNED__
         file.m_enable(arg, when=when)

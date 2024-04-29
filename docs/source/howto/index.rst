@@ -14,6 +14,7 @@ The how-to guides in the documentation were auto-generated using a set of exampl
    run_batched
    execute_and_analyze
    parameterize
+   enable
    status
    filter
    analyze_only

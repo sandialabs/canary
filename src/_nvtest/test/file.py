@@ -155,7 +155,7 @@ from typing import Type
 from typing import Union
 
 from .. import config
-from ..parameter_set import ParameterSet
+from ..paramset import ParameterSet
 from ..third_party.color import colorize
 from ..util import logging
 from ..util.filesystem import mkdirp
@@ -183,7 +183,7 @@ class FilterNamespace:
         import _nvtest.directives
 
         self.value: Any = value
-        self.when = _nvtest.directives.When.from_string(when)
+        self.when = _nvtest.when.When.from_string(when)
         self.expect = expect
         self.result = result
         self.action = action
@@ -381,9 +381,7 @@ class AbstractTestFile:
                     kwds.add(name)
                     kwds.update(parameters.keys())
                     kwds.update({"ready"})
-                    match = _nvtest.directives.when(
-                        f"keywords={keyword_expr!r}", keywords=list(kwds)
-                    )
+                    match = _nvtest.when.when(f"keywords={keyword_expr!r}", keywords=list(kwds))
                     if not match:
                         logging.debug(f"Skipping {self}::{name}")
                         mask = colorize("deselected by @*b{keyword expression}")
@@ -411,7 +409,7 @@ class AbstractTestFile:
                 if mask is None and ("TDD" in keywords or "tdd" in keywords):
                     mask = colorize("deselected due to @*b{TDD keyword}")
                 if mask is None and parameter_expr:
-                    match = _nvtest.directives.when(
+                    match = _nvtest.when.when(
                         f"parameters={parameter_expr!r}", parameters=parameters
                     )
                     if not match:

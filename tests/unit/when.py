@@ -1,8 +1,8 @@
 import sys
 
 import pytest
-from _nvtest.directives.when import InvalidSyntax
-from _nvtest.directives.when import When
+from _nvtest.when import InvalidSyntax
+from _nvtest.when import When
 
 
 def test_when_platform():

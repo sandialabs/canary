@@ -1,0 +1,8 @@
+{
+  "testpaths": [
+    {
+      "root": ".",
+      "paths": ["centered_space/test.pyt", "parameterize/test2.pyt"]
+    }
+  ]
+}

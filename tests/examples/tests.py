@@ -41,6 +41,15 @@ def test_parameterize():
     assert nvtest("run", "-w", f"{this_dir}/parameterize") == 0
 
 
+def test_enable(capfd):
+    # should get error about not having any tests to run
+    assert nvtest("run", "-w", f"{this_dir}/enable") == 7
+    capfd.readouterr()
+    assert nvtest("run", "-w", "-o", "enable", f"{this_dir}/enable") == 0
+    out, err = capfd.readouterr()
+    assert "Beginning test session" in out
+
+
 def teardown():
     if os.path.exists("TestResults"):
         shutil.rmtree("TestResults")

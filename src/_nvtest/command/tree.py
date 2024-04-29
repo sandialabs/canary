@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -18,11 +19,22 @@ def setup_parser(parser: "Parser"):
     )
     parser.add_argument("-d", action="store_true", default=False, help="List directories only")
     parser.add_argument("-i", action="append", help="Ignore pattern")
+    parser.add_argument(
+        "--exclude-results",
+        default=False,
+        action="store_true",
+        help="Exclude test result directories",
+    )
     parser.add_argument("directory")
 
 
 def tree(args: "argparse.Namespace") -> int:
-    _tree(args.directory, limit_to_directories=args.d, skip_hidden=not args.a)
+    _tree(
+        args.directory,
+        limit_to_directories=args.d,
+        skip_hidden=not args.a,
+        exclude_results=args.exclude_results,
+    )
     return 0
 
 
@@ -32,6 +44,7 @@ def _tree(
     limit_to_directories: bool = False,
     skip_hidden: bool = True,
     dont_descend=None,
+    exclude_results: bool = False,
     indent="",
 ):
     """Given a directory Path object print a visual tree structure"""
@@ -46,17 +59,29 @@ def _tree(
     dir_path = Path(directory)
     files = 0
     directories = 0
+    always_exclude = ("__pycache__", ".git", ".nvtest")
+
+    def is_results_dir(p):
+        return os.path.exists(os.path.join(p, ".nvtest/RESULTS.TAG"))
 
     def inner(dir_path: Path, prefix: str = "", level=-1):
         nonlocal files, directories
         if not level:
             return  # 0, stop iterating
-        if limit_to_directories:
+        contents: list[Path]
+        if os.path.basename(dir_path) in always_exclude:
+            contents = []
+        elif exclude_results and is_results_dir(dir_path):
+            contents = []
+        elif limit_to_directories:
             contents = [d for d in dir_path.iterdir() if d.is_dir()]
         else:
             contents = sorted(dir_path.iterdir())
         if skip_hidden:
             contents = [_ for _ in contents if not _.name.startswith(".")]
+        if exclude_results:
+            contents = [_ for _ in contents if not is_results_dir(_)]
+        contents = [_ for _ in contents if os.path.basename(_) not in always_exclude]
         pointers = [tee] * (len(contents) - 1) + [last]
         for pointer, path in zip(pointers, contents):
             if skip_hidden and path.name.startswith("."):

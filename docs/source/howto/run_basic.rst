@@ -6,7 +6,7 @@ How to run tests
 Basic usage
 -----------
 
-.. command-output:: nvtest run -vw ./basic
+.. command-output:: nvtest run ./basic
     :cwd: /examples
 
 Filter tests to run by keyword
@@ -16,7 +16,10 @@ Filter tests to run by keyword
 
    nvtest run -k KEYWORD_EXPR PATH [PATHS...]
 
-where ``KEYWORD_EXPR`` is a Python expression.  For example, ``-k 'key1 and not key2'``.
+where ``KEYWORD_EXPR`` is a Python expression such as ``-k 'fast and regression'``.  For example
+
+.. command-output:: nvtest run -k first ./basic
+    :cwd: /examples
 
 Limit the number of concurrent tests
 ------------------------------------
@@ -25,6 +28,11 @@ Limit the number of concurrent tests
 
    nvtest run -l session:workers:N PATH [PATHS...]
 
+where ``N`` is a number of workers.  For example,
+
+.. command-output:: nvtest run -l session:workers:1 ./basic
+    :cwd: /examples
+
 Set a timeout on the test session
 ---------------------------------
 
@@ -32,4 +40,7 @@ Set a timeout on the test session
 
    nvtest run -l session:timeout:T PATH [PATHS...]
 
-where ``T`` is a number or a human-readable number representation like ``1 sec``, ``1s``, etc.
+where ``T`` is a number or a human-readable number representation like ``1 sec``, ``1s``, etc.  For example,
+
+.. command-output:: nvtest run -l 'session:timeout:1 min' ./basic
+    :cwd: /examples

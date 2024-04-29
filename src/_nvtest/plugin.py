@@ -170,7 +170,7 @@ def register(*, scope: str, stage: str):
 
 
 def load_builtin_plugins() -> None:
-    path = ir.files("_nvtest").joinpath("builtin_plugins")
+    path = ir.files("nvtest").joinpath("plugins")
     logging.debug(f"Loading builtin plugins from {path}")
     if path.exists():  # type: ignore
         for file in path.iterdir():

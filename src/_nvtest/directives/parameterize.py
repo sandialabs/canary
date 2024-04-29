@@ -55,10 +55,10 @@ def parameterize(
     Special argnames
     ----------------
 
-    * `np`` interpreted to mean "number of processing cores".
+    * ``np`` interpreted to mean "number of processing cores".
       If the ``np`` parameter is not defined, the test is assumed to use 1
       processing core.
-    * `ndevice`` interpreted to mean "number of devices" (gpus).
+    * ``ndevice`` interpreted to mean "number of devices" (gpus).
       If the ``ndevice`` parameter is not defined, the test is assumed to use 0
       devices.
 

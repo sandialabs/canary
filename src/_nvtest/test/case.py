@@ -268,10 +268,17 @@ class TestCase(Runner):
 
     @property
     def timeout(self) -> float:
+        timeout: float
         if self._timeout is not None:
-            timeout = self.timeout_multiplier * int(self._timeout)
+            timeout = float(self._timeout)
         elif self._runtimes[2] is not None:
-            timeout = 2.0 * self._runtimes[2]
+            max_runtime = self._runtimes[2]
+            if max_runtime < 5.0:
+                timeout = 20.0
+            elif max_runtime < 300.0:
+                timeout = 3.0 * max_runtime
+            else:
+                timeout = 2.0 * self._runtimes[2]
         elif "fast" in self._keywords:
             timeout = 5 * 30
         elif "long" in self._keywords:
