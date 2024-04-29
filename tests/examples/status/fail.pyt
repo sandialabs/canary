@@ -3,7 +3,7 @@ import nvtest
 
 
 def test():
-    raise nvtest.TestSkipped()
+    raise nvtest.TestFailed()
 
 
 if __name__ == "__main__":

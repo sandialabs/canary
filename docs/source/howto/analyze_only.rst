@@ -11,9 +11,9 @@ command.  Consider the following test
 
 To execute, first run the tests.  Then, navigate to the test directory and run
 
-.. program-output:: nvtest run -vw -d ExecuteAndAnalyze ./execute_and_analyze
+.. command-output:: nvtest run -vw -d ExecuteAndAnalyze ./execute_and_analyze
     :cwd: /examples
 
 
-.. program-output:: nvtest -C ExecuteAndAnalyze analyze .
+.. command-output:: nvtest -C ExecuteAndAnalyze analyze .
     :cwd: /examples
