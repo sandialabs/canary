@@ -23,8 +23,6 @@ def xfail(*, code: int = -1, when: Optional[str] = None):
     ----------
 
     * ``code``: The return code.
-      20m", and HH:MM:SS such as "2:30:00" are also allowed and converted to
-      seconds.
     * ``when``: Restrict processing of the directive to this condition
 
     The ``when`` expression is limited to the following conditions:
