@@ -1,4 +1,5 @@
 import argparse
+from typing import Optional
 
 import _nvtest.plugin as plugin
 from _nvtest import config
@@ -14,6 +15,7 @@ from _nvtest.error import TestSkipped
 from _nvtest.main import console_main
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
+from _nvtest.test.instance import TestInstance
 from _nvtest.user import patterns
 from _nvtest.util import filesystem
 from _nvtest.util import logging
@@ -29,15 +31,21 @@ def make_std_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def get_instance() -> Optional[TestInstance]:
+    try:
+        return TestInstance.load()
+    except FileNotFoundError:
+        return None
+
+
 def __getattr__(name):
     import _nvtest
-    from _nvtest.test.instance import TestInstance
 
     if name == "FILE_SCANNING":
         return _nvtest.FILE_SCANNING
     elif name == "test":
         test = type("", (), {})()
-        test.instance = TestInstance.load()
+        test.instance = get_instance()
         return test
 
     raise AttributeError(name)

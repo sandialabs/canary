@@ -1,4 +1,7 @@
 *.pyc
+.nvtest_cache
+.nvtest_cache/*
+.nvtest_cache*
 Results*
 TestResults*
 TestPartitions*
@@ -23,3 +26,8 @@ build
 .DS_Store
 
 mock-tests
+
+tests/examples/ExecuteAndAnalyze/
+tests/examples/TestMarkdownResults/
+tests/examples/basic/TestHTMLResults/
+tests/examples/basic/TestMarkdownResults/

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from ..session import Session
 from ..test.case import TestCase
+from ..util import logging
 from .common import filter_cases_by_path
 from .common import filter_cases_by_status
 
@@ -32,5 +33,6 @@ def analyze(args: "argparse.Namespace") -> int:
     else:
         cases = filter_cases_by_status(session.cases, ("failed", "diffed", "success"))
     for case in cases:
+        logging.info(f"Executing analysis section of {case.pretty_repr()}")
         case.do_analyze()
     return 0

@@ -7,6 +7,7 @@ import sys
 import textwrap as textwrap
 from types import ModuleType
 from typing import Any
+from typing import Callable
 from typing import Optional
 from typing import Sequence
 from typing import Type
@@ -75,6 +76,7 @@ class Parser(argparse.ArgumentParser):
         self.argv: Sequence[str] = sys.argv[1:]
         if positionals_title:
             self._positionals.title = positionals_title
+        self.callbacks: list[Callable] = []
 
     def convert_arg_line_to_args(self, arg_line: str) -> list[str]:
         return shlex.split(arg_line.split("#", 1)[0].strip())
@@ -116,7 +118,10 @@ class Parser(argparse.ArgumentParser):
     def parse_known_args(self, args=None, namespace=None):
         if args is not None:
             self.argv = args
-        return super().parse_known_args(args, namespace)
+        namespace, unknown_args = super().parse_known_args(args, namespace)
+        for callback in self.callbacks:
+            callback(namespace)
+        return namespace, unknown_args
 
     def _read_args_from_files(self, arg_strings: list[str]) -> list[str]:
         arg_strings = super()._read_args_from_files(arg_strings)
@@ -180,6 +185,9 @@ class Parser(argparse.ArgumentParser):
     def add_plugin_argument(self, *args, **kwargs):
         group = self.get_group("plugin options")
         group.add_argument(*args, **kwargs)
+
+    def add_default_setter_callback(self, fun: Callable) -> None:
+        self.callbacks.append(fun)
 
 
 def identity(arg):

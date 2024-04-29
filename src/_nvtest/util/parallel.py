@@ -78,7 +78,7 @@ def raise_if_errors(*results, debug=False):
 
     error_fmt = "{0}"
     if len(errors) > 1 and not debug:
-        error_fmt = "errors occurred during concretization of the environment:\n{0}"
+        error_fmt = "errors occurred during parallel execution:\n{0}"
 
     raise RuntimeError(error_fmt.format(msg))
 

@@ -21,19 +21,23 @@ class Status:
         "failed",
         "timeout",
         "success",
+        "xfail",
+        "xdiff",
     )
     colors = {
         "masked": "y",
         "created": "b",
         "pending": "b",
         "ready": "b",
-        "running": "g",
+        "running": "c",
         "cancelled": "y",
         "skipped": "m",
         "diffed": "y",
         "failed": "R",
         "timeout": "R",
-        "success": "g",
+        "success": "G",
+        "xfail": "c",
+        "xdiff": "c",
     }
 
     def __init__(self, arg: str = "created", details: Optional[str] = None) -> None:

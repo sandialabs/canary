@@ -44,7 +44,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.autodoc',
     'sphinx.ext.mathjax',
-#    'sphinxcontrib.programoutput',
+    'sphinxcontrib.programoutput',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -94,7 +94,7 @@ os.environ["COLIFY_SIZE"] = "25x120"
 os.environ["COLUMNS"] = "120"
 
 # Generate full package list if needed
-for subdir in ("directives", "howto"):
+for subdir in ("directives",):
 	dir = os.path.join(docs_source_dir, subdir)
 	if os.path.exists(dir):
 		shutil.rmtree(dir)

@@ -338,7 +338,7 @@ class Session:
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
-        test_timeout: Optional[float] = None,
+        test_timelimit: Optional[float] = None,
         timeout_multiplier: float = 1.0,
     ) -> "Session":
         if config.has_scope("session"):
@@ -372,7 +372,7 @@ class Session:
             on_options=on_options,
             keyword_expr=keyword_expr,
             parameter_expr=parameter_expr,
-            test_timeout=test_timeout,
+            test_timelimit=test_timelimit,
             timeout_multiplier=timeout_multiplier,
         )
 
@@ -529,7 +529,7 @@ class Session:
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
-        test_timeout: Optional[float] = None,
+        test_timelimit: Optional[float] = None,
         timeout_multiplier: float = 1.0,
     ) -> None:
         if self.mode != "w":
@@ -570,7 +570,7 @@ class Session:
             avail_devices_per_test=self.avail_devices_per_test,
             on_options=on_options,
             keyword_expr=keyword_expr,
-            timelimit=test_timeout,
+            timelimit=test_timelimit,
             timeout_multiplier=timeout_multiplier,
             parameter_expr=parameter_expr,
         )
@@ -1035,7 +1035,7 @@ class Session:
             if case.masked:
                 totals.setdefault("masked", []).append(case)
             else:
-                totals.setdefault(case.status.iid, []).append(case)
+                totals.setdefault(case.status.value, []).append(case)
 
         nonpass = ("skipped", "diffed", "timeout", "failed")
         level = logging.get_level()
@@ -1068,7 +1068,7 @@ class Session:
             if case.masked:
                 totals.setdefault("masked", []).append(case)
             else:
-                totals.setdefault(case.status.iid, []).append(case)
+                totals.setdefault(case.status.value, []).append(case)
         N = len(self.active_cases)
         summary_parts = ["@*b{%d total}" % N]
         for member in Status.colors:

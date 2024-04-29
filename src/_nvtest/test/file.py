@@ -103,6 +103,8 @@ class AbstractTestFile:
         self._preload: list[FilterNamespace] = []
         self._depends_on: list[FilterNamespace] = []
         self.skipif_reason: Optional[str] = None
+        self._xfail: Optional[FilterNamespace] = None
+        self._xdiff: Optional[FilterNamespace] = None
 
         self.load()
 
@@ -286,6 +288,8 @@ class AbstractTestFile:
                     timeout_multiplier=timeout_multiplier,
                     baseline=self.baseline(testname=name, parameters=parameters),
                     sources=self.sources(testname=name, parameters=parameters),
+                    xfail=self.xfail(testname=name, on_options=on_options, parameters=parameters),
+                    xdiff=self.xdiff(testname=name, on_options=on_options, parameters=parameters),
                 )
                 if mask is not None:
                     case.status.set("masked", mask)
@@ -311,6 +315,8 @@ class AbstractTestFile:
                     timeout_multiplier=timeout_multiplier,
                     baseline=self.baseline(testname=name),
                     sources=self.sources(testname=name),
+                    xfail=self.xfail(testname=name, on_options=on_options, parameters=parameters),
+                    xdiff=self.xdiff(testname=name, on_options=on_options, parameters=parameters),
                 )
                 if mask_analyze_case is not None:
                     parent.status.set("masked", mask_analyze_case)
@@ -356,6 +362,34 @@ class AbstractTestFile:
                 continue
             keywords.update(ns.value)
         return sorted(keywords)
+
+    def xfail(
+        self,
+        testname: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        parameters: Optional[dict[str, Any]] = None,
+    ) -> Optional[int]:
+        if self._xfail is not None:
+            result = self._xfail.when.evaluate(
+                testname=testname, parameters=parameters, on_options=on_options
+            )
+            if result.value:
+                return self._xfail.value
+        return None
+
+    def xdiff(
+        self,
+        testname: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        parameters: Optional[dict[str, Any]] = None,
+    ) -> bool:
+        if self._xdiff is not None:
+            result = self._xdiff.when.evaluate(
+                testname=testname, parameters=parameters, on_options=on_options
+            )
+            if result.value:
+                return True
+        return False
 
     def paramsets(
         self, testname: Optional[str] = None, on_options: Optional[list[str]] = None
@@ -524,6 +558,14 @@ class AbstractTestFile:
     def m_keywords(self, *args: str, when: Optional[str] = None) -> None:
         keyword_ns = FilterNamespace(tuple(args), when=when)
         self._keywords.append(keyword_ns)
+
+    def m_xfail(self, *, code: int = -1, when: Optional[str] = None) -> None:
+        ns = FilterNamespace(code, when=when)
+        self._xfail = ns
+
+    def m_xdiff(self, *, when: Optional[str] = None) -> None:
+        ns = FilterNamespace(True, when=when)
+        self._xdiff = ns
 
     def m_owners(self, *args: str) -> None:
         self.owners.extend(args)

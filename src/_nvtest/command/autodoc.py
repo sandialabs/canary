@@ -42,32 +42,10 @@ def commands(dest):
     writer.write(parser)
 
 
-def howto(dest):
-    mkdirp(dest)
-    with open(os.path.join(dest, "index.rst"), "w") as fh:
-        fh.write(".. _howto-guides:\n\n")
-        fh.write("How-to guides\n=============\n\n")
-        fh.write(".. toctree::\n   :maxdepth: 1\n\n")
-        root = os.path.dirname(_nvtest.__file__)
-        tests = os.path.join(root, "../../tests")
-        howto = os.path.join(tests, "howto")
-        assert os.path.exists(os.path.join(howto, "__init__.py"))
-        for file in sorted(os.listdir(howto)):
-            if file.startswith("howto_") and file.endswith(".py"):
-                module = os.path.splitext(os.path.basename(file))[0]
-                name = module.split("_", 2)[-1]
-                fh.write(f"   {name}\n")
-                print(file, name)
-                with open(os.path.join(dest, f"{name}.rst"), "w") as fp:
-                    fp.write(f".. _howto-{name.replace('_', '-')}:\n\n")
-                    fp.write(f".. automodule:: howto.{module}\n")
-
-
 def autodoc(args: argparse.Namespace) -> int:
     set_color_when("never")
     if not os.path.isdir(args.dest):
         mkdirp(args.dest)
     directives(os.path.join(args.dest, "directives"))
     commands(os.path.join(args.dest, "commands"))
-    howto(os.path.join(args.dest, "howto"))
     return 0

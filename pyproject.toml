@@ -11,7 +11,7 @@ dependencies = []
 nvtest = "nvtest:console_main"
 
 [project.optional-dependencies]
-dev = ["ruff", "mypy", "pytest", "sphinxcontrib-programoutput==0.17"]
+dev = ["ruff", "mypy", "pytest", "sphinxcontrib-programoutput"]
 requests = ["requests"]
 
 [build-system]

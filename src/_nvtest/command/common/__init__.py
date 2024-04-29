@@ -74,15 +74,20 @@ def add_resource_arguments(parser: "Parser") -> None:
         "for more help and examples."
     )
     group.add_argument(
-        "-l", action=ResourceSetter, metavar="resource", default=None, help=help_str
+        "-l",
+        action=ResourceSetter,
+        metavar="resource",
+        default=None,
+        help=ResourceSetter.help_page(),
     )
+    parser.add_default_setter_callback(set_default_resource_args)
 
 
 def set_default_resource_args(args: argparse.Namespace) -> None:
     def _die(name1, n1, name2, n2):
         raise ValueError("'-l {0}:{1}' must not exceed {2}:{3}".format(name1, n1, name2, n2))
 
-    setdefault(args, "test_timeout", None)
+    setdefault(args, "test_maxtime", None)
     setdefault(args, "test_timeoutx", 1.0)
     setdefault(args, "cpus_per_test", None)
     setdefault(args, "devices_per_test", None)
@@ -162,7 +167,7 @@ class ResourceSetter(argparse.Action):
         scope, arg_type, string = components
         type = self.type_map(arg_type)
         if scope in ("session", "test"):
-            if type not in ("cpus", "devices", "workers", "timeout", "timeoutx"):
+            if type not in ("cpus", "devices", "workers", "timeout", "maxtime", "timeoutx"):
                 raise ResourceError(self, path, f"invalid type {arg_type!r}")
         elif scope == "batch":
             if type not in ("count", "time", "workers"):
@@ -171,7 +176,7 @@ class ResourceSetter(argparse.Action):
             raise ResourceError(self, path, f"invalid scope {scope!r}")
         if type == "workers" and scope not in ("session", "batch"):
             raise ResourceError(self, path, f"invalid scope {scope!r} (expected session)")
-        if type in ("time", "timeout"):
+        if type in ("time", "timeout", "maxtime"):
             value = time_in_seconds(string, negatives=True if type == "timeout" else False)
         elif type == "timeoutx":
             try:
@@ -191,36 +196,23 @@ class ResourceSetter(argparse.Action):
             return colorize("@*{%s}" % arg)
 
         resource_help = """\
-%(title)s
-
-The %(r_arg)s argument is of the form: %(r_form)s, where %(r_scope)s
-(optional) is one of session, test, or batch, (session is assumed if not provided);
-%(r_type)s is one of workers, cpus, devices, time; and %(r_value)s is an integer or float value.
-
-%(examples)s
-• -l session:workers:N: Execute the test session asynchronously using a pool of at most N workers
-• -l session:cpus:N: Occupy at most N cpu cores at any one time.
-• -l session:devices:N: Occupy at most N devices at any one time.
-• -l session:timeout:T: Set a timeout on test session execution in seconds (accepts human
-     readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]
-• -l test:cpus:N: Skip tests requiring more than N cpu cores.
-• -l test:devices:N: Skip tests requiring more than N devices.
-• -l test:timeout:T: Set a timeout on any single test execution in seconds (accepts human
-     readable expressions like 1s, 1 hr, 2 hrs, etc) [default: None]
-• -l test:timeoutx:T: Multiply test timeouts by this much [default: 1.0]
-• -l batch:workers:N: Execute the batch asynchronously using a pool of at most N workers
-     [default: 5]
-• -l batch:count:N: Execute tests in N batches.
-• -l batch:time:N': Execute tests in batches having runtimes of approximately N seconds.
-     [default: 30 min]
+Defines resources that are required by the test session and establishes limits
+to the amount of resources that can be consumed. The %(r_arg)s argument is of
+the form: %(r_form)s.  The possible possible %(r_form)s settings are\n\n
+• -l session:workers:N: Execute the test session asynchronously using a pool of at most N workers [default: auto]\n
+• -l session:cpus:N: Occupy at most N cpu cores at any one time.\n
+• -l session:devices:N: Occupy at most N devices at any one time.\n
+• -l session:timeout:T: Set a timeout on test session execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n
+• -l test:cpus:N: Skip tests requiring more than N cpu cores.\n
+• -l test:devices:N: Skip tests requiring more than N devices.\n
+• -l test:maxtime:T: Exclude tests requiring more than T seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: None]\n
+• -l test:timeoutx:T: Multiply test timeouts by this much [default: 1.0]\n
+• -l batch:workers:N: Execute the batch asynchronously using a pool of at most N workers [default: auto]\n
+• -l batch:count:N: Execute tests in N batches.\n
+• -l batch:time:N': Execute tests in batches having runtimes of approximately N seconds.  [default: 30 min]
 """ % {
-            "title": bold("Setting limits on resources"),
             "r_form": bold("[scope:]type:value"),
             "r_arg": bold("-l resource"),
-            "r_scope": bold("scope"),
-            "r_type": bold("type"),
-            "r_value": bold("value"),
-            "examples": bold("Examples"),
         }
         return resource_help
 

@@ -23,11 +23,9 @@ from ..third_party.color import colorize
 from ..util import logging
 from ..util.banner import banner
 from ..util.filesystem import force_remove
-from .common import ResourceSetter
 from .common import add_mark_arguments
 from .common import add_resource_arguments
 from .common import add_work_tree_arguments
-from .common import set_default_resource_args
 from .common import setdefault
 
 valid_schedulers = (None, "shell", "slurm")
@@ -40,14 +38,7 @@ description = "Run the tests"
 
 
 def setup_parser(parser: "Parser"):
-    parser.add_argument(
-        "-H",
-        "--help-topic",
-        action=ExtraHelpTopic,
-        metavar=ExtraHelpTopic.metavar,
-        dest="help_topic",
-        help="Request extra help on topic",
-    )
+    parser.epilog = pathspec_epilog()
     add_work_tree_arguments(parser)
     add_mark_arguments(parser)
     group = parser.add_argument_group("console reporting")
@@ -117,7 +108,7 @@ def setup_parser(parser: "Parser"):
         "commas. You can use this syntax to pass an argument to the script. "
         "For example, -U,-A,XXXX passes -A XXXX to the script."
     )
-    group.add_argument(
+    parser.add_argument(
         "-U",
         action=SchedulerOptions,
         dest="script_options",
@@ -198,10 +189,6 @@ class Timer:
 
 
 def run(args: "argparse.Namespace") -> int:
-    if args.help_topic:
-        ExtraHelpTopic.print(args.help_topic)
-        return 0
-    set_default_resource_args(args)
     parse_pathspec(args)
     initstate: int = 0
 
@@ -403,7 +390,7 @@ def setup_session(args: "argparse.Namespace") -> Session:
             keyword_expr=args.keyword_expr,
             on_options=args.on_options,
             parameter_expr=args.parameter_expr,
-            test_timeout=args.test_timeout,
+            test_timelimit=args.test_maxtime,
             timeout_multiplier=args.test_timeoutx or 1.0,
         )
         if not args.no_header:
@@ -457,39 +444,8 @@ def bold(arg: str) -> str:
     return colorize("@*{%s}" % arg)
 
 
-class ExtraHelpTopic(argparse.Action):
-    choices = ("pathspec", "resource")
-    metavar = "{%s}" % ",".join(choices)
-
-    def __call__(
-        self,
-        parser: argparse.ArgumentParser,
-        namespace: argparse.Namespace,
-        option: Union[str, Sequence[Any], None],
-        option_str: Optional[str] = None,
-    ):
-        assert isinstance(option, str)
-        if option in ("path", "pathspec"):
-            topic = "pathspec"
-        elif option in ("resource", "resources"):
-            topic = "resource management"
-        else:
-            choices = ", ".join(self.choices)
-            parser.error(f"invalid choice {option!r} (choose from {choices})")
-        setattr(namespace, self.dest, topic)
-
-    @staticmethod
-    def print(topic: str) -> None:
-        if topic == "pathspec":
-            ExtraHelpTopic.print_pathspec_help()
-        elif topic == "resource management":
-            ExtraHelpTopic.print_resource_help()
-
-    @staticmethod
-    def print_pathspec_help() -> None:
-        pathspec_help = """\
-%(title)s
-
+def pathspec_epilog() -> str:
+    pathspec_help = """\
 The behavior %(run)s is context dependent.
 
 For %(new)s test sessions, the %(pathspec)s argument is scanned for test files to add
@@ -521,18 +477,13 @@ For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests t
 - test file: run the test defined in this file; and
 - batch number: run this batch of tests, specified as %(batch_no)s.
 """ % {
-            "title": bold("The pathspec argument"),
-            "run": bold("nvtest run"),
-            "new": bold("new"),
-            "existing": bold("existing"),
-            "pathspec": bold("pathspec"),
-            "id": bold("/ID"),
-            "batch_no": bold("^[BATCH_ID]:BATCH_NO"),
-            "paths": bold("paths"),
-            "root": bold("root"),
-        }
-        print(pathspec_help)
-
-    @staticmethod
-    def print_resource_help():
-        print(ResourceSetter.help_page())
+        "run": bold("nvtest run"),
+        "new": bold("new"),
+        "existing": bold("existing"),
+        "pathspec": bold("pathspec"),
+        "id": bold("/ID"),
+        "batch_no": bold("^[BATCH_ID]:BATCH_NO"),
+        "paths": bold("paths"),
+        "root": bold("root"),
+    }
+    return pathspec_help

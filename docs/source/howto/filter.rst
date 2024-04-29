@@ -1,4 +1,5 @@
-"""
+.. _howto-filter:
+
 How to filter and select tests
 ==============================
 
@@ -89,9 +90,3 @@ test. For example, the test ``atest.vvt``
 will only run if the platform name is ``Darwin``. Expressions are allowed as the
 ``platform`` attribute value, such as ``platforms="Darwin or Linux"``, or
 ``platforms="not Darwin"``.
-
-"""
-
-
-def test_howto_filter():
-    pass
