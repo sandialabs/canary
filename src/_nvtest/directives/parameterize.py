@@ -25,7 +25,8 @@ def parameterize(
 
     .. code-block:: python
 
-       parametrize(argnames, argvalues, when=None, type=None)
+       import nvtest
+       nvtest.directives.parametrize(argnames, argvalues, when=..., type=None)
 
 
     ``.vvt``:

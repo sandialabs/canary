@@ -13,7 +13,8 @@ def owners(*args: str):
 
     .. code-block:: python
 
-       owners("name1", "name2", ...)
+       import nvtest
+       nvtest.directives.owners("name1", "name2", ...)
 
     ``.vvt``:
 

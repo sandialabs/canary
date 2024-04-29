@@ -21,7 +21,8 @@ def analyze(
 
     .. code-block:: python
 
-       analyze(*, flag=None, script=None, when=None)
+       import nvtest
+       nvtest.directives.analyze(*, flag=None, script=None, when=...)
 
     ``.vvt``:
 

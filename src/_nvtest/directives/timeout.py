@@ -16,7 +16,8 @@ def timeout(arg: Union[str, float, int], *, when: Optional[str] = None):
 
     .. code-block:: python
 
-       timeout(arg, when=None)
+       import nvtest
+       nvtest.directives.timeout(arg, when=...)
 
     ``.vvt``:
 

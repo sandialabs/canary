@@ -16,7 +16,8 @@ def keywords(*args: str, when: Optional[str] = None) -> None:
 
     .. code-block:: python
 
-       keywords(*args, when=None)
+       import nvtest
+       nvtest.directives.keywords(*args, when=...)
 
     ``.vvt``:
 

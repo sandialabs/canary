@@ -12,12 +12,12 @@ The how-to guides in the documentation were auto-generated using a set of exampl
    run_basic
    run_file
    run_batched
-   execute_and_analyze
    parameterize
+   execute_and_analyze
+   analyze_only
    enable
    status
    filter
-   analyze_only
    centered_parameter_space
    cmake_integration
    cdash

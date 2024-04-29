@@ -15,8 +15,9 @@ def link(*args: str, when: Optional[str] = None, rename: bool = False):
 
     .. code-block:: python
 
-       link(*args, rename=False, when=None)
-       link(src, dst, rename=True, when=None)
+       import nvtest
+       nvtest.directives.link(*args, rename=False, when=...)
+       nvtest.directives.link(src, dst, rename=True, when=...)
 
     ``.vvt``:
 

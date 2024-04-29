@@ -15,7 +15,8 @@ def preload(arg: str, *, when: Optional[str] = None, source: bool = False):
 
     .. code-block:: python
 
-       preload(arg, *, when=None, source=False):
+       import nvtest
+       nvtest.directives.preload(arg, *, when=..., source=False):
 
     ``.vvt``:
 

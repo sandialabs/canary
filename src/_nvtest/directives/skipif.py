@@ -13,7 +13,8 @@ def skipif(arg: bool, *, reason: str) -> None:
 
     .. code:: python
 
-       skipif(arg, *, reason)
+       import nvtest
+       nvtest.directives.skipif(arg, *, reason)
 
     ``.vvt``:
 

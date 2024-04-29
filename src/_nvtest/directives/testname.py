@@ -14,6 +14,7 @@ def testname(arg: str) -> None:
 
     .. code-block:: python
 
+       import nvtest
        pytest.directives.name(arg)
 
     ``.vvt``:

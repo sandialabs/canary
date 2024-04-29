@@ -4,18 +4,23 @@ Installing nvtest
 
 .. note::
 
-   ``nvtest`` requires Python 3.10+
+   ``nvtest`` requires Python 3.9+
 
 Basic installation
 ------------------
 
 1. Create and activate a python virtual environment.
 
+   .. code-block:: console
+
+      python3 -m venv venv
+      source venv/bin/activate
+
 2. Install via ``pip`` into the virtual environment
 
    .. code-block:: console
 
-      python3 -m pip install git+ssh://git@@cee-gitlab.gov/alegra/tools/nvtest
+      python3 -m pip install git+ssh://git@cee-gitlab.gov/alegra/tools/nvtest
 
 
 Editable installation
@@ -25,15 +30,25 @@ An "editable installation" installs package dependencies, metadata, and wrappers
 
 1. Create and activate a python virtual environment.
 
+   .. code-block:: console
+
+      python3 -m venv venv
+      source venv/bin/activate
+
 2. Install via ``pip`` into the virtual environment with the ``-e`` flag
 
    .. code-block:: console
 
-      python3 -m pip install -e git+ssh://git@@cee-gitlab.gov/alegra/tools/nvtest#egg=nvtest
+      python3 -m pip install -e git+ssh://git@cee-gitlab.gov/alegra/tools/nvtest#egg=nvtest
 
 Alternatively, the package can be installed from a source checkout:
 
 1. Create and activate a python virtual environment.
+
+   .. code-block:: console
+
+      python3 -m venv venv
+      source venv/bin/activate
 
 2. Clone the source code:
 

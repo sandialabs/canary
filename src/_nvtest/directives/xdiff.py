@@ -15,7 +15,8 @@ def xdiff(*, when: Optional[str] = None):
 
     .. code-block:: python
 
-       xdiff(when=None)
+       import nvtest
+       nvtest.directives.xdiff(when=...)
 
     Parameters
     ----------

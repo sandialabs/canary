@@ -15,7 +15,8 @@ def processors(*values: int, when: Optional[str] = None) -> None:
 
     .. code-block:: python
 
-       processors(*nprocs, when=None)
+       import nvtest
+       nvtest.directives.processors(*nprocs, when=...)
 
 
     ``.vvt``: NA

@@ -17,7 +17,8 @@ def xfail(*, code: int = -1, when: Optional[str] = None):
 
     .. code-block:: python
 
-       xfail(code=-1, when=None)
+       import nvtest
+       nvtest.directives.xfail(code=-1, when=...)
 
     Parameters
     ----------

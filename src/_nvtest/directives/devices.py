@@ -15,7 +15,8 @@ def devices(*ndevices: int, when: Optional[str] = None) -> None:
 
     .. code-block:: python
 
-       devices(*ndevices, when=None)
+       import nvtest
+       nvtest.directives.devices(*ndevices, when=...)
 
 
     ``.vvt``: NA
@@ -53,8 +54,8 @@ def devices(*ndevices: int, when: Optional[str] = None) -> None:
     .. code-block:: console
 
        2 test cases:
-       ├── test1[ndevies=1]
-       ├── test1[ndevices=2]
+       ├── test1[ndevice=1]
+       ├── test1[ndevice=2]
 
     """
     if isinstance(_nvtest.__FILE_BEING_SCANNED__, AbstractTestFile):

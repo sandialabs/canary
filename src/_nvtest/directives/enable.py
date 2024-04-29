@@ -17,7 +17,7 @@ def enable(*args: bool, when: Optional[str] = None):
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.enable(arg, when=None)
+       nvtest.directives.enable(arg, when=...)
 
     ``.vvt``:
 

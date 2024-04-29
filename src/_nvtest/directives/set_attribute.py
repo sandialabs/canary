@@ -16,7 +16,8 @@ def set_attribute(*, when: Optional[str] = None, **attributes: Any) -> None:
 
     .. code:: python
 
-       set_attribute(*, when=None, **attributes)
+       import nvtest
+       nvtest.directives.set_attribute(*, when=..., **attributes)
 
     ``.vvt``: NA
 

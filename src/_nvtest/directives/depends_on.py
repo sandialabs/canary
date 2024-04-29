@@ -22,7 +22,7 @@ def depends_on(
     .. code:: python
 
        import nvtest
-       nvtest.directives.depends_on(name, when=None, expect=None, result=None)
+       nvtest.directives.depends_on(name, when=..., expect=None, result=None)
 
     ``.vvt``:
 

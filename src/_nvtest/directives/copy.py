@@ -15,8 +15,9 @@ def copy(*args: str, when: Optional[str] = None, rename: bool = False):
 
     .. code-block:: python
 
-       copy(*args, rename=False, when=None)
-       copy(src, dst, rename=True, when=None)
+       import nvtest
+       nvtest.directives.copy(*args, rename=False, when=...)
+       nvtest.directives.copy(src, dst, rename=True, when=...)
 
     ``.vvt``:
 

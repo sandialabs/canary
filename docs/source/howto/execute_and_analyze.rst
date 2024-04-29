@@ -13,12 +13,41 @@ Consider the following test file ``examples/execute_and_analyze/test.pyt``
     :language: python
     :lines: 1-6
 
-and associated dependency graph
+The dependency graph for this test is
 
-.. program-output:: nvtest describe test.pyt
+.. command-output:: nvtest describe test.pyt
     :cwd: /examples/execute_and_analyze
 
-When this test is run, ``test[a=1]``, ``test[a=2]``, and ``test[a=3]`` are run first and then ``test``.  This last test is the analyze test.  The "children" tests are made available to ``test`` in the ``nvtest.test.instance.dependencies`` attribute as shown in the ``analyze`` function of the full example:
+As can be seen, the test ``test`` depends on ``test[a=1]``, ``test[a=2]``, and ``test[a=3]``.  When the test is run, these "children" tests are run first and then ``test``:
+
+.. command-output:: nvtest run ./execute_and_analyze
+    :cwd: /examples
+
+The full example
+----------------
+
+Define separate functions for the "test" and "verification" portions of the test, as defined in ``test`` and ``verify_parameterized_test`` below.
+
+.. literalinclude:: /examples/execute_and_analyze/test.pyt
+    :lines: 9-22
+    :language: python
+
+``verify_parameterized_test`` is intended to be called for each child test.
+
+During the final analysis phase, the children tests are made available in the ``nvtest.test.instance.dependencies`` attribute as shown in the ``analyze`` function below:
+
+.. literalinclude:: /examples/execute_and_analyze/test.pyt
+    :lines: 25-30
+    :language: python
+
+Finally, the ``ExecuteAndAnalyze`` object is used to set up the test to broker which functions are called during different phases of the test:
+
+.. literalinclude:: /examples/execute_and_analyze/test.pyt
+    :lines: 33-42
+    :language: python
+
+Full test file
+--------------
 
 .. literalinclude:: /examples/execute_and_analyze/test.pyt
     :language: python

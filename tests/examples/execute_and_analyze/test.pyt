@@ -11,10 +11,11 @@ def test():
     self = nvtest.test.instance
     f = f'{self.parameters.a}.txt'
     nvtest.filesystem.touchp(f)
+    verify_parameterized_test()
     return 0
 
 
-def analyze_parameterized_test():
+def verify_parameterized_test():
     # Analyze a single parameterized test
     self = nvtest.test.instance
     f = f'{self.parameters.a}.txt'
@@ -31,7 +32,7 @@ def analyze():
 
 def main():
     pattern = nvtest.patterns.ExecuteAndAnalyze(
-        test_fn=test, verify_fn=analyze_parameterized_test, analyze_fn=analyze
+        test_fn=test, verify_fn=verify_parameterized_test, analyze_fn=analyze
     )
     pattern()
     return 0

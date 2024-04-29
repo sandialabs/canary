@@ -3,16 +3,17 @@
 How to run only the analysis section of a test
 ==============================================
 
-After a test is run, the analysis sections can be run with the ``nvtest analyze``
-command.  Consider the following test
+After a test is run, the verification and analysis sections can be run with the ``nvtest analyze``
+command.  Consider the test introduced in :ref:`howto-execute-and-analyze`, repeated here for convenience:
 
 .. literalinclude:: /examples/execute_and_analyze/test.pyt
     :language: python
 
-To execute, first run the tests.  Then, navigate to the test directory and run
+After the test has been run, the verification and analysis section can be run without rerunning the (potentially expensive) test portion:
 
-.. command-output:: nvtest run -vw -d ExecuteAndAnalyze ./execute_and_analyze
+.. command-output:: nvtest run -d ExecuteAndAnalyze ./execute_and_analyze
     :cwd: /examples
+    :ellipsis: 0
 
 
 .. command-output:: nvtest -C ExecuteAndAnalyze analyze .
