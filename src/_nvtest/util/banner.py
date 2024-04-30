@@ -1,4 +1,5 @@
 from itertools import cycle
+
 from ..third_party import art
 from ..third_party.color import colorize
 
@@ -11,7 +12,6 @@ def banner(color: bool = True) -> str:
     lines: list[str] = []
     for line in a.splitlines():
         if line.split():
-            color = next(colors)
-            line = colorize("@*%s{%s}" %(color, line))
+            line = colorize("@*%s{%s}" % (next(colors), line))
         lines.append(line)
     return "\n".join(lines)
