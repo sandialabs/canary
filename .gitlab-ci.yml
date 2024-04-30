@@ -45,7 +45,6 @@ pages:
     changes:
     - src/_nvtest/directives/*.py
     - src/_nvtest/commands/*.py
-    - src/_nvtest/tests/howto/*.py
     - src/_nvtest/test/testfile.py
     - docs/*.rst
     - docs/*/*.rst

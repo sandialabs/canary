@@ -14,6 +14,7 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 
 docs_source_dir = os.path.abspath(".")
 sys.path.insert(0, os.path.abspath(os.path.join(docs_source_dir, '../../src')))
@@ -27,14 +28,15 @@ os.environ["NVTEST_MAKE_DOCS"] = "1"
 # -- Project information -----------------------------------------------------
 
 project = 'nvtest'
-copyright = '2023, Tim Fuller'
+copyright = '2024, Tim Fuller'
 author = 'Tim Fuller'
 
 # The short X.Y version
-version = '0.1'
+today = datetime.today()
+version = today.strftime("%Y.%m.%d")
 
 # The full version, including alpha/beta/rc tags
-release = '0.1'
+release = today.strftime("%Y.%m.%d")
 
 
 # -- General configuration ---------------------------------------------------
