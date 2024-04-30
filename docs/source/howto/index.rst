@@ -15,6 +15,7 @@ The how-to guides in the documentation were auto-generated using a set of exampl
    parameterize
    execute_and_analyze
    analyze_only
+   copy_and_link
    enable
    status
    filter
@@ -23,3 +24,4 @@ The how-to guides in the documentation were auto-generated using a set of exampl
    cdash
    html
    md
+   plugins

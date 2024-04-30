@@ -41,14 +41,17 @@ class Manager:
         name = func.__name__
         logging.debug(f"Registering plugin {name}::{scope}::{stage}")
         err_msg = f"register() got unexpected stage '{scope}::{stage}'"
+        if stage == "teardown":
+            logging.warning("prefer 'finish' to 'teardown'")
+            stage = "finish"
         if scope == "main":
             if stage not in ("setup",):
                 raise TypeError(err_msg)
         elif scope == "session":
-            if stage not in ("setup", "teardown"):
+            if stage not in ("setup", "finish"):
                 raise TypeError(err_msg)
         elif scope == "test":
-            if stage not in ("discovery", "setup", "teardown"):
+            if stage not in ("discovery", "setup", "finish"):
                 raise TypeError(err_msg)
         else:
             raise TypeError(f"register() got unexpected scope {scope!r}")

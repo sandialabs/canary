@@ -49,7 +49,7 @@ def add_work_tree_arguments(parser: "Parser") -> None:
     parser.add_argument(
         "-w",
         dest="wipe",
-        default=True if "NVTEST_MAKE_DOCS" in os.environ else False,
+        default=False,
         action="store_true",
         help="Remove test execution directory, if it exists [default: %(default)s]",
     )
@@ -138,10 +138,6 @@ class ResourceSetter(argparse.Action):
         self.set_resource_args(args, scope, type, value)
 
     def set_resource_args(self, args, scope, type, value):
-        if scope == "batch":
-            conflicting_type = "time" if type == "count" else "count"
-            if hasattr(args, f"batch_{conflicting_type}"):
-                raise ValueError("batch:count and batch:time are mutually exclusive")
         if type in ("workers", "cpus", "devices"):
             setattr(args, f"{type}_per_{scope}", value)
         else:

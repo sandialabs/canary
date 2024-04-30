@@ -399,12 +399,13 @@ class Session:
             raise ValueError(f"Expected state == 1 (got {self.state})")
 
         logging.debug("Setting up work tree")
-        t_start = time.monotonic()
-        self.setup_testcases(self.active_cases, copy_all_resources=copy_all_resources)
-        duration = time.monotonic() - t_start
 
         for hook in plugin.plugins("session", "setup"):
             hook(self)
+
+        t_start = time.monotonic()
+        self.setup_testcases(self.active_cases, copy_all_resources=copy_all_resources)
+        duration = time.monotonic() - t_start
 
         self.ini_options.update(
             {
@@ -784,12 +785,12 @@ class Session:
         with self.rc_environ():
             for case in finished:
                 with working_dir(case.exec_dir):
-                    for hook in plugin.plugins("test", "teardown"):
+                    for hook in plugin.plugins("test", "finish"):
                         logging.debug(f"Calling the {hook.specname} plugin")
                         hook(case)
                 with working_dir(self.work_tree):
                     case.teardown()
-        for hook in plugin.plugins("session", "teardown"):
+        for hook in plugin.plugins("session", "finish"):
             hook(self)
 
     @contextmanager

@@ -11,7 +11,7 @@ from _nvtest.util import gitlab
 from _nvtest.util import logging
 
 
-@_nvtest.plugin.register(scope="session", stage="teardown")
+@_nvtest.plugin.register(scope="session", stage="finish")
 def merge_request_report(session: Session) -> None:
     if "CI_MERGE_REQUEST_IID" not in os.environ:
         return

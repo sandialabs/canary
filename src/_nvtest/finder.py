@@ -192,12 +192,12 @@ class Finder:
         if any(case.status.value not in ("created", "masked") for case in cases):
             raise ValueError("One or more test cases is not in created state")
 
-        Finder.resolve_dependencies(cases)
-        Finder.check_for_skipped_dependencies(cases)
-
         for hook in plugin.plugins("test", "discovery"):
             for case in cases:
                 hook(case)
+
+        Finder.resolve_dependencies(cases)
+        Finder.check_for_skipped_dependencies(cases)
 
         logging.debug("Done creating test cases")
         return cases

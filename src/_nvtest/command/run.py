@@ -365,6 +365,8 @@ def setup_session(args: "argparse.Namespace") -> Session:
     p = config.get("system:os:name")
     v = config.get("python:version")
     logging.debug(f"Platform: {p} -- Python {v}")
+    if "NVTEST_MAKE_DOCS" in os.environ and args.mode == "w":
+        args.wipe = True
     if args.wipe:
         if args.mode != "w":
             raise ValueError(f"Cannot wipe work directory with mode={args.mode}")

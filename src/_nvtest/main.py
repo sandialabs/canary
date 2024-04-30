@@ -34,7 +34,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         config.set_main_options(pre)
 
         load_plugins(pre.plugin_dirs or [])
-        for hook in plugin.plugins("main", "setup"):
+        for hook in plugin.plugins("main", "start"):
             hook(parser)
 
         add_all_commands(parser)
