@@ -37,6 +37,10 @@ where ``path`` is the directory name (including parents), relative to the
 search path, of the test file, and ``name`` is the basename of the test. The
 ``px=vx`` are the names of values of the test parameters (if any).
 
+.. warning::
+
+  The test directory naming scheme is an implementation detail and may change in the future.  Do not write tests that rely on this naming scheme.
+
 Consider, for example, the search path
 
 .. code-block:: console

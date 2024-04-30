@@ -1008,10 +1008,11 @@ class Session:
             reason = case.status.details
             assert isinstance(reason, str)
             skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
-        logging.info(colorize("@*b{skipping} %d test cases" % len(skipped)))
-        reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
-        for reason in reversed(reasons):
-            logging.emit(f"• {skipped_reasons[reason]} {reason.lstrip()}\n")
+        if skipped:
+            logging.info(colorize("@*b{skipping} %d test cases" % len(skipped)))
+            reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
+            for reason in reversed(reasons):
+                logging.emit(f"• {skipped_reasons[reason]} {reason.lstrip()}\n")
         return
 
     @staticmethod
@@ -1083,8 +1084,8 @@ class Session:
                 c = Status.colors[member]
                 stat = totals[member][0].status.name
                 summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-        ts = hhmmss(duration)
-        logging.info(colorize("@*{Session done} -- %s in @*{%s}" % (", ".join(summary_parts), ts)))
+        kwds = {"x": "\u2728", "summary": ", ".join(summary_parts), "t": hhmmss(duration)}
+        logging.emit(colorize("%(x)s%(x)s @*{Session done} -- %(summary)s in @*{%(t)s}\n" % kwds))
 
     def print_durations(self, N: int) -> None:
         cases = [case for case in self.active_cases if case.duration > 0]
