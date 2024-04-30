@@ -1087,8 +1087,8 @@ class Session:
         kwds = {"x": "\u2728", "summary": ", ".join(summary_parts), "t": hhmmss(duration)}
         logging.emit(colorize("%(x)s%(x)s @*{Session done} -- %(summary)s in @*{%(t)s}\n" % kwds))
 
-    def print_durations(self, N: int) -> None:
-        cases = [case for case in self.active_cases if case.duration > 0]
+    def print_durations(self, N: int, cases: Optional[list[TestCase]] = None) -> None:
+        cases = [c for c in (cases or self.active_cases) if c.duration > 0]
         sorted_cases = sorted(cases, key=lambda x: x.duration)
         if N > 0:
             sorted_cases = sorted_cases[-N:]

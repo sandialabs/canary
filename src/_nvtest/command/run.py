@@ -212,10 +212,10 @@ def run(args: "argparse.Namespace") -> int:
             )
         if not args.no_summary:
             session.print_summary()
-        if args.durations:
-            session.print_durations(args.durations)
         run_duration = timer.duration("run")
         session.print_footer(duration=run_duration)
+        if args.durations:
+            session.print_durations(args.durations)
     except KeyboardInterrupt:
         session.exitstatus = ExitCode.INTERRUPTED
     except StopExecution as e:

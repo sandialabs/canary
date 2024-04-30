@@ -163,10 +163,10 @@ def status(args: "argparse.Namespace") -> int:
     n: int = 0
     if cases_to_show:
         n = print_status(cases_to_show, show_logs=args.show_logs, sortby=args.sort_by)
-    if args.durations is not None:
-        print_durations(cases_to_show, int(args.durations))
     if n:
         print_footer_summary(cases)
+    if args.durations is not None:
+        session.print_durations(int(args.durations), cases_to_show)
     return 0
 
 
@@ -220,14 +220,5 @@ def print_footer_summary(cases: list[TestCase]) -> None:
             c = Status.colors[member]
             stat = totals[member][0].status.name
             summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-    logging.info("%s %s" % (colorize("@*{Summary}:"), ", ".join(summary_parts)))
-
-
-def print_durations(cases: list[TestCase], N: int) -> None:
-    cases = [case for case in cases if case.duration > 0]
-    sorted_cases = sorted(cases, key=lambda x: x.duration)
-    if N > 0:
-        sorted_cases = sorted_cases[-N:]
-    logging.emit(f"\nSlowest {len(sorted_cases)} durations\n")
-    for case in sorted_cases:
-        logging.emit("  %6.2f     %s\n" % (case.duration, case.pretty_repr()))
+    kwds = {"x": "\u2728", "summary": ", ".join(summary_parts)}
+    logging.emit(colorize("%(x)s @*{Summary}: %(summary)s\n") % kwds)
