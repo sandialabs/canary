@@ -80,7 +80,7 @@ class Config:
             self.load_config(file, "global")
         dir = os.getcwd()
         while dir != os.path.sep:
-            path = os.path.join(dir, ".nvtest/RESULTS.tag")
+            path = os.path.join(dir, ".nvtest/SESSION.TAG")
             if os.path.exists(path):
                 file = os.path.join(dir, ".nvtest/config")
                 self.load_config(file, "session")

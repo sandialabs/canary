@@ -32,11 +32,10 @@ copyright = '2024, Tim Fuller'
 author = 'Tim Fuller'
 
 # The short X.Y version
-today = datetime.today()
-version = today.strftime("%Y.%m.%d")
+version = datetime.today().strftime("%Y.%m.%d")
 
 # The full version, including alpha/beta/rc tags
-release = today.strftime("%Y.%m.%d")
+release = datetime.today().strftime("%Y.%m.%d")
 
 
 # -- General configuration ---------------------------------------------------

@@ -416,7 +416,7 @@ class Session:
                 "copy_all_resources": copy_all_resources,
             }
         )
-        file = os.path.join(self.dotdir, "RESULTS.TAG")
+        file = os.path.join(self.dotdir, "SESSION.TAG")
         mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
             fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
