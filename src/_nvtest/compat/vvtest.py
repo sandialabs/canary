@@ -196,6 +196,8 @@ def p_OPTION(tokens: list[tokenize.TokenInfo]) -> tuple[str, object]:
     if token.type != tokenize.NAME:
         raise ParseError(token)
     name = token.string
+    if len(tokens) == 1:
+        return name, True
     token = tokens[1]
     if token.type == tokenize.NEWLINE:
         return name, True
@@ -231,7 +233,7 @@ def p_OPTIONS(tokens: list[tokenize.TokenInfo]) -> dict[str, object]:
 def f_KEYWORDS(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
     """# VVT : keywords [:=] word1 word2 ... wordn"""
     assert arg.command == "keywords"
-    file.m_keywords(*arg.command.split(), when=arg.when)
+    file.m_keywords(*arg.argument.split(), when=arg.when)
 
 
 def f_SOURCES(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
