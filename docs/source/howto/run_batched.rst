@@ -16,6 +16,7 @@ Batching options
 
 * ``-b count=N``: group tests into ``N`` batches, each having approximately the same runtime.
 * ``-b limit=T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Human readable times, eg 1s, 1 sec, 1h, 2 hrs, etc, are accepted.
+* ``-b args=S``: pass args ``S`` directly to the scheduler.
 * ``-l session:workers=N``: Submit ``N`` concurrent batches to the scheduler at any one time.  The default is 5.
 * ``-l batch:workers=N``: Execute the batch asynchronously using a pool of at most ``N`` workers.  By default, the maximum number of available workers is used.
 
@@ -30,8 +31,7 @@ Batching options
 Scheduler options
 -----------------
 
-Send options directly to the scheduler via ``-R,option``.  Eg, ``-R,--account=XYZ`` will
-pass ``--account=XYZ`` directly to the scheduler.
+Send options directly to the scheduler via ``-b args=option``.  Eg, ``-b args=--account=XYZ`` will pass ``--account=XYZ`` directly to the scheduler.
 
 Supported schedulers
 --------------------
@@ -50,11 +50,11 @@ Examples
 
   .. command-output:: nvtest run -d TestResults.Batched -b scheduler=shell -b count=4 .
     :cwd: /examples
-    :returncode: 32
+    :returncode: 22
 
 
 * Run the nvtest example suite in 4 batches, running tests in serial in each batch
 
   .. command-output:: nvtest run -d TestResults.Batched -b scheduler=shell -b count=4 -l batch:workers=1 .
     :cwd: /examples
-    :returncode: 32
+    :returncode: 22

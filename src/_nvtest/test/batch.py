@@ -115,15 +115,17 @@ class Batch(Runner):
 
     @property
     def stage(self):
-        return os.path.join(self.root, ".nvtest/stage")
+        from ..queues import BatchResourceQueue
+
+        return os.path.join(self.root, ".nvtest", BatchResourceQueue.store, str(self.world_id))
 
     def submission_script_filename(self) -> str:
         basename = f"submit.{self.world_size}.{self.world_rank}.sh"
-        return os.path.join(self.stage, "batch", str(self.world_id), basename)
+        return os.path.join(self.stage, basename)
 
     def logfile(self) -> str:
         basename = f"out.{self.world_size}.{self.world_rank}.txt"
-        return os.path.join(self.stage, "batch", str(self.world_id), basename)
+        return os.path.join(self.stage, basename)
 
     def write_submission_script(self) -> None: ...
 
@@ -199,7 +201,7 @@ class SubShell(Batch):
         fh.write("export NVTEST_DISABLE_KB=1\n")
         max_workers = self.use_num_workers or 1
         fh.write(
-            f"(\n  nvtest {dbg_flag} -C {self.root} run -v "
+            f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
             "${SCRIPT_ARGS} "
             f"-l session:workers={max_workers} "
             f"-l session:cpus={session_cpus} "
@@ -314,7 +316,7 @@ class Slurm(Batch):
         fh.write(f"# total: {len(self.cases)} test cases\n")
         fh.write("export NVTEST_DISABLE_KB=1\n")
         fh.write(
-            f"(\n  nvtest {dbg_flag} -C {self.root} run -v "
+            f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
             "${SCRIPT_ARGS} "
             f"-l session:workers={max_workers} "
             f"-l session:cpus={session_cpus} "

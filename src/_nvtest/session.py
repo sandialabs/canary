@@ -315,10 +315,10 @@ class Session:
         return cases
 
     def bfilter(self, batch_store: Optional[int], batch_no: Optional[int]) -> list[TestCase]:
-        dir = os.path.join(self.config_dir, "stage/batch")
+        dir = os.path.join(self.config_dir, BatchResourceQueue.store)
         if batch_store is None:
             batch_store = len(os.listdir(dir))  # use latest
-        file = os.path.join(self.config_dir, "stage/batch", str(batch_store), "index")
+        file = os.path.join(self.config_dir, BatchResourceQueue.store, str(batch_store), "index")
         with open(file, "r") as fh:
             fd = json.load(fh)
         case_ids: list[str] = fd["index"][str(batch_no)]

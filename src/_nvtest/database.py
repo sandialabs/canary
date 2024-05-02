@@ -66,7 +66,6 @@ class Database:
             The list of ``TestCase``s
 
         """
-        file = os.path.join(self.directory, "cases.data.p")
         if not os.path.exists(self.index_file):
             return []
         fd: dict[str, TestCase]
@@ -97,7 +96,7 @@ class Database:
         """Read the results file and return a dictionary of the stored ``TestCase`` attributions"""
         with ReadTransaction(self.lock):
             fd: dict[str, dict] = {}
-            with open(os.path.join(self.directory, "cases"), "rb") as fh:
+            with open(self.progress_file, "rb") as fh:
                 while True:
                     try:
                         cd = pickle.load(fh)
