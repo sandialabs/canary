@@ -9,6 +9,10 @@ Basic usage
 .. command-output:: nvtest run -d TestResults.Basic ./basic
     :cwd: /examples
 
+.. note::
+
+    The ``-d`` flag specifies the name of the results directory.  The default value is ``TestResults``.
+
 Filter tests to run by keyword
 ------------------------------
 

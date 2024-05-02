@@ -9,9 +9,9 @@ The how-to guides in the documentation were auto-generated using a set of exampl
    :maxdepth: 1
 
    finding
-   run_basic
-   run_file
-   run_batched
+   basic
+   run_from_file
+   batch
    parameterize
    execute_and_analyze
    analyze_only
