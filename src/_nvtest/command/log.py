@@ -1,7 +1,6 @@
 import os
 from typing import TYPE_CHECKING
 
-from .. import config
 from ..session import Session
 from ..util import logging
 
@@ -21,19 +20,15 @@ def setup_parser(parser: "Parser"):
 def log(args: "argparse.Namespace") -> int:
     import pydoc
 
-    work_tree = config.get("session:work_tree")
-    if work_tree is None:
-        raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
-
     with logging.level(logging.WARNING):
-        session = Session.load(mode="r")
+        session = Session(os.getcwd(), mode="r")
 
     if args.testspec.startswith("^"):
         try:
             batch_store, batch_no = [int(_) for _ in args.testspec[1:].split(":")]
         except ValueError:
             batch_store, batch_no = None, int(args.testspec[1:])
-        file = session.batch_log(batch_no, batch_store=batch_store)
+        file = session.blogfile(batch_no, batch_store=batch_store)
         print(f"{file}:")
         pydoc.pager(open(file).read())
         return 0
@@ -46,4 +41,4 @@ def log(args: "argparse.Namespace") -> int:
                 print(f"{f}:")
                 pydoc.pager(open(f).read())
                 return 0
-    raise ValueError(f"{args.testspec}: no matching test found in {work_tree}")
+    raise ValueError(f"{args.testspec}: no matching test found in {session.root}")

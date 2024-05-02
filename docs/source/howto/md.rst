@@ -5,12 +5,12 @@ How to generate markdown output
 
 A markdown report of a test session can be generated after the session has completed:
 
-.. command-output:: nvtest run -vw -d TestMarkdownResults .
-    :cwd: /examples/basic
+.. command-output:: nvtest run -d TestResults.Markdown ./basic
+    :cwd: /examples
     :ellipsis: 0
 
-.. command-output:: nvtest -C TestMarkdownResults report markdown create
-    :cwd: /examples/basic
+.. command-output:: nvtest -C TestResults.Markdown report markdown create
+    :cwd: /examples
 
-.. literalinclude:: /examples/basic/TestMarkdownResults/Results.md
+.. literalinclude:: /examples/TestResults.Markdown/Results.md
     :language: markdown

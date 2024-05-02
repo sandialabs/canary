@@ -78,22 +78,9 @@ class Config:
         file = self.config_file("global")
         if file is not None and os.path.exists(file):
             self.load_config(file, "global")
-        dir = os.getcwd()
-        while dir != os.path.sep:
-            path = os.path.join(dir, ".nvtest/SESSION.TAG")
-            if os.path.exists(path):
-                file = os.path.join(dir, ".nvtest/config")
-                self.load_config(file, "session")
-                self.set("session:work_tree", dir, scope="session")
-                self.set("session:invocation_dir", invocation_dir, scope="session")
-                start = os.path.relpath(dir, os.getcwd()) or "."
-                self.set("session:start", start, scope="session")
-                break
-            dir = os.path.dirname(dir)
-        else:
-            file = self.config_file("local")
-            if file is not None and os.path.exists(file):
-                self.load_config(file, "local")
+        file = self.config_file("local")
+        if file is not None and os.path.exists(file):
+            self.load_config(file, "local")
         self.load_env_config()
 
     def config_file(self, scope) -> Optional[str]:
@@ -106,9 +93,9 @@ class Config:
         elif scope == "local":
             return os.path.abspath("./nvtest.cfg")
         elif scope == "session":
-            dir = self.get("session:work_tree")
+            dir = self.get("session:root")
             if not dir:
-                raise ValueError("session:work_tree has not been set")
+                raise ValueError("session:root has not been set")
             return os.path.join(dir, config_dir, "config")
         return None
 
@@ -170,10 +157,10 @@ class Config:
         scope_data = self.scopes.setdefault("command_line", {})
         logging.set_level(logging.INFO)
         if args.q or args.v:
-            adjust = args.q + args.v
-            level = min(max(logging.TRACE, logging.get_level() + 10 * adjust), logging.FATAL)
-            logging.set_level(level)
-            level_name = logging.get_level_name(level)
+            i = min(max(2 - args.q + args.v, 0), 4)
+            levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.TRACE)
+            logging.set_level(levels[i])
+            level_name = logging.get_level_name(levels[i])
             scope_data.setdefault("config", {})["log_level"] = level_name
         if args.debug:
             logging.set_level(logging.DEBUG)
@@ -505,7 +492,10 @@ def parse_config_path(path):
     """
     if path.startswith(":"):
         raise ValueError(f"Illegal leading `:' in path {path:r}")
-    return [_.strip() for _ in path.split(":") if _.split()]
+    parts = [_.strip() for _ in path.split(":") if _.split()]
+    if parts and "=" in parts[-1]:
+        parts = parts[:-1] + parts[-1].split("=", 1)
+    return parts
 
 
 class IllegalConfiguration(Exception):

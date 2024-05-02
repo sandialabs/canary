@@ -1,6 +1,6 @@
+import os
 from typing import TYPE_CHECKING
 
-from .. import config
 from ..session import Session
 from ..util import logging
 
@@ -48,12 +48,8 @@ def setup_parser(parser: "Parser"):
 
 
 def location(args: "argparse.Namespace") -> int:
-    work_tree = config.get("session:work_tree")
-    if work_tree is None:
-        raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
-
     with logging.level(logging.WARNING):
-        session = Session.load(mode="r")
+        session = Session(os.getcwd(), mode="r")
 
     for case in session.cases:
         if case.matches(args.testspec):
@@ -70,4 +66,4 @@ def location(args: "argparse.Namespace") -> int:
                 f = case.exec_dir
             print(f)
             return 0
-    raise ValueError(f"{args.testspec}: no matching test found in {work_tree}")
+    raise ValueError(f"{args.testspec}: no matching test found in {session.root}")

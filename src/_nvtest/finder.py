@@ -1,6 +1,7 @@
 import fnmatch
 import os
 import re
+from itertools import repeat
 from typing import Any
 from typing import Optional
 
@@ -11,6 +12,7 @@ from .test.file import AbstractTestFile
 from .util import filesystem as fs
 from .util import logging
 from .util import parallel
+from .util.resource import ResourceInfo
 
 default_file_pattern = r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$"
 
@@ -22,7 +24,6 @@ class Finder:
     def __init__(self) -> None:
         self.roots: dict[str, Optional[list[str]]] = {}
         self._ready = False
-        self.tree: dict[str, set[AbstractTestFile]] = {}
 
     def prepare(self):
         self._ready = True
@@ -45,9 +46,8 @@ class Finder:
                     raise ValueError(f"{path} not found in {root}")
             self.roots[root].append(path)  # type: ignore
 
-    def populate(self) -> dict[str, set[AbstractTestFile]]:
-        if len(self.tree):
-            raise ValueError("populate() should be called one time")
+    def discover(self) -> list[AbstractTestFile]:
+        tree: dict[str, set[AbstractTestFile]] = {}
         if not self._ready:
             raise ValueError("Cannot call populate() before calling prepare()")
         for root, paths in self.roots.items():
@@ -55,10 +55,10 @@ class Finder:
             if os.path.isfile(root):
                 f = AbstractTestFile.factory(root)
                 root = f.root
-                testfiles = self.tree.setdefault(root, set())
+                testfiles = tree.setdefault(root, set())
                 testfiles.add(f)
             elif paths is not None:
-                testfiles = self.tree.setdefault(root, set())
+                testfiles = tree.setdefault(root, set())
                 for path in paths:
                     p = os.path.join(root, path)
                     if os.path.isfile(p):
@@ -68,13 +68,14 @@ class Finder:
                     else:
                         raise FileNotFoundError(path)
             else:
-                testfiles = self.tree.setdefault(root, set())
+                testfiles = tree.setdefault(root, set())
                 testfiles.update(self.rfind(root))
             logging.debug(f"Found {len(testfiles)} test files in {root}")
-        n = sum([len(_) for _ in self.tree.values()])
-        nr = len(self.tree)
+        n = sum([len(_) for _ in tree.values()])
+        nr = len(tree)
         logging.debug(f"Found {n} test files in {nr} search roots")
-        return self.tree
+        files: list[AbstractTestFile] = [file for files in tree.values() for file in files]
+        return files
 
     def rfind(self, root: str, subdir: Optional[str] = None) -> list[AbstractTestFile]:
         def skip_dir(dirname):
@@ -101,6 +102,7 @@ class Finder:
                 ]
             )
         testfiles: list[AbstractTestFile] = parallel.starmap(AbstractTestFile.factory, paths)
+
         return testfiles
 
     @property
@@ -157,12 +159,10 @@ class Finder:
 
     @staticmethod
     def freeze(
-        tree: dict[str, set[AbstractTestFile]],
-        avail_cpus_per_test: Optional[int] = None,
-        avail_devices_per_test: Optional[int] = None,
+        files: list[AbstractTestFile],
+        resourceinfo: Optional[ResourceInfo] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
-        timelimit: Optional[float] = None,
         timeout_multiplier: float = 1.0,
         on_options: Optional[list[str]] = None,
         owners: Optional[set[str]] = None,
@@ -170,21 +170,22 @@ class Finder:
         o = ",".join(on_options or [])
         logging.debug(
             "Creating concrete test cases using\n"
-            f"  options={o}\n"
-            f"  keywords={keyword_expr}\n"
-            f"  parameters={parameter_expr}\n"
+            f"    options={o}\n"
+            f"    keywords={keyword_expr}\n"
+            f"    parameters={parameter_expr}"
         )
+        resourceinfo = resourceinfo or ResourceInfo()
         kwds = dict(
-            avail_cpus=avail_cpus_per_test,
-            avail_devices=avail_devices_per_test,
+            avail_cpus=resourceinfo["test:cpus"],
+            avail_devices=resourceinfo["test:devices"],
             keyword_expr=keyword_expr,
-            timelimit=timelimit,
+            timelimit=resourceinfo["test:timeout"],
             timeout_multiplier=timeout_multiplier,
             parameter_expr=parameter_expr,
             on_options=on_options,
             owners=owners,
         )
-        args = [(f, kwds) for files in tree.values() for f in files]
+        args = list(zip(files, repeat(kwds, len(files))))
         concrete_test_groups: list[list[TestCase]] = parallel.starmap(freeze_abstract_file, args)
         cases: list[TestCase] = [case for group in concrete_test_groups for case in group if case]
 

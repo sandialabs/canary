@@ -15,3 +15,14 @@ def test_parse_parameterize():
     assert names == ["np", "n"]
     assert values == [[1, 2], [3, 4], [5, 6], [7, 8]]
     assert kwds == {"type": list_parameter_space}
+
+
+def test_parse_autotype():
+    s = """\
+#!/usr/bin/env python3
+# VVT: parameterize (autotype) : np,n = 1,2 3,4 5,6
+"""
+    commands, _ = vvtest.p_VVT(s)
+    assert commands[0].command == "parameterize"
+    assert "%".join(commands[0].argument.split()) == "np,n%=%1,2%3,4%5,6"
+    assert commands[0].options == {"autotype": True}

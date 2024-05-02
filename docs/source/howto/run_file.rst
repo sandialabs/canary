@@ -27,5 +27,5 @@ To run only ``centered_space/test.pyt`` and ``parameterize/test2.pyt``, write th
 
 and pass it to ``nvtest run``:
 
-.. command-output:: nvtest run tests.json
+.. command-output:: nvtest run -d TestResults.FromFile tests.json
     :cwd: /examples

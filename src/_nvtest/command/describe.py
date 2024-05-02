@@ -4,9 +4,9 @@ from typing import TYPE_CHECKING
 
 from ..test.file import AbstractTestFile
 from ..util import graph
+from ..util.resource import ResourceInfo
 from .common import add_mark_arguments
 from .common import add_resource_arguments
-from .common import set_default_resource_args
 
 if TYPE_CHECKING:
     import argparse
@@ -24,7 +24,6 @@ def setup_parser(parser: "Parser"):
 
 
 def describe(args: "argparse.Namespace") -> int:
-    set_default_resource_args(args)
     file = AbstractTestFile(args.file)
     fp = sys.stdout
     fp.write(f"--- {file.name} ------------\n")
@@ -44,9 +43,10 @@ def describe(args: "argparse.Namespace") -> int:
                 if dst and dst != os.path.basename(src):
                     fp.write(f" -> {dst}")
                 fp.write("\n")
+    resourceinfo = args.resourceinfo or ResourceInfo()
     cases = file.freeze(
-        avail_cpus=args.cpus_per_test,
-        avail_devices=args.devices_per_test,
+        avail_cpus=int(resourceinfo["test:cpus"]),
+        avail_devices=int(resourceinfo["test:devices"]),
         on_options=args.on_options,
         keyword_expr=args.keyword_expr,
     )

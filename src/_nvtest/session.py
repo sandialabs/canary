@@ -1,8 +1,8 @@
-import glob
-import inspect
+import io
 import json
 import os
 import pickle
+import random
 import signal
 import threading
 import time
@@ -20,6 +20,7 @@ from typing import Union
 
 from . import config
 from . import plugin
+from .database import Database
 from .error import FailFast
 from .error import StopExecution
 from .finder import Finder
@@ -28,14 +29,11 @@ from .queues import DirectResourceQueue
 from .queues import Empty as EmptyQueue
 from .queues import ResourceQueue
 from .test.batch import Batch
-from .test.batch import factory as b_factory
 from .test.case import TestCase
+from .test.file import AbstractTestFile
 from .test.status import Status
-from .third_party.color import clen
-from .third_party.color import colorize
-from .third_party.lock import Lock
-from .third_party.lock import ReadTransaction
-from .third_party.lock import WriteTransaction
+from .third_party import color
+from .util import glyphs
 from .util import keyboard
 from .util import logging
 from .util import parallel
@@ -43,18 +41,17 @@ from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
-from .util.misc import dedup
 from .util.misc import partition
-from .util.partition import partition_n
-from .util.partition import partition_t
-from .util.progress import progress
+from .util.resource import BatchInfo
+from .util.resource import ResourceInfo
 from .util.returncode import compute_returncode
 from .util.time import hhmmss
 from .when import when
 
-default_batchsize = 30 * 60  # 30 minutes
 default_timeout = 60 * 60  # 60 minutes
+default_batchsize = 30 * 60  # 30 minutes
 global_session_lock = threading.Lock()
+batch_store_path = "B"
 
 
 class ExitCode:
@@ -69,451 +66,88 @@ class ExitCode:
         return compute_returncode(cases)
 
 
-class Database:
-    """Manages the test session database
-
-    Writes an index file containing information about all tests found during
-    discovery (index/cases) and a results file for tests that are run
-    (stage/cases).  The results file is updated after the completion of each
-    test case.
-
-    Reads and writes to the results file are locked to allow running tests in parallel
-
-    Args:
-        directory: Where to store database assets
-        cases: The list of test cases
-
-    """
-
-    def __init__(self, directory: str, cases: Optional[list[TestCase]] = None) -> None:
-        self.directory = os.path.abspath(directory)
-        lock_path = os.path.join(self.directory, "lock")
-        self.lock = Lock(lock_path, default_timeout=120, desc="session.database")
-        if cases is not None:
-            self.makeindex(cases)
-        elif not os.path.exists(os.path.join(self.directory, "index/cases")):
-            raise ValueError(f"index not found at {self.directory}")
-
-    def _single_case_entry(self, case: TestCase) -> dict:
-        entry = {
-            "start": case.start,
-            "finish": case.finish,
-            "status": case.status,
-            "returncode": case.returncode,
-            "dependencies": case.dependencies,
-        }
-        return entry
-
-    def update(self, cases: Union[TestCase, list[TestCase]]) -> None:
-        """Add test case results to the database
-
-        Args:
-            cases: list of test cases to add to the database
-
-        """
-        if not isinstance(cases, list):
-            cases = [cases]
-        file = os.path.join(self.directory, "stage/cases")
-        mkdirp(os.path.dirname(file))
-        with WriteTransaction(self.lock):
-            with open(file, "ab") as fh:
-                for case in cases:
-                    cd = self._single_case_entry(case)
-                    pickle.dump({case.id: cd}, fh)
-
-    def load(self) -> list[TestCase]:
-        """Load the test results
-
-        Returns:
-            The list of ``TestCase``s
-
-        """
-        fd: dict[str, TestCase]
-        with ReadTransaction(self.lock):
-            file = os.path.join(self.directory, "index/cases")
-            with open(file, "rb") as fh:
-                fd = pickle.load(fh)
-            file = os.path.join(self.directory, "stage/cases")
-            with open(file, "rb") as fh:
-                while True:
-                    try:
-                        cd = pickle.load(fh)
-                    except EOFError:
-                        break
-                    else:
-                        for case_id, value in cd.items():
-                            fd[case_id].update(value)
-        ts: TopologicalSorter = TopologicalSorter()
-        for case in fd.values():
-            ts.add(case, *case.dependencies)
-        cases: dict[str, TestCase] = {}
-        for case in ts.static_order():
-            if case.exec_root is None:
-                case.exec_root = os.path.dirname(self.directory)
-            case.dependencies = [cases[dep.id] for dep in case.dependencies]
-            cases[case.id] = case
-        return list(cases.values())
-
-    def read(self) -> dict[str, dict]:
-        """Read the results file and return a dictionary of the stored ``TestCase`` attributions"""
-        with ReadTransaction(self.lock):
-            fd: dict[str, dict] = {}
-            with open(os.path.join(self.directory, "stage/cases"), "rb") as fh:
-                while True:
-                    try:
-                        cd = pickle.load(fh)
-                    except EOFError:
-                        break
-                    else:
-                        for case_id, value in cd.items():
-                            fd.setdefault(case_id, {}).update(value)
-        return fd
-
-    def makeindex(self, cases: list[TestCase]) -> None:
-        """Store each ``TestCase`` in ``cases`` as a dictionary in the index file"""
-        files: dict[str, set[str]] = {}
-        indexed: dict[str, TestCase] = {}
-        for case in cases:
-            files.setdefault(case.file_root, set()).add(case.file_path)
-            indexed[case.id] = case
-        file = os.path.join(self.directory, "index/files")
-        mkdirp(os.path.dirname(file))
-        with open(file, "w") as fh:
-            json.dump({k: list(v) for (k, v) in files.items()}, fh, indent=2)
-        file = os.path.join(self.directory, "index/cases")
-        with open(file, "wb") as fh:
-            pickle.dump(indexed, fh)
-        file = os.path.join(self.directory, "stage/cases")
-        mkdirp(os.path.dirname(file))
-        with open(file, "wb") as fh:
-            for case in cases:
-                if case.masked:
-                    continue
-                cd = self._single_case_entry(case)
-                pickle.dump({case.id: cd}, fh)
-
-
 class Session:
-    """Manages the test session
+    tagfile = "SESSION.TAG"
+    default_worktree = "./TestResults"
+    data_file = "session.data.json"
+    resource_file = "resources.data.json"
 
-    This object should not be directly instantiated but should be instantiated
-    through one of the two factory methods: ``Session.create`` and
-    ``Session.load``
-
-    """
-
-    default_work_tree = "./TestResults"
-    mode: str
-    id: int
-    startdir: str
-    exitstatus: int
-    _work_tree: str
-    _avail_cpus: int
-    _avail_devices: int
-    _avail_cpus_per_test: int
-    _avail_devices_per_test: int
-    _avail_workers: int
-    search_paths: dict[str, list[str]]
-    cases: list[TestCase]
-    queue: ResourceQueue
-    lock: Lock
-    db: Database
-    ini_options: dict
-
-    def __init__(self) -> None:
-        stack = inspect.stack()
-        frame = stack[1][0]
-        calling_func = None
-        if "cls" in frame.f_locals:
-            calling_func = getattr(frame.f_locals["cls"], frame.f_code.co_name, None)
-        if calling_func not in (Session.create, Session.load):
-            raise ValueError("Session must be created through one of its factory methods")
-        self.state: int = 0
-
-        nodes = config.get("machine:nodes") or 1
-        spn = config.get("machine:sockets_per_node")
-        cps = config.get("machine:cores_per_socket")
-        cores_per_node = spn * cps
-        avail_cpus = nodes * cores_per_node
-
-        self._avail_cpus = avail_cpus
-        self._avail_cpus_per_test = self.avail_cpus
-        self._avail_workers = config.get("machine:cpu_count")
-        self._avail_devices = config.get("machine:device_count")
-        self._avail_devices_per_test = self.avail_devices
-
-    @property
-    def active_cases(self) -> list[TestCase]:
-        return [case for case in self.cases if not case.masked]
-
-    @property
-    def work_tree(self) -> str:
-        return self._work_tree
-
-    @work_tree.setter
-    def work_tree(self, arg: str) -> None:
-        self._work_tree = arg
-
-    @property
-    def dotdir(self) -> str:
-        path = os.path.join(self.work_tree, ".nvtest")
-        return path
-
-    @property
-    def stage(self) -> str:
-        return os.path.join(self.dotdir, "stage")
-
-    @property
-    def avail_cpus(self) -> int:
-        return self._avail_cpus
-
-    @avail_cpus.setter
-    def avail_cpus(self, arg: int) -> None:
-        nodes = config.get("machine:nodes") or 1
-        spn = config.get("machine:sockets_per_node") or 1
-        cps = config.get("machine:cores_per_socket") or config.get("machine:cpu_count")
-        cores_per_node = spn * cps
-        avail_cpus = nodes * cores_per_node
-        if arg > avail_cpus:
-            raise ValueError(f"avail_cpus={arg} cannot exceed cpu_count={avail_cpus}")
-        self._avail_cpus = arg
-        if arg < self._avail_cpus_per_test:
-            self._avail_cpus_per_test = arg
-
-    @property
-    def avail_cpus_per_test(self) -> int:
-        return self._avail_cpus_per_test
-
-    @avail_cpus_per_test.setter
-    def avail_cpus_per_test(self, arg: int) -> None:
-        if arg > self.avail_cpus:
-            n = self.avail_cpus
-            raise ValueError(f"avail_cpus_per_test={arg} cannot exceed avail_cpus={n}")
-        self._avail_cpus_per_test = arg
-
-    @property
-    def avail_devices(self) -> int:
-        return self._avail_devices
-
-    @avail_devices.setter
-    def avail_devices(self, arg: int) -> None:
-        if arg > config.get("machine:device_count"):
-            n = config.get("machine:device_count")
-            raise ValueError(f"avail_devices={arg} cannot exceed device_count={n}")
-        self._avail_devices = arg
-
-    @property
-    def avail_devices_per_test(self) -> int:
-        return self._avail_devices_per_test
-
-    @avail_devices_per_test.setter
-    def avail_devices_per_test(self, arg: int) -> None:
-        if arg > self.avail_devices:
-            n = self.avail_devices
-            raise ValueError(f"avail_devices_per_test={arg} cannot exceed avail_devices={n}")
-        self._avail_devices_per_test = arg
-
-    @property
-    def avail_workers(self) -> int:
-        return self._avail_workers
-
-    @avail_workers.setter
-    def avail_workers(self, arg: int) -> None:
-        if arg > self.avail_cpus:
-            n = self.avail_cpus
-            raise ValueError(f"avail_workers={arg} cannot exceed avail_cpus={n}")
-        self._avail_workers = arg
-
-    @classmethod
-    def create(
-        cls,
-        *,
-        work_tree: str,
-        search_paths: dict[str, list[str]],
-        avail_cpus: Optional[int] = None,
-        avail_cpus_per_test: Optional[int] = None,
-        avail_devices: Optional[int] = None,
-        avail_devices_per_test: Optional[int] = None,
-        avail_workers: Optional[int] = None,
-        keyword_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameter_expr: Optional[str] = None,
-        test_timelimit: Optional[float] = None,
-        timeout_multiplier: float = 1.0,
-    ) -> "Session":
-        if config.has_scope("session"):
-            raise ValueError("cannot create new session when another session is active")
-        self = cls()
-        self.mode = "w"
+    def __init__(self, path: str, mode: str = "r", force: bool = False) -> None:
+        if mode not in "arw":
+            raise ValueError(f"invalid mode: {mode!r}")
+        self.root: str
+        if mode == "w":
+            path = os.path.abspath(path)
+            if force:
+                if not os.getenv("NVTEST_MAKE_DOCS"):
+                    logging.warning(f"Removing {path}")
+                force_remove(path)
+            if os.path.exists(path):
+                raise DirectoryExistsError(f"{path}: directory exists")
+            self.root = path
+        else:
+            root = self.find_root(path)
+            if root is None:
+                raise NotASession("not a nvtest session (or any of the parent directories)")
+            self.root = root
+        self.mode = mode
+        self.search_paths: dict[str, list[str]] = {}
+        self.files: list[AbstractTestFile] = list()
+        self.cases: list[TestCase] = list()
+        self.db = Database(self.config_dir)
+        if mode in "ra":
+            self.load()
+        else:
+            self.initialize()
         self.exitstatus = -1
+        self.returncode = -1
+        self.mode = mode
 
-        logging.debug(f"Creating new test session in {work_tree}")
+    @property
+    def config_dir(self):
+        return os.path.join(self.root, ".nvtest")
 
-        try:
-            self.initialize(
-                work_tree,
-                search_paths=search_paths,
-                avail_cpus=avail_cpus,
-                avail_cpus_per_test=avail_cpus_per_test,
-                avail_devices=avail_devices,
-                avail_devices_per_test=avail_devices_per_test,
-                avail_workers=avail_workers,
-                keyword_expr=keyword_expr,
-                on_options=on_options,
-                parameter_expr=parameter_expr,
-            )
-        except DirectoryExistsError:
-            raise
-        except Exception:
-            force_remove(self.work_tree)
-            raise
+    @staticmethod
+    def find_root(path: str):
+        path = os.path.abspath(path)
+        while True:
+            if os.path.exists(os.path.join(path, Session.tagfile)):
+                return os.path.dirname(path)
+            elif os.path.exists(os.path.join(path, ".nvtest", Session.tagfile)):
+                return path
+            path = os.path.dirname(path)
+            if path == os.path.sep:
+                break
+        return None
 
-        self.populate(
-            on_options=on_options,
-            keyword_expr=keyword_expr,
-            parameter_expr=parameter_expr,
-            test_timelimit=test_timelimit,
-            timeout_multiplier=timeout_multiplier,
-        )
+    def load(self) -> None:
+        logging.debug(f"Loading test session in {self.root}")
+        file = os.path.join(self.config_dir, self.data_file)
+        with open(file, "rb") as fh:
+            data = json.load(fh)
+        for var, val in data.items():
+            setattr(self, var, val)
+        file = os.path.join(self.config_dir, "files.data.p")
+        if os.path.exists(file):
+            with open(file, "rb") as fh:
+                self.files = pickle.load(fh)
+        self.cases = self.db.load()
+        self.set_config_values()
 
-        self.ini_options = dict(
-            keyword_expr=keyword_expr,
-            on_options=on_options,
-            parameter_expr=parameter_expr,
-            timeout_multiplier=timeout_multiplier,
-        )
-        self.state = 1
-
-        return self
-
-    def setup(
-        self,
-        copy_all_resources: bool = False,
-        workers_per_batch: Optional[int] = None,
-        batch_count: Optional[int] = None,
-        batch_time: Optional[float] = None,
-        scheduler: Optional[str] = None,
-        scheduler_options: Optional[list[str]] = None,
-    ) -> None:
-        if self.state != 1:
-            raise ValueError(f"Expected state == 1 (got {self.state})")
-
-        logging.debug("Setting up work tree")
-
-        for hook in plugin.plugins("session", "setup"):
-            hook(self)
-
-        t_start = time.monotonic()
-        self.setup_testcases(self.active_cases, copy_all_resources=copy_all_resources)
-        duration = time.monotonic() - t_start
-
-        self.ini_options.update(
-            {
-                "batch_count": batch_count,
-                "batch_time": batch_time,
-                "scheduler": scheduler,
-                "scheduler_options": scheduler_options,
-                "copy_all_resources": copy_all_resources,
-            }
-        )
-        file = os.path.join(self.dotdir, "SESSION.TAG")
+    def initialize(self) -> None:
+        logging.debug(f"Initializing test session in {self.root}")
+        file = os.path.join(self.config_dir, self.tagfile)
         mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
             fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
             fh.write("# This file is a results directory tag automatically created by nvtest.\n")
+        self.set_config_values(write=True)
+        self.save()
 
-        file = os.path.join(self.dotdir, "params")
-        with open(file, "w") as fh:
-            variables = dict(vars(self))
-            for attr in ("cases", "queue", "db", "lock"):
-                variables.pop(attr, None)
-            json.dump(variables, fh, indent=2)
-
-        self.setup_queue(
-            batch_count=batch_count,
-            batch_time=batch_time,
-            scheduler=scheduler,
-            scheduler_options=scheduler_options,
-            workers_per_batch=workers_per_batch,
-        )
-
-        duration = time.monotonic() - t_start
-        logging.debug(f"Done setting up work tree ({duration:.2f}s.)")
-
-        self.state = 2
-
-    @classmethod
-    def load(cls, *, mode: str = "r") -> "Session":
-        if mode not in "ra":
-            raise ValueError(f"Incorrect mode {mode!r}")
-        self = cls()
-        self.work_tree = config.get("session:work_tree")
-        logging.info(f"Loading session from {self.work_tree}")
-        if not self.work_tree:
-            raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
-        self.mode = mode
-        self.exitstatus = -1
-        assert os.path.exists(self.stage)
-        with open(os.path.join(self.dotdir, "params")) as fh:
-            for attr, value in json.load(fh).items():
-                setattr(self, attr, value)
-        self.db = Database(self.dotdir)
-        self.cases = self.db.load()
-        self.state = 1
-        self.mode = mode
-
-        logging.info(f"Available cpus: {self.avail_cpus}")
-        logging.info(f"Available cpus per test: {self.avail_cpus_per_test}")
-        if self.avail_devices:
-            logging.info(f"Available devices: {self.avail_devices}")
-            logging.info(f"Available devices per test: {self.avail_devices_per_test}")
-        logging.info(f"Maximum number of asynchronous jobs: {self.avail_workers}")
-
-        return self
-
-    def initialize(
-        self,
-        work_tree: str,
-        search_paths: dict[str, list[str]],
-        avail_cpus: Optional[int] = None,
-        avail_cpus_per_test: Optional[int] = None,
-        avail_devices: Optional[int] = None,
-        avail_devices_per_test: Optional[int] = None,
-        avail_workers: Optional[int] = None,
-        **kwds: Any,
-    ) -> None:
-        """Create the work tree and auxiliary directories, and setup session
-        configuration
-
-        """
-        self.work_tree = os.path.abspath(work_tree)
-        if os.path.exists(self.work_tree):
-            raise DirectoryExistsError(f"{self.work_tree}: directory exists")
-        mkdirp(self.work_tree)
-
-        t_start = time.monotonic()
-        logging.debug("Initializing session")
-        if avail_cpus is not None:
-            self.avail_cpus = avail_cpus
-        if avail_cpus_per_test is not None:
-            self.avail_cpus_per_test = avail_cpus_per_test
-
-        if avail_devices is not None:
-            self.avail_devices = avail_devices
-        if avail_devices_per_test is not None:
-            self.avail_devices_per_test = avail_devices_per_test
-
-        if avail_workers is not None:
-            self.avail_workers = avail_workers
-
-        self.search_paths = search_paths
-
-        config.set("session:work_tree", self.work_tree, scope="session")
+    def set_config_values(self, write: bool = False):
+        config.set("session:root", self.root, scope="session")
         config.set("session:invocation_dir", config.invocation_dir, scope="session")
-        start = os.path.relpath(self.work_tree, os.getcwd()) or "."
-        config.set("session:start", start, scope="session")
-        for key, value in kwds.items():
-            config.set(f"session:{key}", value, scope="session")
+        config.set("session:start", config.invocation_dir, scope="session")
         for attr in ("sockets_per_node", "cores_per_socket", "cpu_count"):
             value = config.get(f"machine:{attr}", scope="local")
             if value is not None:
@@ -523,169 +157,114 @@ class Session:
             data = config.get(section, scope="local") or {}
             for key, value in data.items():
                 config.set(f"{section}:{key}", value, scope="session")
-        file = os.path.join(self.work_tree, config.config_dir, "config")
-        mkdirp(os.path.dirname(file))
+        if write:
+            file = os.path.join(self.config_dir, "config")
+            with open(file, "w") as fh:
+                config.dump(fh, scope="session")
+
+    def save(self) -> None:
+        data: dict[str, Any] = {}
+        for var, value in vars(self).items():
+            if var not in ("files", "cases", "db"):
+                data[var] = value
+        file = os.path.join(self.config_dir, self.data_file)
         with open(file, "w") as fh:
-            config.dump(fh, scope="session")
-        duration = time.monotonic() - t_start
-        logging.debug(f"Done initializing session ({duration:.2f}s.)")
+            json.dump(data, fh, indent=2)
 
-    def populate(
-        self,
-        keyword_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameter_expr: Optional[str] = None,
-        test_timelimit: Optional[float] = None,
-        timeout_multiplier: float = 1.0,
-    ) -> None:
-        if self.mode != "w":
-            raise ValueError(f"Incorrect mode {self.mode!r}")
+    def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:
+        """Add ``path`` to this session's search paths"""
+        if isinstance(search_paths, list):
+            search_paths = {path: [] for path in search_paths}
+        if self.files:
+            raise ValueError("session is already populated")
+        errors = 0
+        for root, paths in search_paths.items():
+            if not os.path.isdir(root):
+                errors += 1
+                logging.warning(f"{root}: directory does not exist and will not be searched")
+        if errors:
+            logging.warning("one or more search paths does not exist")
+        for root, paths in search_paths.items():
+            root = os.path.abspath(root)
+            self.search_paths[root] = paths
+        self.save()
 
-        t_start = time.monotonic()
-        paths = ", ".join([os.path.relpath(p) for p in self.search_paths])
-        logging.debug(f"Searching for test files in {paths}")
-
+    def discover(self):
         finder = Finder()
-        for root, _paths in self.search_paths.items():
-            finder.add(root, *_paths, tolerant=True)
+        for root, paths in self.search_paths.items():
+            finder.add(root, *paths, tolerant=True)
         finder.prepare()
-        tree = finder.populate()
-        n = sum([len(_fs) for _, _fs in tree.items()])
-        logging.debug(f"Found {n} test files")
+        self.files = finder.discover()
+        file = os.path.join(self.config_dir, "files.data.p")
+        with open(file, "wb") as fh:
+            pickle.dump(self.files, fh)
+        logging.debug(f"Discovered {len(self.files)} test files")
 
-        on_options = on_options or []
-        if config.get("build:options"):
-            for opt, val in config.get("build:options").items():
-                if val:
-                    on_options.append(opt)
-        on_options = dedup(on_options)
-
-        logging.debug("Freezing test files")
-        logging.debug(
-            "Freezing test files with the following options:\n"
-            f"  {self.avail_cpus=}\n"
-            f"  {self.avail_cpus_per_test=}\n"
-            f"  {self.avail_devices_per_test=}\n"
-            f"  {on_options=}\n"
-            f"  {keyword_expr=}\n"
-            f"  {parameter_expr=}\n"
-        )
+    def freeze(
+        self,
+        resourceinfo: Optional[ResourceInfo] = None,
+        keyword_expr: Optional[str] = None,
+        parameter_expr: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        owners: Optional[set[str]] = None,
+    ) -> None:
         self.cases = Finder.freeze(
-            tree,
-            avail_cpus_per_test=self.avail_cpus_per_test,
-            avail_devices_per_test=self.avail_devices_per_test,
-            on_options=on_options,
+            self.files,
+            resourceinfo=resourceinfo,
             keyword_expr=keyword_expr,
-            timelimit=test_timelimit,
-            timeout_multiplier=timeout_multiplier,
             parameter_expr=parameter_expr,
+            on_options=on_options,
+            owners=owners,
         )
-        cases_to_run = self.active_cases
+        cases_to_run = [case for case in self.cases if not case.masked]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
-        duration = time.monotonic() - t_start
-        self.db = Database(self.dotdir, self.cases)
-        logging.debug(f"Done populating work tree ({duration:.2f}s.)")
+        self.db.makeindex(self.cases)
+        logging.debug(f"Collected {len(self.cases)} test cases from {len(self.files)} files")
 
-    def setup_direct_queue(self) -> None:
-        self.queue = DirectResourceQueue(
-            self.avail_cpus, self.avail_devices, self.avail_workers, global_session_lock
-        )
-        self.queue.put(*self.active_cases)
+    def populate(self, copy_all_resources: bool = False) -> None:
+        """Populate the work tree with test case assets"""
+        logging.debug("Populating test case directories")
+        with self.rc_environ():
+            with working_dir(self.root):
+                self.setup_testcases(copy_all_resources=copy_all_resources)
 
-    def setup_batch_queue(
-        self,
-        batch_count: Optional[int] = None,
-        batch_time: Optional[float] = None,
-        scheduler: Optional[str] = None,
-        scheduler_options: Optional[list[str]] = None,
-        workers_per_batch: Optional[int] = None,
-    ) -> None:
-        batched: bool = batch_count is not None or batch_time is not None
-        if not batched:
-            raise ValueError("Expected batched == True")
-
-        batch_stores = glob.glob(os.path.join(self.dotdir, "stage/batch/*"))
-
-        cases_to_run = self.active_cases
-        partitions: list[set[TestCase]]
-        if batch_count:
-            partitions = partition_n(cases_to_run, n=batch_count)
-        else:
-            assert batch_time is not None
-            partitions = partition_t(cases_to_run, t=batch_time)
-        n = len(partitions)
-        N = len(batch_stores) + 1
-        batches = [
-            b_factory(p, i, n, N, scheduler=scheduler, avail_workers=workers_per_batch)
-            for i, p in enumerate(partitions, start=1)
-            if len(p)
-        ]
-        for batch in batches:
-            batch.setup(*(scheduler_options or []))
-        self.queue = BatchResourceQueue(
-            self.avail_cpus, self.avail_devices, self.avail_workers, global_session_lock
-        )
-        self.queue.put(*batches)
-        fd: dict[int, list[str]] = {}
-        for batch in batches:
-            cases = fd.setdefault(batch.world_rank, [])
-            cases.extend([case.id for case in batch])
-
-        file = os.path.join(self.dotdir, "stage/batch", str(N), "index")
-        mkdirp(os.path.dirname(file))
-        with open(file, "w") as fh:
-            json.dump({"index": fd}, fh, indent=2)
-        return
-
-    def apply_batch_filter(self, batch_store: Optional[int], batch_no: Optional[int]) -> None:
-        dir = os.path.join(self.dotdir, "stage/batch")
-        if batch_store is None:
-            batch_store = len(os.listdir(dir))  # use latest
-        file = os.path.join(self.dotdir, "stage/batch", str(batch_store), "index")
-        with open(file, "r") as fh:
-            fd = json.load(fh)
-        case_ids: list[str] = fd["index"][str(batch_no)]
-        # mask tests and then later enable based on additional conditions
-        for case in self.cases:
-            if case.id in case_ids:
-                case.status.set("ready")
-            elif not case.masked:
-                case.status.set("masked", f"case is not in batch {batch_no}")
-        return None
-
-    def batch_log(self, batch_no: int, batch_store: Optional[int]) -> str:
-        dir = os.path.join(self.dotdir, "stage/batch")
-        if batch_store is None:
-            batch_store = len(os.listdir(dir))  # use latest
-        index = os.path.join(dir, str(batch_store), "index")
-        with open(index) as fh:
-            fd = json.load(fh)
-            n = len(fd["index"])
-        f = os.path.join(dir, str(batch_store), f"out.{n}.{batch_no}.txt")
-        return f
+    def setup_testcases(self, copy_all_resources: bool = False) -> None:
+        logging.debug("Setting up test cases")
+        cases = [case for case in self.cases if not case.masked]
+        ts: TopologicalSorter = TopologicalSorter()
+        for case in cases:
+            ts.add(case, *case.dependencies)
+        ts.prepare()
+        while ts.is_active():
+            group = ts.get_ready()
+            args = zip(group, repeat(self.root), repeat(copy_all_resources))
+            parallel.starmap(setup_individual_case, list(args))
+            for case in group:
+                # Since setup is run in a multiprocessing pool, the internal
+                # state is lost and needs to be updated
+                case.refresh()
+                assert case.status.value in ("skipped", "ready", "pending")
+                with working_dir(case.exec_dir):
+                    for hook in plugin.plugins("test", "setup"):
+                        hook(case)
+            ts.done(*group)
+        self.db.update(cases)
 
     def filter(
         self,
-        batch_no: Optional[int] = None,
-        batch_store: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
         start: Optional[str] = None,
-        avail_cpus_per_test: Optional[int] = None,
-        avail_devices_per_test: Optional[int] = None,
+        resourceinfo: Optional[ResourceInfo] = None,
         case_specs: Optional[list[str]] = None,
-    ) -> None:
-        if self.state != 1:
-            raise ValueError(f"Expected state == 1 (got {self.state})")
-        if batch_no is not None:
-            self.apply_batch_filter(batch_store, batch_no)
-            return
+    ) -> list[TestCase]:
+        resourceinfo = resourceinfo or ResourceInfo()
         explicit_start_path = start is not None
         if start is None:
-            start = self.work_tree
+            start = self.root
         elif not os.path.isabs(start):
-            start = os.path.join(self.work_tree, start)
+            start = os.path.join(self.root, start)
         start = os.path.normpath(start)
         # mask tests and then later enable based on additional conditions
         for case in self.cases:
@@ -698,100 +277,78 @@ class Session:
                 if any(case.matches(_) for _ in case_specs):
                     case.status.set("ready")
                 else:
-                    case.status.set("masked", colorize("deselected by @*b{testspec expression}"))
+                    case.status.set(
+                        "masked", color.colorize("deselected by @*b{testspec expression}")
+                    )
                 continue
             elif explicit_start_path:
                 case.status.set("ready")
                 continue
-            if case.status != "ready":
-                s = f"deselected due to previous status: {case.status.cname}"
-                case.status.set("masked", s)
-                if avail_cpus_per_test and case.processors > avail_cpus_per_test:
-                    continue
-                if avail_devices_per_test and case.devices > avail_devices_per_test:
-                    continue
-                when_expr: list[str] = []
-                if parameter_expr:
-                    when_expr.append(f"parameters={parameter_expr!r}")
-                if keyword_expr:
-                    when_expr.append(f"keywords={keyword_expr!r}")
-                if when_expr:
-                    match = when(
-                        " ".join(when_expr),
-                        parameters=case.parameters,
-                        keywords=case.keywords(implicit=True),
-                    )
-                    if match:
-                        case.status.set("ready")
-        if not self.active_cases:
-            raise EmptySession()
+            if resourceinfo["test:cpus"] and case.processors > resourceinfo["test:cpus"]:
+                n = resourceinfo["test:cpus"]
+                case.status.set("masked", f"test requires more than {n} cpus")
+                continue
+            if resourceinfo["test:devices"] and case.devices > resourceinfo["test:devices"]:
+                n = resourceinfo["test:devices"]
+                case.status.set("masked", f"test requires more than {n} devices")
+                continue
+            when_expr: dict[str, str] = {}
+            if parameter_expr:
+                when_expr.update({"parameters": parameter_expr})
+            if keyword_expr:
+                when_expr.update({"keywords": keyword_expr})
+            if when_expr:
+                match = when(
+                    when_expr,
+                    parameters=case.parameters,
+                    keywords=case.keywords(implicit=True),
+                )
+                if match:
+                    case.status.set("ready" if not case.dependencies else "pending")
+                elif case.status != "ready":
+                    s = f"deselected due to previous status: {case.status.cname}"
+                    case.status.set("masked", s)
+                else:
+                    case.status.set("masked", color.colorize("deselected by @*b{when expression}"))
 
-    def setup_queue(
-        self,
-        batch_count: Optional[int] = None,
-        batch_time: Optional[float] = None,
-        scheduler: Optional[str] = None,
-        scheduler_options: Optional[list[str]] = None,
-        workers_per_batch: Optional[int] = None,
-    ):
-        if scheduler is None:
-            if batch_count is not None or batch_time is not None:
-                raise ValueError("batched execution requires a scheduler")
-            self.setup_direct_queue()
-        else:
-            if batch_count is None and batch_time is None:
-                batch_time = default_batchsize
-            self.setup_batch_queue(
-                batch_count=batch_count,
-                batch_time=batch_time,
-                scheduler=scheduler,
-                scheduler_options=scheduler_options,
-                workers_per_batch=workers_per_batch,
-            )
-        self.state = 2
+        cases = [case for case in self.cases if case.status.value in ("pending", "ready")]
+        return cases
+
+    def bfilter(self, batch_store: Optional[int], batch_no: Optional[int]) -> list[TestCase]:
+        dir = os.path.join(self.config_dir, "stage/batch")
+        if batch_store is None:
+            batch_store = len(os.listdir(dir))  # use latest
+        file = os.path.join(self.config_dir, "stage/batch", str(batch_store), "index")
+        with open(file, "r") as fh:
+            fd = json.load(fh)
+        case_ids: list[str] = fd["index"][str(batch_no)]
+        for case in self.cases:
+            if case.id in case_ids:
+                case.status.set("ready")
+            elif not case.masked:
+                case.status.set("masked", f"case is not in batch {batch_no}")
+        return [case for case in self.cases if case.status == "ready"]
 
     def run(
         self,
-        *args: str,
-        timeout: Optional[float] = None,
+        cases: list[TestCase],
+        *,
+        resourceinfo: Optional[ResourceInfo] = None,
+        batchinfo: Optional[BatchInfo] = None,
         fail_fast: bool = False,
-        verbose: bool = False,
+        output: str = "progress-bar",
     ) -> int:
-        if self.state != 2:
-            raise ValueError(
-                f"Expected state == 2 (got {self.state}), did you forget to call setup_queue?"
-            )
-        if config.get("config:debug"):
-            verbose = True
-        self.start = time.monotonic()
-        if not self.queue:
-            raise ValueError("This session's queue was not set up")
-        if self.queue.empty():
+        if not cases:
             raise ValueError("There are no cases to run in this session")
+        resourceinfo = resourceinfo or ResourceInfo()
+        batchinfo = batchinfo or BatchInfo()
+        queue = self.setup_queue(cases, resourceinfo, batchinfo)
         with self.rc_environ():
-            with working_dir(self.work_tree):
+            with working_dir(self.root):
                 self.process_testcases(
-                    *args, timeout=timeout or default_timeout, fail_fast=fail_fast, verbose=verbose
+                    queue=queue, resourceinfo=resourceinfo, fail_fast=fail_fast, output=output
                 )
-        self.finish = time.monotonic()
         return self.returncode
-
-    def teardown(self) -> None:
-        finished: list[TestCase]
-        if isinstance(self.queue, DirectResourceQueue):
-            finished = self.queue.finished()
-        else:
-            finished = [case for batch in self.queue.finished() for case in batch]
-        with self.rc_environ():
-            for case in finished:
-                with working_dir(case.exec_dir):
-                    for hook in plugin.plugins("test", "finish"):
-                        logging.debug(f"Calling the {hook.specname} plugin")
-                        hook(case)
-                with working_dir(self.work_tree):
-                    case.teardown()
-        for hook in plugin.plugins("session", "finish"):
-            hook(self)
 
     @contextmanager
     def rc_environ(self) -> Generator[None, None, None]:
@@ -809,65 +366,42 @@ class Session:
             else:
                 os.environ.pop(var)
 
-    def setup_testcases(
-        self,
-        cases: list[TestCase],
-        copy_all_resources: bool = False,
-        timeout_multipler: float = 1.0,
-    ) -> None:
-        logging.debug("Setting up test case directories")
-        ts: TopologicalSorter = TopologicalSorter()
-        for case in cases:
-            ts.add(case, *case.dependencies)
-        with self.rc_environ():
-            with working_dir(self.work_tree):
-                ts.prepare()
-                while ts.is_active():
-                    group = ts.get_ready()
-                    args = zip(
-                        group,
-                        repeat(self.work_tree),
-                        repeat(copy_all_resources),
-                        repeat(timeout_multipler),
-                    )
-                    parallel.starmap(_setup_individual_case, list(args))
-                    for case in group:
-                        # Since setup is run in a multiprocessing pool, the internal
-                        # state is lost and needs to be updated
-                        case.refresh()
-                        assert case.status.value in ("skipped", "ready", "pending")
-                        with working_dir(case.exec_dir):
-                            for hook in plugin.plugins("test", "setup"):
-                                hook(case)
-                    ts.done(*group)
-
     def process_testcases(
-        self, *args: str, timeout: Union[int, float], fail_fast: bool, verbose: bool = False
+        self,
+        *,
+        queue: ResourceQueue,
+        resourceinfo: ResourceInfo,
+        fail_fast: bool,
+        output: str = "progress-bar",
     ) -> None:
+        verbose: bool = output == "verbose"
         futures: dict = {}
         auto_cleanup: bool = True
+        self.start = time.monotonic()
         duration = lambda: time.monotonic() - self.start
-
+        w = resourceinfo["session:workers"]
+        max_workers = os.cpu_count() if w is None else int(w)
+        timeout = resourceinfo["session:timeout"] or -1
         try:
-            with ProcessPoolExecutor(max_workers=self.avail_workers) as ppe:
+            with ProcessPoolExecutor(max_workers=max_workers) as ppe:
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
-                        self.print_status()
+                        logging.emit(queue.status())
                     if not verbose:
-                        self.print_progress_bar()
+                        queue.display_progress(self.start)
                     if timeout >= 0.0 and duration() > timeout:
                         raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
                     try:
-                        iid_obj = self.queue.get()
+                        iid_obj = queue.get()
                         if iid_obj is None:
                             time.sleep(0.01)
                             continue
                         iid, obj = iid_obj
                     except EmptyQueue:
                         break
-                    future = ppe.submit(obj, *args, verbose=verbose)
-                    callback = partial(self.update_from_future, iid, fail_fast)
+                    future = ppe.submit(obj, verbose=verbose)
+                    callback = partial(self.done_callback, iid, queue, fail_fast)
                     future.add_done_callback(callback)
                     futures[iid] = (obj, future)
         except BaseException as e:
@@ -885,15 +419,16 @@ class Session:
                 raise StopExecution(f"fail_fast: {name}", code)
             else:
                 logging.error(traceback.format_exc())
-                self.returncode = compute_returncode(self.queue.cases())
+                self.returncode = compute_returncode(queue.cases())
                 raise
         else:
             if not verbose:
-                self.print_progress_bar(last=True)
-            self.returncode = compute_returncode(self.queue.cases())
+                queue.display_progress(self.start, last=True)
+            self.returncode = compute_returncode(queue.cases())
         finally:
+            self.finish = time.monotonic()
             if auto_cleanup:
-                for case in self.queue.cases():
+                for case in queue.cases():
                     if case.status == "ready":
                         case.status.set("failed", "Case failed to start")
                         case.save()
@@ -901,11 +436,8 @@ class Session:
                         case.status.set("failed", "Case failed to stop")
                         case.save()
 
-    def update_from_future(
-        self,
-        obj_no: int,
-        fail_fast: bool,
-        future: Future,
+    def done_callback(
+        self, iid: int, queue: ResourceQueue, fail_fast: bool, future: Future
     ) -> None:
         if future.cancelled():
             return
@@ -915,13 +447,14 @@ class Session:
             # The future was probably killed by fail_fast or a keyboard interrupt
             return
 
-        obj: Union[TestCase, Batch] = self.queue.done(obj_no)
+        # The case (or batch) was run in a subprocess.  The object must be
+        # refreshed so that the state in this main thread is up to date.
+
+        obj: Union[TestCase, Batch] = queue.mark_done(iid)
         if not isinstance(obj, (Batch, TestCase)):
             logging.error(f"Expected TestCase or Batch, got {obj.__class__.__name__}")
             return
 
-        # The case (or batch) was run in a subprocess.  The object must be
-        # refreshed so that the state in this main thread is up to date.
         obj.refresh()
         if isinstance(obj, TestCase):
             self.db.update([obj])
@@ -946,125 +479,89 @@ class Session:
                 code = compute_returncode(obj.cases)
                 raise FailFast(str(obj), code)
 
-    def print_progress_bar(self, last: bool = False) -> None:
-        with global_session_lock:
-            progress(self.active_cases, time.monotonic() - self.start)
-            if last:
-                logging.emit("\n")
+    def setup_queue(
+        self, cases: list[TestCase], resourceinfo: ResourceInfo, batchinfo: BatchInfo
+    ) -> ResourceQueue:
+        queue: ResourceQueue
+        if batchinfo.scheduler is None:
+            if batchinfo.count is not None or batchinfo.limit is not None:
+                raise ValueError("batched execution requires a scheduler")
+            queue = DirectResourceQueue(resourceinfo, global_session_lock)
+        else:
+            if batchinfo.count is None and batchinfo.limit is None:
+                batchinfo.limit = default_batchsize
+            queue = BatchResourceQueue(resourceinfo, batchinfo, global_session_lock)
+        queue.put(*cases)
+        queue.prepare()
+        if queue.empty():
+            raise ValueError("There are no cases to run in this session")
+        return queue
 
-    def print_status(self):
-        def count(objs) -> int:
-            return sum([1 if isinstance(obj, TestCase) else len(obj) for obj in objs])
+    def blogfile(self, batch_no: int, batch_store: Optional[int]) -> str:
+        dir = os.path.join(self.config_dir, BatchResourceQueue.store)
+        if batch_store is None:
+            batch_store = len(os.listdir(dir))  # use latest
+        index = os.path.join(dir, str(batch_store), BatchResourceQueue.index_file)
+        with open(index) as fh:
+            fd = json.load(fh)
+            n = len(fd["index"])
+        f = os.path.join(dir, str(batch_store), f"out.{n}.{batch_no}.txt")
+        return f
 
-        with global_session_lock:
-            p = d = f = t = 0
-            done = count(self.queue.finished())
-            busy = count(self.queue.busy())
-            notrun = count(self.queue.queued())
-            total = done + busy + notrun
-            for obj in self.queue.finished():
-                if isinstance(obj, TestCase):
-                    obj = [obj]
-                for case in obj:
-                    if case.status == "success":
-                        p += 1
-                    elif case.status == "diffed":
-                        d += 1
-                    elif case.status == "timeout":
-                        t += 1
-                    else:
-                        f += 1
-            fmt = "%d/%d running, %d/%d done, %d/%d queued "
-            fmt += "(@g{%d pass}, @y{%d diff}, @r{%d fail}, @m{%d timeout})"
-            text = colorize(fmt % (busy, total, done, total, notrun, total, p, d, f, t))
-            n = clen(text)
-            header = colorize("@*c{%s}" % " status ".center(n + 10, "="))
-            footer = colorize("@*c{%s}" % "=" * (n + 10))
-            pad = colorize("@*c{====}")
-            logging.lmit(f"\n{header}\n{pad} {text} {pad}\n{footer}\n\n")
-
-    def print_overview(self) -> None:
+    @staticmethod
+    def overview(cases: list[TestCase]) -> str:
         def unreachable(c):
             return c.status == "skipped" and c.status.details.startswith("Unreachable")
 
-        logging.info(f"Available cpus: {self.avail_cpus}")
-        logging.info(f"Available cpus per test: {self.avail_cpus_per_test}")
-        if self.avail_devices:
-            logging.info(f"Available devices: {self.avail_devices}")
-            logging.info(f"Available devices per test: {self.avail_devices_per_test}")
-        logging.info(f"Maximum number of asynchronous jobs: {self.avail_workers}")
-        cases = self.cases
+        string = io.StringIO()
         files = {case.file for case in cases}
         _, cases = partition(cases, lambda c: unreachable(c))
-        t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
-        logging.info(colorize(t))
+        n, N = len(cases), len(files)
+        s = "s " if n > 1 else " "
+        S = "s " if N > 1 else ""
+        t = "@*{collected %d test%sfrom %d file%s}" % (n, s, N, S)
+        string.write(color.colorize(t) + "\n")
         cases_to_run = [case for case in cases if not case.masked and not case.skipped]
         files = {case.file for case in cases_to_run}
-        t = "@*g{running} %d test cases from %d files" % (len(cases_to_run), len(files))
-        logging.info(colorize(t))
-        skipped = [case for case in cases if case.skipped or case.masked]
+        n, N = len(cases_to_run), len(files)
+        s = "s " if n > 1 else " "
+        S = "s " if N > 1 else ""
+        t = "@*g{running} %d test case%sfrom %d file%s" % (n, s, N, S)
+        string.write(color.colorize(t) + "\n")
+        skipped = [case for case in cases if case.masked]
         skipped_reasons: dict[str, int] = {}
         for case in skipped:
             reason = case.status.details
             assert isinstance(reason, str)
             skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
         if skipped:
-            logging.info(colorize("@*b{skipping} %d test cases" % len(skipped)))
+            string.write(color.colorize("@*b{skipping} %d test cases" % len(skipped)) + "\n")
             reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
             for reason in reversed(reasons):
-                logging.emit(f"• {skipped_reasons[reason]} {reason.lstrip()}\n")
-        return
+                string.write(f"{glyphs.bullet} {skipped_reasons[reason]} {reason.lstrip()}\n")
+        return string.getvalue()
 
     @staticmethod
-    def cformat(case: TestCase, show_log: bool = False) -> str:
-        id = colorize("@*b{%s}" % case.id[:7])
-        if case.masked:
-            string = "@*c{EXCLUDED} %s %s: %s" % (id, case.pretty_repr(), case.status.details)
-            return colorize(string)
-        string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
-        if case.duration > 0:
-            string += " (%.2fs.)" % case.duration
-        elif case.status == "skipped":
-            string += ": Skipped due to %s" % case.status.details
-        if show_log:
-            f = os.path.relpath(case.logfile(), os.getcwd())
-            string += colorize(": @m{%s}" % f)
-        return string
-
-    def print_summary(self) -> None:
-        cases = self.active_cases
+    def summary(cases: list[TestCase]) -> str:
+        string = io.StringIO()
         if not cases:
-            logging.info("Nothing to report")
-            return
-
+            string.write("Nothing to report\n")
+            return string.getvalue()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            if case.masked:
-                totals.setdefault("masked", []).append(case)
-            else:
-                totals.setdefault(case.status.value, []).append(case)
-
-        nonpass = ("skipped", "diffed", "timeout", "failed")
-        level = logging.get_level()
-        if level < logging.INFO and len(totals):
-            logging.info(colorize("@*{Short test summary info}"))
-        elif any(r in totals for r in nonpass):
-            logging.info(colorize("@*{Short test summary info}"))
-        if level < logging.DEBUG and "masked" in totals:
-            for case in sorted(totals["masked"], key=lambda t: t.name):
-                logging.emit(self.cformat(case) + "\n")
-        if level < logging.INFO:
-            for status in ("ready", "success"):
-                if status in totals:
-                    for case in sorted(totals[status], key=lambda t: t.name):
-                        logging.emit(self.cformat(case) + "\n")
-        for status in nonpass:
+            totals.setdefault(case.status.value, []).append(case)
+        string.write(color.colorize("\n@*{Short test summary info}\n"))
+        for status in Status.members:
+            glyph = Status.glyph(status)
             if status in totals:
                 for case in sorted(totals[status], key=lambda t: t.name):
-                    logging.emit(self.cformat(case) + "\n")
+                    string.write("%s %s\n" % (glyph, cformat(case)))
+        string.write("\n")
+        return string.getvalue()
 
-    def print_footer(self, duration: float = -1) -> None:
-        cases = self.active_cases
+    @staticmethod
+    def footer(cases: list[TestCase], duration: float = -1, title="Session done") -> str:
+        string = io.StringIO()
         if duration == -1:
             finish = max(_.finish for _ in cases)
             start = min(_.start for _ in cases)
@@ -1076,37 +573,82 @@ class Session:
                 totals.setdefault("masked", []).append(case)
             else:
                 totals.setdefault(case.status.value, []).append(case)
-        N = len(self.active_cases)
-        summary_parts = ["@*b{%d total}" % N]
+        N = len(cases)
+        summary = ["@*b{%d total}" % N]
         for member in Status.colors:
             n = len(totals.get(member, []))
             if n:
                 c = Status.colors[member]
                 stat = totals[member][0].status.name
-                summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-        kwds = {"x": "\u2728", "summary": ", ".join(summary_parts), "t": hhmmss(duration)}
-        logging.emit(colorize("%(x)s%(x)s @*{Session done} -- %(summary)s in @*{%(t)s}\n" % kwds))
+                summary.append(color.colorize("@%s{%d %s}" % (c, n, stat.lower())))
+        x, y = random.sample([glyphs.sparkles, glyphs.collision, glyphs.highvolt], 2)
+        kwds = {"x": x, "y": y, "s": ", ".join(summary), "t": hhmmss(duration), "title": title}
+        string.write(color.colorize("%(x)s%(x)s @*{%(title)s} -- %(s)s in @*{%(t)s}\n" % kwds))
+        return string.getvalue()
 
-    def print_durations(self, N: int, cases: Optional[list[TestCase]] = None) -> None:
-        cases = [c for c in (cases or self.active_cases) if c.duration > 0]
+    @staticmethod
+    def durations(cases: list[TestCase], N: int) -> str:
+        string = io.StringIO()
+        cases = [c for c in cases if c.duration > 0]
         sorted_cases = sorted(cases, key=lambda x: x.duration)
         if N > 0:
             sorted_cases = sorted_cases[-N:]
-        logging.info(f"Slowest {len(sorted_cases)} durations")
+        kwds = {"t": glyphs.turtle, "N": N}
+        string.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
         for case in sorted_cases:
-            logging.emit("  %6.2f     %s\n" % (case.duration, case.pretty_repr()))
+            string.write("  %6.2f     %s\n" % (case.duration, case.pretty_repr()))
+        string.write("\n")
+        return string.getvalue()
+
+    @staticmethod
+    def status(cases: list[TestCase], show_logs: bool = False, sortby: str = "duration") -> str:
+        string = io.StringIO()
+        totals: dict[str, list[TestCase]] = {}
+        for case in cases:
+            if case.masked:
+                totals.setdefault("masked", []).append(case)
+            else:
+                totals.setdefault(case.status.value, []).append(case)
+        nprinted = 0
+        for member in Status.members:
+            if member in totals:
+                for case in sort_cases_by(totals[member], field=sortby):
+                    glyph = Status.glyph(case.status.value)
+                    string.write("%s %s\n" % (glyph, cformat(case, show_log=show_logs)))
+                    nprinted += 1
+        return string.getvalue()
 
 
-def _setup_individual_case(case, exec_root, copy_all_resources, timeout_multiplier):
-    case.setup(
-        exec_root, copy_all_resources=copy_all_resources, timeout_multiplier=timeout_multiplier
-    )
+def setup_individual_case(case, exec_root, copy_all_resources):
+    logging.debug(f"Setting up {case}")
+    case.setup(exec_root, copy_all_resources=copy_all_resources)
 
 
-class EmptySession(Exception):
-    def __init__(self):
-        super().__init__("No test cases to run")
+def cformat(case: TestCase, show_log: bool = False) -> str:
+    id = color.colorize("@*b{%s}" % case.id[:7])
+    if case.masked:
+        string = "@*c{EXCLUDED} %s %s: %s" % (id, case.pretty_repr(), case.status.details)
+        return color.colorize(string)
+    string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
+    if case.duration > 0:
+        string += " (%.2fs.)" % case.duration
+    elif case.status == "skipped":
+        string += ": Skipped due to %s" % case.status.details
+    if show_log:
+        f = os.path.relpath(case.logfile(), os.getcwd())
+        string += color.colorize(": @m{%s}" % f)
+    return string
+
+
+def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
+    if cases and isinstance(getattr(cases[0], field), str):
+        return sorted(cases, key=lambda case: getattr(case, field).lower())
+    return sorted(cases, key=lambda case: getattr(case, field))
 
 
 class DirectoryExistsError(Exception):
+    pass
+
+
+class NotASession(Exception):
     pass

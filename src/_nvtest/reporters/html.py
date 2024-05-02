@@ -13,9 +13,9 @@ from .common import Reporter as _Reporter
 class Reporter(_Reporter):
     def __init__(self, session: Session) -> None:
         super().__init__(session)
-        self.html_dir = os.path.join(session.work_tree, "_reports/html")
+        self.html_dir = os.path.join(session.root, "_reports/html")
         self.cases_dir = os.path.join(self.html_dir, "cases")
-        self.index = os.path.join(session.work_tree, "Results.html")
+        self.index = os.path.join(session.root, "Results.html")
 
     def create(self):
         """Collect information and create reports"""
@@ -35,7 +35,7 @@ class Reporter(_Reporter):
         ts = "<style>\n"
         ts += "table{font-family:arial,sans-serif;border-collapse:collapse;}\n"
         ts += "td, th {border: 1px solid #dddddd; text-align: left; "
-        ts += "padding: 8px; width=100%}\n"
+        ts += "padding: 8px; width: 100%}\n"
         ts += "tr:nth-child(even) {background-color: #dddddd;}\n"
         ts += "</style>"
         return ts

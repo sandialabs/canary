@@ -1,11 +1,8 @@
 import os
 from typing import TYPE_CHECKING
 
-from .. import config
 from ..session import Session
 from ..test.case import TestCase
-from ..test.status import Status
-from ..third_party.color import colorize
 from ..util import logging
 
 if TYPE_CHECKING:
@@ -105,11 +102,7 @@ def matches(pathspec, case):
 
 
 def status(args: "argparse.Namespace") -> int:
-    work_tree = config.get("session:work_tree")
-    if work_tree is None:
-        raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
-    with logging.level(logging.WARNING):
-        session = Session.load(mode="r")
+    session = Session(os.getcwd(), mode="r")
     cases = session.cases
     if args.pathspec:
         if TestCase.spec_like(args.pathspec):
@@ -117,7 +110,7 @@ def status(args: "argparse.Namespace") -> int:
             args.show_all = True
         else:
             pathspec = os.path.abspath(args.pathspec)
-            if pathspec != work_tree:
+            if pathspec != session.root:
                 cases = [c for c in cases if c.exec_dir.startswith(pathspec)]
     for attr in (
         "show_fail",
@@ -160,65 +153,9 @@ def status(args: "argparse.Namespace") -> int:
                 "cancelled",
             ):
                 cases_to_show.append(case)
-    n: int = 0
     if cases_to_show:
-        n = print_status(cases_to_show, show_logs=args.show_logs, sortby=args.sort_by)
-    if n:
-        print_footer_summary(cases)
-    if args.durations is not None:
-        session.print_durations(int(args.durations), cases_to_show)
+        logging.emit(session.status(cases_to_show, show_logs=args.show_logs, sortby=args.sort_by))
+    if args.durations:
+        logging.emit(session.durations(cases_to_show, int(args.durations)))
+    logging.emit(session.footer(cases_to_show, title="Summary"))
     return 0
-
-
-def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
-    if cases and isinstance(getattr(cases[0], field), str):
-        return sorted(cases, key=lambda case: getattr(case, field).lower())
-    return sorted(cases, key=lambda case: getattr(case, field))
-
-
-def print_status(
-    cases: list[TestCase],
-    show_logs: bool = False,
-    sortby: str = "duration",
-) -> int:
-    totals: dict[str, list[TestCase]] = {}
-    for case in cases:
-        if case.masked:
-            totals.setdefault("masked", []).append(case)
-        else:
-            totals.setdefault(case.status.value, []).append(case)
-    nprinted = 0
-    members = [
-        "masked",
-        "created",
-        "pending",
-        "ready",
-        "success",
-        "skipped",
-        "diffed",
-        "failed",
-        "timeout",
-    ]
-    for member in members:
-        if member in totals:
-            for case in sort_cases_by(totals[member], field=sortby):
-                logging.emit(Session.cformat(case, show_log=show_logs) + "\n")
-                nprinted += 1
-    return nprinted
-
-
-def print_footer_summary(cases: list[TestCase]) -> None:
-    totals: dict[str, list[TestCase]] = {}
-    for case in cases:
-        if case.masked:
-            continue
-        totals.setdefault(case.status.value, []).append(case)
-    summary_parts = []
-    for member in Status.colors:
-        n = len(totals.get(member, []))
-        if n:
-            c = Status.colors[member]
-            stat = totals[member][0].status.name
-            summary_parts.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-    kwds = {"x": "\u2728", "summary": ", ".join(summary_parts)}
-    logging.emit(colorize("%(x)s @*{Summary}: %(summary)s\n") % kwds)

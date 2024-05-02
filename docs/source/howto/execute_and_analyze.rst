@@ -15,12 +15,12 @@ Consider the following test file ``examples/execute_and_analyze/test.pyt``
 
 The dependency graph for this test is
 
-.. command-output:: nvtest describe test.pyt
-    :cwd: /examples/execute_and_analyze
+.. command-output:: nvtest describe execute_and_analyze/test.pyt
+    :cwd: /examples
 
 As can be seen, the test ``test`` depends on ``test[a=1]``, ``test[a=2]``, and ``test[a=3]``.  When the test is run, these "children" tests are run first and then ``test``:
 
-.. command-output:: nvtest run ./execute_and_analyze
+.. command-output:: nvtest run -d TestResults.ExecuteAndAnalyze ./execute_and_analyze
     :cwd: /examples
 
 The full example

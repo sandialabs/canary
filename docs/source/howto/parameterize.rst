@@ -10,8 +10,8 @@ A single test file can generate many test cases, each having different parameter
 
 will produce two test cases, one with ``a=1`` and another with ``a=4``, each executed in their own test directory:
 
-.. command-output:: nvtest describe test1.pyt
-    :cwd: /examples/parameterize
+.. command-output:: nvtest describe parameterize/test1.pyt
+    :cwd: /examples
 
 Multiple parameter names and their values can be defined:
 
@@ -20,16 +20,16 @@ Multiple parameter names and their values can be defined:
 
 which would result in the following three tests
 
-.. command-output:: nvtest describe test2.pyt
-    :cwd: /examples/parameterize
+.. command-output:: nvtest describe parameterize/test2.pyt
+    :cwd: /examples
 
 If multiple ``parameterize`` directives are specified, the cartesian product of parameters is performed:
 
 .. literalinclude:: /examples/parameterize/test3.pyt
     :language: python
 
-.. command-output:: nvtest describe test3.pyt
-    :cwd: /examples/parameterize
+.. command-output:: nvtest describe parameterize/test3.pyt
+    :cwd: /examples
 
 Similarly,
 
@@ -38,8 +38,8 @@ Similarly,
 
 results in the following 6 test cases:
 
-.. command-output:: nvtest describe test4.pyt
-    :cwd: /examples/parameterize
+.. command-output:: nvtest describe parameterize/test4.pyt
+    :cwd: /examples
 
 vvt parameter types
 -------------------

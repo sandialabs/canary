@@ -2,7 +2,6 @@ import glob
 import os
 from typing import TYPE_CHECKING
 
-from .. import config
 from ..reporters import Reporter
 from ..reporters import cdash
 from ..reporters import html
@@ -213,10 +212,8 @@ def report(args: "Namespace") -> int:
             skip_sites=args.skip_sites,
         )
         return 0
-    if not config.get("session:work_tree"):
-        raise ValueError("not a nvtest session (or any of the parent directories): .nvtest")
     with logging.level(logging.WARNING):
-        session = Session.load(mode="r")
+        session = Session(os.getcwd(), mode="r")
     reporter: Reporter
     if args.parent_command == "cdash":
         reporter = cdash.Reporter(session, dest=args.d)

@@ -243,7 +243,7 @@ class TestCase(Runner):
     def exec_dir(self) -> str:
         exec_root = self.exec_root
         if not exec_root:
-            exec_root = config.get("session:work_tree")
+            exec_root = config.get("session:root")
         if not exec_root:
             raise ValueError("exec_root must be set during set up") from None
         return os.path.normpath(os.path.join(exec_root, self.exec_path))

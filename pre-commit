@@ -12,12 +12,14 @@ ruff format ./tests
 echo "Type checking with mypy"
 mypy ./src
 
+rm -rf test/examples/TestResults*
 (
   cd tests
   pytest .
 )
 
 echo "Making docs"
+rm -rf test/examples/TestResults*
 (
   cd docs
   make clean

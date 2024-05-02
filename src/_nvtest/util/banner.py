@@ -11,7 +11,9 @@ def banner(color: bool = True) -> str:
     colors = cycle(["c", "c", "b", "b", "m", "m", "G", "G"])
     lines: list[str] = []
     for line in a.splitlines():
-        if line.split():
+        if not line.split() and not lines:
+            continue
+        elif line.split():
             line = colorize("@*%s{%s}" % (next(colors), line))
         lines.append(line)
-    return "\n".join(lines)
+    return "\n".join(lines).rstrip()

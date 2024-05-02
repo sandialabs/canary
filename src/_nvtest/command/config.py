@@ -1,12 +1,13 @@
 import os
 from typing import TYPE_CHECKING
 
-import _nvtest.config
+from .. import config as _config
+from ..session import Session
 
 if TYPE_CHECKING:
     import argparse
 
-    from _nvtest.config.argparsing import Parser
+    from ..config.argparsing import Parser
 
 
 description = "Show configuration variable values"
@@ -41,8 +42,10 @@ def pretty_print(text: str):
 
 
 def config(args: "argparse.Namespace") -> int:
+    if Session.find_root(os.getcwd()):
+        Session(os.getcwd(), mode="r")
     if args.subcommand == "show":
-        text = _nvtest.config.describe(section=args.section)
+        text = _config.describe(section=args.section)
         try:
             if "NVTEST_MAKE_DOCS" in os.environ:
                 print(text)
@@ -52,11 +55,11 @@ def config(args: "argparse.Namespace") -> int:
             print(text)
         return 0
     elif args.subcommand == "add":
-        _nvtest.config.add(args.path, scope=args.scope)
-        file = _nvtest.config.config_file(args.scope)
+        _config.add(args.path, scope=args.scope)
+        file = _config.config_file(args.scope)
         assert file is not None
         with open(file, "w") as fh:
-            _nvtest.config.dump(fh, scope=args.scope)
+            _config.dump(fh, scope=args.scope)
     elif args.command is None:
         raise ValueError("nvtest config: missing required subcommand (choose from show, add)")
     else:

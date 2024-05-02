@@ -1,5 +1,4 @@
 import argparse
-import math
 import os
 import subprocess
 import time
@@ -17,6 +16,7 @@ from ..util.filesystem import getuser
 from ..util.filesystem import mkdirp
 from ..util.filesystem import set_executable
 from ..util.hash import hashit
+from ..util.resource import calculate_allocations
 from ..util.time import hhmmss
 from .case import TestCase
 from .runner import Runner
@@ -52,6 +52,8 @@ class Batch(Runner):
         self.use_num_workers = workers
         self.id: str = hashit("".join(_.id for _ in self), length=20)
         self._status = Status("created")
+        first = next(iter(cases))
+        self.root = first.exec_root
 
     def __iter__(self):
         return iter(self.cases)
@@ -113,11 +115,7 @@ class Batch(Runner):
 
     @property
     def stage(self):
-        return os.path.join(config.get("session:work_tree"), ".nvtest/stage")
-
-    @property
-    def work_tree(self):
-        return config.get("session:work_tree")
+        return os.path.join(self.root, ".nvtest/stage")
 
     def submission_script_filename(self) -> str:
         basename = f"submit.{self.world_size}.{self.world_rank}.sh"
@@ -201,11 +199,11 @@ class SubShell(Batch):
         fh.write("export NVTEST_DISABLE_KB=1\n")
         max_workers = self.use_num_workers or 1
         fh.write(
-            f"(\n  nvtest {dbg_flag} -C {self.work_tree} run -v "
+            f"(\n  nvtest {dbg_flag} -C {self.root} run -v "
             "${SCRIPT_ARGS} "
-            f"-l session:workers:{max_workers} "
-            f"-l session:cpus:{session_cpus} "
-            f"-l test:cpus:{max_test_cpus} "
+            f"-l session:workers={max_workers} "
+            f"-l session:cpus={session_cpus} "
+            f"-l test:cpus={max_test_cpus} "
             f"^{self.world_id}:{self.world_rank}\n)\n"
         )
         f = self.submission_script_filename()
@@ -284,12 +282,14 @@ class Slurm(Batch):
             raise
 
     def write_submission_script(self, *a: str) -> None:
-        ns = self.calculate_resource_allocations()
+        max_tasks = self.max_tasks_required()
+        ns = calculate_allocations(max_tasks)
+        qtime = self.cputime / (ns.cores_per_node * ns.nodes) * 1.05
         args = list(a)
         args.append(f"--nodes={ns.nodes}")
         args.append(f"--ntasks-per-node={ns.ntasks_per_node}")
         args.append(f"--cpus-per-task={ns.cpus_per_task}")
-        args.append(f"--time={ns.time}")
+        args.append(f"--time={hhmmss(qtime)}")
         file = self.logfile()
         args.append(f"--error={file}")
         args.append(f"--output={file}")
@@ -314,11 +314,11 @@ class Slurm(Batch):
         fh.write(f"# total: {len(self.cases)} test cases\n")
         fh.write("export NVTEST_DISABLE_KB=1\n")
         fh.write(
-            f"(\n  nvtest {dbg_flag} -C {self.work_tree} run -v "
+            f"(\n  nvtest {dbg_flag} -C {self.root} run -v "
             "${SCRIPT_ARGS} "
-            f"-l session:workers:{max_workers} "
-            f"-l session:cpus:{session_cpus} "
-            f"-l test:cpus:{max_test_cpus} "
+            f"-l session:workers={max_workers} "
+            f"-l session:cpus={session_cpus} "
+            f"-l test:cpus={max_test_cpus} "
             f"^{self.world_id}:{self.world_rank}\n)\n"
         )
         f = self.submission_script_filename()
@@ -327,26 +327,6 @@ class Slurm(Batch):
             fp.write(fh.getvalue())
         set_executable(f)
         return
-
-    def calculate_resource_allocations(self) -> argparse.Namespace:
-        """Performs basic resource calculations"""
-        ns = argparse.Namespace()
-        max_tasks = self.max_tasks_required()
-        cores_per_socket = config.get("machine:cores_per_socket")
-        sockets_per_node = config.get("machine:sockets_per_node") or 1
-        cores_per_node = cores_per_socket * sockets_per_node
-        if max_tasks < cores_per_node:
-            nodes = 1
-            ntasks_per_node = cores_per_node
-        else:
-            ntasks_per_node = min(max_tasks, cores_per_node)
-            nodes = int(math.ceil(max_tasks / cores_per_node))
-        ns.nodes = nodes
-        ns.ntasks_per_node = ntasks_per_node
-        ns.cpus_per_task = 1
-        qtime = self.cputime / (cores_per_node * nodes) * 1.05
-        ns.time = hhmmss(qtime)
-        return ns
 
     def poll(self, jobid: str) -> Optional[str]:
         squeue = Executable("squeue")

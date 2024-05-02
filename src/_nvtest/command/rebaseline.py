@@ -1,4 +1,5 @@
 import argparse
+import os
 from typing import TYPE_CHECKING
 
 from ..session import Session
@@ -20,7 +21,7 @@ def setup_parser(parser: "Parser"):
 
 def rebaseline(args: "argparse.Namespace") -> int:
     with logging.level(logging.WARNING):
-        session = Session.load(mode="r")
+        session = Session(os.getcwd(), mode="r")
     cases: list[TestCase]
     if args.pathspec:
         cases = filter_cases_by_path(session.cases, args.pathspec)

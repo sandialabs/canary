@@ -47,7 +47,7 @@ def test_enable(capfd):
     capfd.readouterr()
     assert nvtest("run", "-w", "-o", "enable", f"{this_dir}/enable") == 0
     out, err = capfd.readouterr()
-    assert "Beginning test session" in out
+    assert "Initializing test session" in out
 
 
 def teardown():

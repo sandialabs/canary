@@ -11,10 +11,10 @@ command.  Consider the test introduced in :ref:`howto-execute-and-analyze`, repe
 
 After the test has been run, the verification and analysis section can be run without rerunning the (potentially expensive) test portion:
 
-.. command-output:: nvtest run -d ExecuteAndAnalyze ./execute_and_analyze
+.. command-output:: nvtest run -d TestResults.ExecuteAndAnalyze ./execute_and_analyze
     :cwd: /examples
     :ellipsis: 0
 
 
-.. command-output:: nvtest -C ExecuteAndAnalyze analyze .
+.. command-output:: nvtest -C TestResults.ExecuteAndAnalyze analyze .
     :cwd: /examples

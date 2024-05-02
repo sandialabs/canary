@@ -8,5 +8,5 @@ Resources needed by tests can be copied and linked from their source locations t
 .. literalinclude:: /examples/copy_and_link/test.pyt
     :language: python
 
-.. command-output:: nvtest run ./copy_and_link
+.. command-output:: nvtest run -d TestResults.CopyAndLink ./copy_and_link
     :cwd: /examples

@@ -13,9 +13,9 @@ from .common import Reporter as _Reporter
 class Reporter(_Reporter):
     def __init__(self, session: Session) -> None:
         super().__init__(session)
-        self.md_dir = os.path.join(session.work_tree, "_reports/markdown")
-        self.index = os.path.join(session.work_tree, "Results.md")
-        self.work_tree = session.work_tree
+        self.md_dir = os.path.join(session.root, "_reports/markdown")
+        self.index = os.path.join(session.root, "Results.md")
+        self.root = session.root
 
     def create(self):
         """Collect information and create reports"""
@@ -68,12 +68,12 @@ class Reporter(_Reporter):
             else:
                 n = len(totals[group])
                 file = os.path.join(self.md_dir, "%s.md" % "".join(group.split()))
-                relpath = os.path.relpath(file, self.work_tree)
+                relpath = os.path.relpath(file, self.root)
                 fh.write(f"| [{n}]({relpath}) ")
                 with open(file, "w") as fp:
                     self.generate_group_index(totals[group], fp)
         file = os.path.join(self.md_dir, "Total.md")
-        relpath = os.path.relpath(file, self.work_tree)
+        relpath = os.path.relpath(file, self.root)
         fh.write(f"| [{len(self.data.cases)}]({relpath}) |\n")
         with open(file, "w") as fp:
             self.generate_all_tests_index(totals, fp)

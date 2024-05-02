@@ -16,8 +16,8 @@ def test_skipif(tmpdir):
     assert len(finder.roots) == 1
     assert workdir in finder.roots
     finder.prepare()
-    tree = finder.populate()
-    cases = finder.freeze(tree)
+    files = finder.discover()
+    cases = finder.freeze(files)
     assert len(cases) == 2
     assert len([c for c in cases if not c.masked]) == 1
 
@@ -34,12 +34,12 @@ def test_keywords(tmpdir):
     assert len(finder.roots) == 1
     assert workdir in finder.roots
     finder.prepare()
-    tree = finder.populate()
-    cases = finder.freeze(tree, keyword_expr="a and i")
+    files = finder.discover()
+    cases = finder.freeze(files, keyword_expr="a and i")
     assert len([c for c in cases if not c.masked]) == 0
-    cases = finder.freeze(tree, keyword_expr="a and e")
+    cases = finder.freeze(files, keyword_expr="a and e")
     assert len([c for c in cases if not c.masked]) == 1
-    cases = finder.freeze(tree, keyword_expr="a or i")
+    cases = finder.freeze(files, keyword_expr="a or i")
     assert len([c for c in cases if not c.masked]) == 2
 
 
@@ -53,8 +53,8 @@ def test_parameterize_1(tmpdir):
     finder.add(workdir)
     assert len(finder.roots) == 1
     finder.prepare()
-    tree = finder.populate()
-    cases = finder.freeze(tree)
+    files = finder.discover()
+    cases = finder.freeze(files)
     assert len([c for c in cases if not c.masked]) == 3
     a, b = 0, 1
     for case in cases:
@@ -74,8 +74,8 @@ def test_parameterize_2(tmpdir):
     finder.add(workdir)
     assert len(finder.roots) == 1
     finder.prepare()
-    tree = finder.populate()
-    cases = finder.freeze(tree)
+    files = finder.discover()
+    cases = finder.freeze(files)
     assert len([c for c in cases if not c.masked]) == 9
     i = 0
     for a, b in [(0, 1), (2, 3), (4, 5)]:
@@ -95,10 +95,10 @@ def test_parameterize_3(tmpdir):
     assert len(finder.roots) == 1
     assert workdir in finder.roots
     finder.prepare()
-    tree = finder.populate()
-    cases = finder.freeze(tree, on_options=["xxx"])
+    files = finder.discover()
+    cases = finder.freeze(files, on_options=["xxx"])
     assert len([c for c in cases if not c.masked]) == 2
-    cases = finder.freeze(tree)
+    cases = finder.freeze(files)
     assert len([c for c in cases if not c.masked]) == 1
     assert cases[0].parameters == {}
 
@@ -113,11 +113,11 @@ def test_cpu_count(tmpdir):
     finder = Finder()
     finder.add(workdir)
     finder.prepare()
-    tree = finder.populate()
-    cases = finder.freeze(tree)
+    files = finder.discover()
+    cases = finder.freeze(files)
     assert len([c for c in cases if not c.masked]) == 4
     nvtest.config.set("machine:cpu_count", 2)
-    cases = finder.freeze(tree)
+    cases = finder.freeze(files)
     assert len([c for c in cases if not c.masked]) == 1
 
 
@@ -135,8 +135,8 @@ def test_dep_patterns(tmpdir):
     finder = Finder()
     finder.add(workdir)
     finder.prepare()
-    tree = finder.populate()
-    cases = finder.freeze(tree)
+    files = finder.discover()
+    cases = finder.freeze(files)
     assert len([c for c in cases if not c.masked]) == 4
     for case in cases:
         if case.name == "f":
@@ -156,8 +156,8 @@ def test_analyze(tmpdir):
     finder = Finder()
     finder.add(workdir)
     finder.prepare()
-    tree = finder.populate()
-    cases = finder.freeze(tree)
+    files = finder.discover()
+    cases = finder.freeze(files)
     assert len([c for c in cases if not c.masked]) == 10
     assert cases[-1].analyze == "--analyze"
     assert all(case in cases[-1].dependencies for case in cases[:-1])
@@ -173,12 +173,12 @@ def test_enable(tmpdir):
     finder = Finder()
     finder.add(workdir)
     finder.prepare()
-    tree = finder.populate()
-    cases = finder.freeze(tree, on_options=["baz", "spam"])
+    files = finder.discover()
+    cases = finder.freeze(files, on_options=["baz", "spam"])
     assert len([c for c in cases if not c.masked]) == 1
-    cases = finder.freeze(tree, on_options=["baz"])
+    cases = finder.freeze(files, on_options=["baz"])
     assert len([c for c in cases if not c.masked]) == 0
-    cases = finder.freeze(tree, on_options=["spam", "baz", "foo"])
+    cases = finder.freeze(files, on_options=["spam", "baz", "foo"])
     assert len([c for c in cases if not c.masked]) == 1
 
 
@@ -195,6 +195,6 @@ def test_enable_names(tmpdir):
     finder = Finder()
     finder.add(workdir)
     finder.prepare()
-    tree = finder.populate()
-    cases = finder.freeze(tree)
+    files = finder.discover()
+    cases = finder.freeze(files)
     assert len([c for c in cases if not c.masked]) == 2

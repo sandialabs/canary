@@ -381,7 +381,7 @@ class AbstractTestFile:
                     kwds.add(name)
                     kwds.update(parameters.keys())
                     kwds.update({"ready"})
-                    match = _nvtest.when.when(f"keywords={keyword_expr!r}", keywords=list(kwds))
+                    match = _nvtest.when.when({"keywords": keyword_expr}, keywords=list(kwds))
                     if not match:
                         logging.debug(f"Skipping {self}::{name}")
                         mask = colorize("deselected by @*b{keyword expression}")
@@ -431,9 +431,10 @@ class AbstractTestFile:
                     xfail=self.xfail(testname=name, on_options=on_options, parameters=parameters),
                     xdiff=self.xdiff(testname=name, on_options=on_options, parameters=parameters),
                 )
+                timelimit = timelimit or -1
                 if mask is not None:
                     case.status.set("masked", mask)
-                elif timelimit is not None and case.runtime > timelimit:
+                elif timelimit > 0 and case.runtime > timelimit:
                     case.status.set("masked", "runtime excceeds timelimt")
                 for attr, value in attributes.items():
                     case.set_attribute(attr, value)

@@ -1,4 +1,5 @@
 import argparse
+import os
 from typing import TYPE_CHECKING
 
 from ..session import Session
@@ -22,11 +23,11 @@ An "analyze" run only makes sense in the following conditions:
 
 
 def setup_parser(parser: "Parser"):
-    parser.add_argument("pathspec", nargs="?", help="Limit rebaselining to this path")
+    parser.add_argument("pathspec", nargs="?", help="Limit analyis to tests in this path")
 
 
 def analyze(args: "argparse.Namespace") -> int:
-    session = Session.load(mode="r")
+    session = Session(os.getcwd(), mode="r")
     cases: list[TestCase]
     if args.pathspec:
         cases = filter_cases_by_path(session.cases, args.pathspec)

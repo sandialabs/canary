@@ -133,6 +133,7 @@ from ..error import fail_exit_status
 from ..error import skip_exit_status
 from ..error import timeout_exit_status
 from ..third_party.color import colorize
+from ..util import glyphs
 
 
 class Status:
@@ -143,13 +144,13 @@ class Status:
         "ready",
         "running",
         "cancelled",
+        "success",
+        "xfail",
+        "xdiff",
         "skipped",
         "diffed",
         "failed",
         "timeout",
-        "success",
-        "xfail",
-        "xdiff",
     )
     colors = {
         "masked": "y",
@@ -158,13 +159,13 @@ class Status:
         "ready": "b",
         "running": "c",
         "cancelled": "y",
+        "success": "G",
+        "xfail": "c",
+        "xdiff": "c",
         "skipped": "m",
         "diffed": "y",
         "failed": "R",
         "timeout": "R",
-        "success": "G",
-        "xfail": "c",
-        "xdiff": "c",
     }
 
     def __init__(self, arg: str = "created", details: Optional[str] = None) -> None:
@@ -173,6 +174,9 @@ class Status:
         self.set(arg, details)
 
     def __str__(self):
+        return repr(self)
+
+    def __repr__(self):
         string_repr = self.value
         if self.details:
             string_repr += f": {self.details}"
@@ -187,6 +191,27 @@ class Status:
 
     def __hash__(self) -> int:
         return hash(f"{self.value}%{self.details}")
+
+    @staticmethod
+    def glyph(status):
+        map = {
+            "masked": glyphs.masked,
+            "created": glyphs.mdash,
+            "pending": glyphs.mdash,
+            "ready": glyphs.mdash,
+            "running": glyphs.ellipsis,
+            "cancelled": glyphs.ballotx,
+            "success": glyphs.checkmark,
+            "xfail": glyphs.checkmark,
+            "xdiff": glyphs.checkmark,
+            "skipped": glyphs.ballotx,
+            "diffed": glyphs.ballotx,
+            "failed": glyphs.ballotx,
+            "timeout": glyphs.ballotx,
+        }
+        glyph = map[status]
+        color = Status.colors[status]
+        return colorize("@*%s{%s}" % (color, glyph))
 
     def set_from_code(self, arg: int) -> None:
         assert isinstance(arg, int)

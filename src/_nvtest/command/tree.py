@@ -62,7 +62,7 @@ def _tree(
     always_exclude = ("__pycache__", ".git", ".nvtest")
 
     def is_results_dir(p):
-        return os.path.exists(os.path.join(p, ".nvtest/RESULTS.TAG"))
+        return os.path.exists(os.path.join(p, ".nvtest/SESSION.TAG"))
 
     def inner(dir_path: Path, prefix: str = "", level=-1):
         nonlocal files, directories

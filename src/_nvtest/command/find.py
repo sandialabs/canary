@@ -3,17 +3,16 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
-from .. import config
 from ..finder import Finder
 from ..third_party.colify import colified
 from ..third_party.color import colorize
 from ..util import graph
 from ..util import logging
+from ..util.resource import ResourceInfo
 from ..util.term import terminal_size
 from ..util.time import hhmmss
 from .common import add_mark_arguments
 from .common import add_resource_arguments
-from .common import set_default_resource_args
 
 if TYPE_CHECKING:
     from _nvtest.config.argparsing import Parser
@@ -69,17 +68,15 @@ def setup_parser(parser: "Parser"):
 
 
 def find(args: "argparse.Namespace") -> int:
-    set_default_resource_args(args)
     finder = Finder()
     search_paths = args.search_paths or [os.getcwd()]
     for path in search_paths:
         finder.add(path)
     finder.prepare()
-    tree = finder.populate()
+    files = finder.discover()
     cases = Finder.freeze(
-        tree,
-        avail_cpus_per_test=args.cpus_per_test,
-        avail_devices_per_test=args.devices_per_test,
+        files,
+        resourceinfo=args.resourceinfo,
         keyword_expr=args.keyword_expr,
         parameter_expr=args.parameter_expr,
         on_options=args.on_options,
@@ -153,7 +150,8 @@ def print_testcase_summary(args: "argparse.Namespace", cases: "list[TestCase]") 
     t = "@*{collected %d tests from %d files}" % (len(cases), len(files))
     print(colorize(t))
     cases_to_run = [case for case in cases if not case.masked]
-    max_workers = args.workers_per_session or config.get("machine:cpu_count")
+    resourceinfo = args.resourceinfo or ResourceInfo()
+    max_workers = resourceinfo["session:workers"]
     files = {case.file for case in cases_to_run}
     fmt = "@*g{running} %d test cases from %d files with %s workers"
     print(colorize(fmt % (len(cases_to_run), len(files), max_workers)))

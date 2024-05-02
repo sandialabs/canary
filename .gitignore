@@ -27,8 +27,4 @@ build
 
 mock-tests
 
-tests/examples/ExecuteAndAnalyze/
-tests/examples/TestMarkdownResults/
-tests/examples/basic/TestHTMLResults/
-tests/examples/basic/TestMarkdownResults/
-tests/examples/Batched
+*.orig
