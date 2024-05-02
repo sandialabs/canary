@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 description = "Print information about a test run"
 aliases = ["stat"]
+epilog = "Note: this command must be run from inside of a test session directory."
 
 
 def setup_parser(parser: "Parser"):

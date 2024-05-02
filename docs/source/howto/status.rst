@@ -12,3 +12,7 @@ After running a test session, the ``status`` subcommanda can show the status of 
 
 .. command-output:: nvtest -C TestResults status .
     :cwd: /examples
+
+.. note::
+
+    ``nvtest status`` should be run inside of a test session by either navigating to the session's directory or by ``nvtest -C PATH``.

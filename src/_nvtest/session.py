@@ -379,11 +379,9 @@ class Session:
         auto_cleanup: bool = True
         self.start = time.monotonic()
         duration = lambda: time.monotonic() - self.start
-        w = resourceinfo["session:workers"]
-        max_workers = os.cpu_count() if w is None else int(w)
         timeout = resourceinfo["session:timeout"] or -1
         try:
-            with ProcessPoolExecutor(max_workers=max_workers) as ppe:
+            with ProcessPoolExecutor(max_workers=queue.workers) as ppe:
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":

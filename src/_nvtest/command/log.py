@@ -11,10 +11,11 @@ if TYPE_CHECKING:
 
 
 description = "Show the test case's log file"
+epilog = "Note: this command must be run from inside of a test session directory."
 
 
 def setup_parser(parser: "Parser"):
-    parser.add_argument("testspec", help="Test name or test id or batch id")
+    parser.add_argument("testspec", help="Test name, /TEST_ID, or ^BATCH_NO")
 
 
 def log(args: "argparse.Namespace") -> int:

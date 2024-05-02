@@ -11,6 +11,11 @@ if TYPE_CHECKING:
 
 
 description = "Print locations of test files and directories"
+epilog = """\
+If no options are give, -l is assumed.
+
+Note: this command must be run from inside of a test session directory.
+"""
 
 
 def setup_parser(parser: "Parser"):
@@ -44,7 +49,6 @@ def setup_parser(parser: "Parser"):
         help="Show the location of the test's source directory",
     )
     parser.add_argument("testspec", help="Test name or test id")
-    parser.epilog = "If no options are give, -l is assumed"
 
 
 def location(args: "argparse.Namespace") -> int:

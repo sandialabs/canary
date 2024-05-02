@@ -28,13 +28,14 @@ class Command(object):
       - subcommands: list of subcommand parsers (list)
     """
 
-    def __init__(self, prog, description, usage, positionals, optionals, subcommands):
+    def __init__(self, prog, description, usage, positionals, optionals, subcommands, epilog):
         self.prog = prog
         self.description = description
         self.usage = usage
         self.positionals = positionals
         self.optionals = optionals
         self.subcommands = subcommands
+        self.epilog = epilog
 
 
 # NOTE: The only reason we subclass argparse.HelpFormatter is to get access
@@ -73,6 +74,7 @@ class ArgparseWriter(argparse.HelpFormatter):
         split_prog[-1] = prog
         prog = " ".join(split_prog)
         description = parser.description
+        epilog = getattr(parser, "epilog", None)
 
         fmt = parser._get_formatter()
         actions = parser._actions
@@ -89,7 +91,9 @@ class ArgparseWriter(argparse.HelpFormatter):
                 flags = action.option_strings
                 dest_flags = fmt._format_action_invocation(action)
                 help = self._expand_help(action) if action.help else ""
+                help = help.replace("\n\n", "<...>")
                 help = help.replace("\n", " ")
+                help = help.replace("<...>", "\n")
                 optionals.append((flags, dest_flags, help))
             elif isinstance(action, argparse._SubParsersAction):
                 for subaction in action._choices_actions:
@@ -110,7 +114,7 @@ class ArgparseWriter(argparse.HelpFormatter):
                 help = help.replace("\n", " ")
                 positionals.append((args, help))
 
-        return Command(prog, description, usage, positionals, optionals, subcommands)
+        return Command(prog, description, usage, positionals, optionals, subcommands, epilog)
 
     def format(self, cmd):
         """Returns the string representation of a single node in the
@@ -199,6 +203,9 @@ class ArgparseRstWriter(ArgparseWriter):
                 string.write(self.optional(dest_flags, help))
             string.write(self.end_optionals())
 
+        if cmd.epilog:
+            string.write(self.epilog(cmd.epilog))
+
         if cmd.subcommands:
             string.write(self.begin_subcommands(cmd.subcommands))
 
@@ -230,6 +237,9 @@ class ArgparseRstWriter(ArgparseWriter):
         return "\n**Positional arguments**\n\n"
 
     def positional(self, name, help):
+        if "\n" in help:
+            lines = help.split("\n")
+            help = "\n  ".join(lines)
         return """\
 {0}
   {1}
@@ -243,6 +253,9 @@ class ArgparseRstWriter(ArgparseWriter):
         return "\n**Optional arguments**\n\n"
 
     def optional(self, opts, help):
+        if "\n" in help:
+            lines = help.split("\n")
+            help = "\n  ".join(lines)
         return """\
 ``{0}``
   {1}
@@ -251,6 +264,13 @@ class ArgparseRstWriter(ArgparseWriter):
 
     def end_optionals(self):
         return ""
+
+    def epilog(self, text):
+        return """\
+
+{0}
+
+""".format(text)
 
     def begin_subcommands(self, subcommands):
         string = """
@@ -306,6 +326,9 @@ class ArgparseMultiRstWriter(ArgparseRstWriter):
             for flags, dest_flags, help in cmd.optionals:
                 string.write(self.optional(dest_flags, help))
             string.write(self.end_optionals())
+
+        if cmd.epilog:
+            string.write(self.epilog(cmd.epilog))
 
         if not index and cmd.subcommands:
             string.write(self.begin_subcommands(cmd.subcommands))

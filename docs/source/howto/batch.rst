@@ -3,7 +3,7 @@
 How to run tests in a scheduler
 ===============================
 
-Tests can be run under a workload manager (scheduler) such as Slurm or PBS by adding the following options to ``nvtest run``
+Tests can be run under a workload manager (scheduler) such as Slurm or PBS by adding the following options to :ref:`nvtest run<nvtest-run>`:
 
 .. code-block:: console
 
@@ -17,6 +17,9 @@ Batching options
 * ``-b count=N``: group tests into ``N`` batches, each having approximately the same runtime.
 * ``-b limit=T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Human readable times, eg 1s, 1 sec, 1h, 2 hrs, etc, are accepted.
 * ``-b args=S``: pass args ``S`` directly to the scheduler.
+
+Additionally, batch concurrency can be controlled by
+
 * ``-l session:workers=N``: Submit ``N`` concurrent batches to the scheduler at any one time.  The default is 5.
 * ``-l batch:workers=N``: Execute the batch asynchronously using a pool of at most ``N`` workers.  By default, the maximum number of available workers is used.
 

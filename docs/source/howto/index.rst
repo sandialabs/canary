@@ -19,6 +19,8 @@ The how-to guides in the documentation were auto-generated using a set of exampl
    enable
    status
    filter
+   log
+   location
    centered_parameter_space
    cmake_integration
    cdash

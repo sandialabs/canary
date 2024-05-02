@@ -3,6 +3,8 @@
 How to run tests
 ================
 
+Use :ref:`nvtest run<nvtest-run>` to run tests.
+
 Basic usage
 -----------
 

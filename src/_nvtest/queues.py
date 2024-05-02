@@ -12,6 +12,7 @@ from .test.batch import Batch
 from .test.batch import factory as b_factory
 from .test.case import TestCase
 from .third_party import color
+from .third_party.rprobe import cpu_count
 from .util import logging
 from .util.filesystem import mkdirp
 from .util.partition import partition_n
@@ -26,6 +27,8 @@ class ResourceQueue:
         self.cpus = int(resourceinfo["session:cpus"])
         self.devices = int(resourceinfo["session:devices"])
         self.workers = int(resourceinfo["session:workers"])
+        if self.workers < 0:
+            self.workers = cpu_count()
 
         self._buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
@@ -191,6 +194,12 @@ class BatchResourceQueue(ResourceQueue):
         elif scheduler not in ("slurm", "shell"):
             raise ValueError(f"{scheduler}: unknown scheduler")
         self.scheduler: str = str(scheduler)
+        self.workers = int(resourceinfo["session:workers"])
+        if self.workers < 0:
+            self.workers = 5
+        self.batch_workers = int(resourceinfo["batch:workers"])
+        if self.batch_workers < 0:
+            self.batch_workers = cpu_count()
         self.tmp_buffer: list[TestCase] = []
 
     def prepare(self) -> None:
@@ -208,7 +217,7 @@ class BatchResourceQueue(ResourceQueue):
         n = len(partitions)
         N = len(batch_stores) + 1
         batches = [
-            b_factory(p, i, n, N, scheduler=self.scheduler, avail_workers=self.workers)
+            b_factory(p, i, n, N, scheduler=self.scheduler, avail_workers=self.batch_workers)
             for i, p in enumerate(partitions, start=1)
             if len(p)
         ]

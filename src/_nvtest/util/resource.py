@@ -28,11 +28,8 @@ class ResourceInfo:
         self["session:timeout"] = -1
         self["test:timeout"] = -1
 
-        cores_per_socket = config.get("machine:cores_per_socket")
-        sockets_per_node = config.get("machine:sockets_per_node")
-        workers = cores_per_socket * sockets_per_node
-        self["session:workers"] = workers
-        self["batch:workers"] = workers
+        self["session:workers"] = -1
+        self["batch:workers"] = -1
 
     def __setitem__(self, key: str, value: Number) -> None:
         self.data[key] = value

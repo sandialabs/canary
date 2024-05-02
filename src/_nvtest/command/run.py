@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
 
 
-description = "Interact with the session object"
+description = "Run the tests"
 
 
 def setup_parser(parser: "Parser"):
@@ -52,8 +52,8 @@ def setup_parser(parser: "Parser"):
         metavar="{b, v}",
         default="v" if "NVTEST_MAKE_DOCS" in os.environ else "b",
         choices=("b", "v"),
-        help="During test execution, show progress bar (-rb, default) or print each "
-        "test case as it starts/finishes of every case (-rv)",
+        help="During test execution, show progress bar (``-rb``, default) or print each "
+        "test case as it starts/finishes of every case (``-rv``)",
     )
     parser.add_argument("-u", "--until", choices=("setup",), help=argparse.SUPPRESS)
     parser.add_argument(

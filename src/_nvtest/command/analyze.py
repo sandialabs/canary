@@ -18,7 +18,9 @@ epilog = """\
 An "analyze" run only makes sense in the following conditions:
 
 1. The test has already been run; and
-2. The test has logic for handling ``--execute-analysis-sections`` on the command line
+2. The test has logic for handling ``--execute-analysis-sections`` on the command line.
+
+Note: this command must be run in a test session directory.
 """
 
 
