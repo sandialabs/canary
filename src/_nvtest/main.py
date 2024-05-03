@@ -34,7 +34,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         config.set_main_options(pre)
 
         load_plugins(pre.plugin_dirs or [])
-        for hook in plugin.plugins("main", "start"):
+        for hook in plugin.plugins("main", "setup"):
             hook(parser)
 
         add_all_commands(parser)
@@ -133,7 +133,7 @@ def load_plugins(paths: list[str]) -> None:
             logging.warning(f"{path}: plugin directory not found")
         else:
             dirs.append(path)
-    plugin.load_builtin_plugins()
+    plugin.load_builtin_plugins(disable=disable)
     plugin.load_from_entry_points(disable=disable)
     for dir in dirs:
         path = os.path.abspath(dir)

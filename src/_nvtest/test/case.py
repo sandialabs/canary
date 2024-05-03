@@ -16,6 +16,7 @@ from typing import Optional
 from typing import Union
 
 from .. import config
+from .. import plugin
 from ..error import diff_exit_status
 from ..third_party.color import colorize
 from ..util import cache
@@ -390,6 +391,8 @@ class TestCase(Runner):
             if self.file_type == "vvt":
                 self.write_vvtest_util()
             self._status.set("ready" if not self.dependencies else "pending")
+            for hook in plugin.plugins("test", "setup"):
+                hook(self)
             self.save()
         logging.trace(f"Done setting up {self}")
 
@@ -472,6 +475,8 @@ class TestCase(Runner):
             self.status.set("running")
             self.save()
             self.returncode = self._run(*args, stage=stage)
+            for hook in plugin.plugins("test", "finish"):
+                hook(self)
             if self.xfail:
                 code = self.xfail
                 if code > 0 and self.returncode != code:

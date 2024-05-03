@@ -23,6 +23,7 @@ The how-to guides in the documentation were auto-generated using a set of exampl
    location
    centered_parameter_space
    cmake_integration
+   ctest
    cdash
    html
    md

@@ -96,6 +96,9 @@ def run(args: "argparse.Namespace") -> int:
             on_options=args.on_options,
         )
         session.populate(copy_all_resources=args.copy_all_resources)
+        if args.until == "setup":
+            logging.info("Exiting after setup")
+            return 0
         cases = [case for case in session.cases if case.status.value in ("pending", "ready")]
         logging.emit(session.overview(session.cases))
     elif args.mode == "a":

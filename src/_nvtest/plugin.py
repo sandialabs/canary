@@ -48,7 +48,7 @@ class Manager:
             if stage not in ("setup",):
                 raise TypeError(err_msg)
         elif scope == "session":
-            if stage not in ("setup", "finish"):
+            if stage not in ("discovery", "setup", "finish"):
                 raise TypeError(err_msg)
         elif scope == "test":
             if stage not in ("discovery", "setup", "finish"):
@@ -172,12 +172,17 @@ def register(*, scope: str, stage: str):
     return decorator
 
 
-def load_builtin_plugins() -> None:
+def load_builtin_plugins(disable: Optional[list[str]]) -> None:
     path = ir.files("nvtest").joinpath("plugins")
+    disable = disable or []
     logging.debug(f"Loading builtin plugins from {path}")
     if path.exists():  # type: ignore
         for file in path.iterdir():
             if file.name.startswith("nvtest_"):
+                name = os.path.splitext(file.name[7:])[0]
+                if name in disable:
+                    logging.debug(f"Skipping disabled plugin {name}")
+                    continue
                 logging.debug(f"Loading {file.name} builtin plugin")
                 _manager.load_from_file(str(file))
 

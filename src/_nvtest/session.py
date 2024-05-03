@@ -193,6 +193,8 @@ class Session:
         finder = Finder()
         for root, paths in self.search_paths.items():
             finder.add(root, *paths, tolerant=True)
+        for hook in plugin.plugins("session", "discovery"):
+            hook(self)
         finder.prepare()
         self.files = finder.discover()
         file = os.path.join(self.config_dir, "files.data.p")
@@ -245,9 +247,6 @@ class Session:
                 # state is lost and needs to be updated
                 case.refresh()
                 assert case.status.value in ("skipped", "ready", "pending")
-                with working_dir(case.exec_dir):
-                    for hook in plugin.plugins("test", "setup"):
-                        hook(case)
             ts.done(*group)
         self.db.update(cases)
 
@@ -348,6 +347,8 @@ class Session:
                 self.process_testcases(
                     queue=queue, resourceinfo=resourceinfo, fail_fast=fail_fast, output=output
                 )
+                for hook in plugin.plugins("session", "finish"):
+                    hook(self)
         return self.returncode
 
     @contextmanager
@@ -448,7 +449,7 @@ class Session:
         # The case (or batch) was run in a subprocess.  The object must be
         # refreshed so that the state in this main thread is up to date.
 
-        obj: Union[TestCase, Batch] = queue.mark_done(iid)
+        obj: Union[TestCase, Batch] = queue.done(iid)
         if not isinstance(obj, (Batch, TestCase)):
             logging.error(f"Expected TestCase or Batch, got {obj.__class__.__name__}")
             return

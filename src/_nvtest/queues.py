@@ -35,7 +35,7 @@ class ResourceQueue:
         self._finished: dict[int, Any] = {}
         self.lock = lock
 
-    def mark_done(self, Any) -> Any:
+    def done(self, Any) -> Any:
         raise NotImplementedError()
 
     def cases(self) -> list[TestCase]:
@@ -155,7 +155,7 @@ class DirectResourceQueue(ResourceQueue):
                 if dep.id == self._finished[obj_no].id:
                     case.dependencies[i] = self._finished[obj_no]
 
-    def mark_done(self, obj_no: int) -> "TestCase":
+    def done(self, obj_no: int) -> "TestCase":
         with self.lock:
             if obj_no not in self._busy:
                 raise RuntimeError(f"case {obj_no} is not running")
@@ -256,7 +256,7 @@ class BatchResourceQueue(ResourceQueue):
                     if dep.id in finished:
                         case.dependencies[i] = finished[dep.id]
 
-    def mark_done(self, obj_no: int) -> Batch:
+    def done(self, obj_no: int) -> Batch:
         with self.lock:
             if obj_no not in self._busy:
                 raise RuntimeError(f"batch {obj_no} is not running")
