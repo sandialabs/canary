@@ -549,7 +549,7 @@ class Session:
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
             totals.setdefault(case.status.value, []).append(case)
-        string.write(color.colorize("\n@*{Short test summary info}\n"))
+        string.write(color.colorize("@*{Short test summary info}\n"))
         for status in Status.members:
             glyph = Status.glyph(status)
             if status in totals:
