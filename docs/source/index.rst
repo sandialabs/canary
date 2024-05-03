@@ -9,6 +9,7 @@ nvtest user's guide
 
    introduction/index
    basics/index
+   tutorial
    howto/index
    commands/index
    directives/index

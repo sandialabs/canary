@@ -11,7 +11,7 @@ dependencies = []
 nvtest = "nvtest:console_main"
 
 [project.optional-dependencies]
-dev = ["ruff", "mypy", "pytest", "sphinxcontrib-programoutput"]
+dev = ["ruff", "mypy", "pytest"]
 requests = ["requests"]
 
 [build-system]
@@ -24,7 +24,7 @@ version_scheme = "guess-next-dev"
 local_scheme = "node-and-date"
 
 [tool.mypy]
-exclude = ["src/_nvtest/third_party/distro.py"]
+exclude = ["src/_nvtest/third_party/distro.py", "src/_nvtest/third_party/programoutput"]
 
 [[tool.mypy.overrides]]
 module = "requests.*,networkx.*,yaml.*,ruamel.*,pygments.*,toml.*,contextlib2.*,scipy.*,pyinstrument.*,numpy.*,imageio.*"

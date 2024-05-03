@@ -20,7 +20,8 @@ In this first test, the test file ``first.pyt`` defines a function that adds two
 To run the test, navigate to the examples directory and run:
 
 .. command-output:: nvtest run -k first ./basic
-   :cwd: /examples
+    :cwd: /examples
+    :extraargs: -rv -w
 
 A test is considered to have successfully completed if its exit code is 0.  See :ref:`test-status` for more details on test statuses.
 
@@ -45,4 +46,5 @@ This test introduces two new features:
 To run the test, navigate to the examples folder and run:
 
 .. command-output:: nvtest run -k second ./basic
-   :cwd: /examples
+    :cwd: /examples
+    :extraargs: -rv -w

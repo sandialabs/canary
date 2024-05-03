@@ -1,3 +1,5 @@
+.. _nvtest-basics:
+
 nvtest basics
 =============
 

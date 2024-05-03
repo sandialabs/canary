@@ -1,7 +1,7 @@
 .. _howto-finding:
 
-How to find and list test files
-===============================
+Find and list test files
+========================
 
 ``nvtest find`` finds tests in a search path and prints basic information about each test:
 

@@ -1,7 +1,7 @@
 .. _howto-cmake-integration:
 
-How to integrate with CMake
-===========================
+Integrate with CMake
+====================
 
 The ``NVTest.cmake`` plugin integrates ``nvtest`` with CMake projects. This
 plugin provides three main functions: ``add_nvtest``, ``add_nvtest_target``, and

@@ -1,3 +1,5 @@
+.. _nvtest-about:
+
 What is nvtest?
 ===============
 

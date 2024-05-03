@@ -1,3 +1,5 @@
+.. _nvtest-install:
+
 Installing nvtest
 =================
 

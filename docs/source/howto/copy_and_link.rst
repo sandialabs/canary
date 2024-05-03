@@ -1,7 +1,7 @@
 .. _howto-copy-and-link:
 
-How to copy and link resource files into the test execution directory
-=====================================================================
+Copy and link resource files into the test execution directory
+==============================================================
 
 Resources needed by tests can be copied and linked from their source locations to the executtion directory with the :ref:`nvtest.directives.copy<directive-copy>` and :ref:`nvtest.directives.link<directive-link>` directives, respectively, as shown in the following example:
 
@@ -10,3 +10,4 @@ Resources needed by tests can be copied and linked from their source locations t
 
 .. command-output:: nvtest run -d TestResults.CopyAndLink ./copy_and_link
     :cwd: /examples
+    :extraargs: -rv -w

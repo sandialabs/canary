@@ -1,7 +1,7 @@
 .. _howto-parameterize:
 
-How to parameterize tests
-=========================
+Parameterize tests
+==================
 
 A single test file can generate many test cases, each having different parameters, using the :ref:`parameterize <directive-parameterize>` directive.  The test file uses the parameter name[s] and value[s] to run variations of the test.  For example, the test script
 

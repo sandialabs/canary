@@ -1,7 +1,7 @@
 .. _howto-centered-parameter-space:
 
-How to run a centered parameter space study
-===========================================
+Run a centered parameter space study
+====================================
 
 The centered parameter space computes parameter sets along multiple
 coordinate-based vectors, one per parameter, centered about the initial values.
@@ -18,5 +18,5 @@ direction, so that the total number of points in the parameter study is
 will produce two test cases, one with ``a=1`` and another with ``a=4``, each
 executed in their own test directory:
 
-.. command-output:: nvtest describe examples/centered_space/test.pyt
-    :cwd: /
+.. command-output:: nvtest describe ./centered_space/test.pyt
+    :cwd: /examples

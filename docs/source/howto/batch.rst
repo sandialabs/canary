@@ -1,7 +1,7 @@
 .. _howto-run-batched:
 
-How to run tests in a scheduler
-===============================
+Run tests in a scheduler
+========================
 
 Tests can be run under a workload manager (scheduler) such as Slurm or PBS by adding the following options to :ref:`nvtest run<nvtest-run>`:
 
@@ -53,6 +53,7 @@ Examples
 
   .. command-output:: nvtest run -d TestResults.Batched -b scheduler=shell -b count=4 .
     :cwd: /examples
+    :extraargs: -rv -w
     :returncode: 22
 
 
@@ -60,4 +61,5 @@ Examples
 
   .. command-output:: nvtest run -d TestResults.Batched -b scheduler=shell -b count=4 -l batch:workers=1 .
     :cwd: /examples
+    :extraargs: -rv -w
     :returncode: 22

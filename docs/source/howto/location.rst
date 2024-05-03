@@ -1,9 +1,14 @@
 .. _howto-location:
 
-How to find locations of test assets
-====================================
+Find locations of test assets
+=============================
 
-It is often useful to know the location a test's execution directory.  The :ref:`nvtest location<nvtest-location>` command can display the locations of test assets.  For example to move to the test execution directory, simply:
+It is often useful to know the location a test's execution directory.  The :ref:`nvtest location<nvtest-location>` command can display the locations of test assets:
+
+
+.. command-output:: nvtest location -h
+
+For example to move to the test execution directory, simply:
 
 .. code-block:: console
 

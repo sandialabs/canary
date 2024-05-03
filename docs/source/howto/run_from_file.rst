@@ -1,7 +1,33 @@
 .. _howto-run-file:
 
-How to run specific tests from a file
-=====================================
+Run specific test files
+=======================
+
+Run a file directly
+-------------------
+
+Test files can be run directly by passing their paths to ``nvtest run``
+
+.. command-output:: nvtest run ./basic/first.pyt
+    :nocache:
+    :cwd: /examples
+
+.. command-output:: ls -F TestResults
+    :nocache:
+    :cwd: /examples
+
+Replacing a path separator with a colon ``:``, the path after the ``:`` is used as the relative path to the test execution directory:
+
+.. command-output:: nvtest run .:basic/first.pyt
+    :nocache:
+    :cwd: /examples
+
+.. command-output:: ls -F TestResults
+    :nocache:
+    :cwd: /examples
+
+Running tests from a file
+-------------------------
 
 Select tests can be executed by specifying their paths in a ``json`` or ``yaml`` configuration file with the following layout:
 
@@ -29,3 +55,4 @@ and pass it to ``nvtest run``:
 
 .. command-output:: nvtest run -d TestResults.FromFile tests.json
     :cwd: /examples
+    :extraargs: -rv -w

@@ -1,3 +1,4 @@
+.. _nvtest-intro:
 
 Introduction
 ============

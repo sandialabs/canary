@@ -94,7 +94,10 @@ def _tree(
                     break
                 yield from inner(path, prefix=prefix + extension, level=level - 1)
             elif not limit_to_directories:
-                yield prefix + pointer + path.name
+                name = path.name
+                if path.is_symlink():
+                    name += "@"
+                yield prefix + pointer + name
                 files += 1
 
     stream.write(f"{indent}{dir_path}\n")

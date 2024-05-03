@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import sys
 import traceback
 from typing import TYPE_CHECKING
 
@@ -8,6 +9,7 @@ from ..error import StopExecution
 from ..session import ExitCode
 from ..session import Session
 from ..test.case import TestCase
+from ..util import graph
 from ..util import logging
 from ..util.banner import banner
 from ..util.resource import BatchInfo
@@ -55,7 +57,7 @@ def setup_parser(parser: "Parser"):
         help="During test execution, show progress bar (``-rb``, default) or print each "
         "test case as it starts/finishes of every case (``-rv``)",
     )
-    parser.add_argument("-u", "--until", choices=("setup",), help=argparse.SUPPRESS)
+    parser.add_argument("-u", "--until", choices=("discovery", "setup"), help=argparse.SUPPRESS)
     parser.add_argument(
         "--fail-fast",
         action="store_true",
@@ -95,12 +97,18 @@ def run(args: "argparse.Namespace") -> int:
             parameter_expr=args.parameter_expr,
             on_options=args.on_options,
         )
+        if not args.no_header:
+            logging.emit(session.overview(session.cases))
+        if args.until == "discovery":
+            cases = [case for case in session.cases if not case.masked]
+            graph.print(cases, file=sys.stdout)
+            logging.info("Exiting after discovery")
+            return 0
         session.populate(copy_all_resources=args.copy_all_resources)
         if args.until == "setup":
             logging.info("Exiting after setup")
             return 0
         cases = [case for case in session.cases if case.status.value in ("pending", "ready")]
-        logging.emit(session.overview(session.cases))
     elif args.mode == "a":
         session = Session(args.work_tree, mode=args.mode)
         cases = session.filter(
@@ -116,7 +124,8 @@ def run(args: "argparse.Namespace") -> int:
                 data = json.load(open(os.path.join(session.config_dir, "B/1/meta.json")))
                 for var, val in data["meta"].items():
                     setattr(args.batchinfo, var, val)
-        logging.emit(session.overview(cases))
+        if not args.no_header:
+            logging.emit(session.overview(cases))
     else:
         assert args.mode == "b"
         session = Session(args.work_tree, mode="a")
@@ -138,7 +147,8 @@ def run(args: "argparse.Namespace") -> int:
         session.exitstatus = ExitCode.INTERNAL_ERROR
         logging.fatal(traceback.format_exc())
     else:
-        logging.emit(session.summary(cases))
+        if not args.no_summary:
+            logging.emit(session.summary(cases))
         if args.durations:
             logging.emit(session.durations(cases, args.durations))
         logging.emit(session.footer(cases))

@@ -1,7 +1,7 @@
 .. _howto-plugins:
 
-How to extend nvtest with plugins
-=================================
+Extend nvtest with plugins
+==========================
 
 The default behavior of ``nvtest`` can be modified with user defined plugins.  A plugin is a python function that is called at different phases of the ``nvtest`` session.  Plugin functions must be defined in a python module starting with ``nvtest_`` and registered with ``nvtest`` with the ``@nvtest.plugin.register`` decorator.
 

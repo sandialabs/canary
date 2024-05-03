@@ -1,7 +1,7 @@
 .. _howto-execute-and-analyze:
 
-How to write an execute and analyze test
-========================================
+Write an execute and analyze test
+=================================
 
 An execute/analyze test is one that uses parameters to expand into multiple test instances, followed by a final test instance that analyzes the results.  The analyze test only runs after all the parameter tests are finished.
 
@@ -22,6 +22,7 @@ As can be seen, the test ``test`` depends on ``test[a=1]``, ``test[a=2]``, and `
 
 .. command-output:: nvtest run -d TestResults.ExecuteAndAnalyze ./execute_and_analyze
     :cwd: /examples
+    :extraargs: -rv -w
 
 The full example
 ----------------
