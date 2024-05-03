@@ -14,7 +14,6 @@ nvtest user's guide
    commands/index
    directives/index
 
-
 Indices and tables
 ==================
 
