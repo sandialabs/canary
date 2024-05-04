@@ -13,6 +13,7 @@ from ..util import graph
 from ..util import logging
 from ..util.banner import banner
 from ..util.resource import BatchInfo
+from ..third_party.color import colorize
 from .common import PathSpec
 from .common import add_batch_arguments
 from .common import add_mark_arguments
@@ -57,7 +58,11 @@ def setup_parser(parser: "Parser"):
         help="During test execution, show progress bar (``-rb``, default) or print each "
         "test case as it starts/finishes of every case (``-rv``)",
     )
-    parser.add_argument("-u", "--until", choices=("discovery", "setup"), help=argparse.SUPPRESS)
+    parser.add_argument("-u",
+        "--until",
+        choices=("discover", "freeze", "populate"),
+        help=argparse.SUPPRESS
+    )
     parser.add_argument(
         "--fail-fast",
         action="store_true",
@@ -91,22 +96,37 @@ def run(args: "argparse.Namespace") -> int:
         session = Session(path, mode=args.mode, force=args.wipe)
         session.add_search_paths(args.paths)
         session.discover()
+        if args.until is not None:
+            files = session.files
+            roots = set()
+            for file in files:
+                roots.add(file.root)
+            n, N = len(files), len(roots)
+            s, S = "" if n == 1 else "s", "" if N == 1 else "s"
+            logging.info(colorize("@*{Collected} %d file%s from %d root%s" % (n, s, N, S)))
+            if args.until == "discover":
+                logging.info("Exiting after discovery")
+                return 0
         session.freeze(
             resourceinfo=args.resourceinfo,
             keyword_expr=args.keyword_expr,
             parameter_expr=args.parameter_expr,
             on_options=args.on_options,
         )
+        if args.until is not None:
+            cases = [case for case in session.cases if not case.masked]
+            n, N = len(cases), len([case.file for case in cases])
+            s, S = "" if n == 1 else "s", "" if N == 1 else "s"
+            logging.info(colorize("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S)))
+            graph.print(cases, file=sys.stdout)
+            if args.until == "freeze":
+                logging.info("Exiting after freezing test cases")
+                return 0
         if not args.no_header:
             logging.emit(session.overview(session.cases))
-        if args.until == "discovery":
-            cases = [case for case in session.cases if not case.masked]
-            graph.print(cases, file=sys.stdout)
-            logging.info("Exiting after discovery")
-            return 0
         session.populate(copy_all_resources=args.copy_all_resources)
-        if args.until == "setup":
-            logging.info("Exiting after setup")
+        if args.until == "populate":
+            logging.info("Exiting after populating worktree")
             return 0
         cases = [case for case in session.cases if case.status.value in ("pending", "ready")]
     elif args.mode == "a":

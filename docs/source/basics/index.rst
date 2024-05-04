@@ -10,3 +10,5 @@ nvtest basics
    testfile
    session
    status
+   runtime
+   fast_and_long

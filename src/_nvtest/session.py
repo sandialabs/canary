@@ -527,9 +527,8 @@ class Session:
         files = {case.file for case in cases}
         _, cases = partition(cases, lambda c: unreachable(c))
         n, N = len(cases), len(files)
-        s = "s " if n > 1 else " "
-        S = "s " if N > 1 else ""
-        t = "@*{collected %d test%sfrom %d file%s}" % (n, s, N, S)
+        s, S = "s" if n > 1 else "", "s" if N > 1 else ""
+        t = "@*{collected %d test%s from %d file%s}" % (n, s, N, S)
         string.write(color.colorize(t) + "\n")
         cases_to_run = [case for case in cases if not case.masked and not case.skipped]
         files = {case.file for case in cases_to_run}

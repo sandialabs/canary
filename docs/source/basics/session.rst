@@ -11,15 +11,19 @@ Phases of a test session
 A test session consists of the following phases:
 
 :ref:`Discovery<discovery>`:
-  Search for test scripts in ``path [path...]``
+  Search ``path [path...]`` for test scripts.
 
-:ref:`Setup<setup>`:
-  Order test scripts, create unique execution directories for each test, and
-  copy/link necessary resources into the execution directory.
+:ref:`Freeze<freeze>`:
+  "Freeze" test files into test cases based on :ref:`parameterizations<howto-parameterize>` and :ref:`filtering<howto-filter>` criteria.
+
+:ref:`Populate<populate>`:
+  Create unique execution directories for each test case and :ref:`copy/link <howto-copy-and-link>` necessary resources into the execution directory.
+
+:ref:`Batch<batch>`:
+  For :ref:`batched<howto-run-batched>` sessions, group test cases into batches to run in a scheduler.
 
 :ref:`Run<run>`:
-  For each test, move to its execution directory and run the test script, first
-  ensuring that dependencies have been satisfied.
+  For each test, move into its execution directory and run the test script (after each dependency has completed).
 
 Finish:
   Perform clean up actions, if any.
@@ -38,30 +42,36 @@ We will use an example to demonstrate each phase of the testing process.  Consid
 Discovery
 .........
 
-During discovery, test files are collected, ``parameterize`` statements expanded, and dependency links created:
+During discovery test files are collected:
 
-.. command-output:: rm -rf TestResults
-   :silent:
-
-.. command-output:: nvtest run --until=discovery -k centered_space .
+.. command-output:: nvtest run --until=discover -k centered_space .
    :cwd: /examples
    :extraargs: -rv -w --no-header
+   :setup: rm -rf TestResults
 
-This test expands into 9 individual parameterized tests and 1 unparameterized test with the other 9 tests as dependencies.
+.. _freeze:
 
-.. _setup:
+Freeze
+.........
 
-Setup
-.....
+``parameterize`` statements expanded, and dependency links created: This test expands into 9 individual parameterized tests and 1 unparameterized test with the other 9 tests as dependencies.
+
+.. command-output:: nvtest run --until=freeze -k centered_space .
+   :cwd: /examples
+   :extraargs: -rv -w --no-header
+   :setup: rm -rf TestResults
+
+.. _populate:
+
+Populate
+........
 
 During setup, the actual test execution directories are made and test assets linked:
 
-.. command-output:: rm -rf TestResults
-   :silent:
-
-.. command-output:: nvtest run --until=setup -k centered_space .
+.. command-output:: nvtest run --until=populate -k centered_space .
    :cwd: /examples
-   :extraargs: -rv -w --no-header
+   :extraargs: -rv -w
+   :setup: rm -rf TestResults
 
 .. code-block:: console
 
@@ -78,6 +88,18 @@ Each test's execution directory has the following naming convention: ``[relpath/
 
   The test directory naming scheme is an implementation detail and may change in the future.  Do not write tests that rely on this naming scheme.
 
+.. _batch:
+
+Batch
+.....
+
+Group test cases into batches to run in a scheduler.  The default batching scheme is to:
+
+1. group cases by the number of compute nodes required to run; and
+2. partition each group into batches that complete in a set time (defined by the ``-b limit:T`` option)
+
+Optionally, a fixed number of batches can be requested (``-b count:N``).
+
 .. _run:
 
 Run
@@ -85,13 +107,11 @@ Run
 
 During test execution, ``nvtest`` navigates to each test directory and runs the script:
 
-.. command-output:: rm -rf TestResults
-   :silent:
-
 .. command-output:: nvtest run -k centered_space .
    :cwd: /examples
    :extraargs: -rv -w --no-header
    :nocache:
+   :setup: rm -rf TestResults
 
 .. command-output:: nvtest tree ./TestResults
    :cwd: /examples
@@ -102,4 +122,4 @@ Note the output files (``output.json``) from each of the parameterized test case
 
 .. note::
 
-   Tests are run asynchronously to (by default) utilize all available resources.
+   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type:X`` option.

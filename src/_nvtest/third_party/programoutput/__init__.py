@@ -103,6 +103,7 @@ class ProgramOutputDirective(rst.Directive):
         silent=flag,
         anyreturncode=flag,
         ellipsis=_slice,
+        setup=unchanged,
         extraargs=unchanged,
         returncode=nonnegative_int,
         cwd=unchanged,
@@ -128,6 +129,7 @@ class ProgramOutputDirective(rst.Directive):
 
         node["hide_standard_error"] = "nostderr" in self.options
         node["extraargs"] = self.options.get("extraargs", "")
+        node["setup"] = self.options.get("setup", None)
         _, cwd = env.relfn2path(self.options.get("cwd", "/"))
         node["working_directory"] = cwd
         node["use_shell"] = "shell" in self.options
@@ -142,7 +144,7 @@ class ProgramOutputDirective(rst.Directive):
         return [node]
 
 
-_Command = namedtuple("Command", "command shell hide_standard_error working_directory")
+_Command = namedtuple("Command", "command shell hide_standard_error working_directory setup")
 
 
 class Command(_Command):
@@ -150,7 +152,7 @@ class Command(_Command):
     A command to be executed.
     """
 
-    def __new__(cls, command, shell=False, hide_standard_error=False, working_directory="/"):
+    def __new__(cls, command, shell=False, hide_standard_error=False, working_directory="/", setup=None):
         # `chdir()` resolves symlinks, so we need to resolve them too for
         # caching to make sure that different symlinks to the same directory
         # don't result in different cache keys.  Also normalize paths to make
@@ -159,7 +161,7 @@ class Command(_Command):
         # Likewise, normalize the command now for better caching, and so
         # that we can present *exactly* what we run to the user.
         command = cls.__normalize_command(command, shell)
-        return _Command.__new__(cls, command, shell, hide_standard_error, working_directory)
+        return _Command.__new__(cls, command, shell, hide_standard_error, working_directory, setup)
 
     @staticmethod
     def __normalize_command(command, shell):
@@ -187,7 +189,7 @@ class Command(_Command):
         extraargs = node.get("extraargs", "")
         command = (node["command"] + " " + extraargs).strip()
         return cls(
-            command, node["use_shell"], node["hide_standard_error"], node["working_directory"]
+            command, node["use_shell"], node["hide_standard_error"], node["working_directory"], node.get("setup")
         )
 
     def execute(self):
@@ -197,6 +199,11 @@ class Command(_Command):
         Return the :class:`~subprocess.Popen` object representing the running
         command.
         """
+        if self.setup:
+            with open(os.devnull, "a") as fh:
+                p = Popen(shlex.split(self.setup), stdout=fh, stderr=STDOUT, cwd=self.working_directory)
+            p.wait()
+
         command = self.command
 
         return Popen(
