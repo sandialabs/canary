@@ -110,8 +110,7 @@ class ResourceSetter(argparse.Action):
         return {"cores": "cpus", "processors": "cpus", "gpus": "devices"}.get(type, type)
 
     def parse_path(self, path: str) -> tuple[str, str, str]:
-        key, value = path.split("=", 1)
-        scope, type = key.split(":")
+        scope, type, value = path.split(":", 2)
         type = self.type_map(type)
         return scope, type, value
 
@@ -124,15 +123,15 @@ class ResourceSetter(argparse.Action):
 Defines resources that are required by the test session and establishes limits
 to the amount of resources that can be consumed. The %(r_arg)s argument is of
 the form: ``%(r_form)s``.  The possible ``%(r_form)s`` settings are\n\n
-• ``-l session:workers=N``: Execute the test session asynchronously using a pool of at most N workers [default: auto]\n\n
-• ``-l session:cpus=N``: Occupy at most N cpu cores at any one time.\n\n
-• ``-l session:devices=N``: Occupy at most N devices at any one time.\n\n
-• ``-l session:timeout=T``: Set a timeout on test session execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
-• ``-l test:cpus=N``: Skip tests requiring more than N cpu cores.\n\n
-• ``-l test:devices=N``: Skip tests requiring more than N devices.\n\n
-• ``-l test:timeout=T``: Set a timeout on any single test execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
-• ``-l batch:workers=N``: Execute the batch asynchronously using a pool of at most N workers [default: auto]\n\n
-""" % {"r_form": bold("scope:type=value"), "r_arg": bold("-l resource")}
+• ``-l session:workers:N``: Execute the test session asynchronously using a pool of at most N workers [default: auto]\n\n
+• ``-l session:cpus:N``: Occupy at most N cpu cores at any one time.\n\n
+• ``-l session:devices:N``: Occupy at most N devices at any one time.\n\n
+• ``-l session:timeout:T``: Set a timeout on test session execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
+• ``-l test:cpus:N``: Skip tests requiring more than N cpu cores.\n\n
+• ``-l test:devices:N``: Skip tests requiring more than N devices.\n\n
+• ``-l test:timeout:T``: Set a timeout on any single test execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
+• ``-l batch:workers:N``: Execute the batch asynchronously using a pool of at most N workers [default: auto]\n\n
+""" % {"r_form": bold("scope:type:value"), "r_arg": bold("-l resource")}
         return resource_help
 
 
@@ -147,7 +146,7 @@ class BatchSetter(argparse.Action):
         setattr(args, self.dest, batchinfo)
 
     def parse_path(self, path: str) -> tuple[str, str]:
-        type, value = path.split("=", 1)
+        type, value = path.split(":", 1)
         if type == "args":
             value = strip_quotes(value)
         return type, value
@@ -160,11 +159,11 @@ class BatchSetter(argparse.Action):
         resource_help = """\
 Defines how to batch test cases. The %(r_arg)s argument is of the form: ``%(r_form)s``.
 The possible possible ``%(r_form)s`` settings are\n\n
-• ``-b count=N``: Execute tests in N batches.\n\n
-• ``-b limit=T``: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
-• ``-b scheduler=S``: Use scheduler 'S' to run the test batches.\n\n
-• ``-b args=A``: Any additional args 'A' are passed directly to the scheduler, for example,
-  ``-b args=--account=ABC`` will pass ``--account=ABC`` to the scheduler
+• ``-b count:N``: Execute tests in N batches.\n\n
+• ``-b limit:T``: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
+• ``-b scheduler:S``: Use scheduler 'S' to run the test batches.\n\n
+• ``-b args:A``: Any additional args 'A' are passed directly to the scheduler, for example,
+  ``-b args:--account=ABC`` will pass ``--account=ABC`` to the scheduler
 """ % {"r_form": bold("type:value"), "r_arg": bold("-b resource")}
         return resource_help
 

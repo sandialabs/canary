@@ -152,7 +152,9 @@ class Command(_Command):
     A command to be executed.
     """
 
-    def __new__(cls, command, shell=False, hide_standard_error=False, working_directory="/", setup=None):
+    def __new__(
+        cls, command, shell=False, hide_standard_error=False, working_directory="/", setup=None
+    ):
         # `chdir()` resolves symlinks, so we need to resolve them too for
         # caching to make sure that different symlinks to the same directory
         # don't result in different cache keys.  Also normalize paths to make
@@ -189,7 +191,11 @@ class Command(_Command):
         extraargs = node.get("extraargs", "")
         command = (node["command"] + " " + extraargs).strip()
         return cls(
-            command, node["use_shell"], node["hide_standard_error"], node["working_directory"], node.get("setup")
+            command,
+            node["use_shell"],
+            node["hide_standard_error"],
+            node["working_directory"],
+            node.get("setup"),
         )
 
     def execute(self):
@@ -201,7 +207,9 @@ class Command(_Command):
         """
         if self.setup:
             with open(os.devnull, "a") as fh:
-                p = Popen(shlex.split(self.setup), stdout=fh, stderr=STDOUT, cwd=self.working_directory)
+                p = Popen(
+                    shlex.split(self.setup), stdout=fh, stderr=STDOUT, cwd=self.working_directory
+                )
             p.wait()
 
         command = self.command

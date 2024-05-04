@@ -203,9 +203,9 @@ class SubShell(Batch):
         fh.write(
             f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
             "${SCRIPT_ARGS} "
-            f"-l session:workers={max_workers} "
-            f"-l session:cpus={session_cpus} "
-            f"-l test:cpus={max_test_cpus} "
+            f"-l session:workers:{max_workers} "
+            f"-l session:cpus:{session_cpus} "
+            f"-l test:cpus:{max_test_cpus} "
             f"^{self.world_id}:{self.world_rank}\n)\n"
         )
         f = self.submission_script_filename()
@@ -318,9 +318,9 @@ class Slurm(Batch):
         fh.write(
             f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
             "${SCRIPT_ARGS} "
-            f"-l session:workers={max_workers} "
-            f"-l session:cpus={session_cpus} "
-            f"-l test:cpus={max_test_cpus} "
+            f"-l session:workers:{max_workers} "
+            f"-l session:cpus:{session_cpus} "
+            f"-l test:cpus:{max_test_cpus} "
             f"^{self.world_id}:{self.world_rank}\n)\n"
         )
         f = self.submission_script_filename()

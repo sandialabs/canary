@@ -7,34 +7,42 @@ Tests can be run under a workload manager (scheduler) such as Slurm or PBS by ad
 
 .. code-block:: console
 
-  nvtest run [-b (count=N|limit=T)] -b scheduler=SCHEDULER ...
+  nvtest run [-b (count:N|limit:T)] -b scheduler:SCHEDULER ...
 
 When run in "batch" mode, ``nvtest`` will group tests into "batches" and submit each batch to ``SCHEDULER``.
 
 Batching options
 ----------------
 
-* ``-b count=N``: group tests into ``N`` batches, each having approximately the same runtime.
-* ``-b limit=T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Human readable times, eg 1s, 1 sec, 1h, 2 hrs, etc, are accepted.
-* ``-b args=S``: pass args ``S`` directly to the scheduler.
+* ``-b count:N``: group tests into ``N`` batches, each having approximately the same runtime.
+* ``-b limit:T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Human readable times, eg 1s, 1 sec, 1h, 2 hrs, etc, are accepted.
+* ``-b args:S``: pass args ``S`` directly to the scheduler.
 
 Additionally, batch concurrency can be controlled by
 
-* ``-l session:workers=N``: Submit ``N`` concurrent batches to the scheduler at any one time.  The default is 5.
-* ``-l batch:workers=N``: Execute the batch asynchronously using a pool of at most ``N`` workers.  By default, the maximum number of available workers is used.
+* ``-l session:workers:N``: Submit ``N`` concurrent batches to the scheduler at any one time.  The default is 5.
+* ``-l batch:workers:N``: Execute the batch asynchronously using a pool of at most ``N`` workers.  By default, the maximum number of available workers is used.
 
 .. note::
 
-   ``-b count=N`` and ``-b limit=T`` are mutually exclusive.
+   ``-b count:N`` and ``-b limit:T`` are mutually exclusive.
 
-.. note::
+.. _batch-schemes:
 
-   A default of 30 minutes is used if neither the batch time or count is specified.
+Batching schemes
+----------------
+
+By default, tests are batched into groups based as follows:
+
+1. group cases by the number of compute nodes required to run; and
+2. partition each group into batches that complete in the time specified by ``-b limit:T``.  A default limit of 30 minutes is used if not otherwise specified.
+
+Optionally, a fixed number of batches can be requested (``-b count:N``).
 
 Scheduler options
 -----------------
 
-Send options directly to the scheduler via ``-b args=option``.  Eg, ``-b args=--account=XYZ`` will pass ``--account=XYZ`` directly to the scheduler.
+Send options directly to the scheduler via ``-b args:option``.  Eg, ``-b args:--account=XYZ`` will pass ``--account=XYZ`` directly to the scheduler.
 
 Supported schedulers
 --------------------
@@ -51,7 +59,7 @@ Examples
 
 * Run the nvtest example suite in 4 batches
 
-  .. command-output:: nvtest run -d TestResults.Batched -b scheduler=shell -b count=4 .
+  .. command-output:: nvtest run -d TestResults.Batched -b scheduler:shell -b count:4 .
     :cwd: /examples
     :extraargs: -rv -w
     :returncode: 22
@@ -59,7 +67,7 @@ Examples
 
 * Run the nvtest example suite in 4 batches, running tests in serial in each batch
 
-  .. command-output:: nvtest run -d TestResults.Batched -b scheduler=shell -b count=4 -l batch:workers=1 .
+  .. command-output:: nvtest run -d TestResults.Batched -b scheduler:shell -b count:4 -l batch:workers:1 .
     :cwd: /examples
     :extraargs: -rv -w
     :returncode: 22

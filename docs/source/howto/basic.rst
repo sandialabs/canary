@@ -34,11 +34,11 @@ Limit the number of concurrent tests
 
 .. code-block:: console
 
-   nvtest run -l session:workers=N PATH [PATHS...]
+   nvtest run -l session:workers:N PATH [PATHS...]
 
 where ``N`` is a number of workers.  For example,
 
-.. command-output:: nvtest run -d TestResults.Basic -l session:workers=1 ./basic
+.. command-output:: nvtest run -d TestResults.Basic -l session:workers:1 ./basic
     :cwd: /examples
     :extraargs: -rv -w
 
@@ -47,10 +47,10 @@ Set a timeout on the test session
 
 .. code-block:: console
 
-   nvtest run -l session:timeout=T PATH [PATHS...]
+   nvtest run -l session:timeout:T PATH [PATHS...]
 
 where ``T`` is a number or a human-readable number representation like ``1 sec``, ``1s``, etc.  For example,
 
-.. command-output:: nvtest run -d TestResults.Basic -l 'session:timeout=1 min' ./basic
+.. command-output:: nvtest run -d TestResults.Basic -l 'session:timeout:1 min' ./basic
     :cwd: /examples
     :extraargs: -rv -w

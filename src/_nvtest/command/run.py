@@ -9,11 +9,11 @@ from ..error import StopExecution
 from ..session import ExitCode
 from ..session import Session
 from ..test.case import TestCase
+from ..third_party.color import colorize
 from ..util import graph
 from ..util import logging
 from ..util.banner import banner
 from ..util.resource import BatchInfo
-from ..third_party.color import colorize
 from .common import PathSpec
 from .common import add_batch_arguments
 from .common import add_mark_arguments
@@ -58,10 +58,8 @@ def setup_parser(parser: "Parser"):
         help="During test execution, show progress bar (``-rb``, default) or print each "
         "test case as it starts/finishes of every case (``-rv``)",
     )
-    parser.add_argument("-u",
-        "--until",
-        choices=("discover", "freeze", "populate"),
-        help=argparse.SUPPRESS
+    parser.add_argument(
+        "-u", "--until", choices=("discover", "freeze", "populate"), help=argparse.SUPPRESS
     )
     parser.add_argument(
         "--fail-fast",
