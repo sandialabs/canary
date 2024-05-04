@@ -1,6 +1,6 @@
 # NVTEST
 
-An application testing framework inspired by vvtest.
+An application testing framework inspired by [vvtest](https://cee-gitlab.sandia.gov/scidev/vvtest.git).
 
 ## Requirements
 
@@ -11,7 +11,7 @@ Python 3.9+
 ### Default
 
 ```console
-pip install "nvtest git+ssh://git@@cee-gitlab.sandia.gov/alegra/tools/nvtest"
+pip install "nvtest git+ssh://git@cee-gitlab.sandia.gov/alegra/tools/nvtest"
 ```
 
 ### Developers

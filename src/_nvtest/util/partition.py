@@ -1,4 +1,5 @@
 import math
+from graphlib import TopologicalSorter
 
 from .. import config
 from ..test.case import TestCase
@@ -39,10 +40,60 @@ def partition_t(cases: list[TestCase], t: float = 60 * 30) -> list[set[TestCase]
     """Partition test cases into partitions having a runtime approximately equal
     to ``t``
 
+    """
+    sockets_per_node = config.get("machine:sockets_per_node")
+    cores_per_socket = config.get("machine:cores_per_socket")
+    cores_per_node = sockets_per_node * cores_per_socket
+
+    def _p_nodes(partition):
+        max_processors = max(case.processors for case in partition)
+        return math.ceil(max_processors / cores_per_node)
+
+    partitions: list[set[TestCase]] = []
+    graph = {}
+    for case in cases:
+        graph[case] = case.dependencies
+    ts = TopologicalSorter(graph)
+    ts.prepare()
+    while ts.is_active():
+        ready = ts.get_ready()
+        groups: dict[int, list[TestCase]] = {}
+        for case in ready:
+            c_nodes = math.ceil(case.processors / cores_per_node)
+            groups.setdefault(c_nodes, []).append(case)
+        for c_nodes, group in groups.items():
+            g_partitions = defaultlist(Partition)
+            for case in group:
+                for g_partition in g_partitions:
+                    p_nodes = _p_nodes(g_partition)
+                    if p_nodes != c_nodes:
+                        continue
+                    total_cputime = g_partition.cputime + 1.5 * case.cputime
+                    runtime = total_cputime / (p_nodes * cores_per_node)
+                    if runtime <= t:
+                        g_partition.add(case)
+                        break
+                else:
+                    g_partition = g_partitions.new()
+                    g_partition.add(case)
+            partitions.extend(g_partitions)
+        ts.done(*ready)
+
+    if len(cases) != sum([len(partition) for partition in partitions]):
+        raise ValueError("Incorrect partition lengths!")
+
+    return partitions
+
+
+def _partition_t(cases: list[TestCase], t: float = 60 * 30) -> list[set[TestCase]]:
+    """Partition test cases into partitions having a runtime approximately equal
+    to ``t``
+
     The partitioning is as follows:
 
-    - Put any test requiring more than one node into its own partition
-    - Fill each partition with all other
+    - Group test cases and put groups into partitions if they fit entirely
+    - Topologically sort any test cases that didn't get partitioned above and pack
+      them in.
 
     """
     partitions = defaultlist(Partition)
@@ -55,38 +106,72 @@ def partition_t(cases: list[TestCase], t: float = 60 * 30) -> list[set[TestCase]
         return math.ceil(max_processors / cores_per_node)
 
     unassigned: set[TestCase] = set()
-    for case in cases:
-        if case.dependencies:
-            unassigned.add(case)
+    groups = group_testcases(cases)
+    while True:
+        try:
+            group = groups.pop(0)
+        except IndexError:
+            break
+        g_processors = max(case.processors for case in group)
+        g_cputime = sum(case.processors * case.runtime for case in group)
+
+        if g_processors <= cores_per_node and g_cputime <= t:
+            # This group can be run on a single node in less than the time allotted.
+            for partition in partitions:
+                nodes = p_nodes(partition)
+                total_cputime = partition.cputime + 1.5 * g_cputime
+                runtime = total_cputime / (nodes * cores_per_node)
+                if nodes == 1 and runtime <= t:
+                    partition.update(group)
+                    break
+            else:
+                partition = partitions.new()
+                partition.update(group)
             continue
-        if case.processors <= cores_per_node:
-            # pack as many tests in the partition as possible
+
+        if len(group) == 1:
+            # Single case must be put into its own partition
+            partition = partitions.new()
+            partition.add(group.pop())
+            continue
+
+        # Check if this partition can fit
+        g_nodes = p_nodes(group)
+        g_runtime = g_cputime / (g_nodes * cores_per_node)
+        if g_runtime <= t:
+            for partition in partitions:
+                nodes = p_nodes(partition)
+                total_cputime = partition.cputime + 1.5 * g_cputime
+                runtime = total_cputime / (nodes * cores_per_node)
+                if nodes == g_nodes and runtime <= t:
+                    partition.update(group)
+                break
+            else:
+                partition = partitions.new()
+                partition.update(group)
+            continue
+
+        for case in group:
+            if case.dependencies:
+                unassigned.add(case)
+                continue
+            c_nodes = math.ceil(case.processors / cores_per_node)
             for partition in partitions:
                 nodes = p_nodes(partition)
                 total_cputime = partition.cputime + 1.5 * case.cputime
                 runtime = total_cputime / (nodes * cores_per_node)
-                if nodes == 1 and runtime <= t:
-                    partition.add(case)
-                    break
-            else:
-                partition = partitions.new()
-                partition.add(case)
-        else:
-            # group cases with the same number of nodes
-            c_nodes = math.ceil(case.processors / cores_per_node)
-            for partition in partitions:
-                nodes = p_nodes(partition)
-                total_cputime = partition.cputime + case.cputime
-                runtime = total_cputime / (nodes * cores_per_node)
                 if nodes == c_nodes and runtime <= t:
-                    partition.add(case)
+                    partition.update(group)
                     break
             else:
                 partition = partitions.new()
                 partition.add(case)
+
     for case in unassigned:
         partition = partitions.new()
         partition.add(case)
+
     if len(cases) != sum([len(partition) for partition in partitions]):
         raise ValueError("Incorrect partition lengths!")
+
     return partitions

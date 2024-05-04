@@ -286,12 +286,12 @@ class Slurm(Batch):
     def write_submission_script(self, *a: str) -> None:
         max_tasks = self.max_tasks_required()
         ns = calculate_allocations(max_tasks)
-        qtime = self.cputime / (ns.cores_per_node * ns.nodes) * 1.05
+        qtime = max(self.cputime / (ns.cores_per_node * ns.nodes) * 1.05, 5)
         args = list(a)
         args.append(f"--nodes={ns.nodes}")
-        args.append(f"--ntasks-per-node={ns.ntasks_per_node}")
+        args.append(f"--ntasks-per-node={ns.tasks_per_node}")
         args.append(f"--cpus-per-task={ns.cpus_per_task}")
-        args.append(f"--time={hhmmss(qtime)}")
+        args.append(f"--time={hhmmss(qtime, threshold=0)}")
         file = self.logfile()
         args.append(f"--error={file}")
         args.append(f"--output={file}")
@@ -299,7 +299,7 @@ class Slurm(Batch):
         if self.use_num_workers is not None:
             max_workers = self.use_num_workers
         else:
-            max_workers = ns.ntasks_per_node if ns.nodes == 1 else 1
+            max_workers = ns.tasks_per_node if ns.nodes == 1 else 1
         max_test_cpus = self.max_tasks_required()
         session_cpus = max(max_workers, max_test_cpus)
         dbg_flag = "-d" if config.get("config:debug") else ""

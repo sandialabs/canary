@@ -238,6 +238,7 @@ class Session:
         for case in cases:
             ts.add(case, *case.dependencies)
         ts.prepare()
+        errors = 0
         while ts.is_active():
             group = ts.get_ready()
             args = zip(group, repeat(self.root), repeat(copy_all_resources))
@@ -247,8 +248,13 @@ class Session:
                 # state is lost and needs to be updated
                 case.refresh()
                 assert case.status.value in ("skipped", "ready", "pending")
+                if case.exec_root is None:
+                    errors += 1
+                    logging.error(f"{case}: exec_root not set after setup")
             ts.done(*group)
         self.db.update(cases)
+        if errors:
+            raise ValueError("Stopping due to previous errors")
 
     def filter(
         self,
@@ -490,6 +496,11 @@ class Session:
             if batchinfo.count is None and batchinfo.limit is None:
                 batchinfo.limit = default_batchsize
             queue = BatchResourceQueue(resourceinfo, batchinfo, global_session_lock)
+        for case in cases:
+            if case.status.value not in ("ready", "pending"):
+                raise ValueError(f"{case}: case is not ready or pending")
+            elif case.exec_root is None:
+                raise ValueError(f"{case}: exec root is not set")
         queue.put(*cases)
         queue.prepare()
         if queue.empty():

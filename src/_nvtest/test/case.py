@@ -348,6 +348,7 @@ class TestCase(Runner):
         self.finish = case.finish
         self.returncode = case.returncode
         self.status.set(case.status.value, details=case.status.details)
+        self.exec_root = case.exec_root
         for dep in self.dependencies:
             dep.refresh()
 
