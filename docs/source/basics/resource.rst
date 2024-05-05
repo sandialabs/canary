@@ -1,7 +1,7 @@
 .. _nvtest-resource:
 
-Resource usage
-==============
+Machine resources
+=================
 
 ``nvtest`` uses the `ProcessPoolExecutor <https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ProcessPoolExecutor>`_ to execute tests asynchronously using :ref:`N <workers>`.  Tests requiring ``np`` processors and ``nd`` devices are submitted to the executor such that the total number of resources used remains less than or equal to the number of available resources.
 

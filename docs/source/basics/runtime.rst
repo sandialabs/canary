@@ -1,7 +1,7 @@
 .. _nvtest-runtimes:
 
-Test case running times and timeouts
-====================================
+Time resources
+==============
 
 Runtime
 -------

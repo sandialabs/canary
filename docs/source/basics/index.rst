@@ -1,7 +1,7 @@
 .. _nvtest-basics:
 
-nvtest basics
-=============
+User's guide
+============
 
 .. toctree::
    :maxdepth: 1
