@@ -11,3 +11,4 @@ nvtest basics
    session
    status
    runtime
+   resource

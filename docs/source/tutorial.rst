@@ -8,7 +8,6 @@ The "tutorial" is a selection of pages from the :ref:`introduction <nvtest-intro
 Getting Started
 ---------------
 
-* :ref:`nvtest-about`
 * :ref:`nvtest-install`
 * :ref:`nvtest-testfile`
 * :ref:`nvtest-session`
