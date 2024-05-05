@@ -14,7 +14,11 @@ Test file structure
 
 The test file is composed of two parts:
 
-.. rubric:: 1. Directives
+.. image:: /file.png
+    :width: 800
+
+Directives
+~~~~~~~~~~
 
 These lines provide instructions to ``nvtest`` regarding the setup and cleanup of the test.  These instructions are provided through the ``nvtest.directives`` namespace.  For example,
 
@@ -27,7 +31,8 @@ would copy ``file.txt`` from the test's source directory into the the test's exe
 
 See :ref:`test-directives` for more.
 
-.. rubric:: 2. Body
+Body
+~~~~
 
 Executable statements that are run during the session's run phase.
 

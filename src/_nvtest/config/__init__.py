@@ -15,12 +15,14 @@ from ..third_party.schema import SchemaError
 from ..util import logging
 from ..util.misc import ns2dict
 from ..util.singleton import Singleton
+from ..util.time import time_in_seconds
 from . import machine
 from .schemas import any_schema
 from .schemas import build_schema
 from .schemas import config_schema
 from .schemas import machine_schema
 from .schemas import python_schema
+from .schemas import test_schema
 from .schemas import variables_schema
 
 
@@ -41,6 +43,7 @@ section_schemas: dict[str, Schema] = {
     "session": any_schema,
     "system": any_schema,
     "option": any_schema,
+    "test": test_schema,
 }
 
 read_only_sections = ("python",)
@@ -57,13 +60,14 @@ class Config:
         editable_machine_config = {
             key: static_machine_config.pop(key) for key in machine.editable_properties
         }
-        self.scopes = {
+        self.scopes: dict = {
             "defaults": {
                 "config": {
                     "debug": False,
                     "log_level": "INFO",
                     "test_files": r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$",
                 },
+                "test": {"timeout": {"fast": 30.0, "long": 10 * 60.0, "default": 5 * 60.0}},
                 "machine": editable_machine_config,
                 "system": static_machine_config,
                 "variables": {},
@@ -104,6 +108,9 @@ class Config:
         if "variables" in self.scopes[scope]:
             for var, val in self.scopes[scope]["variables"].items():
                 os.environ[var] = val
+        if self.scopes[scope].get("test", {}).get("timeout"):
+            for key, val in self.scopes[scope]["test"]["timeout"].items():
+                self.scopes[scope]["test"]["timeout"][key] = time_in_seconds(val)
 
     def load_env_config(self) -> None:
         if "NVTEST_LOG_LEVEL" in os.environ:

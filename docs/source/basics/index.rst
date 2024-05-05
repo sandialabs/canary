@@ -11,4 +11,3 @@ nvtest basics
    session
    status
    runtime
-   fast_and_long

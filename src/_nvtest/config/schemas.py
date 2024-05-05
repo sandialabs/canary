@@ -3,6 +3,7 @@ from typing import Any
 from ..third_party.schema import Optional
 from ..third_party.schema import Or
 from ..third_party.schema import Schema
+from ..util.time import time_in_seconds
 
 
 def list_of_str(arg: Any) -> bool:
@@ -39,6 +40,19 @@ config_schema = Schema(
         }
     }
 )
+
+test_schema = Schema(
+    {
+        "test": {
+            "timeout": {
+                "fast": time_in_seconds,
+                "long": time_in_seconds,
+                "default": time_in_seconds,
+            }
+        }
+    }
+)
+
 machine_schema = Schema(
     {
         "machine": {

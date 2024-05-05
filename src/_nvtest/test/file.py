@@ -13,6 +13,7 @@ from typing import Type
 from typing import Union
 
 from .. import config
+from ..error import diff_exit_status
 from ..paramset import ParameterSet
 from ..third_party.color import colorize
 from ..util import logging
@@ -103,8 +104,7 @@ class AbstractTestFile:
         self._preload: list[FilterNamespace] = []
         self._depends_on: list[FilterNamespace] = []
         self.skipif_reason: Optional[str] = None
-        self._xfail: Optional[FilterNamespace] = None
-        self._xdiff: Optional[FilterNamespace] = None
+        self._xstatus: Optional[FilterNamespace] = None
 
         self.load()
 
@@ -286,8 +286,9 @@ class AbstractTestFile:
                     timeout_multiplier=timeout_multiplier,
                     baseline=self.baseline(testname=name, parameters=parameters),
                     sources=self.sources(testname=name, parameters=parameters),
-                    xfail=self.xfail(testname=name, on_options=on_options, parameters=parameters),
-                    xdiff=self.xdiff(testname=name, on_options=on_options, parameters=parameters),
+                    xstatus=self.xstatus(
+                        testname=name, on_options=on_options, parameters=parameters
+                    ),
                 )
                 timelimit = timelimit or -1
                 if mask is not None:
@@ -314,8 +315,9 @@ class AbstractTestFile:
                     timeout_multiplier=timeout_multiplier,
                     baseline=self.baseline(testname=name),
                     sources=self.sources(testname=name),
-                    xfail=self.xfail(testname=name, on_options=on_options, parameters=parameters),
-                    xdiff=self.xdiff(testname=name, on_options=on_options, parameters=parameters),
+                    xstatus=self.xstatus(
+                        testname=name, on_options=on_options, parameters=parameters
+                    ),
                 )
                 if mask_analyze_case is not None:
                     parent.status.set("masked", mask_analyze_case)
@@ -362,33 +364,19 @@ class AbstractTestFile:
             keywords.update(ns.value)
         return sorted(keywords)
 
-    def xfail(
+    def xstatus(
         self,
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameters: Optional[dict[str, Any]] = None,
-    ) -> Optional[int]:
-        if self._xfail is not None:
-            result = self._xfail.when.evaluate(
+    ) -> int:
+        if self._xstatus is not None:
+            result = self._xstatus.when.evaluate(
                 testname=testname, parameters=parameters, on_options=on_options
             )
             if result.value:
-                return self._xfail.value
-        return None
-
-    def xdiff(
-        self,
-        testname: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
-    ) -> bool:
-        if self._xdiff is not None:
-            result = self._xdiff.when.evaluate(
-                testname=testname, parameters=parameters, on_options=on_options
-            )
-            if result.value:
-                return True
-        return False
+                return self._xstatus.value
+        return 0
 
     def paramsets(
         self, testname: Optional[str] = None, on_options: Optional[list[str]] = None
@@ -560,11 +548,11 @@ class AbstractTestFile:
 
     def m_xfail(self, *, code: int = -1, when: Optional[str] = None) -> None:
         ns = FilterNamespace(code, when=when)
-        self._xfail = ns
+        self._xstatus = ns
 
     def m_xdiff(self, *, when: Optional[str] = None) -> None:
-        ns = FilterNamespace(True, when=when)
-        self._xdiff = ns
+        ns = FilterNamespace(diff_exit_status, when=when)
+        self._xstatus = ns
 
     def m_owners(self, *args: str) -> None:
         self.owners.extend(args)

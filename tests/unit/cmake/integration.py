@@ -23,8 +23,10 @@ def test_cmake_integration(tmpdir):
         with open("CMakeLists.txt", "w") as fh:
             fh.write("cmake_minimum_required(VERSION 3.1...3.28)\n")
             fh.write("project(Foo VERSION 1.0 LANGUAGES C)\n")
+            fh.write("enable_testing()\n")
             fh.write(f"include({nvf})\n")
             fh.write("add_executable(foo foo.c)\n")
+            fh.write("add_test(NAME spam COMMAND foo)\n")
             fh.write("add_nvtest(NAME foo COMMAND foo)\n")
             fh.write("add_nvtest(NAME baz SCRIPT baz.pyt)\n")
         with fs.working_dir("build", create=True):
@@ -36,6 +38,7 @@ def test_cmake_integration(tmpdir):
             make()
             run = NVTestCommand("run")
             run("-w", ".")
+            assert os.path.exists("TestResults/spam")
             assert os.path.exists("TestResults/foo")
             assert os.path.exists("TestResults/baz")
 

@@ -53,8 +53,7 @@ class TestCase(Runner):
         timeout_multiplier: float = 1.0,
         baseline: list[Union[str, tuple[str, str]]] = [],
         sources: dict[str, list[tuple[str, str]]] = {},
-        xfail: Optional[int] = None,
-        xdiff: bool = False,
+        xstatus: int = 0,
     ):
         # file properties
         self.file_root = root
@@ -105,11 +104,7 @@ class TestCase(Runner):
         self._timeout = timeout
         self.timeout_multiplier = timeout_multiplier
         self._runtimes = self.load_runtimes()
-
-        self.xfail = xfail
-        self.xdiff = xdiff
-        if self.xfail is not None and self.xdiff:
-            raise ValueError("A test cannot xfail and xdiff")
+        self.xstatus = xstatus
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -281,11 +276,11 @@ class TestCase(Runner):
             else:
                 timeout = 2.0 * self._runtimes[2]
         elif "fast" in self._keywords:
-            timeout = 5 * 30
+            timeout = config.get("test:timeout:fast")
         elif "long" in self._keywords:
-            timeout = 15 * 60
+            timeout = config.get("test:timeout:long")
         else:
-            timeout = 5 * 60
+            timeout = config.get("test:timeout:default")
         return self.timeout_multiplier * timeout
 
     def add_dependency(self, *cases: Union["TestCase", str]) -> None:
@@ -478,19 +473,20 @@ class TestCase(Runner):
             self.returncode = self._run(*args, stage=stage)
             for hook in plugin.plugins("test", "finish"):
                 hook(self)
-            if self.xfail:
-                code = self.xfail
+            if self.xstatus == diff_exit_status:
+                if self.returncode != diff_exit_status:
+                    self.status.set("failed", f"expected {self.name} to diff")
+                else:
+                    self.status.set("xdiff")
+            elif self.xstatus != 0:
+                # Expected to fail
+                code = self.xstatus
                 if code > 0 and self.returncode != code:
                     self.status.set("failed", f"expected {self.name} to exit with code={code}")
                 elif self.returncode == 0:
                     self.status.set("failed", f"expected {self.name} to exit with code != 0")
                 else:
                     self.status.set("xfail")
-            elif self.xdiff:
-                if self.returncode != diff_exit_status:
-                    self.status.set("failed", f"expected {self.name} to diff")
-                else:
-                    self.status.set("xdiff")
             else:
                 self.status.set_from_code(self.returncode)
         except KeyboardInterrupt:
