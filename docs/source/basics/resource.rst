@@ -23,6 +23,8 @@ The number of available processors is found through a system probe [#]_.  The nu
 * ``machine:cpu_count``
 * the product of ``machine:sockets_per_node`` and ``machine::cores_per_socket``
 
+or by the ``-l session:cpus:N`` option to :ref:`nvtest run <nvtest-run>`.
+
 Setting the number available devices
 ------------------------------------
 
@@ -31,5 +33,6 @@ The number of available devices is defaults to zero.  The number of available de
 * ``machine:device_count``
 * the product of ``machine:sockets_per_node`` and ``machine::devices_per_socket``
 
+or by the ``-l session:devices:N`` option to :ref:`nvtest run <nvtest-run>`.
 
 .. [#] If `sinfo <https://slurm.schedmd.com/sinfo.html>`_ is detected, it will be used to query the number of available processors on the Slurm nodes.

@@ -18,7 +18,7 @@ Multiple parameter names and their values can be defined:
 .. literalinclude:: /examples/parameterize/test2.pyt
     :language: python
 
-which would result in the following three tests
+which would result in the following two tests
 
 .. command-output:: nvtest describe parameterize/test2.pyt
     :cwd: /examples
@@ -40,6 +40,11 @@ results in the following 6 test cases:
 
 .. command-output:: nvtest describe parameterize/test4.pyt
     :cwd: /examples
+
+np and ndevice parameters
+-------------------------
+
+The ``np`` and ``ndevice`` parameters are interpreted by ``nvtest`` to be the number of processors and devices, respectively, needed by the test case.
 
 vvt parameter types
 -------------------

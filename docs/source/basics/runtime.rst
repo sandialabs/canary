@@ -25,3 +25,5 @@ These values are configurable in the ``test:timeout`` :ref:`configuration settin
    fast = 30 sec
    long = 10 min
    default = 5 min
+
+The timeout can also be set from the command line by ``-l test:timeout:T``.  This timeout will be applied to all tests in the session.
