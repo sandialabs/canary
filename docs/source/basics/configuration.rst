@@ -43,9 +43,9 @@ is
    test_files = r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$" # regular expression for test file names
 
    [test:timeout]
-   fast = 30 sec
-   long = 10 min
-   default = 5 min
+   fast = T  # (number or str) default: 30 sec
+   long = T  # (number or str) default: 10 min
+   default = T  # (number or str) default: 5 min
 
    [variables]
    var = value # (str) environment variables to set for the test session
