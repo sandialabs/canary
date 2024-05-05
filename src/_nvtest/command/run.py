@@ -53,7 +53,7 @@ def setup_parser(parser: "Parser"):
     group.add_argument(
         "-r",
         metavar="{b, v}",
-        default="v" if "NVTEST_MAKE_DOCS" in os.environ else "b",
+        default="b",
         choices=("b", "v"),
         help="During test execution, show progress bar (``-rb``, default) or print each "
         "test case as it starts/finishes of every case (``-rv``)",
@@ -87,8 +87,6 @@ def run(args: "argparse.Namespace") -> int:
     PathSpec.parse(args)
     session: Session
     cases: list[TestCase]
-    if os.getenv("NVTEST_MAKE_DOCS"):
-        args.wipe = True
     if args.mode == "w":
         path = args.work_tree or Session.default_worktree
         session = Session(path, mode=args.mode, force=args.wipe)

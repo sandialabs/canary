@@ -9,7 +9,7 @@ nvtest
 ``nvtest`` uses a pool of processes to execute tests asynchronously.  Hierarchical parallelism is employed to run tests requiring ``np`` and ``nd`` devices such that the number of busy resources is less than or equal to the number of available resources.  See :ref:`nvtest-resource`.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    introduction/index
    basics/index
