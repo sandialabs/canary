@@ -10,6 +10,7 @@ The :ref:`xdiff<directive-xdiff>` and :ref:`xfail<directive-xfail>` directives c
 
 .. command-output:: nvtest run ./xstatus/xdiff.pyt
     :cwd: /examples
+    :setup: rm -rf TestResults
 
 As you can see, the test status was set to :ref:`stat-xdiff` which is considered a successful outcome.
 
@@ -21,6 +22,7 @@ However, if a test that is marked to :ref:`diff <stat-diffed>` or :ref:`fail <st
 .. command-output:: nvtest run ./xstatus/xfail-fail.pyt
     :cwd: /examples
     :returncode: 4
+    :setup: rm -rf TestResults
 
 Specifying a nonzero exit code
 ------------------------------

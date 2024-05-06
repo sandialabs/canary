@@ -12,10 +12,7 @@ A test file is a python script ending with ``.pyt``.  If execution of the script
 Test file structure
 -------------------
 
-The test file is composed of two parts:
-
-.. image:: /file.png
-    :width: 800
+The test file is composed of two parts: directives and the body, as described below.
 
 Directives
 ~~~~~~~~~~
@@ -34,14 +31,17 @@ See :ref:`test-directives` for more.
 Body
 ~~~~
 
-Executable statements that are run during the session's run phase.
+Executable statements that are run during the session's run phase, for example:
+
+.. code-block:: python
+
+    def test():
+        assert 2 + 2 == 4
 
 Best practices
 ~~~~~~~~~~~~~~
 
-Because [``.pyt``] test files are imported during the discovery process, the
-test body should be contained in one or more functions with an entry point
-guarded by
+Because ``.pyt`` test files are imported during the discovery process, the test body should be contained in one or more functions with an entry point guarded by
 
 .. code-block:: python
 

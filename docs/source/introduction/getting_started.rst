@@ -22,6 +22,7 @@ To run the test, navigate to the examples directory and run:
 .. command-output:: nvtest run -k first ./basic
     :cwd: /examples
     :extraargs: -rv -w
+    :setup: rm -rf TestResults
 
 A test is considered to have successfully completed if its exit code is 0.  See :ref:`test-status` for more details on test statuses.
 
@@ -48,3 +49,4 @@ To run the test, navigate to the examples folder and run:
 .. command-output:: nvtest run -k second ./basic
     :cwd: /examples
     :extraargs: -rv -w
+    :setup: rm -rf TestResults

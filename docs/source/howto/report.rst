@@ -5,11 +5,11 @@ Generate reports
 
 Several report formats are available:
 
-* :ref:`Markdown<md>`
-* :ref:`HTML<html>`
-* :ref:`CDash XML<cdash>`
+* :ref:`Markdown<howto-md>`
+* :ref:`HTML<howto-html>`
+* :ref:`CDash XML<howto-cdash>`
 
-.. _md:
+.. _howto-md:
 
 Markdown
 --------
@@ -25,9 +25,8 @@ A markdown report of a test session can be generated after the session has compl
 
 .. literalinclude:: /examples/TestResults.Markdown/Results.md
     :language: markdown
-.. _howto-html:
 
-.. _html:
+.. _howto-html:
 
 HTML
 ----
@@ -44,10 +43,8 @@ A HTML report of a test session can be generated after the session has completed
 
 .. literalinclude:: /examples/TestResults.HTML/Results.html
     :language: html
+
 .. _howto-cdash:
-
-
-.. _cdash:
 
 CDash XML
 ---------

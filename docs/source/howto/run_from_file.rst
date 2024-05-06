@@ -11,6 +11,7 @@ Test files can be run directly by passing their paths to ``nvtest run``
 .. command-output:: nvtest run ./basic/first.pyt
     :nocache:
     :cwd: /examples
+    :setup: rm -rf TestResults
 
 .. command-output:: ls -F TestResults
     :nocache:
@@ -21,6 +22,7 @@ Replacing a path separator with a colon ``:``, the path after the ``:`` is used 
 .. command-output:: nvtest run .:basic/first.pyt
     :nocache:
     :cwd: /examples
+    :setup: rm -rf TestResults
 
 .. command-output:: ls -F TestResults
     :nocache:
@@ -53,6 +55,7 @@ To run only ``centered_space/test.pyt`` and ``parameterize/test2.pyt``, write th
 
 and pass it to ``nvtest run``:
 
-.. command-output:: nvtest run -d TestResults.FromFile tests.json
+.. command-output:: nvtest run tests.json
     :cwd: /examples
     :extraargs: -rv -w
+    :setup: rm -rf TestResults

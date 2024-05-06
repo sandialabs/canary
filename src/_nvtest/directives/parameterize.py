@@ -115,7 +115,7 @@ def parameterize(
 
     .. code-block:: console
 
-       4 test cases:
+       3 test cases:
        ├── test1[a=1,b=2]
        ├── test1[a=3,b=4]
        ├── test1[a=5,b=6]
