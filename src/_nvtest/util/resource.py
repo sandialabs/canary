@@ -156,6 +156,8 @@ class BatchInfo:
                 raise ValueError("expected scheduler to be of type str")
             self.scheduler = value
         elif key == "args":
+            if not isinstance(value, str):
+                raise ValueError("expected scheduler args to be of type str")
             self.args.extend(shlex.split(value))
         else:
             raise ValueError(f"{key}: unknown attribute name")

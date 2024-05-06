@@ -526,17 +526,16 @@ class Session:
         string = io.StringIO()
         files = {case.file for case in cases}
         _, cases = partition(cases, lambda c: unreachable(c))
+        fmt = "@*c{%s} %d test%s from %d file%s\n"
         n, N = len(cases), len(files)
         s, S = "s" if n > 1 else "", "s" if N > 1 else ""
-        t = "@*{collected %d test%s from %d file%s}" % (n, s, N, S)
-        string.write(color.colorize(t) + "\n")
+        string.write(color.colorize(fmt % ("collected", n, s, N, S)))
         cases_to_run = [case for case in cases if not case.masked and not case.skipped]
         files = {case.file for case in cases_to_run}
         n, N = len(cases_to_run), len(files)
         s = "s " if n > 1 else " "
         S = "s " if N > 1 else ""
-        t = "@*g{running} %d test case%sfrom %d file%s" % (n, s, N, S)
-        string.write(color.colorize(t) + "\n")
+        string.write(color.colorize(fmt % ("running", n, s, N, S)))
         skipped = [case for case in cases if case.masked]
         skipped_reasons: dict[str, int] = {}
         for case in skipped:
