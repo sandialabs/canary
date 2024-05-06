@@ -1,16 +1,14 @@
-.. _nvtest-tutorial:
+.. _tutorial:
 
 Tutorial
 ========
 
-The "tutorial" is a selection of pages from the :ref:`introduction <nvtest-intro>`, :ref:`basics <nvtest-basics>`, and :ref:`how to<howto-guides>` sections of the documentation.
-
 Getting Started
 ---------------
 
-* :ref:`nvtest-install`
-* :ref:`nvtest-testfile`
-* :ref:`nvtest-session`
+* :ref:`intro-install`
+* :ref:`userguide-testfile`
+* :ref:`userguide-session`
 
 Selected how-to guides
 ----------------------

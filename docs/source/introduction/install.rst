@@ -1,4 +1,4 @@
-.. _nvtest-install:
+.. _intro-install:
 
 Installing nvtest
 =================

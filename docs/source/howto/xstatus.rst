@@ -31,3 +31,7 @@ If a nonzero exit code is expected, use ``nvtest.directives.xfail(code)``, where
 
 .. literalinclude:: /examples/xstatus/xfail-code.pyt
     :language: python
+
+.. command-output:: nvtest run ./xstatus/xfail-code.pyt
+    :cwd: /examples
+    :setup: rm -rf TestResults

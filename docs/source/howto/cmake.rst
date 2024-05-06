@@ -199,7 +199,7 @@ and then
    make vvtest
    make install
 
-.. _write-nvtest-config:
+.. _cdash-write-config:
 
 ``write_nvtest_config``
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -209,7 +209,7 @@ and then
    write_nvtest_config()
 
 Generates a ``nvtest.cfg`` configuration file in the project's build directory.
-The configuration populates the :ref:`build section <config-file>` of the
+The configuration populates the :ref:`build section <userguide-config>` of the
 configuration file.
 
 ``add_nvtest_options``
@@ -228,7 +228,7 @@ Add options to the ``build:options`` configuration setting.
    add_nvtest_options(ON_OPTION feature1 feature2)
 
 would cause the following to be written to the build configuration
-(:ref:`write-nvtest-config` must be called):
+(:ref:`cdash-write-config` must be called):
 
 .. code-block:: ini
 

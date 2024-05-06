@@ -1,4 +1,4 @@
-.. _nvtest-runtimes:
+.. _userguide-runtimes:
 
 Time resources
 ==============
@@ -11,13 +11,13 @@ Test runtimes are written to ``<root>/.nvtest_cache/timing``, where ``<root>`` i
 Timeout
 -------
 
-A test case's timeout can be set by the :ref:`timeout <directive-timeout>` directive.  If the timeout is not explicitly set, it is set based on the presence of the ``fast`` and ``long`` keywords in a manner similar to `nvtest <https://cee-gitlab.sandia.gov/scidev/vvtest>`_:
+A test case's timeout can be set by the :ref:`timeout <directive-timeout>` directive.  If the timeout is not explicitly set, it is set based on the presence of the ``fast`` and ``long`` keywords in a manner similar to `vvtest <https://cee-gitlab.sandia.gov/scidev/vvtest>`_:
 
 * If a test is marked ``fast``, its timeout defaults to 30 seconds.
 * If a test is marked ``long``, its timeout defaults to 10 minutes.
 * Otherwise the timeout is 5 minutes.
 
-These values are configurable in the ``test:timeout`` :ref:`configuration setting <config-settings>`:
+These values are configurable in the ``test:timeout`` :ref:`configuration setting <nvtest-config>`:
 
 .. code-block:: ini
 

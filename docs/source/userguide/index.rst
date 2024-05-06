@@ -1,4 +1,4 @@
-.. _nvtest-basics:
+.. _userguide:
 
 User's guide
 ============

@@ -14,38 +14,28 @@ When run in "batch" mode, ``nvtest`` will group tests into "batches" and submit 
 Batching options
 ----------------
 
+Batch size
+..........
+
 * ``-b count:N``: group tests into ``N`` batches, each having approximately the same runtime.
 * ``-b limit:T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Human readable times, eg 1s, 1 sec, 1h, 2 hrs, etc, are accepted.
-* ``-b args:S``: pass args ``S`` directly to the scheduler.
-
-Additionally, batch concurrency can be controlled by
-
-* ``-l session:workers:N``: Submit ``N`` concurrent batches to the scheduler at any one time.  The default is 5.
-* ``-l batch:workers:N``: Execute the batch asynchronously using a pool of at most ``N`` workers.  By default, the maximum number of available workers is used.
-
-.. note::
-
-   ``-b count:N`` and ``-b limit:T`` are mutually exclusive.
-
-.. _batch-schemes:
-
-Batching schemes
-----------------
 
 By default, tests are batched into groups based as follows:
 
 1. group cases by the number of compute nodes required to run; and
 2. partition each group into batches that complete in the time specified by ``-b limit:T``.  A default limit of 30 minutes is used if not otherwise specified.
 
-Optionally, a fixed number of batches can be requested (``-b count:N``).
+.. note::
 
-Scheduler options
------------------
+   ``-b count:N`` and ``-b limit:T`` are mutually exclusive.
 
-Send options directly to the scheduler via ``-b args:option``.  Eg, ``-b args:--account=XYZ`` will pass ``--account=XYZ`` directly to the scheduler.
+Batch scheduler
+................
 
-Supported schedulers
---------------------
+* ``-b scheduler:S``: use scheduler ``S`` to run batches.
+* ``-b args:S``: pass args ``S`` directly to the scheduler.  Eg, ``-b args:--account=XYZ`` will pass ``--account=XYZ`` directly to the scheduler.
+
+The following schedulers are supported:
 
 * shell (run batches in subprocess of the current shell)
 * `slurm workload manager <https://slurm.schedmd.com/overview.html>`_
@@ -53,6 +43,14 @@ Supported schedulers
 .. note::
 
   The shell scheduler is not performant and its primary utility is running examples on machines which don't have an actual scheduler setup.
+
+Batch concurrency
+.................
+
+Batch concurrency can be controlled by
+
+* ``-l session:workers:N``: Submit ``N`` concurrent batches to the scheduler at any one time.  The default is 5.
+* ``-l batch:workers:N``: Execute the batch asynchronously using a pool of at most ``N`` workers.  By default, the maximum number of available workers is used.
 
 Examples
 --------

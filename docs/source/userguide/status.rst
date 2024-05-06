@@ -1,4 +1,4 @@
-.. _test-status:
+.. _userguide-status:
 
 Test statuses
 =============
@@ -6,7 +6,7 @@ Test statuses
 Tests can receive one of the following statuses:
 
 .. hlist::
-   :columns: 3
+   :columns: 4
 
    * :ref:`stat-masked`
    * :ref:`stat-created`

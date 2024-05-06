@@ -1,4 +1,4 @@
-.. _nvtest-resource:
+.. _userguide-resource:
 
 Machine resources
 =================
@@ -18,21 +18,31 @@ The number of workers ``N`` be specified by the ``-l session:workers:N`` option 
 Setting the number available processors
 ---------------------------------------
 
-The number of available processors is found through a system probe [#]_.  The number of available processors can be set with the following :ref:`configuration variables<config-settings>`:
+The number of available processors is found through a system probe [#]_.  The number of available processors can be set with the following :ref:`configuration variables<userguide-config>`:
 
 * ``machine:cpu_count``
 * the product of ``machine:sockets_per_node`` and ``machine::cores_per_socket``
 
 or by the ``-l session:cpus:N`` option to :ref:`nvtest run <nvtest-run>`.
 
+Setting the number of processors required by a test
+---------------------------------------------------
+
+The number of processors required by a test is inferred from the ``np`` parameter.  If the ``np`` parameter is not set, the number of processors is assumed to by 1.
+
 Setting the number available devices
 ------------------------------------
 
-The number of available devices is defaults to zero.  The number of available devices can be set with the following :ref:`configuration variables<config-settings>`:
+The number of available devices is defaults to zero.  The number of available devices can be set with the following :ref:`configuration variables<userguide-config>`:
 
 * ``machine:device_count``
 * the product of ``machine:sockets_per_node`` and ``machine::devices_per_socket``
 
 or by the ``-l session:devices:N`` option to :ref:`nvtest run <nvtest-run>`.
+
+Setting the number of devices required by a test
+------------------------------------------------
+
+The number of devices required by a test is inferred from the ``ndevice`` parameter.  If the ``ndevice`` parameter is not set, the number of processors is assumed to by 0.
 
 .. [#] If `sinfo <https://slurm.schedmd.com/sinfo.html>`_ is detected, it will be used to query the number of available processors on the Slurm nodes.

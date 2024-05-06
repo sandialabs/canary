@@ -1,9 +1,9 @@
-.. _nvtest-testfile:
+.. _userguide-testfile:
 
 The test file
 =============
 
-A test file is a python script ending with ``.pyt``.  If execution of the script exits with code ``0``, the test passes.  Non-zero exit code indicates some other type of test failure (see :ref:`test-status` for additional test statuses).  A good test ensures the correctness of output given a set of inputs and should be as simple and fast running as possible.
+A test file is a python script ending with ``.pyt``.  If execution of the script exits with code ``0``, the test passes.  Non-zero exit code indicates some other type of test failure (see :ref:`userguide-status` for additional test statuses).  A good test ensures the correctness of output given a set of inputs and should be as simple and fast running as possible.
 
 .. note::
 
@@ -12,7 +12,9 @@ A test file is a python script ending with ``.pyt``.  If execution of the script
 Test file structure
 -------------------
 
-The test file is composed of two parts: directives and the body, as described below.
+The test file is composed of two parts: :ref:`directives<file-directives>` and the :ref:`body<file-body>`, each described below.
+
+.. _file-directives:
 
 Directives
 ~~~~~~~~~~
@@ -27,6 +29,8 @@ These lines provide instructions to ``nvtest`` regarding the setup and cleanup o
 would copy ``file.txt`` from the test's source directory into the the test's execution directory.
 
 See :ref:`test-directives` for more.
+
+.. _file-body:
 
 Body
 ~~~~

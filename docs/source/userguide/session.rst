@@ -1,4 +1,4 @@
-.. _nvtest-session:
+.. _userguide-session:
 
 The test session
 ================
@@ -10,11 +10,12 @@ Phases of a test session
 
 A test session consists of the following phases:
 
-:ref:`Discovery<discovery>`:
+:ref:`Discover<discover>`:
   Search ``path [path...]`` for test scripts.
 
 :ref:`Freeze<freeze>`:
-  "Freeze" test files into test cases based on :ref:`parameterizations<howto-parameterize>` and :ref:`filtering<howto-filter>` criteria.
+  "Freeze" test files into test cases based on :ref:`filtering<howto-filter>` criteria and
+  :ref:`parameterizations<howto-parameterize>`.
 
 :ref:`Populate<populate>`:
   Create unique execution directories for each test case and :ref:`copy/link <howto-copy-and-link>` necessary resources into the execution directory.
@@ -37,10 +38,10 @@ We will use an example to demonstrate each phase of the testing process.  Consid
    :language: python
    :lines: 1-11
 
-.. _discovery:
+.. _discover:
 
-Discovery
-.........
+Discover
+........
 
 During discovery test files are collected:
 
@@ -52,9 +53,9 @@ During discovery test files are collected:
 .. _freeze:
 
 Freeze
-.........
+......
 
-``parameterize`` statements expanded, and dependency links created: This test expands into 9 individual parameterized tests and 1 unparameterized test with the other 9 tests as dependencies.
+During the ``freeze`` stage, test files are :ref:`filtered <howto-filter>`, ``parameterize`` statements are expanded, and dependency links created:
 
 .. command-output:: nvtest run --until=freeze -k centered_space .
    :cwd: /examples
@@ -66,7 +67,7 @@ Freeze
 Populate
 ........
 
-During setup, the actual test execution directories are made and test assets linked:
+During the ``populate`` stage, the test execution directories are made and populated with test assets:
 
 .. command-output:: nvtest run --until=populate -k centered_space .
    :cwd: /examples
@@ -82,7 +83,7 @@ During setup, the actual test execution directories are made and test assets lin
    :cwd: /examples
    :nocache:
 
-Each test's execution directory has the following naming convention: ``[relpath/]testname.key1=val1.key2=val2...keyn=valn``.  ``relpath`` is the relative path from the search path ``path`` to the test file ``testname.pyt`` and the ``key``\ s are the name of the test cases parameters [if any] with associated ``val``\ s.  The test script is symbolically linked into the execution directory.
+Each test's execution directory has the following naming convention: ``[relpath/]testname[.key=val[...]]``.  ``relpath`` is the relative path from the search path root to the test file ``testname.pyt`` and the ``key``\ s are the name of the test cases parameters (if any) with associated ``val``\ s.  The test script is symbolically linked into the execution directory.
 
 .. warning::
 
@@ -122,4 +123,4 @@ Note the output files (``output.json``) from each of the parameterized test case
 
 .. note::
 
-   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type:X`` option.
+   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type:X`` option.  See :ref:`userguide-resource`.
