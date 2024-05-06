@@ -1,6 +1,7 @@
 """Classes and functions dealing with resource management"""
 
 import math
+import shlex
 from types import SimpleNamespace
 from typing import Optional
 from typing import Union
@@ -154,6 +155,8 @@ class BatchInfo:
             if not isinstance(value, str):
                 raise ValueError("expected scheduler to be of type str")
             self.scheduler = value
+        elif key == "args":
+            self.args.extend(shlex.split(value))
         else:
             raise ValueError(f"{key}: unknown attribute name")
 
