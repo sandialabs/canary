@@ -551,7 +551,9 @@ class TestCase(Runner):
         return os.path.join(path, f"timing/{self.id[:2]}/{self.id[2:]}.json")
 
     def cache_runtime(self) -> None:
-        # store mean, min, max runtimes
+        """store mean, min, max runtimes"""
+        if config.get("config:no_cache"):
+            return
         if self.status.value not in ("success", "diffed"):
             return
         cache_dir = cache.create_cache_dir(self.file_root)
@@ -572,6 +574,8 @@ class TestCase(Runner):
 
     def load_runtimes(self):
         # return mean, min, max runtimes
+        if config.get("config:no_cache"):
+            return [None, None, None]
         cache_dir = cache.get_cache_dir(self.file_root)
         file = self.cache_file(cache_dir)
         if not os.path.exists(file):

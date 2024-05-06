@@ -89,3 +89,11 @@ Examples
         if case.masked:
             return
         case.add_default_env("LLVM_PROFILE_FILE", f"{case.name}.profraw")
+
+    @nvtest.plugin.register(scope="session", stage="finish")
+    def llvm_coverage_combine(session: nvtest.Session) -> None:
+        if not nvtest.config.get("option:code_coverage"):
+            return
+        files = find_raw_profiling_files(session.root)
+        combined_files = combine_profiling_files(files)
+        create_coverage_maps(combined_files)

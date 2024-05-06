@@ -35,6 +35,7 @@ config_schema = Schema(
     {
         "config": {
             Optional("debug"): bool,
+            Optional("no_cache"): bool,
             Optional("log_level"): log_levels,
             Optional("test_files"): str,
         }

@@ -64,6 +64,7 @@ class Config:
             "defaults": {
                 "config": {
                     "debug": False,
+                    "no_cache": False,
                     "log_level": "INFO",
                     "test_files": r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$",
                 },
@@ -119,6 +120,8 @@ class Config:
             level = logging.get_level(level_name.upper())
             logging.set_level(level)
             scope_data.setdefault("config", {})["log_level"] = level_name
+        if os.getenv("NVTEST_NOCACHE", "off").lower() in ("on", "1", "true", "yes"):
+            scope_data.setdefault("config", {})["no_cache"] = True
         if os.getenv("NVTEST_DEBUG", "off").lower() in ("on", "1", "true", "yes"):
             scope_data = self.scopes.setdefault("environment", {})
             scope_data.setdefault("config", {})["debug"] = True
