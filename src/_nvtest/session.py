@@ -78,7 +78,7 @@ class Session:
         self.root: str
         if mode == "w":
             path = os.path.abspath(path)
-            if force:
+            if force and os.path.exists(path):
                 if not os.getenv("NVTEST_MAKE_DOCS"):
                     logging.warning(f"Removing {path}")
                 force_remove(path)
@@ -529,7 +529,7 @@ class Session:
         fmt = "@*%s{%s} %d test%s from %d file%s\n"
         n, N = len(cases), len(files)
         s, S = "s" if n > 1 else "", "s" if N > 1 else ""
-        string.write(color.colorize(fmt % ("g", "collected", n, s, N, S)))
+        string.write(color.colorize(fmt % ("c", "collected", n, s, N, S)))
         cases_to_run = [case for case in cases if not case.masked and not case.skipped]
         files = {case.file for case in cases_to_run}
         n, N = len(cases_to_run), len(files)
