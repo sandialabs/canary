@@ -192,8 +192,7 @@ class SubShell(Batch):
         cores_per_socket = config.get("machine:cores_per_socket")
         sockets_per_node = config.get("machine:sockets_per_node") or 1
         cores_per_node = cores_per_socket * sockets_per_node
-        nodes = 1
-        qtime = self.cputime / (cores_per_node * nodes) * 1.05
+        qtime = self.cputime / cores_per_node * 1.05
 
         fh.write(f"# approximate runtime: {hhmmss(qtime)}\n")
         fh.write(f"# batch {self.world_rank} of {self.world_size}\n")
@@ -290,11 +289,17 @@ class Slurm(Batch):
         max_tasks = self.max_tasks_required()
         ns = calculate_allocations(max_tasks)
         qtime = max(self.cputime / (ns.cores_per_node * ns.nodes) * 1.05, 5)
-        if qtime < 300:
-            qtime *= 5
-        elif qtime < 600:
-            qtime *= 3
-        elif qtime < 3600:
+        if qtime < 100.0:
+            qtime = 300.0
+        elif qtime < 300.0:
+            qtime = 600.0
+        elif qtime < 600.0:
+            qtime = 1200.0
+        elif qtime < 1800.0:
+            qtime = 2400.0
+        elif qtime < 3600.0:
+            qtime = 5000.0
+        else:
             qtime *= 1.5
         args = list(a)
         args.append(f"--nodes={ns.nodes}")
