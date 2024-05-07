@@ -17,6 +17,7 @@ from typing import Union
 from .. import config
 from ..directives.enums import list_parameter_space
 from ..third_party.color import colorize
+from ..util import scalar
 from ..util.time import to_seconds
 
 if TYPE_CHECKING:
@@ -358,15 +359,16 @@ def importable(module_name: str) -> bool:
 
 
 def loads(arg: str) -> Union[int, float, str]:
+    x: Union[scalar.Integer, scalar.Float, scalar.String]
     try:
-        return int(arg)
+        x = scalar.Integer(arg)
     except ValueError:
-        pass
-    try:
-        return float(arg)
-    except ValueError:
-        pass
-    return arg
+        try:
+            x = scalar.Float(arg)
+        except ValueError:
+            x = scalar.String(arg)
+    x.string = arg
+    return x
 
 
 def safe_eval(expression: str) -> object:
@@ -473,6 +475,14 @@ def get_vvtest_attrs(case: "TestCase", baseline: bool, analyze: bool) -> dict:
             attrs[f"PARAM_{key}"] = table
         attrs["DEPDIRS"] = [dep.exec_dir for dep in case.dependencies]
         attrs["DEPDIRMAP"] = {}  # FIXME
+
+        attrs["exec_dir"] = case.exec_dir
+        attrs["exec_root"] = case.exec_root
+        attrs["exec_path"] = case.exec_path
+        attrs["file_root"] = case.file_root
+        attrs["file_dir"] = case.file_dir
+        attrs["file_path"] = case.file_path
+
     return attrs
 
 

@@ -32,7 +32,9 @@ from .status import Status
 
 
 def stringify(arg: Any) -> str:
-    if isinstance(arg, float):
+    if hasattr(arg, "string"):
+        return arg.string
+    elif isinstance(arg, float):
         return f"{arg:g}"
     elif isinstance(arg, int):
         return f"{arg:d}"
