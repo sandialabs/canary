@@ -520,6 +520,8 @@ class TestCase(Runner):
                 self.cmd_line = " ".join(cmd)
                 logging.info(f"Running {self.display_name}")
                 logging.info(f"Command line: {self.cmd_line}")
+                if timeoutx != 1.0:
+                    logging.info(f"Timeout multiplier: {timeoutx}")
                 with self.rc_environ():
                     start = time.monotonic()
                     proc = subprocess.Popen(cmd, start_new_session=True)

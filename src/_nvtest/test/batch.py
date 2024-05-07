@@ -290,6 +290,12 @@ class Slurm(Batch):
         max_tasks = self.max_tasks_required()
         ns = calculate_allocations(max_tasks)
         qtime = max(self.cputime / (ns.cores_per_node * ns.nodes) * 1.05, 5)
+        if qtime < 300:
+            qtime *= 5
+        elif qtime < 600:
+            qtime *= 3
+        elif qtime < 3600:
+            qtime *= 1.5
         args = list(a)
         args.append(f"--nodes={ns.nodes}")
         args.append(f"--ntasks-per-node={ns.tasks_per_node}")
