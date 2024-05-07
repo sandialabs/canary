@@ -5,10 +5,10 @@ from .status import Status
 
 
 class Runner(abc.ABC):
-    def __call__(self, *args: str, verbose: bool = True) -> None:
+    def __call__(self, *args: str, verbose: bool = True, timeoutx: float = 1.0) -> None:
         if verbose:
             logging.emit(self.start_msg() + "\n")
-        self.run(*args)
+        self.run(*args, timeoutx=timeoutx)
         if verbose:
             logging.emit(self.end_msg() + "\n")
         return None
@@ -44,7 +44,7 @@ class Runner(abc.ABC):
     def end_msg(self) -> str: ...
 
     @abc.abstractmethod
-    def run(self, *args: str) -> None: ...
+    def run(self, *args: str, timeoutx: float = 1.0) -> None: ...
 
     @abc.abstractmethod
     def refresh(self) -> None: ...

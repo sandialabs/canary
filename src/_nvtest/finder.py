@@ -163,7 +163,6 @@ class Finder:
         resourceinfo: Optional[ResourceInfo] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
-        timeout_multiplier: float = 1.0,
         on_options: Optional[list[str]] = None,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
@@ -180,7 +179,6 @@ class Finder:
             avail_devices=resourceinfo["test:devices"],
             keyword_expr=keyword_expr,
             timelimit=resourceinfo["test:timeout"],
-            timeout_multiplier=timeout_multiplier,
             parameter_expr=parameter_expr,
             on_options=on_options,
             owners=owners,

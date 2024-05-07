@@ -60,7 +60,7 @@ Examples
   .. command-output:: nvtest run -d TestResults.Batched -b scheduler:shell -b count:4 .
     :cwd: /examples
     :extraargs: -rv -w
-    :returncode: 22
+    :returncode: 30
 
 
 * Run the nvtest example suite in 4 batches, running tests in serial in each batch
@@ -68,4 +68,4 @@ Examples
   .. command-output:: nvtest run -d TestResults.Batched -b scheduler:shell -b count:4 -l batch:workers:1 .
     :cwd: /examples
     :extraargs: -rv -w
-    :returncode: 22
+    :returncode: 30

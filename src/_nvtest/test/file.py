@@ -184,7 +184,6 @@ class AbstractTestFile:
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
         timelimit: Optional[float] = None,
-        timeout_multiplier: float = 1.0,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         try:
@@ -194,7 +193,6 @@ class AbstractTestFile:
                 keyword_expr=keyword_expr,
                 on_options=on_options,
                 timelimit=timelimit,
-                timeout_multiplier=timeout_multiplier,
                 parameter_expr=parameter_expr,
                 owners=owners,
             )
@@ -212,7 +210,6 @@ class AbstractTestFile:
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
         timelimit: Optional[float] = None,
-        timeout_multiplier: float = 1.0,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         avail_cpus = avail_cpus or config.get("machine:cpu_count")
@@ -283,7 +280,6 @@ class AbstractTestFile:
                     keywords=keywords,
                     parameters=parameters,
                     timeout=self.timeout(testname=name, parameters=parameters),
-                    timeout_multiplier=timeout_multiplier,
                     baseline=self.baseline(testname=name, parameters=parameters),
                     sources=self.sources(testname=name, parameters=parameters),
                     xstatus=self.xstatus(
@@ -312,7 +308,6 @@ class AbstractTestFile:
                     analyze=analyze,
                     keywords=self.keywords(testname=name),
                     timeout=self.timeout(testname=name),
-                    timeout_multiplier=timeout_multiplier,
                     baseline=self.baseline(testname=name),
                     sources=self.sources(testname=name),
                     xstatus=self.xstatus(
@@ -426,14 +421,14 @@ class AbstractTestFile:
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameters: Optional[dict[str, Any]] = None,
-    ) -> Union[int, None]:
+    ) -> Union[float, None]:
         for ns in self._timeout:
             result = ns.when.evaluate(
                 testname=testname, on_options=on_options, parameters=parameters
             )
             if not result.value:
                 continue
-            return int(ns.value)
+            return float(ns.value)
         return None
 
     def enable(

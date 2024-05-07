@@ -7,7 +7,7 @@ After running a test session, the ``status`` subcommand can show the status of t
 
 .. command-output:: nvtest run .
     :cwd: /examples
-    :returncode: 22
+    :returncode: 30
     :ellipsis: 0
     :extraargs: -rv -w
 

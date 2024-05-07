@@ -405,7 +405,9 @@ class Session:
                         iid, obj = iid_obj
                     except EmptyQueue:
                         break
-                    future = ppe.submit(obj, verbose=verbose)
+                    future = ppe.submit(
+                        obj, verbose=verbose, timeoutx=resourceinfo["test:timeoutx"]
+                    )
                     callback = partial(self.done_callback, iid, queue, fail_fast)
                     future.add_done_callback(callback)
                     futures[iid] = (obj, future)

@@ -15,7 +15,6 @@ __all__ = [
 ]
 
 
-from ...third_party.color import colorize
 from ...util import resource
 from .pathspec import PathSpec
 from .pathspec import setdefault
@@ -116,23 +115,7 @@ class ResourceSetter(argparse.Action):
 
     @staticmethod
     def help_page() -> str:
-        def bold(arg: str) -> str:
-            return colorize("@*{%s}" % arg)
-
-        resource_help = """\
-Defines resources that are required by the test session and establishes limits
-to the amount of resources that can be consumed. The %(r_arg)s argument is of
-the form: ``%(r_form)s``.  The possible ``%(r_form)s`` settings are\n\n
-• ``-l session:workers:N``: Execute the test session asynchronously using a pool of at most N workers [default: auto]\n\n
-• ``-l session:cpus:N``: Occupy at most N cpu cores at any one time.\n\n
-• ``-l session:devices:N``: Occupy at most N devices at any one time.\n\n
-• ``-l session:timeout:T``: Set a timeout on test session execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
-• ``-l test:cpus:N``: Skip tests requiring more than N cpu cores.\n\n
-• ``-l test:devices:N``: Skip tests requiring more than N devices.\n\n
-• ``-l test:timeout:T``: Set a timeout on any single test execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
-• ``-l batch:workers:N``: Execute the batch asynchronously using a pool of at most N workers [default: auto]\n\n
-""" % {"r_form": bold("scope:type:value"), "r_arg": bold("-l resource")}
-        return resource_help
+        return resource.ResourceInfo.cli_help("-l")
 
 
 class BatchSetter(argparse.Action):
@@ -153,19 +136,7 @@ class BatchSetter(argparse.Action):
 
     @staticmethod
     def help_page() -> str:
-        def bold(arg: str) -> str:
-            return colorize("@*{%s}" % arg)
-
-        resource_help = """\
-Defines how to batch test cases. The %(r_arg)s argument is of the form: ``%(r_form)s``.
-The possible possible ``%(r_form)s`` settings are\n\n
-• ``-b count:N``: Execute tests in N batches.\n\n
-• ``-b limit:T``: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
-• ``-b scheduler:S``: Use scheduler 'S' to run the test batches.\n\n
-• ``-b args:A``: Any additional args 'A' are passed directly to the scheduler, for example,
-  ``-b args:--account=ABC`` will pass ``--account=ABC`` to the scheduler
-""" % {"r_form": bold("type:value"), "r_arg": bold("-b resource")}
-        return resource_help
+        return resource.BatchInfo.cli_help("-b")
 
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:

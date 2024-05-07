@@ -7,6 +7,7 @@ from typing import Optional
 from typing import Union
 
 from .. import config
+from ..third_party.color import colorize
 from .time import time_in_seconds
 
 Scalar = Union[str, int, float, None]
@@ -28,6 +29,7 @@ class ResourceInfo:
 
         self["session:timeout"] = -1
         self["test:timeout"] = -1
+        self["test:timeoutx"] = 1.0
 
         self["session:workers"] = -1
         self["batch:workers"] = -1
@@ -45,7 +47,7 @@ class ResourceInfo:
     def set(self, scope: str, type: str, value: Union[Number, str]) -> None:
         valid_types: tuple
         if scope == "test":
-            valid_types = ("cpus", "devices", "timeout")
+            valid_types = ("cpus", "devices", "timeout", "timeoutx")
         elif scope == "session":
             valid_types = ("workers", "cpus", "devices", "timeout")
         elif scope == "batch":
@@ -58,6 +60,8 @@ class ResourceInfo:
         if isinstance(value, str):
             if type == "timeout":
                 value = time_in_seconds(value, negatives=True)
+            elif type == "timeoutx":
+                value = float(value)
             else:
                 value = int(value)
         assert isinstance(value, (int, float))
@@ -100,6 +104,27 @@ class ResourceInfo:
                 raise ValueError("session worker request exceeds machine cpu count")
 
         self[key] = value
+
+    @staticmethod
+    def cli_help(flag) -> str:
+        def bold(arg: str) -> str:
+            return colorize("@*{%s}" % arg)
+
+        text = """\
+Defines resources that are required by the test session and establishes limits
+to the amount of resources that can be consumed. The %(r_arg)s argument is of
+the form: ``%(r_form)s``.  The possible ``%(r_form)s`` settings are\n\n
+• ``%(f)s session:workers:N``: Execute the test session asynchronously using a pool of at most N workers [default: auto]\n\n
+• ``%(f)s session:cpus:N``: Occupy at most N cpu cores at any one time.\n\n
+• ``%(f)s session:devices:N``: Occupy at most N devices at any one time.\n\n
+• ``%(f)s session:timeout:T``: Set a timeout on test session execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
+• ``%(f)s test:cpus:N``: Skip tests requiring more than N cpu cores.\n\n
+• ``%(f)s test:devices:N``: Skip tests requiring more than N devices.\n\n
+• ``%(f)s test:timeout:T``: Set a timeout on any single test execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
+• ``%(f)s test:timeoutx:R``: Set a timeout multiplier for all tests [default: 1.0]\n\n
+• ``%(f)s batch:workers:N``: Execute the batch asynchronously using a pool of at most N workers [default: auto]\n\n
+""" % {"f": flag, "r_form": bold("scope:type:value"), "r_arg": bold(f"{flag} resource")}
+        return text
 
 
 class BatchInfo:
@@ -161,6 +186,22 @@ class BatchInfo:
             self.args.extend(shlex.split(value))
         else:
             raise ValueError(f"{key}: unknown attribute name")
+
+    @staticmethod
+    def cli_help(flag) -> str:
+        def bold(arg: str) -> str:
+            return colorize("@*{%s}" % arg)
+
+        resource_help = """\
+Defines how to batch test cases. The %(r_arg)s argument is of the form: ``%(r_form)s``.
+The possible possible ``%(r_form)s`` settings are\n\n
+• ``%(f)s count:N``: Execute tests in N batches.\n\n
+• ``%(f)s limit:T``: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
+• ``%(f)s scheduler:S``: Use scheduler 'S' to run the test batches.\n\n
+• ``%(f)s args:A``: Any additional args 'A' are passed directly to the scheduler, for example,
+  ``%(f)s args:--account=ABC`` will pass ``--account=ABC`` to the scheduler
+""" % {"f": flag, "r_form": bold("type:value"), "r_arg": bold(f"{flag} resource")}
+        return resource_help
 
 
 def calculate_allocations(tasks: int) -> SimpleNamespace:

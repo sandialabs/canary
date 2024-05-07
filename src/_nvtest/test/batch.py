@@ -154,9 +154,12 @@ class Batch(Runner):
         st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
         return f"FINISHED: Batch {self.world_rank} of {self.world_size}, {st_stat}"
 
-    def run(self, *args: str) -> None:
+    def run(self, *args: str, timeoutx: float = 1.0) -> None:
+        script_args = list(args)
+        if timeoutx != 1.0:
+            script_args.append(f"-l test:timeoutx:{timeoutx}")
         try:
-            os.environ["SCRIPT_ARGS"] = "" if not args else "-U,%s" % ",".join(args)
+            os.environ["SCRIPT_ARGS"] = " ".join(script_args)
             self._run()
         finally:
             os.environ.pop("SCRIPT_ARGS")

@@ -46,9 +46,9 @@ test_schema = Schema(
     {
         "test": {
             "timeout": {
-                "fast": time_in_seconds,
-                "long": time_in_seconds,
-                "default": time_in_seconds,
+                Optional("fast"): time_in_seconds,
+                Optional("long"): time_in_seconds,
+                Optional("default"): time_in_seconds,
             }
         }
     }

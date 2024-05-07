@@ -51,8 +51,7 @@ class TestCase(Runner):
         family: Optional[str] = None,
         keywords: list[str] = [],
         parameters: dict[str, object] = {},
-        timeout: Optional[int] = None,
-        timeout_multiplier: float = 1.0,
+        timeout: Optional[float] = None,
         baseline: list[Union[str, tuple[str, str]]] = [],
         sources: dict[str, list[tuple[str, str]]] = {},
         xstatus: int = 0,
@@ -104,7 +103,6 @@ class TestCase(Runner):
         self.dependencies: list["TestCase"] = []
 
         self._timeout = timeout
-        self.timeout_multiplier = timeout_multiplier
         self._runtimes = self.load_runtimes()
         self.xstatus = xstatus
 
@@ -261,7 +259,7 @@ class TestCase(Runner):
     @property
     def runtime(self) -> Union[float, int]:
         if self._runtimes[0] is None:
-            return self.timeout / self.timeout_multiplier
+            return self.timeout
         return self._runtimes[0]
 
     @property
@@ -283,7 +281,7 @@ class TestCase(Runner):
             timeout = config.get("test:timeout:long")
         else:
             timeout = config.get("test:timeout:default")
-        return self.timeout_multiplier * timeout
+        return timeout
 
     def add_dependency(self, *cases: Union["TestCase", str]) -> None:
         for case in cases:
@@ -372,11 +370,8 @@ class TestCase(Runner):
             return compressed_log
         return "Log not found"
 
-    def setup(
-        self, exec_root: str, copy_all_resources: bool = False, timeout_multiplier: float = 1.0
-    ) -> None:
+    def setup(self, exec_root: str, copy_all_resources: bool = False) -> None:
         logging.trace(f"Setting up {self}")
-        self.timeout_multiplier = timeout_multiplier
         if self.exec_root is not None:
             assert os.path.samefile(exec_root, self.exec_root)
         self.exec_root = exec_root
@@ -461,7 +456,7 @@ class TestCase(Runner):
         id = colorize("@b{%s}" % self.id[:7])
         return "FINISHED: {0} {1} {2}".format(id, self.pretty_repr(), self.status.cname)
 
-    def run(self, *args: str, stage: Optional[str] = None) -> None:
+    def run(self, *args: str, stage: Optional[str] = None, timeoutx: float = 1.0) -> None:
         if os.getenv("NVTEST_RESETUP"):
             assert isinstance(self.exec_root, str)
             self.setup(self.exec_root)
@@ -472,7 +467,7 @@ class TestCase(Runner):
             self.finish = -1
             self.status.set("running")
             self.save()
-            self.returncode = self._run(*args, stage=stage)
+            self.returncode = self._run(*args, stage=stage, timeoutx=timeoutx)
             for hook in plugin.plugins("test", "finish"):
                 hook(self)
             if self.xstatus == diff_exit_status:
@@ -513,8 +508,9 @@ class TestCase(Runner):
                 fs.force_symlink(self.logfile(), f)
         return
 
-    def _run(self, *args: str, stage: Optional[str] = None) -> int:
+    def _run(self, *args: str, stage: Optional[str] = None, timeoutx: float = 1.0) -> int:
         stage = stage or ("analyze" if self.analyze else "test")
+        timeout = self.timeout * timeoutx
         with fs.working_dir(self.exec_dir):
             if self.file_type == "vvt":
                 self.write_vvtest_util()
@@ -530,7 +526,7 @@ class TestCase(Runner):
                     while True:
                         if proc.poll() is not None:
                             break
-                        if time.monotonic() - start > self.timeout:
+                        if time.monotonic() - start > timeout:
                             os.kill(proc.pid, signal.SIGINT)
                             return -2
                         time.sleep(0.05)
