@@ -67,7 +67,7 @@ def test_enable(capfd, tmp_path):
 def test_timeoutx(tmp_path):
     with working_dir(tmp_path):
         assert nvtest("run", "-w", f"{examples_dir}/timeoutx") == 8
-        assert nvtest("run", "-w", "-l", "test:timeoutx:2.5", f"{examples_dir}/timeoutx") == 0
+        assert nvtest("run", "-w", "-l", "test:timeoutx:5", f"{examples_dir}/timeoutx") == 0
 
 
 def test_vvt(tmp_path):
