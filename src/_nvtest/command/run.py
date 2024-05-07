@@ -149,7 +149,11 @@ def run(args: "argparse.Namespace") -> int:
     output = {"b": "progress", "v": "verbose"}[args.r]
     try:
         session.exitstatus = session.run(
-            cases, resourceinfo=args.resourceinfo, batchinfo=args.batchinfo, output=output
+            cases,
+            resourceinfo=args.resourceinfo,
+            batchinfo=args.batchinfo,
+            output=output,
+            fail_fast=args.fail_fast,
         )
     except KeyboardInterrupt:
         session.exitstatus = ExitCode.INTERRUPTED
