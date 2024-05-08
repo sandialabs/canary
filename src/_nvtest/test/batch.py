@@ -315,7 +315,7 @@ class Slurm(Batch):
         else:
             max_workers = ns.tasks_per_node if ns.nodes == 1 else 1
         max_test_cpus = self.max_tasks_required()
-        session_cpus = max(max_workers, max_test_cpus)
+        session_cpus = ns.nodes * ns.cores_per_node
         dbg_flag = "-d" if config.get("config:debug") else ""
         fh = StringIO()
         fh.write(f"#!{self.shell}\n")

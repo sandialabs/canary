@@ -113,7 +113,7 @@ class ResourceQueue:
                 if isinstance(obj, TestCase):
                     obj = [obj]
                 for case in obj:
-                    if case.status == "success":
+                    if case.status.value in ("success", "xdiff", "xfail"):
                         p += 1
                     elif case.status == "diffed":
                         d += 1
