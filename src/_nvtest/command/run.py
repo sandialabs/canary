@@ -168,7 +168,7 @@ def run(args: "argparse.Namespace") -> int:
         logging.fatal(traceback.format_exc())
     else:
         if not args.no_summary:
-            logging.emit(session.summary(cases))
+            logging.emit(session.summary(cases, include_pass=False))
         if args.durations:
             logging.emit(session.durations(cases, args.durations))
         logging.emit(session.footer(cases))

@@ -552,7 +552,7 @@ class Session:
         return string.getvalue()
 
     @staticmethod
-    def summary(cases: list[TestCase]) -> str:
+    def summary(cases: list[TestCase], include_pass: bool = True) -> str:
         string = io.StringIO()
         if not cases:
             string.write("Nothing to report\n")
@@ -562,6 +562,8 @@ class Session:
             totals.setdefault(case.status.value, []).append(case)
         string.write(color.colorize("@*{Short test summary info}\n"))
         for status in Status.members:
+            if not include_pass and status == "success":
+                continue
             glyph = Status.glyph(status)
             if status in totals:
                 for case in sorted(totals[status], key=lambda t: t.name):
