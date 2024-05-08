@@ -62,7 +62,7 @@ class TestCase(Runner):
         self.file = os.path.join(root, path)
         self.file_dir = os.path.dirname(self.file)
         assert os.path.exists(self.file)
-        self.file_type = "vvt" if self.file.endswith(".vvt") else "pyt"
+        self.file_type = os.path.splitext(self.file)[1:]
         self._active: Optional[bool] = None
 
         # Other properties
