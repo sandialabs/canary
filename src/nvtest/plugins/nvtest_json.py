@@ -33,7 +33,7 @@ class JsonReporter(Reporter):
 
     def create(self) -> None:
         """Collect information and create reports"""
-        data = {}
+        data: dict = {}
         for case in self.data.cases:
             d = data.setdefault(case.id, {})
             for var, val in vars(case).items():
