@@ -1,23 +1,25 @@
 import sys
+from typing import TYPE_CHECKING
 
-from ..session import Session
-from ..test.case import TestCase
+if TYPE_CHECKING:
+    from _nvtest.session import Session
+    from _nvtest.test.case import TestCase
 
 
 class Reporter:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: "Session") -> None:
         self.session = session
         self.data = TestData(session)
 
 
 class TestData:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: "Session") -> None:
         self.session = session
         self.start: float = sys.maxsize
         self.finish: float = -1
         self.status: int = 0
-        self.cases: list[TestCase] = []
-        cases_to_run: list[TestCase] = [c for c in session.cases if not c.masked]
+        self.cases: list["TestCase"] = []
+        cases_to_run: list["TestCase"] = [c for c in session.cases if not c.masked]
         for case in cases_to_run:
             self.add_test(case)
 
@@ -28,7 +30,7 @@ class TestData:
         for case in self.cases:
             yield case
 
-    def update_status(self, case: TestCase) -> None:
+    def update_status(self, case: "TestCase") -> None:
         if case.status == "diffed":
             self.status |= 2**1
         elif case.status == "failed":
@@ -42,7 +44,7 @@ class TestData:
         elif case.status == "skipped":
             self.status |= 2**6
 
-    def add_test(self, case: TestCase) -> None:
+    def add_test(self, case: "TestCase") -> None:
         if self.start > case.start:
             self.start = case.start
         if self.finish < case.finish:

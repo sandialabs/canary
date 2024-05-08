@@ -14,15 +14,16 @@ from typing import Generator
 from typing import Optional
 from typing import Union
 
-from .. import config
-from ..directives.enums import list_parameter_space
-from ..third_party.color import colorize
-from ..util import scalar
-from ..util.time import to_seconds
+import nvtest
+from _nvtest import config
+from _nvtest.directives.enums import list_parameter_space
+from _nvtest.third_party.color import colorize
+from _nvtest.util import scalar
+from _nvtest.util.time import to_seconds
 
 if TYPE_CHECKING:
-    from ..test.case import TestCase
-    from ..test.file import AbstractTestFile
+    from _nvtest.test.case import TestCase
+    from _nvtest.test.file import AbstractTestFile
 
 
 non_code_token_nums = [
@@ -37,6 +38,7 @@ COLON = ":"
 EQUAL = "="
 
 
+@nvtest.plugin.register(scope="test", stage="load", file_type=".vvt")
 def load_vvt(file: "AbstractTestFile") -> None:
     try:
         args, _ = p_VVT(file.file)
@@ -409,6 +411,7 @@ def p_SKIPIF(expression: str, **options: dict[str, str]) -> tuple[bool, str]:
     return True, reason
 
 
+@nvtest.plugin.register(scope="test", stage="setup")
 def write_vvtest_util(case: "TestCase", baseline: bool = False, analyze: bool = False) -> None:
     attrs = get_vvtest_attrs(case, baseline, analyze)
     with open("vvtest_util.py", "w") as fh:

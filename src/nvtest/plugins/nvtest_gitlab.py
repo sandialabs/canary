@@ -4,11 +4,12 @@ import re
 from typing import Optional
 
 import _nvtest.plugin
-from _nvtest.reporters import cdash
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.util import gitlab
 from _nvtest.util import logging
+
+from .nvtest_cdash import CDashReporter
 
 
 @_nvtest.plugin.register(scope="session", stage="finish")
@@ -19,7 +20,7 @@ def merge_request_report(session: Session) -> None:
     cdash_url = os.getenv("MERGE_REQUEST_CDASH_URL")
     cdash_project = os.getenv("MERGE_REQUEST_CDASH_PROJECT")
     if cdash_url and cdash_project:
-        reporter = cdash.Reporter(session)
+        reporter = CDashReporter(session)
         reporter.create(
             buildname(),
             site=os.getenv("MERGE_REQUEST_CDASH_SITE"),

@@ -381,8 +381,8 @@ class TestCase(Runner):
                     fs.force_remove(f)
         with fs.working_dir(self.exec_dir, create=True):
             self.setup_exec_dir(copy_all_resources=copy_all_resources)
-            if self.file_type == "vvt":
-                self.write_vvtest_util()
+            for hook in plugin.plugins("test", "setup"):
+                hook(self)
             self._status.set("ready" if not self.dependencies else "pending")
             for hook in plugin.plugins("test", "setup"):
                 hook(self)
@@ -417,8 +417,8 @@ class TestCase(Runner):
             return
         logging.info(f"Rebaselining {self.pretty_repr()}")
         with fs.working_dir(self.exec_dir):
-            if self.file_type == "vvt":
-                self.write_vvtest_util(baseline=True)
+            for hook in plugin.plugins("test", "setup"):
+                hook(self, baseline=True)
             for arg in self.baseline:
                 if isinstance(arg, str):
                     if os.path.exists(arg):
@@ -436,11 +436,6 @@ class TestCase(Runner):
                     if os.path.exists(src):
                         logging.emit(f"    Replacing {b} with {a}\n")
                         copyfile(src, dst)
-
-    def write_vvtest_util(self, baseline: bool = False) -> None:
-        from _nvtest.compat.vvtest import write_vvtest_util
-
-        write_vvtest_util(self, baseline=baseline)
 
     def do_analyze(self) -> None:
         args: list[str] = []
@@ -512,8 +507,8 @@ class TestCase(Runner):
         stage = stage or ("analyze" if self.analyze else "test")
         timeout = self.timeout * timeoutx
         with fs.working_dir(self.exec_dir):
-            if self.file_type == "vvt":
-                self.write_vvtest_util()
+            for hook in plugin.plugins("test", "setup"):
+                hook(self)
             with logging.capture(self.logfile(stage), mode="w"), logging.timestamps():
                 cmd = [sys.executable]
                 cmd.extend(self.command_line_args(*args))

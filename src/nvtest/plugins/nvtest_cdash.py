@@ -1,5 +1,6 @@
 import argparse
 import datetime
+import glob
 import io
 import os
 import sys
@@ -9,20 +10,128 @@ from getpass import getuser
 from typing import Optional
 from typing import Union
 
-from .. import config
-from ..config.machine import machine_config
-from ..session import Session
-from ..util import cdash
-from ..util import gitlab
-from ..util import logging
-from ..util.filesystem import mkdirp
-from ..util.sendmail import sendmail
-from ..util.time import strftimestamp
-from ..util.time import timestamp
-from .common import Reporter as _Reporter
+import nvtest
+from _nvtest import config
+from _nvtest.config.machine import machine_config
+from _nvtest.session import Session
+from _nvtest.util import cdash
+from _nvtest.util import gitlab
+from _nvtest.util import logging
+from _nvtest.util.filesystem import mkdirp
+from _nvtest.util.sendmail import sendmail
+from _nvtest.util.time import strftimestamp
+from _nvtest.util.time import timestamp
+
+from .reporter import Reporter
 
 
-class Reporter(_Reporter):
+@nvtest.plugin.register(scope="report", stage="setup", type="cdash")
+def setup_parser(parser):
+    sp = parser.add_subparsers(dest="child_command", metavar="")
+    p = sp.add_parser("create", help="Create CDash XML files")
+    p.add_argument(
+        "--build",
+        dest="buildname",
+        metavar="name",
+        help="The name of the build that will be reported to CDash.",
+    )
+    p.add_argument(
+        "--site",
+        metavar="name",
+        help="The site name that will be reported to CDash. " "[default: current system hostname]",
+    )
+    p.add_argument(
+        "-f",
+        metavar="file",
+        help="Read site, build, and buildstamp from this XML "
+        "file (eg, Build.xml or Configure.xml)",
+    )
+    p.add_argument(
+        "-d",
+        metavar="directory",
+        help="Write reports to this directory [default: $session/_reports/cdash]",
+    )
+    group = p.add_mutually_exclusive_group()
+    group.add_argument(
+        "--track",
+        metavar="track",
+        help="Results will be reported to this group on CDash [default: Experimental]",
+    )
+    group.add_argument(
+        "--build-stamp",
+        dest="buildstamp",
+        metavar="stamp",
+        help="Instead of letting the CDash reporter prepare the buildstamp which, "
+        "when combined with build name, site and project, uniquely identifies the "
+        "build, provide this argument to identify the build yourself. "
+        "Format: %%Y%%m%%d-%%H%%M-<track>",
+    )
+
+    p = sp.add_parser("post", help="Post CDash XML files")
+    p.add_argument(
+        "--project",
+        required=True,
+        metavar="project",
+        help="The CDash project",
+    )
+    p.add_argument(
+        "--url",
+        metavar="url",
+        required=True,
+        help="The base CDash url (do not include project)",
+    )
+    p.add_argument("files", nargs="*", help="XML files to post")
+
+    p = sp.add_parser("create-gitlab-issues")
+    p.add_argument(
+        "--project",
+        required=True,
+        metavar="project",
+        help="The CDash project",
+    )
+    p.add_argument(
+        "--url",
+        required=True,
+        help="The base CDash url (do not include project)",
+    )
+
+
+@nvtest.plugin.register(scope="report", stage="create", type="cdash")
+def create_report(session, args):
+    if args.child_command == "post" and args.files:
+        CDashReporter.post(args.url, args.project, *args.files)
+        return
+    else:
+        reporter = CDashReporter(session, dest=args.d)
+        if args.child_command == "create":
+            if args.f:
+                opts = dict(
+                    buildstamp=args.buildstamp,
+                    track=args.track,
+                    buildname=args.buildname,
+                )
+                if any(list(opts.values())):
+                    s = ", ".join(list(opts.keys()))
+                    raise ValueError(f"-f {args.f!r} incompatible with {s}")
+                reporter.read_site_info(args.f, namespace=args)
+            reporter.create(
+                args.buildname,
+                site=args.site,
+                track=args.track,
+                buildstamp=args.buildstamp,
+            )
+        elif args.child_command == "post":
+            if not args.files:
+                args.files = glob.glob(os.path.join(reporter.xml_dir, "*.xml"))
+            if not args.files:
+                raise ValueError("nvtest report cdash post: no xml files to post")
+            reporter.post(args.url, args.project, *args.files)
+        else:
+            raise ValueError(f"{args.child_command}: unknown `nvtest report cdash` subcommand")
+        return 0
+
+
+class CDashReporter(Reporter):
     def __init__(self, session: Session, dest: Optional[str] = None) -> None:
         super().__init__(session)
         dest = dest or os.path.join(session.root, "_reports/cdash")
@@ -82,7 +191,7 @@ class Reporter(_Reporter):
         if not files:
             raise ValueError("No files to post")
         server = cdash.server(url, project)
-        ns = Reporter.read_site_info(files[0])
+        ns = CDashReporter.read_site_info(files[0])
         upload_errors = 0
         for file in files:
             upload_errors += server.upload(

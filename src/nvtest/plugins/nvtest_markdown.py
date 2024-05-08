@@ -1,16 +1,33 @@
 import os
 from typing import TextIO
 
-from .. import config
-from ..session import Session
-from ..test.case import TestCase
-from ..util import logging
-from ..util.filesystem import force_remove
-from ..util.filesystem import mkdirp
-from .common import Reporter as _Reporter
+import nvtest
+from _nvtest import config
+from _nvtest.session import Session
+from _nvtest.test.case import TestCase
+from _nvtest.util import logging
+from _nvtest.util.filesystem import force_remove
+from _nvtest.util.filesystem import mkdirp
+
+from .reporter import Reporter
 
 
-class Reporter(_Reporter):
+@nvtest.plugin.register(scope="report", stage="setup", type="markdown")
+def setup_parser(parser):
+    sp = parser.add_subparsers(dest="child_command", metavar="")
+    sp.add_parser("create", help="Create local markdown report files")
+
+
+@nvtest.plugin.register(scope="report", stage="create", type="markdown")
+def create_report(session, args):
+    reporter = MarkdownReporter(session)
+    if args.child_command == "create":
+        reporter.create()
+    else:
+        raise ValueError(f"{args.child_command}: unknown `nvtest report markdown` subcommand")
+
+
+class MarkdownReporter(Reporter):
     def __init__(self, session: Session) -> None:
         super().__init__(session)
         self.md_dir = os.path.join(session.root, "_reports/markdown")

@@ -1,4 +1,4 @@
-import _nvtest.compat.vvtest as vvtest
+import nvtest.plugins.nvtest_vvt as vvtest
 from _nvtest.directives.enums import list_parameter_space
 
 

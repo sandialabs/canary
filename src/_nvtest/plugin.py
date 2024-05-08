@@ -9,15 +9,17 @@ from typing import Callable
 from typing import Generator
 from typing import Optional
 
-from .compat import get_entry_points
 from .util import logging
+from .util.entry_points import get_entry_points
 from .util.singleton import Singleton
 
 
 class PluginHook:
-    def __init__(self, func: Callable) -> None:
+    def __init__(self, func: Callable, **kwds: str) -> None:
         self.func = func
         self.specname = f"{func.__name__}_impl"  # type: ignore
+        for key, val in kwds.items():
+            setattr(self, key, val)
 
     def __call__(self, *args, **kwargs):
         return self.func(*args, **kwargs)
@@ -37,7 +39,7 @@ class Manager:
     def set_args(self, arg: Namespace) -> None:
         self._args = arg
 
-    def register(self, func: Callable, scope: str, stage: str) -> None:
+    def register(self, func: Callable, scope: str, stage: str, **kwds: str) -> None:
         name = func.__name__
         logging.debug(f"Registering plugin {name}::{scope}::{stage}")
         err_msg = f"register() got unexpected stage '{scope}::{stage}'"
@@ -47,18 +49,26 @@ class Manager:
         if scope == "main":
             if stage not in ("setup",):
                 raise TypeError(err_msg)
+        elif scope == "report":
+            if stage not in ("setup", "create"):
+                raise TypeError(err_msg)
+            if scope in ("setup", "create") and "type" not in kwds:
+                raise TypeError("report::setup plugin must define 'type'")
         elif scope == "session":
             if stage not in ("discovery", "setup", "finish"):
                 raise TypeError(err_msg)
         elif scope == "test":
-            if stage not in ("discovery", "setup", "finish"):
+            if stage not in ("load", "discovery", "setup", "finish"):
                 raise TypeError(err_msg)
+            if stage == "load":
+                if "file_type" not in kwds:
+                    raise TypeError("test::load plugin must define 'file_type'")
         else:
             raise TypeError(f"register() got unexpected scope {scope!r}")
 
         scope_plugins = self._plugins.setdefault(scope, {})
         stage_plugins = scope_plugins.setdefault(stage, [])
-        hook = PluginHook(func)
+        hook = PluginHook(func, **kwds)
         stage_plugins.append(hook)
 
     def plugins(self, scope: str, stage: str) -> Generator[PluginHook, None, None]:
@@ -157,7 +167,7 @@ def get(scope: str, stage: str, name: str) -> Optional[PluginHook]:
     return _manager.get(scope, stage, name)
 
 
-def register(*, scope: str, stage: str):
+def register(*, scope: str, stage: str, **kwds: str):
     """Decorator to register a callback"""
 
     def decorator(func: Callable):
@@ -166,7 +176,7 @@ def register(*, scope: str, stage: str):
         def wrapper(*args: Any, **kwargs: Any):
             return func(*args, **kwargs)
 
-        _manager.register(func, scope, stage)
+        _manager.register(func, scope, stage, **kwds)
         return wrapper
 
     return decorator

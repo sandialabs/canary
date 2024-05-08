@@ -13,6 +13,7 @@ from typing import Type
 from typing import Union
 
 from .. import config
+from .. import plugin
 from ..error import diff_exit_status
 from ..paramset import ParameterSet
 from ..third_party.color import colorize
@@ -143,17 +144,23 @@ class AbstractTestFile:
             dirname, "__nvcache__", f"{name}.{sys.implementation.cache_tag}.pickle"
         )
 
-    def load(self):
-        if self.path.endswith(".vvt"):
-            from _nvtest.compat.vvtest import load_vvt
-
-            try:
-                load_vvt(self)
-            except Exception:
-                logging.error(f"Failed to load {self.file}")
-                raise
-        else:
+    def load(self) -> None:
+        if self.path.endswith(".pyt"):
             self._load()
+        else:
+            for hook in plugin.plugins("test", "load"):
+                ft = getattr(hook, "file_type", None)
+                if ft is None:
+                    raise ValueError(f"{hook.specname}: hook.file_type not defined")
+                if self.path.endswith(ft):
+                    try:
+                        hook(self)
+                        break
+                    except Exception:
+                        logging.error(f"Failed to load {self.file}")
+                        raise
+            else:
+                raise ValueError(f"No hook to load file {self.file}")
 
     @property
     def type(self):
