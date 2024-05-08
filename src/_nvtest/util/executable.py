@@ -161,7 +161,7 @@ class Executable:
         if verbose:
             logging.info(f"Command line: {cmd_line}")
         else:
-            logging.debug(cmd_line)
+            logging.trace(cmd_line)
 
         try:
             proc = subprocess.Popen(

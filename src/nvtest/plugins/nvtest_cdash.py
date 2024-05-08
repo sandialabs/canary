@@ -86,7 +86,8 @@ def setup_parser(parser):
 @nvtest.plugin.register(scope="report", stage="create", type="cdash")
 def create_reports(args):
     if args.child_command == "post" and args.files:
-        CDashReporter.post(args.url, args.project, *args.files)
+        url = CDashReporter.post(args.url, args.project, *args.files)
+        logging.info(f"Files uploaded to {url}")
         return
     else:
         with logging.level(logging.WARNING):
@@ -114,7 +115,8 @@ def create_reports(args):
                 args.files = glob.glob(os.path.join(reporter.xml_dir, "*.xml"))
             if not args.files:
                 raise ValueError("nvtest report cdash post: no xml files to post")
-            reporter.post(args.url, args.project, *args.files)
+            url = reporter.post(args.url, args.project, *args.files)
+            logging.info(f"Files uploaded to {url}")
         else:
             raise ValueError(f"{args.child_command}: unknown `nvtest report cdash` subcommand")
         return 0
@@ -314,7 +316,7 @@ class CDashReporter(Reporter):
         return filename
 
     def write_notes_xml(self) -> str:
-        filename = os.path.join(self.xml_dir, "Notes.xml")
+        filename = unique_file(self.xml_dir, "Notes", ".xml")
         f = os.path.relpath(filename, config.get("session:invocation_dir"))
         logging.log(logging.INFO, f"WRITING: Notes.xml to {f}", prefix=None)
         notes: dict[str, str] = {}
@@ -948,3 +950,13 @@ def test_status_label(status):
 
 def site_label(site):
     return f"system: {site}"
+
+
+def unique_file(dirname: str, filename: str, ext: str) -> str:
+    i = 0
+    while True:
+        basename = f"{filename}-{i}{ext}" if i else f"{filename}{ext}"
+        file = os.path.join(dirname, basename)
+        if not os.path.exists(file):
+            return file
+        i += 1
