@@ -71,6 +71,33 @@ def load_vvt(file: "AbstractTestFile") -> None:
             raise ValueError(f"Unknown command: {arg.command} at {arg.line_no}:{arg.line}")
 
 
+@nvtest.plugin.register(scope="test", stage="setup")
+def write_vvtest_util(case: "TestCase", baseline: bool = False, analyze: bool = False) -> None:
+    if not case.file_path.endswith(".vvt"):
+        return
+    attrs = get_vvtest_attrs(case, baseline, analyze)
+    with open("vvtest_util.py", "w") as fh:
+        fh.write("import os\n")
+        fh.write("import sys\n")
+        for key, value in attrs.items():
+            if isinstance(value, bool):
+                fh.write(f"{key} = {value!r}\n")
+            elif value is None:
+                fh.write(f"{key} = None\n")
+            elif isinstance(value, str) and "in sys.argv" in value:
+                fh.write(f"{key} = {value}\n")
+            else:
+                fh.write(f"{key} = {json.dumps(value, indent=3)}\n")
+
+
+@nvtest.plugin.register(scope="test", stage="setup")
+def write_execute_log(case: "TestCase") -> None:
+    if not case.file_path.endswith(".vvt"):
+        return
+    f = os.path.join(case.exec_dir, "execute.log")
+    nvtest.filesystem.force_symlink(case.logfile(), f)
+
+
 def p_LINE(line: str) -> Optional[SimpleNamespace]:
     """COMMAND ( OPTIONS ) [:=] ARGS"""
     if not line.split():
@@ -409,23 +436,6 @@ def p_SKIPIF(expression: str, **options: dict[str, str]) -> tuple[bool, str]:
     if not reason:
         reason = colorize("deselected due to @*b{skipif=%s} evaluating to @*g{True}" % expression)
     return True, reason
-
-
-@nvtest.plugin.register(scope="test", stage="setup")
-def write_vvtest_util(case: "TestCase", baseline: bool = False, analyze: bool = False) -> None:
-    attrs = get_vvtest_attrs(case, baseline, analyze)
-    with open("vvtest_util.py", "w") as fh:
-        fh.write("import os\n")
-        fh.write("import sys\n")
-        for key, value in attrs.items():
-            if isinstance(value, bool):
-                fh.write(f"{key} = {value!r}\n")
-            elif value is None:
-                fh.write(f"{key} = None\n")
-            elif isinstance(value, str) and "in sys.argv" in value:
-                fh.write(f"{key} = {value}\n")
-            else:
-                fh.write(f"{key} = {json.dumps(value, indent=3)}\n")
 
 
 def unique(sequence: list[str]) -> list[str]:

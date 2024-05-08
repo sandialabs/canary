@@ -9,6 +9,7 @@ from typing import Callable
 from typing import Generator
 from typing import Optional
 
+from . import config
 from .util import logging
 from .util.entry_points import get_entry_points
 from .util.singleton import Singleton
@@ -18,11 +19,13 @@ class PluginHook:
     def __init__(self, func: Callable, **kwds: str) -> None:
         self.func = func
         self.specname = f"{func.__name__}_impl"  # type: ignore
-        for key, val in kwds.items():
-            setattr(self, key, val)
+        self.attrs = dict(kwds)
 
     def __call__(self, *args, **kwargs):
         return self.func(*args, **kwargs)
+
+    def get_attribute(self, name: str) -> Optional[str]:
+        return self.attrs.get(name)
 
 
 class Manager:
@@ -63,6 +66,10 @@ class Manager:
             if stage == "load":
                 if "file_type" not in kwds:
                     raise TypeError("test::load plugin must define 'file_type'")
+                if not kwds["file_type"].startswith("."):
+                    kwds["file_type"] = f".{kwds['file_type']}"
+                if kwds["file_type"] not in config.file_types:
+                    config.file_types.append(kwds["file_type"])
         else:
             raise TypeError(f"register() got unexpected scope {scope!r}")
 

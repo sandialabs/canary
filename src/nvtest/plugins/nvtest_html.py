@@ -19,7 +19,9 @@ def setup_parser(parser):
 
 
 @nvtest.plugin.register(scope="report", stage="create", type="html")
-def create_report(session, args):
+def create_report(args):
+    with logging.level(logging.WARNING):
+        session = Session(os.getcwd(), mode="r")
     reporter = HTMLReporter(session)
     if args.child_command == "create":
         reporter.create()

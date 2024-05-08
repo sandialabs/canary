@@ -82,26 +82,15 @@ def setup_parser(parser):
     )
     p.add_argument("files", nargs="*", help="XML files to post")
 
-    p = sp.add_parser("create-gitlab-issues")
-    p.add_argument(
-        "--project",
-        required=True,
-        metavar="project",
-        help="The CDash project",
-    )
-    p.add_argument(
-        "--url",
-        required=True,
-        help="The base CDash url (do not include project)",
-    )
-
 
 @nvtest.plugin.register(scope="report", stage="create", type="cdash")
-def create_report(session, args):
+def create_reports(args):
     if args.child_command == "post" and args.files:
         CDashReporter.post(args.url, args.project, *args.files)
         return
     else:
+        with logging.level(logging.WARNING):
+            session = Session(os.getcwd(), mode="r")
         reporter = CDashReporter(session, dest=args.d)
         if args.child_command == "create":
             if args.f:

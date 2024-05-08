@@ -381,8 +381,6 @@ class TestCase(Runner):
                     fs.force_remove(f)
         with fs.working_dir(self.exec_dir, create=True):
             self.setup_exec_dir(copy_all_resources=copy_all_resources)
-            for hook in plugin.plugins("test", "setup"):
-                hook(self)
             self._status.set("ready" if not self.dependencies else "pending")
             for hook in plugin.plugins("test", "setup"):
                 hook(self)
@@ -463,8 +461,6 @@ class TestCase(Runner):
             self.status.set("running")
             self.save()
             self.returncode = self._run(*args, stage=stage, timeoutx=timeoutx)
-            for hook in plugin.plugins("test", "finish"):
-                hook(self)
             if self.xstatus == diff_exit_status:
                 if self.returncode != diff_exit_status:
                     self.status.set("failed", f"expected {self.name} to diff")
@@ -498,9 +494,8 @@ class TestCase(Runner):
                     file = self.logfile(stage)
                     if os.path.exists(file):
                         fh.write(open(file).read())
-            if self.file_type == "vvt":
-                f = os.path.join(self.exec_dir, "execute.log")
-                fs.force_symlink(self.logfile(), f)
+            for hook in plugin.plugins("test", "finish"):
+                hook(self)
         return
 
     def _run(self, *args: str, stage: Optional[str] = None, timeoutx: float = 1.0) -> int:

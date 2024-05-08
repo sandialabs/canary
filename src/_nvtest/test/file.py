@@ -149,9 +149,7 @@ class AbstractTestFile:
             self._load()
         else:
             for hook in plugin.plugins("test", "load"):
-                ft = getattr(hook, "file_type", None)
-                if ft is None:
-                    raise ValueError(f"{hook.specname}: hook.file_type not defined")
+                ft = hook.get_attribute("file_type") or ""
                 if self.path.endswith(ft):
                     try:
                         hook(self)

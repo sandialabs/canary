@@ -1,6 +1,5 @@
 import fnmatch
 import os
-import re
 from itertools import repeat
 from typing import Any
 from typing import Optional
@@ -13,8 +12,6 @@ from .util import filesystem as fs
 from .util import logging
 from .util import parallel
 from .util.resource import ResourceInfo
-
-default_file_pattern = r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$"
 
 
 class Finder:
@@ -87,7 +84,7 @@ class Finder:
                 return True
             return False
 
-        file_pattern = config.get("config:test_files") or default_file_pattern
+        file_types = tuple(config.file_types)
         start = root if subdir is None else os.path.join(root, subdir)
         paths: list[tuple[str, str]] = []
         for dirname, dirs, files in os.walk(start):
@@ -98,7 +95,7 @@ class Finder:
                 [
                     (root, os.path.relpath(os.path.join(dirname, f), root))
                     for f in files
-                    if _is_test_file(f, file_pattern)
+                    if f.endswith(file_types)
                 ]
             )
         testfiles: list[AbstractTestFile] = parallel.starmap(AbstractTestFile.factory, paths)
@@ -203,12 +200,8 @@ class Finder:
 
 
 def is_test_file(file: str) -> bool:
-    file_pattern = config.get("config:test_files") or default_file_pattern
-    return _is_test_file(file, file_pattern)
-
-
-def _is_test_file(file: str, file_pattern: str) -> bool:
-    return bool(re.search(file_pattern, os.path.basename(file)))
+    file_types = tuple(config.file_types)
+    return file.endswith(file_types)
 
 
 def freeze_abstract_file(file: AbstractTestFile, kwds: dict) -> list[TestCase]:

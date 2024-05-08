@@ -3,7 +3,7 @@ import os
 import re
 from typing import Optional
 
-import _nvtest.plugin
+import nvtest
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.util import gitlab
@@ -12,7 +12,7 @@ from _nvtest.util import logging
 from .nvtest_cdash import CDashReporter
 
 
-@_nvtest.plugin.register(scope="session", stage="finish")
+@nvtest.plugin.register(scope="session", stage="finish")
 def merge_request_report(session: Session) -> None:
     if "CI_MERGE_REQUEST_IID" not in os.environ:
         return
