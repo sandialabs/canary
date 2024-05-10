@@ -21,6 +21,7 @@ from ..util import logging
 from ..util.filesystem import mkdirp
 from ..util.misc import boolean
 from ..util.time import time_in_seconds
+from .case import AnalyzeTestCase
 from .case import TestCase
 
 if TYPE_CHECKING:
@@ -306,11 +307,12 @@ class AbstractTestFile:
                 mask_analyze_case: Optional[str] = None
                 if all(case.masked for case in cases):
                     mask_analyze_case = colorize("deselected due to @*b{skipped dependencies}")
-                parent = TestCase(
+                parent = AnalyzeTestCase(
                     self.root,
                     self.path,
+                    paramsets=paramsets,
+                    flag=analyze,
                     family=name,
-                    analyze=analyze,
                     keywords=self.keywords(testname=name),
                     timeout=self.timeout(testname=name),
                     baseline=self.baseline(testname=name),

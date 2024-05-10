@@ -7,6 +7,7 @@ from typing import Optional
 from typing import Type
 from typing import Union
 
+from .case import AnalyzeTestCase
 from .case import TestCase
 from .status import Status
 
@@ -34,7 +35,7 @@ class TestInstance:
     file: str
     processors: int
     devices: int
-    analyze: str
+    analyze: bool
     family: str
     keywords: list[str]
     parameters: Parameters
@@ -66,7 +67,7 @@ class TestInstance:
             processors=case.processors,
             devices=case.devices,
             family=case.family,
-            analyze=case.analyze or "",
+            analyze=isinstance(case, AnalyzeTestCase),
             keywords=case.keywords(),
             parameters=Parameters(**case.parameters),
             timeout=case.timeout,

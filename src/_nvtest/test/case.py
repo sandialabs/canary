@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from string import Template
 from typing import Any
+from typing import BinaryIO
 from typing import Generator
 from typing import Optional
 from typing import Union
@@ -18,6 +19,7 @@ from typing import Union
 from .. import config
 from .. import plugin
 from ..error import diff_exit_status
+from ..paramset import ParameterSet
 from ..third_party.color import colorize
 from ..util import cache
 from ..util import filesystem as fs
@@ -47,7 +49,6 @@ class TestCase(Runner):
         root: str,
         path: str,
         *,
-        analyze: str = "",
         family: Optional[str] = None,
         keywords: list[str] = [],
         parameters: dict[str, object] = {},
@@ -66,7 +67,6 @@ class TestCase(Runner):
         self._active: Optional[bool] = None
 
         # Other properties
-        self.analyze = analyze
         self._keywords = keywords
         self.parameters = {} if parameters is None else dict(parameters)
         self.baseline = baseline
@@ -121,7 +121,7 @@ class TestCase(Runner):
         return self.display_name
 
     @classmethod
-    def load(cls, fh) -> "TestCase":
+    def load(cls, fh: BinaryIO) -> "TestCase":
         self = pickle.load(fh)
         return self
 
@@ -436,9 +436,7 @@ class TestCase(Runner):
                         copyfile(src, dst)
 
     def do_analyze(self) -> None:
-        args: list[str] = []
-        if not self.analyze:
-            args.append("--execute-analysis-sections")
+        args = ["--execute-analysis-sections"]
         return self.run(*args, stage="analyze")
 
     def start_msg(self) -> str:
@@ -499,7 +497,7 @@ class TestCase(Runner):
         return
 
     def _run(self, *args: str, stage: Optional[str] = None, timeoutx: float = 1.0) -> int:
-        stage = stage or ("analyze" if self.analyze else "test")
+        stage = stage or "test"
         timeout = self.timeout * timeoutx
         with fs.working_dir(self.exec_dir):
             for hook in plugin.plugins("test", "setup"):
@@ -525,13 +523,7 @@ class TestCase(Runner):
                     return proc.returncode
 
     def command_line_args(self, *args: str) -> list[str]:
-        if self.analyze:
-            if self.analyze.startswith("-"):
-                command_line_args = [os.path.basename(self.file), self.analyze]
-            else:
-                command_line_args = [self.analyze]
-        else:
-            command_line_args = [os.path.basename(self.file)]
+        command_line_args = [os.path.basename(self.file)]
         command_line_args.extend(args)
         return command_line_args
 
@@ -572,6 +564,46 @@ class TestCase(Runner):
             return [None, None, None]
         _, mean, minimum, maximum = json.load(open(file))
         return [mean, minimum, maximum]
+
+
+class AnalyzeTestCase(TestCase):
+    def __init__(
+        self,
+        root: str,
+        path: str,
+        *,
+        flag: str,
+        paramsets: list[ParameterSet],
+        family: Optional[str] = None,
+        keywords: list[str] = [],
+        timeout: Optional[float] = None,
+        baseline: list[Union[str, tuple[str, str]]] = [],
+        sources: dict[str, list[tuple[str, str]]] = {},
+        xstatus: int = 0,
+    ):
+        super().__init__(
+            root,
+            path,
+            family=family,
+            keywords=keywords,
+            timeout=timeout,
+            baseline=baseline,
+            sources=sources,
+            xstatus=xstatus,
+        )
+        self.flag = flag
+        self.paramsets = paramsets
+
+    def do_analyze(self) -> None:
+        return self.run(stage="analyze")
+
+    def command_line_args(self, *args: str) -> list[str]:
+        if self.flag.startswith("-"):
+            command_line_args = [os.path.basename(self.file), self.flag]
+        else:
+            command_line_args = [self.flag]
+        command_line_args.extend(args)
+        return command_line_args
 
 
 class MissingSourceError(Exception):

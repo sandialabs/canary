@@ -72,10 +72,10 @@ def load_vvt(file: "AbstractTestFile") -> None:
 
 
 @nvtest.plugin.register(scope="test", stage="setup")
-def write_vvtest_util(case: "TestCase", baseline: bool = False, analyze: bool = False) -> None:
+def write_vvtest_util(case: "TestCase", baseline: bool = False) -> None:
     if not case.file_path.endswith(".vvt"):
         return
-    attrs = get_vvtest_attrs(case, baseline, analyze)
+    attrs = get_vvtest_attrs(case, baseline)
     with open("vvtest_util.py", "w") as fh:
         fh.write("import os\n")
         fh.write("import sys\n")
@@ -447,7 +447,9 @@ def unique(sequence: list[str]) -> list[str]:
 
 
 @typing.no_type_check
-def get_vvtest_attrs(case: "TestCase", baseline: bool, analyze: bool) -> dict:
+def get_vvtest_attrs(case: "TestCase", baseline: bool) -> dict:
+    from _nvtest.test.case import AnalyzeTestCase
+
     attrs = {}
     compiler_spec = None
     if config.get("build:compiler:vendor") is None:
@@ -469,32 +471,27 @@ def get_vvtest_attrs(case: "TestCase", baseline: bool, analyze: bool) -> dict:
     attrs["diff_exit_status"] = 64
     attrs["skip_exit_status"] = 63
     attrs["opt_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"
-    attrs["is_analyze"] = bool(case.analyze)
+    attrs["is_analyze"] = isinstance(case, AnalyzeTestCase)
     attrs["is_baseline"] = baseline
-    attrs["is_analysis_only"] = analyze
+    attrs["is_analysis_only"] = attrs["is_analyze"]
     attrs["PARAM_DICT"] = case.parameters or {}
     for key, val in case.parameters.items():
         attrs[key] = val
-    if case.dependencies:
-        paramset = {}
-        for dep in case.dependencies:
-            for key, value in dep.parameters.items():
-                paramset.setdefault(key, []).append(value)
-        for key, values in paramset.items():
-            attrs[f"PARAM_{key}"] = unique(values)
-        if len(paramset) > 1:
-            key = "_".join(_ for _ in next(iter(case.dependencies)).parameters)
-            table = [list(_) for _ in zip(*paramset.values())]
-            attrs[f"PARAM_{key}"] = table
+    if isinstance(case, AnalyzeTestCase):
+        for paramset in case.paramsets:
+            key = "_".join(paramset.keys)
+            table = attrs.setdefault(f"PARAM_{key}", [])
+            for row in paramset.values:
+                table.append(list(row))
         attrs["DEPDIRS"] = [dep.exec_dir for dep in case.dependencies]
         attrs["DEPDIRMAP"] = {}  # FIXME
 
-        attrs["exec_dir"] = case.exec_dir
-        attrs["exec_root"] = case.exec_root
-        attrs["exec_path"] = case.exec_path
-        attrs["file_root"] = case.file_root
-        attrs["file_dir"] = case.file_dir
-        attrs["file_path"] = case.file_path
+    attrs["exec_dir"] = case.exec_dir
+    attrs["exec_root"] = case.exec_root
+    attrs["exec_path"] = case.exec_path
+    attrs["file_root"] = case.file_root
+    attrs["file_dir"] = case.file_dir
+    attrs["file_path"] = case.file_path
 
     return attrs
 

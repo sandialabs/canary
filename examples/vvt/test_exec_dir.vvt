@@ -7,5 +7,10 @@ import vvtest_util as vvt
 def test():
     param_map = {3: '1.234e6', 4: '1.234e7', 5: '1.234e8',  6: '1.23423476498e-2'}
     x = param_map[vvt.np]
-    assert os.path.basename(vvt.exec_path) == f"x={x}", x
+    basename = os.path.basename(vvt.exec_path)
+    assert os.path.basename(vvt.exec_path).endswith(f"np={vvt.np}.x={x}")
     assert vvt.x == float(x)
+
+
+if __name__ == "__main__":
+    test()
