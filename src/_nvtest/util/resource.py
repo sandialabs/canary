@@ -169,15 +169,16 @@ class BatchInfo:
 
     @workers.setter
     def workers(self, arg: Scalar) -> None:
-        workers = int(arg)
-        if workers < 0:
-            raise ValueError(f"batch workers:{arg} < 0")
-        elif workers > config.get("machine:cpu_count"):
-            raise ValueError("batch worker request exceeds machine cpu count")
-        self._workers = workers
+        if arg is not None:
+            workers = int(arg)
+            if workers < 0:
+                raise ValueError(f"batch workers:{arg} < 0")
+            elif workers > config.get("machine:cpu_count"):
+                raise ValueError("batch worker request exceeds machine cpu count")
+            self._workers = workers
 
     def set(self, key: str, value: Scalar):
-        if key == "length":
+        if key in ("length", "limit"):
             self.length = value  # type: ignore
         elif key == "count":
             self.count = value  # type: ignore
