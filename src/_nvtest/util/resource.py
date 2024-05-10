@@ -129,7 +129,7 @@ the form: ``%(r_form)s``.  The possible ``%(r_form)s`` settings are\n\n
 
 class BatchInfo:
     def __init__(self) -> None:
-        self._limit: Optional[float] = None
+        self._length: Optional[float] = None
         self._count: Optional[int] = None
         self._scheduler: Optional[str] = None
         self.args: list[str] = []
@@ -156,24 +156,24 @@ class BatchInfo:
     @count.setter
     def count(self, arg: Scalar) -> None:
         if arg is not None:
-            if self.limit is not None:
-                raise ValueError("batch count and batch limit are mutually exclusive")
+            if self.length is not None:
+                raise ValueError("batch count and batch length are mutually exclusive")
             self._count = int(arg)
 
     @property
-    def limit(self) -> Optional[float]:
-        return self._limit
+    def length(self) -> Optional[float]:
+        return self._length
 
-    @limit.setter
-    def limit(self, arg: Scalar) -> None:
+    @length.setter
+    def length(self, arg: Scalar) -> None:
         if arg is not None:
             if self.count is not None:
-                raise ValueError("batch count and batch limit are mutually exclusive")
-            self._limit = time_in_seconds(arg)
+                raise ValueError("batch count and batch length are mutually exclusive")
+            self._length = time_in_seconds(arg)
 
     def set(self, key: str, value: Scalar):
-        if key == "limit":
-            self.limit = value  # type: ignore
+        if key == "length":
+            self.length = value  # type: ignore
         elif key == "count":
             self.count = value  # type: ignore
         elif key == "scheduler":
@@ -196,7 +196,7 @@ class BatchInfo:
 Defines how to batch test cases. The %(r_arg)s argument is of the form: ``%(r_form)s``.
 The possible possible ``%(r_form)s`` settings are\n\n
 • ``%(f)s count:N``: Execute tests in N batches.\n\n
-• ``%(f)s limit:T``: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
+• ``%(f)s length:T``: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
 • ``%(f)s scheduler:S``: Use scheduler 'S' to run the test batches.\n\n
 • ``%(f)s args:A``: Any additional args 'A' are passed directly to the scheduler, for example,
   ``%(f)s args:--account=ABC`` will pass ``--account=ABC`` to the scheduler

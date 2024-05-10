@@ -158,18 +158,11 @@ to the session.  %(pathspec)s can be one (or more) of the following types:
 * ``.vvt`` or ``.pyt`` file: specific test files; and
 * json or yaml file: file containing specific paths to tests and/or directories.
 
-The json input file has the following schema:
+The input file has the following schema::
 
-.. code-block:: json
-
-   {
-     "testpaths": [
-       {
-         "root": "str",
-         "paths": "list_of_str"
-       }
-     ]
-   }
+   testpaths:
+   - root: str
+     paths: [path, ...]
 
 where %(paths)s is a list of file paths relative to %(root)s.
 

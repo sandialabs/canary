@@ -491,12 +491,12 @@ class Session:
     ) -> ResourceQueue:
         queue: ResourceQueue
         if batchinfo.scheduler is None:
-            if batchinfo.count is not None or batchinfo.limit is not None:
+            if batchinfo.count is not None or batchinfo.length is not None:
                 raise ValueError("batched execution requires a scheduler")
             queue = DirectResourceQueue(resourceinfo, global_session_lock)
         else:
-            if batchinfo.count is None and batchinfo.limit is None:
-                batchinfo.limit = default_batchsize
+            if batchinfo.count is None and batchinfo.length is None:
+                batchinfo.length = default_batchsize
             queue = BatchResourceQueue(resourceinfo, batchinfo, global_session_lock)
         for case in cases:
             if case.status.value not in ("ready", "pending"):

@@ -212,8 +212,8 @@ class BatchResourceQueue(ResourceQueue):
             count = self.batchinfo.count
             partitions = partition_n(self.tmp_buffer, n=count)
         else:
-            limit = float(self.batchinfo.limit or 30 * 60)  # 30 minute default
-            partitions = partition_t(self.tmp_buffer, t=limit)
+            length = float(self.batchinfo.length or 30 * 60)  # 30 minute default
+            partitions = partition_t(self.tmp_buffer, t=length)
         n = len(partitions)
         N = len(batch_stores) + 1
         batches = [

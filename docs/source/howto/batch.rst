@@ -7,7 +7,7 @@ Tests can be run under a workload manager (scheduler) such as Slurm or PBS by ad
 
 .. code-block:: console
 
-  nvtest run [-b (count:N|limit:T)] -b scheduler:SCHEDULER ...
+  nvtest run [-b (count:N|length:T)] -b scheduler:SCHEDULER ...
 
 When run in "batch" mode, ``nvtest`` will group tests into "batches" and submit each batch to ``SCHEDULER``.
 
@@ -18,16 +18,16 @@ Batch size
 ..........
 
 * ``-b count:N``: group tests into ``N`` batches, each having approximately the same runtime.
-* ``-b limit:T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Human readable times, eg 1s, 1 sec, 1h, 2 hrs, etc, are accepted.
+* ``-b length:T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Human readable times, eg 1s, 1 sec, 1h, 2 hrs, etc, are accepted.
 
 By default, tests are batched into groups based as follows:
 
 1. group cases by the number of compute nodes required to run; and
-2. partition each group into batches that complete in the time specified by ``-b limit:T``.  A default limit of 30 minutes is used if not otherwise specified.
+2. partition each group into batches that complete in the time specified by ``-b length:T``.  A default length of 30 minutes is used if not otherwise specified.
 
 .. note::
 
-   ``-b count:N`` and ``-b limit:T`` are mutually exclusive.
+   ``-b count:N`` and ``-b length:T`` are mutually exclusive.
 
 Batch scheduler
 ................
