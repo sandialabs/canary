@@ -85,7 +85,7 @@ def add_resource_arguments(parser: "Parser") -> None:
 def add_batch_arguments(parser: "Parser") -> None:
     group = parser.add_argument_group("batch control")
     group.add_argument(
-        "-b",
+        "-W",
         action=BatchSetter,
         metavar="resource",
         dest="batchinfo",
@@ -136,7 +136,7 @@ class BatchSetter(argparse.Action):
 
     @staticmethod
     def help_page() -> str:
-        return resource.BatchInfo.cli_help("-b")
+        return resource.BatchInfo.cli_help("-W")
 
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:

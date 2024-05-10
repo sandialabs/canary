@@ -97,9 +97,9 @@ Batch
 Group test cases into batches to run in a scheduler.  The default batching scheme is to:
 
 1. group cases by the number of compute nodes required to run; and
-2. partition each group into batches that complete in a set time (defined by the ``-b length:T`` option)
+2. partition each group into batches that complete in a set time (defined by the ``-W length:T`` option)
 
-Optionally, a fixed number of batches can be requested (``-b count:N``).
+Optionally, a fixed number of batches can be requested (``-W count:N``).
 
 .. _run:
 

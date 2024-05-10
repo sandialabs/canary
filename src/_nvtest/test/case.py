@@ -447,7 +447,7 @@ class TestCase(Runner):
         id = colorize("@b{%s}" % self.id[:7])
         return "FINISHED: {0} {1} {2}".format(id, self.pretty_repr(), self.status.cname)
 
-    def run(self, *args: str, stage: Optional[str] = None, timeoutx: float = 1.0) -> None:
+    def run(self, *args: str, stage: Optional[str] = None, **kwargs: Any) -> None:
         if os.getenv("NVTEST_RESETUP"):
             assert isinstance(self.exec_root, str)
             self.setup(self.exec_root)
@@ -458,6 +458,7 @@ class TestCase(Runner):
             self.finish = -1
             self.status.set("running")
             self.save()
+            timeoutx = kwargs.get("timeoutx", 1.0)
             self.returncode = self._run(*args, stage=stage, timeoutx=timeoutx)
             if self.xstatus == diff_exit_status:
                 if self.returncode != diff_exit_status:

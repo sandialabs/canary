@@ -351,7 +351,11 @@ class Session:
         with self.rc_environ():
             with working_dir(self.root):
                 self.process_testcases(
-                    queue=queue, resourceinfo=resourceinfo, fail_fast=fail_fast, output=output
+                    queue=queue,
+                    resourceinfo=resourceinfo,
+                    fail_fast=fail_fast,
+                    output=output,
+                    batchinfo=batchinfo,
                 )
                 for hook in plugin.plugins("session", "finish"):
                     hook(self)
@@ -380,6 +384,7 @@ class Session:
         resourceinfo: ResourceInfo,
         fail_fast: bool,
         output: str = "progress-bar",
+        batchinfo: Optional[BatchInfo] = None,
     ) -> None:
         verbose: bool = output == "verbose"
         futures: dict = {}
@@ -389,6 +394,12 @@ class Session:
         timeout = resourceinfo["session:timeout"] or -1
         try:
             with ProcessPoolExecutor(max_workers=queue.workers) as ppe:
+                runner_args = []
+                runner_kwargs = dict(verbose=verbose, timeoutx=resourceinfo["test:timeoutx"])
+                if batchinfo:
+                    runner_args.extend(batchinfo.args)
+                    if batchinfo.workers:
+                        runner_kwargs["workers"] = batchinfo.workers
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
@@ -405,9 +416,7 @@ class Session:
                         iid, obj = iid_obj
                     except EmptyQueue:
                         break
-                    future = ppe.submit(
-                        obj, verbose=verbose, timeoutx=resourceinfo["test:timeoutx"]
-                    )
+                    future = ppe.submit(obj, *runner_args, **runner_kwargs)
                     callback = partial(self.done_callback, iid, queue, fail_fast)
                     future.add_done_callback(callback)
                     futures[iid] = (obj, future)

@@ -1,9 +1,9 @@
-import argparse
 import os
 import subprocess
 import time
 from datetime import datetime
 from io import StringIO
+from typing import Any
 from typing import Optional
 from typing import Union
 
@@ -43,13 +43,11 @@ class Batch(Runner):
         world_rank: int,
         world_size: int,
         world_id: int = 1,
-        workers: Optional[int] = None,
     ) -> None:
         self.cases = cases
         self.world_rank = world_rank
         self.world_size = world_size
         self.world_id = world_id
-        self.use_num_workers = workers
         self.id: str = hashit("".join(_.id for _ in self), length=20)
         self._status = Status("created")
         first = next(iter(cases))
@@ -127,10 +125,7 @@ class Batch(Runner):
         basename = f"out.{self.world_size}.{self.world_rank}.txt"
         return os.path.join(self.stage, basename)
 
-    def write_submission_script(self) -> None: ...
-
-    def setup(self, *args: str) -> None:
-        self.write_submission_script()
+    def setup(self) -> None:
         for case in self.cases:
             if any(dep not in self.cases for dep in case.dependencies):
                 self._status.set("pending")
@@ -138,7 +133,7 @@ class Batch(Runner):
         else:
             self._status.set("ready")
 
-    def _run(self) -> None:
+    def _run(self, *args: str, **kwargs: Any) -> None:
         raise NotImplementedError
 
     def start_msg(self) -> str:
@@ -154,15 +149,10 @@ class Batch(Runner):
         st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
         return f"FINISHED: Batch {self.world_rank} of {self.world_size}, {st_stat}"
 
-    def run(self, *args: str, timeoutx: float = 1.0) -> None:
-        script_args = list(args)
-        if timeoutx != 1.0:
-            script_args.append(f"-l test:timeoutx:{timeoutx}")
+    def run(self, *args: str, **kwargs: Any) -> None:
         try:
-            os.environ["SCRIPT_ARGS"] = " ".join(script_args)
-            self._run()
+            self._run(*args, **kwargs)
         finally:
-            os.environ.pop("SCRIPT_ARGS")
             self.refresh()
         return
 
@@ -170,8 +160,8 @@ class Batch(Runner):
 class SubShell(Batch):
     """Run the Batch in a subshell"""
 
-    def _run(self) -> None:
-        script = self.submission_script_filename()
+    def _run(self, *args: str, **kwargs: Any) -> None:
+        script = self.write_submission_script(*args, **kwargs)
         if not os.path.exists(script):
             raise ValueError("submission script not found, did you call setup()?")
         script_x = Executable(self.command)
@@ -180,7 +170,7 @@ class SubShell(Batch):
             script_x(script, fail_on_error=False, output=fh, error=fh)
         return None
 
-    def write_submission_script(self) -> None:
+    def write_submission_script(self, *args: str, **kwargs: Any) -> str:
         max_test_cpus = self.max_tasks_required()
         session_cpus = max_test_cpus
         dbg_flag = "-d" if config.get("config:debug") else ""
@@ -201,13 +191,14 @@ class SubShell(Batch):
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
         fh.write("export NVTEST_DISABLE_KB=1\n")
-        max_workers = self.use_num_workers or 1
+        workers = kwargs.get("workers", 1)
+        timeoutx = kwargs.get("timeoutx", 1.0)
         fh.write(
             f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
-            "${SCRIPT_ARGS} "
-            f"-l session:workers:{max_workers} "
+            f"-l session:workers:{workers} "
             f"-l session:cpus:{session_cpus} "
             f"-l test:cpus:{max_test_cpus} "
+            f"-l test:timeoutx:{timeoutx} "
             f"^{self.world_id}:{self.world_rank}\n)\n"
         )
         f = self.submission_script_filename()
@@ -215,7 +206,7 @@ class SubShell(Batch):
         with open(f, "w") as fp:
             fp.write(fh.getvalue())
         set_executable(f)
-        return
+        return f
 
 
 class Slurm(Batch):
@@ -231,23 +222,14 @@ class Slurm(Batch):
         world_rank: int,
         world_size: int,
         world_id: int = 1,
-        workers: Optional[int] = None,
     ) -> None:
         cores_per_socket = config.get("machine:cores_per_socket")
         if cores_per_socket is None:
             raise ValueError("slurm runner requires that 'machine:cores_per_socket' be defined")
-        super().__init__(cases, world_rank, world_size, world_id=world_id, workers=workers)
+        super().__init__(cases, world_rank, world_size, world_id=world_id)
 
-    def setup(self, *args: str) -> None:
-        parser = self.make_argument_parser()
-        _, unknown_args = parser.parse_known_args(args)
-        if unknown_args:
-            s_unknown = " ".join(unknown_args)
-            raise ValueError(f"unrecognized slurm arguments: {s_unknown}")
-        super().setup(*args)
-
-    def _run(self) -> None:
-        script = self.submission_script_filename()
+    def _run(self, *args_in: str, **kwargs: Any) -> None:
+        script = self.write_submission_script(*args_in, **kwargs)
         if not os.path.exists(script):
             raise ValueError("submission script not found, did you call setup()?")
         args = [self.command, script]
@@ -285,10 +267,8 @@ class Slurm(Batch):
                 return
             raise
 
-    def write_submission_script(self, *a: str) -> None:
-        max_tasks = self.max_tasks_required()
-        ns = calculate_allocations(max_tasks)
-        qtime = max(self.cputime / (ns.cores_per_node * ns.nodes) * 1.05, 5)
+    def qtime(self, max_tasks: int, nodes: int, timeoutx: float = 1.0) -> float:
+        qtime = max(self.cputime / nodes * 1.05, 5)
         if qtime < 100.0:
             qtime = 300.0
         elif qtime < 300.0:
@@ -301,7 +281,14 @@ class Slurm(Batch):
             qtime = 5000.0
         else:
             qtime *= 1.5
-        args = list(a)
+        return qtime * timeoutx
+
+    def write_submission_script(self, *args_in: str, **kwargs: Any) -> str:
+        max_tasks = self.max_tasks_required()
+        ns = calculate_allocations(max_tasks)
+        timeoutx = kwargs.get("timeoutx", 1.0)
+        qtime = self.qtime(max_tasks, ns.cores_per_node * ns.nodes, timeoutx=timeoutx)
+        args = list(args_in)
         args.append(f"--nodes={ns.nodes}")
         args.append(f"--ntasks-per-node={ns.tasks_per_node}")
         args.append(f"--cpus-per-task={ns.cpus_per_task}")
@@ -310,11 +297,6 @@ class Slurm(Batch):
         args.append(f"--error={file}")
         args.append(f"--output={file}")
 
-        if self.use_num_workers is not None:
-            max_workers = self.use_num_workers
-        else:
-            max_workers = ns.tasks_per_node if ns.nodes == 1 else 1
-        max_test_cpus = self.max_tasks_required()
         session_cpus = ns.nodes * ns.cores_per_node
         dbg_flag = "-d" if config.get("config:debug") else ""
         fh = StringIO()
@@ -329,12 +311,13 @@ class Slurm(Batch):
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
         fh.write("export NVTEST_DISABLE_KB=1\n")
+        workers = kwargs.get("workers", ns.cores_per_node)
         fh.write(
             f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
-            "${SCRIPT_ARGS} "
-            f"-l session:workers:{max_workers} "
+            f"-l session:workers:{workers} "
             f"-l session:cpus:{session_cpus} "
-            f"-l test:cpus:{max_test_cpus} "
+            f"-l test:cpus:{max_tasks} "
+            f"-l test:timeoutx:{timeoutx} "
             f"^{self.world_id}:{self.world_rank}\n)\n"
         )
         f = self.submission_script_filename()
@@ -342,7 +325,7 @@ class Slurm(Batch):
         with open(f, "w") as fp:
             fp.write(fh.getvalue())
         set_executable(f)
-        return
+        return f
 
     def poll(self, jobid: str) -> Optional[str]:
         squeue = Executable("squeue")
@@ -360,122 +343,6 @@ class Slurm(Batch):
     def cancel(self, jobid: str) -> None:
         scancel = Executable("scancel")
         scancel(jobid, "--clusters=all")
-
-    @staticmethod
-    def make_argument_parser():
-        parser = argparse.ArgumentParser()
-        parser.add_argument("-A", "--account", metavar="<account>")
-        parser.add_argument(
-            "--acctg_freq", metavar="<datatype><interval>[,<datatype><interval>...]"
-        )
-        parser.add_argument("-a", "--array", metavar="<indexes>")
-        parser.add_argument("--batch", metavar="<list>")
-        parser.add_argument("--bb", metavar="<spec>")
-        parser.add_argument("--bbf", metavar="<file_name>")
-        parser.add_argument("-b", "--begin", metavar="<time>")
-        parser.add_argument("-D", "--chdir", metavar="<directory>")
-        parser.add_argument("--cluster-constraint", metavar="[!]<list>")
-        parser.add_argument("-M", "--clusters", metavar="<string>")
-        parser.add_argument("--comment", metavar="<string>")
-        parser.add_argument("-C", "--constraint", metavar="<list>")
-        parser.add_argument("--container", metavar="<path_to_container>")
-        parser.add_argument("--container-id", metavar="<container_id>")
-        parser.add_argument("--contiguous", action="store_true", default=False)
-        parser.add_argument("-S", "--core-spec", metavar="<num>")
-        parser.add_argument("--cores-per-socket", metavar="<cores>")
-        parser.add_argument("--cpu-freq", metavar="<p1>[-p2[:p3]]")
-        parser.add_argument("--cpus-per-gpu", metavar="<ncpus>")
-        parser.add_argument("-c", "--cpus-per-task", metavar="<ncpus>")
-        parser.add_argument("--deadline", metavar="<OPT>")
-        parser.add_argument("--delay-boot", metavar="<minutes>")
-        parser.add_argument("-d", "--dependency", metavar="<dependency_list>")
-        parser.add_argument(
-            "-m",
-            "--distribution",
-            metavar="{*|block|cyclic|arbitrary|plane<size>}[:{*|block|cyclic|fcyclic}[:{*|block|cyclic|fcyclic}]][,{Pack|NoPack}]",  # noqa: E501
-        )
-        parser.add_argument("-e", "--error", metavar="<filename_pattern>")
-        parser.add_argument("-x", "--exclude", metavar="<node_name_list>")
-        parser.add_argument("--exclusive", metavar="[{user|mcs}]")
-        parser.add_argument("--export", metavar="{[ALL,]<environment_variables>|ALL|NONE}")
-        parser.add_argument("--export-file", metavar="{<filename>|<fd>}")
-        parser.add_argument("--extra", metavar="<string>")
-        parser.add_argument("-B", "--extra-node-info", metavar="<sockets>[:cores[:threads]]")
-        parser.add_argument("--get-user-env", metavar="[timeout][mode]")
-        parser.add_argument("--gid", metavar="<group>")
-        parser.add_argument("--gpu-bind", metavar="[verbose,]<type>")
-        parser.add_argument("--gpu-freq", metavar="[<type]value>[,<typevalue>][,verbose]")
-        parser.add_argument("--gpus-per-node", metavar="[type:]<number>")
-        parser.add_argument("--gpus-per-socket", metavar="[type:]<number>")
-        parser.add_argument("--gpus-per-task", metavar="[type:]<number>")
-        parser.add_argument("-G", "--gpus", metavar="[type:]<number>")
-        parser.add_argument("--gres", metavar="<list>")
-        parser.add_argument("--gres-flags", metavar="<type>")
-        parser.add_argument("--hint", metavar="<type>")
-        parser.add_argument("-H", "--hold", action="store_true", default=False)
-        parser.add_argument("--ignore-pbs", action="store_true", default=False)
-        parser.add_argument("-i", "--input", metavar="<filename_pattern>")
-        parser.add_argument("-J", "--job-name", metavar="<jobname>")
-        parser.add_argument("--kill-on-invalid-dep", metavar="<yes|no>")
-        parser.add_argument(
-            "-L",
-            "--licenses",
-            metavar="<license>[@db][:count][,license[@db][:count]...]",
-        )
-        parser.add_argument("--mail-type", metavar="<type>")
-        parser.add_argument("--mail-user", metavar="<user>")
-        parser.add_argument("--mcs-label", metavar="<mcs>")
-        parser.add_argument("--mem", metavar="<size>[units]")
-        parser.add_argument("--mem-bind", metavar="[{quiet|verbose},]<type>")
-        parser.add_argument("--mem-per-cpu", metavar="<size>[units]")
-        parser.add_argument("--mem-per-gpu", metavar="<size>[units]")
-        parser.add_argument("--mincpus", metavar="<n>")
-        parser.add_argument("--network", metavar="<type>")
-        parser.add_argument("--nice", metavar="[adjustment]")
-        parser.add_argument("-k", "--no-kill", metavar="[off]")
-        parser.add_argument("--no_requeue", action="store_true", default=False)
-        parser.add_argument("-F", "--nodefile", metavar="<node_file>")
-        parser.add_argument("-w", "--nodelist", metavar="<node_name_list>")
-        parser.add_argument("-N", "--nodes", metavar="<minnodes>[-maxnodes]|<size_string>")
-        parser.add_argument("--ntasks-per-core", metavar="<ntasks>")
-        parser.add_argument("--ntasks-per-gpu", metavar="<ntasks>")
-        parser.add_argument("--ntasks-per-node", metavar="<ntasks>")
-        parser.add_argument("--ntasks-per-socket", metavar="<ntasks>")
-        parser.add_argument("-n", "--ntasks", metavar="<number>")
-        parser.add_argument("--open_mode", metavar="{append|truncate}")
-        parser.add_argument("-o", "--output", metavar="<filename_pattern>")
-        parser.add_argument("-O", "--overcommit", action="store_true", default=False)
-        parser.add_argument("-s", "--oversubscribe", action="store_true", default=False)
-        parser.add_argument("-p", "--partition", metavar="<partition_names>")
-        parser.add_argument("--power", metavar="<flags>")
-        parser.add_argument("--prefer", metavar="<list>")
-        parser.add_argument("--priority", metavar="<value>")
-        parser.add_argument("--profile", metavar="{all|none|<type>[,<type>...]}")
-        parser.add_argument("--propagate", metavar="[rlimit[,rlimit...]]")
-        parser.add_argument("-q", "--qos", metavar="<qos>")
-        parser.add_argument("-Q", "--quiet", action="store_true", default=False)
-        parser.add_argument("--reboot", action="store_true", default=False)
-        parser.add_argument("--requeue", action="store_true", default=False)
-        parser.add_argument("--reservation", metavar="<reservation_names>")
-        parser.add_argument("--signal", metavar="[{R|B}:]<sig_num>[@sig_time]")
-        parser.add_argument("--sockets-per-node", metavar="<sockets>")
-        parser.add_argument("--spread-job", action="store_true", default=False)
-        parser.add_argument("--switches", metavar="<count>[@max-time]")
-        parser.add_argument("--test-only", action="store_true", default=False)
-        parser.add_argument("--thread-spec", metavar="<num>")
-        parser.add_argument("--threads-per-core", metavar="<threads>")
-        parser.add_argument("--time-min", metavar="<time>")
-        parser.add_argument("-t", "--time", metavar="<time>")
-        parser.add_argument("--tmp", metavar="<size>[units]")
-        parser.add_argument("--tres-per-task", metavar="<list>")
-        parser.add_argument("--uid", metavar="<user>")
-        parser.add_argument("--use-min-nodes", action="store_true", default=False)
-        parser.add_argument("-v", "--verbose", metavar="<value>")
-        # parser.add_argument("--wait-all-nodes", metavar="<value>")
-        # g.add_argument("-W", "--wait", action="store_true", default=False)
-        parser.add_argument("--wckey", metavar="<wckey>")
-        parser.add_argument("--wrap", metavar="<command_string>")
-        return parser
 
 
 # class PBS(Batch):
@@ -514,11 +381,13 @@ def factory(
     world_size: int,
     world_id: int = 1,
     scheduler: Optional[str] = None,
-    avail_workers: Optional[int] = None,
 ) -> Batch:
+    batch: Batch
     if scheduler in (None, "shell", "subshell"):
-        return SubShell(cases, world_rank, world_size, world_id, workers=avail_workers)
-    assert scheduler is not None
-    if scheduler.lower() == "slurm":
-        return Slurm(cases, world_rank, world_size, world_id, workers=avail_workers)
-    raise ValueError(f"{scheduler}: Unknown batch scheduler")
+        batch = SubShell(cases, world_rank, world_size, world_id)
+    elif scheduler and scheduler.lower() == "slurm":
+        batch = Slurm(cases, world_rank, world_size, world_id)
+    else:
+        raise ValueError(f"{scheduler}: Unknown batch scheduler")
+    batch.setup()
+    return batch

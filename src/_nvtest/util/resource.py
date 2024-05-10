@@ -32,7 +32,6 @@ class ResourceInfo:
         self["test:timeoutx"] = 1.0
 
         self["session:workers"] = -1
-        self["batch:workers"] = -1
 
     def __setitem__(self, key: str, value: Number) -> None:
         self.data[key] = value
@@ -50,8 +49,6 @@ class ResourceInfo:
             valid_types = ("cpus", "devices", "timeout", "timeoutx")
         elif scope == "session":
             valid_types = ("workers", "cpus", "devices", "timeout")
-        elif scope == "batch":
-            valid_types = ("workers",)
         else:
             raise ValueError(f"invalid resource scope {scope!r}")
         if type not in valid_types:
@@ -97,11 +94,6 @@ class ResourceInfo:
                 raise ValueError("test device request exceeds machine device count")
             elif self["session:devices"] > 0 and value > self["session:devices"]:
                 raise ValueError("test device request exceeds session device limit")
-        elif key == "batch:workers":
-            if value < 0:
-                raise ValueError(f"batch:workers = {value} < 0")
-            elif value > config.get("machine:cpu_count"):
-                raise ValueError("session worker request exceeds machine cpu count")
 
         self[key] = value
 
@@ -122,7 +114,6 @@ the form: ``%(r_form)s``.  The possible ``%(r_form)s`` settings are\n\n
 • ``%(f)s test:devices:N``: Skip tests requiring more than N devices.\n\n
 • ``%(f)s test:timeout:T``: Set a timeout on any single test execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
 • ``%(f)s test:timeoutx:R``: Set a timeout multiplier for all tests [default: 1.0]\n\n
-• ``%(f)s batch:workers:N``: Execute the batch asynchronously using a pool of at most N workers [default: auto]\n\n
 """ % {"f": flag, "r_form": bold("scope:type:value"), "r_arg": bold(f"{flag} resource")}
         return text
 
@@ -132,6 +123,7 @@ class BatchInfo:
         self._length: Optional[float] = None
         self._count: Optional[int] = None
         self._scheduler: Optional[str] = None
+        self._workers: Optional[int] = None
         self.args: list[str] = []
 
     def __repr__(self):
@@ -171,11 +163,26 @@ class BatchInfo:
                 raise ValueError("batch count and batch length are mutually exclusive")
             self._length = time_in_seconds(arg)
 
+    @property
+    def workers(self) -> Optional[int]:
+        return self._workers
+
+    @workers.setter
+    def workers(self, arg: Scalar) -> None:
+        workers = int(arg)
+        if workers < 0:
+            raise ValueError(f"batch workers:{arg} < 0")
+        elif workers > config.get("machine:cpu_count"):
+            raise ValueError("batch worker request exceeds machine cpu count")
+        self._workers = workers
+
     def set(self, key: str, value: Scalar):
         if key == "length":
             self.length = value  # type: ignore
         elif key == "count":
             self.count = value  # type: ignore
+        elif key == "workers":
+            self.workers = value  # type: ignore
         elif key == "scheduler":
             if not isinstance(value, str):
                 raise ValueError("expected scheduler to be of type str")
@@ -198,6 +205,7 @@ The possible possible ``%(r_form)s`` settings are\n\n
 • ``%(f)s count:N``: Execute tests in N batches.\n\n
 • ``%(f)s length:T``: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
 • ``%(f)s scheduler:S``: Use scheduler 'S' to run the test batches.\n\n
+• ``%(f)s workers:N``: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
 • ``%(f)s args:A``: Any additional args 'A' are passed directly to the scheduler, for example,
   ``%(f)s args:--account=ABC`` will pass ``--account=ABC`` to the scheduler
 """ % {"f": flag, "r_form": bold("type:value"), "r_arg": bold(f"{flag} resource")}

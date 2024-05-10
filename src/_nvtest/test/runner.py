@@ -1,14 +1,16 @@
 import abc
+from typing import Any
 
 from ..util import logging
 from .status import Status
 
 
 class Runner(abc.ABC):
-    def __call__(self, *args: str, verbose: bool = True, timeoutx: float = 1.0) -> None:
+    def __call__(self, *args: str, **kwargs: Any) -> None:
+        verbose = kwargs.get("verbose", False)
         if verbose:
             logging.emit(self.start_msg() + "\n")
-        self.run(*args, timeoutx=timeoutx)
+        self.run(*args, **kwargs)
         if verbose:
             logging.emit(self.end_msg() + "\n")
         return None

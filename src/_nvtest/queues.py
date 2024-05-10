@@ -197,9 +197,7 @@ class BatchResourceQueue(ResourceQueue):
         self.workers = int(resourceinfo["session:workers"])
         if self.workers < 0:
             self.workers = 5
-        self.batch_workers = int(resourceinfo["batch:workers"])
-        if self.batch_workers < 0:
-            self.batch_workers = cpu_count()
+        self.batch_workers = batchinfo.workers
         self.tmp_buffer: list[TestCase] = []
 
     def prepare(self) -> None:
@@ -217,12 +215,10 @@ class BatchResourceQueue(ResourceQueue):
         n = len(partitions)
         N = len(batch_stores) + 1
         batches = [
-            b_factory(p, i, n, N, scheduler=self.scheduler, avail_workers=self.batch_workers)
+            b_factory(p, i, n, N, scheduler=self.scheduler)
             for i, p in enumerate(partitions, start=1)
             if len(p)
         ]
-        for batch in batches:
-            batch.setup(*self.batchinfo.args)
         for batch in batches:
             super().put(batch)
         fd: dict[int, list[str]] = {}
