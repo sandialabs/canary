@@ -66,8 +66,30 @@ class CTestTestFile(TestGenerator):
                 with open(".nvtest.cmake", "w") as fh:
                     if build_type:
                         fh.write(f"set(CTEST_CONFIGURATION_TYPE {build_type})\n")
-                    fh.write(cmake_script)
-                    fh.write("\n")
+                    fh.write(r"""
+macro(add_test NAME COMMAND)
+  message("{\"name\": \"${NAME}\", \"command\": \"${COMMAND}\", \"args\": \"${ARGN}\"}")
+endmacro()
+
+macro(subdirs)
+  # Ignore subdirs since we just crawl looking for CTest files
+endmacro()
+
+macro(set_tests_properties NAME TITLE)
+  set(properties)
+  if(${TITLE} STREQUAL "PROPERTIES")
+    foreach(ARG ${ARGN})
+      if("${ARG}" MATCHES "^_.*")
+        break()
+      endif()
+      list(APPEND properties "${ARG}")
+    endforeach()
+    message("{\"name\": \"${NAME}\", \"properties\": \"${properties}\"}")
+  else()
+    message(WARNING "Unknown TITLE ${TITLE}")
+  endif()
+endmacro()
+""")
                     fh.write(open(self.file).read())
                 p = subprocess.Popen(
                     ["cmake", "-P", ".nvtest.cmake"],
@@ -140,29 +162,3 @@ def find_build_type(directory) -> Optional[str]:
 
 
 nvtest.plugin.test_generator(CTestTestFile)
-
-
-cmake_script = r"""
-macro(add_test NAME COMMAND)
-  message("{\"name\": \"${NAME}\", \"command\": \"${COMMAND}\", \"args\": \"${ARGN}\"}")
-endmacro()
-
-macro(subdirs)
-  # Ignore subdirs since we just crawl looking for CTest files
-endmacro()
-
-macro(set_tests_properties NAME TITLE)
-  set(properties)
-  if(${TITLE} STREQUAL "PROPERTIES")
-    foreach(ARG ${ARGN})
-      if("${ARG}" MATCHES "^_.*")
-        break()
-      endif()
-      list(APPEND properties "${ARG}")
-    endforeach()
-    message("{\"name\": \"${NAME}\", \"properties\": \"${properties}\"}")
-  else()
-    message(WARNING "Unknown TITLE ${TITLE}")
-  endif()
-endmacro()
-"""
