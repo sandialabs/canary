@@ -162,7 +162,7 @@ class Finder:
                     missing += 1
                 if dep.status != "created":
                     case.status.set("masked", "deselected due to skipped dependency")
-                    logging.warning(f"Dependency {dep!r} of {case!r} is marked to be skipped")
+                    logging.debug(f"Dependency {dep!r} of {case!r} is marked to be skipped")
         if missing:
             raise ValueError("Missing dependencies")
         logging.debug("Done validating test cases")

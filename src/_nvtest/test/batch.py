@@ -69,7 +69,7 @@ class Batch(Runner):
 
     @property
     def cputime(self) -> float:
-        return sum(case.processors * case.runtime for case in self if not case.masked)
+        return sum(case.processors * min(case.runtime, 5.0) for case in self if not case.masked)
 
     @property
     def runtime(self) -> float:
