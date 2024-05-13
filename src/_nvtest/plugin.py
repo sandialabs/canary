@@ -4,15 +4,20 @@ import importlib.resources as ir
 import os
 import sys
 from argparse import Namespace
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
 from typing import Generator
 from typing import Optional
+from typing import Type
 
 from . import config
 from .util import logging
 from .util.entry_points import get_entry_points
 from .util.singleton import Singleton
+
+if TYPE_CHECKING:
+    from .test.generator import TestGenerator
 
 
 class PluginHook:
@@ -31,7 +36,24 @@ class PluginHook:
 class Manager:
     def __init__(self) -> None:
         self._plugins: dict[str, dict[str, list[PluginHook]]] = {}
+        self._generators: list[Type["TestGenerator"]] = []
         self._args: Optional[Namespace] = None
+        self._builtin_loaded = False
+
+    def load_builtin(self, disable: Optional[list[str]] = None) -> None:
+        path = ir.files("nvtest").joinpath("plugins")
+        disable = disable or []
+        logging.debug(f"Loading builtin plugins from {path}")
+        if path.exists():  # type: ignore
+            for file in path.iterdir():
+                if file.name.startswith("nvtest_"):
+                    name = os.path.splitext(file.name[7:])[0]
+                    if name in disable:
+                        logging.debug(f"Skipping disabled plugin {name}")
+                        continue
+                    logging.debug(f"Loading {file.name} builtin plugin")
+                    self.load_from_file(str(file))
+        self._builtin_loaded = True
 
     @property
     def args(self) -> Namespace:
@@ -42,12 +64,18 @@ class Manager:
     def set_args(self, arg: Namespace) -> None:
         self._args = arg
 
+    def register_test_generator(self, obj: Type["TestGenerator"]) -> None:
+        for generator in self._generators:
+            if generator.file_type == obj.file_type:
+                raise ValueError(f"duplicate test file type: {obj.file_type}")
+        self._generators.append(obj)
+
     def register(self, func: Callable, scope: str, stage: str, **kwds: str) -> None:
         name = func.__name__
         logging.debug(f"Registering plugin {name}::{scope}::{stage}")
         err_msg = f"register() got unexpected stage '{scope}::{stage}'"
         if stage == "teardown":
-            logging.warning("prefer 'finish' to 'teardown'")
+            logging.warning(f"plugin::{name}: prefer 'finish' to 'teardown'")
             stage = "finish"
         if scope == "main":
             if stage not in ("setup",):
@@ -61,7 +89,7 @@ class Manager:
             if stage not in ("discovery", "setup", "finish"):
                 raise TypeError(err_msg)
         elif scope == "test":
-            if stage not in ("load", "discovery", "setup", "finish"):
+            if stage not in ("discovery", "setup", "finish"):
                 raise TypeError(err_msg)
             if stage == "load":
                 if "file_type" not in kwds:
@@ -167,10 +195,14 @@ def set_args(args: Namespace) -> None:
 
 
 def plugins(scope: str, stage: str) -> Generator[PluginHook, None, None]:
+    if not _manager._builtin_loaded:
+        _manager.load_builtin()
     return _manager.plugins(scope, stage)
 
 
 def get(scope: str, stage: str, name: str) -> Optional[PluginHook]:
+    if not _manager._builtin_loaded:
+        _manager.load_builtin()
     return _manager.get(scope, stage, name)
 
 
@@ -189,19 +221,18 @@ def register(*, scope: str, stage: str, **kwds: str):
     return decorator
 
 
-def load_builtin_plugins(disable: Optional[list[str]]) -> None:
-    path = ir.files("nvtest").joinpath("plugins")
-    disable = disable or []
-    logging.debug(f"Loading builtin plugins from {path}")
-    if path.exists():  # type: ignore
-        for file in path.iterdir():
-            if file.name.startswith("nvtest_"):
-                name = os.path.splitext(file.name[7:])[0]
-                if name in disable:
-                    logging.debug(f"Skipping disabled plugin {name}")
-                    continue
-                logging.debug(f"Loading {file.name} builtin plugin")
-                _manager.load_from_file(str(file))
+def test_generator(hook: Callable) -> None:
+    _manager.register_test_generator(hook)
+
+
+def test_generators() -> list[Type["TestGenerator"]]:
+    if not _manager._builtin_loaded:
+        _manager.load_builtin()
+    return _manager._generators
+
+
+def load_builtin_plugins(disable: Optional[list[str]] = None) -> None:
+    _manager.load_builtin(disable=disable)
 
 
 def load_from_entry_points(disable: Optional[list[str]] = None) -> None:

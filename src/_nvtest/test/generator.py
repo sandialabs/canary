@@ -1,34 +1,91 @@
+import abc
 import errno
 import fnmatch
 import glob
+import io
 import os
-import pickle
-import sys
 from string import Template
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
 from typing import Sequence
-from typing import Type
 from typing import Union
 
 from .. import config
-from .. import plugin
+from .. import when as m_when
 from ..error import diff_exit_status
 from ..paramset import ParameterSet
+from ..test.case import AnalyzeTestCase
+from ..test.case import TestCase
 from ..third_party.color import colorize
+from ..util import graph
 from ..util import logging
-from ..util.filesystem import mkdirp
-from ..util.misc import boolean
+from ..util.resource import ResourceInfo
 from ..util.time import time_in_seconds
-from .case import AnalyzeTestCase
-from .case import TestCase
 
 if TYPE_CHECKING:
-    import _nvtest.directives.enums
+    import _nvtest.enums
 
 
-WRITE_CACHE = boolean(os.getenv("NVTEST_WRITE_CACHE"))
+class TestGenerator(abc.ABC):
+    """The TestCaseGenerator is an abstract object representing a test file that
+    can generate test cases
+
+    Parameters
+    ----------
+    root : str
+        The base test directory, or file path if ``path`` is not given
+    path : str
+        The file path, relative to root
+
+    Notes
+    -----
+    The ``TestCaseGenerator`` represents of an abstract test object.  The
+    ``TestCaseGenerator`` facilitates the creation and management of ``TestCase``s
+    based on a user-defined configuration.
+
+    """
+
+    def __init__(self, root: str, path: Optional[str] = None) -> None:
+        if path is None:
+            root, path = os.path.split(root)
+        self.root = os.path.abspath(root)
+        self.path = path
+        self.file = os.path.join(self.root, self.path)
+        if not os.path.exists(self.file):
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
+        self.name = os.path.splitext(os.path.basename(self.path))[0]
+
+    @property
+    @abc.abstractmethod
+    def file_type(self) -> str:
+        pass
+
+    @classmethod
+    def matches(cls, path: str) -> bool:
+        return path.endswith(cls.file_type)  # type: ignore
+
+    @abc.abstractmethod
+    def describe(
+        self,
+        keyword_expr: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        resourceinfo: Optional[ResourceInfo] = None,
+    ) -> str:
+        pass
+
+    @abc.abstractmethod
+    def freeze(
+        self,
+        avail_cpus: Optional[int] = None,
+        avail_devices: Optional[int] = None,
+        keyword_expr: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        parameter_expr: Optional[str] = None,
+        timelimit: Optional[float] = None,
+        owners: Optional[set[str]] = None,
+    ) -> list[TestCase]:
+        pass
 
 
 class FilterNamespace:
@@ -41,10 +98,8 @@ class FilterNamespace:
         result: Optional[str] = None,
         action: Optional[str] = None,
     ):
-        import _nvtest.directives
-
         self.value: Any = value
-        self.when = _nvtest.when.When.from_string(when)
+        self.when = m_when.When.from_string(when)
         self.expect = expect
         self.result = result
         self.action = action
@@ -61,7 +116,7 @@ class FilterNamespace:
         return result.value
 
 
-class AbstractTestFile:
+class AbstractTestFile(TestGenerator):
     """The AbstractTestFile is an object representing a test file
 
     Parameters
@@ -85,14 +140,8 @@ class AbstractTestFile:
     """
 
     def __init__(self, root: str, path: Optional[str] = None) -> None:
-        if path is None:
-            root, path = os.path.split(root)
-        self.root = os.path.abspath(root)
-        self.path = path
-        self.file = os.path.join(self.root, self.path)
-        if not os.path.exists(self.file):
-            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
-        self.name = os.path.splitext(os.path.basename(self.path))[0]
+        super().__init__(root, path=path)
+
         self.owners: list[str] = []
         self._keywords: list[FilterNamespace] = []
         self._paramsets: list[FilterNamespace] = []
@@ -105,82 +154,48 @@ class AbstractTestFile:
         self._enable: list[FilterNamespace] = []
         self._preload: list[FilterNamespace] = []
         self._depends_on: list[FilterNamespace] = []
-        self.skipif_reason: Optional[str] = None
+        self._skipif_reason: Optional[str] = None
         self._xstatus: Optional[FilterNamespace] = None
 
         self.load()
 
-    def __repr__(self):
-        return self.path
-
-    @classmethod
-    def factory(
-        cls: "Type[AbstractTestFile]", root_arg: str, path_arg: Optional[str] = None
-    ) -> "AbstractTestFile":
-        if path_arg is None:
-            root, path = os.path.split(root_arg)
-        else:
-            root, path = root_arg, path_arg
-        file = os.path.join(root, path)
-        cache = cls.cache_from_source(file)
-        self: AbstractTestFile
-        if os.path.exists(cache) and os.path.getmtime(cache) >= os.path.getmtime(file):
-            self = pickle.load(open(cache, "rb"))
-        else:
-            self = AbstractTestFile(root_arg, path=path_arg)
-            if WRITE_CACHE:
-                try:
-                    mkdirp(os.path.dirname(cache))
-                    with open(cache, "wb") as fh:
-                        pickle.dump(self, fh)
-                except OSError:
-                    pass
-        return self
-
-    @staticmethod
-    def cache_from_source(path: str) -> str:
-        dirname, basename = os.path.split(path)
-        name, _ = os.path.splitext(basename)
-        return os.path.join(
-            dirname, "__nvcache__", f"{name}.{sys.implementation.cache_tag}.pickle"
-        )
-
     def load(self) -> None:
-        if self.path.endswith(".pyt"):
-            self._load()
-        else:
-            for hook in plugin.plugins("test", "load"):
-                ft = hook.get_attribute("file_type") or ""
-                if self.path.endswith(ft):
-                    try:
-                        hook(self)
-                        break
-                    except Exception:
-                        logging.error(f"Failed to load {self.file}")
-                        raise
-            else:
-                raise ValueError(f"No hook to load file {self.file}")
+        raise NotImplementedError
 
-    @property
-    def type(self):
-        return "vvt" if os.path.splitext(self.file)[1] == ".vvt" else "pyt"
-
-    def _load(self):
-        import _nvtest
-
-        file = self.file
-        code = compile(open(file).read(), file, "exec")
-        global_vars = {"__name__": "__load__", "__file__": file, "__testfile__": self}
-        try:
-            _nvtest.FILE_SCANNING = True
-            _nvtest.__FILE_BEING_SCANNED__ = self
-            try:
-                exec(code, global_vars)
-            except SystemExit:
-                pass
-        finally:
-            _nvtest.FILE_SCANNING = False
-            _nvtest.__FILE_BEING_SCANNED__ = None
+    def describe(
+        self,
+        keyword_expr: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        resourceinfo: Optional[ResourceInfo] = None,
+    ) -> str:
+        file = io.StringIO()
+        file.write(f"--- {self.name} ------------\n")
+        file.write(f"File: {self.file}\n")
+        file.write(f"Keywords: {', '.join(self.keywords())}\n")
+        if self._sources:
+            file.write("Source files:\n")
+            grouped: dict[str, list[tuple[str, str]]] = {}
+            for ns in self._sources:
+                assert isinstance(ns.action, str)
+                src, dst = ns.value
+                grouped.setdefault(ns.action, []).append((src, dst))
+            for action, files in grouped.items():
+                file.write(f"  {action.title()}:\n")
+                for src, dst in files:
+                    file.write(f"    {src}")
+                    if dst and dst != os.path.basename(src):
+                        file.write(f" -> {dst}")
+                    file.write("\n")
+        resourceinfo = resourceinfo or ResourceInfo()
+        cases: list[TestCase] = self.freeze(
+            avail_cpus=int(resourceinfo["test:cpus"]),
+            avail_devices=int(resourceinfo["test:devices"]),
+            on_options=on_options,
+            keyword_expr=keyword_expr,
+        )
+        file.write(f"{len(cases)} test cases:\n")
+        graph.print(cases, file=file)
+        return file.getvalue()
 
     def freeze(
         self,
@@ -223,8 +238,6 @@ class AbstractTestFile:
         testcases: list[TestCase] = []
         names = ", ".join(self.names())
         logging.debug(f"Generating test cases for {self} using the following test names: {names}")
-        import _nvtest.directives
-
         for name in self.names():
             mask = self.skipif_reason
             if owners and not owners.intersection(self.owners):
@@ -242,7 +255,7 @@ class AbstractTestFile:
                     kwds.add(name)
                     kwds.update(parameters.keys())
                     kwds.update({"ready"})
-                    match = _nvtest.when.when({"keywords": keyword_expr}, keywords=list(kwds))
+                    match = m_when.when({"keywords": keyword_expr}, keywords=list(kwds))
                     if not match:
                         logging.debug(f"Skipping {self}::{name}")
                         mask = colorize("deselected by @*b{keyword expression}")
@@ -270,9 +283,7 @@ class AbstractTestFile:
                 if mask is None and ("TDD" in keywords or "tdd" in keywords):
                     mask = colorize("deselected due to @*b{TDD keyword}")
                 if mask is None and parameter_expr:
-                    match = _nvtest.when.when(
-                        f"parameters={parameter_expr!r}", parameters=parameters
-                    )
+                    match = m_when.when(f"parameters={parameter_expr!r}", parameters=parameters)
                     if not match:
                         mask = colorize("deselected due to @*b{parameter expression}")
                 attributes = self.attributes(
@@ -352,6 +363,14 @@ class AbstractTestFile:
             case.dep_patterns = [_ for _ in case.dep_patterns if _ != "null"]
 
     # -------------------------------------------------------------------------------- #
+
+    @property
+    def skipif_reason(self) -> Optional[str]:
+        return self._skipif_reason
+
+    @skipif_reason.setter
+    def skipif_reason(self, arg: str) -> None:
+        self._skipif_reason = arg
 
     def keywords(
         self,
@@ -578,18 +597,18 @@ class AbstractTestFile:
         argnames: Union[str, Sequence[str]],
         argvalues: list[Union[Sequence[Any], Any]],
         when: Optional[str] = None,
-        type: Optional["_nvtest.directives.enums.enums"] = None,
+        type: Optional["_nvtest.enums.enums"] = None,
     ) -> None:
-        import _nvtest.directives.enums
+        import _nvtest.enums
 
-        type = type or _nvtest.directives.enums.list_parameter_space
-        if not isinstance(type, _nvtest.directives.enums.enums):
+        type = type or _nvtest.enums.list_parameter_space
+        if not isinstance(type, _nvtest.enums.enums):
             raise ValueError(
                 f"parameterize: type: expected " f"nvtest.enums, got {type.__class__.__name__}"
             )
-        if type is _nvtest.directives.enums.centered_parameter_space:
+        if type is _nvtest.enums.centered_parameter_space:
             pset = ParameterSet.centered_parameter_space(argnames, argvalues, file=self.file)
-        elif type is _nvtest.directives.enums.random_parameter_space:
+        elif type is _nvtest.enums.random_parameter_space:
             pset = ParameterSet.random_parameter_space(argnames, argvalues, file=self.file)
         else:
             pset = ParameterSet.list_parameter_space(
@@ -692,11 +711,3 @@ class AbstractTestFile:
         else:
             ns = FilterNamespace((arg1, arg2), when=when)
         self._baseline.append(ns)
-
-
-class UsageError(Exception):
-    pass
-
-
-class InvalidFile(Exception):
-    pass

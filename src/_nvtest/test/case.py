@@ -106,6 +106,8 @@ class TestCase(Runner):
         self._runtimes = self.load_runtimes()
         self.xstatus = xstatus
 
+        self.command = sys.executable
+
     def __hash__(self) -> int:
         return hash(self.id)
 
@@ -504,7 +506,7 @@ class TestCase(Runner):
             for hook in plugin.plugins("test", "setup"):
                 hook(self)
             with logging.capture(self.logfile(stage), mode="w"), logging.timestamps():
-                cmd = [sys.executable]
+                cmd = [self.command]
                 cmd.extend(self.command_line_args(*args))
                 self.cmd_line = " ".join(cmd)
                 logging.info(f"Running {self.display_name}")

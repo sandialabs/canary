@@ -211,7 +211,12 @@ def progress_bar(
     return log(level, f"\r{lsep}{bar}{pad}{rsep}{info}", prefix=None, end="")
 
 
-def hline(label: Optional[str] = None, char: str = "-", max_width: int = 64) -> None:
+def hline(
+    label: Optional[str] = None,
+    char: str = "-",
+    max_width: int = 64,
+    file: TextIO = sys.stdout,
+) -> None:
     """Draw a labeled horizontal line.
 
     Keyword Arguments:
@@ -223,17 +228,15 @@ def hline(label: Optional[str] = None, char: str = "-", max_width: int = 64) -> 
         max_width = cols
     cols = min(max_width, cols - 2)
 
-    out = StringIO()
     if label is None:
-        out.write(char * max_width)
+        file.write(char * max_width)
     else:
         label = str(label)
         prefix = char * 2 + " "
         suffix = " " + (cols - len(prefix) - clen(label)) * char
-        out.write(prefix)
-        out.write(label)
-        out.write(suffix)
-    print(out.getvalue())
+        file.write(prefix)
+        file.write(label)
+        file.write(suffix)
 
 
 def fileno(file_or_fd):

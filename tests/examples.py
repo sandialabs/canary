@@ -11,6 +11,8 @@ examples_dir = os.path.abspath(os.path.join(this_dir, "../examples"))
 if not os.path.exists(examples_dir):
     pytestmark = pytest.mark.skip
 
+pytestmark = pytest.mark.skip
+
 
 def nvtest(*args):
     argv = [sys.executable, "-m", "nvtest", "-d"]

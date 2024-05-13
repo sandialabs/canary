@@ -30,7 +30,7 @@ from .queues import Empty as EmptyQueue
 from .queues import ResourceQueue
 from .test.batch import Batch
 from .test.case import TestCase
-from .test.file import AbstractTestFile
+from .test.generator import TestGenerator
 from .test.status import Status
 from .third_party import color
 from .util import glyphs
@@ -92,7 +92,7 @@ class Session:
             self.root = root
         self.mode = mode
         self.search_paths: dict[str, list[str]] = {}
-        self.files: list[AbstractTestFile] = list()
+        self.generators: list[TestGenerator] = list()
         self.cases: list[TestCase] = list()
         self.db = Database(self.config_dir)
         if mode in "ra":
@@ -130,7 +130,7 @@ class Session:
         file = os.path.join(self.config_dir, "files.data.p")
         if os.path.exists(file):
             with open(file, "rb") as fh:
-                self.files = pickle.load(fh)
+                self.generators = pickle.load(fh)
         self.cases = self.db.load()
         self.set_config_values()
 
@@ -175,7 +175,7 @@ class Session:
         """Add ``path`` to this session's search paths"""
         if isinstance(search_paths, list):
             search_paths = {path: [] for path in search_paths}
-        if self.files:
+        if self.generators:
             raise ValueError("session is already populated")
         errors = 0
         for root, paths in search_paths.items():
@@ -196,11 +196,11 @@ class Session:
         for hook in plugin.plugins("session", "discovery"):
             hook(self)
         finder.prepare()
-        self.files = finder.discover()
+        self.generators = finder.discover()
         file = os.path.join(self.config_dir, "files.data.p")
         with open(file, "wb") as fh:
-            pickle.dump(self.files, fh)
-        logging.debug(f"Discovered {len(self.files)} test files")
+            pickle.dump(self.generators, fh)
+        logging.debug(f"Discovered {len(self.generators)} test files")
 
     def freeze(
         self,
@@ -211,7 +211,7 @@ class Session:
         owners: Optional[set[str]] = None,
     ) -> None:
         self.cases = Finder.freeze(
-            self.files,
+            self.generators,
             resourceinfo=resourceinfo,
             keyword_expr=keyword_expr,
             parameter_expr=parameter_expr,
@@ -222,7 +222,7 @@ class Session:
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
         self.db.makeindex(self.cases)
-        logging.debug(f"Collected {len(self.cases)} test cases from {len(self.files)} files")
+        logging.debug(f"Collected {len(self.cases)} test cases from {len(self.generators)} files")
 
     def populate(self, copy_all_resources: bool = False) -> None:
         """Populate the work tree with test case assets"""

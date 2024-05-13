@@ -16,14 +16,138 @@ from typing import Union
 
 import nvtest
 from _nvtest import config
-from _nvtest.directives.enums import list_parameter_space
+from _nvtest.enums import list_parameter_space
+from _nvtest.test.generator import AbstractTestFile
 from _nvtest.third_party.color import colorize
 from _nvtest.util import scalar
 from _nvtest.util.time import to_seconds
 
 if TYPE_CHECKING:
     from _nvtest.test.case import TestCase
-    from _nvtest.test.file import AbstractTestFile
+
+
+class VVTTestFile(AbstractTestFile):
+    file_type = ".vvt"
+
+    def load(self) -> None:
+        try:
+            args, _ = p_VVT(self.file)
+        except ParseError as e:
+            raise ValueError(f"Failed to parse {self.file} at command {e.args[0]}") from None
+        for arg in args:
+            if arg.command == "keywords":
+                self.f_KEYWORDS(arg)
+            elif arg.command in ("copy", "link", "sources"):
+                self.f_SOURCES(arg)
+            elif arg.command == "preload":
+                self.f_PRELOAD(arg)
+            elif arg.command == "parameterize":
+                self.f_PARAMETERIZE(arg)
+            elif arg.command == "analyze":
+                self.f_ANALYZE(arg)
+            elif arg.command in ("name", "testname"):
+                self.f_NAME(arg)
+            elif arg.command == "timeout":
+                self.f_TIMEOUT(arg)
+            elif arg.command == "skipif":
+                self.f_SKIPIF(arg)
+            elif arg.command == "baseline":
+                self.f_BASELINE(arg)
+            elif arg.command == "enable":
+                self.f_ENABLE(arg)
+            elif arg.command == "depends_on":
+                self.f_DEPENDS_ON(arg)
+            else:
+                raise ValueError(f"Unknown command: {arg.command} at {arg.line_no}:{arg.line}")
+
+    def f_KEYWORDS(self, arg: SimpleNamespace) -> None:
+        """# VVT : keywords [:=] word1 word2 ... wordn"""
+        assert arg.command == "keywords"
+        self.m_keywords(*arg.argument.split(), when=arg.when)
+
+    def f_SOURCES(self, arg: SimpleNamespace) -> None:
+        """#VVT : (link|copy|sources) ( OPTIONS ) [:=] file1 file2 ..
+        | (link|copy|sources) (rename) [:=] file1,file2 file3,file4 ...
+        """
+        assert arg.command in ("copy", "link", "sources")
+        fun = {"copy": self.m_copy, "link": self.m_link, "sources": self.m_sources}[arg.command]
+        if arg.options and arg.options.get("rename"):
+            s = re.sub(",\s*", ",", arg.argument)
+            file_pairs = [_.split(",") for _ in s.split()]
+            for file_pair in file_pairs:
+                assert len(file_pair) == 2
+                fun(*file_pair, when=arg.when, **arg.options)  # type: ignore
+        else:
+            files = arg.argument.split()
+            fun(*files, when=arg.when, **arg.options)  # type: ignore
+
+    def f_PRELOAD(self, arg: SimpleNamespace) -> None:
+        assert arg.command == "preload"
+        parts = arg.argument.split()
+        if parts[0] == "source-script":
+            arg.argument = parts[1]
+            arg.options["source"] = True
+        self.m_preload(arg.argument, when=arg.when, **arg.options)  # type: ignore
+
+    def f_PARAMETERIZE(self, arg: SimpleNamespace) -> None:
+        names, values, kwds = p_PARAMETERIZE(arg)
+        self.m_parameterize(list(names), values, when=arg.when, **kwds)
+
+    def f_ANALYZE(self, arg: SimpleNamespace) -> None:
+        """# VVT: analyze ( OPTIONS ) [:=] --FLAG
+        | analyze ( OPTIONS ) [:=] FILE
+        """
+        options = dict(arg.options)
+        if arg.argument:
+            key = "flag" if arg.argument.startswith("-") else "script"
+            options[key] = arg.argument
+        self.m_analyze(when=arg.when, **options)
+
+    def f_TIMEOUT(self, arg: SimpleNamespace) -> None:
+        """# VVT: timeout ( OPTIONS ) [:=] SECONDS"""
+        seconds = to_seconds(arg.argument)
+        self.m_timeout(seconds, when=arg.when)
+
+    def f_SKIPIF(self, arg: SimpleNamespace) -> None:
+        """# VVT: skipif ( reason=STRING ) [:=] BOOL_EXPR"""
+        skip, reason = p_SKIPIF(arg.argument, reason=arg.options.get("reason"))
+        self.m_skipif(skip, reason=reason)
+
+    def f_BASELINE(self, arg: SimpleNamespace) -> None:
+        """# VVT: baseline ( OPTIONS ) [:=] --FLAG
+        | baseline ( OPTIONS ) [:=] file1,file2 file3,file4 ...
+        """
+        argument = re.sub(",\s*", ",", arg.argument)
+        file_pairs = [_.split(",") for _ in argument.split()]
+        for file_pair in file_pairs:
+            if len(file_pair) == 1 and file_pair[0].startswith("--"):
+                self.m_baseline(when=arg.when, flag=file_pair[0], **arg.options)
+            elif len(file_pair) != 2:
+                raise ValueError(f"{self.file}: invalid baseline command at {arg.line!r}")
+            else:
+                self.m_baseline(file_pair[0], file_pair[1], when=arg.when, **arg.options)
+
+    def f_ENABLE(self, arg: SimpleNamespace) -> None:
+        """# VVT: enable ( OPTIONS ) [:=] BOOL"""
+        if arg.argument and arg.argument.lower() == "true":
+            arg.argument = True
+        elif arg.argument and arg.argument.lower() == "false":
+            arg.argument = False
+        elif arg.argument is None:
+            arg.argument = True
+        # if arg.options.get("platforms") == "":
+        #    arg.options["platforms"] = "__"
+        self.m_enable(arg.argument, when=arg.when, **arg.options)
+
+    def f_NAME(self, arg: SimpleNamespace) -> None:
+        """# VVT: name ( OPTIONS ) [:=] NAME"""
+        self.m_name(arg.argument.strip())
+
+    def f_DEPENDS_ON(self, arg: SimpleNamespace) -> None:
+        """# VVT: depends on ( OPTIONS ) [:=] STRING"""
+        if "expect" in arg.options:
+            arg.options["expect"] = int(arg.options["expect"])
+        self.m_depends_on(arg.argument.strip(), when=arg.when, **arg.options)
 
 
 non_code_token_nums = [
@@ -38,64 +162,27 @@ COLON = ":"
 EQUAL = "="
 
 
-@nvtest.plugin.register(scope="test", stage="load", file_type=".vvt")
-def load_vvt(file: "AbstractTestFile") -> None:
-    try:
-        args, _ = p_VVT(file.file)
-    except ParseError as e:
-        raise ValueError(f"Failed to parse {file.file} at command {e.args[0]}") from None
-    for arg in args:
-        if arg.command == "keywords":
-            f_KEYWORDS(file, arg)
-        elif arg.command in ("copy", "link", "sources"):
-            f_SOURCES(file, arg)
-        elif arg.command == "preload":
-            f_PRELOAD(file, arg)
-        elif arg.command == "parameterize":
-            f_PARAMETERIZE(file, arg)
-        elif arg.command == "analyze":
-            f_ANALYZE(file, arg)
-        elif arg.command in ("name", "testname"):
-            f_NAME(file, arg)
-        elif arg.command == "timeout":
-            f_TIMEOUT(file, arg)
-        elif arg.command == "skipif":
-            f_SKIPIF(file, arg)
-        elif arg.command == "baseline":
-            f_BASELINE(file, arg)
-        elif arg.command == "enable":
-            f_ENABLE(file, arg)
-        elif arg.command == "depends_on":
-            f_DEPENDS_ON(file, arg)
-        else:
-            raise ValueError(f"Unknown command: {arg.command} at {arg.line_no}:{arg.line}")
+def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict]:
+    """# VVT: parameterize ( OPTIONS ) [:=] names_spec = values_spec
 
+    names_spec: name1,name2,...
+    values_spec: val1_1,val2_1,... val1_2,val2_2,... ...
 
-@nvtest.plugin.register(scope="test", stage="setup")
-def write_vvtest_util(case: "TestCase", baseline: bool = False) -> None:
-    if not case.file_path.endswith(".vvt"):
-        return
-    attrs = get_vvtest_attrs(case, baseline)
-    with open("vvtest_util.py", "w") as fh:
-        fh.write("import os\n")
-        fh.write("import sys\n")
-        for key, value in attrs.items():
-            if isinstance(value, bool):
-                fh.write(f"{key} = {value!r}\n")
-            elif value is None:
-                fh.write(f"{key} = None\n")
-            elif isinstance(value, str) and "in sys.argv" in value:
-                fh.write(f"{key} = {value}\n")
-            else:
-                fh.write(f"{key} = {json.dumps(value, indent=3)}\n")
-
-
-@nvtest.plugin.register(scope="test", stage="setup")
-def write_execute_log(case: "TestCase") -> None:
-    if not case.file_path.endswith(".vvt"):
-        return
-    f = os.path.join(case.exec_dir, "execute.log")
-    nvtest.filesystem.force_symlink(case.logfile(), f)
+    """
+    names_spec, values_spec = arg.argument.split("=", 1)
+    values_spec = re.sub(",\s*", ",", values_spec)
+    names = [_.strip() for _ in names_spec.split(",") if _.split()]
+    values = []
+    for group in values_spec.split():
+        row = [loads(_) for _ in group.split(",") if _.split()]
+        if len(row) != len(names):
+            raise ParseError(f"invalid parameterize command at {arg.line_no}:{arg.line!r}")
+        values.append(row)
+    kwds = dict(arg.options)
+    for key in ("autotype", "int", "float", "str"):
+        kwds.pop(key, None)
+    kwds["type"] = list_parameter_space
+    return names, values, kwds
 
 
 def p_LINE(line: str) -> Optional[SimpleNamespace]:
@@ -260,129 +347,6 @@ def p_OPTIONS(tokens: list[tokenize.TokenInfo]) -> dict[str, object]:
     return options
 
 
-def f_KEYWORDS(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
-    """# VVT : keywords [:=] word1 word2 ... wordn"""
-    assert arg.command == "keywords"
-    file.m_keywords(*arg.argument.split(), when=arg.when)
-
-
-def f_SOURCES(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
-    """#VVT : (link|copy|sources) ( OPTIONS ) [:=] file1 file2 ..
-    | (link|copy|sources) (rename) [:=] file1,file2 file3,file4 ...
-    """
-    assert arg.command in ("copy", "link", "sources")
-    fun = {"copy": file.m_copy, "link": file.m_link, "sources": file.m_sources}[arg.command]
-    if arg.options and arg.options.get("rename"):
-        s = re.sub(",\s*", ",", arg.argument)
-        file_pairs = [_.split(",") for _ in s.split()]
-        for file_pair in file_pairs:
-            assert len(file_pair) == 2
-            fun(*file_pair, when=arg.when, **arg.options)  # type: ignore
-    else:
-        files = arg.argument.split()
-        fun(*files, when=arg.when, **arg.options)  # type: ignore
-
-
-def f_PRELOAD(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
-    assert arg.command == "preload"
-    parts = arg.argument.split()
-    if parts[0] == "source-script":
-        arg.argument = parts[1]
-        arg.options["source"] = True
-    file.m_preload(arg.argument, when=arg.when, **arg.options)  # type: ignore
-
-
-def f_PARAMETERIZE(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
-    names, values, kwds = p_PARAMETERIZE(arg)
-    file.m_parameterize(list(names), values, when=arg.when, **kwds)
-
-
-def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict]:
-    """# VVT: parameterize ( OPTIONS ) [:=] names_spec = values_spec
-
-    names_spec: name1,name2,...
-    values_spec: val1_1,val2_1,... val1_2,val2_2,... ...
-
-    """
-    names_spec, values_spec = arg.argument.split("=", 1)
-    values_spec = re.sub(",\s*", ",", values_spec)
-    names = [_.strip() for _ in names_spec.split(",") if _.split()]
-    values = []
-    for group in values_spec.split():
-        row = [loads(_) for _ in group.split(",") if _.split()]
-        if len(row) != len(names):
-            raise ParseError(f"invalid parameterize command at {arg.line_no}:{arg.line!r}")
-        values.append(row)
-    kwds = dict(arg.options)
-    for key in ("autotype", "int", "float", "str"):
-        kwds.pop(key, None)
-    kwds["type"] = list_parameter_space
-    return names, values, kwds
-
-
-def f_ANALYZE(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
-    """# VVT: analyze ( OPTIONS ) [:=] --FLAG
-    | analyze ( OPTIONS ) [:=] FILE
-    """
-    options = dict(arg.options)
-    if arg.argument:
-        key = "flag" if arg.argument.startswith("-") else "script"
-        options[key] = arg.argument
-    file.m_analyze(when=arg.when, **options)
-
-
-def f_TIMEOUT(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
-    """# VVT: timeout ( OPTIONS ) [:=] SECONDS"""
-    seconds = to_seconds(arg.argument)
-    file.m_timeout(seconds, when=arg.when)
-
-
-def f_SKIPIF(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
-    """# VVT: skipif ( reason=STRING ) [:=] BOOL_EXPR"""
-    skip, reason = p_SKIPIF(arg.argument, reason=arg.options.get("reason"))
-    file.m_skipif(skip, reason=reason)
-
-
-def f_BASELINE(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
-    """# VVT: baseline ( OPTIONS ) [:=] --FLAG
-    | baseline ( OPTIONS ) [:=] file1,file2 file3,file4 ...
-    """
-    argument = re.sub(",\s*", ",", arg.argument)
-    file_pairs = [_.split(",") for _ in argument.split()]
-    for file_pair in file_pairs:
-        if len(file_pair) == 1 and file_pair[0].startswith("--"):
-            file.m_baseline(when=arg.when, flag=file_pair[0], **arg.options)
-        elif len(file_pair) != 2:
-            raise ValueError(f"{file.file}: invalid baseline command at {arg.line!r}")
-        else:
-            file.m_baseline(file_pair[0], file_pair[1], when=arg.when, **arg.options)
-
-
-def f_ENABLE(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
-    """# VVT: enable ( OPTIONS ) [:=] BOOL"""
-    if arg.argument and arg.argument.lower() == "true":
-        arg.argument = True
-    elif arg.argument and arg.argument.lower() == "false":
-        arg.argument = False
-    elif arg.argument is None:
-        arg.argument = True
-    # if arg.options.get("platforms") == "":
-    #    arg.options["platforms"] = "__"
-    file.m_enable(arg.argument, when=arg.when, **arg.options)
-
-
-def f_NAME(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
-    """# VVT: name ( OPTIONS ) [:=] NAME"""
-    file.m_name(arg.argument.strip())
-
-
-def f_DEPENDS_ON(file: "AbstractTestFile", arg: SimpleNamespace) -> None:
-    """# VVT: depends on ( OPTIONS ) [:=] STRING"""
-    if "expect" in arg.options:
-        arg.options["expect"] = int(arg.options["expect"])
-    file.m_depends_on(arg.argument.strip(), when=arg.when, **arg.options)
-
-
 def importable(module_name: str) -> bool:
     return importlib.util.find_spec(module_name) is not None
 
@@ -494,6 +458,36 @@ def get_vvtest_attrs(case: "TestCase", baseline: bool) -> dict:
     attrs["file_path"] = case.file_path
 
     return attrs
+
+
+nvtest.plugin.test_generator(VVTTestFile)
+
+
+@nvtest.plugin.register(scope="test", stage="setup")
+def write_vvtest_util(case: "TestCase", baseline: bool = False) -> None:
+    if not case.file_path.endswith(".vvt"):
+        return
+    attrs = get_vvtest_attrs(case, baseline)
+    with open("vvtest_util.py", "w") as fh:
+        fh.write("import os\n")
+        fh.write("import sys\n")
+        for key, value in attrs.items():
+            if isinstance(value, bool):
+                fh.write(f"{key} = {value!r}\n")
+            elif value is None:
+                fh.write(f"{key} = None\n")
+            elif isinstance(value, str) and "in sys.argv" in value:
+                fh.write(f"{key} = {value}\n")
+            else:
+                fh.write(f"{key} = {json.dumps(value, indent=3)}\n")
+
+
+@nvtest.plugin.register(scope="test", stage="finish")
+def write_execute_log(case: "TestCase") -> None:
+    if not case.file_path.endswith(".vvt"):
+        return
+    f = os.path.join(case.exec_dir, "execute.log")
+    nvtest.filesystem.force_symlink(case.logfile(), f)
 
 
 class ParseError(Exception):

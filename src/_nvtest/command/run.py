@@ -93,11 +93,11 @@ def run(args: "argparse.Namespace") -> int:
         session.add_search_paths(args.paths)
         session.discover()
         if args.until is not None:
-            files = session.files
+            generators = session.generators
             roots = set()
-            for file in files:
-                roots.add(file.root)
-            n, N = len(files), len(roots)
+            for generator in generators:
+                roots.add(generator.root)
+            n, N = len(generators), len(roots)
             s, S = "" if n == 1 else "s", "" if N == 1 else "s"
             logging.info(colorize("@*{Collected} %d file%s from %d root%s" % (n, s, N, S)))
             if args.until == "discover":

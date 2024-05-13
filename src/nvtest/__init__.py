@@ -3,12 +3,11 @@ from typing import Optional
 
 import _nvtest.plugin as plugin
 from _nvtest import config
-from _nvtest import directives
+from _nvtest import enums
 from _nvtest._version import __version__
 from _nvtest._version import version
 from _nvtest._version import version_tuple
 from _nvtest.config.argparsing import Parser
-from _nvtest.directives import enums
 from _nvtest.error import TestDiffed
 from _nvtest.error import TestFailed
 from _nvtest.error import TestSkipped
@@ -20,6 +19,7 @@ from _nvtest.util import filesystem
 from _nvtest.util import logging
 from _nvtest.util.executable import Executable
 
+from . import directives
 from . import patterns
 
 
@@ -48,5 +48,4 @@ def __getattr__(name):
         test = type("", (), {})()
         test.instance = get_instance()
         return test
-
     raise AttributeError(name)

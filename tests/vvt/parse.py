@@ -1,5 +1,5 @@
 import nvtest.plugins.nvtest_vvt as vvtest
-from _nvtest.directives.enums import list_parameter_space
+from _nvtest.enums import list_parameter_space
 
 
 def test_parse_parameterize():

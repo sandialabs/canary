@@ -1,17 +1,23 @@
 import fnmatch
 import os
+import sys
 from itertools import repeat
 from typing import Any
 from typing import Optional
+from typing import TextIO
 
-from . import config
 from . import plugin
 from .test.case import TestCase
-from .test.file import AbstractTestFile
+from .test.generator import TestGenerator
+from .third_party.colify import colified
+from .third_party.color import colorize
 from .util import filesystem as fs
+from .util import graph
 from .util import logging
 from .util import parallel
 from .util.resource import ResourceInfo
+from .util.term import terminal_size
+from .util.time import hhmmss
 
 
 class Finder:
@@ -43,38 +49,38 @@ class Finder:
                     raise ValueError(f"{path} not found in {root}")
             self.roots[root].append(path)  # type: ignore
 
-    def discover(self) -> list[AbstractTestFile]:
-        tree: dict[str, set[AbstractTestFile]] = {}
+    def discover(self) -> list[TestGenerator]:
+        tree: dict[str, set[TestGenerator]] = {}
         if not self._ready:
             raise ValueError("Cannot call populate() before calling prepare()")
         for root, paths in self.roots.items():
             logging.debug(f"Searching {root} for test files")
             if os.path.isfile(root):
-                f = AbstractTestFile.factory(root)
+                f = self.gen_factory(root)
                 root = f.root
-                testfiles = tree.setdefault(root, set())
-                testfiles.add(f)
+                generators = tree.setdefault(root, set())
+                generators.add(f)
             elif paths is not None:
-                testfiles = tree.setdefault(root, set())
+                generators = tree.setdefault(root, set())
                 for path in paths:
                     p = os.path.join(root, path)
                     if os.path.isfile(p):
-                        testfiles.add(AbstractTestFile.factory(root, path))
+                        generators.add(self.gen_factory(root, path))
                     elif os.path.isdir(p):
-                        testfiles.update(self.rfind(root, subdir=path))
+                        generators.update(self.rfind(root, subdir=path))
                     else:
                         raise FileNotFoundError(path)
             else:
-                testfiles = tree.setdefault(root, set())
-                testfiles.update(self.rfind(root))
-            logging.debug(f"Found {len(testfiles)} test files in {root}")
+                generators = tree.setdefault(root, set())
+                generators.update(self.rfind(root))
+            logging.debug(f"Found {len(generators)} test files in {root}")
         n = sum([len(_) for _ in tree.values()])
         nr = len(tree)
         logging.debug(f"Found {n} test files in {nr} search roots")
-        files: list[AbstractTestFile] = [file for files in tree.values() for file in files]
+        files: list[TestGenerator] = [file for files in tree.values() for file in files]
         return files
 
-    def rfind(self, root: str, subdir: Optional[str] = None) -> list[AbstractTestFile]:
+    def rfind(self, root: str, subdir: Optional[str] = None) -> list[TestGenerator]:
         def skip_dir(dirname):
             if os.path.basename(dirname) in self.skip_dirs:
                 return True
@@ -84,7 +90,7 @@ class Finder:
                 return True
             return False
 
-        file_types = tuple(config.file_types)
+        file_types = tuple([_.file_type for _ in plugin.test_generators()])
         start = root if subdir is None else os.path.join(root, subdir)
         paths: list[tuple[str, str]] = []
         for dirname, dirs, files in os.walk(start):
@@ -98,9 +104,16 @@ class Finder:
                     if f.endswith(file_types)
                 ]
             )
-        testfiles: list[AbstractTestFile] = parallel.starmap(AbstractTestFile.factory, paths)
+        generators: list[TestGenerator] = parallel.starmap(self.gen_factory, paths)
 
-        return testfiles
+        return generators
+
+    def gen_factory(self, root: str, path: Optional[str] = None) -> TestGenerator:
+        for factory in plugin.test_generators():
+            if factory.matches(root if path is None else path):
+                return factory(root, path=path)
+        f = root if path is None else os.path.join(root, path)
+        raise TypeError(f"No test generator for {f}")
 
     @property
     def search_paths(self) -> list[str]:
@@ -156,7 +169,7 @@ class Finder:
 
     @staticmethod
     def freeze(
-        files: list[AbstractTestFile],
+        files: list[TestGenerator],
         resourceinfo: Optional[ResourceInfo] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
@@ -198,15 +211,69 @@ class Finder:
         logging.debug("Done creating test cases")
         return cases
 
+    @staticmethod
+    def pprint_paths(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+        unique_generators: dict[str, set[str]] = dict()
+        for case in cases:
+            unique_generators.setdefault(case.file_root, set()).add(case.file_path)
+        _, max_width = terminal_size()
+        for root, paths in unique_generators.items():
+            label = colorize("@m{%s}" % root)
+            logging.hline(label, max_width=max_width, file=file)
+            cols = colified(sorted(paths), indent=2, width=max_width)
+            file.write(cols + "\n")
+
+    @staticmethod
+    def pprint_files(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+        for f in sorted(set([case.file for case in cases])):
+            file.write(os.path.relpath(f, os.getcwd()) + "\n")
+
+    @staticmethod
+    def pprint_keywords(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+        unique_kwds: dict[str, set[str]] = dict()
+        for case in cases:
+            unique_kwds.setdefault(case.file_root, set()).update(case.keywords())
+        _, max_width = terminal_size()
+        for root, kwds in unique_kwds.items():
+            label = colorize("@m{%s}" % root)
+            logging.hline(label, max_width=max_width, file=file)
+            cols = colified(sorted(kwds), indent=2, width=max_width)
+            file.write(cols + "\n")
+
+    @staticmethod
+    def pprint_graph(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+        graph.print(cases, file=file)
+
+    @staticmethod
+    def pprint(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+        _, max_width = terminal_size()
+        tree: dict[str, list[str]] = {}
+        for case in cases:
+            line = f"{hhmmss(case.runtime):11s}    {case.fullname}"
+            tree.setdefault(case.file_root, []).append(line)
+        for root, lines in tree.items():
+            cols = colified(lines, indent=2, width=max_width)
+            label = colorize("@m{%s}" % root)
+            logging.hline(label, max_width=max_width, file=file)
+            file.write(" " + cols + "\n")
+            file.write(f"found {len(lines)} test cases\n")
+
 
 def is_test_file(file: str) -> bool:
-    file_types = tuple(config.file_types)
+    file_types = tuple([_.file_type for _ in plugin.test_generators()])
     return file.endswith(file_types)
 
 
-def freeze_abstract_file(file: AbstractTestFile, kwds: dict) -> list[TestCase]:
-    concrete_test_cases = file.freeze(**kwds)
+def freeze_abstract_file(file: TestGenerator, kwds: dict) -> list[TestCase]:
+    concrete_test_cases: list[TestCase] = file.freeze(**kwds)
     return concrete_test_cases
+
+
+def find(path: str) -> TestGenerator:
+    for factory in plugin.test_generators():
+        if factory.matches(path):
+            return factory(path)
+    raise TypeError(f"No test generator for {path}")
 
 
 class FinderError(Exception):
