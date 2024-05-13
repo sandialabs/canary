@@ -277,11 +277,11 @@ def find_vvt_lines(filename: Union[Path, str]) -> tuple[list[str], int]:
         if token.type == tokenize.ENCODING:
             continue
         elif token.type == tokenize.COMMENT:
-            match = re.search("^#\s*VVT:\s*:", token.line)
+            match = re.search("^\s*#\s*VVT\s*:\s*:", token.line)
             if match:
                 s.write(f" {token.line[match.end():].rstrip()}")
                 continue
-            match = re.search("^#\s*VVT:(?!(\s*:))", token.line)
+            match = re.search("^\s*#\s*VVT\s*:(?!(\s*:))", token.line)
             if match:
                 s.write(f"\n{token.line[match.end():].strip()}")
                 continue

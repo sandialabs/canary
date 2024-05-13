@@ -102,6 +102,8 @@ class Session:
         self.exitstatus = -1
         self.returncode = -1
         self.mode = mode
+        self.start = -1.0
+        self.finish = -1.0
 
     @property
     def config_dir(self):
@@ -390,6 +392,7 @@ class Session:
         futures: dict = {}
         auto_cleanup: bool = True
         self.start = time.monotonic()
+        self.finish = -1.0
         duration = lambda: time.monotonic() - self.start
         timeout = resourceinfo["session:timeout"] or -1
         try:
@@ -584,8 +587,8 @@ class Session:
     def footer(cases: list[TestCase], duration: float = -1, title="Session done") -> str:
         string = io.StringIO()
         if duration == -1:
-            finish = max(_.finish for _ in cases)
-            start = min(_.start for _ in cases)
+            finish = max(_.finish for _ in cases if _.finish > 0)
+            start = min(_.start for _ in cases if _.start > 0)
             duration = finish - start
 
         totals: dict[str, list[TestCase]] = {}
