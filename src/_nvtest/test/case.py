@@ -274,7 +274,7 @@ class TestCase(Runner):
             if max_runtime < 5.0:
                 timeout = 20.0
             elif max_runtime < 300.0:
-                timeout = 3.0 * max_runtime
+                timeout = 900.0
             else:
                 timeout = 2.0 * self._runtimes[2]
         elif "fast" in self._keywords:
@@ -481,10 +481,12 @@ class TestCase(Runner):
         except KeyboardInterrupt:
             self.returncode = 2
             self.status.set("cancelled", "keyboard interrupt")
+            time.sleep(.01)
             raise
         except BaseException:
             self.returncode = 1
             self.status.set("failed", "unknown failure")
+            time.sleep(.01)
             raise
         finally:
             self.finish = time.monotonic()

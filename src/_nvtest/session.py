@@ -587,10 +587,14 @@ class Session:
     def footer(cases: list[TestCase], duration: float = -1, title="Session done") -> str:
         string = io.StringIO()
         if duration == -1:
-            finish = max(_.finish for _ in cases if _.finish > 0)
-            start = min(_.start for _ in cases if _.start > 0)
-            duration = finish - start
-
+            has_a = any(_.start for _ in cases if _.start > 0)
+            has_b = any(_.finish for _ in cases if _.finish > 0)
+            if has_a and has_b:
+                finish = max(_.finish for _ in cases if _.finish > 0)
+                start = min(_.start for _ in cases if _.start > 0)
+                duration = finish - start
+            else:
+                duration = None
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
             if case.masked:

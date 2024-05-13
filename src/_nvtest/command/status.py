@@ -145,7 +145,7 @@ def status(args: "argparse.Namespace") -> int:
                 cases_to_show.append(case)
             elif args.show_diff and case.status == "diffed":
                 cases_to_show.append(case)
-            elif args.show_timeout and case.status == "timedout":
+            elif args.show_timeout and case.status == "timeout":
                 cases_to_show.append(case)
             elif args.show_notrun and case.status.value in (
                 "ready",

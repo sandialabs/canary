@@ -68,7 +68,7 @@ class Config:
                     "no_cache": False,
                     "log_level": "INFO",
                 },
-                "test": {"timeout": {"fast": 30.0, "long": 10 * 60.0, "default": 5 * 60.0}},
+                "test": {"timeout": {"fast": 30.0, "long": 15 * 60.0, "default": 5 * 60.0}},
                 "machine": editable_machine_config,
                 "system": static_machine_config,
                 "variables": {},
