@@ -446,7 +446,10 @@ def get_vvtest_attrs(case: "TestCase", baseline: bool) -> dict:
             key = "_".join(paramset.keys)
             table = attrs.setdefault(f"PARAM_{key}", [])
             for row in paramset.values:
-                table.append(list(row))
+                if len(paramset.keys) == 1:
+                    table.append(row[0])
+                else:
+                    table.append(list(row))
         attrs["DEPDIRS"] = [dep.exec_dir for dep in case.dependencies]
         attrs["DEPDIRMAP"] = {}  # FIXME
 
@@ -479,7 +482,7 @@ def write_vvtest_util(case: "TestCase", baseline: bool = False) -> None:
             elif isinstance(value, str) and "in sys.argv" in value:
                 fh.write(f"{key} = {value}\n")
             else:
-                fh.write(f"{key} = {json.dumps(value, indent=3)}\n")
+                fh.write(f"{key} = {json.dumps(value, indent=4)}\n")
 
 
 @nvtest.plugin.register(scope="test", stage="finish")
