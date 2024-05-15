@@ -9,7 +9,7 @@ from ..util.collections import defaultlist
 class Partition(set):
     @property
     def cputime(self):
-        return sum(case.processors * case.runtime for case in self if not case.masked)
+        return sum(case.processors * case.runtime for case in self if not case.mask)
 
 
 def group_testcases(cases: list[TestCase]) -> list[set[TestCase]]:
@@ -17,12 +17,15 @@ def group_testcases(cases: list[TestCase]) -> list[set[TestCase]]:
     same group
 
     """
-    groups: list[set[TestCase]] = [{case} | set(case.dependencies) for case in cases]
-    for i, group in enumerate(groups):
-        for j, other in enumerate(groups):
-            if i != j and group & other:
-                group.update(other)
-                other.clear()
+    groups: list[set[TestCase]] = []
+    buffer: list[set[TestCase]] = [{case} | set(case.dependencies) for case in cases]
+    for temp in buffer:
+        for group in groups:
+            if temp & group:
+                group.update(temp)
+                break
+        else:
+            groups.append(temp)
     return sorted(filter(None, groups), key=lambda g: -len(g))
 
 
@@ -36,7 +39,9 @@ def partition_n(cases: list[TestCase], n: int = 8) -> list[set[TestCase]]:
     return partitions
 
 
-def partition_t(cases: list[TestCase], t: float = 60 * 30) -> list[set[TestCase]]:
+def partition_t(
+    cases: list[TestCase], t: float = 60 * 30, fac: float = 1.5
+) -> list[set[TestCase]]:
     """Partition test cases into partitions having a runtime approximately equal
     to ``t``
 
@@ -68,9 +73,9 @@ def partition_t(cases: list[TestCase], t: float = 60 * 30) -> list[set[TestCase]
                     p_nodes = _p_nodes(g_partition)
                     if p_nodes != c_nodes:
                         continue
-                    total_cputime = g_partition.cputime + 1.5 * case.cputime
-                    runtime = total_cputime / (p_nodes * cores_per_node)
-                    if runtime <= t:
+                    trial_cputime = g_partition.cputime + fac * case.cputime
+                    trial_runtime = trial_cputime / (p_nodes * cores_per_node)
+                    if trial_runtime <= t:
                         g_partition.add(case)
                         break
                 else:

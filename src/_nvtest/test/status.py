@@ -11,7 +11,6 @@ from ..util import glyphs
 
 class Status:
     members = (
-        "masked",
         "created",
         "pending",
         "ready",
@@ -24,9 +23,9 @@ class Status:
         "diffed",
         "failed",
         "timeout",
+        "not_run",
     )
     colors = {
-        "masked": "y",
         "created": "b",
         "pending": "b",
         "ready": "b",
@@ -39,6 +38,7 @@ class Status:
         "diffed": "y",
         "failed": "R",
         "timeout": "R",
+        "not_run": "R",
     }
 
     def __init__(self, arg: str = "created", details: Optional[str] = None) -> None:
@@ -68,7 +68,6 @@ class Status:
     @staticmethod
     def glyph(status):
         map = {
-            "masked": glyphs.masked,
             "created": glyphs.mdash,
             "pending": glyphs.mdash,
             "ready": glyphs.mdash,
@@ -81,6 +80,7 @@ class Status:
             "diffed": glyphs.ballotx,
             "failed": glyphs.ballotx,
             "timeout": glyphs.ballotx,
+            "not_run": glyphs.ballotx,
         }
         glyph = map[status]
         color = Status.colors[status]
@@ -111,6 +111,8 @@ class Status:
             return "DIFF"
         elif self.value == "failed":
             return "FAIL"
+        elif self.value == "not_run":
+            return "NOT RUN"
         else:
             return self.value.upper()
 

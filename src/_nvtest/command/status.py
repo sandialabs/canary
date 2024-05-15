@@ -132,11 +132,12 @@ def status(args: "argparse.Namespace") -> int:
         if args.show_excluded:
             cases_to_show = cases
         else:
-            cases_to_show = [case for case in cases if not case.masked]
+            cases_to_show = [case for case in cases if not case.mask]
     else:
         for case in cases:
-            if args.show_excluded and case.masked:
-                cases_to_show.append(case)
+            if case.mask:
+                if args.show_excluded:
+                    cases_to_show.append(case)
             elif args.show_skip and case.status == "skipped":
                 cases_to_show.append(case)
             elif args.show_pass and case.status == "success":

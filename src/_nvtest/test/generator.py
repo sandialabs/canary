@@ -305,9 +305,9 @@ class AbstractTestFile(TestGenerator):
                 )
                 timelimit = timelimit or -1
                 if mask is not None:
-                    case.status.set("masked", mask)
+                    case.mask = mask
                 elif timelimit > 0 and case.runtime > timelimit:
-                    case.status.set("masked", "runtime excceeds timelimt")
+                    case.mask = "runtime excceeds timelimt"
                 for attr, value in attributes.items():
                     case.set_attribute(attr, value)
                 cases.append(case)
@@ -316,7 +316,7 @@ class AbstractTestFile(TestGenerator):
             if analyze:
                 # add previous cases as dependencies
                 mask_analyze_case: Optional[str] = None
-                if all(case.masked for case in cases):
+                if all(case.mask for case in cases):
                     mask_analyze_case = colorize("deselected due to @*b{skipped dependencies}")
                 parent = AnalyzeTestCase(
                     self.root,
@@ -333,7 +333,7 @@ class AbstractTestFile(TestGenerator):
                     ),
                 )
                 if mask_analyze_case is not None:
-                    parent.status.set("masked", mask_analyze_case)
+                    parent.mask = mask_analyze_case
                 for case in cases:
                     parent.add_dependency(case)
                 cases.append(parent)

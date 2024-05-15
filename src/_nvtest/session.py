@@ -220,7 +220,7 @@ class Session:
             on_options=on_options,
             owners=owners,
         )
-        cases_to_run = [case for case in self.cases if not case.masked]
+        cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
         self.db.makeindex(self.cases)
@@ -235,7 +235,7 @@ class Session:
 
     def setup_testcases(self, copy_all_resources: bool = False) -> None:
         logging.debug("Setting up test cases")
-        cases = [case for case in self.cases if not case.masked]
+        cases = [case for case in self.cases if not case.mask]
         ts: TopologicalSorter = TopologicalSorter()
         for case in cases:
             ts.add(case, *case.dependencies)
@@ -275,29 +275,27 @@ class Session:
         start = os.path.normpath(start)
         # mask tests and then later enable based on additional conditions
         for case in self.cases:
-            if case.masked:
+            if case.mask:
                 continue
             if not case.exec_dir.startswith(start):
-                case.status.set("masked", "Unreachable from start directory")
+                case.mask = "Unreachable from start directory"
                 continue
             if case_specs is not None:
                 if any(case.matches(_) for _ in case_specs):
                     case.status.set("ready")
                 else:
-                    case.status.set(
-                        "masked", color.colorize("deselected by @*b{testspec expression}")
-                    )
+                    case.mask = color.colorize("deselected by @*b{testspec expression}")
                 continue
             elif explicit_start_path:
                 case.status.set("ready")
                 continue
             if resourceinfo["test:cpus"] and case.processors > resourceinfo["test:cpus"]:
                 n = resourceinfo["test:cpus"]
-                case.status.set("masked", f"test requires more than {n} cpus")
+                case.mask = f"test requires more than {n} cpus"
                 continue
             if resourceinfo["test:devices"] and case.devices > resourceinfo["test:devices"]:
                 n = resourceinfo["test:devices"]
-                case.status.set("masked", f"test requires more than {n} devices")
+                case.mask = f"test requires more than {n} devices"
                 continue
             when_expr: dict[str, str] = {}
             if parameter_expr:
@@ -313,10 +311,9 @@ class Session:
                 if match:
                     case.status.set("ready" if not case.dependencies else "pending")
                 elif case.status != "ready":
-                    s = f"deselected due to previous status: {case.status.cname}"
-                    case.status.set("masked", s)
+                    case.mask = f"deselected due to previous status: {case.status.cname}"
                 else:
-                    case.status.set("masked", color.colorize("deselected by @*b{when expression}"))
+                    case.mask = color.colorize("deselected by @*b{when expression}")
 
         cases = [case for case in self.cases if case.status.value in ("pending", "ready")]
         return cases
@@ -332,9 +329,9 @@ class Session:
         for case in self.cases:
             if case.id in case_ids:
                 case.status.set("ready")
-            elif not case.masked:
-                case.status.set("masked", f"case is not in batch {batch_no}")
-        return [case for case in self.cases if case.status == "ready"]
+            else:
+                case.mask = f"Case not in batch {batch_store}:{batch_no}"
+        return [case for case in self.cases if not case.mask]
 
     def run(
         self,
@@ -448,11 +445,9 @@ class Session:
             self.finish = time.monotonic()
             if auto_cleanup:
                 for case in queue.cases():
-                    if case.status == "ready":
-                        case.status.set("failed", "Case failed to start")
-                        case.save()
-                    elif case.status == "running":
-                        case.status.set("failed", "Case failed to stop")
+                    if case.status.value in ("ready", "running"):
+                        st = "start" if case.status == "ready" else "stop"
+                        case.status.set("failed", f"Case failed to {st}")
                         case.save()
 
     def done_callback(
@@ -487,13 +482,17 @@ class Session:
                 if case.id not in fd:
                     logging.error(f"case ID {case.id} not in batch {obj.world_rank}")
                     continue
-                if case.status.value != fd[case.id]["status"].value:
+                if case.status.value == "running":
+                    # Job was cancelled
+                    case.status.set("cancelled", "batch cancelled")
+                elif case.status.value != fd[case.id]["status"].value:
                     fs = case.status.value
                     ss = fd[case.id]["status"].value
                     logging.warning(
                         f"batch {obj.world_rank}, {case}: "
                         f"expected status of future.result to be {ss}, not {fs}"
                     )
+                    case.status.set("failed", "unknown failure")
             if fail_fast and any(_.status != "success" for _ in obj):
                 code = compute_returncode(obj.cases)
                 raise FailFast(str(obj), code)
@@ -544,18 +543,16 @@ class Session:
         n, N = len(cases), len(files)
         s, S = "s" if n > 1 else "", "s" if N > 1 else ""
         string.write(color.colorize(fmt % ("c", "collected", n, s, N, S)))
-        cases_to_run = [case for case in cases if not case.masked and not case.skipped]
+        cases_to_run = [case for case in cases if not case.mask and not case.skipped]
         files = {case.file for case in cases_to_run}
         n, N = len(cases_to_run), len(files)
         s = "s " if n > 1 else " "
         S = "s " if N > 1 else ""
         string.write(color.colorize(fmt % ("g", "running", n, s, N, S)))
-        skipped = [case for case in cases if case.masked]
+        skipped = [case for case in cases if case.mask]
         skipped_reasons: dict[str, int] = {}
         for case in skipped:
-            reason = case.status.details
-            assert isinstance(reason, str)
-            skipped_reasons[reason] = skipped_reasons.get(reason, 0) + 1
+            skipped_reasons[case.mask] = skipped_reasons.get(case.mask, 0) + 1
         if skipped:
             string.write(color.colorize("@*b{skipping} %d test cases" % len(skipped)) + "\n")
             reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
@@ -593,14 +590,9 @@ class Session:
                 finish = max(_.finish for _ in cases if _.finish > 0)
                 start = min(_.start for _ in cases if _.start > 0)
                 duration = finish - start
-            else:
-                duration = None
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            if case.masked:
-                totals.setdefault("masked", []).append(case)
-            else:
-                totals.setdefault(case.status.value, []).append(case)
+            totals.setdefault(case.status.value, []).append(case)
         N = len(cases)
         summary = ["@*b{%d total}" % N]
         for member in Status.colors:
@@ -610,7 +602,13 @@ class Session:
                 stat = totals[member][0].status.name
                 summary.append(color.colorize("@%s{%d %s}" % (c, n, stat.lower())))
         x, y = random.sample([glyphs.sparkles, glyphs.collision, glyphs.highvolt], 2)
-        kwds = {"x": x, "y": y, "s": ", ".join(summary), "t": hhmmss(duration), "title": title}
+        kwds = {
+            "x": x,
+            "y": y,
+            "s": ", ".join(summary),
+            "t": hhmmss(None if duration < 0 else duration),
+            "title": title,
+        }
         string.write(color.colorize("%(x)s%(x)s @*{%(title)s} -- %(s)s in @*{%(t)s}\n" % kwds))
         return string.getvalue()
 
@@ -633,17 +631,18 @@ class Session:
         string = io.StringIO()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            if case.masked:
+            if case.mask:
                 totals.setdefault("masked", []).append(case)
             else:
                 totals.setdefault(case.status.value, []).append(case)
-        nprinted = 0
+        if "masked" in totals:
+            for case in sort_cases_by(totals["masked"], field=sortby):
+                string.write("%s %s\n" % (glyphs.masked, cformat(case, show_log=show_logs)))
         for member in Status.members:
             if member in totals:
                 for case in sort_cases_by(totals[member], field=sortby):
                     glyph = Status.glyph(case.status.value)
                     string.write("%s %s\n" % (glyph, cformat(case, show_log=show_logs)))
-                    nprinted += 1
         return string.getvalue()
 
 
@@ -654,8 +653,8 @@ def setup_individual_case(case, exec_root, copy_all_resources):
 
 def cformat(case: TestCase, show_log: bool = False) -> str:
     id = color.colorize("@*b{%s}" % case.id[:7])
-    if case.masked:
-        string = "@*c{EXCLUDED} %s %s: %s" % (id, case.pretty_repr(), case.status.details)
+    if case.mask:
+        string = "@*c{EXCLUDED} %s %s: %s" % (id, case.pretty_repr(), case.mask)
         return color.colorize(string)
     string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
     if case.duration > 0:

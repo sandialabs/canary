@@ -67,6 +67,7 @@ class TestCase(Runner):
         self._active: Optional[bool] = None
 
         # Other properties
+        self._mask = ""
         self._keywords = keywords
         self.parameters = {} if parameters is None else dict(parameters)
         self.baseline = baseline
@@ -135,8 +136,12 @@ class TestCase(Runner):
         return file
 
     @property
-    def masked(self) -> bool:
-        return self.status == "masked"
+    def mask(self) -> str:
+        return self._mask
+
+    @mask.setter
+    def mask(self, arg: str) -> None:
+        self._mask = arg
 
     @property
     def skipped(self) -> bool:
@@ -344,7 +349,7 @@ class TestCase(Runner):
         self.start = case.start
         self.finish = case.finish
         self.returncode = case.returncode
-        self.status.set(case.status.value, details=case.status.details)
+        self._status.set(case.status.value, details=case.status.details)
         self.exec_root = case.exec_root
         for dep in self.dependencies:
             dep.refresh()
@@ -384,8 +389,6 @@ class TestCase(Runner):
         with fs.working_dir(self.exec_dir, create=True):
             self.setup_exec_dir(copy_all_resources=copy_all_resources)
             self._status.set("ready" if not self.dependencies else "pending")
-            for hook in plugin.plugins("test", "setup"):
-                hook(self)
             self.save()
         logging.trace(f"Done setting up {self}")
 
@@ -439,7 +442,7 @@ class TestCase(Runner):
 
     def do_analyze(self) -> None:
         args = ["--execute-analysis-sections"]
-        return self.run(*args, stage="analyze")
+        return self.run(*args, stage="analyze", analyze=True)
 
     def start_msg(self) -> str:
         id = colorize("@b{%s}" % self.id[:7])
@@ -449,7 +452,14 @@ class TestCase(Runner):
         id = colorize("@b{%s}" % self.id[:7])
         return "FINISHED: {0} {1} {2}".format(id, self.pretty_repr(), self.status.cname)
 
-    def run(self, *args: str, stage: Optional[str] = None, **kwargs: Any) -> None:
+    def run(
+        self,
+        *args: str,
+        stage: Optional[str] = None,
+        analyze: bool = False,
+        timeoutx: float = 1.0,
+        **kwargs: Any,
+    ) -> None:
         if os.getenv("NVTEST_RESETUP"):
             assert isinstance(self.exec_root, str)
             self.setup(self.exec_root)
@@ -458,35 +468,32 @@ class TestCase(Runner):
         try:
             self.start = time.monotonic()
             self.finish = -1
-            self.status.set("running")
-            self.save()
-            timeoutx = kwargs.get("timeoutx", 1.0)
-            self.returncode = self._run(*args, stage=stage, timeoutx=timeoutx)
+            self.returncode = self._run(*args, stage=stage, timeoutx=timeoutx, analyze=analyze)
             if self.xstatus == diff_exit_status:
                 if self.returncode != diff_exit_status:
-                    self.status.set("failed", f"expected {self.name} to diff")
+                    self._status.set("failed", f"expected {self.name} to diff")
                 else:
-                    self.status.set("xdiff")
+                    self._status.set("xdiff")
             elif self.xstatus != 0:
                 # Expected to fail
                 code = self.xstatus
                 if code > 0 and self.returncode != code:
-                    self.status.set("failed", f"expected {self.name} to exit with code={code}")
+                    self._status.set("failed", f"expected {self.name} to exit with code={code}")
                 elif self.returncode == 0:
-                    self.status.set("failed", f"expected {self.name} to exit with code != 0")
+                    self._status.set("failed", f"expected {self.name} to exit with code != 0")
                 else:
-                    self.status.set("xfail")
+                    self._status.set("xfail")
             else:
-                self.status.set_from_code(self.returncode)
+                self._status.set_from_code(self.returncode)
         except KeyboardInterrupt:
             self.returncode = 2
-            self.status.set("cancelled", "keyboard interrupt")
-            time.sleep(.01)
+            self._status.set("cancelled", "keyboard interrupt")
+            time.sleep(0.01)
             raise
         except BaseException:
             self.returncode = 1
-            self.status.set("failed", "unknown failure")
-            time.sleep(.01)
+            self._status.set("failed", "unknown failure")
+            time.sleep(0.01)
             raise
         finally:
             self.finish = time.monotonic()
@@ -501,12 +508,20 @@ class TestCase(Runner):
                 hook(self)
         return
 
-    def _run(self, *args: str, stage: Optional[str] = None, timeoutx: float = 1.0) -> int:
+    def _run(
+        self,
+        *args: str,
+        stage: Optional[str] = None,
+        analyze: bool = False,
+        timeoutx: float = 1.0,
+    ) -> int:
+        self._status.set("running")
+        self.save()
         stage = stage or "test"
         timeout = self.timeout * timeoutx
         with fs.working_dir(self.exec_dir):
             for hook in plugin.plugins("test", "setup"):
-                hook(self)
+                hook(self, analyze=analyze)
             with logging.capture(self.logfile(stage), mode="w"), logging.timestamps():
                 cmd = [self.command]
                 cmd.extend(self.command_line_args(*args))
@@ -551,13 +566,24 @@ class TestCase(Runner):
             n = 0
             mean = minimum = maximum = self.duration
         else:
-            n, mean, minimum, maximum = json.load(open(file))
-            mean = (self.duration + mean * n) / (n + 1)
-            minimum = min(minimum, self.duration)
-            maximum = max(maximum, self.duration)
+            try:
+                n, mean, minimum, maximum = json.load(open(file))
+            except json.decoder.JSONDecodeError:
+                n = 0
+                mean = minimum = maximum = self.duration
+            finally:
+                mean = (self.duration + mean * n) / (n + 1)
+                minimum = min(minimum, self.duration)
+                maximum = max(maximum, self.duration)
         mkdirp(os.path.dirname(file))
-        with open(file, "w") as fh:
-            json.dump([n + 1, mean, minimum, maximum], fh)
+        tries = 0
+        while tries < 3:
+            try:
+                with open(file, "w") as fh:
+                    json.dump([n + 1, mean, minimum, maximum], fh)
+                break
+            except Exception:
+                tries += 1
 
     def load_runtimes(self):
         # return mean, min, max runtimes
@@ -567,8 +593,14 @@ class TestCase(Runner):
         file = self.cache_file(cache_dir)
         if not os.path.exists(file):
             return [None, None, None]
-        _, mean, minimum, maximum = json.load(open(file))
-        return [mean, minimum, maximum]
+        tries = 0
+        while tries < 3:
+            try:
+                _, mean, minimum, maximum = json.load(open(file))
+                return [mean, minimum, maximum]
+            except json.decoder.JSONDecodeError:
+                tries += 1
+        return [None, None, None]
 
 
 class AnalyzeTestCase(TestCase):
@@ -600,7 +632,7 @@ class AnalyzeTestCase(TestCase):
         self.paramsets = paramsets
 
     def do_analyze(self) -> None:
-        return self.run(stage="analyze")
+        return self.run(stage="analyze", analyze=True)
 
     def command_line_args(self, *args: str) -> list[str]:
         if self.flag.startswith("-"):

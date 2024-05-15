@@ -154,14 +154,14 @@ class Finder:
         missing = 0
         ids = [id(case) for case in cases]
         for case in cases:
-            if case.status != "created":
+            if case.mask:
                 continue
             for dep in case.dependencies:
                 if id(dep) not in ids:
                     logging.error(f"ID of {dep!r} is not in test cases")
                     missing += 1
-                if dep.status != "created":
-                    case.status.set("masked", "deselected due to skipped dependency")
+                if dep.mask:
+                    case.mask = "deselected due to skipped dependency"
                     logging.debug(f"Dependency {dep!r} of {case!r} is marked to be skipped")
         if missing:
             raise ValueError("Missing dependencies")
@@ -198,7 +198,7 @@ class Finder:
         cases: list[TestCase] = [case for group in concrete_test_groups for case in group if case]
 
         # this sanity check should not be necessary
-        if any(case.status.value not in ("created", "masked") for case in cases):
+        if any(case.status.value != "created" for case in cases if not case.mask):
             raise ValueError("One or more test cases is not in created state")
 
         for hook in plugin.plugins("test", "discovery"):

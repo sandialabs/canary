@@ -19,7 +19,7 @@ class TestData:
         self.finish: float = -1
         self.status: int = 0
         self.cases: list["TestCase"] = []
-        cases_to_run: list["TestCase"] = [c for c in session.cases if not c.masked]
+        cases_to_run: list["TestCase"] = [c for c in session.cases if not c.mask]
         for case in cases_to_run:
             self.add_test(case)
 

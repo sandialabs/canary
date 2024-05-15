@@ -411,7 +411,7 @@ def unique(sequence: list[str]) -> list[str]:
 
 
 @typing.no_type_check
-def get_vvtest_attrs(case: "TestCase", baseline: bool) -> dict:
+def get_vvtest_attrs(case: "TestCase", baseline: bool = False, analyze: bool = False) -> dict:
     from _nvtest.test.case import AnalyzeTestCase
 
     attrs = {}
@@ -437,7 +437,7 @@ def get_vvtest_attrs(case: "TestCase", baseline: bool) -> dict:
     attrs["opt_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"
     attrs["is_analyze"] = isinstance(case, AnalyzeTestCase)
     attrs["is_baseline"] = baseline
-    attrs["is_analysis_only"] = attrs["is_analyze"]
+    attrs["is_analysis_only"] = analyze
     attrs["PARAM_DICT"] = case.parameters or {}
     for key, val in case.parameters.items():
         attrs[key] = val
@@ -467,10 +467,10 @@ nvtest.plugin.test_generator(VVTTestFile)
 
 
 @nvtest.plugin.register(scope="test", stage="setup")
-def write_vvtest_util(case: "TestCase", baseline: bool = False) -> None:
+def write_vvtest_util(case: "TestCase", baseline: bool = False, analyze: bool = False) -> None:
     if not case.file_path.endswith(".vvt"):
         return
-    attrs = get_vvtest_attrs(case, baseline)
+    attrs = get_vvtest_attrs(case, baseline=baseline, analyze=analyze)
     with open("vvtest_util.py", "w") as fh:
         fh.write("import os\n")
         fh.write("import sys\n")

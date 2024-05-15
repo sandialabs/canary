@@ -64,7 +64,7 @@ class HTMLReporter(Reporter):
         return f"<head>\n{self.style}\n</head>\n"
 
     def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
-        if case.skipped or case.masked:
+        if case.skipped or case.mask:
             return
         fh.write("<html>\n")
         fh.write("<body>\n<table>\n")
@@ -101,7 +101,7 @@ class HTMLReporter(Reporter):
         fh.write("</tr>\n")
         totals: dict[str, list[TestCase]] = {}
         for case in self.data.cases:
-            if case.masked:
+            if case.mask:
                 continue
             if case.skipped:
                 group = "Not Run"

@@ -32,7 +32,7 @@ def merge_request_report(session: Session) -> None:
     except MissingCIVariable:
         return
     else:
-        cases = [case for case in session.cases if not case.masked]
+        cases = [case for case in session.cases if not case.mask]
         failed = group_failed_tests(cases)
         if failed:
             mr.report_failed(failed, cdash_build_url=cdash_build_url)

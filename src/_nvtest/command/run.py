@@ -90,6 +90,8 @@ def run(args: "argparse.Namespace") -> int:
     if args.mode == "w":
         path = args.work_tree or Session.default_worktree
         session = Session(path, mode=args.mode, force=args.wipe)
+        s = ", ".join(os.path.relpath(p, os.getcwd()) for p in args.paths) if args.paths else "."
+        logging.emit(colorize("@*{Searching} for tests in %s\n" % s))
         session.add_search_paths(args.paths)
         session.discover()
         if args.until is not None:
@@ -103,6 +105,7 @@ def run(args: "argparse.Namespace") -> int:
             if args.until == "discover":
                 logging.info("Exiting after discovery")
                 return 0
+        logging.emit(colorize("@*{Generating} test cases from test files\n"))
         session.freeze(
             resourceinfo=args.resourceinfo,
             keyword_expr=args.keyword_expr,
@@ -110,7 +113,7 @@ def run(args: "argparse.Namespace") -> int:
             on_options=args.on_options,
         )
         if args.until is not None:
-            cases = [case for case in session.cases if not case.masked]
+            cases = [case for case in session.cases if not case.mask]
             n, N = len(cases), len([case.file for case in cases])
             s, S = "" if n == 1 else "s", "" if N == 1 else "s"
             logging.info(colorize("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S)))

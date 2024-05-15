@@ -117,7 +117,7 @@ class Database:
             pickle.dump(indexed, fh)
         with open(self.progress_file, "wb") as fh:
             for case in cases:
-                if case.masked:
+                if case.mask:
                     continue
                 cd = self._single_case_entry(case)
                 pickle.dump({case.id: cd}, fh)
