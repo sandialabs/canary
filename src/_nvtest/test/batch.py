@@ -274,6 +274,11 @@ class Slurm(Batch):
             if isinstance(e, KeyboardInterrupt):
                 return
             raise
+        finally:
+            for case in self.cases:
+                if case.status == "running":
+                    case.status.set("cancelled", "batch cancelled")
+                    case.save()
 
     def qtime(self, max_tasks: int, nodes: int) -> float:
         qtime = max(self.cputime / nodes, 5)
