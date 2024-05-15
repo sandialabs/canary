@@ -40,7 +40,7 @@ def partition_n(cases: list[TestCase], n: int = 8) -> list[set[TestCase]]:
 
 
 def partition_t(
-    cases: list[TestCase], t: float = 60 * 30, fac: float = 1.5
+    cases: list[TestCase], t: float = 60 * 30, fac: float = 1.1
 ) -> list[set[TestCase]]:
     """Partition test cases into partitions having a runtime approximately equal
     to ``t``
