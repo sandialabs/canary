@@ -251,7 +251,7 @@ class CDashReporter(Reporter):
         for case in self.data:
             exit_value = case.returncode
             fail_reason = None
-            if case.masked or case.status.value in ("created", "pending", "ready", "cancelled"):
+            if case.mask or case.status.value in ("created", "pending", "ready", "cancelled"):
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
