@@ -73,9 +73,9 @@ def partition_t(
                     p_nodes = _p_nodes(g_partition)
                     if p_nodes != c_nodes:
                         continue
-                    trial_cputime = g_partition.cputime + fac * case.cputime
+                    trial_cputime = g_partition.cputime + case.cputime
                     trial_runtime = trial_cputime / (p_nodes * cores_per_node)
-                    if trial_runtime <= t:
+                    if trial_runtime <= t / fac:
                         g_partition.add(case)
                         break
                 else:

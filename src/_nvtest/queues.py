@@ -188,7 +188,6 @@ class BatchResourceQueue(ResourceQueue):
     ) -> None:
         super().__init__(resourceinfo, lock)
         self.batchinfo = batchinfo
-        self.resourceinfo = resourceinfo
         scheduler = self.batchinfo.scheduler
         if scheduler is None:
             raise ValueError("BatchResourceQueue requires a scheduler")
@@ -212,8 +211,7 @@ class BatchResourceQueue(ResourceQueue):
             partitions = partition_n(self.tmp_buffer, n=count)
         else:
             length = float(self.batchinfo.length or 30 * 60)  # 30 minute default
-            fac = max(self.resourceinfo["test:timeoutx"], 1.5)
-            partitions = partition_t(self.tmp_buffer, t=length, fac=fac)
+            partitions = partition_t(self.tmp_buffer, t=length)
         n = len(partitions)
         N = len(batch_stores) + 1
         batches = [
