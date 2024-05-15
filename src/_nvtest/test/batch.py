@@ -53,6 +53,7 @@ class Batch(Runner):
         self._status = Status("created")
         first = next(iter(cases))
         self.root = first.exec_root
+        self.duration: float = -1
 
     def __iter__(self):
         return iter(self.cases)
@@ -156,12 +157,15 @@ class Batch(Runner):
         fmt = "@%s{%d %s}"
         colors = Status.colors
         st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
-        return f"FINISHED: Batch {self.world_rank} of {self.world_size}, {st_stat}"
+        t = hhmmss(self.duration if self.duration > 0 else None)
+        return f"FINISHED: Batch {self.world_rank} of {self.world_size}, {st_stat} ({t})"
 
     def run(self, *args: str, **kwargs: Any) -> None:
         try:
+            start = time.monotonic()
             self._run(*args, **kwargs)
         finally:
+            self.duration = time.monotonic() - start
             self.refresh()
         return
 
@@ -310,7 +314,7 @@ class Slurm(Batch):
         args.append(f"--nodes={ns.nodes}")
         args.append(f"--ntasks-per-node={tpn}")
         args.append(f"--cpus-per-task={ns.cpus_per_task}")
-        args.append(f"--time={hhmmss(qtime * 1.5, threshold=0)}")
+        args.append(f"--time={hhmmss(qtime * 1.25, threshold=0)}")
         file = self.logfile()
         args.append(f"--error={file}")
         args.append(f"--output={file}")
