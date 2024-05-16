@@ -3,7 +3,6 @@ import io
 import json
 import os
 import threading
-import time
 from typing import Any
 from typing import Optional
 from typing import Union
@@ -20,6 +19,7 @@ from .util.partition import partition_t
 from .util.progress import progress
 from .util.resource import BatchInfo
 from .util.resource import ResourceInfo
+from .util.time import timestamp
 
 
 class ResourceQueue:
@@ -133,7 +133,7 @@ class ResourceQueue:
 
     def display_progress(self, start: float, last: bool = False) -> None:
         with self.lock:
-            progress(self.cases(), time.monotonic() - start)
+            progress(self.cases(), timestamp() - start)
             if last:
                 logging.emit("\n")
 

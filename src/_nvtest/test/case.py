@@ -29,6 +29,7 @@ from ..util.executable import Executable
 from ..util.filesystem import copyfile
 from ..util.filesystem import mkdirp
 from ..util.hash import hashit
+from ..util.time import timestamp
 from .runner import Runner
 from .status import Status
 
@@ -277,9 +278,13 @@ class TestCase(Runner):
         elif self._runtimes[2] is not None:
             max_runtime = self._runtimes[2]
             if max_runtime < 5.0:
-                timeout = 20.0
+                timeout = 120.0
+            elif max_runtime < 120.0:
+                timeout = 360.0
             elif max_runtime < 300.0:
                 timeout = 900.0
+            elif max_runtime < 600.0:
+                timeout = 1800.0
             else:
                 timeout = 2.0 * self._runtimes[2]
         elif "fast" in self._keywords:
@@ -466,7 +471,7 @@ class TestCase(Runner):
         if self.dep_patterns:
             raise RuntimeError("Dependency patterns must be resolved before running")
         try:
-            self.start = time.monotonic()
+            self.start = timestamp()
             self.finish = -1
             self.returncode = self._run(*args, stage=stage, timeoutx=timeoutx, analyze=analyze)
             if self.xstatus == diff_exit_status:
@@ -496,7 +501,7 @@ class TestCase(Runner):
             time.sleep(0.01)
             raise
         finally:
-            self.finish = time.monotonic()
+            self.finish = timestamp()
             self.cache_runtime()
             self.save()
             with open(self.logfile(), "w") as fh:

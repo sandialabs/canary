@@ -158,7 +158,7 @@ class Batch(Runner):
         colors = Status.colors
         st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
         t = hhmmss(self.duration if self.duration > 0 else None)
-        return f"FINISHED: Batch {self.world_rank} of {self.world_size}, {st_stat} ({t})"
+        return f"FINISHED: Batch {self.world_rank} of {self.world_size}, {st_stat} [{t}]"
 
     def run(self, *args: str, **kwargs: Any) -> None:
         try:
@@ -167,6 +167,10 @@ class Batch(Runner):
         finally:
             self.duration = time.monotonic() - start
             self.refresh()
+            for case in self:
+                if case.status == "running":
+                    case.status.set("cancelled", "batch cancelled")
+                    case.save()
         return
 
 
@@ -278,11 +282,6 @@ class Slurm(Batch):
             if isinstance(e, KeyboardInterrupt):
                 return
             raise
-        finally:
-            for case in self.cases:
-                if case.status == "running":
-                    case.status.set("cancelled", "batch cancelled")
-                    case.save()
 
     def qtime(self, max_tasks: int, nodes: int) -> float:
         qtime = max(self.cputime / nodes, 5)
@@ -327,6 +326,7 @@ class Slurm(Batch):
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
         fh.write(f"# batch {self.world_rank} of {self.world_size}\n")
+        fh.write(f"# approximate runtime: {hhmmss(qtime)}\n")
         fh.write("# test cases:\n")
         for case in self.cases:
             fh.write(f"# - {case.fullname}\n")

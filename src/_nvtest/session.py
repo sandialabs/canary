@@ -46,6 +46,7 @@ from .util.resource import BatchInfo
 from .util.resource import ResourceInfo
 from .util.returncode import compute_returncode
 from .util.time import hhmmss
+from .util.time import timestamp
 from .when import when
 
 default_timeout = 60 * 60  # 60 minutes
@@ -328,7 +329,18 @@ class Session:
         case_ids: list[str] = fd["index"][str(batch_no)]
         for case in self.cases:
             if case.id in case_ids:
-                case.status.set("ready")
+                assert not case.mask
+                if not case.dependencies:
+                    case.status.set("ready")
+                elif any(
+                    [dep.status.value not in ("diff", "success") for dep in case.dependencies]
+                ):
+                    reason = "one or more dependencies failed"
+                    case.status.set("skipped", reason)
+                    case.save()
+                    case.mask = reason
+                else:
+                    case.status.set("pending")
             else:
                 case.mask = f"Case not in batch {batch_store}:{batch_no}"
         return [case for case in self.cases if not case.mask]
@@ -388,9 +400,9 @@ class Session:
         verbose: bool = output == "verbose"
         futures: dict = {}
         auto_cleanup: bool = True
-        self.start = time.monotonic()
+        self.start = timestamp()
         self.finish = -1.0
-        duration = lambda: time.monotonic() - self.start
+        duration = lambda: timestamp() - self.start
         timeout = resourceinfo["session:timeout"] or -1
         try:
             with ProcessPoolExecutor(max_workers=queue.workers) as ppe:
@@ -442,12 +454,14 @@ class Session:
                 queue.display_progress(self.start, last=True)
             self.returncode = compute_returncode(queue.cases())
         finally:
-            self.finish = time.monotonic()
+            self.finish = timestamp()
             if auto_cleanup:
                 for case in queue.cases():
-                    if case.status.value in ("ready", "running"):
-                        st = "start" if case.status == "ready" else "stop"
-                        case.status.set("failed", f"Case failed to {st}")
+                    if case.status == "running":
+                        case.status.set("cancelled", "Case failed to stop")
+                        case.save()
+                    elif case.status == "ready":
+                        case.status.set("failed", "Case failed to start")
                         case.save()
 
     def done_callback(
@@ -485,14 +499,19 @@ class Session:
                 if case.status.value == "running":
                     # Job was cancelled
                     case.status.set("cancelled", "batch cancelled")
+                elif case.status.value == "skipped":
+                    pass
+                elif case.status.value == "ready":
+                    case.status.set("skipped", "test skipped for unknown reasons")
                 elif case.status.value != fd[case.id]["status"].value:
-                    fs = case.status.value
-                    ss = fd[case.id]["status"].value
-                    logging.warning(
-                        f"batch {obj.world_rank}, {case}: "
-                        f"expected status of future.result to be {ss}, not {fs}"
-                    )
-                    case.status.set("failed", "unknown failure")
+                    if config.get("config:debug"):
+                        fs = case.status.value
+                        ss = fd[case.id]["status"].value
+                        logging.warning(
+                            f"batch {obj.world_rank}, {case}: "
+                            f"expected status of future.result to be {ss}, not {fs}"
+                        )
+                        case.status.set("failed", "unknown failure")
             if fail_fast and any(_.status != "success" for _ in obj):
                 code = compute_returncode(obj.cases)
                 raise FailFast(str(obj), code)
@@ -510,11 +529,13 @@ class Session:
                 batchinfo.length = default_batchsize
             queue = BatchResourceQueue(resourceinfo, batchinfo, global_session_lock)
         for case in cases:
-            if case.status.value not in ("ready", "pending"):
+            if case.status == "skipped":
+                case.save()
+            elif case.status.value not in ("ready", "pending"):
                 raise ValueError(f"{case}: case is not ready or pending")
             elif case.exec_root is None:
                 raise ValueError(f"{case}: exec root is not set")
-        queue.put(*cases)
+        queue.put(*[case for case in cases if case.status.value in ("ready", "pending")])
         queue.prepare()
         if queue.empty():
             raise ValueError("There are no cases to run in this session")

@@ -19,7 +19,7 @@ def test_skipif(tmpdir):
     files = finder.discover()
     cases = finder.freeze(files)
     assert len(cases) == 2
-    assert len([c for c in cases if not c.masked]) == 1
+    assert len([c for c in cases if not c.mask]) == 1
 
 
 def test_keywords(tmpdir):
@@ -36,11 +36,11 @@ def test_keywords(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.freeze(files, keyword_expr="a and i")
-    assert len([c for c in cases if not c.masked]) == 0
+    assert len([c for c in cases if not c.mask]) == 0
     cases = finder.freeze(files, keyword_expr="a and e")
-    assert len([c for c in cases if not c.masked]) == 1
+    assert len([c for c in cases if not c.mask]) == 1
     cases = finder.freeze(files, keyword_expr="a or i")
-    assert len([c for c in cases if not c.masked]) == 2
+    assert len([c for c in cases if not c.mask]) == 2
 
 
 def test_parameterize_1(tmpdir):
@@ -55,7 +55,7 @@ def test_parameterize_1(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.freeze(files)
-    assert len([c for c in cases if not c.masked]) == 3
+    assert len([c for c in cases if not c.mask]) == 3
     a, b = 0, 1
     for case in cases:
         assert case.parameters == {"a": a, "b": b}
@@ -76,7 +76,7 @@ def test_parameterize_2(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.freeze(files)
-    assert len([c for c in cases if not c.masked]) == 9
+    assert len([c for c in cases if not c.mask]) == 9
     i = 0
     for a, b in [(0, 1), (2, 3), (4, 5)]:
         for n in (10, 11, 12):
@@ -97,9 +97,9 @@ def test_parameterize_3(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.freeze(files, on_options=["xxx"])
-    assert len([c for c in cases if not c.masked]) == 2
+    assert len([c for c in cases if not c.mask]) == 2
     cases = finder.freeze(files)
-    assert len([c for c in cases if not c.masked]) == 1
+    assert len([c for c in cases if not c.mask]) == 1
     assert cases[0].parameters == {}
 
 
@@ -115,10 +115,10 @@ def test_cpu_count(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.freeze(files)
-    assert len([c for c in cases if not c.masked]) == 4
+    assert len([c for c in cases if not c.mask]) == 4
     nvtest.config.set("machine:cpu_count", 2)
     cases = finder.freeze(files)
-    assert len([c for c in cases if not c.masked]) == 1
+    assert len([c for c in cases if not c.mask]) == 1
 
 
 def test_dep_patterns(tmpdir):
@@ -137,7 +137,7 @@ def test_dep_patterns(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.freeze(files)
-    assert len([c for c in cases if not c.masked]) == 4
+    assert len([c for c in cases if not c.mask]) == 4
     for case in cases:
         if case.name == "f":
             assert len(case.dependencies) == 1
@@ -158,7 +158,7 @@ def test_analyze(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.freeze(files)
-    assert len([c for c in cases if not c.masked]) == 10
+    assert len([c for c in cases if not c.mask]) == 10
     assert cases[-1].flag == "--analyze"
     assert all(case in cases[-1].dependencies for case in cases[:-1])
 
@@ -175,11 +175,11 @@ def test_enable(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.freeze(files, on_options=["baz", "spam"])
-    assert len([c for c in cases if not c.masked]) == 1
+    assert len([c for c in cases if not c.mask]) == 1
     cases = finder.freeze(files, on_options=["baz"])
-    assert len([c for c in cases if not c.masked]) == 0
+    assert len([c for c in cases if not c.mask]) == 0
     cases = finder.freeze(files, on_options=["spam", "baz", "foo"])
-    assert len([c for c in cases if not c.masked]) == 1
+    assert len([c for c in cases if not c.mask]) == 1
 
 
 def test_enable_names(tmpdir):
@@ -197,4 +197,4 @@ def test_enable_names(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.freeze(files)
-    assert len([c for c in cases if not c.masked]) == 2
+    assert len([c for c in cases if not c.mask]) == 2

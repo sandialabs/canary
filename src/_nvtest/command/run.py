@@ -91,7 +91,7 @@ def run(args: "argparse.Namespace") -> int:
         path = args.work_tree or Session.default_worktree
         session = Session(path, mode=args.mode, force=args.wipe)
         s = ", ".join(os.path.relpath(p, os.getcwd()) for p in args.paths) if args.paths else "."
-        logging.emit(colorize("@*{Searching} for tests in %s\n" % s))
+        logging.emit(colorize("@*{searching} for tests in %s\n" % s))
         session.add_search_paths(args.paths)
         session.discover()
         if args.until is not None:
@@ -101,11 +101,11 @@ def run(args: "argparse.Namespace") -> int:
                 roots.add(generator.root)
             n, N = len(generators), len(roots)
             s, S = "" if n == 1 else "s", "" if N == 1 else "s"
-            logging.info(colorize("@*{Collected} %d file%s from %d root%s" % (n, s, N, S)))
+            logging.info(colorize("@*{collected} %d file%s from %d root%s" % (n, s, N, S)))
             if args.until == "discover":
-                logging.info("Exiting after discovery")
+                logging.info("done with test discovery")
                 return 0
-        logging.emit(colorize("@*{Generating} test cases from test files\n"))
+        logging.emit(colorize("@*{generating} test cases from test files\n"))
         session.freeze(
             resourceinfo=args.resourceinfo,
             keyword_expr=args.keyword_expr,
@@ -116,16 +116,16 @@ def run(args: "argparse.Namespace") -> int:
             cases = [case for case in session.cases if not case.mask]
             n, N = len(cases), len([case.file for case in cases])
             s, S = "" if n == 1 else "s", "" if N == 1 else "s"
-            logging.info(colorize("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S)))
+            logging.info(colorize("@*{expanded} %d case%s from %d file%s" % (n, s, N, S)))
             graph.print(cases, file=sys.stdout)
             if args.until == "freeze":
-                logging.info("Exiting after freezing test cases")
+                logging.info("done freezing test cases")
                 return 0
         if not args.no_header:
             logging.emit(session.overview(session.cases))
         session.populate(copy_all_resources=args.copy_all_resources)
         if args.until == "populate":
-            logging.info("Exiting after populating worktree")
+            logging.info("done populating worktree")
             return 0
         cases = [case for case in session.cases if case.status.value in ("pending", "ready")]
     elif args.mode == "a":

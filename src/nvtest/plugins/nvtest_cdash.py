@@ -14,6 +14,7 @@ import nvtest
 from _nvtest import config
 from _nvtest.config.machine import machine_config
 from _nvtest.session import Session
+from _nvtest.test.case import TestCase
 from _nvtest.util import cdash
 from _nvtest.util import gitlab
 from _nvtest.util import logging
@@ -109,6 +110,7 @@ def create_reports(args):
                 site=args.site,
                 track=args.track,
                 buildstamp=args.buildstamp,
+                generator=getattr(args, "generator", None),
             )
         elif args.child_command == "post":
             if not args.files:
@@ -120,6 +122,10 @@ def create_reports(args):
         else:
             raise ValueError(f"{args.child_command}: unknown `nvtest report cdash` subcommand")
         return 0
+
+
+def chunked(seq, size):
+    return (seq[pos : pos + size] for pos in range(0, len(seq), size))
 
 
 class CDashReporter(Reporter):
@@ -135,11 +141,13 @@ class CDashReporter(Reporter):
         site: Optional[str] = None,
         track: Optional[str] = None,
         buildstamp: Optional[str] = None,
+        generator: Optional[str] = None,
     ) -> None:
         """Collect information and create reports"""
         self.meta = None
         self.buildname = buildname
         self.site = site or os.uname().nodename
+        self.generator = generator or f"nvtest version {nvtest.version}"
         if buildstamp is not None and track is not None:
             raise ValueError("mutually exclusive inputs: track, buildstamp")
         if buildstamp is None:
@@ -147,7 +155,8 @@ class CDashReporter(Reporter):
         else:
             self.buildstamp = self.validate_buildstamp(buildstamp)
         mkdirp(self.xml_dir)
-        self.write_test_xml()
+        for i, cases in enumerate(chunked(self.data.cases, 500)):
+            self.write_test_xml(cases, i)
         self.write_notes_xml()
 
     @staticmethod
@@ -160,6 +169,7 @@ class CDashReporter(Reporter):
         namespace.site = fs.getAttribute("Name")
         namespace.buildname = fs.getAttribute("BuildName")
         namespace.buildstamp = fs.getAttribute("BuildStamp")
+        namespace.generator = fs.getAttribute("Generator")
         return namespace
 
     def generate_buildstamp(self, track):
@@ -202,8 +212,6 @@ class CDashReporter(Reporter):
 
     @property
     def site_node(self):
-        import nvtest
-
         if self.meta is None:
             self.meta = {}
             host = os.uname().nodename
@@ -215,7 +223,7 @@ class CDashReporter(Reporter):
             self.meta["BuildName"] = self.buildname
             self.meta["BuildStamp"] = self.buildstamp
             self.meta["Name"] = self.site
-            self.meta["Generator"] = f"nvtest version {nvtest.version}"
+            self.meta["Generator"] = self.generator
             if config.get("build"):
                 vendor = config.get("build:compiler:vendor")
                 version = config.get("build:compiler:version")
@@ -231,10 +239,10 @@ class CDashReporter(Reporter):
             add_attr(el, key, value)
         return el
 
-    def write_test_xml(self) -> str:
-        filename = os.path.join(self.xml_dir, "Test.xml")
+    def write_test_xml(self, cases: list[TestCase], id: int) -> str:
+        filename = os.path.join(self.xml_dir, f"Test-{id}.xml")
         f = os.path.relpath(filename, config.get("session:invocation_dir"))
-        logging.log(logging.INFO, f"WRITING: Test.xml to {f}", prefix=None)
+        logging.log(logging.INFO, f"WRITING: {len(cases)} test cases to {f}", prefix=None)
         starttime = self.data.start
 
         doc = xdom.Document()
@@ -243,12 +251,12 @@ class CDashReporter(Reporter):
         add_text_node(l1, "StartDateTime", strftimestamp(starttime))
         add_text_node(l1, "StartTestTime", int(starttime))
         testlist = doc.createElement("TestList")
-        for case in self.data:
+        for case in cases:
             add_text_node(testlist, "Test", f"./{case.fullname}")
         l1.appendChild(testlist)
 
         status: str
-        for case in self.data:
+        for case in cases:
             exit_value = case.returncode
             fail_reason = None
             if case.mask or case.status.value in ("created", "pending", "ready", "cancelled"):

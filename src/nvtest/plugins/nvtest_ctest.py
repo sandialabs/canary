@@ -8,6 +8,7 @@ import nvtest
 from _nvtest.test.case import TestCase
 from _nvtest.test.generator import TestGenerator
 from _nvtest.util import graph
+from _nvtest.util import logging
 from _nvtest.util.resource import ResourceInfo
 
 build_types: dict[str, str] = {}
@@ -19,6 +20,21 @@ class CTestTestFile(TestGenerator):
     def __init__(self, root: str, path: Optional[str] = None) -> None:
         super().__init__(root, path=path)
 
+    @staticmethod
+    def find_cmake():
+        cmake = nvtest.filesystem.which("cmake")
+        if cmake is None:
+            return None
+        out = subprocess.check_output([cmake, "--version"]).decode("utf-8")
+        parts = [_.strip() for _ in out.split() if _.split()]
+        if parts and parts[0:2] == ["cmake", "version"]:
+            version_parts = tuple([int(_) for _ in parts[2].split(".")])
+            if version_parts[:2] <= (3, 20):
+                logging.warning("nvtest ctest integration requires cmake > 3.20")
+                return None
+            return cmake
+        return None
+
     def freeze(
         self,
         avail_cpus: Optional[int] = None,
@@ -29,7 +45,7 @@ class CTestTestFile(TestGenerator):
         timelimit: Optional[float] = None,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
-        cmake = nvtest.filesystem.which("cmake")
+        cmake = self.find_cmake()
         if cmake is None:
             return []
         tests = self.parse()
@@ -91,8 +107,9 @@ macro(set_tests_properties NAME TITLE)
 endmacro()
 """)
                     fh.write(open(self.file).read())
+                cmake = self.find_cmake()
                 p = subprocess.Popen(
-                    ["cmake", "-P", ".nvtest.cmake"],
+                    [cmake, "-P", ".nvtest.cmake"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                 )

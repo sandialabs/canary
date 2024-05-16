@@ -36,7 +36,7 @@ def test_cmake_integration(tmpdir):
             assert os.path.exists("baz.pyt")
             make = ex.Executable("make")
             make()
-            run = NVTestCommand("run")
+            run = NVTestCommand("run", debug=True)
             run("-w", ".")
             assert os.path.exists("TestResults/spam")
             assert os.path.exists("TestResults/foo")
@@ -68,7 +68,7 @@ def test_cmake_integration_parallel(tmpdir):
             assert os.path.exists("foo.pyt")
             make = ex.Executable("make")
             make()
-            run = NVTestCommand("run")
+            run = NVTestCommand("run", debug=True)
             run("-w", ".")
             assert os.path.exists("TestResults/foo.np=4")
 
