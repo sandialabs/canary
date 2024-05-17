@@ -8,7 +8,6 @@ Tests can receive one of the following statuses:
 .. hlist::
    :columns: 4
 
-   * :ref:`stat-masked`
    * :ref:`stat-created`
    * :ref:`stat-pending`
    * :ref:`stat-ready`
@@ -21,13 +20,6 @@ Tests can receive one of the following statuses:
    * :ref:`stat-success`
    * :ref:`stat-xfail`
    * :ref:`stat-xdiff`
-
-.. _stat-masked:
-
-masked
-------
-
-The test was found in the search path but was filtered out of the list of tests to run.
 
 .. _stat-created:
 

@@ -108,7 +108,10 @@ class TestCase(Runner):
         self._runtimes = self.load_runtimes()
         self.xstatus = xstatus
 
-        self.command = sys.executable
+        self.launcher: Optional[str] = sys.executable
+        self.preflags: Optional[list[str]] = None
+        self.command = os.path.basename(self.file)
+        self.postflags: Optional[list[str]] = None
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -528,8 +531,13 @@ class TestCase(Runner):
             for hook in plugin.plugins("test", "setup"):
                 hook(self, analyze=analyze)
             with logging.capture(self.logfile(stage), mode="w"), logging.timestamps():
-                cmd = [self.command]
-                cmd.extend(self.command_line_args(*args))
+                cmd: list[str] = []
+                if self.launcher:
+                    cmd.append(self.launcher)
+                    cmd.extend(self.preflags or [])
+                cmd.append(self.command)
+                cmd.extend(self.postflags or [])
+                cmd.extend(args)
                 self.cmd_line = " ".join(cmd)
                 logging.info(f"Running {self.display_name}")
                 logging.info(f"Command line: {self.cmd_line}")
@@ -546,11 +554,6 @@ class TestCase(Runner):
                             return -2
                         time.sleep(0.05)
                     return proc.returncode
-
-    def command_line_args(self, *args: str) -> list[str]:
-        command_line_args = [os.path.basename(self.file)]
-        command_line_args.extend(args)
-        return command_line_args
 
     def teardown(self) -> None: ...
 
@@ -633,19 +636,15 @@ class AnalyzeTestCase(TestCase):
             sources=sources,
             xstatus=xstatus,
         )
-        self.flag = flag
         self.paramsets = paramsets
+        if flag.startswith("-"):
+            self.command = os.path.basename(self.file)
+            self.postflags = [flag]
+        else:
+            self.command = flag
 
     def do_analyze(self) -> None:
         return self.run(stage="analyze", analyze=True)
-
-    def command_line_args(self, *args: str) -> list[str]:
-        if self.flag.startswith("-"):
-            command_line_args = [os.path.basename(self.file), self.flag]
-        else:
-            command_line_args = [self.flag]
-        command_line_args.extend(args)
-        return command_line_args
 
 
 class MissingSourceError(Exception):

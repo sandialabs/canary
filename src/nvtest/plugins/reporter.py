@@ -45,9 +45,9 @@ class TestData:
             self.status |= 2**6
 
     def add_test(self, case: "TestCase") -> None:
-        if self.start > case.start:
+        if case.start > 0 and case.start < self.start:
             self.start = case.start
-        if self.finish < case.finish:
+        if case.finish > 0 and case.finish > self.finish:
             self.finish = case.finish
         self.update_status(case)
         self.cases.append(case)

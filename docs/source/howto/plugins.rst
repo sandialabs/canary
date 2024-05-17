@@ -64,7 +64,7 @@ Examples
     @nvtest.plugin.register(scope="test", stage="discovery")
     def exclude_test(case: nvtest.TestCase):
         if case.name in EXCLUSION_DB:
-            case.status.set("masked", "excluded due to ...")
+            case.mask = "excluded due to ..."
 
 
 * Add a flag to turn on test coverage and set the ``LLVM_PROFILE_FILE`` environment variable:
@@ -86,7 +86,7 @@ Examples
     def llvm_coverage_setup(case: nvtest.TestCase) -> None:
         if not nvtest.config.get("option:code_coverage"):
             return
-        if case.masked:
+        if case.mask:
             return
         case.add_default_env("LLVM_PROFILE_FILE", f"{case.name}.profraw")
 

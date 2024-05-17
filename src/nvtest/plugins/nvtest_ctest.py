@@ -1,3 +1,4 @@
+import argparse
 import io
 import json
 import os
@@ -49,8 +50,7 @@ class CTestTestFile(TestGenerator):
         if cmake is None:
             return []
         tests = self.parse()
-        root, path = os.path.split(self.file)
-        cases = [CTestTestCase(root, path, name, **td) for name, td in tests.items()]
+        cases = [CTestTestCase(self.root, self.path, name, **td) for name, td in tests.items()]
         return cases  # type: ignore
 
     def describe(
@@ -83,8 +83,8 @@ class CTestTestFile(TestGenerator):
                     if build_type:
                         fh.write(f"set(CTEST_CONFIGURATION_TYPE {build_type})\n")
                     fh.write(r"""
-macro(add_test NAME COMMAND)
-  message("{\"name\": \"${NAME}\", \"command\": \"${COMMAND}\", \"args\": \"${ARGN}\"}")
+macro(add_test NAME)
+  message("{\"name\": \"${NAME}\", \"args\": \"${ARGN}\"}")
 endmacro()
 
 macro(subdirs)
@@ -138,13 +138,13 @@ class CTestTestCase(TestCase):
         path: str,
         name: str,
         *,
-        command: str,
-        args: Optional[list[str]] = None,
+        args: list[str],
         WORKING_DIRECTORY: Optional[str] = None,
         WILL_FAIL: Optional[str] = None,
         TIMEOUT: Optional[str] = None,
         **kwds,
     ) -> None:
+        ns = parse_test_args(args)
         super().__init__(
             root,
             path,
@@ -152,15 +152,25 @@ class CTestTestCase(TestCase):
             keywords=["unit", "ctest"],
             timeout=float(TIMEOUT or 10),
             xstatus=0 if not WILL_FAIL else -1,
-            sources={"link": [(command, os.path.basename(command))]},
+            sources={"link": [(ns.command, os.path.basename(ns.command))]},
         )
-        self.command = command
-        self.default_args = list(args or [])
+        self.launcher = ns.launcher
+        self.preflags = ns.preflags
+        self.command = ns.command
+        self.postflags = ns.postflags
+        self._processors: int = 1
+        if self.preflags:
+            self._processors = parse_np(self.preflags)
 
-    def command_line_args(self, *args: str) -> list[str]:
-        command_line_args = list(self.default_args)
-        command_line_args.extend(args)
-        return command_line_args
+    def run(self, *args, **kwargs):
+        print(self.name)
+        print(self.sources)
+        print(self.command)
+        return super().run(*args, **kwargs)
+
+    @property
+    def processors(self) -> int:
+        return self._processors
 
 
 def find_build_type(directory) -> Optional[str]:
@@ -176,6 +186,45 @@ def find_build_type(directory) -> Optional[str]:
                     build_types[directory] = build_type
                     return build_type
     return find_build_type(os.path.dirname(directory))
+
+
+def is_mpi_launcher(arg: str) -> bool:
+    launchers = ("mpiexec", "mpirun", "srun")
+    return os.path.exists(arg) and arg.endswith(launchers)
+
+
+def parse_test_args(args: list[str]) -> argparse.Namespace:
+    """Look for command and or mpi runner"""
+    ns = argparse.Namespace(launcher=None, preflags=None)
+    iter_args = iter(args)
+    arg = next(iter_args)
+    if is_mpi_launcher(arg):
+        ns.launcher = arg
+        ns.launcher_args = []
+        for arg in iter_args:
+            if os.path.exists(arg):
+                break
+            else:
+                ns.launcher_args.append(arg)
+        else:
+            raise ValueError("Unable to find test program")
+    if not os.path.exists(arg):
+        logging.warning(f"{arg}: ctest command not found")
+    ns.command = arg
+    ns.postflags = list(iter_args)
+    return ns
+
+
+def parse_np(args: list[str]) -> int:
+    p = argparse.ArgumentParser()
+    p.add_argument("-n", type=int)
+    p.add_argument("-np", type=int)
+    known, unknown = p.parse_known_args(args)
+    if known.n:
+        return known.n
+    elif known.np:
+        return known.np
+    return 1
 
 
 nvtest.plugin.test_generator(CTestTestFile)
