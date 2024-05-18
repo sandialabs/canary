@@ -77,8 +77,8 @@ class TestGenerator(abc.ABC):
     @abc.abstractmethod
     def freeze(
         self,
-        avail_cpus: Optional[int] = None,
-        avail_devices: Optional[int] = None,
+        cpus: Optional[list[int]] = None,
+        devices: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -188,8 +188,8 @@ class AbstractTestFile(TestGenerator):
                     file.write("\n")
         resourceinfo = resourceinfo or ResourceInfo()
         cases: list[TestCase] = self.freeze(
-            avail_cpus=int(resourceinfo["test:cpus"]),
-            avail_devices=int(resourceinfo["test:devices"]),
+            cpus=resourceinfo["test:cpus"],
+            devices=int(resourceinfo["test:devices"]),
             on_options=on_options,
             keyword_expr=keyword_expr,
         )
@@ -199,8 +199,8 @@ class AbstractTestFile(TestGenerator):
 
     def freeze(
         self,
-        avail_cpus: Optional[int] = None,
-        avail_devices: Optional[int] = None,
+        cpus: Optional[list[int]] = None,
+        devices: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -209,8 +209,8 @@ class AbstractTestFile(TestGenerator):
     ) -> list[TestCase]:
         try:
             cases = self._freeze(
-                avail_cpus=avail_cpus,
-                avail_devices=avail_devices,
+                cpus=cpus,
+                devices=devices,
                 keyword_expr=keyword_expr,
                 on_options=on_options,
                 timelimit=timelimit,
@@ -225,16 +225,16 @@ class AbstractTestFile(TestGenerator):
 
     def _freeze(
         self,
-        avail_cpus: Optional[int] = None,
-        avail_devices: Optional[int] = None,
+        cpus: Optional[list[int]] = None,
+        devices: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
         timelimit: Optional[float] = None,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
-        avail_cpus = avail_cpus or config.get("machine:cpu_count")
-        avail_devices = avail_devices or config.get("machine:device_count")
+        min_cpus, max_cpus = cpus or (0, config.get("machine:cpu_count"))
+        max_devices = devices or config.get("machine:device_count")
         testcases: list[TestCase] = []
         names = ", ".join(self.names())
         logging.debug(f"Generating test cases for {self} using the following test names: {names}")
@@ -266,8 +266,12 @@ class AbstractTestFile(TestGenerator):
                     raise ValueError(
                         f"{self.name}: expected np={np} to be an int, not {class_name}"
                     )
-                if mask is None and np and np > avail_cpus:
-                    s = "deselected due to @*b{exceeding cpu count of machine}"
+                if mask is None and np and np > max_cpus:
+                    s = "deselected due to @*b{exceeding max cpu count}"
+                    mask = colorize(s)
+
+                if mask is None and np and np < min_cpus:
+                    s = "deselected due to @*b{exceeding min cpu count}"
                     mask = colorize(s)
 
                 nd = parameters.get("ndevice")
@@ -276,7 +280,7 @@ class AbstractTestFile(TestGenerator):
                     raise ValueError(
                         f"{self.name}: expected ndevice={nd} " f"to be an int, not {class_name}"
                     )
-                if mask is None and nd and nd > avail_devices:
+                if mask is None and nd and nd > max_devices:
                     s = "deselected due to @*b{exceeding device count of machine}"
                     mask = colorize(s)
 

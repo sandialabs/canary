@@ -38,8 +38,8 @@ class CTestTestFile(TestGenerator):
 
     def freeze(
         self,
-        avail_cpus: Optional[int] = None,
-        avail_devices: Optional[int] = None,
+        cpus: Optional[list[int]] = None,
+        devices: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -65,8 +65,8 @@ class CTestTestFile(TestGenerator):
         file.write("Keywords: unit, ctest\n")
         resourceinfo = resourceinfo or ResourceInfo()
         cases = self.freeze(
-            avail_cpus=int(resourceinfo["test:cpus"]),
-            avail_devices=int(resourceinfo["test:devices"]),
+            cpus=resourceinfo["test:cpus"],
+            devices=int(resourceinfo["test:devices"]),
             on_options=on_options,
             keyword_expr=keyword_expr,
         )

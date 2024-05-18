@@ -290,8 +290,8 @@ class Session:
             elif explicit_start_path:
                 case.status.set("ready")
                 continue
-            if resourceinfo["test:cpus"] and case.processors > resourceinfo["test:cpus"]:
-                n = resourceinfo["test:cpus"]
+            if resourceinfo["test:cpus"][1] and case.processors > resourceinfo["test:cpus"][1]:
+                n = resourceinfo["test:cpus"][1]
                 case.mask = f"test requires more than {n} cpus"
                 continue
             if resourceinfo["test:devices"] and case.devices > resourceinfo["test:devices"]:

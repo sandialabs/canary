@@ -96,22 +96,10 @@ def add_batch_arguments(parser: "Parser") -> None:
 
 class ResourceSetter(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
-        scope, type, value = self.parse_path(values)
-        self.set_resource_args(args, scope, type, value)
-
-    def set_resource_args(self, args, scope, type, value):
+        key, value = resource.ResourceInfo.parse(values)
         resourceinfo = getattr(args, self.dest, None) or resource.ResourceInfo()
-        resourceinfo.set(scope, type, value)
+        resourceinfo.set(key, value)
         setattr(args, self.dest, resourceinfo)
-
-    @staticmethod
-    def type_map(type: str) -> str:
-        return {"cores": "cpus", "processors": "cpus", "gpus": "devices"}.get(type, type)
-
-    def parse_path(self, path: str) -> tuple[str, str, str]:
-        scope, type, value = path.split(":", 2)
-        type = self.type_map(type)
-        return scope, type, value
 
     @staticmethod
     def help_page() -> str:
@@ -120,19 +108,10 @@ class ResourceSetter(argparse.Action):
 
 class BatchSetter(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
-        type, value = self.parse_path(values)
-        self.set_batch_args(args, type, value)
-
-    def set_batch_args(self, args, type, value):
+        type, value = resource.BatchInfo.parse(values)
         batchinfo = getattr(args, self.dest, None) or resource.BatchInfo()
         batchinfo.set(type, value)
         setattr(args, self.dest, batchinfo)
-
-    def parse_path(self, path: str) -> tuple[str, str]:
-        type, value = path.split(":", 1)
-        if type == "args":
-            value = strip_quotes(value)
-        return type, value
 
     @staticmethod
     def help_page() -> str:
@@ -148,37 +127,6 @@ def filter_cases_by_status(cases: list["TestCase"], status: Union[tuple, str]) -
     if isinstance(status, str):
         status = (status,)
     return [c for c in cases if c.status.value in status]
-
-
-def split_on_comma(string: str) -> list[str]:
-    if not string:
-        return []
-    single_quote = "'"
-    double_quote = '"'
-    args: list[str] = []
-    tokens = iter(string[1:] if string[0] == "," else string)
-    arg = ""
-    quoted = None
-    while True:
-        try:
-            token = next(tokens)
-        except StopIteration:
-            args.append(arg)
-            break
-        if not quoted and token == ",":
-            args.append(arg)
-            arg = ""
-            continue
-        else:
-            arg += token
-        if token in (single_quote, double_quote):
-            if quoted is None:
-                # starting a quoted string
-                quoted = token
-            elif token == quoted:
-                # ending a quoted string
-                quoted = None
-    return args
 
 
 def strip_quotes(arg: str) -> str:

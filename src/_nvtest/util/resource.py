@@ -1,8 +1,10 @@
 """Classes and functions dealing with resource management"""
 
 import math
+import re
 import shlex
 from types import SimpleNamespace
+from typing import Any
 from typing import Optional
 from typing import Union
 
@@ -11,17 +13,16 @@ from ..third_party.color import colorize
 from .time import time_in_seconds
 
 Scalar = Union[str, int, float, None]
-Number = Union[int, float]
 schedulers = ("slurm", "shell", None)
 
 
 class ResourceInfo:
     def __init__(self) -> None:
-        self.data: dict[str, Number] = {}
+        self.data: dict[str, Any] = {}
 
         cpu_count = config.get("machine:cpu_count")
         self["session:cpus"] = cpu_count
-        self["test:cpus"] = cpu_count
+        self["test:cpus"] = [0, cpu_count]
 
         device_count = config.get("machine:device_count")
         self["session:devices"] = device_count
@@ -33,38 +34,49 @@ class ResourceInfo:
 
         self["session:workers"] = -1
 
-    def __setitem__(self, key: str, value: Number) -> None:
+    def __setitem__(self, key: str, value: Any) -> None:
         self.data[key] = value
 
-    def __getitem__(self, key: str) -> Number:
+    def __getitem__(self, key: str) -> Any:
         return self.data[key]
 
     def __repr__(self):
         s = ", ".join(f"{key}={value}" for key, value in self.data.items())
         return f"ResourceInfo({s})"
 
-    def set(self, scope: str, type: str, value: Union[Number, str]) -> None:
-        valid_types: tuple
-        if scope == "test":
-            valid_types = ("cpus", "devices", "timeout", "timeoutx")
-        elif scope == "session":
-            valid_types = ("workers", "cpus", "devices", "timeout")
+    @staticmethod
+    def parse(arg: str) -> tuple[str, Any]:
+        if match := re.search(r"^session:(cpus|cores|processors)[:=](\d+)$", arg):
+            raw = match.group(2)
+            return ("session:cpus", int(raw))
+        elif match := re.search(r"^session:workers[:=](\d+)$", arg):
+            raw = match.group(1)
+            return ("session:workers", int(raw))
+        elif match := re.search(r"^session:(devices|gpus)[:=](\d+)$", arg):
+            raw = match.group(2)
+            return ("session:devices", int(raw))
+        elif match := re.search(r"^test:(devices|gpus)[:=](\d+)$", arg):
+            raw = match.group(2)
+            return ("test:devices", int(raw))
+        elif match := re.search(r"^test:(cpus|cores|processors)[:=]:?(\d+)$", arg):
+            raw = match.group(2)
+            return ("test:cpus", [0, int(raw)])
+        elif match := re.search(r"^test:(cpus|cores|processors)[:=](\d+):$", arg):
+            raw = match.group(2)
+            return ("test:cpus", [int(raw), config.get("machine:cpu_count")])
+        elif match := re.search(r"^test:(cpus|cores|processors)[:=](\d+):(\d+)$", arg):
+            _, a, b = match.groups()
+            return ("test:cpus", [int(a), int(b)])
+        elif match := re.search(r"^(session|test):timeout[:=](.*)$", arg):
+            scope, raw = match.groups()
+            return (f"{scope}:timeout", time_in_seconds(raw, negatives=True))
+        elif match := re.search(r"^test:timeoutx[:=](.*)$", arg):
+            raw = match.group(1)
+            return ("test:timeoutx", time_in_seconds(raw, negatives=True))
         else:
-            raise ValueError(f"invalid resource scope {scope!r}")
-        if type not in valid_types:
-            raise ValueError(f"{type} is an invalid {scope} resource")
+            raise ValueError(f"invalid resource arg: {arg!r}")
 
-        if isinstance(value, str):
-            if type == "timeout":
-                value = time_in_seconds(value, negatives=True)
-            elif type == "timeoutx":
-                value = float(value)
-            else:
-                value = int(value)
-        assert isinstance(value, (int, float))
-
-        key = f"{scope}:{type}"
-
+    def set(self, key: str, value: Any) -> None:
         if key == "session:cpus":
             if value < 0:
                 raise ValueError(f"session:cpus = {value} < 0")
@@ -80,13 +92,6 @@ class ResourceInfo:
                 raise ValueError(f"session:workers = {value} < 0")
             elif value > config.get("machine:cpu_count"):
                 raise ValueError("session worker request exceeds machine cpu count")
-        elif key == "test:cpus":
-            if value < 0:
-                raise ValueError(f"test:cpus = {value} < 0")
-            elif value > config.get("machine:cpu_count"):
-                raise ValueError("test cpu request exceeds machine cpu count")
-            elif self["session:cpus"] > 0 and value > self["session:cpus"]:
-                raise ValueError("test cpu request exceeds session cpu limit")
         elif key == "test:devices":
             if value < 0:
                 raise ValueError(f"test:devices = {value} < 0")
@@ -94,7 +99,20 @@ class ResourceInfo:
                 raise ValueError("test device request exceeds machine device count")
             elif self["session:devices"] > 0 and value > self["session:devices"]:
                 raise ValueError("test device request exceeds session device limit")
-
+        elif key == "test:cpus":
+            min_cpus, max_cpus = value
+            if min_cpus > max_cpus:
+                raise ValueError("test min cpus > test max cpus")
+            elif min_cpus < 0:
+                raise ValueError(f"test:cpus:{min_cpus} < 0")
+            elif max_cpus < 0:
+                raise ValueError(f"test:cpus:{max_cpus} < 0")
+            elif max_cpus > config.get("machine:cpu_count"):
+                raise ValueError("test max cpu request exceeds machine cpu count")
+            elif self["session:cpus"] > 0 and max_cpus > self["session:cpus"]:
+                raise ValueError("test cpu request exceeds session cpu limit")
+        elif key not in ("test:timeout", "test:timeoutx", "session:timeout"):
+            raise ValueError(f"unknown resource name: {key!r}")
         self[key] = value
 
     @staticmethod
@@ -106,15 +124,15 @@ class ResourceInfo:
 Defines resources that are required by the test session and establishes limits
 to the amount of resources that can be consumed. The %(r_arg)s argument is of
 the form: ``%(r_form)s``.  The possible ``%(r_form)s`` settings are\n\n
-• ``%(f)s session:workers:N``: Execute the test session asynchronously using a pool of at most N workers [default: auto]\n\n
-• ``%(f)s session:cpus:N``: Occupy at most N cpu cores at any one time.\n\n
-• ``%(f)s session:devices:N``: Occupy at most N devices at any one time.\n\n
-• ``%(f)s session:timeout:T``: Set a timeout on test session execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
-• ``%(f)s test:cpus:N``: Skip tests requiring more than N cpu cores.\n\n
-• ``%(f)s test:devices:N``: Skip tests requiring more than N devices.\n\n
-• ``%(f)s test:timeout:T``: Set a timeout on any single test execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
-• ``%(f)s test:timeoutx:R``: Set a timeout multiplier for all tests [default: 1.0]\n\n
-""" % {"f": flag, "r_form": bold("scope:type:value"), "r_arg": bold(f"{flag} resource")}
+• ``%(f)s session:workers=N``: Execute the test session asynchronously using a pool of at most N workers [default: auto]\n\n
+• ``%(f)s session:cpus=N``: Occupy at most N cpu cores at any one time.\n\n
+• ``%(f)s session:devices=N``: Occupy at most N devices at any one time.\n\n
+• ``%(f)s session:timeout=T``: Set a timeout on test session execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
+• ``%(f)s test:cpus=[n:]N``: Skip tests requiring less than n and more than N cpu cores [default: 0 and machine cpu count]\n\n
+• ``%(f)s test:devices=N``: Skip tests requiring more than N devices.\n\n
+• ``%(f)s test:timeout=T``: Set a timeout on any single test execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
+• ``%(f)s test:timeoutx=R``: Set a timeout multiplier for all tests [default: 1.0]\n\n
+""" % {"f": flag, "r_form": bold("scope:type=value"), "r_arg": bold(f"{flag} resource")}
         return text
 
 
@@ -124,11 +142,32 @@ class BatchInfo:
         self._count: Optional[int] = None
         self._scheduler: Optional[str] = None
         self._workers: Optional[int] = None
-        self.args: list[str] = []
+        self._args: list[str] = []
 
     def __repr__(self):
         s = ", ".join(f"{key[1:]}={value}" for key, value in vars(self).items())
         return f"BatchInfo({s})"
+
+    @staticmethod
+    def parse(arg: str) -> tuple[str, Any]:
+        if match := re.search(r"^length[:=](.*)$", arg):
+            raw = match.group(1)
+            return ("length", time_in_seconds(raw))
+        elif match := re.search(r"^(count|workers)[:=](\d+)$", arg):
+            type, raw = match.groups()
+            return (type, int(raw))
+        elif match := re.search(r"^scheduler[:=](\w+)$", arg):
+            raw = match.group(1)
+            return ("scheduler", str(raw))
+        elif match := re.search(r"^args[:=](.*)$", arg):
+            raw = match.group(1)
+            return ("args", shlex.split(raw))
+        else:
+            raise ValueError(f"invalid batch arg: {arg!r}")
+
+    @property
+    def args(self) -> list[str]:
+        return self._args
 
     @property
     def scheduler(self) -> Optional[str]:
@@ -177,23 +216,21 @@ class BatchInfo:
                 raise ValueError("batch worker request exceeds machine cpu count")
             self._workers = workers
 
-    def set(self, key: str, value: Scalar):
-        if key in ("length", "limit"):
-            self.length = value  # type: ignore
+    def set(self, key: str, value: Any) -> None:
+        if key == "length":
+            self.length = float(value)
         elif key == "count":
-            self.count = value  # type: ignore
+            self.count = int(value)
         elif key == "workers":
-            self.workers = value  # type: ignore
+            self.workers = int(value)
         elif key == "scheduler":
-            if not isinstance(value, str):
-                raise ValueError("expected scheduler to be of type str")
-            self.scheduler = value
+            self.scheduler = str(value)
         elif key == "args":
-            if not isinstance(value, str):
-                raise ValueError("expected scheduler args to be of type str")
-            self.args.extend(shlex.split(value))
+            if isinstance(value, str):
+                value = shlex.split(value)
+            self.args.extend(value)
         else:
-            raise ValueError(f"{key}: unknown attribute name")
+            raise ValueError(f"unknown batch resource name: {key!r}")
 
     @staticmethod
     def cli_help(flag) -> str:
