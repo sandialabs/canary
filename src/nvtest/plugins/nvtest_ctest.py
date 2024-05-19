@@ -167,9 +167,6 @@ class CTestTestCase(TestCase):
             self._processors = parse_np(self.preflags)
 
     def run(self, *args, **kwargs):
-        print(self.name)
-        print(self.sources)
-        print(self.command)
         return super().run(*args, **kwargs)
 
     @property
@@ -212,7 +209,7 @@ def parse_test_args(args: list[str]) -> argparse.Namespace:
                 ns.launcher_args.append(arg)
         else:
             raise ValueError("Unable to find test program")
-    if not os.path.exists(arg):
+    if not is_exe(arg):
         logging.warning(f"{arg}: ctest command not found")
     ns.command = arg
     ns.postflags = list(iter_args)
