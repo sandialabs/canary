@@ -1,5 +1,6 @@
 import argparse
 import os
+import shlex
 import signal
 import sys
 import traceback
@@ -26,12 +27,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     """
     parser = make_argument_parser()
 
+    argv = argv or sys.argv[1:]
     invocation_dir = os.getcwd()
-    pre = parser.preparse()
+    pre = parser.preparse(argv)
+
 
     try:
         os.chdir(pre.C or invocation_dir)
         config.set_main_options(pre)
+        if pre.echo:
+            a = [os.path.join(sys.prefix, "bin/nvtest")] + [_ for _ in argv if _ != "--echo"]
+            logging.info(shlex.join(a))
 
         load_plugins(pre.plugin_dirs or [])
         for hook in plugin.plugins("main", "setup"):

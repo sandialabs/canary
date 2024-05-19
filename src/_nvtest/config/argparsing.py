@@ -267,6 +267,12 @@ def make_argument_parser(**kwargs):
         default=False,
         help="Debug mode [default: %(default)s]",
     )
+    parser.add_argument(
+        "--echo",
+        action="store_true",
+        default=False,
+        help="Echo command line to the console [default: %(default)s]",
+    )
     group = parser.add_argument_group("profiling")
     group.add_argument(
         "--profile",
