@@ -2,6 +2,7 @@ import argparse
 import io
 import json
 import os
+import re
 import subprocess
 from typing import Optional
 
@@ -10,6 +11,7 @@ from _nvtest.test.case import TestCase
 from _nvtest.test.generator import TestGenerator
 from _nvtest.util import graph
 from _nvtest.util import logging
+from _nvtest.util.filesystem import is_exe
 from _nvtest.util.resource import ResourceInfo
 
 build_types: dict[str, str] = {}
@@ -191,8 +193,8 @@ def find_build_type(directory) -> Optional[str]:
 
 
 def is_mpi_launcher(arg: str) -> bool:
-    launchers = ("mpiexec", "mpirun", "srun")
-    return os.path.exists(arg) and arg.endswith(launchers)
+    launchers = ("mpiexec", "mpirun", "srun", "jsrun")
+    return is_exe(arg) and arg.endswith(launchers)
 
 
 def parse_test_args(args: list[str]) -> argparse.Namespace:
@@ -204,7 +206,7 @@ def parse_test_args(args: list[str]) -> argparse.Namespace:
         ns.launcher = arg
         ns.launcher_args = []
         for arg in iter_args:
-            if os.path.exists(arg):
+            if is_exe(arg):
                 break
             else:
                 ns.launcher_args.append(arg)
@@ -218,14 +220,15 @@ def parse_test_args(args: list[str]) -> argparse.Namespace:
 
 
 def parse_np(args: list[str]) -> int:
-    p = argparse.ArgumentParser()
-    p.add_argument("-n", type=int)
-    p.add_argument("-np", type=int)
-    known, unknown = p.parse_known_args(args)
-    if known.n:
-        return known.n
-    elif known.np:
-        return known.np
+    for i, arg in enumerate(args):
+        if re.search("^-(n|np|c)$", arg):
+            return int(args[i + 1])
+        elif re.search("^--np$", arg):
+            return int(args[i + 1])
+        elif match := re.search("^-(n|np|c)([0-9]+)$", arg):
+            return int(match.group(2))
+        elif match := re.search("^--np=([0-9]+)$", arg):
+            return int(match.group(1))
     return 1
 
 
