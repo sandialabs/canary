@@ -20,6 +20,7 @@ from _nvtest.enums import list_parameter_space
 from _nvtest.test.generator import AbstractTestFile
 from _nvtest.third_party.color import colorize
 from _nvtest.util import scalar
+from _nvtest.util import string
 from _nvtest.util.time import to_seconds
 
 if TYPE_CHECKING:
@@ -189,7 +190,7 @@ def p_LINE(line: str) -> Optional[SimpleNamespace]:
     """COMMAND ( OPTIONS ) [:=] ARGS"""
     if not line.split():
         return None
-    tokens = get_tokens(line)
+    tokens = string.get_tokens(line)
     cmd_stack = []
     for token in tokens:
         if token.type == tokenize.ENCODING:
@@ -247,10 +248,6 @@ def p_VVT(filename: Union[Path, str]) -> tuple[list[SimpleNamespace], int]:
     return commands, line_no
 
 
-def get_tokens(path) -> Generator[tokenize.TokenInfo, None, None]:
-    return tokenize.tokenize(io.BytesIO(path.encode("utf-8")).readline)
-
-
 def make_when_expr(options):
     when_expr = io.StringIO()
     wildcards = "*?=><!"
@@ -271,7 +268,7 @@ def find_vvt_lines(filename: Union[Path, str]) -> tuple[list[str], int]:
     if os.path.exists(filename):
         tokens = tokenize.tokenize(open(filename, "rb").readline)
     else:
-        tokens = get_tokens(filename)
+        tokens = string.get_tokens(filename)
     s = io.StringIO()
     for token in tokens:
         if token.type == tokenize.ENCODING:
@@ -289,20 +286,6 @@ def find_vvt_lines(filename: Union[Path, str]) -> tuple[list[str], int]:
             break
     lines = s.getvalue().strip().split("\n")
     return lines, token.start[0]
-
-
-def strip_quotes(arg: str) -> str:
-    s_quote, d_quote = "'''", '"""'
-    tokens = get_tokens(arg)
-    token = next(tokens)
-    while token.type == tokenize.ENCODING:
-        token = next(tokens)
-    s = token.string
-    if token.type == tokenize.STRING:
-        if s.startswith((s_quote, d_quote)):
-            return s[3:-3]
-        return s[1:-1]
-    return arg
 
 
 def p_OPTION(tokens: list[tokenize.TokenInfo]) -> tuple[str, object]:
@@ -325,7 +308,7 @@ def p_OPTION(tokens: list[tokenize.TokenInfo]) -> tuple[str, object]:
         if token.type == tokenize.NEWLINE:
             break
         value += f" {token.string}"
-    return name, strip_quotes(value.strip())
+    return name, string.strip_quotes(value.strip())
 
 
 def p_OPTIONS(tokens: list[tokenize.TokenInfo]) -> dict[str, object]:

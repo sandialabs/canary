@@ -82,7 +82,8 @@ class CTestTestFile(TestGenerator):
                 with open(".nvtest.cmake", "w") as fh:
                     if build_type:
                         fh.write(f"set(CTEST_CONFIGURATION_TYPE {build_type})\n")
-                    fh.write(r"""
+                    fh.write(
+                        r"""
 macro(add_test NAME)
   message("{\"name\": \"${NAME}\", \"args\": \"${ARGN}\"}")
 endmacro()
@@ -105,7 +106,8 @@ macro(set_tests_properties NAME TITLE)
     message(WARNING "Unknown TITLE ${TITLE}")
   endif()
 endmacro()
-""")
+"""
+                    )
                     fh.write(open(self.file).read())
                 cmake = self.find_cmake()
                 p = subprocess.Popen(

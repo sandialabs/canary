@@ -10,6 +10,7 @@ from typing import Union
 
 from .. import config
 from ..third_party.color import colorize
+from .string import strip_quotes
 from .time import time_in_seconds
 
 Scalar = Union[str, int, float, None]
@@ -68,10 +69,10 @@ class ResourceInfo:
             _, a, b = match.groups()
             return ("test:cpus", [int(a), int(b)])
         elif match := re.search(r"^(session|test):timeout[:=](.*)$", arg):
-            scope, raw = match.groups()
+            scope, raw = match.group(1), strip_quotes(match.group(2))
             return (f"{scope}:timeout", time_in_seconds(raw, negatives=True))
         elif match := re.search(r"^test:timeoutx[:=](.*)$", arg):
-            raw = match.group(1)
+            raw = strip_quotes(match.group(1))
             return ("test:timeoutx", time_in_seconds(raw, negatives=True))
         else:
             raise ValueError(f"invalid resource arg: {arg!r}")
@@ -151,7 +152,7 @@ class BatchInfo:
     @staticmethod
     def parse(arg: str) -> tuple[str, Any]:
         if match := re.search(r"^length[:=](.*)$", arg):
-            raw = match.group(1)
+            raw = strip_quotes(match.group(1))
             return ("length", time_in_seconds(raw))
         elif match := re.search(r"^(count|workers)[:=](\d+)$", arg):
             type, raw = match.groups()
@@ -160,7 +161,7 @@ class BatchInfo:
             raw = match.group(1)
             return ("scheduler", str(raw))
         elif match := re.search(r"^args[:=](.*)$", arg):
-            raw = match.group(1)
+            raw = strip_quotes(match.group(1))
             return ("args", shlex.split(raw))
         else:
             raise ValueError(f"invalid batch arg: {arg!r}")

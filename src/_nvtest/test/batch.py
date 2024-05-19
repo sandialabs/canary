@@ -212,9 +212,9 @@ class SubShell(Batch):
         timeoutx = kwargs.get("timeoutx", 1.0)
         fh.write(
             f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
-            f"-l session:workers:{workers} "
-            f"-l session:cpus:{session_cpus} "
-            f"-l test:timeoutx:{timeoutx} "
+            f"-l session:workers={workers} "
+            f"-l session:cpus={session_cpus} "
+            f"-l test:timeoutx={timeoutx} "
             f"^{self.world_id}:{self.world_rank}\n)\n"
         )
         f = self.submission_script_filename()
@@ -334,9 +334,9 @@ class Slurm(Batch):
         fh.write("export NVTEST_DISABLE_KB=1\n")
         fh.write(
             f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
-            f"-l session:workers:{workers} "
-            f"-l session:cpus:{session_cpus} "
-            f"-l test:timeoutx:{timeoutx} "
+            f"-l session:workers={workers} "
+            f"-l session:cpus={session_cpus} "
+            f"-l test:timeoutx={timeoutx} "
             f"^{self.world_id}:{self.world_rank}\n)\n"
         )
         f = self.submission_script_filename()

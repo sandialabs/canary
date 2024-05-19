@@ -24,10 +24,10 @@ version_scheme = "guess-next-dev"
 local_scheme = "node-and-date"
 
 [tool.mypy]
-exclude = ["src/_nvtest/third_party/distro.py", "src/_nvtest/third_party/programoutput", "src/_nvtest/third_party/monkeypatch"]
+exclude = ["src/_nvtest/third_party/distro.py", "src/_nvtest/third_party/programoutput/*", "src/_nvtest/third_party/monkeypatch.py"]
 
 [[tool.mypy.overrides]]
-module = "requests.*,networkx.*,yaml.*,ruamel.*,pygments.*,toml.*,contextlib2.*,scipy.*,pyinstrument.*,numpy.*,imageio.*"
+module = "requests.*,networkx.*,yaml.*,ruamel.*,pygments.*,toml.*,contextlib2.*,scipy.*,pyinstrument.*,numpy.*,imageio.*,pkg_resources.*"
 ignore_missing_imports = true
 
 # check-wheel-contents is executed by the build-and-inspect-python-package action.
