@@ -188,9 +188,11 @@ class TestCase(Runner):
         return self._status
 
     @status.setter
-    def status(self, arg: Union[Status, list[str]]) -> None:
+    def status(self, arg: Union[Status, list[str], dict[str, str]]) -> None:
         if isinstance(arg, Status):
             self._status.set(arg.value, details=arg.details)
+        elif isinstance(arg, dict):
+            self._status.set(arg["value"], details=arg["details"])
         else:
             self._status.set(arg[0], details=arg[1])
 

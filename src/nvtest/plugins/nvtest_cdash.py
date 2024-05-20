@@ -53,6 +53,12 @@ def setup_parser(parser):
         metavar="directory",
         help="Write reports to this directory [default: $session/_reports/cdash]",
     )
+    p.add_argument(
+        "-j",
+        dest="json",
+        metavar="file",
+        help="Create reports from this JSON file [default: $session/_reports/cdash]",
+    )
     group = p.add_mutually_exclusive_group()
     group.add_argument(
         "--track",
@@ -92,8 +98,8 @@ def create_reports(args):
         print(url)
         return
     else:
-        if args.files and args.files[0].endswith(".json"):
-            reporter = CDashReporter.from_json(file=args.files[0], dest=args.d)
+        if args.json:
+            reporter = CDashReporter.from_json(file=args.json, dest=args.d)
         else:
             with logging.level(logging.WARNING):
                 session = Session(os.getcwd(), mode="r")

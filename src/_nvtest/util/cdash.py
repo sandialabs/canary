@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import xml.dom.minidom as dom
 import xml.parsers.expat
 import xml.sax.saxutils
@@ -110,7 +111,7 @@ class server:
             params["MD5"] = md5sum
         encoded_params = urlencode(params)
         url = f"{self.baseurl}/submit.php?{encoded_params}"
-        logging.info(f"Uploading {os.path.basename(filename)} to {url}")
+        logging.info(f"Uploading {os.path.basename(filename)} to {url}", file=sys.stderr)
         return self.put(url, filename)
 
     @staticmethod
