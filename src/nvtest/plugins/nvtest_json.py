@@ -12,7 +12,7 @@ from .reporter import Reporter
 @nvtest.plugin.register(scope="report", stage="setup", type="json")
 def setup_parser(parser):
     sp = parser.add_subparsers(dest="child_command", metavar="")
-    sp.add_parser("create", help="Create CDash XML files")
+    sp.add_parser("create", help="Create json report")
 
 
 @nvtest.plugin.register(scope="report", stage="create", type="json")

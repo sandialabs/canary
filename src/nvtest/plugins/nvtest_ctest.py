@@ -148,7 +148,9 @@ class CTestTestCase(TestCase):
         TIMEOUT: Optional[str] = None,
         **kwds,
     ) -> None:
-        ns = parse_test_args(args)
+        directory = os.path.join(root, os.path.dirname(path))
+        with nvtest.filesystem.working_dir(directory):
+            ns = parse_test_args(args)
         super().__init__(
             root,
             path,
@@ -201,14 +203,17 @@ def parse_test_args(args: list[str]) -> argparse.Namespace:
     arg = next(iter_args)
     if is_mpi_launcher(arg):
         ns.launcher = arg
-        ns.launcher_args = []
+        ns.preflags = []
         for arg in iter_args:
             if is_exe(arg):
                 break
+            elif is_exe(os.path.abspath(arg)):
+                arg = os.path.abspath(arg)
             else:
-                ns.launcher_args.append(arg)
+                ns.preflags.append(arg)
         else:
-            raise ValueError("Unable to find test program")
+            s = " ".join(args)
+            raise ValueError(f"Unable to find test program in {s}")
     if not is_exe(arg):
         logging.warning(f"{arg}: ctest command not found")
     ns.command = arg
