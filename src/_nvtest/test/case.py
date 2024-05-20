@@ -378,7 +378,15 @@ class TestCase(Runner):
                 os.environ.pop(var)
 
     def compressed_log(self) -> str:
-        done = self.status.value in ("failed", "success")
+        done = self.status.value in (
+            "success",
+            "xfail",
+            "xdiff",
+            "skipped",
+            "diffed",
+            "failed",
+            "timeout",
+        )
         if done:
             kb_to_keep = 2 if self.status == "success" else 300
             compressed_log = compress_file(self.logfile(), kb_to_keep)
@@ -555,7 +563,8 @@ class TestCase(Runner):
                         time.sleep(0.05)
                     return proc.returncode
 
-    def teardown(self) -> None: ...
+    def teardown(self) -> None:
+        ...
 
     def cache_file(self, path):
         return os.path.join(path, f"timing/{self.id[:2]}/{self.id[2:]}.json")
