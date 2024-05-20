@@ -31,7 +31,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     invocation_dir = os.getcwd()
     pre = parser.preparse(argv)
 
-
     try:
         os.chdir(pre.C or invocation_dir)
         config.set_main_options(pre)

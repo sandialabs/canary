@@ -3,59 +3,55 @@ import os
 import re
 from typing import Optional
 
+import nvtest
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.util import gitlab
 from _nvtest.util import logging
 
-from .nvtest_cdash import CDashReporter
 
-
-# @nvtest.plugin.register(scope="session", stage="finish")
-def merge_request_report(session: Session) -> None:
+@nvtest.plugin.register(scope="report", stage="setup", type="gitlab-mr")
+def setup_parser(parser):
     if "CI_MERGE_REQUEST_IID" not in os.environ:
         return
-    cdash_build_url = None
-    cdash_url = os.getenv("MERGE_REQUEST_CDASH_URL")
-    cdash_project = os.getenv("MERGE_REQUEST_CDASH_PROJECT")
-    if cdash_url and cdash_project:
-        reporter = CDashReporter(session)
-        reporter.create(
-            buildname(),
-            site=os.getenv("MERGE_REQUEST_CDASH_SITE"),
-            track=os.getenv("MERGE_REQUEST_CDASH_TRACK", "Merge Request"),
-        )
-        cdash_build_url = reporter.post(cdash_url, cdash_project, *reporter.xml_files)
+    parser.add_argument("--cdash-url", help="CDash build URL")
+    parser.add_argument("-a", dest="access_token", help="GitLab access token")
+
+
+@nvtest.plugin.register(scope="report", stage="create", type="gitlab-mr")
+def create_report(args):
+    if "CI_MERGE_REQUEST_IID" not in os.environ:
+        return
     try:
-        mr = MergeRequest()
+        mr = MergeRequest(access_token=args.access_token)
     except MissingCIVariable:
         return
     else:
+        with logging.level(logging.WARNING):
+            session = Session(os.getcwd(), mode="r")
         cases = [case for case in session.cases if not case.mask]
         failed = group_failed_tests(cases)
         if failed:
-            mr.report_failed(failed, cdash_build_url=cdash_build_url)
+            mr.report_failed(failed, cdash_build_url=args.cdash_url)
         else:
-            mr.report_success(cdash_build_url=cdash_build_url)
-
-
-def buildname() -> str:
-    iid = os.environ["CI_MERGE_REQUEST_IID"]
-    job = os.environ["CI_JOB_NAME"]
-    title = os.environ["CI_MERGE_REQUEST_TITLE"]
-    return f"{title} (!{iid}), job={job}"
+            mr.report_success(cdash_build_url=args.cdash_url)
 
 
 class MergeRequest:
-    def __init__(self):
+    def __init__(self, access_token: Optional[str] = None):
         if "GITLAB_CI" not in os.environ:
             raise MissingCIVariable("GITLAB_CI")
-        for var in ("GITLAB_ACCESS_TOKEN", "ACCESS_TOKEN"):
-            if var in os.environ:
-                self.access_token = os.environ[var]
-                break
-        else:
-            raise MissingCIVariable("GITLAB_ACCESS_TOKEN")
+        if access_token is None:
+            for var in ("GITLAB_ACCESS_TOKEN", "ACCESS_TOKEN"):
+                if var in os.environ:
+                    access_token = os.environ[var]
+                    break
+            else:
+                raise MissingCIVariable("GITLAB_ACCESS_TOKEN")
+        for var in ("CI_MERGE_REQUEST_IID", "CI_PROJECT_ID", "CI_API_V4_URL"):
+            if var not in os.environ:
+                raise MissingCIVariable(var)
+        self.access_token = access_token
         iid = os.environ["CI_MERGE_REQUEST_IID"]
         project_id = os.environ["CI_PROJECT_ID"]
         api_v4_url = os.environ["CI_API_V4_URL"]

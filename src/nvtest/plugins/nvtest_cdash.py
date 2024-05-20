@@ -2,6 +2,7 @@ import argparse
 import datetime
 import glob
 import io
+import json
 import os
 import sys
 import time
@@ -88,12 +89,15 @@ def setup_parser(parser):
 def create_reports(args):
     if args.child_command == "post" and args.files:
         url = CDashReporter.post(args.url, args.project, *args.files)
-        logging.info(f"Files uploaded to {url}")
+        print(url)
         return
     else:
-        with logging.level(logging.WARNING):
-            session = Session(os.getcwd(), mode="r")
-        reporter = CDashReporter(session, dest=args.d)
+        if args.files and args.files[0].endswith(".json"):
+            reporter = CDashReporter.from_json(file=args.files[0], dest=args.d)
+        else:
+            with logging.level(logging.WARNING):
+                session = Session(os.getcwd(), mode="r")
+            reporter = CDashReporter(session, dest=args.d)
         if args.child_command == "create":
             if args.f:
                 opts = dict(
@@ -129,11 +133,30 @@ def chunked(seq, size):
 
 
 class CDashReporter(Reporter):
-    def __init__(self, session: Session, dest: Optional[str] = None) -> None:
+    def __init__(self, session: Optional[Session] = None, dest: Optional[str] = None) -> None:
         super().__init__(session)
-        dest = dest or os.path.join(session.root, "_reports/cdash")
+        dest = dest or os.path.join("." if not session else session.root, "_reports/cdash")
         self.xml_dir = os.path.abspath(dest)
         self.xml_files: list[str] = []
+
+    @classmethod
+    def from_json(cls, file: str, dest: Optional[str] = None) -> "CDashReporter":
+        dest = dest or os.path.join(os.path.dirname(file), "xml")
+        self = cls(dest=dest)
+        data = json.load(open(file))
+        cases: dict[str, TestCase] = {}
+        for id, details in data.items():
+            case = TestCase.from_vars(details)
+            case.id = id
+            cases[id] = case
+        for id, case in cases.items():
+            for i, dep in enumerate(case.dependencies):
+                if isinstance(dep, str):
+                    case.dependencies[i] = cases[dep]
+        for case in cases.values():
+            if not case.mask:
+                self.data.add_test(case)
+        return self
 
     def create(
         self,
@@ -155,8 +178,8 @@ class CDashReporter(Reporter):
         else:
             self.buildstamp = self.validate_buildstamp(buildstamp)
         mkdirp(self.xml_dir)
-        for i, cases in enumerate(chunked(self.data.cases, 500)):
-            self.write_test_xml(cases, i)
+        for cases in chunked(self.data.cases, 500):
+            self.write_test_xml(cases)
         self.write_notes_xml()
 
     @staticmethod
@@ -239,8 +262,13 @@ class CDashReporter(Reporter):
             add_attr(el, key, value)
         return el
 
-    def write_test_xml(self, cases: list[TestCase], id: int) -> str:
-        filename = os.path.join(self.xml_dir, f"Test-{id}.xml")
+    def write_test_xml(self, cases: list[TestCase]) -> str:
+        i = 0
+        while True:
+            filename = os.path.join(self.xml_dir, f"Test-{i}.xml")
+            if not os.path.exists(filename):
+                break
+            i += 1
         f = os.path.relpath(filename, config.get("session:invocation_dir"))
         logging.log(logging.INFO, f"WRITING: {len(cases)} test cases to {f}", prefix=None)
         starttime = self.data.start

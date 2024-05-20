@@ -1,5 +1,6 @@
 import sys
 from typing import TYPE_CHECKING
+from typing import Optional
 
 if TYPE_CHECKING:
     from _nvtest.session import Session
@@ -7,21 +8,20 @@ if TYPE_CHECKING:
 
 
 class Reporter:
-    def __init__(self, session: "Session") -> None:
-        self.session = session
-        self.data = TestData(session)
+    def __init__(self, session: Optional["Session"] = None) -> None:
+        self.data = TestData()
+        if session:
+            cases_to_run: list["TestCase"] = [c for c in session.cases if not c.mask]
+            for case in cases_to_run:
+                self.data.add_test(case)
 
 
 class TestData:
-    def __init__(self, session: "Session") -> None:
-        self.session = session
+    def __init__(self) -> None:
         self.start: float = sys.maxsize
         self.finish: float = -1
         self.status: int = 0
         self.cases: list["TestCase"] = []
-        cases_to_run: list["TestCase"] = [c for c in session.cases if not c.mask]
-        for case in cases_to_run:
-            self.add_test(case)
 
     def __len__(self):
         return len(self.cases)
