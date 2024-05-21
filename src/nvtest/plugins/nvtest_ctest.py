@@ -64,7 +64,6 @@ class CTestTestFile(TestGenerator):
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")
-        file.write("Keywords: unit, ctest\n")
         resourceinfo = resourceinfo or ResourceInfo()
         cases = self.freeze(
             cpus=resourceinfo["test:cpus"],
@@ -94,16 +93,26 @@ macro(subdirs)
   # Ignore subdirs since we just crawl looking for CTest files
 endmacro()
 
-macro(set_tests_properties NAME TITLE)
-  set(properties)
-  if(${TITLE} STREQUAL "PROPERTIES")
-    foreach(ARG ${ARGN})
-      if("${ARG}" MATCHES "^_.*")
-        break()
-      endif()
-      list(APPEND properties "${ARG}")
-    endforeach()
-    message("{\"name\": \"${NAME}\", \"properties\": \"${properties}\"}")
+macro(set_tests_properties NAME)
+  cmake_parse_arguments(
+    p "PROPERTIES" "PROCESSORS" "ENVIRONMENT;LABELS;RESOURCE_GROUPS;_BACKTRACE_TRIPLES" ${ARGN}
+  )
+  if (p_PROPERTIES)
+    set(output "{\"name\": \"${NAME}\"")
+    if (p_PROCESSORS)
+      string(APPEND output ", \"processors\": ${p_PROCESSORS}")
+    endif()
+    if (p_ENVIRONMENT)
+      string(APPEND output ", \"variables\": \"${p_ENVIRONMENT}\"")
+    endif()
+    if (p_LABELS)
+      string(APPEND output ", \"labels\": \"${p_LABELS}\"")
+    endif()
+    if (p_RESOURCE_GROUPS)
+      string(APPEND output ", \"resource_groups\": \"${p_RESOURCE_GROUPS}\"")
+    endif()
+    string(APPEND output "}")
+    message("{\"properties\": ${output}}")
   else()
     message(WARNING "Unknown TITLE ${TITLE}")
   endif()
@@ -119,13 +128,19 @@ endmacro()
                 )
                 p.wait()
                 out, err = p.communicate()
+                split = lambda a: [_.strip() for _ in a.split(";") if _.split()]
                 lines = [l.strip() for l in out.decode("utf-8").split("\n") if l.split()]
                 lines.extend([l.strip() for l in err.decode("utf-8").split("\n") if l.split()])
                 for line in lines:
                     fd = json.loads(line)
                     if "properties" in fd:
                         props = fd.pop("properties")
-                        fd["properties"] = dict(zip(props[0::2], props[1::2]))
+                        for key, val in props.items():
+                            if key == "variables":
+                                val = dict([tuple(kv.split("=")) for kv in split(val)])
+                            elif key == "labels":
+                                val = split(val)
+                            fd[key] = val
                     if "args" in fd:
                         fd["args"] = [_.strip() for _ in fd["args"].split(";") if _.split()]
                     d = tests.setdefault(fd.pop("name"), {})
@@ -146,16 +161,24 @@ class CTestTestCase(TestCase):
         WORKING_DIRECTORY: Optional[str] = None,
         WILL_FAIL: Optional[str] = None,
         TIMEOUT: Optional[str] = None,
+        variables: Optional[dict[str, str]] = None,
+        labels: Optional[list[str]] = None,
+        processors: Optional[int] = None,
         **kwds,
     ) -> None:
         directory = os.path.join(root, os.path.dirname(path))
         with nvtest.filesystem.working_dir(directory):
             ns = parse_test_args(args)
+
+        keywords = ["unit", "ctest"]
+        if labels:
+            keywords.extend(labels)
+
         super().__init__(
             root,
             path,
             family=name,
-            keywords=["unit", "ctest"],
+            keywords=keywords,
             timeout=float(TIMEOUT or 10),
             xstatus=0 if not WILL_FAIL else -1,
             sources={"link": [(ns.command, os.path.basename(ns.command))]},
@@ -165,8 +188,13 @@ class CTestTestCase(TestCase):
         self.command = ns.command
         self.postflags = ns.postflags
         self._processors: int = 1
-        if self.preflags:
+        if processors:
+            self._processors = processors
+        elif self.preflags:
             self._processors = parse_np(self.preflags)
+        if variables:
+            for var, val in variables.items():
+                self.add_default_env(var, val)
 
     def run(self, *args, **kwargs):
         return super().run(*args, **kwargs)
