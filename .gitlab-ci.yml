@@ -12,6 +12,7 @@ test-job:
   - module load aue/gcc/12.1.0 > /dev/null 2>&1 || true
   - module load aue/openmpi/4.1.4-gcc-12.1.0 > /dev/null 2>&1 || true
   - module load alegra-dev
+  - python3 -m venv venv
   - source venv/bin/activate
   - python3 -m pip install -e .[dev]
   - pytest ./tests
