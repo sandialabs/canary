@@ -31,12 +31,14 @@ def test_parse_ctesttestfile(tmpdir):
         set_executable("some-exe")
         set_executable("mpiexec")
         with open("CTestTestfile.cmake", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 add_test(test1 "script.sh" "some-exe")
 set_tests_properties(test1 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;SPAM=BAZ" LABELS "foo;baz" PROCESSORS "5" RESOURCE_GROUPS "5,gpus:1" _BACKTRACE_TRIPLES "CMakeLists.txt;0;")
 add_test(test2 "mpiexec" "-n" "4" "some-exe")
 set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM" LABELS "foo;spam" _BACKTRACE_TRIPLES "CMakeLists.txt;0;")
-""")
+"""
+            )
         file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
         cases = file.freeze()
         assert len(cases) == 2

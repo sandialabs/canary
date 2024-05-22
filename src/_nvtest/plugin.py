@@ -89,7 +89,7 @@ class Manager:
             if stage not in ("discovery", "setup", "finish"):
                 raise TypeError(err_msg)
         elif scope == "test":
-            if stage not in ("discovery", "setup", "finish"):
+            if stage not in ("discovery", "setup", "pre:baseline", "pre:run", "finish"):
                 raise TypeError(err_msg)
             if stage == "load":
                 if "file_type" not in kwds:

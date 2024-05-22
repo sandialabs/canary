@@ -62,6 +62,7 @@ class TestCase(Runner):
         self.file_root = root
         self.file_path = path
         self.file = os.path.join(root, path)
+        self.url: Optional[str] = None
         self.file_dir = os.path.dirname(self.file)
         assert os.path.exists(self.file)
         self.file_type = os.path.splitext(self.file)[1:]
@@ -424,6 +425,8 @@ class TestCase(Runner):
         with fs.working_dir(self.exec_dir, create=True):
             self.setup_exec_dir(copy_all_resources=copy_all_resources)
             self._status.set("ready" if not self.dependencies else "pending")
+            for hook in plugin.plugins("test", "setup"):
+                hook(self)
             self.save()
         logging.trace(f"Done setting up {self}")
 
@@ -455,8 +458,8 @@ class TestCase(Runner):
             return
         logging.info(f"Rebaselining {self.pretty_repr()}")
         with fs.working_dir(self.exec_dir):
-            for hook in plugin.plugins("test", "setup"):
-                hook(self, baseline=True)
+            for hook in plugin.plugins("test", "pre:baseline"):
+                hook(self)
             for arg in self.baseline:
                 if isinstance(arg, str):
                     if os.path.exists(arg):
@@ -555,7 +558,7 @@ class TestCase(Runner):
         stage = stage or "test"
         timeout = self.timeout * timeoutx
         with fs.working_dir(self.exec_dir):
-            for hook in plugin.plugins("test", "setup"):
+            for hook in plugin.plugins("test", "pre:run"):
                 hook(self, analyze=analyze)
             with logging.capture(self.logfile(stage), mode="w"), logging.timestamps():
                 cmd: list[str] = []

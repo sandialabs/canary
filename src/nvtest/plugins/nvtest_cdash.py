@@ -335,6 +335,8 @@ class CDashReporter(Reporter):
             add_measurement(results, name="Completion Status", value=completion_status)
             add_measurement(results, name="Command Line", cdata=case.cmd_line)
             add_measurement(results, name="Processors", value=int(case.processors or 0))
+            if url := getattr(case, "url", None):
+                add_measurement(results, name="Script", cdata=url)
             add_measurement(
                 results,
                 value=case.compressed_log(),

@@ -14,12 +14,16 @@ from _nvtest.util import logging
 def setup_parser(parser):
     if "CI_MERGE_REQUEST_IID" not in os.environ:
         return
-    parser.add_argument("--cdash-url", help="CDash build URL")
-    parser.add_argument("-a", dest="access_token", help="GitLab access token")
+    sp = parser.add_subparsers(dest="child_command", metavar="")
+    p = sp.add_parser("create", help="Create GitLab Merge request report")
+    p.add_argument("--cdash-url", help="CDash build URL")
+    p.add_argument("-a", dest="access_token", help="GitLab access token")
 
 
 @nvtest.plugin.register(scope="report", stage="create", type="gitlab-mr")
 def create_report(args):
+    if args.child_command != "create":
+        return
     if "CI_MERGE_REQUEST_IID" not in os.environ:
         return
     try:

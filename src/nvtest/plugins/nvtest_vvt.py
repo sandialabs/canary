@@ -449,7 +449,6 @@ def get_vvtest_attrs(case: "TestCase", baseline: bool = False, analyze: bool = F
 nvtest.plugin.test_generator(VVTTestFile)
 
 
-@nvtest.plugin.register(scope="test", stage="setup")
 def write_vvtest_util(case: "TestCase", baseline: bool = False, analyze: bool = False) -> None:
     if not case.file_path.endswith(".vvt"):
         return
@@ -466,6 +465,21 @@ def write_vvtest_util(case: "TestCase", baseline: bool = False, analyze: bool = 
                 fh.write(f"{key} = {value}\n")
             else:
                 fh.write(f"{key} = {json.dumps(value, indent=4)}\n")
+
+
+@nvtest.plugin.register(scope="test", stage="setup")
+def setup(case: "TestCase") -> None:
+    write_vvtest_util(case)
+
+
+@nvtest.plugin.register(scope="test", stage="pre:run")
+def pre_run(case: "TestCase", analyze: bool = False) -> None:
+    write_vvtest_util(case, analyze=analyze)
+
+
+@nvtest.plugin.register(scope="test", stage="pre:baseline")
+def pre_baseline(case: "TestCase") -> None:
+    write_vvtest_util(case, baseline=True)
 
 
 @nvtest.plugin.register(scope="test", stage="finish")
