@@ -152,12 +152,13 @@ class CTestTestCase(TestCase):
         name: str,
         *,
         args: list[str],
-        WORKING_DIRECTORY: Optional[str] = None,
-        WILL_FAIL: Optional[str] = None,
-        TIMEOUT: Optional[str] = None,
+        working_directory: Optional[str] = None,
+        will_fail: Optional[bool] = False,
+        timeout: float = 10.0,
         environment: Optional[dict[str, str]] = None,
         labels: Optional[list[str]] = None,
         processors: Optional[int] = None,
+        resource_groups: Optional[list[str]] = None,
         **kwds,
     ) -> None:
         directory = os.path.join(root, os.path.dirname(path))
@@ -173,8 +174,8 @@ class CTestTestCase(TestCase):
             path,
             family=name,
             keywords=keywords,
-            timeout=float(TIMEOUT or 10),
-            xstatus=0 if not WILL_FAIL else -1,
+            timeout=timeout,
+            xstatus=0 if not will_fail else -1,
             sources={"link": [(ns.command, os.path.basename(ns.command))]},
         )
         self.launcher = ns.launcher
@@ -190,12 +191,31 @@ class CTestTestCase(TestCase):
             for var, val in environment.items():
                 self.add_default_env(var, val)
 
+        self._devices: int = 0
+        if resource_groups:
+            self.read_resource_groups(resource_groups)
+
+    def read_resource_groups(self, resource_groups: list[str]) -> None:
+        for rg in resource_groups:
+            groups = rg.split(",")
+            n = 1
+            if match := re.search(r"[0-9]+", groups[0]):
+                n = int(match.group(0))
+                groups = groups[1:]
+            for group in groups:
+                if group.startswith("gpus:"):
+                    self._devices += int(group[5:]) * n
+
     def run(self, *args, **kwargs):
         return super().run(*args, **kwargs)
 
     @property
     def processors(self) -> int:
         return self._processors
+
+    @property
+    def devices(self) -> int:
+        return self._devices
 
 
 def find_build_type(directory) -> Optional[str]:

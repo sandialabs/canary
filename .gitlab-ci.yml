@@ -3,18 +3,17 @@ stages:
 - deploy
 
 test-job:
-  tags:
-  - cee
-  - linux_rh7
+  tags: [cee]
   stage: test
   script:
-  - module use /projects/aue/modules/cee/x86_64/rhel7 > /dev/null 2>&1 || true
+  - module use /projects/alegranevada/modules/$SNLSYSTEM/$SNLCLUSTER
+  - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - module load aue/cmake/3.27.7 > /dev/null 2>&1 || true
   - module load aue/gcc/12.1.0 > /dev/null 2>&1 || true
   - module load aue/openmpi/4.1.4-gcc-12.1.0 > /dev/null 2>&1 || true
-  - /projects/alegranevada/opt/cee/linux_rh7/python/3.9/bin/python -m venv venv
+  - module load alegra-dev
   - source venv/bin/activate
-  - python -m pip install -e .[dev]
+  - python3 -m pip install -e .[dev]
   - pytest ./tests
   - deactivate
   rules:
@@ -23,13 +22,13 @@ test-job:
 
 pages:
   stage: deploy
-  tags:
-  - cee
-  - linux_rh7
+  tags: [cee]
   script:
-  - /projects/alegranevada/opt/cee/linux_rh7/python/3.9/bin/python -m venv venv
+  - module use /projects/alegranevada/modules/$SNLSYSTEM/$SNLCLUSTER
+  - module load alegra-dev
+  - python3 -m venv venv
   - source venv/bin/activate
-  - python -m pip install -e .[dev]
+  - python3 -m pip install -e .[dev]
   - cd docs
   - make clean
   - make html
