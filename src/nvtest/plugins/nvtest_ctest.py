@@ -1,9 +1,11 @@
 import argparse
+import importlib.resources as ir
 import io
 import json
 import os
 import re
 import subprocess
+from typing import Any
 from typing import Optional
 
 import nvtest
@@ -77,77 +79,69 @@ class CTestTestFile(TestGenerator):
 
     def parse(self) -> dict:
         build_type = find_build_type(os.path.dirname(self.file))
+        cmake_helper = ir.files("nvtest").joinpath("plugins/ctest_helpers.cmake")
         tests: dict = {}
         with nvtest.filesystem.working_dir(os.path.dirname(self.file)):
             try:
                 with open(".nvtest.cmake", "w") as fh:
                     if build_type:
                         fh.write(f"set(CTEST_CONFIGURATION_TYPE {build_type})\n")
-                    fh.write(
-                        r"""
-macro(add_test NAME)
-  message("{\"name\": \"${NAME}\", \"args\": \"${ARGN}\"}")
-endmacro()
-
-macro(subdirs)
-  # Ignore subdirs since we just crawl looking for CTest files
-endmacro()
-
-macro(set_tests_properties NAME)
-  cmake_parse_arguments(
-    p "PROPERTIES" "PROCESSORS" "ENVIRONMENT;LABELS;RESOURCE_GROUPS;_BACKTRACE_TRIPLES" ${ARGN}
-  )
-  if (p_PROPERTIES)
-    set(output "{\"name\": \"${NAME}\"")
-    if (p_PROCESSORS)
-      string(APPEND output ", \"processors\": ${p_PROCESSORS}")
-    endif()
-    if (p_ENVIRONMENT)
-      string(APPEND output ", \"variables\": \"${p_ENVIRONMENT}\"")
-    endif()
-    if (p_LABELS)
-      string(APPEND output ", \"labels\": \"${p_LABELS}\"")
-    endif()
-    if (p_RESOURCE_GROUPS)
-      string(APPEND output ", \"resource_groups\": \"${p_RESOURCE_GROUPS}\"")
-    endif()
-    string(APPEND output "}")
-    message("{\"properties\": ${output}}")
-  else()
-    message(WARNING "Unknown TITLE ${TITLE}")
-  endif()
-endmacro()
-"""
-                    )
+                    fh.write(cmake_helper.read_text())
                     fh.write(open(self.file).read())
                 cmake = self.find_cmake()
                 p = subprocess.Popen(
-                    [cmake, "-P", ".nvtest.cmake"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    [cmake, "-P", ".nvtest.cmake"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
                 )
                 p.wait()
                 out, err = p.communicate()
-                split = lambda a: [_.strip() for _ in a.split(";") if _.split()]
                 lines = [l.strip() for l in out.decode("utf-8").split("\n") if l.split()]
                 lines.extend([l.strip() for l in err.decode("utf-8").split("\n") if l.split()])
                 for line in lines:
                     fd = json.loads(line)
-                    if "properties" in fd:
-                        props = fd.pop("properties")
-                        for key, val in props.items():
-                            if key == "variables":
-                                val = dict([tuple(kv.split("=")) for kv in split(val)])
-                            elif key == "labels":
-                                val = split(val)
-                            fd[key] = val
-                    if "args" in fd:
-                        fd["args"] = [_.strip() for _ in fd["args"].split(";") if _.split()]
-                    d = tests.setdefault(fd.pop("name"), {})
-                    d.update(fd)
+                    if "test" in fd:
+                        td = tests.setdefault(fd["test"].pop("name"), {})
+                        td["args"] = [] if "args" not in fd["test"] else split(fd["test"]["args"])
+                    elif "properties" in fd:
+                        td = tests.setdefault(fd["properties"].pop("name"), {})
+                        for key, details in fd["properties"].items():
+                            val: Any
+                            type = details["type"]
+                            raw_value = details["value"]
+                            if type == "str":
+                                val = raw_value
+                            elif type == "list_of_str":
+                                val = split(raw_value)
+                            elif type == "bool":
+                                val = boolean(raw_value)
+                            elif type == "int":
+                                val = int(raw_value)
+                            elif type == "float":
+                                val = float(raw_value)
+                            elif type == "list_of_var":
+                                val = split_vars(raw_value)
+                            else:
+                                logging.warning(f"Unknown CTest property type: {type}")
+                                continue
+                            td[key] = val
             finally:
                 nvtest.filesystem.force_remove(".nvtest.cmake")
         return tests
+
+
+def boolean(string: str) -> bool:
+    return string.lower() in ("1", "on", "true", "yes")
+
+
+def split(string: str) -> list[str]:
+    return [_.strip() for _ in string.split(";") if _.split()]
+
+
+def split_vars(string: str) -> dict[str, str]:
+    vars: dict[str, str] = {}
+    for kv in split(string):
+        k, v = kv.split("=")
+        vars[k] = v
+    return vars
 
 
 class CTestTestCase(TestCase):
@@ -161,7 +155,7 @@ class CTestTestCase(TestCase):
         WORKING_DIRECTORY: Optional[str] = None,
         WILL_FAIL: Optional[str] = None,
         TIMEOUT: Optional[str] = None,
-        variables: Optional[dict[str, str]] = None,
+        environment: Optional[dict[str, str]] = None,
         labels: Optional[list[str]] = None,
         processors: Optional[int] = None,
         **kwds,
@@ -192,8 +186,8 @@ class CTestTestCase(TestCase):
             self._processors = processors
         elif self.preflags:
             self._processors = parse_np(self.preflags)
-        if variables:
-            for var, val in variables.items():
+        if environment:
+            for var, val in environment.items():
                 self.add_default_env(var, val)
 
     def run(self, *args, **kwargs):

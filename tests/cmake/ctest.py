@@ -25,21 +25,27 @@ def test_parse_np():
 def test_parse_ctesttestfile(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         touchp("mpiexec")
-        touchp("some-script.sh")
+        touchp("script.sh")
         touchp("some-exe")
+        set_executable("script.sh")
         set_executable("some-exe")
         set_executable("mpiexec")
         with open("CTestTestfile.cmake", "w") as fh:
             fh.write("""\
-add_test(name "script.sh" "some-exe")
-set_tests_properties(name PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;SPAM=BAZ" LABELS "foo;baz" PROCESSORS "5" RESOURCE_GROUPS "5,gpus:1" _BACKTRACE_TRIPLES "CMakeLists.txt;0;")
-add_test(mpitest "mpiexec" "-n" "4" "some-exe")
-set_tests_properties(mpitest PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;SPAM=EGGS" LABELS "foo;spam" _BACKTRACE_TRIPLES "CMakeLists.txt;0;")
+add_test(test1 "script.sh" "some-exe")
+set_tests_properties(test1 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;SPAM=BAZ" LABELS "foo;baz" PROCESSORS "5" RESOURCE_GROUPS "5,gpus:1" _BACKTRACE_TRIPLES "CMakeLists.txt;0;")
+add_test(test2 "mpiexec" "-n" "4" "some-exe")
+set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM" LABELS "foo;spam" _BACKTRACE_TRIPLES "CMakeLists.txt;0;")
 """)
         file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
         cases = file.freeze()
         assert len(cases) == 2
+
         assert cases[0]._processors == 5
         assert "baz" in cases[0]._keywords
+        assert "SPAM" in cases[0].variables
+
         assert cases[1].launcher.endswith("mpiexec")
         assert cases[1]._processors == 4
+        assert "foo" in cases[1]._keywords
+        assert "EGGS" in cases[1].variables
