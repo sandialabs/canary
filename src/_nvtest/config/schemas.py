@@ -37,7 +37,7 @@ config_schema = Schema(
             Optional("debug"): bool,
             Optional("no_cache"): bool,
             Optional("log_level"): log_levels,
-            Optional("batch_length"): float,
+            Optional("batch_length"): time_in_seconds,
         }
     }
 )

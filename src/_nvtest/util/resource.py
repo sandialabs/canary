@@ -70,10 +70,10 @@ class ResourceInfo:
             return ("test:cpus", [int(a), int(b)])
         elif match := re.search(r"^(session|test):timeout[:=](.*)$", arg):
             scope, raw = match.group(1), strip_quotes(match.group(2))
-            return (f"{scope}:timeout", time_in_seconds(raw, negatives=True))
+            return (f"{scope}:timeout", time_in_seconds(raw))
         elif match := re.search(r"^test:timeoutx[:=](.*)$", arg):
             raw = strip_quotes(match.group(1))
-            return ("test:timeoutx", time_in_seconds(raw, negatives=True))
+            return ("test:timeoutx", time_in_seconds(raw))
         else:
             raise ValueError(f"invalid resource arg: {arg!r}")
 
@@ -128,10 +128,10 @@ the form: ``%(r_form)s``.  The possible ``%(r_form)s`` settings are\n\n
 • ``%(f)s session:workers=N``: Execute the test session asynchronously using a pool of at most N workers [default: auto]\n\n
 • ``%(f)s session:cpus=N``: Occupy at most N cpu cores at any one time.\n\n
 • ``%(f)s session:devices=N``: Occupy at most N devices at any one time.\n\n
-• ``%(f)s session:timeout=T``: Set a timeout on test session execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
+• ``%(f)s session:timeout=T``: Set a timeout on test session execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: 60m]\n\n
 • ``%(f)s test:cpus=[n:]N``: Skip tests requiring less than n and more than N cpu cores [default: 0 and machine cpu count]\n\n
 • ``%(f)s test:devices=N``: Skip tests requiring more than N devices.\n\n
-• ``%(f)s test:timeout=T``: Set a timeout on any single test execution in seconds (accepts human readable expressions like 1s, 1 hr, 2 hrs, etc) [default: 60 min]\n\n
+• ``%(f)s test:timeout=T``: Set a timeout on any single test execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s)\n\n
 • ``%(f)s test:timeoutx=R``: Set a timeout multiplier for all tests [default: 1.0]\n\n
 """ % {"f": flag, "r_form": bold("scope:type=value"), "r_arg": bold(f"{flag} resource")}
         return text
@@ -153,6 +153,9 @@ class BatchInfo:
     def parse(arg: str) -> tuple[str, Any]:
         if match := re.search(r"^length[:=](.*)$", arg):
             raw = strip_quotes(match.group(1))
+            length = time_in_seconds(raw)
+            if length <= 0:
+                raise ValueError("batch length <= 0")
             return ("length", time_in_seconds(raw))
         elif match := re.search(r"^(count|workers)[:=](\d+)$", arg):
             type, raw = match.groups()

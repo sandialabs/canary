@@ -18,7 +18,7 @@ Batch size
 ..........
 
 * ``-b count:N``: group tests into ``N`` batches, each having approximately the same runtime.
-* ``-b length:T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Human readable times, eg 1s, 1 sec, 1h, 2 hrs, etc, are accepted.
+* ``-b length:T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Accepts Go's duration format eg ``1s``, ``1h``, ``4h30m30s``, etc, are accepted.
 * ``-b workers:N``: Run tests in this batch asynchronously with at most ``N`` workers.
 
 By default, tests are batched into groups based as follows:

@@ -40,12 +40,12 @@ is
    [config]
    debug = false  # (bool)
    log_level = INFO  # (str)
-   test_files = r"^[a-zA-Z0-9_][a-zA-Z0-9_-]*\.(vvt|pyt)$" # regular expression for test file names
+   batch_length = 1800 # (float)
 
    [test:timeout]
-   fast = T  # (number or str) default: 30 sec
-   long = T  # (number or str) default: 10 min
-   default = T  # (number or str) default: 5 min
+   fast = T  # (number or str) default: 30s
+   long = T  # (number or str) default: 10m
+   default = T  # (number or str) default: 5m
 
    [variables]
    var = value # (str) environment variables to set for the test session

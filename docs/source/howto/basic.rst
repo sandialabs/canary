@@ -49,8 +49,8 @@ Set a timeout on the test session
 
    nvtest run -l session:timeout:T PATH [PATHS...]
 
-where ``T`` is a number or a human-readable number representation like ``1 sec``, ``1s``, etc.  For example,
+where ``T`` is a duration in Go's duration format (``40s,``, ``1h20m``, ``2h``, ``4h30m30s``, etc.)  For example,
 
-.. command-output:: nvtest run -d TestResults.Basic -l 'session:timeout:1 min' ./basic
+.. command-output:: nvtest run -d TestResults.Basic -l 'session:timeout:1m' ./basic
     :cwd: /examples
     :extraargs: -rv -w

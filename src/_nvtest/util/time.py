@@ -1,8 +1,7 @@
-import io
 import re
 import time
-import tokenize
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 from typing import Callable
 from typing import Optional
@@ -19,70 +18,11 @@ def timestamp(local: bool = True) -> float:
     return time.mktime(time.localtime()) if local else time.time()
 
 
-def to_seconds(
-    arg: Union[str, int, float], round: bool = False, negatives: bool = False
-) -> Union[int, float]:
-    if isinstance(arg, (int, float)):
-        return arg
-    units = {
-        "second": 1,
-        "minute": 60,  # 60 sec/min * 1 min
-        "hour": 3600,  # 60 min/hr * 60 sec/min * 1hr
-        "day": 86400,  # 24 hr/day * 60 min/hr * 60 sec/min * 1 day
-        "month": 2592000,  # 30 day/mo 24 hr/day * 60 min/hr * 60 sec/min * 1 mo
-        "year": 31536000,  # 365 day/yr * 30 day/mo * 24 hr/day * 60 min/hr * 60 sec/min * 1 year
-    }
-    units["s"] = units["sec"] = units["secs"] = units["seconds"] = units["second"]
-    units["m"] = units["min"] = units["mins"] = units["minutes"] = units["minute"]
-    units["h"] = units["hr"] = units["hrs"] = units["hours"] = units["hour"]
-    units["d"] = units["days"] = units["day"]
-    units["mo"] = units["mos"] = units["months"] = units["month"]
-    units["y"] = units["yr"] = units["yrs"] = units["years"] = units["year"]
-
-    if re.search("^\d{1,2}:\d{1,2}:\d{1,2}(\.\d+)?$", arg):
-        hours, minutes, seconds = [float(_) for _ in arg.split(":")]
-        return hours * units["hours"] + minutes * units["minutes"] + seconds * units["seconds"]
-    elif re.search("^\d{1,2}:\d{1,2}(\.\d+)?$", arg):
-        minutes, seconds = [float(_) for _ in arg.split(":")]
-        return minutes * units["minutes"] + seconds * units["seconds"]
-
-    tokens = [
-        token
-        for token in tokenize.tokenize(io.BytesIO(arg.encode("utf-8")).readline)
-        if token.type not in (tokenize.NEWLINE, tokenize.ENDMARKER, tokenize.ENCODING)
-    ]
-    stack = []
-    for token in tokens:
-        if token.type == tokenize.OP and token.string == "-":
-            stack.append(-1.0)
-        elif token.type == tokenize.NUMBER:
-            number = float(token.string)
-            if stack and stack[-1] == -1.0:
-                stack[-1] *= number
-            else:
-                stack.append(number)
-        elif token.type == tokenize.NAME:
-            if token.string.lower() in ("and", "plus"):
-                continue
-            fac = units.get(token.string.lower())
-            if fac is None:
-                raise InvalidTimeFormat(arg)
-            if not stack:
-                stack.append(1)
-            stack[-1] *= fac
-        elif token.type == tokenize.OP and token.string in (".",):
-            continue
-        else:
-            raise InvalidTimeFormat(arg)
-    seconds = sum(stack)
-    if seconds < 0 and not negatives:
-        raise ValueError(f"negative seconds from {arg!r}")
-    if round:
-        return int(seconds)
-    return seconds
-
-
-time_in_seconds = to_seconds
+def time_in_seconds(arg: Union[int, float, str]) -> float:
+    if isinstance(arg, (float, int)):
+        return float(arg)
+    duration = Duration.from_str(arg)
+    return duration.total_seconds()
 
 
 def hhmmss(seconds: Optional[float], threshold: float = 2.0) -> str:
@@ -119,10 +59,164 @@ def pretty_seconds(seconds: Union[str, int, float]) -> str:
         str: Time string with units
     """
     if isinstance(seconds, str):
-        seconds = to_seconds(seconds)
+        seconds = time_in_seconds(seconds)
     return pretty_seconds_formatter(seconds)(seconds)
+    # -*- coding: UTF-8 -*-
 
 
-class InvalidTimeFormat(Exception):
-    def __init__(self, fmt):
-        super().__init__(f"invalid time format: {fmt!r}")
+class Duration:
+    """Support for GO lang's duration format"""
+
+    _nanosecond_size = 1
+    _microsecond_size = 1000 * _nanosecond_size
+    _millisecond_size = 1000 * _microsecond_size
+    _second_size = 1000 * _millisecond_size
+    _minute_size = 60 * _second_size
+    _hour_size = 60 * _minute_size
+    _day_size = 24 * _hour_size
+    _week_size = 7 * _day_size
+    _month_size = 30 * _day_size
+    _year_size = 365 * _day_size
+
+    units = {
+        "ns": _nanosecond_size,
+        "us": _microsecond_size,
+        "µs": _microsecond_size,
+        "μs": _microsecond_size,
+        "ms": _millisecond_size,
+        "s": _second_size,
+        "m": _minute_size,
+        "h": _hour_size,
+        "d": _day_size,
+        "w": _week_size,
+        "mm": _month_size,
+        "y": _year_size,
+    }
+
+    _re = re.compile(r"([\d\.]+)([a-zµμ]+)")
+
+    @staticmethod
+    def from_str(duration: str) -> timedelta:
+        """Parse a duration string to a datetime.timedelta"""
+
+        original = duration
+
+        if not duration:
+            return timedelta()
+        elif duration in ("0", "+0", "-0"):
+            return timedelta()
+
+        sign = 1
+        if duration[0] in "+-":
+            sign = -1 if duration[0] == "-" else 1
+            duration = duration[1:]
+
+        if re.search("^[0-9]+$", duration):
+            return timedelta(seconds=sign * float(duration))
+        elif re.search("^\d{1,2}:\d{1,2}:\d{1,2}(\.\d+)?$", duration):
+            hours, minutes, seconds = [float(_) for _ in duration.split(":")]
+            units = Duration.units
+            microseconds = hours * units["h"] + minutes * units["m"] + seconds * units["s"]
+            print(microseconds / Duration._microsecond_size)
+            return timedelta(microseconds=sign * microseconds / Duration._microsecond_size)
+        elif re.search("^\d{1,2}:\d{1,2}(\.\d+)?$", duration):
+            minutes, seconds = [float(_) for _ in duration.split(":")]
+            microseconds = minutes * 60.0 + seconds * 1.0
+            return timedelta(microseconds=sign * microseconds / Duration._microsecond_size)
+
+        matches = list(Duration._re.finditer(duration))
+        if not matches:
+            raise DurationError("Invalid duration {}".format(original))
+        if matches[0].start() != 0 or matches[-1].end() != len(duration):
+            raise DurationError("Extra chars at start or end of duration {}".format(original))
+
+        total = 0.0
+        for match in matches:
+            value, unit = match.groups()
+            if unit not in Duration.units:
+                raise DurationError("Unknown unit {} in duration {}".format(unit, original))
+            try:
+                total += float(value) * Duration.units[unit]
+            except Exception:
+                raise DurationError("Invalid value {} in duration {}".format(value, original))
+
+        microseconds = total / Duration._microsecond_size
+        return timedelta(microseconds=sign * microseconds)
+
+    @staticmethod
+    def to_str(delta: timedelta, extended: bool = False) -> str:
+        """Format a datetime.timedelta to a duration string"""
+
+        total_seconds = delta.total_seconds()
+        sign = "-" if total_seconds < 0 else ""
+        nanoseconds = abs(total_seconds * Duration._second_size)
+
+        if abs(total_seconds) < 1:
+            result_str = Duration._to_str_small(nanoseconds, extended)
+        else:
+            result_str = Duration._to_str_large(nanoseconds, extended)
+
+        return "{}{}".format(sign, result_str)
+
+    @staticmethod
+    def _to_str_small(nanoseconds: float, extended: bool) -> str:
+        result_str = ""
+
+        if not nanoseconds:
+            return "0"
+
+        milliseconds = int(nanoseconds / Duration._millisecond_size)
+        if milliseconds:
+            nanoseconds -= Duration._millisecond_size * milliseconds
+            result_str += "{:g}ms".format(milliseconds)
+
+        microseconds = int(nanoseconds / Duration._microsecond_size)
+        if microseconds:
+            nanoseconds -= Duration._microsecond_size * microseconds
+            result_str += "{:g}us".format(microseconds)
+
+        if nanoseconds:
+            result_str += "{:g}ns".format(nanoseconds)
+
+        return result_str
+
+    @staticmethod
+    def _to_str_large(nanoseconds: float, extended: bool) -> str:
+        result_str = ""
+
+        if extended:
+            years = int(nanoseconds / Duration._year_size)
+            if years:
+                nanoseconds -= Duration._year_size * years
+                result_str += "{:g}y".format(years)
+
+            months = int(nanoseconds / Duration._month_size)
+            if months:
+                nanoseconds -= Duration._month_size * months
+                result_str += "{:g}mm".format(months)
+
+            days = int(nanoseconds / Duration._day_size)
+            if days:
+                nanoseconds -= Duration._day_size * days
+                result_str += "{:g}d".format(days)
+
+        hours = int(nanoseconds / Duration._hour_size)
+        if hours:
+            nanoseconds -= Duration._hour_size * hours
+            result_str += "{:g}h".format(hours)
+
+        minutes = int(nanoseconds / Duration._minute_size)
+        if minutes:
+            nanoseconds -= Duration._minute_size * minutes
+            result_str += "{:g}m".format(minutes)
+
+        seconds = float(nanoseconds) / float(Duration._second_size)
+        if seconds:
+            nanoseconds -= Duration._second_size * seconds
+            result_str += "{:g}s".format(seconds)
+
+        return result_str
+
+
+class DurationError(ValueError):
+    """duration error"""
