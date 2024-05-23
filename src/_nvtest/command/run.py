@@ -6,6 +6,7 @@ import traceback
 from typing import TYPE_CHECKING
 
 from ..error import StopExecution
+from ..queues import BatchResourceQueue
 from ..session import ExitCode
 from ..session import Session
 from ..test.case import TestCase
@@ -136,11 +137,12 @@ def run(args: "argparse.Namespace") -> int:
             parameter_expr=args.parameter_expr,
             resourceinfo=args.resourceinfo,
         )
-        if os.path.exists(os.path.join(session.config_dir, "B/1/meta.json")):
+        metafile = os.path.join(session.config_dir, BatchResourceQueue.store, "1/meta.json")
+        if os.path.exists(metafile):
             # Reload batch info so that the tests can be rerun in the scheduler
             if args.batchinfo is None:
                 args.batchinfo = BatchInfo()
-                data = json.load(open(os.path.join(session.config_dir, "B/1/meta.json")))
+                data = json.load(open(metafile))
                 for var, val in data["meta"].items():
                     setattr(args.batchinfo, var, val)
         if not args.no_header:

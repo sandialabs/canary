@@ -35,6 +35,9 @@ class ResourceQueue:
         self._finished: dict[int, Any] = {}
         self.lock = lock
 
+    def iter_keys(self) -> list[int]:
+        raise NotImplementedError()
+
     def done(self, Any) -> Any:
         raise NotImplementedError()
 
@@ -85,7 +88,7 @@ class ResourceQueue:
                 return None
             if not len(self._buffer):
                 raise Empty
-            for i in list(self._buffer.keys()):
+            for i in self.iter_keys():
                 obj = self._buffer[i]
                 status = obj.status
                 if status == "skipped":
@@ -139,6 +142,9 @@ class ResourceQueue:
 
 
 class DirectResourceQueue(ResourceQueue):
+    def iter_keys(self) -> list[int]:
+        return sorted(self._buffer.keys(), key=lambda k: self._buffer[k].processors)
+
     def put(self, *objs: TestCase) -> None:
         for obj in objs:
             if obj.processors > self.cpus:
@@ -180,7 +186,7 @@ class DirectResourceQueue(ResourceQueue):
 
 
 class BatchResourceQueue(ResourceQueue):
-    store = "B"
+    store = "batches"
     index_file = "index"
 
     def __init__(
@@ -199,6 +205,9 @@ class BatchResourceQueue(ResourceQueue):
             self.workers = 5
         self.batch_workers = batchinfo.workers
         self.tmp_buffer: list[TestCase] = []
+
+    def iter_keys(self) -> list[int]:
+        return list(self._buffer.keys())
 
     def prepare(self) -> None:
         root = self.tmp_buffer[0].exec_root

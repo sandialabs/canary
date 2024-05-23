@@ -1,5 +1,6 @@
 import math
 from graphlib import TopologicalSorter
+from typing import Sequence
 
 from .. import config
 from ..test.case import TestCase
@@ -86,3 +87,16 @@ def partition_t(
         raise ValueError("Incorrect partition lengths!")
 
     return partitions
+
+
+def tile(cases: Sequence[TestCase], cores: int) -> list[list[TestCase]]:
+    rows: list[list[TestCase]] = []
+    for case in sorted(cases, key=lambda c: c.processors, reverse=True):
+        for row in rows:
+            row_processors = sum(c.processors for c in row)
+            if row_processors + case.processors <= cores:
+                row.append(case)
+                break
+        else:
+            rows.append([case])
+    return rows

@@ -66,6 +66,7 @@ class Config:
                 "config": {
                     "debug": False,
                     "no_cache": False,
+                    "batch_length": 30 * 60,  # 30 minutes
                     "log_level": "INFO",
                 },
                 "test": {"timeout": {"fast": 120.0, "long": 15 * 60.0, "default": 7.5 * 60.0}},

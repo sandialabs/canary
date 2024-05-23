@@ -11,6 +11,7 @@ from .. import config
 from ..test.status import Status
 from ..third_party.color import colorize
 from ..util import logging
+from ..util import partition
 from ..util.executable import Executable
 from ..util.filesystem import getuser
 from ..util.filesystem import mkdirp
@@ -45,7 +46,7 @@ class Batch(Runner):
         world_id: int = 1,
     ) -> None:
         self.validate(cases)
-        self.cases = cases
+        self.cases = list(cases)
         self.world_rank = world_rank
         self.world_size = world_size
         self.world_id = world_id
@@ -283,27 +284,33 @@ class Slurm(Batch):
                 return
             raise
 
-    def qtime(self, max_tasks: int, nodes: int) -> float:
-        qtime = max(self.cputime / nodes, 5)
-        if qtime < 100.0:
-            qtime = 300.0
-        elif qtime < 300.0:
-            qtime = 600.0
-        elif qtime < 600.0:
-            qtime = 1200.0
-        elif qtime < 1800.0:
-            qtime = 2400.0
-        elif qtime < 3600.0:
-            qtime = 5000.0
+    def qtime(self, cores: int) -> float:
+        if len(self.cases) == 1:
+            return self.cases[0].timeout
+        rows = partition.tile(self.cases, cores)
+        total_runtime = 0.0
+        for row in rows:
+            total_runtime += sum(case.runtime for case in row)
+        total_runtime = max(total_runtime, 5)
+        if total_runtime < 100.0:
+            total_runtime = 300.0
+        elif total_runtime < 300.0:
+            total_runtime = 600.0
+        elif total_runtime < 600.0:
+            total_runtime = 1200.0
+        elif total_runtime < 1800.0:
+            total_runtime = 2400.0
+        elif total_runtime < 3600.0:
+            total_runtime = 5000.0
         else:
-            qtime *= 1.5
-        return qtime
+            total_runtime *= 1.1
+        return total_runtime
 
     def write_submission_script(self, *args_in: str, **kwargs: Any) -> str:
         max_tasks = self.max_tasks_required()
         ns = calculate_allocations(max_tasks)
         timeoutx = kwargs.get("timeoutx", 1.0)
-        qtime = self.qtime(max_tasks, ns.cores_per_node * ns.nodes) * timeoutx
+        qtime = self.qtime(ns.cores_per_node * ns.nodes) * timeoutx
 
         workers = kwargs.get("workers", ns.cores_per_node)
         session_cpus = ns.nodes * ns.cores_per_node

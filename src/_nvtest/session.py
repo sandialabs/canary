@@ -49,10 +49,7 @@ from .util.time import hhmmss
 from .util.time import timestamp
 from .when import when
 
-default_timeout = 60 * 60  # 60 minutes
-default_batchsize = 30 * 60  # 30 minutes
 global_session_lock = threading.Lock()
-batch_store_path = "B"
 
 
 class ExitCode:
@@ -526,7 +523,7 @@ class Session:
             queue = DirectResourceQueue(resourceinfo, global_session_lock)
         else:
             if batchinfo.count is None and batchinfo.length is None:
-                batchinfo.length = default_batchsize
+                batchinfo.length = config.get("config:batch_length")
             queue = BatchResourceQueue(resourceinfo, batchinfo, global_session_lock)
         for case in cases:
             if case.status == "skipped":
