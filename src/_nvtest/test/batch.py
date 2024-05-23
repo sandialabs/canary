@@ -290,7 +290,7 @@ class Slurm(Batch):
         rows = partition.tile(self.cases, cores)
         total_runtime = 0.0
         for row in rows:
-            total_runtime += sum(case.runtime for case in row)
+            total_runtime += max(case.runtime for case in row)
         total_runtime = max(total_runtime, 5)
         if total_runtime < 100.0:
             total_runtime = 300.0
