@@ -44,7 +44,7 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         assert len(cases) == 2
 
         assert cases[0]._processors == 5
-        assert cases[0]._devices == 5
+        assert cases[0]._gpus == 5
         assert "baz" in cases[0]._keywords
         assert "SPAM" in cases[0].variables
 
