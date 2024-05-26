@@ -3,7 +3,7 @@
 Machine resources
 =================
 
-``nvtest`` uses the `ProcessPoolExecutor <https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ProcessPoolExecutor>`_ to execute tests asynchronously using :ref:`N <workers>` workers.  Tests requiring ``np`` processors and ``nd`` devices are submitted to the executor such that the total number of resources used remains less than or equal to the number of available resources.
+``nvtest`` uses the `ProcessPoolExecutor <https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ProcessPoolExecutor>`_ to execute tests asynchronously using :ref:`N <workers>` workers.  Tests requiring ``np`` processors and ``nd`` gpus are submitted to the executor such that the total number of resources used remains less than or equal to the number of available resources.
 
 .. _workers:
 
@@ -30,19 +30,19 @@ Setting the number of processors required by a test
 
 The number of processors required by a test is inferred from the ``np`` parameter.  If the ``np`` parameter is not set, the number of processors is assumed to by 1.
 
-Setting the number available devices
-------------------------------------
+Setting the number available gpus
+---------------------------------
 
-The number of available devices is defaults to zero.  The number of available devices can be set with the following :ref:`configuration variables<userguide-config>`:
+The number of available gpus is defaults to zero.  The number of available gpus can be set with the following :ref:`configuration variables<userguide-config>`:
 
-* ``machine:device_count``
-* the product of ``machine:sockets_per_node`` and ``machine::devices_per_socket``
+* ``machine:gpu_count``
+* the product of ``machine:sockets_per_node`` and ``machine::gpus_per_socket``
 
-or by the ``-l session:devices:N`` option to :ref:`nvtest run <nvtest-run>`.
+or by the ``-l session:gpus:N`` option to :ref:`nvtest run <nvtest-run>`.
 
-Setting the number of devices required by a test
-------------------------------------------------
+Setting the number of gpus required by a test
+---------------------------------------------
 
-The number of devices required by a test is inferred from the ``ndevice`` parameter.  If the ``ndevice`` parameter is not set, the number of processors is assumed to by 0.
+The number of gpus required by a test is inferred from the ``ngpu`` parameter.  If the ``ngpu`` parameter is not set, the number of processors is assumed to by 0.
 
 .. [#] If `sinfo <https://slurm.schedmd.com/sinfo.html>`_ is detected, it will be used to query the number of available processors on the Slurm nodes.

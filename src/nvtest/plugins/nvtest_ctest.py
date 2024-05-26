@@ -43,7 +43,7 @@ class CTestTestFile(TestGenerator):
     def freeze(
         self,
         cpus: Optional[list[int]] = None,
-        devices: Optional[int] = None,
+        gpus: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -69,7 +69,7 @@ class CTestTestFile(TestGenerator):
         resourceinfo = resourceinfo or ResourceInfo()
         cases = self.freeze(
             cpus=resourceinfo["test:cpus"],
-            devices=int(resourceinfo["test:devices"]),
+            gpus=int(resourceinfo["test:gpus"]),
             on_options=on_options,
             keyword_expr=keyword_expr,
         )
@@ -191,7 +191,7 @@ class CTestTestCase(TestCase):
             for var, val in environment.items():
                 self.add_default_env(var, val)
 
-        self._devices: int = 0
+        self._gpus: int = 0
         if resource_groups:
             self.read_resource_groups(resource_groups)
 
@@ -204,7 +204,7 @@ class CTestTestCase(TestCase):
                 groups = groups[1:]
             for group in groups:
                 if group.startswith("gpus:"):
-                    self._devices += int(group[5:]) * n
+                    self._gpus += int(group[5:]) * n
 
     def run(self, *args, **kwargs):
         return super().run(*args, **kwargs)
@@ -214,8 +214,8 @@ class CTestTestCase(TestCase):
         return self._processors
 
     @property
-    def devices(self) -> int:
-        return self._devices
+    def gpus(self) -> int:
+        return self._gpus
 
 
 def find_build_type(directory) -> Optional[str]:

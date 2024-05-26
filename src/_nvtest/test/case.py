@@ -280,8 +280,13 @@ class TestCase(Runner):
         return int(self.parameters.get("np") or 1)  # type: ignore
 
     @property
-    def devices(self) -> int:
-        return int(self.parameters.get("ndevice") or 0)  # type: ignore
+    def gpus(self) -> int:
+        if "ngpu" in self.parameters:
+            return int(self.parameters["ngpu"])  # type: ignore
+        elif "ndevice" in self.parameters:
+            return int(self.parameters["ndevice"])  # type: ignore
+        else:
+            return 0
 
     @property
     def cputime(self) -> Union[float, int]:

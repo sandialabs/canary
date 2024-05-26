@@ -55,8 +55,8 @@ class PYTTestFile(AbstractTestFile):
     ):
         self.m_depends_on(arg, when=when, result=result, expect=expect)
 
-    def f_devices(self, *ndevices: int, when: Optional[str] = None) -> None:
-        self.m_parameterize("ndevice", list(ndevices), when=when)
+    def f_gpus(self, *ngpus: int, when: Optional[str] = None) -> None:
+        self.m_parameterize("ngpu", list(ngpus), when=when)
 
     def f_enable(self, *args: bool, when: Optional[str] = None):
         arg = True if not args else args[0]

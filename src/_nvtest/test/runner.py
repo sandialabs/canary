@@ -29,7 +29,7 @@ class Runner(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def devices(self) -> int: ...
+    def gpus(self) -> int: ...
 
     @property
     @abc.abstractmethod

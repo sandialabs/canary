@@ -41,10 +41,10 @@ results in the following 6 test cases:
 .. command-output:: nvtest describe parameterize/test4.pyt
     :cwd: /examples
 
-np and ndevice parameters
--------------------------
+np and ngpu parameters
+----------------------
 
-The ``np`` and ``ndevice`` parameters are interpreted by ``nvtest`` to be the number of processors and devices, respectively, needed by the test case.
+The ``np`` and ``ngpu`` parameters are interpreted by ``nvtest`` to be the number of processors and gpus, respectively, needed by the test case.  For compatiblity with ``vvtest``, ``ndevice`` is interpreted the same as ``ngpu``.
 
 vvt parameter types
 -------------------

@@ -25,7 +25,7 @@ from .util.time import timestamp
 class ResourceQueue:
     def __init__(self, resourceinfo: ResourceInfo, lock: threading.Lock) -> None:
         self.cpus = int(resourceinfo["session:cpus"])
-        self.devices = int(resourceinfo["session:devices"])
+        self.gpus = int(resourceinfo["session:gpus"])
         self.workers = int(resourceinfo["session:workers"])
         if self.workers < 0:
             self.workers = cpu_count()
@@ -65,11 +65,11 @@ class ResourceQueue:
     def available_cpus(self):
         return self.cpus - sum(obj.processors for obj in self._busy.values())
 
-    def available_devices(self):
-        return self.devices - sum(obj.devices for obj in self._busy.values())
+    def available_gpus(self):
+        return self.gpus - sum(obj.gpus for obj in self._busy.values())
 
     def available_resources(self):
-        return (self.available_cpus(), self.available_devices())
+        return (self.available_cpus(), self.available_gpus())
 
     @property
     def qsize(self):
@@ -96,7 +96,7 @@ class ResourceQueue:
                     self._skipped(i)
                     continue
                 elif status == "ready":
-                    if (obj.processors, obj.devices) <= self.available_resources():
+                    if (obj.processors, obj.gpus) <= self.available_resources():
                         self._busy[i] = self._buffer.pop(i)
                         return (i, self._busy[i])
         return None

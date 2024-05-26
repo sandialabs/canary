@@ -53,9 +53,9 @@ is
    [machine]
    cores_per_socket = N  # (int) default computed from os.cpu_count()
    sockets_per_node = N  # (int) default: 1
-   devices_per_socket = N  # (int)
+   gpus_per_socket = N  # (int)
    cpu_count = N  # (int) default computed from os.cpu_count()
-   device_count = N  # (int) default computed from os.cpu_count()
+   gpu_count = N  # (int) default computed from os.cpu_count()
 
   [build]
    type = ... # str

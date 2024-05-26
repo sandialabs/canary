@@ -81,8 +81,8 @@ class Batch(Runner):
         return max(case.processors for case in self)
 
     @property
-    def devices(self) -> int:
-        return max(case.devices for case in self)
+    def gpus(self) -> int:
+        return max(case.gpus for case in self)
 
     @property
     def cputime(self) -> float:

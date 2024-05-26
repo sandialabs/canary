@@ -363,8 +363,8 @@ def depends_on(
     """  # noqa: E501
 
 
-def devices(*ndevices: int, when: Optional[str] = None) -> None:
-    """Run the test with this many devices
+def gpus(*ngpus: int, when: Optional[str] = None) -> None:
+    """Run the test with this many gpus
 
     Usage
     -----
@@ -374,7 +374,7 @@ def devices(*ndevices: int, when: Optional[str] = None) -> None:
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.devices(*ndevices, when=...)
+       nvtest.directives.gpus(*ngpus, when=...)
 
 
     ``.vvt``: NA
@@ -382,7 +382,7 @@ def devices(*ndevices: int, when: Optional[str] = None) -> None:
     Parameters
     ----------
 
-    * ``ndevices``: List of device counts counts
+    * ``ngpus``: List of gpu counts
     * ``when``: Restrict processing of the directive to this condition
 
     The ``when`` expression is limited to the following conditions:
@@ -395,7 +395,7 @@ def devices(*ndevices: int, when: Optional[str] = None) -> None:
     Notes
     -----
 
-    * ``devices(...)`` is equivalent to ``parameterize("ndevice", ...)``
+    * ``gpus(...)`` is equivalent to ``parameterize("ngpu", ...)``
 
     Examples
     --------
@@ -407,13 +407,13 @@ def devices(*ndevices: int, when: Optional[str] = None) -> None:
     .. code-block:: python
 
        # test1
-       nvtest.directives.devices(1, 2)
+       nvtest.directives.gpus(1, 2)
 
     .. code-block:: console
 
        2 test cases:
-       ├── test1[ndevice=1]
-       ├── test1[ndevice=2]
+       ├── test1[ngpu=1]
+       ├── test1[ngpu=2]
 
     """
 
@@ -734,9 +734,9 @@ def parameterize(
     * ``np`` interpreted to mean "number of processing cores".
       If the ``np`` parameter is not defined, the test is assumed to use 1
       processing core.
-    * ``ndevice`` interpreted to mean "number of devices" (gpus).
-      If the ``ndevice`` parameter is not defined, the test is assumed to use 0
-      devices.
+    * ``ngpu`` interpreted to mean "number of gpus".
+      If the ``ngpu`` parameter is not defined, the test is assumed to use 0
+      gpus.
 
     References
     ----------

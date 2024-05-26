@@ -78,7 +78,7 @@ class TestGenerator(abc.ABC):
     def freeze(
         self,
         cpus: Optional[list[int]] = None,
-        devices: Optional[int] = None,
+        gpus: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -189,7 +189,7 @@ class AbstractTestFile(TestGenerator):
         resourceinfo = resourceinfo or ResourceInfo()
         cases: list[TestCase] = self.freeze(
             cpus=resourceinfo["test:cpus"],
-            devices=int(resourceinfo["test:devices"]),
+            gpus=int(resourceinfo["test:gpus"]),
             on_options=on_options,
             keyword_expr=keyword_expr,
         )
@@ -200,7 +200,7 @@ class AbstractTestFile(TestGenerator):
     def freeze(
         self,
         cpus: Optional[list[int]] = None,
-        devices: Optional[int] = None,
+        gpus: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -210,7 +210,7 @@ class AbstractTestFile(TestGenerator):
         try:
             cases = self._freeze(
                 cpus=cpus,
-                devices=devices,
+                gpus=gpus,
                 keyword_expr=keyword_expr,
                 on_options=on_options,
                 timelimit=timelimit,
@@ -226,7 +226,7 @@ class AbstractTestFile(TestGenerator):
     def _freeze(
         self,
         cpus: Optional[list[int]] = None,
-        devices: Optional[int] = None,
+        gpus: Optional[int] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -234,7 +234,7 @@ class AbstractTestFile(TestGenerator):
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         min_cpus, max_cpus = cpus or (0, config.get("machine:cpu_count"))
-        max_devices = devices or config.get("machine:device_count")
+        max_gpus = gpus or config.get("machine:gpu_count")
         testcases: list[TestCase] = []
         names = ", ".join(self.names())
         logging.debug(f"Generating test cases for {self} using the following test names: {names}")
@@ -274,15 +274,20 @@ class AbstractTestFile(TestGenerator):
                     s = "deselected due to @*b{exceeding min cpu count}"
                     mask = colorize(s)
 
-                nd = parameters.get("ndevice")
-                if not isinstance(nd, int) and nd is not None:
-                    class_name = nd.__class__.__name__
-                    raise ValueError(
-                        f"{self.name}: expected ndevice={nd} " f"to be an int, not {class_name}"
-                    )
-                if mask is None and nd and nd > max_devices:
-                    s = "deselected due to @*b{exceeding device count of machine}"
-                    mask = colorize(s)
+                for key in ("ngpu", "ndevice"):
+                    # ndevice provides backward compatibility with vvtest
+                    if key not in parameters:
+                        continue
+                    nd = parameters[key]
+                    if not isinstance(nd, int) and nd is not None:
+                        class_name = nd.__class__.__name__
+                        raise ValueError(
+                            f"{self.name}: expected {key}={nd} " f"to be an int, not {class_name}"
+                        )
+                    if mask is None and nd and nd > max_gpus:
+                        s = "deselected due to @*b{exceeding gpu count of machine}"
+                        mask = colorize(s)
+                    break
 
                 if mask is None and ("TDD" in keywords or "tdd" in keywords):
                     mask = colorize("deselected due to @*b{TDD keyword}")

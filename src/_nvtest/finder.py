@@ -186,7 +186,7 @@ class Finder:
         resourceinfo = resourceinfo or ResourceInfo()
         kwds = dict(
             cpus=resourceinfo["test:cpus"],
-            devices=resourceinfo["test:devices"],
+            gpus=resourceinfo["test:gpus"],
             keyword_expr=keyword_expr,
             timelimit=resourceinfo["test:timeout"],
             parameter_expr=parameter_expr,

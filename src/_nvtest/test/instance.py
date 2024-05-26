@@ -34,7 +34,7 @@ class TestInstance:
     name: str
     file: str
     processors: int
-    devices: int
+    gpus: int
     analyze: bool
     family: str
     keywords: list[str]
@@ -65,7 +65,7 @@ class TestInstance:
             name=case.name,
             file=os.path.join(case.file_root, case.file_path),
             processors=case.processors,
-            devices=case.devices,
+            gpus=case.gpus,
             family=case.family,
             analyze=isinstance(case, AnalyzeTestCase),
             keywords=case.keywords(),

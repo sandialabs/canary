@@ -25,9 +25,9 @@ class ResourceInfo:
         self["session:cpus"] = cpu_count
         self["test:cpus"] = [0, cpu_count]
 
-        device_count = config.get("machine:device_count")
-        self["session:devices"] = device_count
-        self["test:devices"] = device_count
+        gpu_count = config.get("machine:gpu_count")
+        self["session:gpus"] = gpu_count
+        self["test:gpus"] = gpu_count
 
         self["session:timeout"] = -1
         self["test:timeout"] = -1
@@ -55,10 +55,10 @@ class ResourceInfo:
             return ("session:workers", int(raw))
         elif match := re.search(r"^session:(devices|gpus)[:=](\d+)$", arg):
             raw = match.group(2)
-            return ("session:devices", int(raw))
+            return ("session:gpus", int(raw))
         elif match := re.search(r"^test:(devices|gpus)[:=](\d+)$", arg):
             raw = match.group(2)
-            return ("test:devices", int(raw))
+            return ("test:gpus", int(raw))
         elif match := re.search(r"^test:(cpus|cores|processors)[:=]:?(\d+)$", arg):
             raw = match.group(2)
             return ("test:cpus", [0, int(raw)])
@@ -83,23 +83,23 @@ class ResourceInfo:
                 raise ValueError(f"session:cpus = {value} < 0")
             elif value > config.get("machine:cpu_count"):
                 raise ValueError("session cpu request exceeds machine cpu count")
-        elif key == "session:devices":
+        elif key == "session:gpus":
             if value < 0:
-                raise ValueError(f"session:devices = {value} < 0")
-            elif value > config.get("machine:device_count"):
-                raise ValueError("session device request exceeds machine device count")
+                raise ValueError(f"session:gpus = {value} < 0")
+            elif value > config.get("machine:gpu_count"):
+                raise ValueError("session gpu request exceeds machine gpu count")
         elif key == "session:workers":
             if value < 0:
                 raise ValueError(f"session:workers = {value} < 0")
             elif value > config.get("machine:cpu_count"):
                 raise ValueError("session worker request exceeds machine cpu count")
-        elif key == "test:devices":
+        elif key == "test:gpus":
             if value < 0:
-                raise ValueError(f"test:devices = {value} < 0")
-            elif value > config.get("machine:device_count"):
-                raise ValueError("test device request exceeds machine device count")
-            elif self["session:devices"] > 0 and value > self["session:devices"]:
-                raise ValueError("test device request exceeds session device limit")
+                raise ValueError(f"test:gpus = {value} < 0")
+            elif value > config.get("machine:gpu_count"):
+                raise ValueError("test gpu request exceeds machine gpu count")
+            elif self["session:gpus"] > 0 and value > self["session:gpus"]:
+                raise ValueError("test gpu request exceeds session gpu limit")
         elif key == "test:cpus":
             min_cpus, max_cpus = value
             if min_cpus > max_cpus:
@@ -127,10 +127,10 @@ to the amount of resources that can be consumed. The %(r_arg)s argument is of
 the form: ``%(r_form)s``.  The possible ``%(r_form)s`` settings are\n\n
 • ``%(f)s session:workers=N``: Execute the test session asynchronously using a pool of at most N workers [default: auto]\n\n
 • ``%(f)s session:cpus=N``: Occupy at most N cpu cores at any one time.\n\n
-• ``%(f)s session:devices=N``: Occupy at most N devices at any one time.\n\n
+• ``%(f)s session:gpus=N``: Occupy at most N gpus at any one time.\n\n
 • ``%(f)s session:timeout=T``: Set a timeout on test session execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: 60m]\n\n
 • ``%(f)s test:cpus=[n:]N``: Skip tests requiring less than n and more than N cpu cores [default: 0 and machine cpu count]\n\n
-• ``%(f)s test:devices=N``: Skip tests requiring more than N devices.\n\n
+• ``%(f)s test:gpus=N``: Skip tests requiring more than N gpus.\n\n
 • ``%(f)s test:timeout=T``: Set a timeout on any single test execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s)\n\n
 • ``%(f)s test:timeoutx=R``: Set a timeout multiplier for all tests [default: 1.0]\n\n
 """ % {"f": flag, "r_form": bold("scope:type=value"), "r_arg": bold(f"{flag} resource")}

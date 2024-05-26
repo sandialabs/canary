@@ -291,9 +291,9 @@ class Session:
                 n = resourceinfo["test:cpus"][1]
                 case.mask = f"test requires more than {n} cpus"
                 continue
-            if resourceinfo["test:devices"] and case.devices > resourceinfo["test:devices"]:
-                n = resourceinfo["test:devices"]
-                case.mask = f"test requires more than {n} devices"
+            if resourceinfo["test:gpus"] and case.gpus > resourceinfo["test:gpus"]:
+                n = resourceinfo["test:gpus"]
+                case.mask = f"test requires more than {n} gpus"
                 continue
             when_expr: dict[str, str] = {}
             if parameter_expr:
