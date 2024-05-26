@@ -244,8 +244,8 @@ class BatchInfo:
         resource_help = """\
 Defines how to batch test cases. The %(r_arg)s argument is of the form: ``%(r_form)s``.
 The possible possible ``%(r_form)s`` settings are\n\n
-• ``%(f)s count:N``: Execute tests in N batches.\n\n
-• ``%(f)s length:T``: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
+• ``%(f)s count=N``: Execute tests in N batches.\n\n
+• ``%(f)s length=T``: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
 • ``%(f)s scheduler:S``: Use scheduler 'S' to run the test batches.\n\n
 • ``%(f)s workers:N``: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
 • ``%(f)s args:A``: Any additional args 'A' are passed directly to the scheduler, for example,

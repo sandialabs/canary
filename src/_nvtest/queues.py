@@ -214,10 +214,9 @@ class BatchResourceQueue(ResourceQueue):
         assert root is not None
         batch_store = os.path.join(root, ".nvtest", self.store)
         batch_stores = glob.glob(os.path.join(batch_store, "*"))
-        partitions: list[set[TestCase]]
+        partitions: list[list[TestCase]]
         if self.batchinfo.count:
-            count = self.batchinfo.count
-            partitions = partition_n(self.tmp_buffer, n=count)
+            partitions = partition_n(self.tmp_buffer, n=self.batchinfo.count)
         else:
             length = float(self.batchinfo.length or 30 * 60)  # 30 minute default
             partitions = partition_t(self.tmp_buffer, t=length)

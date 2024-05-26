@@ -1,3 +1,4 @@
+import io
 import os
 import subprocess
 import time
@@ -54,7 +55,7 @@ class Batch(Runner):
         self._status = Status("created")
         first = next(iter(cases))
         self.root = first.exec_root
-        self.duration: float = -1
+        self.total_duration: float = -1
 
     def __iter__(self):
         return iter(self.cases)
@@ -149,7 +150,7 @@ class Batch(Runner):
 
     def start_msg(self) -> str:
         n = len(self.cases)
-        return f"STARTING: Batch {self.world_rank} of {self.world_size} ({n} tests)"
+        return f"SUBMITTING: Batch {self.world_rank} of {self.world_size} ({n} tests)"
 
     def end_msg(self) -> str:
         stat: dict[str, int] = {}
@@ -158,15 +159,23 @@ class Batch(Runner):
         fmt = "@%s{%d %s}"
         colors = Status.colors
         st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
-        t = hhmmss(self.duration if self.duration > 0 else None)
-        return f"FINISHED: Batch {self.world_rank} of {self.world_size}, {st_stat} [{t}]"
+        qtime: Optional[float] = self.total_duration if self.total_duration > 0 else None
+        runtime: Optional[float] = None
+        if any(_.start > 0 for _ in self) and any(_.finish > 0 for _ in self):
+            ti = min(_.start for _ in self if _.start > 0)
+            tf = max(_.finish for _ in self if _.finish > 0)
+            runtime = tf - ti
+        s = io.StringIO()
+        s.write(f"FINISHED: Batch {self.world_rank} of {self.world_size}, {st_stat} ")
+        s.write(f"(queued: {hhmmss(qtime)}, runtime: {hhmmss(runtime)})")
+        return s.getvalue()
 
     def run(self, *args: str, **kwargs: Any) -> None:
         try:
             start = time.monotonic()
             self._run(*args, **kwargs)
         finally:
-            self.duration = time.monotonic() - start
+            self.total_duration = time.monotonic() - start
             self.refresh()
             for case in self:
                 if case.status == "running":
@@ -271,9 +280,13 @@ class Slurm(Batch):
         logging.debug(f"Submitted batch with jobid={jobid}")
 
         time.sleep(1)
+        running = False
         try:
             while True:
                 state = self.poll(jobid)
+                if not running and state in ("R", "RUNNING"):
+                    logging.emit(f"STARTING: Batch {self.world_rank} of {self.world_size}\n")
+                    running = True
                 if state is None:
                     return
                 time.sleep(0.5)
@@ -289,9 +302,7 @@ class Slurm(Batch):
             return self.cases[0].timeout
         rows = partition.tile(self.cases, cores)
         total_runtime = 0.0
-        for row in rows:
-            total_runtime += max(case.runtime for case in row)
-        total_runtime = max(total_runtime, 5)
+        total_runtime = max(sum([max(case.runtime for case in row) for row in rows]), 5)
         if total_runtime < 100.0:
             total_runtime = 300.0
         elif total_runtime < 300.0:

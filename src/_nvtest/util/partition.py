@@ -30,7 +30,7 @@ def group_testcases(cases: list[TestCase]) -> list[set[TestCase]]:
     return sorted(filter(None, groups), key=lambda g: -len(g))
 
 
-def partition_n(cases: list[TestCase], n: int = 8) -> list[set[TestCase]]:
+def partition_n(cases: list[TestCase], n: int = 8) -> list[list[TestCase]]:
     """Partition test cases into ``n`` partitions"""
     groups = group_testcases(cases)
     partitions = defaultlist(Partition, n)
@@ -42,7 +42,7 @@ def partition_n(cases: list[TestCase], n: int = 8) -> list[set[TestCase]]:
 
 def partition_t(
     cases: list[TestCase], t: float = 60 * 30, fac: float = 1.15
-) -> list[set[TestCase]]:
+) -> list[list[TestCase]]:
     """Partition test cases into partitions having a runtime approximately equal
     to ``t``
 
@@ -51,7 +51,8 @@ def partition_t(
     cores_per_socket = config.get("machine:cores_per_socket")
     cores_per_node = sockets_per_node * cores_per_socket
 
-    partitions: list[set[TestCase]] = []
+    partitions: list[list[TestCase]] = []
+
     graph = {}
     for case in cases:
         graph[case] = case.dependencies
@@ -65,38 +66,57 @@ def partition_t(
         for case in ready:
             c_nodes = math.ceil(case.processors / cores_per_node)
             groups.setdefault(c_nodes, []).append(case)
-        for c_nodes, group in groups.items():
-            trial_cputime = sum(case.cputime for case in group)
-            trial_runtime = trial_cputime / (c_nodes * cores_per_node)
-            n = int(trial_runtime / t)
-            g_partitions = defaultlist(Partition, n)
-            for case in group:
-                for g_partition in sorted(g_partitions, key=lambda x: x.cputime):
-                    trial_cputime = g_partition.cputime + case.cputime
-                    trial_runtime = trial_cputime / (c_nodes * cores_per_node)
-                    if trial_runtime <= t / fac:
-                        g_partition.add(case)
-                        break
+        for g_nodes, group in groups.items():
+            g_runtime = 0.0
+            g_partition: list[TestCase] = []
+            grid = tile(group, g_nodes * cores_per_node)
+            assert sum(len(row) for row in grid) == len(group)
+            grid_runtime = sum([max(c.runtime for c in row) for row in grid])
+            target_partition_time = grid_runtime / math.ceil(grid_runtime / t)
+            for row in grid:
+                r_runtime = max(c.runtime for c in row)
+                if r_runtime >= target_partition_time:
+                    partitions.append(row)
+                elif g_runtime + r_runtime <= target_partition_time:
+                    g_partition.extend(row)
+                    g_runtime += r_runtime
                 else:
-                    g_partition = g_partitions.new()
-                    g_partition.add(case)
-            partitions.extend([p for p in g_partitions if len(p)])
+                    partitions.append(g_partition)
+                    g_runtime, g_partition = r_runtime, list(row)
+            if g_partition:
+                partitions.append(g_partition)
         ts.done(*ready)
 
     if len(cases) != sum([len(partition) for partition in partitions]):
         raise ValueError("Incorrect partition lengths!")
 
+    partitions = [p for p in partitions if p]
+
     return partitions
 
 
 def tile(cases: Sequence[TestCase], cores: int) -> list[list[TestCase]]:
-    rows: list[list[TestCase]] = []
-    for case in sorted(cases, key=lambda c: c.processors, reverse=True):
-        for row in rows:
-            row_processors = sum(c.processors for c in row)
-            if row_processors + case.processors <= cores:
+    """Tile test cases in a way that minimizes total runtime.
+
+    Args:
+      cases: Sequence of TestCase objects
+      cores: the number of cores available
+
+    The strategy employed is the First-Fit Decreasing (heuristic) bin-packing
+    algorithm to create a 2D grid of test cases with dimensions cores x runtime
+
+    1. Sort cases in decreasing runtime order
+    2. Place each test case in the first row where it fits
+    3. If it doesn't fit in any existing row, create a new row
+
+    """
+    grid: list[list[TestCase]] = []
+    for case in sorted(cases, key=lambda c: c.runtime, reverse=True):
+        for row in grid:
+            row_cpus = sum(c.processors for c in row)
+            if row_cpus + case.processors <= cores:
                 row.append(case)
                 break
         else:
-            rows.append([case])
-    return rows
+            grid.append([case])
+    return grid

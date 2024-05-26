@@ -2,6 +2,7 @@ import sys
 import nvtest
 
 
+nvtest.directives.keywords("fast")
 nvtest.directives.xfail()
 
 
