@@ -641,6 +641,7 @@ def _get_build_data(
     for b in cdash_builds:
         logging.info(f"Categorizing tests for build {b['buildname']}")
         if "test" not in b:
+            logging.debug(f"Missing 'test' section from {b['buildname']}")
             b["test"] = server.empty_test_data()
             continue
         num_failed = b["test"]["fail"]
@@ -838,7 +839,7 @@ def _html_summary(url, project, buildgroups) -> str:
 
                 target = build["test"].get("pass", 0)
                 filters = ["onlypassed", f"buildid={id}"]
-                link = _link(url, "viewTest.php", 0, *filters)
+                link = _link(url, "viewTest.php", target, *filters)
                 fh.write(tblcell(link, 1, "limegreen"))
 
             else:
