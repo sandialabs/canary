@@ -78,24 +78,106 @@ def setup_parser(parser):
     p = sp.add_parser("post", help="Post CDash XML files")
     p.add_argument(
         "--project",
+        "--cdash-project",
         required=True,
-        metavar="project",
+        dest="cdash_project",
         help="The CDash project",
     )
     p.add_argument(
         "--url",
-        metavar="url",
+        "--cdash-url",
+        dest="cdash_url",
         required=True,
         help="The base CDash url (do not include project)",
     )
     p.add_argument("files", nargs="*", help="XML files to post")
 
+    p = sp.add_parser("summary", help="Generate an html summary of the CDash dashboard")
+    p.add_argument("--project", "--cdash-project", dest="cdash_project", help="The CDash project")
+    p.add_argument(
+        "--url",
+        "--cdash-url",
+        dest="cdash_url",
+        help="The base CDash url (do not include project)",
+    )
+    p.add_argument(
+        "-t",
+        "--track",
+        default=None,
+        dest="tracks",
+        action="append",
+        help="CDash build groups to pull from CDash [default: all]",  # noqa: E501
+    )
+    p.add_argument(
+        "-m",
+        "--mailto",
+        default=None,
+        action="append",
+        help="Email addresses to send the summary.",
+    )
+    p.add_argument(
+        "-s",
+        "--skip-site",
+        default=None,
+        action="append",
+        dest="skip_sites",
+        metavar="SKIP_SITE",
+        help="Sites to skip (accepts Python regular expression)",
+    )
+    p.add_argument("-o", help="Filename to write the html summary [default: stdout]")
+    p = sp.add_parser("make-gitlab-issues", help="Create GitLab issues for failed tests")
+    p.add_argument("--cdash-url", required=True, help="The base CDash url, do not include project")
+    p.add_argument("--cdash-project", required=True, help="The base CDash project")
+    p.add_argument("--gitlab-url", required=True, help="The GitLab project url")
+    p.add_argument("--gitlab-api-url", required=True, help="The GitLab project's API url")
+    p.add_argument("--gitlab-project-id", type=int, required=True, help="The GitLab project's ID")
+    p.add_argument("-a", dest="access_token", help="The GitLab read/write API access token.")
+    p.add_argument("-d", "--date", help="Date to retrieve from CDash")
+    p.add_argument("-f", "--filtergroups", action="append", help="Groups to pull down from CDash")
+    p.add_argument(
+        "--skip-site",
+        default=None,
+        dest="skip_sites",
+        action="append",
+        metavar="SKIP_SITE",
+        help="Sites to skip (accepts Python regular expression)",
+    )
+    p.add_argument(
+        "--dont-close-missing",
+        default=False,
+        action="store_true",
+        help="Don't close issues belonging to missing tests",
+    )
+
 
 @nvtest.plugin.register(scope="report", stage="create", type="cdash")
 def create_reports(args):
     if args.child_command == "post" and args.files:
-        url = CDashReporter.post(args.url, args.project, *args.files)
+        url = CDashReporter.post(args.cdash_url, args.cdash_project, *args.files)
         print(url)
+        return
+    elif args.child_command == "summary":
+        cdash_summary(
+            url=args.cdash_url,
+            project=args.cdash_project,
+            buildgroups=args.tracks,
+            mailto=args.mailto,
+            file=args.o,
+            skip_sites=args.skip_sites,
+        )
+        return
+    elif args.child_command == "make-gitlab-issues":
+        create_issues_from_failed_tests(
+            access_token=args.access_token,
+            cdash_url=args.cdash_url,
+            cdash_project=args.cdash_project,
+            gitlab_url=args.gitlab_url,
+            gitlab_project_id=args.gitlab_project_id,
+            data=args.data,
+            filtergroups=args.filter_groups,
+            skip_sites=args.skip_sites,
+            dont_close_missing=args.dont_close_missing,
+        )
         return
     else:
         if args.json:
@@ -127,7 +209,7 @@ def create_reports(args):
                 args.files = glob.glob(os.path.join(reporter.xml_dir, "*.xml"))
             if not args.files:
                 raise ValueError("nvtest report cdash post: no xml files to post")
-            url = reporter.post(args.url, args.project, *args.files)
+            url = reporter.post(args.cdash_url, args.cdash_project, *args.files)
             logging.info(f"Files uploaded to {url}")
         else:
             raise ValueError(f"{args.child_command}: unknown `nvtest report cdash` subcommand")
@@ -443,8 +525,8 @@ def add_measurement(parent, name=None, value=None, cdata=None, **attrs):
 
 def cdash_summary(
     *,
-    url: str,
-    project: str,
+    url: Optional[str] = None,
+    project: Optional[str] = None,
     buildgroups: Optional[list[str]] = None,
     mailto: Optional[list[str]] = None,
     file: Optional[str] = None,
@@ -459,7 +541,7 @@ def cdash_summary(
     mailto : list of str
         Email addresses to send the summary.
     file : str
-        If not None, filename to write the html summary
+        Filename to write the html summary
     project : str
         The CDash project
     skip_sites : list of str
@@ -467,6 +549,15 @@ def cdash_summary(
 
     """
     logging.info("Generating the HTML summary")
+    if url is None:
+        if "CDASH_URL" not in os.environ:
+            raise MissingCIVariable("CDASH_URL")
+        url = os.environ["CDASH_URL"]
+    if project is None:
+        if "CDASH_PROJECT" not in os.environ:
+            raise MissingCIVariable("CDASH_PROJECT")
+        project = os.environ["CDASH_PROJECT"]
+
     html_summary = generate_cdash_html_summary(
         url, project, groups=buildgroups, skip_sites=skip_sites
     )
@@ -763,11 +854,12 @@ def _html_summary(url, project, buildgroups) -> str:
 
 def create_issues_from_failed_tests(
     *,
-    access_token: str,
-    cdash_url: str,
-    cdash_project: str,
-    gitlab_url: str,
-    gitlab_project_id: Union[int, str],
+    access_token: Optional[str] = None,
+    cdash_url: Optional[str] = None,
+    cdash_project: Optional[str] = None,
+    gitlab_url: Optional[str] = None,
+    gitlab_api_url: Optional[str] = None,
+    gitlab_project_id: Optional[Union[int, str]] = None,
     date: Optional[str] = None,
     filtergroups: Optional[list[str]] = None,
     skip_sites: Optional[list[str]] = None,
@@ -788,6 +880,31 @@ def create_issues_from_failed_tests(
         dont_close_missing: Don't close GitLab issues that are missing from CDash
 
     """
+    if access_token is None:
+        if "ACCESS_TOKEN" not in os.environ:
+            raise MissingCIVariable("ACCESS_TOKEN")
+        access_token = os.environ["ACCESS_TOKEN"]
+    if cdash_url is None:
+        if "CDASH_URL" not in os.environ:
+            raise MissingCIVariable("CDASH_URL")
+        cdash_url = os.environ["CDASH_URL"]
+    if cdash_project is None:
+        if "CDASH_PROJECT" not in os.environ:
+            raise MissingCIVariable("CDASH_PROJECT")
+        cdash_project = os.environ["CDASH_PROJECT"]
+    if gitlab_url is None:
+        if "CI_PROJECT_URL" not in os.environ:
+            raise MissingCIVariable("CI_PROJECT_URL")
+        gitlab_url = os.environ["CI_PROJECT_URL"]
+    if gitlab_project_id is None:
+        if "CI_PROJECT_ID" not in os.environ:
+            raise MissingCIVariable("CI_PROJECT_ID")
+        gitlab_project_id = int(os.environ["CI_PROJECT_ID"])
+    if gitlab_api_url is None:
+        if "CI_API_V4_URL" not in os.environ:
+            raise MissingCIVariable("CI_API_V4_URL")
+        gitlab_api_url = os.environ["CI_API_V4_URL"]
+
     filtergroups = filtergroups or ["Nightly"]
     server = cdash.server(cdash_url, cdash_project)
     builds = server.builds(date=date, buildgroups=filtergroups, skip_sites=skip_sites)
@@ -801,7 +918,10 @@ def create_issues_from_failed_tests(
             issue = generate_test_issue(test_name, test_realizations)
             issue_data.append(issue)
     repo = gitlab.repo(
-        url=gitlab_url, access_token=access_token, project_id=int(gitlab_project_id)
+        url=gitlab_url,
+        access_token=access_token,
+        project_id=int(gitlab_project_id),
+        api_url=gitlab_api_url,
     )
     for issue in issue_data:
         create_or_update_test_issues(repo, issue)
@@ -1004,3 +1124,7 @@ def unique_file(dirname: str, filename: str, ext: str) -> str:
         if not os.path.exists(file):
             return file
         i += 1
+
+
+class MissingCIVariable(Exception):
+    pass

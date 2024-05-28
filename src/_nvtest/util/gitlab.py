@@ -25,22 +25,24 @@ def api_access_required(fun):
         if self.gitlab_id is None:
             raise ValueError(f"{self.name}'s project or group id must be set")
 
+        if self.api_url is None:
+            raise ValueError(f"{self.name}'s api url must be set")
+
         return fun(self, *args, **kwargs)
 
     return inner
 
 
 class repo:
-    def __init__(self, *, url, path=None, access_token=None, project_id=None):
+    def __init__(self, *, url, path=None, api_url=None, access_token=None, project_id=None):
         if path is None and url is None:
             raise ValueError("path or url must be defined")
         self.url = self.sanitize_url(url)
         self.path = path
         self.name = os.path.basename(self.path or self.sanitize_url(url))
-        self.access_token = access_token
-        self.project_id = project_id
-        self.base_url = self.url.split("/")[0]
-        self.v4_api_url = f"https://{self.base_url}/api/v4"
+        self.access_token = access_token or os.getenv("ACCESS_TOKEN")
+        self.project_id = project_id or os.getenv("CI_PROJECT_ID")
+        self.api_url = api_url or os.getenv("CI_API_V4_URL")
         self._issues = {}
         self._merge_requests = {}
 
@@ -55,7 +57,7 @@ class repo:
         return self.project_id
 
     def build_api_url(self, *, path, query=None):
-        url = f"{self.v4_api_url}/{path}"
+        url = f"{self.api_url}/{path}"
         if query is not None:
             url = f"{url}?{query}"
         return url
@@ -425,13 +427,12 @@ class repo:
 
 
 class group(repo):
-    def __init__(self, *, url, group_id, access_token=None):
+    def __init__(self, *, url, group_id, access_token=None, api_url=None):
         self.url = self.sanitize_url(url)
         self.name = os.path.basename(self.sanitize_url(url))
-        self.access_token = access_token
+        self.access_token = access_token or os.getenv("ACCESS_TOKEN")
         self.group_id = group_id
-        self.base_url = self.url.split("/")[0]
-        self.v4_api_url = f"https://{self.base_url}/api/v4"
+        self.api_url = api_url or os.getenv("CI_API_V4_URL")
         self._issues = {}
 
     @property
@@ -439,7 +440,7 @@ class group(repo):
         return self.group_id
 
     def build_api_url(self, *, path, query=None):
-        url = f"{self.v4_api_url}/{path}"
+        url = f"{self.api_url}/{path}"
         if query is not None:
             url = f"{url}?{path}"
         return url
