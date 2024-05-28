@@ -69,6 +69,7 @@ class Session:
     default_worktree = "./TestResults"
     data_file = "session.data.json"
     resource_file = "resources.data.json"
+    options_file = "options.data.json"
 
     def __init__(self, path: str, mode: str = "r", force: bool = False) -> None:
         if mode not in "arw":
@@ -142,7 +143,7 @@ class Session:
             fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
             fh.write("# This file is a results directory tag automatically created by nvtest.\n")
         self.set_config_values(write=True)
-        self.save()
+        self.save(ini=True)
 
     def set_config_values(self, write: bool = False):
         config.set("session:root", self.root, scope="session")
@@ -162,7 +163,7 @@ class Session:
             with open(file, "w") as fh:
                 config.dump(fh, scope="session")
 
-    def save(self) -> None:
+    def save(self, ini: bool = False) -> None:
         data: dict[str, Any] = {}
         for var, value in vars(self).items():
             if var not in ("files", "cases", "db"):
@@ -170,6 +171,15 @@ class Session:
         file = os.path.join(self.config_dir, self.data_file)
         with open(file, "w") as fh:
             json.dump(data, fh, indent=2)
+        if ini:
+            file = os.path.join(self.config_dir, self.options_file)
+            with open(file, "w") as fh:
+                options = config.get("option")
+                if options.get("batchinfo"):
+                    options["batchinfo"] = options["batchinfo"].asdict()
+                if options.get("resourceinfo"):
+                    options["resourceinfo"] = options["resourceinfo"].asdict()
+                json.dump({"options": config.get("option")}, fh, indent=2)
 
     def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:
         """Add ``path`` to this session's search paths"""

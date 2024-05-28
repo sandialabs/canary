@@ -45,6 +45,13 @@ class ResourceInfo:
         s = ", ".join(f"{key}={value}" for key, value in self.data.items())
         return f"ResourceInfo({s})"
 
+    def asdict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {}
+        for key, value in self.data.items():
+            if value and value != -1:
+                d[key[1:]] = value
+        return d
+
     @staticmethod
     def parse(arg: str) -> tuple[str, Any]:
         if match := re.search(r"^session:(cpus|cores|processors)[:=](\d+)$", arg):
@@ -148,6 +155,13 @@ class BatchInfo:
     def __repr__(self):
         s = ", ".join(f"{key[1:]}={value}" for key, value in vars(self).items())
         return f"BatchInfo({s})"
+
+    def asdict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {}
+        for key, value in vars(self).items():
+            if value:
+                d[key[1:]] = value
+        return d
 
     @staticmethod
     def parse(arg: str) -> tuple[str, Any]:

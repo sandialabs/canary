@@ -159,15 +159,17 @@ class Batch(Runner):
         fmt = "@%s{%d %s}"
         colors = Status.colors
         st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
-        qtime: Optional[float] = self.total_duration if self.total_duration > 0 else None
-        runtime: Optional[float] = None
+        duration: Optional[float] = self.total_duration if self.total_duration > 0 else None
+        s = io.StringIO()
+        s.write(f"FINISHED: Batch {self.world_rank} of {self.world_size}, {st_stat} ")
+        s.write(f"(time: {hhmmss(duration)}")
         if any(_.start > 0 for _ in self) and any(_.finish > 0 for _ in self):
             ti = min(_.start for _ in self if _.start > 0)
             tf = max(_.finish for _ in self if _.finish > 0)
-            runtime = tf - ti
-        s = io.StringIO()
-        s.write(f"FINISHED: Batch {self.world_rank} of {self.world_size}, {st_stat} ")
-        s.write(f"(queued: {hhmmss(qtime)}, runtime: {hhmmss(runtime)})")
+            s.write(f", running: {hhmmss(tf - ti)}")
+            if duration:
+                s.write(f", queued: {hhmmss(duration - tf - ti)}")
+        s.write(")")
         return s.getvalue()
 
     def run(self, *args: str, **kwargs: Any) -> None:
@@ -218,6 +220,7 @@ class SubShell(Batch):
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
         fh.write("export NVTEST_DISABLE_KB=1\n")
+        fh.write("export NVTEST_LEVEL=2\n")
         workers = kwargs.get("workers", 1)
         timeoutx = kwargs.get("timeoutx", 1.0)
         fh.write(
@@ -350,6 +353,7 @@ class Slurm(Batch):
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
         fh.write("export NVTEST_DISABLE_KB=1\n")
+        fh.write("export NVTEST_LEVEL=2\n")
         fh.write(
             f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
             f"-l session:workers={workers} "

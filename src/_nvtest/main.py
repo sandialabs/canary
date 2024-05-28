@@ -33,7 +33,6 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     try:
         os.chdir(pre.C or invocation_dir)
-        config.set_main_options(pre)
         if pre.echo:
             a = [os.path.join(sys.prefix, "bin/nvtest")] + [_ for _ in argv if _ != "--echo"]
             logging.info(shlex.join(a))
@@ -45,6 +44,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         add_all_commands(parser)
 
         args = parser.parse_args(argv)
+        config.set_main_options(args)
 
         command = parser.get_command(args.command)
         if command is None:
