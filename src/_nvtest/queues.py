@@ -23,17 +23,29 @@ from .util.time import timestamp
 
 
 class ResourceQueue:
-    def __init__(self, resourceinfo: ResourceInfo, lock: threading.Lock) -> None:
-        self.cpus = int(resourceinfo["session:cpus"])
-        self.gpus = int(resourceinfo["session:gpus"])
-        self.workers = int(resourceinfo["session:workers"])
-        if self.workers < 0:
-            self.workers = cpu_count()
-
+    def __init__(
+        self,
+        *,
+        lock: threading.Lock,
+        workers: int,
+        cpu_ids: list[int],
+        gpu_ids: list[int],
+    ) -> None:
+        self.cpu_ids = list(cpu_ids)
+        self.gpu_ids = list(gpu_ids)
+        self.workers = workers
         self._buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
         self._finished: dict[int, Any] = {}
         self.lock = lock
+
+    @property
+    def cpu_count(self) -> int:
+        return len(self.cpu_ids)
+
+    @property
+    def gpu_count(self) -> int:
+        return len(self.gpu_ids)
 
     def iter_keys(self) -> list[int]:
         raise NotImplementedError()
@@ -63,13 +75,31 @@ class ResourceQueue:
         return self.workers - len(self._busy)
 
     def available_cpus(self):
-        return self.cpus - sum(obj.processors for obj in self._busy.values())
+        return self.cpu_count - sum(obj.processors for obj in self._busy.values())
 
     def available_gpus(self):
-        return self.gpus - sum(obj.gpus for obj in self._busy.values())
+        return self.gpu_count - sum(obj.gpus for obj in self._busy.values())
 
     def available_resources(self):
         return (self.available_cpus(), self.available_gpus())
+
+    def get_cpu_ids(self, n: int) -> list[int]:
+        cpu_ids = list(self.cpu_ids[:n])
+        del self.cpu_ids[:n]
+        return cpu_ids
+
+    def get_gpu_ids(self, n: int) -> list[int]:
+        gpu_ids = list(self.gpu_ids[:n])
+        del self.gpu_ids[:n]
+        return gpu_ids
+
+    def return_cpu_ids(self, ids: list[int]) -> None:
+        self.cpu_ids.extend(ids)
+        self.cpu_ids.sort()
+
+    def return_gpu_ids(self, ids: list[int]) -> None:
+        self.gpu_ids.extend(ids)
+        self.gpu_ids.sort()
 
     @property
     def qsize(self):
@@ -98,6 +128,8 @@ class ResourceQueue:
                 elif status == "ready":
                     if (obj.processors, obj.gpus) <= self.available_resources():
                         self._busy[i] = self._buffer.pop(i)
+                        self._busy[i].assign_cpu_ids(self.get_cpu_ids(self._busy[i].processors))
+                        self._busy[i].assign_gpu_ids(self.get_gpu_ids(self._busy[i].gpus))
                         return (i, self._busy[i])
         return None
 
@@ -142,15 +174,24 @@ class ResourceQueue:
 
 
 class DirectResourceQueue(ResourceQueue):
+    def __init__(self, resourceinfo: ResourceInfo, lock: threading.Lock) -> None:
+        workers = int(resourceinfo["session:workers"])
+        super().__init__(
+            lock=lock,
+            cpu_ids=resourceinfo["session:cpu_ids"],
+            gpu_ids=resourceinfo["session:gpu_ids"],
+            workers=cpu_count() if workers < 0 else workers,
+        )
+
     def iter_keys(self) -> list[int]:
         return sorted(self._buffer.keys(), key=lambda k: self._buffer[k].processors)
 
     def put(self, *objs: TestCase) -> None:
         for obj in objs:
-            if obj.processors > self.cpus:
+            if obj.processors > self.cpu_count:
                 raise ValueError(
                     f"{obj!r}: required cpus ({obj.processors}) "
-                    f"exceeds max cpu count ({self.cpus})"
+                    f"exceeds max cpu count ({self.cpu_count})"
                 )
             super().put(obj)
 
@@ -166,6 +207,8 @@ class DirectResourceQueue(ResourceQueue):
             if obj_no not in self._busy:
                 raise RuntimeError(f"case {obj_no} is not running")
             self._finished[obj_no] = self._busy.pop(obj_no)
+            self.return_cpu_ids(self._finished[obj_no].cpu_ids)
+            self.return_gpu_ids(self._finished[obj_no].gpu_ids)
             for case in self._buffer.values():
                 for i, dep in enumerate(case.dependencies):
                     if dep.id == self._finished[obj_no].id:
@@ -192,7 +235,13 @@ class BatchResourceQueue(ResourceQueue):
     def __init__(
         self, resourceinfo: ResourceInfo, batchinfo: BatchInfo, lock: threading.Lock
     ) -> None:
-        super().__init__(resourceinfo, lock)
+        workers = int(resourceinfo["session:workers"])
+        super().__init__(
+            lock=lock,
+            cpu_ids=list(range(cpu_count())),
+            gpu_ids=[],
+            workers=5 if workers < 0 else workers,
+        )
         self.batchinfo = batchinfo
         scheduler = self.batchinfo.scheduler
         if scheduler is None:
@@ -200,10 +249,6 @@ class BatchResourceQueue(ResourceQueue):
         elif scheduler not in ("slurm", "shell"):
             raise ValueError(f"{scheduler}: unknown scheduler")
         self.scheduler: str = str(scheduler)
-        self.workers = int(resourceinfo["session:workers"])
-        if self.workers < 0:
-            self.workers = 5
-        self.batch_workers = batchinfo.workers
         self.tmp_buffer: list[TestCase] = []
 
     def iter_keys(self) -> list[int]:
@@ -244,10 +289,10 @@ class BatchResourceQueue(ResourceQueue):
 
     def put(self, *objs: TestCase) -> None:
         for obj in objs:
-            if obj.processors > self.cpus:
+            if obj.processors > self.cpu_count:
                 raise ValueError(
                     f"{obj!r}: required cpus ({obj.processors}) "
-                    f"exceeds max cpu count ({self.cpus})"
+                    f"exceeds max cpu count ({self.cpu_count})"
                 )
             self.tmp_buffer.append(obj)
 
@@ -265,6 +310,8 @@ class BatchResourceQueue(ResourceQueue):
             if obj_no not in self._busy:
                 raise RuntimeError(f"batch {obj_no} is not running")
             self._finished[obj_no] = self._busy.pop(obj_no)
+            self.return_cpu_ids(self._finished[obj_no].cpu_ids)
+            self.return_gpu_ids(self._finished[obj_no].gpu_ids)
             completed = dict([(_.id, _) for _ in self.finished()])
             for batch in self._buffer.values():
                 for case in batch:

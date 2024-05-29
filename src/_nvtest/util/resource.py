@@ -22,11 +22,14 @@ class ResourceInfo:
         self.data: dict[str, Any] = {}
 
         cpu_count = config.get("machine:cpu_count")
-        self["session:cpus"] = cpu_count
-        self["test:cpus"] = [0, cpu_count]
+        self["session:cpu_count"] = cpu_count
+        self["session:cpu_ids"] = list(range(cpu_count))
 
         gpu_count = config.get("machine:gpu_count")
-        self["session:gpus"] = gpu_count
+        self["session:gpu_count"] = gpu_count
+        self["session:gpu_ids"] = list(range(gpu_count))
+
+        self["test:cpus"] = [0, cpu_count]
         self["test:gpus"] = gpu_count
 
         self["session:timeout"] = -1
@@ -54,15 +57,23 @@ class ResourceInfo:
 
     @staticmethod
     def parse(arg: str) -> tuple[str, Any]:
-        if match := re.search(r"^session:(cpus|cores|processors)[:=](\d+)$", arg):
+        if match := re.search(r"^session:(cpu_count|cpus|cores|processors)[:=](\d+)$", arg):
             raw = match.group(2)
-            return ("session:cpus", int(raw))
+            return ("session:cpu_count", int(raw))
+        elif match := re.search(r"^session:cpu_ids[:=](.*)$", arg):
+            raw = match.group(2)
+            ints = ilist(raw.strip())
+            return ("session:cpu_ids", ints)
+        elif match := re.search(r"^session:gpu_ids[:=](.*)$", arg):
+            raw = match.group(2)
+            ints = ilist(raw.strip())
+            return ("session:gpu_ids", ints)
         elif match := re.search(r"^session:workers[:=](\d+)$", arg):
             raw = match.group(1)
             return ("session:workers", int(raw))
-        elif match := re.search(r"^session:(devices|gpus)[:=](\d+)$", arg):
+        elif match := re.search(r"^session:(gpu_count|devices|gpus)[:=](\d+)$", arg):
             raw = match.group(2)
-            return ("session:gpus", int(raw))
+            return ("session:gpu_count", int(raw))
         elif match := re.search(r"^test:(devices|gpus)[:=](\d+)$", arg):
             raw = match.group(2)
             return ("test:gpus", int(raw))
@@ -85,14 +96,14 @@ class ResourceInfo:
             raise ValueError(f"invalid resource arg: {arg!r}")
 
     def set(self, key: str, value: Any) -> None:
-        if key == "session:cpus":
+        if key == "session:cpu_count":
             if value < 0:
-                raise ValueError(f"session:cpus = {value} < 0")
+                raise ValueError(f"session:cpu_count = {value} < 0")
             elif value > config.get("machine:cpu_count"):
                 raise ValueError("session cpu request exceeds machine cpu count")
-        elif key == "session:gpus":
+        elif key == "session:gpu_count":
             if value < 0:
-                raise ValueError(f"session:gpus = {value} < 0")
+                raise ValueError(f"session:gpu_count = {value} < 0")
             elif value > config.get("machine:gpu_count"):
                 raise ValueError("session gpu request exceeds machine gpu count")
         elif key == "session:workers":
@@ -105,7 +116,7 @@ class ResourceInfo:
                 raise ValueError(f"test:gpus = {value} < 0")
             elif value > config.get("machine:gpu_count"):
                 raise ValueError("test gpu request exceeds machine gpu count")
-            elif self["session:gpus"] > 0 and value > self["session:gpus"]:
+            elif self["session:gpu_count"] > 0 and value > self["session:gpu_count"]:
                 raise ValueError("test gpu request exceeds session gpu limit")
         elif key == "test:cpus":
             min_cpus, max_cpus = value
@@ -117,8 +128,18 @@ class ResourceInfo:
                 raise ValueError(f"test:cpus:{max_cpus} < 0")
             elif max_cpus > config.get("machine:cpu_count"):
                 raise ValueError("test max cpu request exceeds machine cpu count")
-            elif self["session:cpus"] > 0 and max_cpus > self["session:cpus"]:
+            elif self["session:cpu_count"] > 0 and max_cpus > self["session:cpu_count"]:
                 raise ValueError("test cpu request exceeds session cpu limit")
+        elif key == "session:cpu_ids":
+            if not isinstance(value, list) and not all([isinstance(x, int) for x in value]):
+                raise ValueError("session cpu ids must be a list of integers")
+            if len(value) != self["session:cpu_count"]:
+                self["session:cpu_count"] = len(value)
+        elif key == "session:gpu_ids":
+            if not isinstance(value, list) and not all([isinstance(x, int) for x in value]):
+                raise ValueError("session gpu ids must be a list of integers")
+            if len(value) != self["session:gpu_count"]:
+                self["session:gpu_count"] = len(value)
         elif key not in ("test:timeout", "test:timeoutx", "session:timeout"):
             raise ValueError(f"unknown resource name: {key!r}")
         self[key] = value
@@ -133,8 +154,8 @@ Defines resources that are required by the test session and establishes limits
 to the amount of resources that can be consumed. The %(r_arg)s argument is of
 the form: ``%(r_form)s``.  The possible ``%(r_form)s`` settings are\n\n
 • ``%(f)s session:workers=N``: Execute the test session asynchronously using a pool of at most N workers [default: auto]\n\n
-• ``%(f)s session:cpus=N``: Occupy at most N cpu cores at any one time.\n\n
-• ``%(f)s session:gpus=N``: Occupy at most N gpus at any one time.\n\n
+• ``%(f)s session:cpu_count=N``: Occupy at most N cpu cores at any one time.\n\n
+• ``%(f)s session:gpu_count=N``: Occupy at most N gpus at any one time.\n\n
 • ``%(f)s session:timeout=T``: Set a timeout on test session execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: 60m]\n\n
 • ``%(f)s test:cpus=[n:]N``: Skip tests requiring less than n and more than N cpu cores [default: 0 and machine cpu count]\n\n
 • ``%(f)s test:gpus=N``: Skip tests requiring more than N gpus.\n\n
@@ -283,3 +304,33 @@ def calculate_allocations(tasks: int) -> SimpleNamespace:
         cpus_per_task=1,
     )
     return ns
+
+
+def ilist(arg: str) -> list[int]:
+    """Convert comma separated list of integers in `arg` into a list of int
+
+    List can also contain ranges.
+
+    Examples:
+
+    >>> ilist("1,2,3")
+    [1, 2, 3]
+    >>> ilist("1,2,3,5-9")
+    [1, 2, 3, 5, 6, 7, 8, 9]
+
+    """
+    arg_wo_space = re.sub(r"[ \t]", "", arg)
+    if re.search(r"^\d+$", arg_wo_space):
+        return [int(arg_wo_space)]
+    if re.search(r"^\d+(,\d+)*$", arg_wo_space):
+        return [int(_) for _ in arg_wo_space.split(",") if _.split()]
+    if re.search(r"^(\d+(-\d_)?)(,\d+(-\d+)?)*$", arg_wo_space):
+        ints: list[int] = []
+        for x in arg_wo_space.split(","):
+            if "-" in x:
+                a, b = [int(_) for _ in x.split("-") if _.split()]
+                ints.extend(range(a, b + 1))
+            else:
+                ints.append(int(x))
+        return ints
+    raise ValueError(f"{arg!r}: unknown integer list representation")

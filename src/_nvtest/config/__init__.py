@@ -3,7 +3,6 @@ import configparser
 import copy
 import json
 import os
-import re
 import sys
 from string import Template
 from typing import Any
@@ -320,26 +319,14 @@ class Config:
             if existing is None:
                 has_existing_value = False
                 # construct value from this point down
-                value = loads(components[-1])
+                value = safe_loads(components[-1])
                 for component in reversed(components[idx + 1 : -1]):
                     value = {component: value}
                 break
 
-        # special treatment for CPU and GPU IDs.
-        if path in ("machine:cpu_ids", "machine:gpu_ids"):
-            if not isinstance(value, list):
-                value = [value]
-            if path.endswith("cpu_ids"):
-                self.set("machine:cpu_count", len(value), scope=scope)
-                self.set("machine:cpu_ids", value, scope="defaults")
-            else:
-                self.set("machine:gpu_count", len(value), scope=scope)
-                self.set("machine:gpu_ids", value, scope=scope)
-            return
-
         if has_existing_value:
             path, _, value = fullpath.rpartition(":")
-            value = json.loads(value)
+            value = safe_loads(value)
             existing = self.get(path, scope=scope)
 
         # append values to lists
@@ -507,27 +494,6 @@ def read_config(file: str) -> dict:
             raise ConfigSchemaError(file, e.args[0]) from None
     return config_data
 
-
-def loads(arg: str) -> Any:
-    """JSON loads arg, after first checking if arg is a list of integers or a list of ranges
-
-    """
-    if re.search(r"^\d+(,\d+)*$", arg.strip()):
-        ints = [int(_) for _ in arg.split(",") if arg]
-        return ints
-    elif re.search(r"^(\d+(-\d_)?)(,\d+(-\d+)?)*$", arg.strip()):
-        ints: list[int] = []
-        for x in arg.split(","):
-            if "-" in x:
-                a, b = [int(_) for _ in x.split("-")]
-                ints.extend(range(a, b + 1))
-            else:
-                ints.append(int(x))
-        return ints
-    try:
-        return json.loads(arg)
-    except json.decoder.JSONDecodeError:
-        return arg
 
 def parse_config_path(path):
     """Parse the path argument to various configuration methods.

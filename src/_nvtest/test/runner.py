@@ -6,6 +6,10 @@ from .status import Status
 
 
 class Runner(abc.ABC):
+    def __init__(self) -> None:
+        self._cpu_ids: list[int] = []
+        self._gpu_ids: list[int] = []
+
     def __call__(self, *args: str, **kwargs: Any) -> None:
         verbose = kwargs.get("verbose", False)
         if verbose:
@@ -14,6 +18,22 @@ class Runner(abc.ABC):
         if verbose:
             logging.emit(self.end_msg() + "\n")
         return None
+
+    @property
+    def cpu_ids(self) -> list[int]:
+        return self._cpu_ids
+
+    def assign_cpu_ids(self, arg: list[int]) -> None:
+        assert len(arg) == self.processors
+        self._cpu_ids = list(arg)
+
+    @property
+    def gpu_ids(self) -> list[int]:
+        return self._gpu_ids
+
+    def assign_gpu_ids(self, arg: list[int]) -> None:
+        assert len(arg) == self.gpus
+        self._gpu_ids = list(arg)
 
     @property
     @abc.abstractmethod

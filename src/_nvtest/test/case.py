@@ -59,6 +59,7 @@ class TestCase(Runner):
         xstatus: int = 0,
     ):
         # file properties
+        super().__init__()
         self.file_root = root
         self.file_path = path
         self.file = os.path.join(root, path)

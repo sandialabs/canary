@@ -46,6 +46,7 @@ class Batch(Runner):
         world_size: int,
         world_id: int = 1,
     ) -> None:
+        super().__init__()
         self.validate(cases)
         self.cases = list(cases)
         self.world_rank = world_rank
@@ -56,6 +57,7 @@ class Batch(Runner):
         first = next(iter(cases))
         self.root = first.exec_root
         self.total_duration: float = -1
+        self._runtime: float = -1.0
 
     def __iter__(self):
         return iter(self.cases)
@@ -72,17 +74,20 @@ class Batch(Runner):
             for dep in case.dependencies:
                 if dep.mask:
                     errors += 1
-                    logging.fatal(f"{dep}: dependendent of {case} is masked")
+                    logging.fatal(f"{dep}: dependent of {case} is masked")
         if errors:
             raise ValueError("Stopping due to previous errors")
 
     @property
     def processors(self) -> int:
-        return max(case.processors for case in self)
+        # A batch only requires 1 processor to submit
+        return 1
 
     @property
     def gpus(self) -> int:
-        return max(case.gpus for case in self)
+        # A batch does not require any GPUs to submit (though, once submitted,
+        # the cases in the batch may require a GPU)
+        return 0
 
     @property
     def cputime(self) -> float:
@@ -90,7 +95,15 @@ class Batch(Runner):
 
     @property
     def runtime(self) -> float:
-        return sum(case.runtime for case in self)
+        if self._runtime < 0:
+            if len(self.cases) == 1:
+                self._runtime = self.cases[0].runtime
+            else:
+                max_test_cpus = self.max_cpus_required()
+                ns = calculate_allocations(max_test_cpus)
+                grid = partition.tile(self.cases, ns.cores_per_node * ns.nodes)
+                self._runtime = sum([max(case.runtime for case in row) for row in grid])
+        return self._runtime
 
     @property
     def has_dependencies(self) -> bool:
@@ -116,7 +129,7 @@ class Batch(Runner):
         else:
             self._status.set(arg[0], details=arg[1])
 
-    def max_tasks_required(self) -> int:
+    def max_cpus_required(self) -> int:
         return max([case.processors for case in self.cases])
 
     def refresh(self) -> None:
@@ -162,13 +175,14 @@ class Batch(Runner):
         duration: Optional[float] = self.total_duration if self.total_duration > 0 else None
         s = io.StringIO()
         s.write(f"FINISHED: Batch {self.world_rank} of {self.world_size}, {st_stat} ")
-        s.write(f"(time: {hhmmss(duration)}")
+        s.write(f"(time: {hhmmss(duration, threshold=0)}")
         if any(_.start > 0 for _ in self) and any(_.finish > 0 for _ in self):
             ti = min(_.start for _ in self if _.start > 0)
             tf = max(_.finish for _ in self if _.finish > 0)
-            s.write(f", running: {hhmmss(tf - ti)}")
+            s.write(f", running: {hhmmss(tf - ti, threshold=0)}")
             if duration:
-                s.write(f", queued: {hhmmss(duration - tf - ti)}")
+                qtime = max(duration - (tf - ti), 0)
+                s.write(f", queued: {hhmmss(qtime, threshold=0)}")
         s.write(")")
         return s.getvalue()
 
@@ -200,7 +214,7 @@ class SubShell(Batch):
         return None
 
     def write_submission_script(self, *args: str, **kwargs: Any) -> str:
-        max_test_cpus = self.max_tasks_required()
+        max_test_cpus = self.max_cpus_required()
         session_cpus = max_test_cpus
         dbg_flag = "-d" if config.get("config:debug") else ""
         fh = StringIO()
@@ -226,7 +240,7 @@ class SubShell(Batch):
         fh.write(
             f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
             f"-l session:workers={workers} "
-            f"-l session:cpus={session_cpus} "
+            f"-l session:cpu_count={session_cpus} "
             f"-l test:timeoutx={timeoutx} "
             f"^{self.world_id}:{self.world_rank}\n)\n"
         )
@@ -300,12 +314,10 @@ class Slurm(Batch):
                 return
             raise
 
-    def qtime(self, cores: int) -> float:
+    def qtime(self) -> float:
         if len(self.cases) == 1:
             return self.cases[0].timeout
-        rows = partition.tile(self.cases, cores)
-        total_runtime = 0.0
-        total_runtime = max(sum([max(case.runtime for case in row) for row in rows]), 5)
+        total_runtime = self.runtime
         if total_runtime < 100.0:
             total_runtime = 300.0
         elif total_runtime < 300.0:
@@ -321,10 +333,10 @@ class Slurm(Batch):
         return total_runtime
 
     def write_submission_script(self, *args_in: str, **kwargs: Any) -> str:
-        max_tasks = self.max_tasks_required()
-        ns = calculate_allocations(max_tasks)
+        max_test_cpus = self.max_cpus_required()
+        ns = calculate_allocations(max_test_cpus)
         timeoutx = kwargs.get("timeoutx", 1.0)
-        qtime = self.qtime(ns.cores_per_node * ns.nodes) * timeoutx
+        qtime = self.qtime() * timeoutx
 
         workers = kwargs.get("workers", ns.cores_per_node)
         session_cpus = ns.nodes * ns.cores_per_node
@@ -357,7 +369,7 @@ class Slurm(Batch):
         fh.write(
             f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
             f"-l session:workers={workers} "
-            f"-l session:cpus={session_cpus} "
+            f"-l session:cpu_count={session_cpus} "
             f"-l test:timeoutx={timeoutx} "
             f"^{self.world_id}:{self.world_rank}\n)\n"
         )
