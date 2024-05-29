@@ -160,7 +160,7 @@ def run(args: "argparse.Namespace") -> int:
                 # alert that this batch is starting.
                 fd = os.open("/dev/tty", os.O_RDWR)
                 msg = f"STARTING: Batch {args.batch_no}\n"
-                os.write(tty, msg.encode())
+                os.write(fd, msg.encode())
             except Exception:
                 pass
             finally:
