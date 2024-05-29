@@ -10,6 +10,10 @@ def list_of_str(arg: Any) -> bool:
     return isinstance(arg, list) and all([isinstance(_, str) for _ in arg])
 
 
+def list_of_int(arg: Any) -> bool:
+    return isinstance(arg, list) and all([isinstance(_, int) for _ in arg])
+
+
 def vardict(arg: Any) -> bool:
     if arg is None:
         return True
@@ -61,8 +65,10 @@ machine_schema = Schema(
             Optional("cores_per_socket"): int,
             Optional("sockets_per_node"): int,
             Optional("cpu_count"): int,
+            Optional("cpu_ids"): list_of_int,
             Optional("gpu_count"): int,
             Optional("gpus_per_socket"): int,
+            Optional("gpu_ids"): list_of_int,
         },
     }
 )
