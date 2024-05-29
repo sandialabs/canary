@@ -398,34 +398,148 @@ class Slurm(Batch):
         scancel(jobid, "--clusters=all")
 
 
-# class PBS(Batch):
-#    def write_preamble(self, script):
-#        """Write the pbs submission script preamble"""
-#        if self.auto_allocate:
-#            self.calculate_resource_allocations()
-#        if "nodes" in self.options and "ppn" in self.options:
-#            nodes, ppn = self.options["nodes"], self.options["ppn"]
-#            script.write(f"#PBS -l nodes={nodes}:ppn={ppn}\n")
-#        elif "nodes" in self.options and "ntasks" in self.options:
-#            nodes, ntasks = self.options["nodes"], self.options["ntasks"]
-#            if ntasks % nodes != 0:
-#                raise ValueError("Unable to equally distribute tasks across nodes")
-#            ppn = int(ntasks / nodes)
-#            script.write(f"#PBS -l nodes={nodes}:ppn={ppn}\n")
-#        else:
-#            raise ValueError("Provide nodes and ppn before continuing")
-#        for name, value in self.options.items():
-#            if value in (False, None) or name in self.resource_attrs:
-#                continue
-#            prefix = "-" if len(name) == 1 else "--"
-#            if name in self.el_opts:
-#                option_line = f"#PBS -l {name}={value}\n"
-#            elif value is True:
-#                option_line = f"#PBS {prefix}{name}\n"
-#            else:
-#                op = " " if len(name) == 1 else "="
-#                option_line = f"#PBS {prefix}{name}{op}{value}\n"
-#            script.write(option_line)
+class PBS(Batch):
+    """Setup and submit jobs to the PBS scheduler"""
+
+    name = "pbs"
+    shell = "/bin/sh"
+    command = "qsub"
+
+    def __init__(
+        self,
+        cases: Union[list[TestCase], set[TestCase]],
+        world_rank: int,
+        world_size: int,
+        world_id: int = 1,
+    ) -> None:
+        cores_per_socket = config.get("machine:cores_per_socket")
+        if cores_per_socket is None:
+            raise ValueError("slurm runner requires that 'machine:cores_per_socket' be defined")
+        super().__init__(cases, world_rank, world_size, world_id=world_id)
+
+    def write_submission_script(self, *args_in: str, **kwargs: Any) -> str:
+        """Write the pbs submission script"""
+        max_test_cpus = self.max_cpus_required()
+        ns = calculate_allocations(max_test_cpus)
+        timeoutx = kwargs.get("timeoutx", 1.0)
+        qtime = self.qtime() * timeoutx
+        dbg_flag = "-d" if config.get("config:debug") else ""
+        timeoutx = kwargs.get("timeoutx", 1.0)
+        workers = kwargs.get("workers", ns.cores_per_node)
+        session_cpus = ns.nodes * ns.cores_per_node
+        fh = StringIO()
+        fh.write(f"#!{self.shell}\n")
+        fh.write(f"#PBS -l nodes={ns.nodes}:ppn={ns.cores_per_node}")
+        fh.write(f"#PBS -l walltime={hhmmss(qtime)}\n")
+        fh.write("#PBS -j oe\n")
+        fh.write(f"#PBS -o {self.logfile()}\n")
+        for arg in args_in:
+            fh.write(f"#PBS {arg}\n")
+        fh.write(f"# user: {getuser()}\n")
+        fh.write(f"# date: {datetime.now().strftime('%c')}\n")
+        fh.write(f"# batch {self.world_rank} of {self.world_size}\n")
+        fh.write(f"# approximate runtime: {hhmmss(qtime)}\n")
+        fh.write("# test cases:\n")
+        for case in self.cases:
+            fh.write(f"# - {case.fullname}\n")
+        fh.write(f"# total: {len(self.cases)} test cases\n")
+        fh.write("export NVTEST_DISABLE_KB=1\n")
+        fh.write("export NVTEST_LEVEL=2\n")
+        fh.write(
+            f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
+            f"-l session:workers={workers} "
+            f"-l session:cpu_count={session_cpus} "
+            f"-l test:timeoutx={timeoutx} "
+            f"^{self.world_id}:{self.world_rank}\n)\n"
+        )
+        f = self.submission_script_filename()
+        mkdirp(os.path.dirname(f))
+        with open(f, "w") as fp:
+            fp.write(fh.getvalue())
+        set_executable(f)
+        return f
+
+    def qtime(self) -> float:
+        if len(self.cases) == 1:
+            return self.cases[0].timeout
+        total_runtime = self.runtime
+        if total_runtime < 100.0:
+            total_runtime = 300.0
+        elif total_runtime < 300.0:
+            total_runtime = 600.0
+        elif total_runtime < 600.0:
+            total_runtime = 1200.0
+        elif total_runtime < 1800.0:
+            total_runtime = 2400.0
+        elif total_runtime < 3600.0:
+            total_runtime = 5000.0
+        else:
+            total_runtime *= 1.1
+        return total_runtime
+
+    def _run(self, *args_in: str, **kwargs: Any) -> None:
+        script = self.write_submission_script(*args_in, **kwargs)
+        if not os.path.exists(script):
+            raise ValueError("submission script not found, did you call setup()?")
+        args = [self.command, script]
+        p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        out, _ = p.communicate()
+        result = str(out.decode("utf-8")).strip()
+        parts = result.split()
+        if len(parts) == 1 and parts[0]:
+            jobid = parts[0]
+        else:
+            logging.error(f"Failed to find jobid for batch {self.world_rank}/{self.world_size}")
+            logging.log(
+                logging.ERROR,
+                f"    The following output was received from {self.command}:",
+                prefix=None,
+            )
+            for line in result.split("\n"):
+                logging.log(logging.ERROR, f"    {line}", prefix=None)
+            return
+        logging.debug(f"Submitted batch with jobid={jobid}")
+
+        time.sleep(1)
+        running = False
+        try:
+            while True:
+                state = self.poll(jobid)
+                if not running and state in ("R", "RUNNING"):
+                    running = True
+                if state is None:
+                    return
+                time.sleep(0.5)
+        except BaseException as e:
+            logging.warning(f"cancelling pbs job {jobid}")
+            self.cancel(jobid)
+            if isinstance(e, KeyboardInterrupt):
+                return
+            raise
+
+    def poll(self, jobid: str) -> Optional[str]:
+        qstat = Executable("qstat")
+        out = qstat(output=str)
+        lines = [line.strip() for line in out.splitlines() if line.split()]
+        for line in lines:
+            # Output of qstat is something like:
+            # Job id            Name             User              Time Use S Queue
+            # ----------------  ---------------- ----------------  -------- - -----
+            # 9932285.string-*  spam.sh          username                 0 W serial
+            parts = line.split()
+            if len(parts) >= 6:
+                jid, state = parts[0], parts[4]
+                if jid == jobid:
+                    return state
+                elif jid[-1] == "*" and jobid.startswith(jid[:-1]):
+                    # the output from qstat may return a truncated job id,
+                    # so match the beginning of the incoming 'jobids' strings
+                    return state
+        return None
+
+    def cancel(self, jobid: str) -> None:
+        qdel = Executable("qdel")
+        qdel(jobid)
 
 
 def factory(
