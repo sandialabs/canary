@@ -153,17 +153,19 @@ def run(args: "argparse.Namespace") -> int:
         cases = session.bfilter(batch_store=args.batch_store, batch_no=args.batch_no)
         f = os.path.join(session.config_dir, session.options_file)
         if os.path.exists(f) and json.load(open(f))["options"].get("r") == "v":
+            fd: int = -1001
             try:
                 # The batch is (usually) being run in subprocess whose stdout is
                 # redirected to a log file.  Write straight to the tty device to
                 # alert that this batch is starting.
-                tty = os.open("/dev/tty", os.O_RDWR)
+                fd = os.open("/dev/tty", os.O_RDWR)
                 msg = f"STARTING: Batch {args.batch_no}\n"
                 os.write(tty, msg.encode())
             except Exception:
                 pass
             finally:
-                os.close(tty)
+                if fd != -1001:
+                    os.close(fd)
     output = {"b": "progress", "v": "verbose"}[args.r]
     try:
         session.exitstatus = session.run(
