@@ -3,6 +3,7 @@ import math
 import os
 import sys
 import termios
+import traceback
 from contextlib import contextmanager
 from io import StringIO
 from typing import IO
@@ -135,10 +136,15 @@ def log(
     prefix: Optional[str] = "==> ",
     end: str = "\n",
     format: Optional[str] = None,
+    ex: Optional[Any] = None,
 ) -> None:
     if level >= LEVEL:
         text = format_message(message, end=end, prefix=prefix, format=format)
         emit(text, file=file)
+    if ex is not None:
+        exc, tb = ex.__class__, ex.__traceback__
+        lines = [_.rstrip("\n") for _ in traceback.format_exception(exc, ex, tb)]
+        emit("\n".join(lines), file=sys.stderr)
 
 
 def emit(message: str, *, file: TextIO = sys.stdout) -> None:
@@ -162,12 +168,12 @@ def warning(message: str, *, file: TextIO = sys.stderr, end="\n") -> None:
     log(WARNING, message, file=file, prefix="@*Y{==>} Warning: ", end=end)
 
 
-def error(message: str, *, file: TextIO = sys.stderr, end="\n") -> None:
-    log(ERROR, message, file=file, prefix="@*r{==>} Error: ", end=end)
+def error(message: str, *, file: TextIO = sys.stderr, end="\n", ex: Optional[Any] = None) -> None:
+    log(ERROR, message, file=file, prefix="@*r{==>} Error: ", end=end, ex=ex)
 
 
-def fatal(message: str, *, file: TextIO = sys.stderr, end="\n") -> None:
-    log(FATAL, message, file=file, prefix="@*r{==>} Fatal: ", end=end)
+def fatal(message: str, *, file: TextIO = sys.stderr, end="\n", ex: Optional[Any] = None) -> None:
+    log(FATAL, message, file=file, prefix="@*r{==>} Fatal: ", end=end, ex=ex)
 
 
 def progress_bar(

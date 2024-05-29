@@ -5,6 +5,7 @@ import sys
 import traceback
 from typing import TYPE_CHECKING
 
+from .. import config
 from ..error import StopExecution
 from ..queues import BatchResourceQueue
 from ..session import ExitCode
@@ -161,8 +162,9 @@ def run(args: "argparse.Namespace") -> int:
                 fd = os.open("/dev/tty", os.O_RDWR)
                 msg = f"STARTING: Batch {args.batch_no}\n"
                 os.write(fd, msg.encode())
-            except Exception:
-                pass
+            except Exception as e:
+                if config.get("config:debug"):
+                    logging.error("Failed to open /dev/tty", ex=e)
             finally:
                 if fd != -1001:
                     os.close(fd)
