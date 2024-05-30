@@ -41,6 +41,8 @@ class ResourceInfo:
 
     def __setitem__(self, key: str, value: Any) -> None:
         self.data[key] = value
+        print(key, value)
+        print(self.meta)
         if key == "session:cpu_ids":
             if self.meta.get("session:cpu_count"):
                 raise ValueError("session:cpu_ids and session:cpu_count are mutually exclusive")
@@ -151,13 +153,9 @@ class ResourceInfo:
         elif key == "session:cpu_ids":
             if not isinstance(value, list) and not all([isinstance(x, int) for x in value]):
                 raise ValueError("session cpu ids must be a list of integers")
-            if len(value) != self["session:cpu_count"]:
-                self["session:cpu_count"] = len(value)
         elif key == "session:gpu_ids":
             if not isinstance(value, list) and not all([isinstance(x, int) for x in value]):
                 raise ValueError("session gpu ids must be a list of integers")
-            if len(value) != self["session:gpu_count"]:
-                self["session:gpu_count"] = len(value)
         elif key not in ("test:timeout", "test:timeoutx", "session:timeout"):
             raise ValueError(f"unknown resource name: {key!r}")
         self[key] = value

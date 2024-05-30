@@ -120,8 +120,6 @@ class ResourceQueue:
                     self._skipped(i)
                     continue
                 elif status == "ready":
-                    print((obj.processors, obj.gpus), self.available_resources())
-                    print(os.getenv("SLURM_NTASKS"))
                     if (obj.processors, obj.gpus) <= self.available_resources():
                         self._busy[i] = self._buffer.pop(i)
                         self._busy[i].assign_cpu_ids(self.acquire_cpus(self._busy[i].processors))
