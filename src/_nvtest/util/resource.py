@@ -22,24 +22,42 @@ class ResourceInfo:
         self.data: dict[str, Any] = {}
 
         cpu_count = config.get("machine:cpu_count")
-        self["session:cpu_count"] = cpu_count
-        self["session:cpu_ids"] = list(range(cpu_count))
+        self.data["session:cpu_count"] = cpu_count
+        self.data["session:cpu_ids"] = list(range(cpu_count))
 
         gpu_count = config.get("machine:gpu_count")
-        self["session:gpu_count"] = gpu_count
-        self["session:gpu_ids"] = list(range(gpu_count))
+        self.data["session:gpu_count"] = gpu_count
+        self.data["session:gpu_ids"] = list(range(gpu_count))
 
-        self["test:cpus"] = [0, cpu_count]
-        self["test:gpus"] = gpu_count
+        self.data["test:cpus"] = [0, cpu_count]
+        self.data["test:gpus"] = gpu_count
 
-        self["session:timeout"] = -1
-        self["test:timeout"] = -1
-        self["test:timeoutx"] = 1.0
+        self.data["session:timeout"] = -1
+        self.data["test:timeout"] = -1
+        self.data["test:timeoutx"] = 1.0
 
-        self["session:workers"] = -1
+        self.data["session:workers"] = -1
+        self.meta: dict[str, int] = {}
 
     def __setitem__(self, key: str, value: Any) -> None:
         self.data[key] = value
+        if key == "session:cpu_ids":
+            if self.meta.get("session:cpu_count"):
+                raise ValueError("session:cpu_ids and session:cpu_count are mutually exclusive")
+            self.data["session:cpu_count"] = len(value)
+        elif key == "session:cpu_count":
+            if self.meta.get("session:cpu_ids"):
+                raise ValueError("session:cpu_count and session:cpu_ids are mutually exclusive")
+            self.data["session:cpu_ids"] = list(range(value))
+        elif key == "session:gpu_ids":
+            if self.meta.get("session:gpu_count"):
+                raise ValueError("session:gpu_ids and session:gpu_count are mutually exclusive")
+            self.data["session:gpu_count"] = len(value)
+        elif key == "session:gpu_count":
+            if self.meta.get("session:gpu_ids"):
+                raise ValueError("session:gpu_count and session:gpu_ids are mutually exclusive")
+            self.data["session:gpu_ids"] = list(range(value))
+        self.meta[key] = self.meta.setdefault(key, 0) + 1
 
     def __getitem__(self, key: str) -> Any:
         return self.data[key]

@@ -38,14 +38,8 @@ class ResourceQueue:
         self._busy: dict[int, Any] = {}
         self._finished: dict[int, Any] = {}
         self.lock = lock
-
-    @property
-    def cpu_count(self) -> int:
-        return len(self.cpu_ids)
-
-    @property
-    def gpu_count(self) -> int:
-        return len(self.gpu_ids)
+        self.cpu_count = len(self.cpu_ids)
+        self.gpu_count = len(self.gpu_ids)
 
     def iter_keys(self) -> list[int]:
         raise NotImplementedError()
@@ -75,29 +69,29 @@ class ResourceQueue:
         return self.workers - len(self._busy)
 
     def available_cpus(self):
-        return self.cpu_count - sum(obj.processors for obj in self._busy.values())
+        return len(self.cpu_ids)
 
     def available_gpus(self):
-        return self.gpu_count - sum(obj.gpus for obj in self._busy.values())
+        return len(self.gpu_ids)
 
     def available_resources(self):
         return (self.available_cpus(), self.available_gpus())
 
-    def get_cpu_ids(self, n: int) -> list[int]:
+    def acquire_cpus(self, n: int) -> list[int]:
         cpu_ids = list(self.cpu_ids[:n])
         del self.cpu_ids[:n]
         return cpu_ids
 
-    def get_gpu_ids(self, n: int) -> list[int]:
+    def acquire_gpus(self, n: int) -> list[int]:
         gpu_ids = list(self.gpu_ids[:n])
         del self.gpu_ids[:n]
         return gpu_ids
 
-    def return_cpu_ids(self, ids: list[int]) -> None:
+    def release_cpus(self, ids: list[int]) -> None:
         self.cpu_ids.extend(ids)
         self.cpu_ids.sort()
 
-    def return_gpu_ids(self, ids: list[int]) -> None:
+    def release_gpus(self, ids: list[int]) -> None:
         self.gpu_ids.extend(ids)
         self.gpu_ids.sort()
 
@@ -114,7 +108,7 @@ class ResourceQueue:
 
     def get(self) -> Optional[tuple[int, Union[TestCase, Batch]]]:
         with self.lock:
-            if not self.available_workers():
+            if self.available_workers() <= 0:
                 return None
             if not len(self._buffer):
                 raise Empty
@@ -126,10 +120,12 @@ class ResourceQueue:
                     self._skipped(i)
                     continue
                 elif status == "ready":
+                    print((obj.processors, obj.gpus), self.available_resources())
+                    print(os.getenv("SLURM_NTASKS"))
                     if (obj.processors, obj.gpus) <= self.available_resources():
                         self._busy[i] = self._buffer.pop(i)
-                        self._busy[i].assign_cpu_ids(self.get_cpu_ids(self._busy[i].processors))
-                        self._busy[i].assign_gpu_ids(self.get_gpu_ids(self._busy[i].gpus))
+                        self._busy[i].assign_cpu_ids(self.acquire_cpus(self._busy[i].processors))
+                        self._busy[i].assign_gpu_ids(self.acquire_gpus(self._busy[i].gpus))
                         return (i, self._busy[i])
         return None
 
@@ -207,8 +203,8 @@ class DirectResourceQueue(ResourceQueue):
             if obj_no not in self._busy:
                 raise RuntimeError(f"case {obj_no} is not running")
             self._finished[obj_no] = self._busy.pop(obj_no)
-            self.return_cpu_ids(self._finished[obj_no].cpu_ids)
-            self.return_gpu_ids(self._finished[obj_no].gpu_ids)
+            self.release_cpus(self._finished[obj_no].cpu_ids)
+            self.release_gpus(self._finished[obj_no].gpu_ids)
             for case in self._buffer.values():
                 for i, dep in enumerate(case.dependencies):
                     if dep.id == self._finished[obj_no].id:
@@ -238,8 +234,8 @@ class BatchResourceQueue(ResourceQueue):
         workers = int(resourceinfo["session:workers"])
         super().__init__(
             lock=lock,
-            cpu_ids=list(range(cpu_count())),
-            gpu_ids=[],
+            cpu_ids=resourceinfo["session:cpu_ids"],
+            gpu_ids=resourceinfo["session:gpu_ids"],
             workers=5 if workers < 0 else workers,
         )
         self.batchinfo = batchinfo
@@ -310,8 +306,8 @@ class BatchResourceQueue(ResourceQueue):
             if obj_no not in self._busy:
                 raise RuntimeError(f"batch {obj_no} is not running")
             self._finished[obj_no] = self._busy.pop(obj_no)
-            self.return_cpu_ids(self._finished[obj_no].cpu_ids)
-            self.return_gpu_ids(self._finished[obj_no].gpu_ids)
+            self.release_cpus(self._finished[obj_no].cpu_ids)
+            self.release_gpus(self._finished[obj_no].gpu_ids)
             completed = dict([(_.id, _) for _ in self.finished()])
             for batch in self._buffer.values():
                 for case in batch:

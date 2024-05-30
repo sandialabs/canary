@@ -152,8 +152,7 @@ def run(args: "argparse.Namespace") -> int:
         assert args.mode == "b"
         session = Session(args.work_tree, mode="a")
         cases = session.bfilter(batch_store=args.batch_store, batch_no=args.batch_no)
-        f = os.path.join(session.config_dir, session.options_file)
-        if os.path.exists(f) and json.load(open(f))["options"].get("r") == "v":
+        if os.getenv("NVTEST_ARG_R") == "v":
             fd: int = -1001
             try:
                 # The batch is (usually) being run in subprocess whose stdout is
