@@ -7,6 +7,7 @@ from typing import Optional
 from typing import TextIO
 
 from . import plugin
+from .resources import ResourceHandler
 from .test.case import TestCase
 from .test.generator import TestGenerator
 from .third_party.colify import colified
@@ -15,7 +16,6 @@ from .util import filesystem as fs
 from .util import graph
 from .util import logging
 from .util import parallel
-from .util.resource import ResourceInfo
 from .util.term import terminal_size
 from .util.time import hhmmss
 
@@ -170,7 +170,7 @@ class Finder:
     @staticmethod
     def freeze(
         files: list[TestGenerator],
-        resourceinfo: Optional[ResourceInfo] = None,
+        rh: Optional[ResourceHandler] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
@@ -183,12 +183,12 @@ class Finder:
             f"    keywords={keyword_expr}\n"
             f"    parameters={parameter_expr}"
         )
-        resourceinfo = resourceinfo or ResourceInfo()
+        rh = rh or ResourceHandler()
         kwds = dict(
-            cpus=resourceinfo["test:cpus"],
-            gpus=resourceinfo["test:gpus"],
+            cpus=rh["test:cpus"],
+            gpus=rh["test:gpus"],
             keyword_expr=keyword_expr,
-            timelimit=resourceinfo["test:timeout"],
+            timelimit=rh["test:timeout"],
             parameter_expr=parameter_expr,
             on_options=on_options,
             owners=owners,

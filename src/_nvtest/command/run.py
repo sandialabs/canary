@@ -15,7 +15,6 @@ from ..third_party.color import colorize
 from ..util import graph
 from ..util import logging
 from ..util.banner import banner
-from ..util.resource import BatchInfo
 from .common import PathSpec
 from .common import add_batch_arguments
 from .common import add_mark_arguments
@@ -109,7 +108,7 @@ def run(args: "argparse.Namespace") -> int:
                 return 0
         logging.emit(colorize("@*{generating} test cases from test files\n"))
         session.freeze(
-            resourceinfo=args.resourceinfo,
+            rh=args.rh,
             keyword_expr=args.keyword_expr,
             parameter_expr=args.parameter_expr,
             on_options=args.on_options,
@@ -136,16 +135,15 @@ def run(args: "argparse.Namespace") -> int:
             start=args.start,
             keyword_expr=args.keyword_expr,
             parameter_expr=args.parameter_expr,
-            resourceinfo=args.resourceinfo,
+            rh=args.rh,
         )
         metafile = os.path.join(session.config_dir, BatchResourceQueue.store, "1/meta.json")
         if os.path.exists(metafile):
             # Reload batch info so that the tests can be rerun in the scheduler
-            if args.batchinfo is None:
-                args.batchinfo = BatchInfo()
+            if not args.batched_invocation:
                 data = json.load(open(metafile))
                 for var, val in data["meta"].items():
-                    setattr(args.batchinfo, var, val)
+                    args.rh.set(f"batch:{var}", val)
         if not args.no_header:
             logging.emit(session.overview(cases))
     else:
@@ -171,8 +169,7 @@ def run(args: "argparse.Namespace") -> int:
     try:
         session.exitstatus = session.run(
             cases,
-            resourceinfo=args.resourceinfo,
-            batchinfo=args.batchinfo,
+            rh=args.rh,
             output=output,
             fail_fast=args.fail_fast,
         )

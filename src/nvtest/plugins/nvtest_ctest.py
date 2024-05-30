@@ -9,12 +9,12 @@ from typing import Any
 from typing import Optional
 
 import nvtest
+from _nvtest.resources import ResourceHandler
 from _nvtest.test.case import TestCase
 from _nvtest.test.generator import TestGenerator
 from _nvtest.util import graph
 from _nvtest.util import logging
 from _nvtest.util.filesystem import is_exe
-from _nvtest.util.resource import ResourceInfo
 
 build_types: dict[str, str] = {}
 
@@ -61,15 +61,15 @@ class CTestTestFile(TestGenerator):
         self,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
-        resourceinfo: Optional[ResourceInfo] = None,
+        rh: Optional[ResourceHandler] = None,
     ) -> str:
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")
-        resourceinfo = resourceinfo or ResourceInfo()
+        rh = rh or ResourceHandler()
         cases = self.freeze(
-            cpus=resourceinfo["test:cpus"],
-            gpus=int(resourceinfo["test:gpus"]),
+            cpus=rh["test:cpus"],
+            gpus=int(rh["test:gpus"]),
             on_options=on_options,
             keyword_expr=keyword_expr,
         )

@@ -22,7 +22,7 @@ def setup_parser(parser: "Parser"):
 def describe(args: "argparse.Namespace") -> int:
     file = finder.find(args.file)
     description = file.describe(
-        keyword_expr=args.keyword_expr, on_options=args.on_options, resourceinfo=args.resourceinfo
+        keyword_expr=args.keyword_expr, on_options=args.on_options, rh=args.rh
     )
     print(description.rstrip())
     return 0

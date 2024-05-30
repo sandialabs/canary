@@ -28,6 +28,7 @@ from .queues import BatchResourceQueue
 from .queues import DirectResourceQueue
 from .queues import Empty as EmptyQueue
 from .queues import ResourceQueue
+from .resources import ResourceHandler
 from .test.batch import Batch
 from .test.case import TestCase
 from .test.generator import TestGenerator
@@ -42,8 +43,6 @@ from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
 from .util.misc import partition
-from .util.resource import BatchInfo
-from .util.resource import ResourceInfo
 from .util.returncode import compute_returncode
 from .util.time import hhmmss
 from .util.time import timestamp
@@ -175,10 +174,8 @@ class Session:
             file = os.path.join(self.config_dir, self.options_file)
             with open(file, "w") as fh:
                 options = config.get("option")
-                if options.get("batchinfo"):
-                    options["batchinfo"] = options["batchinfo"].asdict()
-                if options.get("resourceinfo"):
-                    options["resourceinfo"] = options["resourceinfo"].asdict()
+                if options.get("rh"):
+                    options["rh"] = options["rh"].data
                 json.dump({"options": config.get("option")}, fh, indent=2)
 
     def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:
@@ -214,7 +211,7 @@ class Session:
 
     def freeze(
         self,
-        resourceinfo: Optional[ResourceInfo] = None,
+        rh: Optional[ResourceHandler] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
@@ -222,7 +219,7 @@ class Session:
     ) -> None:
         self.cases = Finder.freeze(
             self.generators,
-            resourceinfo=resourceinfo,
+            rh=rh,
             keyword_expr=keyword_expr,
             parameter_expr=parameter_expr,
             on_options=on_options,
@@ -271,10 +268,10 @@ class Session:
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
         start: Optional[str] = None,
-        resourceinfo: Optional[ResourceInfo] = None,
+        rh: Optional[ResourceHandler] = None,
         case_specs: Optional[list[str]] = None,
     ) -> list[TestCase]:
-        resourceinfo = resourceinfo or ResourceInfo()
+        rh = rh or ResourceHandler()
         explicit_start_path = start is not None
         if start is None:
             start = self.root
@@ -297,12 +294,12 @@ class Session:
             elif explicit_start_path:
                 case.status.set("ready")
                 continue
-            if resourceinfo["test:cpus"][1] and case.processors > resourceinfo["test:cpus"][1]:
-                n = resourceinfo["test:cpus"][1]
+            if rh["test:cpus"][1] and case.processors > rh["test:cpus"][1]:
+                n = rh["test:cpus"][1]
                 case.mask = f"test requires more than {n} cpus"
                 continue
-            if resourceinfo["test:gpus"] and case.gpus > resourceinfo["test:gpus"]:
-                n = resourceinfo["test:gpus"]
+            if rh["test:gpus"] and case.gpus > rh["test:gpus"]:
+                n = rh["test:gpus"]
                 case.mask = f"test requires more than {n} gpus"
                 continue
             when_expr: dict[str, str] = {}
@@ -356,24 +353,21 @@ class Session:
         self,
         cases: list[TestCase],
         *,
-        resourceinfo: Optional[ResourceInfo] = None,
-        batchinfo: Optional[BatchInfo] = None,
+        rh: Optional[ResourceHandler] = None,
         fail_fast: bool = False,
         output: str = "progress-bar",
     ) -> int:
         if not cases:
             raise ValueError("There are no cases to run in this session")
-        resourceinfo = resourceinfo or ResourceInfo()
-        batchinfo = batchinfo or BatchInfo()
-        queue = self.setup_queue(cases, resourceinfo, batchinfo)
+        rh = rh or ResourceHandler()
+        queue = self.setup_queue(cases, rh)
         with self.rc_environ():
             with working_dir(self.root):
                 self.process_testcases(
                     queue=queue,
-                    resourceinfo=resourceinfo,
+                    rh=rh,
                     fail_fast=fail_fast,
                     output=output,
-                    batchinfo=batchinfo,
                 )
                 for hook in plugin.plugins("session", "finish"):
                     hook(self)
@@ -399,10 +393,9 @@ class Session:
         self,
         *,
         queue: ResourceQueue,
-        resourceinfo: ResourceInfo,
+        rh: ResourceHandler,
         fail_fast: bool,
         output: str = "progress-bar",
-        batchinfo: Optional[BatchInfo] = None,
     ) -> None:
         verbose: bool = output == "verbose"
         futures: dict = {}
@@ -410,15 +403,15 @@ class Session:
         self.start = timestamp()
         self.finish = -1.0
         duration = lambda: timestamp() - self.start
-        timeout = resourceinfo["session:timeout"] or -1
+        timeout = rh["session:timeout"] or -1
         try:
             with ProcessPoolExecutor(max_workers=queue.workers) as ppe:
                 runner_args = []
-                runner_kwargs = dict(verbose=verbose, timeoutx=resourceinfo["test:timeoutx"])
-                if batchinfo:
-                    runner_args.extend(batchinfo.args)
-                    if batchinfo.workers:
-                        runner_kwargs["workers"] = batchinfo.workers
+                runner_kwargs = dict(verbose=verbose, timeoutx=rh["test:timeoutx"])
+                if rh["batch:batched"]:
+                    runner_args.extend(rh["batch:args"])
+                    if rh["batch:workers"]:
+                        runner_kwargs["workers"] = rh["batch:workers"]
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
@@ -523,18 +516,16 @@ class Session:
                 code = compute_returncode(obj.cases)
                 raise FailFast(str(obj), code)
 
-    def setup_queue(
-        self, cases: list[TestCase], resourceinfo: ResourceInfo, batchinfo: BatchInfo
-    ) -> ResourceQueue:
+    def setup_queue(self, cases: list[TestCase], rh: ResourceHandler) -> ResourceQueue:
         queue: ResourceQueue
-        if batchinfo.scheduler is None:
-            if batchinfo.count is not None or batchinfo.length is not None:
+        if rh["batch:scheduler"] is None:
+            if rh["batch:count"] is not None or rh["batch:length"] is not None:
                 raise ValueError("batched execution requires a scheduler")
-            queue = DirectResourceQueue(resourceinfo, global_session_lock)
+            queue = DirectResourceQueue(rh, global_session_lock)
         else:
-            if batchinfo.count is None and batchinfo.length is None:
-                batchinfo.length = config.get("config:batch_length")
-            queue = BatchResourceQueue(resourceinfo, batchinfo, global_session_lock)
+            if rh["batch:count"] is None and rh["batch:length"] is None:
+                rh.set("batch:length", config.get("config:batch_length"))
+            queue = BatchResourceQueue(rh, global_session_lock)
         for case in cases:
             if case.status == "skipped":
                 case.save()

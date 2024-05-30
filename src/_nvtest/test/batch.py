@@ -9,6 +9,7 @@ from typing import Optional
 from typing import Union
 
 from .. import config
+from ..resources import calculate_allocations
 from ..test.status import Status
 from ..third_party.color import colorize
 from ..util import logging
@@ -18,7 +19,6 @@ from ..util.filesystem import getuser
 from ..util.filesystem import mkdirp
 from ..util.filesystem import set_executable
 from ..util.hash import hashit
-from ..util.resource import calculate_allocations
 from ..util.time import hhmmss
 from .case import TestCase
 from .runner import Runner

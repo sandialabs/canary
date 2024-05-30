@@ -15,12 +15,12 @@ from .. import config
 from .. import when as m_when
 from ..error import diff_exit_status
 from ..paramset import ParameterSet
+from ..resources import ResourceHandler
 from ..test.case import AnalyzeTestCase
 from ..test.case import TestCase
 from ..third_party.color import colorize
 from ..util import graph
 from ..util import logging
-from ..util.resource import ResourceInfo
 from ..util.time import time_in_seconds
 
 if TYPE_CHECKING:
@@ -70,7 +70,7 @@ class TestGenerator(abc.ABC):
         self,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
-        resourceinfo: Optional[ResourceInfo] = None,
+        rh: Optional[ResourceHandler] = None,
     ) -> str:
         pass
 
@@ -166,7 +166,7 @@ class AbstractTestFile(TestGenerator):
         self,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
-        resourceinfo: Optional[ResourceInfo] = None,
+        rh: Optional[ResourceHandler] = None,
     ) -> str:
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
@@ -186,10 +186,10 @@ class AbstractTestFile(TestGenerator):
                     if dst and dst != os.path.basename(src):
                         file.write(f" -> {dst}")
                     file.write("\n")
-        resourceinfo = resourceinfo or ResourceInfo()
+        rh = rh or ResourceHandler()
         cases: list[TestCase] = self.freeze(
-            cpus=resourceinfo["test:cpus"],
-            gpus=int(resourceinfo["test:gpus"]),
+            cpus=rh["test:cpus"],
+            gpus=int(rh["test:gpus"]),
             on_options=on_options,
             keyword_expr=keyword_expr,
         )

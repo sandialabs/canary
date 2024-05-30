@@ -7,6 +7,7 @@ from typing import Any
 from typing import Optional
 from typing import Union
 
+from .resources import ResourceHandler
 from .test.batch import Batch
 from .test.batch import factory as b_factory
 from .test.case import TestCase
@@ -17,8 +18,6 @@ from .util.filesystem import mkdirp
 from .util.partition import partition_n
 from .util.partition import partition_t
 from .util.progress import progress
-from .util.resource import BatchInfo
-from .util.resource import ResourceInfo
 from .util.time import timestamp
 
 
@@ -168,12 +167,12 @@ class ResourceQueue:
 
 
 class DirectResourceQueue(ResourceQueue):
-    def __init__(self, resourceinfo: ResourceInfo, lock: threading.Lock) -> None:
-        workers = int(resourceinfo["session:workers"])
+    def __init__(self, rh: ResourceHandler, lock: threading.Lock) -> None:
+        workers = int(rh["session:workers"])
         super().__init__(
             lock=lock,
-            cpu_ids=resourceinfo["session:cpu_ids"],
-            gpu_ids=resourceinfo["session:gpu_ids"],
+            cpu_ids=rh["session:cpu_ids"],
+            gpu_ids=rh["session:gpu_ids"],
             workers=cpu_count() if workers < 0 else workers,
         )
 
@@ -226,18 +225,16 @@ class BatchResourceQueue(ResourceQueue):
     store = "batches"
     index_file = "index"
 
-    def __init__(
-        self, resourceinfo: ResourceInfo, batchinfo: BatchInfo, lock: threading.Lock
-    ) -> None:
-        workers = int(resourceinfo["session:workers"])
+    def __init__(self, rh: ResourceHandler, lock: threading.Lock) -> None:
+        workers = int(rh["session:workers"])
         super().__init__(
             lock=lock,
-            cpu_ids=resourceinfo["session:cpu_ids"],
-            gpu_ids=resourceinfo["session:gpu_ids"],
+            cpu_ids=rh["session:cpu_ids"],
+            gpu_ids=rh["session:gpu_ids"],
             workers=5 if workers < 0 else workers,
         )
-        self.batchinfo = batchinfo
-        scheduler = self.batchinfo.scheduler
+        self.rh = rh
+        scheduler = self.rh["batch:scheduler"]
         if scheduler is None:
             raise ValueError("BatchResourceQueue requires a scheduler")
         elif scheduler not in ("slurm", "shell"):
@@ -254,10 +251,10 @@ class BatchResourceQueue(ResourceQueue):
         batch_store = os.path.join(root, ".nvtest", self.store)
         batch_stores = glob.glob(os.path.join(batch_store, "*"))
         partitions: list[list[TestCase]]
-        if self.batchinfo.count:
-            partitions = partition_n(self.tmp_buffer, n=self.batchinfo.count)
+        if self.rh["batch:count"]:
+            partitions = partition_n(self.tmp_buffer, n=self.rh["batch:count"])
         else:
-            length = float(self.batchinfo.length or 30 * 60)  # 30 minute default
+            length = float(self.rh["batch:length"] or 30 * 60)  # 30 minute default
             partitions = partition_t(self.tmp_buffer, t=length)
         n = len(partitions)
         N = len(batch_stores) + 1
@@ -279,7 +276,7 @@ class BatchResourceQueue(ResourceQueue):
             json.dump({"index": fd}, fh, indent=2)
         file = os.path.join(batch_dir, "meta.json")
         with open(file, "w") as fh:
-            json.dump({"meta": vars(self.batchinfo)}, fh, indent=2)
+            json.dump({"meta": self.rh.data["batch"]}, fh, indent=2)
 
     def put(self, *objs: TestCase) -> None:
         for obj in objs:
