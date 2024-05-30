@@ -5,7 +5,6 @@ import sys
 import traceback
 from typing import TYPE_CHECKING
 
-from .. import config
 from ..error import StopExecution
 from ..queues import BatchResourceQueue
 from ..session import ExitCode
@@ -150,21 +149,6 @@ def run(args: "argparse.Namespace") -> int:
         assert args.mode == "b"
         session = Session(args.work_tree, mode="a")
         cases = session.bfilter(batch_store=args.batch_store, batch_no=args.batch_no)
-        if os.getenv("NVTEST_ARG_R") == "v":
-            fd: int = -1001
-            try:
-                # The batch is (usually) being run in subprocess whose stdout is
-                # redirected to a log file.  Write straight to the tty device to
-                # alert that this batch is starting.
-                fd = os.open("/dev/tty", os.O_RDWR)
-                msg = f"STARTING: Batch {args.batch_no}\n"
-                os.write(fd, msg.encode())
-            except Exception as e:
-                if config.get("config:debug"):
-                    logging.error("Failed to open /dev/tty", ex=e)
-            finally:
-                if fd != -1001:
-                    os.close(fd)
     output = {"b": "progress", "v": "verbose"}[args.r]
     try:
         session.exitstatus = session.run(

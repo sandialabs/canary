@@ -102,6 +102,7 @@ class Session:
         self.mode = mode
         self.start = -1.0
         self.finish = -1.0
+        os.environ["NVCFG"] = config.dumps()
 
     @property
     def config_dir(self):

@@ -214,6 +214,8 @@ class SubShell(Batch):
         script_x = Executable(self.command)
         f = os.path.splitext(script.replace("/submit.", "/out."))[0] + ".txt"
         with open(f, "w") as fh:
+            if config.get("option:r") == "v":
+                logging.emit(f"STARTING: Batch {self.world_rank} of {self.world_size}\n")
             script_x(script, fail_on_error=False, output=fh, error=fh)
         return None
 
@@ -231,9 +233,7 @@ class SubShell(Batch):
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
         fh.write("export NVTEST_DISABLE_KB=1\n")
-        fh.write("export NVTEST_LEVEL=2\n")
-        r = config.get("option:r")
-        fh.write(f"export NVTEST_ARG_R={r}\n")
+        fh.write("export NVLVL=2\n")
         workers = kwargs.get("workers", 1)
         cpu_ids = ",".join(str(_) for _ in self.cpu_ids)
         fh.write(
@@ -309,6 +309,8 @@ class Slurm(Batch):
             while True:
                 state = self.poll(jobid)
                 if not running and state in ("R", "RUNNING"):
+                    if config.get("option:r") == "v":
+                        logging.emit(f"STARTING: Batch {self.world_rank} of {self.world_size}\n")
                     running = True
                 if state is None:
                     return
@@ -371,9 +373,7 @@ class Slurm(Batch):
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
         fh.write("export NVTEST_DISABLE_KB=1\n")
-        fh.write("export NVTEST_LEVEL=2\n")
-        r = config.get("option:r")
-        fh.write(f"export NVTEST_ARG_R={r}\n")
+        fh.write("export NVLVL=2\n")
         fh.write(f"(\n  nvtest {dbg_flag} -C {self.root} run -rv ")
         fh.write(f"-l session:workers={workers} ")
         fh.write("-l session:cpu_count=$SLURM_NTASKS ")
@@ -456,9 +456,7 @@ class PBS(Batch):
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
         fh.write("export NVTEST_DISABLE_KB=1\n")
-        fh.write("export NVTEST_LEVEL=2\n")
-        r = config.get("option:r")
-        fh.write(f"export NVTEST_ARG_R={r}\n")
+        fh.write("export NVLVL=2\n")
         fh.write(
             f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
             f"-l session:workers={workers} "
@@ -516,9 +514,14 @@ class PBS(Batch):
         logging.debug(f"Submitted batch with jobid={jobid}")
 
         time.sleep(1)
+        running = False
         try:
             while True:
                 state = self.poll(jobid)
+                if not running and state in ("R", "RUNNING"):
+                    if config.get("option:r") == "v":
+                        logging.emit(f"STARTING: Batch {self.world_rank} of {self.world_size}\n")
+                    running = True
                 if state is None:
                     return
                 time.sleep(0.5)

@@ -1,8 +1,10 @@
 import argparse
+import base64
 import configparser
 import copy
 import json
 import os
+import pickle
 import sys
 from string import Template
 from typing import Any
@@ -522,7 +524,16 @@ class ConfigSchemaError(Exception):
         super().__init__(msg)
 
 
-config = Singleton(Config)
+def factory() -> Config:
+    config: Config
+    if int(os.getenv("NVLVL", "1")) <= 1 and "NVCFG" in os.environ:
+        config = loads(os.environ["NVCFG"])
+    else:
+        config = Config()
+    return config
+
+
+config = Singleton(factory)
 
 
 def dump(fh: TextIO, scope: Optional[str] = None):
@@ -555,3 +566,13 @@ def add(fullpath: str, scope: Optional[str] = None) -> None:
 
 def has_scope(scope: str) -> bool:
     return scope in config.scopes
+
+
+def dumps() -> str:
+    ps = pickle.dumps(config)
+    return base64.b64encode(ps).decode("ascii")
+
+
+def loads(string: str) -> Config:
+    config = pickle.loads(base64.b64decode(string))
+    return config
