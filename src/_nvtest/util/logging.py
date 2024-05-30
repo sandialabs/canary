@@ -201,8 +201,10 @@ def progress_bar(
     eta = None if not complete else round(elapsed * (1.0 - frac) / frac)
 
     w = len(str(total))
-    info = f"  {complete:{w}d}/{total} {percent:5.1f}% "
-    info += f"[elapsed: {hhmmss(elapsed)} eta: {hhmmss(eta)} ave: {hhmmss(average)}]   "
+    info = f"  {complete:{w}d}/{total} {percent:5.1f}% ["
+    info += f"elapsed: {hhmmss(elapsed, threshold=1)} "
+    info += f"eta: {hhmmss(eta, threshold=0)} "
+    info += f"ave: {hhmmss(average, threshold=1)}]   "
 
     bar_width = total_width - len(info)
     v = frac * bar_width

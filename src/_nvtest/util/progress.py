@@ -15,6 +15,6 @@ def progress(cases: list[TestCase], elapsed_time: float) -> None:
     """
     i = Status.members.index("cancelled")
     done = [c for c in cases if c.status.value in Status.members[i:]]
-    times = [case.duration for case in done]
+    times = [case.duration for case in done if case.duration > 0]
     average = None if not times else times[0] if len(times) == 1 else statistics.mean(times)
     logging.progress_bar(len(cases), len(done), elapsed_time, average)
