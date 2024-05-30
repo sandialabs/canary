@@ -61,11 +61,11 @@ class ResourceInfo:
             raw = match.group(2)
             return ("session:cpu_count", int(raw))
         elif match := re.search(r"^session:cpu_ids[:=](.*)$", arg):
-            raw = match.group(2)
+            raw = match.group(1)
             ints = ilist(raw.strip())
             return ("session:cpu_ids", ints)
         elif match := re.search(r"^session:gpu_ids[:=](.*)$", arg):
-            raw = match.group(2)
+            raw = match.group(1)
             ints = ilist(raw.strip())
             return ("session:gpu_ids", ints)
         elif match := re.search(r"^session:workers[:=](\d+)$", arg):

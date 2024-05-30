@@ -57,7 +57,15 @@ class Batch(Runner):
         first = next(iter(cases))
         self.root = first.exec_root
         self.total_duration: float = -1
-        self._runtime: float = -1.0
+        self.max_cpus_required = max([case.processors for case in self.cases])
+        self.max_gpus_required = max([case.gpus for case in self.cases])
+        self._runtime: float
+        if len(self.cases) == 1:
+            self._runtime = self.cases[0].runtime
+        else:
+            ns = calculate_allocations(self.max_cpus_required)
+            grid = partition.tile(self.cases, ns.cores_per_node * ns.nodes)
+            self._runtime = sum([max(case.runtime for case in row) for row in grid])
 
     def __iter__(self):
         return iter(self.cases)
@@ -79,35 +87,24 @@ class Batch(Runner):
             raise ValueError("Stopping due to previous errors")
 
     @property
-    def processors(self) -> int:
-        # A batch only requires 1 processor to submit
-        return 1
-
-    @property
-    def gpus(self) -> int:
-        # A batch does not require any GPUs to submit (though, once submitted,
-        # the cases in the batch may require a GPU)
-        return 0
-
-    @property
     def cputime(self) -> float:
         return sum(case.processors * min(case.runtime, 5.0) for case in self) * 1.5
 
     @property
     def runtime(self) -> float:
-        if self._runtime < 0:
-            if len(self.cases) == 1:
-                self._runtime = self.cases[0].runtime
-            else:
-                max_test_cpus = self.max_cpus_required()
-                ns = calculate_allocations(max_test_cpus)
-                grid = partition.tile(self.cases, ns.cores_per_node * ns.nodes)
-                self._runtime = sum([max(case.runtime for case in row) for row in grid])
         return self._runtime
 
     @property
     def has_dependencies(self) -> bool:
         return any(case.dependencies for case in self.cases)
+
+    @property
+    def processors(self) -> int:
+        return self.max_cpus_required
+
+    @property
+    def gpus(self) -> int:
+        return self.max_gpus_required
 
     @property
     def status(self) -> Status:
@@ -128,9 +125,6 @@ class Batch(Runner):
             self._status.set(arg.value, details=arg.details)
         else:
             self._status.set(arg[0], details=arg[1])
-
-    def max_cpus_required(self) -> int:
-        return max([case.processors for case in self.cases])
 
     def refresh(self) -> None:
         for case in self:
@@ -203,6 +197,16 @@ class Batch(Runner):
 class SubShell(Batch):
     """Run the Batch in a subshell"""
 
+    def __init__(
+        self,
+        cases: Union[list[TestCase], set[TestCase]],
+        world_rank: int,
+        world_size: int,
+        world_id: int = 1,
+    ) -> None:
+        super().__init__(cases, world_rank, world_size, world_id=world_id)
+        self.qtime = self.runtime * 1.5
+
     def _run(self, *args: str, **kwargs: Any) -> None:
         script = self.write_submission_script(*args, **kwargs)
         if not os.path.exists(script):
@@ -214,20 +218,13 @@ class SubShell(Batch):
         return None
 
     def write_submission_script(self, *args: str, **kwargs: Any) -> str:
-        max_test_cpus = self.max_cpus_required()
-        session_cpus = max_test_cpus
         dbg_flag = "-d" if config.get("config:debug") else ""
+        timeoutx = kwargs.get("timeoutx", 1.0)
         fh = StringIO()
         fh.write(f"#!{self.shell}\n")
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-
-        cores_per_socket = config.get("machine:cores_per_socket")
-        sockets_per_node = config.get("machine:sockets_per_node") or 1
-        cores_per_node = cores_per_socket * sockets_per_node
-        qtime = self.cputime / cores_per_node
-
-        fh.write(f"# approximate runtime: {hhmmss(qtime)}\n")
+        fh.write(f"# approximate runtime: {hhmmss(self.qtime * timeoutx)}\n")
         fh.write(f"# batch {self.world_rank} of {self.world_size}\n")
         fh.write("# test cases:\n")
         for case in self.cases:
@@ -236,11 +233,11 @@ class SubShell(Batch):
         fh.write("export NVTEST_DISABLE_KB=1\n")
         fh.write("export NVTEST_LEVEL=2\n")
         workers = kwargs.get("workers", 1)
-        timeoutx = kwargs.get("timeoutx", 1.0)
+        cpu_ids = ",".join(str(_) for _ in self.cpu_ids)
         fh.write(
             f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
             f"-l session:workers={workers} "
-            f"-l session:cpu_count={session_cpus} "
+            f"-l session:cpu_ids={cpu_ids} "
             f"-l test:timeoutx={timeoutx} "
             f"^{self.world_id}:{self.world_rank}\n)\n"
         )
@@ -270,6 +267,14 @@ class Slurm(Batch):
         if cores_per_socket is None:
             raise ValueError("slurm runner requires that 'machine:cores_per_socket' be defined")
         super().__init__(cases, world_rank, world_size, world_id=world_id)
+
+    @property
+    def processors(self) -> int:
+        return 1
+
+    @property
+    def gpus(self) -> int:
+        return 0
 
     def _run(self, *args_in: str, **kwargs: Any) -> None:
         script = self.write_submission_script(*args_in, **kwargs)
@@ -314,6 +319,7 @@ class Slurm(Batch):
                 return
             raise
 
+    @property
     def qtime(self) -> float:
         if len(self.cases) == 1:
             return self.cases[0].timeout
@@ -333,10 +339,9 @@ class Slurm(Batch):
         return total_runtime
 
     def write_submission_script(self, *args_in: str, **kwargs: Any) -> str:
-        max_test_cpus = self.max_cpus_required()
-        ns = calculate_allocations(max_test_cpus)
+        ns = calculate_allocations(self.max_cpus_required)
         timeoutx = kwargs.get("timeoutx", 1.0)
-        qtime = self.qtime() * timeoutx
+        qtime = self.qtime * timeoutx
 
         workers = kwargs.get("workers", ns.cores_per_node)
         session_cpus = ns.nodes * ns.cores_per_node
@@ -417,14 +422,20 @@ class PBS(Batch):
             raise ValueError("slurm runner requires that 'machine:cores_per_socket' be defined")
         super().__init__(cases, world_rank, world_size, world_id=world_id)
 
+    @property
+    def processors(self) -> int:
+        return 1
+
+    @property
+    def gpus(self) -> int:
+        return 0
+
     def write_submission_script(self, *args_in: str, **kwargs: Any) -> str:
         """Write the pbs submission script"""
-        max_test_cpus = self.max_cpus_required()
-        ns = calculate_allocations(max_test_cpus)
+        ns = calculate_allocations(self.max_cpus_required)
         timeoutx = kwargs.get("timeoutx", 1.0)
-        qtime = self.qtime() * timeoutx
+        qtime = self.qtime * timeoutx
         dbg_flag = "-d" if config.get("config:debug") else ""
-        timeoutx = kwargs.get("timeoutx", 1.0)
         workers = kwargs.get("workers", ns.cores_per_node)
         session_cpus = ns.nodes * ns.cores_per_node
         fh = StringIO()
@@ -459,6 +470,7 @@ class PBS(Batch):
         set_executable(f)
         return f
 
+    @property
     def qtime(self) -> float:
         if len(self.cases) == 1:
             return self.cases[0].timeout
