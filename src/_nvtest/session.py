@@ -104,7 +104,7 @@ class Session:
         self.start = -1.0
         self.finish = -1.0
         os.environ["NVCFG"] = config.dumps()
-        os.environ["NVPLGMGR"] = plugin.dumps()
+        # os.environ["NVPLGMGR"] = plugin.dumps()
 
     @property
     def config_dir(self):
