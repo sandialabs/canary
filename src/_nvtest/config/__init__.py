@@ -132,6 +132,8 @@ class Config:
             logging.set_level(logging.DEBUG)
 
     def dump(self, fh: TextIO, scope: Optional[str] = None):
+        from ..resources import ResourceHandler
+
         if scope is not None:
             merged = self.scopes[scope]
         else:
@@ -143,6 +145,8 @@ class Config:
             for key, value in table[section].items():
                 if isinstance(value, dict):
                     subsections.append(key)
+                elif isinstance(value, ResourceHandler):
+                    fh.write(f"{key} = {json.dumps(value.data)}\n")
                 else:
                     fh.write(f"{key} = {json.dumps(value)}\n")
             fh.write("\n")
