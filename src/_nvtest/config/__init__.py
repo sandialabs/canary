@@ -1,8 +1,10 @@
 import argparse
+import base64
 import configparser
 import copy
 import json
 import os
+import pickle
 import sys
 from string import Template
 from typing import Any
@@ -14,8 +16,6 @@ from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
 from ..util import logging
 from ..util.misc import ns2dict
-from ..util.serialization import deserialize
-from ..util.serialization import serialize
 from ..util.singleton import Singleton
 from ..util.time import time_in_seconds
 from . import machine
@@ -569,8 +569,10 @@ def has_scope(scope: str) -> bool:
 
 
 def dumps() -> str:
-    return serialize(config)
+    ps = pickle.dumps(config)
+    return base64.b64encode(ps).decode("ascii")
 
 
 def loads(string: str) -> Config:
-    return deserialize(string)
+    config = pickle.loads(base64.b64decode(string))
+    return config
