@@ -37,7 +37,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             a = [os.path.join(sys.prefix, "bin/nvtest")] + [_ for _ in argv if _ != "--echo"]
             logging.info(shlex.join(a))
 
-        prepare_plugin_vars(pre.plugin_dirs or [])
+        load_plugins(pre.plugin_dirs or [])
         for hook in plugin.plugins("main", "setup"):
             hook(parser)
 
@@ -129,7 +129,7 @@ def invoke_profiled_command(command, args):
     return rc
 
 
-def prepare_plugin_vars(paths: list[str]) -> None:
+def load_plugins(paths: list[str]) -> None:
     disable, dirs = [], []
     for path in paths:
         if path.startswith("no:"):
@@ -138,8 +138,11 @@ def prepare_plugin_vars(paths: list[str]) -> None:
             logging.warning(f"{path}: plugin directory not found")
         else:
             dirs.append(path)
-    os.environ["NVTEST_PLUGIN_DIRS"] = ":".join(os.path.abspath(d) for d in dirs)
-    os.environ["NVTEST_DISABLE_PLUGINS"] = ":".join(disable)
+    plugin.load_builtin_plugins(disable=disable)
+    plugin.load_from_entry_points(disable=disable)
+    for dir in dirs:
+        path = os.path.abspath(dir)
+        plugin.load_from_directory(path)
 
 
 def console_main() -> int:
