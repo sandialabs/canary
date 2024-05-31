@@ -360,14 +360,41 @@ class Session:
             raise ValueError("There are no cases to run in this session")
         rh = rh or ResourceHandler()
         queue = self.setup_queue(cases, rh)
+        verbose: bool = output == "verbose"
         with self.rc_environ():
             with working_dir(self.root):
-                self.process_testcases(
-                    queue=queue,
-                    rh=rh,
-                    fail_fast=fail_fast,
-                    output=output,
-                )
+                tries: int = 3
+                while tries:
+                    try:
+                        self.process_testcases(
+                            queue=queue, rh=rh, fail_fast=fail_fast, output=output
+                        )
+                        queue.close(cleanup=True)
+                    except PermissionError:
+                        tries -= 1
+                        if tries == 0:
+                            queue.close(cleanup=True)
+                            raise
+                        continue
+                    except KeyboardInterrupt:
+                        self.returncode = signal.SIGINT.value
+                        queue.close(cleanup=False)
+                        raise
+                    except FailFast as e:
+                        name, code = e.args
+                        self.returncode = code
+                        queue.close(cleanup=False)
+                        raise StopExecution(f"fail_fast: {name}", code)
+                    except Exception:
+                        logging.error(traceback.format_exc())
+                        self.returncode = compute_returncode(queue.cases())
+                        queue.close(cleanup=True)
+                        raise
+                    else:
+                        if not verbose:
+                            queue.display_progress(self.start, last=True)
+                        self.returncode = compute_returncode(queue.cases())
+                        break
                 for hook in plugin.plugins("session", "finish"):
                     hook(self)
         return self.returncode
@@ -398,7 +425,6 @@ class Session:
     ) -> None:
         verbose: bool = output == "verbose"
         futures: dict = {}
-        auto_cleanup: bool = True
         self.start = timestamp()
         self.finish = -1.0
         duration = lambda: timestamp() - self.start
@@ -431,37 +457,16 @@ class Session:
                     callback = partial(self.done_callback, iid, queue, fail_fast)
                     future.add_done_callback(callback)
                     futures[iid] = (obj, future)
-        except BaseException as e:
+        except PermissionError:
+            raise
+        except BaseException:
             if ppe._processes:
                 for proc in ppe._processes:
                     os.kill(proc, signal.SIGINT)
             ppe.shutdown(wait=True)
-            if isinstance(e, KeyboardInterrupt):
-                self.returncode = signal.SIGINT.value
-                auto_cleanup = False
-            elif isinstance(e, FailFast):
-                name, code = e.args
-                self.returncode = code
-                auto_cleanup = False
-                raise StopExecution(f"fail_fast: {name}", code)
-            else:
-                logging.error(traceback.format_exc())
-                self.returncode = compute_returncode(queue.cases())
-                raise
-        else:
-            if not verbose:
-                queue.display_progress(self.start, last=True)
-            self.returncode = compute_returncode(queue.cases())
+            raise
         finally:
             self.finish = timestamp()
-            if auto_cleanup:
-                for case in queue.cases():
-                    if case.status == "running":
-                        case.status.set("cancelled", "Case failed to stop")
-                        case.save()
-                    elif case.status == "ready":
-                        case.status.set("failed", "Case failed to start")
-                        case.save()
 
     def done_callback(
         self, iid: int, queue: ResourceQueue, fail_fast: bool, future: Future

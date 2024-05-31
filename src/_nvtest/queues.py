@@ -36,6 +36,7 @@ class ResourceQueue:
         self._buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
         self._finished: dict[int, Any] = {}
+        self._notrun: dict[int, Any] = {}
         self.lock = lock
         self.cpu_count = len(self.cpu_ids)
         self.gpu_count = len(self.gpu_ids)
@@ -56,6 +57,9 @@ class ResourceQueue:
         raise NotImplementedError
 
     def finished(self) -> list[Any]:
+        raise NotImplementedError
+
+    def notrun(self) -> list[Any]:
         raise NotImplementedError
 
     def empty(self) -> bool:
@@ -105,6 +109,19 @@ class ResourceQueue:
     def prepare(self) -> None:
         pass
 
+    def close(self, cleanup: bool = True) -> None:
+        if cleanup:
+            for case in self.cases():
+                if case.status == "running":
+                    case.status.set("cancelled", "Case failed to stop")
+                    case.save()
+                elif case.status == "ready":
+                    case.status.set("failed", "Case failed to start")
+                    case.save()
+        keys = list(self._buffer.keys())
+        for key in keys:
+            self._notrun[key] = self._buffer.pop(key)
+
     def get(self) -> Optional[tuple[int, Union[TestCase, Batch]]]:
         with self.lock:
             if self.available_workers() <= 0:
@@ -136,6 +153,7 @@ class ResourceQueue:
             done = count(self.finished())
             busy = count(self.busy())
             notrun = count(self.queued())
+            notrun += count(self.notrun())
             total = done + busy + notrun
             for obj in self.finished():
                 if isinstance(obj, TestCase):
@@ -209,7 +227,7 @@ class DirectResourceQueue(ResourceQueue):
             return self._finished[obj_no]
 
     def cases(self) -> list[TestCase]:
-        return self.queued() + self.busy() + self.finished()
+        return self.queued() + self.busy() + self.finished() + self.notrun()
 
     def queued(self) -> list[TestCase]:
         return list(self._buffer.values())
@@ -219,6 +237,9 @@ class DirectResourceQueue(ResourceQueue):
 
     def finished(self) -> list[TestCase]:
         return list(self._finished.values())
+
+    def notrun(self) -> list[TestCase]:
+        return list(self._notrun.values())
 
 
 class BatchResourceQueue(ResourceQueue):
@@ -316,6 +337,7 @@ class BatchResourceQueue(ResourceQueue):
         cases.extend([case for batch in self._buffer.values() for case in batch])
         cases.extend([case for batch in self._busy.values() for case in batch])
         cases.extend([case for batch in self._finished.values() for case in batch])
+        cases.extend([case for batch in self._notrun.values() for case in batch])
         return cases
 
     def queued(self) -> list[Batch]:
@@ -326,6 +348,9 @@ class BatchResourceQueue(ResourceQueue):
 
     def finished(self) -> list[Batch]:
         return list(self._finished.values())
+
+    def notrun(self) -> list[Batch]:
+        return list(self._notrun.values())
 
 
 class Empty(Exception):
