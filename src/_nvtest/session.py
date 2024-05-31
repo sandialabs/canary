@@ -366,6 +366,8 @@ class Session:
                 tries: int = 3
                 while tries:
                     try:
+                        self.start = timestamp()
+                        self.finish = -1.0
                         self.process_testcases(
                             queue=queue, rh=rh, fail_fast=fail_fast, output=output
                         )
@@ -395,6 +397,8 @@ class Session:
                             queue.display_progress(self.start, last=True)
                         self.returncode = compute_returncode(queue.cases())
                         break
+                    finally:
+                        self.finish = timestamp()
                 for hook in plugin.plugins("session", "finish"):
                     hook(self)
         return self.returncode
@@ -425,8 +429,6 @@ class Session:
     ) -> None:
         verbose: bool = output == "verbose"
         futures: dict = {}
-        self.start = timestamp()
-        self.finish = -1.0
         duration = lambda: timestamp() - self.start
         timeout = rh["session:timeout"] or -1
         try:
@@ -465,8 +467,6 @@ class Session:
                     os.kill(proc, signal.SIGINT)
             ppe.shutdown(wait=True)
             raise
-        finally:
-            self.finish = timestamp()
 
     def done_callback(
         self, iid: int, queue: ResourceQueue, fail_fast: bool, future: Future
