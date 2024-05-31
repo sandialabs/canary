@@ -48,6 +48,8 @@ class ResourceHandler:
 
         # --- session resources
         if (scope, type) == ("session", "cpu_count"):
+            if not isinstance(value, int):
+                raise ValueError("session cpu count must be an integer")
             if value < 0:
                 raise ValueError(f"session:cpu_count = {value} < 0")
             elif value > config.get("machine:cpu_count"):
@@ -55,13 +57,17 @@ class ResourceHandler:
             if self.data["session"]["meta"].get("cpu_ids"):
                 raise ValueError("session:cpu_count and session:cpu_ids are mutually exclusive")
             self.data["session"]["meta"]["cpu_count"] = 1
+            self.data["session"]["cpu_ids"] = list(range(value))
         elif (scope, type) == ("session", "cpu_ids"):
             if not isinstance(value, list) and not all([isinstance(x, int) for x in value]):
                 raise ValueError("session cpu ids must be a list of integers")
             if self.data["session"]["meta"].get("cpu_count"):
                 raise ValueError("session:cpu_ids and session:cpu_count are mutually exclusive")
             self.data["session"]["meta"]["cpu_ids"] = 1
+            self.data["session"]["cpu_count"] = len(value)
         elif (scope, type) == ("session", "gpu_count"):
+            if not isinstance(value, int):
+                raise ValueError("session gpu count must be an integer")
             if value < 0:
                 raise ValueError(f"session:gpu_count = {value} < 0")
             elif value > config.get("machine:gpu_count"):
@@ -69,12 +75,14 @@ class ResourceHandler:
             if self.data["session"]["meta"].get("gpu_ids"):
                 raise ValueError("session:gpu_count and session:gpu_ids are mutually exclusive")
             self.data["session"]["meta"]["gpu_count"] = 1
+            self.data["session"]["gpu_ids"] = list(range(value))
         elif (scope, type) == ("session", "gpu_ids"):
             if not isinstance(value, list) and not all([isinstance(x, int) for x in value]):
                 raise ValueError("session gpu ids must be a list of integers")
             if self.data["session"]["meta"].get("gpu_count"):
                 raise ValueError("session:gpu_ids and session:gpu_count are mutually exclusive")
             self.data["session"]["meta"]["gpu_ids"] = 1
+            self.data["session"]["gpu_count"] = len(value)
         elif (scope, type) == ("session", "workers"):
             if value < 0:
                 raise ValueError(f"session:workers = {value} < 0")
