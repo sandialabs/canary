@@ -1,6 +1,7 @@
 import itertools
 import json
 import os
+import pickle
 import re
 import signal
 import subprocess
@@ -14,8 +15,6 @@ from typing import BinaryIO
 from typing import Generator
 from typing import Optional
 from typing import Union
-
-import dill as pickle
 
 from .. import config
 from .. import plugin
@@ -592,7 +591,8 @@ class TestCase(Runner):
                         time.sleep(0.05)
                     return proc.returncode
 
-    def teardown(self) -> None: ...
+    def teardown(self) -> None:
+        ...
 
     def cache_file(self, path):
         return os.path.join(path, f"timing/{self.id[:2]}/{self.id[2:]}.json")

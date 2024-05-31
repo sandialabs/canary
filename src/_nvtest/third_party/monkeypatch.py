@@ -134,7 +134,8 @@ class monkeypatch:
         name: object,
         value: Notset = ...,
         raising: bool = ...,
-    ) -> None: ...
+    ) -> None:
+        ...
 
     @overload
     def setattr(
@@ -143,7 +144,8 @@ class monkeypatch:
         name: str,
         value: object,
         raising: bool = ...,
-    ) -> None: ...
+    ) -> None:
+        ...
 
     def setattr(
         self,

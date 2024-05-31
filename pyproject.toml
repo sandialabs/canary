@@ -5,7 +5,7 @@ readme = "README.md"
 license = {"file" = "LICENSE"}
 description = "nvtest: application testing with Python"
 requires-python = ">=3.9"
-dependencies = ["dill"]
+dependencies = []
 
 [project.scripts]
 nvtest = "nvtest:console_main"
