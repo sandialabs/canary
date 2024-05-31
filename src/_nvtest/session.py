@@ -102,6 +102,8 @@ class Session:
         self.mode = mode
         self.start = -1.0
         self.finish = -1.0
+        os.environ["NVCFGDIR"] = self.config_dir
+        config.pdump(self.config_dir)
 
     @property
     def config_dir(self):
@@ -173,9 +175,6 @@ class Session:
         if ini:
             file = os.path.join(self.config_dir, self.options_file)
             with open(file, "w") as fh:
-                options = config.get("option")
-                if options.get("rh"):
-                    options["rh"] = options["rh"].data
                 json.dump({"options": config.get("option")}, fh, indent=2)
 
     def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:

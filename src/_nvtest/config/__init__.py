@@ -3,6 +3,7 @@ import configparser
 import copy
 import json
 import os
+import pickle
 import sys
 from string import Template
 from typing import Any
@@ -14,8 +15,6 @@ from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
 from ..util import logging
 from ..util.misc import ns2dict
-from ..util.serialization import deserialize
-from ..util.serialization import serialize
 from ..util.singleton import Singleton
 from ..util.time import time_in_seconds
 from . import machine
@@ -57,6 +56,8 @@ invocation_dir = os.getcwd()
 
 class Config:
     """Access to configuration values"""
+
+    fb = f"config.{sys.implementation.cache_tag}.p"
 
     def __init__(self) -> None:
         static_machine_config = machine.machine_config()
@@ -132,8 +133,6 @@ class Config:
             logging.set_level(logging.DEBUG)
 
     def dump(self, fh: TextIO, scope: Optional[str] = None):
-        from ..resources import ResourceHandler
-
         if scope is not None:
             merged = self.scopes[scope]
         else:
@@ -145,8 +144,6 @@ class Config:
             for key, value in table[section].items():
                 if isinstance(value, dict):
                     subsections.append(key)
-                elif isinstance(value, ResourceHandler):
-                    fh.write(f"{key} = {json.dumps(value.data)}\n")
                 else:
                     fh.write(f"{key} = {json.dumps(value)}\n")
             fh.write("\n")
@@ -529,12 +526,12 @@ class ConfigSchemaError(Exception):
 
 
 def factory() -> Config:
-    config: Config
-    if int(os.getenv("NVLVL", "1")) <= 1 and "NVCFG" in os.environ:
-        config = loads(os.environ["NVCFG"])
-    else:
-        config = Config()
-    return config
+    if int(os.getenv("NVLVL", "1")) <= 1 and "NVCFGDIR" in os.environ:
+        f = os.path.join(os.environ["NVCFGDIR"], Config.fb)
+        if os.path.exists(f):
+            with open(f, "rb") as fh:
+                return pickle.load(fh)
+    return Config()
 
 
 config = Singleton(factory)
@@ -572,9 +569,6 @@ def has_scope(scope: str) -> bool:
     return scope in config.scopes
 
 
-def dumps() -> str:
-    return serialize(config._instance)
-
-
-def loads(string: str) -> Config:
-    return deserialize(string)
+def pdump(dirname: str):
+    with open(os.path.join(dirname, Config.fb), "wb") as fh:
+        pickle.dump(config._instance, fh)
