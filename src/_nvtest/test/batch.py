@@ -376,7 +376,7 @@ class Slurm(Batch):
         fh.write("export NVLVL=2\n")
         fh.write(f"(\n  nvtest {dbg_flag} -C {self.root} run -rv ")
         fh.write(f"-l session:workers={workers} ")
-        fh.write("-l session:cpu_count=$SLURM_NTASKS ")
+        fh.write(f"-l session:cpu_count={session_cpus} ")
         fh.write(f"-l test:timeoutx={timeoutx} ")
         fh.write(f"^{self.world_id}:{self.world_rank}\n)\n")
         f = self.submission_script_filename()
