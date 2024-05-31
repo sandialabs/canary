@@ -5,7 +5,7 @@ readme = "README.md"
 license = {"file" = "LICENSE"}
 description = "nvtest: application testing with Python"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = ["dill"]
 
 [project.scripts]
 nvtest = "nvtest:console_main"
@@ -27,7 +27,7 @@ local_scheme = "node-and-date"
 exclude = ["src/_nvtest/third_party/distro.py", "src/_nvtest/third_party/programoutput/*", "src/_nvtest/third_party/monkeypatch.py"]
 
 [[tool.mypy.overrides]]
-module = "requests.*,networkx.*,yaml.*,ruamel.*,pygments.*,toml.*,contextlib2.*,scipy.*,pyinstrument.*,numpy.*,imageio.*,pkg_resources.*"
+module = "requests.*,networkx.*,yaml.*,ruamel.*,pygments.*,toml.*,contextlib2.*,scipy.*,pyinstrument.*,numpy.*,imageio.*,pkg_resources.*,dill.*"
 ignore_missing_imports = true
 
 # check-wheel-contents is executed by the build-and-inspect-python-package action.

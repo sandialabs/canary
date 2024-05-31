@@ -1,7 +1,8 @@
 import base64
-import pickle
 import zlib
 from typing import Any
+
+import dill as pickle
 
 
 def serialize(obj: Any) -> Any:

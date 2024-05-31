@@ -1,7 +1,6 @@
 import io
 import json
 import os
-import pickle
 import random
 import signal
 import threading
@@ -17,6 +16,8 @@ from typing import Any
 from typing import Generator
 from typing import Optional
 from typing import Union
+
+import dill as pickle
 
 from . import config
 from . import plugin
@@ -103,6 +104,7 @@ class Session:
         self.start = -1.0
         self.finish = -1.0
         os.environ["NVCFG"] = config.dumps()
+        os.environ["NVPLGMGR"] = plugin.dumps()
 
     @property
     def config_dir(self):

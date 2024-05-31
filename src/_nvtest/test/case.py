@@ -1,7 +1,6 @@
 import itertools
 import json
 import os
-import pickle
 import re
 import signal
 import subprocess
@@ -15,6 +14,8 @@ from typing import BinaryIO
 from typing import Generator
 from typing import Optional
 from typing import Union
+
+import dill as pickle
 
 from .. import config
 from .. import plugin

@@ -1,6 +1,7 @@
 import os
-import pickle
 from typing import Union
+
+import dill as pickle
 
 from .test.case import TestCase
 from .third_party.lock import Lock

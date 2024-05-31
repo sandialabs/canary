@@ -14,6 +14,8 @@ from typing import Type
 from . import config
 from .util import logging
 from .util.entry_points import get_entry_points
+from .util.serialization import deserialize
+from .util.serialization import serialize
 from .util.singleton import Singleton
 
 if TYPE_CHECKING:
@@ -187,6 +189,15 @@ def load_module_from_file(module_name: str, module_path: str):
     return module
 
 
+def factory() -> Manager:
+    manager: Manager
+    if int(os.getenv("NVLVL", "1")) <= 1 and "NVPLGMGR" in os.environ:
+        manager = loads(os.environ["NVPLGMGR"])
+    else:
+        manager = Manager()
+    return manager
+
+
 _manager = Singleton(Manager)
 
 
@@ -210,8 +221,7 @@ def register(*, scope: str, stage: str, **kwds: str):
     """Decorator to register a callback"""
 
     def decorator(func: Callable):
-        functools.wraps(func)
-
+        @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any):
             return func(*args, **kwargs)
 
@@ -243,3 +253,11 @@ def load_from_entry_points(disable: Optional[list[str]] = None) -> None:
 def load_from_directory(path: str) -> None:
     logging.debug(f"Loading plugins from {path}")
     _manager.load_from_directory(path)
+
+
+def dumps() -> str:
+    return serialize(_manager._instance)
+
+
+def loads(string: str) -> Manager:
+    return deserialize(string)
