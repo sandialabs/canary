@@ -102,7 +102,7 @@ class Session:
         self.mode = mode
         self.start = -1.0
         self.finish = -1.0
-        os.environ["NVCFG"] = config.dumps()
+        # os.environ["NVCFG"] = config.dumps()
         # os.environ["NVPLGMGR"] = plugin.dumps()
 
     @property

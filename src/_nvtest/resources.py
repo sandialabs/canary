@@ -50,21 +50,27 @@ class ResourceHandler:
         if (scope, type) == ("session", "cpu_count"):
             if not isinstance(value, int):
                 raise ValueError("session cpu count must be an integer")
-            if value < 0:
-                raise ValueError(f"session:cpu_count = {value} < 0")
+            if value <= 0:
+                raise ValueError(f"session:cpu_count = {value} <= 0")
             elif value > config.get("machine:cpu_count"):
                 raise ValueError("session cpu request exceeds machine cpu count")
             if self.data["session"]["meta"].get("cpu_ids"):
                 raise ValueError("session:cpu_count and session:cpu_ids are mutually exclusive")
             self.data["session"]["meta"]["cpu_count"] = 1
             self.data["session"]["cpu_ids"] = list(range(value))
+
         elif (scope, type) == ("session", "cpu_ids"):
             if not isinstance(value, list) and not all([isinstance(x, int) for x in value]):
                 raise ValueError("session cpu ids must be a list of integers")
             if self.data["session"]["meta"].get("cpu_count"):
                 raise ValueError("session:cpu_ids and session:cpu_count are mutually exclusive")
+            if len(value) == 0:
+                raise ValueError("len(session:cpu_ids) = 0")
+            elif len(value) > config.get("machine:cpu_count"):
+                raise ValueError("number of session cpu ids exceeds machine cpu count")
             self.data["session"]["meta"]["cpu_ids"] = 1
             self.data["session"]["cpu_count"] = len(value)
+
         elif (scope, type) == ("session", "gpu_count"):
             if not isinstance(value, int):
                 raise ValueError("session gpu count must be an integer")
@@ -76,18 +82,25 @@ class ResourceHandler:
                 raise ValueError("session:gpu_count and session:gpu_ids are mutually exclusive")
             self.data["session"]["meta"]["gpu_count"] = 1
             self.data["session"]["gpu_ids"] = list(range(value))
+
         elif (scope, type) == ("session", "gpu_ids"):
             if not isinstance(value, list) and not all([isinstance(x, int) for x in value]):
                 raise ValueError("session gpu ids must be a list of integers")
             if self.data["session"]["meta"].get("gpu_count"):
                 raise ValueError("session:gpu_ids and session:gpu_count are mutually exclusive")
+            if len(value) == 0:
+                raise ValueError("len(session:gpu_ids) = 0")
+            elif len(value) > config.get("machine:gpu_count"):
+                raise ValueError("number of session gpu ids exceeds machine gpu count")
             self.data["session"]["meta"]["gpu_ids"] = 1
             self.data["session"]["gpu_count"] = len(value)
+
         elif (scope, type) == ("session", "workers"):
             if value < 0:
                 raise ValueError(f"session:workers = {value} < 0")
             elif value > config.get("machine:cpu_count"):
                 raise ValueError("session worker request exceeds machine cpu count")
+
         elif (scope, type) == ("session", "timeout"):
             if value <= 0.0:
                 raise ValueError("session timeout must be > 0")
@@ -105,6 +118,7 @@ class ResourceHandler:
                 raise ValueError("test max cpu request exceeds machine cpu count")
             elif self["session:cpu_count"] > 0 and max_cpus > self["session:cpu_count"]:
                 raise ValueError("test cpu request exceeds session cpu limit")
+
         elif (scope, type) == ("test", "gpus"):
             if value < 0:
                 raise ValueError(f"test:gpus = {value} < 0")
@@ -112,9 +126,11 @@ class ResourceHandler:
                 raise ValueError("test gpu request exceeds machine gpu count")
             elif self["session:gpu_count"] > 0 and value > self["session:gpu_count"]:
                 raise ValueError("test gpu request exceeds session gpu limit")
+
         elif (scope, type) == ("test", "timeout"):
             if value <= 0.0:
                 raise ValueError("test timeout must be > 0")
+
         elif (scope, type) == ("test", "timeoutx"):
             if value <= 0.0:
                 raise ValueError("test timeoutx must be > 0")
@@ -125,23 +141,28 @@ class ResourceHandler:
                 raise ValueError("batch length must be > 0")
             if self.data["batch"]["count"] is not None:
                 raise ValueError("batch length and count are mutually exclusive")
+
         elif (scope, type) == ("batch", "count"):
             if value <= 0:
                 raise ValueError("batch count must be > 0")
             if self.data["batch"]["length"] is not None:
                 raise ValueError("batch count and length are mutually exclusive")
+
         elif (scope, type) == ("batch", "scheduler"):
             if value not in schedulers:
                 raise ValueError(f"unsupported scheduler: {value!r}")
+
         elif (scope, type) == ("batch", "workers"):
             if value < 0:
                 raise ValueError(f"batch:workers = {value} < 0")
             elif value > config.get("machine:cpu_count"):
                 raise ValueError("batch worker request exceeds machine cpu count")
+
         elif (scope, type) == ("batch", "args"):
             if isinstance(value, str):
                 value = shlex.split(value)
             value = self.data[scope][type] + value
+
         elif (scope, type) == ("batch", "batched"):
             value = bool(value)
 
