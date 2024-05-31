@@ -215,6 +215,13 @@ class Executable:
             logging.error(msg)
             self.returncode = rc
 
+        except Exception as e:
+            msg = f"{e}\nUnknown failure occurred when invoking command: {cmd_line}"
+            if fail_on_error:
+                raise ProcessError(msg) from None
+            logging.error(msg)
+            self.returncode = 1
+
         finally:
             if close_ostream:
                 ostream.close()

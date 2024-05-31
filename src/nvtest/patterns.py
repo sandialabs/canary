@@ -3,8 +3,7 @@ from typing import Callable
 from typing import Optional
 
 
-def identity(*args, **kwargs):
-    ...
+def identity(*args, **kwargs): ...
 
 
 class ExecuteAndAnalyze:

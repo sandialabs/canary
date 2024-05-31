@@ -591,8 +591,7 @@ class TestCase(Runner):
                         time.sleep(0.05)
                     return proc.returncode
 
-    def teardown(self) -> None:
-        ...
+    def teardown(self) -> None: ...
 
     def cache_file(self, path):
         return os.path.join(path, f"timing/{self.id[:2]}/{self.id[2:]}.json")
