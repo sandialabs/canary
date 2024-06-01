@@ -37,6 +37,7 @@ class ResourceQueue:
         self._busy: dict[int, Any] = {}
         self._finished: dict[int, Any] = {}
         self._notrun: dict[int, Any] = {}
+        self.meta: dict[int, dict] = {}
         self.lock = lock
         self.cpu_count = len(self.cpu_ids)
         self.gpu_count = len(self.gpu_ids)
@@ -44,11 +45,14 @@ class ResourceQueue:
     def iter_keys(self) -> list[int]:
         raise NotImplementedError()
 
-    def done(self, Any) -> Any:
-        raise NotImplementedError()
+    def done(self, obj_id: int) -> Any:
+        raise NotImplementedError
+
+    def retry(self, obj_id: int) -> Any:
+        raise NotImplementedError
 
     def cases(self) -> list[TestCase]:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def queued(self) -> list[Any]:
         raise NotImplementedError
@@ -331,6 +335,26 @@ class BatchResourceQueue(ResourceQueue):
                         if dep.id in completed:
                             case.dependencies[i] = completed[dep.id]
             return self._finished[obj_no]
+
+    def retry(self, obj_no: int) -> None:
+        if obj_no not in self._finished:
+            raise ValueError("Cannot retry a job that is not done")
+        with self.lock:
+            meta = self.meta.setdefault(obj_no, {})
+            meta["retry"] = meta.setdefault("retry", 0) + 1
+            if meta["retry"] >= 3:
+                for case in self._finished[obj_no]:
+                    case.status.set("failed", "Maximum number of retries exceeded")
+                    case.save()
+            else:
+                self._buffer[obj_no] = self._finished.pop(obj_no)
+                for case in self._buffer[obj_no]:
+                    if case.status.value not in ("pending", "ready"):
+                        if case.dependencies:
+                            case.status.set("pending")
+                        else:
+                            case.status.set("ready")
+                        case.save()
 
     def cases(self) -> list[TestCase]:
         cases: list[TestCase] = []

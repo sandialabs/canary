@@ -188,7 +188,10 @@ class Batch(Runner):
             self.total_duration = time.monotonic() - start
             self.refresh()
             for case in self:
-                if case.status == "running":
+                if case.status == "ready":
+                    case.status.set("failed", "case failed to start")
+                    case.save()
+                elif case.status == "running":
                     case.status.set("cancelled", "batch cancelled")
                     case.save()
         return

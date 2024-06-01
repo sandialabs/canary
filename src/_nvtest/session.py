@@ -363,42 +363,41 @@ class Session:
         verbose: bool = output == "verbose"
         with self.rc_environ():
             with working_dir(self.root):
-                tries: int = 3
-                while tries:
-                    try:
-                        self.start = timestamp()
-                        self.finish = -1.0
-                        self.process_testcases(
-                            queue=queue, rh=rh, fail_fast=fail_fast, output=output
-                        )
-                        queue.close(cleanup=True)
-                    except PermissionError:
-                        tries -= 1
-                        if tries == 0:
-                            queue.close(cleanup=True)
-                            raise
-                        continue
-                    except KeyboardInterrupt:
-                        self.returncode = signal.SIGINT.value
-                        queue.close(cleanup=False)
-                        raise
-                    except FailFast as e:
-                        name, code = e.args
-                        self.returncode = code
-                        queue.close(cleanup=False)
-                        raise StopExecution(f"fail_fast: {name}", code)
-                    except Exception:
-                        logging.error(traceback.format_exc())
-                        self.returncode = compute_returncode(queue.cases())
-                        queue.close(cleanup=True)
-                        raise
+                try:
+                    self.start = timestamp()
+                    self.finish = -1.0
+                    self.process_queue(queue=queue, rh=rh, fail_fast=fail_fast, output=output)
+                    queue.close(cleanup=True)
+                except ProcessPoolExecutorFailedToStart:
+                    if int(os.getenv("NVLVL", "1")) > 1:
+                        # This can happen when the ProcessPoolExecutor fails to obtain a lock.
+                        self.returncode = -3
+                        for case in queue.cases():
+                            case.status.set("retry")
+                            case.save()
                     else:
-                        if not verbose:
-                            queue.display_progress(self.start, last=True)
                         self.returncode = compute_returncode(queue.cases())
-                        break
-                    finally:
-                        self.finish = timestamp()
+                    raise
+                except KeyboardInterrupt:
+                    self.returncode = signal.SIGINT.value
+                    queue.close(cleanup=False)
+                    raise
+                except FailFast as e:
+                    name, code = e.args
+                    self.returncode = code
+                    queue.close(cleanup=False)
+                    raise StopExecution(f"fail_fast: {name}", code)
+                except Exception:
+                    logging.error(traceback.format_exc())
+                    self.returncode = compute_returncode(queue.cases())
+                    queue.close(cleanup=True)
+                    raise
+                else:
+                    if not verbose:
+                        queue.display_progress(self.start, last=True)
+                    self.returncode = compute_returncode(queue.cases())
+                finally:
+                    self.finish = timestamp()
                 for hook in plugin.plugins("session", "finish"):
                     hook(self)
         return self.returncode
@@ -419,7 +418,7 @@ class Session:
             else:
                 os.environ.pop(var)
 
-    def process_testcases(
+    def process_queue(
         self,
         *,
         queue: ResourceQueue,
@@ -432,6 +431,7 @@ class Session:
         duration = lambda: timestamp() - self.start
         timeout = rh["session:timeout"] or -1
         try:
+            ppe: Optional[ProcessPoolExecutor] = None
             with ProcessPoolExecutor(max_workers=queue.workers) as ppe:
                 runner_args = []
                 runner_kwargs = dict(verbose=verbose, timeoutx=rh["test:timeoutx"])
@@ -459,9 +459,9 @@ class Session:
                     callback = partial(self.done_callback, iid, queue, fail_fast)
                     future.add_done_callback(callback)
                     futures[iid] = (obj, future)
-        except PermissionError:
-            raise
         except BaseException:
+            if ppe is None:
+                raise ProcessPoolExecutorFailedToStart
             if ppe._processes:
                 for proc in ppe._processes:
                     os.kill(proc, signal.SIGINT)
@@ -496,6 +496,9 @@ class Session:
         else:
             assert isinstance(obj, Batch)
             fd = self.db.read()
+            if all(case.status == "retry" for case in obj):
+                queue.retry(iid)
+                return
             for case in obj:
                 if case.id not in fd:
                     logging.error(f"case ID {case.id} not in batch {obj.world_rank}")
@@ -701,4 +704,8 @@ class DirectoryExistsError(Exception):
 
 
 class NotASession(Exception):
+    pass
+
+
+class ProcessPoolExecutorFailedToStart(Exception):
     pass

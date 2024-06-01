@@ -11,6 +11,7 @@ from ..util import glyphs
 
 class Status:
     members = (
+        "retry",
         "created",
         "pending",
         "ready",
@@ -26,6 +27,7 @@ class Status:
         "not_run",
     )
     colors = {
+        "retry": "r",
         "created": "b",
         "pending": "b",
         "ready": "b",
@@ -68,6 +70,7 @@ class Status:
     @staticmethod
     def glyph(status):
         map = {
+            "retry": glyphs.retry,
             "created": glyphs.mdash,
             "pending": glyphs.mdash,
             "ready": glyphs.mdash,
@@ -136,7 +139,7 @@ class Status:
         if arg in ("skipped",):
             if details is None:
                 raise ValueError(f"details for status {arg!r} must be provided")
-        if arg in ("pending", "ready", "created"):
+        if arg in ("pending", "ready", "created", "retry"):
             if details is not None:
                 raise ValueError(f"details not compatible with Status({arg!r})")
         self.value = arg
