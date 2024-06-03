@@ -18,7 +18,6 @@ from ..util.executable import Executable
 from ..util.filesystem import getuser
 from ..util.filesystem import mkdirp
 from ..util.filesystem import set_executable
-from ..util.hash import hashit
 from ..util.time import hhmmss
 from .case import TestCase
 from .runner import Runner
@@ -30,9 +29,9 @@ class Batch(Runner):
     Args:
       cases: The list of test cases in this batch
       runner: How to run this batch
-      world_rank: The index of this partition in the group
-      world_size: The number of partitions in the group
-      world_id: The id of the group
+      id: The index of this partition in the group
+      nbatches: The number of partitions in the group
+      group_id: The id of the group
 
     """
 
@@ -42,17 +41,17 @@ class Batch(Runner):
     def __init__(
         self,
         cases: Union[list[TestCase], set[TestCase]],
-        world_rank: int,
-        world_size: int,
-        world_id: int = 1,
+        id: int,
+        nbatches: int,
+        group_id: int = 1,
     ) -> None:
         super().__init__()
         self.validate(cases)
         self.cases = list(cases)
-        self.world_rank = world_rank
-        self.world_size = world_size
-        self.world_id = world_id
-        self.id: str = hashit("".join(_.id for _ in self), length=20)
+        self.id = id
+        self.nbatches = nbatches
+        self.group_id = group_id
+        # self.id: str = hashit("".join(_.id for _ in self), length=20)
         self._status = Status("created")
         first = next(iter(cases))
         self.root = first.exec_root
@@ -72,6 +71,16 @@ class Batch(Runner):
 
     def __len__(self):
         return len(self.cases)
+
+    @property
+    def variables(self) -> dict[str, str]:
+        return {
+            "NVTEST_BATCH_ID": str(self.id),
+            "NVTEST_NBATCHES": str(self.nbatches),
+            "NVTEST_BATCH_GROUP_ID": str(self.group_id),
+            "NVTEST_LEVEL": "2",
+            "NVTEST_DISABLE_KB": "1",
+        }
 
     def validate(self, cases: Union[list[TestCase], set[TestCase]]):
         errors = 0
@@ -134,14 +143,14 @@ class Batch(Runner):
     def stage(self):
         from ..queues import BatchResourceQueue
 
-        return os.path.join(self.root, ".nvtest", BatchResourceQueue.store, str(self.world_id))
+        return os.path.join(self.root, ".nvtest", BatchResourceQueue.store, str(self.group_id))
 
     def submission_script_filename(self) -> str:
-        basename = f"submit.{self.world_size}.{self.world_rank}.sh"
+        basename = f"submit.{self.nbatches}.{self.id}.sh"
         return os.path.join(self.stage, basename)
 
     def logfile(self) -> str:
-        basename = f"out.{self.world_size}.{self.world_rank}.txt"
+        basename = f"out.{self.nbatches}.{self.id}.txt"
         return os.path.join(self.stage, basename)
 
     def setup(self) -> None:
@@ -157,7 +166,7 @@ class Batch(Runner):
 
     def start_msg(self) -> str:
         n = len(self.cases)
-        return f"SUBMITTING: Batch {self.world_rank} of {self.world_size} ({n} tests)"
+        return f"SUBMITTING: Batch {self.id} of {self.nbatches} ({n} tests)"
 
     def end_msg(self) -> str:
         stat: dict[str, int] = {}
@@ -168,7 +177,7 @@ class Batch(Runner):
         st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
         duration: Optional[float] = self.total_duration if self.total_duration > 0 else None
         s = io.StringIO()
-        s.write(f"FINISHED: Batch {self.world_rank} of {self.world_size}, {st_stat} ")
+        s.write(f"FINISHED: Batch {self.id} of {self.nbatches}, {st_stat} ")
         s.write(f"(time: {hhmmss(duration, threshold=0)}")
         if any(_.start > 0 for _ in self) and any(_.finish > 0 for _ in self):
             ti = min(_.start for _ in self if _.start > 0)
@@ -203,11 +212,11 @@ class SubShell(Batch):
     def __init__(
         self,
         cases: Union[list[TestCase], set[TestCase]],
-        world_rank: int,
-        world_size: int,
-        world_id: int = 1,
+        id: int,
+        nbatches: int,
+        group_id: int = 1,
     ) -> None:
-        super().__init__(cases, world_rank, world_size, world_id=world_id)
+        super().__init__(cases, id, nbatches, group_id=group_id)
         self.qtime = self.runtime * 1.5
 
     def _run(self, *args: str, **kwargs: Any) -> None:
@@ -218,7 +227,7 @@ class SubShell(Batch):
         f = os.path.splitext(script.replace("/submit.", "/out."))[0] + ".txt"
         with open(f, "w") as fh:
             if config.get("option:r") == "v":
-                logging.emit(f"STARTING: Batch {self.world_rank} of {self.world_size}\n")
+                logging.emit(f"STARTING: Batch {self.id} of {self.nbatches}\n")
             script_x(script, fail_on_error=False, output=fh, error=fh)
         return None
 
@@ -230,21 +239,21 @@ class SubShell(Batch):
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
         fh.write(f"# approximate runtime: {hhmmss(self.qtime * timeoutx)}\n")
-        fh.write(f"# batch {self.world_rank} of {self.world_size}\n")
+        fh.write(f"# batch {self.id} of {self.nbatches}\n")
         fh.write("# test cases:\n")
         for case in self.cases:
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
-        fh.write("export NVTEST_DISABLE_KB=1\n")
-        fh.write("export NVLVL=2\n")
+        for var, val in self.variables.items():
+            fh.write(f"export {var}={val}\n")
         workers = kwargs.get("workers", 1)
         cpu_ids = ",".join(str(_) for _ in self.cpu_ids)
         fh.write(
-            f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
+            f"(\n  nvtest -d {dbg_flag} -C {self.root} run -rv "
             f"-l session:workers={workers} "
             f"-l session:cpu_ids={cpu_ids} "
             f"-l test:timeoutx={timeoutx} "
-            f"^{self.world_id}:{self.world_rank}\n)\n"
+            f"^{self.group_id}:{self.id}\n)\n"
         )
         f = self.submission_script_filename()
         mkdirp(os.path.dirname(f))
@@ -264,14 +273,14 @@ class Slurm(Batch):
     def __init__(
         self,
         cases: Union[list[TestCase], set[TestCase]],
-        world_rank: int,
-        world_size: int,
-        world_id: int = 1,
+        id: int,
+        nbatches: int,
+        group_id: int = 1,
     ) -> None:
         cores_per_socket = config.get("machine:cores_per_socket")
         if cores_per_socket is None:
             raise ValueError("slurm runner requires that 'machine:cores_per_socket' be defined")
-        super().__init__(cases, world_rank, world_size, world_id=world_id)
+        super().__init__(cases, id, nbatches, group_id=group_id)
 
     @property
     def processors(self) -> int:
@@ -295,7 +304,7 @@ class Slurm(Batch):
             if len(parts) > 3 and parts[3]:
                 jobid = parts[3]
         else:
-            logging.error(f"Failed to find jobid for batch {self.world_rank}/{self.world_size}")
+            logging.error(f"Failed to find jobid for batch {self.id}/{self.nbatches}")
             logging.log(
                 logging.ERROR,
                 f"    The following output was received from {self.command}:",
@@ -313,7 +322,7 @@ class Slurm(Batch):
                 state = self.poll(jobid)
                 if not running and state in ("R", "RUNNING"):
                     if config.get("option:r") == "v":
-                        logging.emit(f"STARTING: Batch {self.world_rank} of {self.world_size}\n")
+                        logging.emit(f"STARTING: Batch {self.id} of {self.nbatches}\n")
                     running = True
                 if state is None:
                     return
@@ -369,19 +378,19 @@ class Slurm(Batch):
             fh.write(f"#SBATCH {arg}\n")
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(f"# batch {self.world_rank} of {self.world_size}\n")
+        fh.write(f"# batch {self.id} of {self.nbatches}\n")
         fh.write(f"# approximate runtime: {hhmmss(qtime)}\n")
         fh.write("# test cases:\n")
         for case in self.cases:
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
-        fh.write("export NVTEST_DISABLE_KB=1\n")
-        fh.write("export NVLVL=2\n")
+        for var, val in self.variables.items():
+            fh.write(f"export {var}={val}\n")
         fh.write(f"(\n  nvtest {dbg_flag} -C {self.root} run -rv ")
         fh.write(f"-l session:workers={workers} ")
         fh.write(f"-l session:cpu_count={session_cpus} ")
         fh.write(f"-l test:timeoutx={timeoutx} ")
-        fh.write(f"^{self.world_id}:{self.world_rank}\n)\n")
+        fh.write(f"^{self.group_id}:{self.id}\n)\n")
         f = self.submission_script_filename()
         mkdirp(os.path.dirname(f))
         with open(f, "w") as fp:
@@ -417,14 +426,14 @@ class PBS(Batch):
     def __init__(
         self,
         cases: Union[list[TestCase], set[TestCase]],
-        world_rank: int,
-        world_size: int,
-        world_id: int = 1,
+        id: int,
+        nbatches: int,
+        group_id: int = 1,
     ) -> None:
         cores_per_socket = config.get("machine:cores_per_socket")
         if cores_per_socket is None:
             raise ValueError("slurm runner requires that 'machine:cores_per_socket' be defined")
-        super().__init__(cases, world_rank, world_size, world_id=world_id)
+        super().__init__(cases, id, nbatches, group_id=group_id)
 
     @property
     def processors(self) -> int:
@@ -452,20 +461,20 @@ class PBS(Batch):
             fh.write(f"#PBS {arg}\n")
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(f"# batch {self.world_rank} of {self.world_size}\n")
+        fh.write(f"# batch {self.id} of {self.nbatches}\n")
         fh.write(f"# approximate runtime: {hhmmss(qtime)}\n")
         fh.write("# test cases:\n")
         for case in self.cases:
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
-        fh.write("export NVTEST_DISABLE_KB=1\n")
-        fh.write("export NVLVL=2\n")
+        for var, val in self.variables.items():
+            fh.write(f"export {var}={val}\n")
         fh.write(
             f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
             f"-l session:workers={workers} "
             f"-l session:cpu_count={session_cpus} "
             f"-l test:timeoutx={timeoutx} "
-            f"^{self.world_id}:{self.world_rank}\n)\n"
+            f"^{self.group_id}:{self.id}\n)\n"
         )
         f = self.submission_script_filename()
         mkdirp(os.path.dirname(f))
@@ -505,7 +514,7 @@ class PBS(Batch):
         if len(parts) == 1 and parts[0]:
             jobid = parts[0]
         else:
-            logging.error(f"Failed to find jobid for batch {self.world_rank}/{self.world_size}")
+            logging.error(f"Failed to find jobid for batch {self.id}/{self.nbatches}")
             logging.log(
                 logging.ERROR,
                 f"    The following output was received from {self.command}:",
@@ -523,7 +532,7 @@ class PBS(Batch):
                 state = self.poll(jobid)
                 if not running and state in ("R", "RUNNING"):
                     if config.get("option:r") == "v":
-                        logging.emit(f"STARTING: Batch {self.world_rank} of {self.world_size}\n")
+                        logging.emit(f"STARTING: Batch {self.id} of {self.nbatches}\n")
                     running = True
                 if state is None:
                     return
@@ -562,16 +571,16 @@ class PBS(Batch):
 
 def factory(
     cases: Union[list[TestCase], set[TestCase]],
-    world_rank: int,
-    world_size: int,
-    world_id: int = 1,
+    id: int,
+    nbatches: int,
+    group_id: int = 1,
     scheduler: Optional[str] = None,
 ) -> Batch:
     batch: Batch
     if scheduler in (None, "shell", "subshell"):
-        batch = SubShell(cases, world_rank, world_size, world_id)
+        batch = SubShell(cases, id, nbatches, group_id)
     elif scheduler and scheduler.lower() == "slurm":
-        batch = Slurm(cases, world_rank, world_size, world_id)
+        batch = Slurm(cases, id, nbatches, group_id)
     else:
         raise ValueError(f"{scheduler}: Unknown batch scheduler")
     batch.setup()

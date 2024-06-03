@@ -3,7 +3,6 @@ import configparser
 import copy
 import json
 import os
-import pickle
 import sys
 from string import Template
 from typing import Any
@@ -11,6 +10,7 @@ from typing import Optional
 from typing import TextIO
 from typing import Union
 
+from ..database import Database
 from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
 from ..util import logging
@@ -526,11 +526,10 @@ class ConfigSchemaError(Exception):
 
 
 def factory() -> Config:
-    if int(os.getenv("NVLVL", "1")) <= 1 and "NVCFGDIR" in os.environ:
-        f = os.path.join(os.environ["NVCFGDIR"], Config.fb)
-        if os.path.exists(f):
-            with open(f, "rb") as fh:
-                return pickle.load(fh)
+    if int(os.getenv("NVTEST_LEVEL", "1")) <= 1 and "NVTEST_SESSION_CONFIG_DIR" in os.environ:
+        db = Database(os.environ["NVTEST_SESSION_CONFIG_DIR"])
+        if "config" in db:
+            return db.get("config")
     return Config()
 
 
@@ -569,6 +568,5 @@ def has_scope(scope: str) -> bool:
     return scope in config.scopes
 
 
-def pdump(dirname: str):
-    with open(os.path.join(dirname, Config.fb), "wb") as fh:
-        pickle.dump(config._instance, fh)
+def instance():
+    return config._instance

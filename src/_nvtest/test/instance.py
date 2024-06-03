@@ -1,6 +1,5 @@
 import dataclasses
 import os
-import sys
 from types import SimpleNamespace
 from typing import Any
 from typing import Optional
@@ -89,12 +88,11 @@ class TestInstance:
 
     @classmethod
     def load(cls: Type["TestInstance"], arg_path: Optional[str] = None) -> "TestInstance":
-        tag = sys.implementation.cache_tag
-        basename = f"case.data.{tag}.p"
+        dbf = TestCase._dbfile
         if arg_path is None:
-            arg_path = f"./.nvtest/{basename}"
+            arg_path = dbf
         elif arg_path.endswith((".vvt", ".pyt")):
-            arg_path = os.path.join(os.path.dirname(arg_path), f".nvtest/{basename}")
+            arg_path = os.path.join(os.path.dirname(arg_path), dbf)
         with open(arg_path, "rb") as fh:
             case = TestCase.load(fh)
         return TestInstance.from_case(case)

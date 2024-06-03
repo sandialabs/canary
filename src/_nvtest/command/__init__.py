@@ -13,6 +13,7 @@ from . import log
 from . import rebaseline
 from . import report
 from . import run
+from . import show
 from . import status
 from . import tree
 
@@ -30,6 +31,7 @@ def all_commands() -> list[ModuleType]:
         report,
         rebaseline,
         run,
+        show,
         status,
         tree,
     ]

@@ -1,13 +1,14 @@
 import os
 import pickle
-from typing import Union
+import re
+import zipfile
+from operator import attrgetter
+from typing import Any
+from typing import Callable
 
-from .test.case import TestCase
 from .third_party.lock import Lock
 from .third_party.lock import ReadTransaction
 from .third_party.lock import WriteTransaction
-from .util.filesystem import mkdirp
-from .util.graph import TopologicalSorter
 
 
 class Database:
@@ -27,97 +28,119 @@ class Database:
     """
 
     def __init__(self, directory: str) -> None:
-        self.directory = os.path.abspath(directory)
-        lock_path = os.path.join(self.directory, "lock")
+        self.zfile = os.path.join(os.path.abspath(directory), "nvtest.db")
+        lock_path = os.path.join(directory, "lock")
         self.lock = Lock(lock_path, default_timeout=120, desc="session.database")
-        self.index_file = os.path.join(self.directory, "cases.data.p")
-        self.progress_file = os.path.join(self.directory, "cases.prog.p")
+        self._data: dict[str, Any] = {}
 
-    def _single_case_entry(self, case: TestCase) -> dict:
-        entry = {
-            "start": case.start,
-            "finish": case.finish,
-            "status": case.status,
-            "returncode": case.returncode,
-            "dependencies": case.dependencies,
-        }
-        return entry
+    def __contains__(self, field: str) -> bool:
+        return self.contains(field)
 
-    def update(self, cases: Union[TestCase, list[TestCase]]) -> None:
-        """Add test case results to the database
+    @staticmethod
+    def sanitize_path(field: str) -> str:
+        return re.sub(r"[^\w_.-]", "-", field)
 
-        Args:
-            cases: list of test cases to add to the database
-
-        """
-        if not isinstance(cases, list):
-            cases = [cases]
-        mkdirp(os.path.dirname(self.progress_file))
+    def put(self, field: str, value: Any) -> None:
         with WriteTransaction(self.lock):
-            with open(self.progress_file, "ab") as fh:
-                for case in cases:
-                    cd = self._single_case_entry(case)
-                    pickle.dump({case.id: cd}, fh)
+            with ZipFile(self.zfile, "a") as zh:
+                name = self.sanitize_path(field)
+                zh.writestr(name, pickle.dumps(value))
 
-    def load(self) -> list[TestCase]:
-        """Load the test results
-
-        Returns:
-            The list of ``TestCase``s
-
-        """
-        if not os.path.exists(self.index_file):
-            return []
-        fd: dict[str, TestCase]
+    def get(self, field: str) -> Any:
         with ReadTransaction(self.lock):
-            with open(self.index_file, "rb") as fh:
-                fd = pickle.load(fh)
-            with open(self.progress_file, "rb") as fh:
-                while True:
-                    try:
-                        cd = pickle.load(fh)
-                    except EOFError:
-                        break
-                    else:
-                        for case_id, value in cd.items():
-                            fd[case_id].update(value)
-        ts: TopologicalSorter = TopologicalSorter()
-        for case in fd.values():
-            ts.add(case, *case.dependencies)
-        cases: dict[str, TestCase] = {}
-        for case in ts.static_order():
-            if case.exec_root is None:
-                case.exec_root = os.path.dirname(self.directory)
-            case.dependencies = [cases[dep.id] for dep in case.dependencies]
-            cases[case.id] = case
-        return list(cases.values())
+            with ZipFile(self.zfile, "r") as zh:
+                name = self.sanitize_path(field)
+                if name not in zh.namelist():
+                    return None
+                return pickle.loads(zh.read(name))
 
-    def read(self) -> dict[str, dict]:
-        """Read the results file and return a dictionary of the stored ``TestCase`` attributions"""
+    def pop(self, field: str) -> Any:
         with ReadTransaction(self.lock):
-            fd: dict[str, dict] = {}
-            with open(self.progress_file, "rb") as fh:
-                while True:
-                    try:
-                        cd = pickle.load(fh)
-                    except EOFError:
-                        break
-                    else:
-                        for case_id, value in cd.items():
-                            fd.setdefault(case_id, {}).update(value)
-        return fd
+            with ZipFile(self.zfile, "r") as zh:
+                name = self.sanitize_path(field)
+                if name not in zh.namelist():
+                    return None
+                value = pickle.loads(zh.read(name))
+        with WriteTransaction(self.lock):
+            with ZipFile(self.zfile, "a") as zh:
+                zh.remove(name)
+        return value
 
-    def makeindex(self, cases: list[TestCase]) -> None:
-        """Store each ``TestCase`` in ``cases`` as a dictionary in the index file"""
-        indexed: dict[str, TestCase] = {}
-        for case in cases:
-            indexed[case.id] = case
-        mkdirp(os.path.dirname(self.index_file))
-        with open(self.index_file, "wb") as fh:
-            pickle.dump(indexed, fh)
-        with open(self.progress_file, "wb") as fh:
-            for case in cases:
-                if case.mask:
-                    continue
-                cd = self._single_case_entry(case)
-                pickle.dump({case.id: cd}, fh)
+    def contains(self, field: str) -> bool:
+        with ZipFile(self.zfile, "r") as zh:
+            name = self.sanitize_path(field)
+            return name in zh.namelist()
+
+    def apply(self, field: str, fun: Callable) -> None:
+        data = self.pop(field)
+        fun(data)
+        self.put(field, data)
+
+
+class ZipFile(zipfile.ZipFile):
+    # From https://github.com/python/cpython/pull/19358/files
+    def remove(self, member):
+        """Remove a file from the archive. The archive must be open with mode 'a'"""
+
+        if self.mode != "a":
+            raise RuntimeError("remove() requires mode 'a'")
+        if not self.fp:
+            raise ValueError("Attempt to write to ZIP archive that was already closed")
+        if self._writing:
+            raise ValueError("Can't write to ZIP archive while an open writing handle exists.")
+
+        # Make sure we have an info object
+        if isinstance(member, zipfile.ZipInfo):
+            # 'member' is already an info object
+            zinfo = member
+        else:
+            # get the info object
+            zinfo = self.getinfo(member)
+
+        return self._remove_member(zinfo)
+
+    def _remove_member(self, member):
+        # get a sorted filelist by header offset, in case the dir order
+        # doesn't match the actual entry order
+        fp = self.fp
+        entry_offset = 0
+        filelist = sorted(self.filelist, key=attrgetter("header_offset"))
+        for i in range(len(filelist)):
+            info = filelist[i]
+            # find the target member
+            if info.header_offset < member.header_offset:
+                continue
+
+            # get the total size of the entry
+            entry_size = None
+            if i == len(filelist) - 1:
+                entry_size = self.start_dir - info.header_offset
+            else:
+                entry_size = filelist[i + 1].header_offset - info.header_offset
+
+            # found the member, set the entry offset
+            if member == info:
+                entry_offset = entry_size
+                continue
+
+            # Move entry
+            # read the actual entry data
+            fp.seek(info.header_offset)
+            entry_data = fp.read(entry_size)
+
+            # update the header
+            info.header_offset -= entry_offset
+
+            # write the entry to the new position
+            fp.seek(info.header_offset)
+            fp.write(entry_data)
+            fp.flush()
+
+        # update state
+        self.start_dir -= entry_offset
+        self.filelist.remove(member)
+        del self.NameToInfo[member.filename]
+        self._didModify = True
+
+        # seek to the start of the central dir
+        fp.seek(self.start_dir)

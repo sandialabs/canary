@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from ..error import StopExecution
 from ..queues import BatchResourceQueue
+from ..resources import ResourceHandler
 from ..session import ExitCode
 from ..session import Session
 from ..test.case import TestCase
@@ -140,9 +141,11 @@ def run(args: "argparse.Namespace") -> int:
         if os.path.exists(metafile):
             # Reload batch info so that the tests can be rerun in the scheduler
             if not args.batched_invocation:
+                args.rh = args.rh or ResourceHandler()
                 data = json.load(open(metafile))
                 for var, val in data["meta"].items():
-                    args.rh.set(f"batch:{var}", val)
+                    if val is not None:
+                        args.rh.set(f"batch:{var}", val)
         if not args.no_header:
             logging.emit(session.overview(cases))
     else:

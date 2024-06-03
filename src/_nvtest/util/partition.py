@@ -13,28 +13,39 @@ class Partition(set):
         return sum(case.processors * case.runtime for case in self if not case.mask)
 
 
-def group_testcases(cases: list[TestCase]) -> list[set[TestCase]]:
-    """Group test cases such that a test and all its dependencies are in the
-    same group
-
+def groupby_dep(cases: list[TestCase]) -> list[set[TestCase]]:
+    """Group cases such that a case an any of its dependencies are in the same
+    group
     """
     groups: list[set[TestCase]] = []
-    buffer: list[set[TestCase]] = [{case} | set(case.dependencies) for case in cases]
-    for temp in buffer:
-        for group in groups:
-            if temp & group:
-                group.update(temp)
-                break
-        else:
-            groups.append(temp)
-    return sorted(filter(None, groups), key=lambda g: -len(g))
+    for case in cases:
+        if case.dependencies:
+            buffer = {case} | set(case.dependencies)
+            for group in groups:
+                if any(c in group for c in buffer):
+                    group.update(buffer)
+                    break
+            else:
+                groups.append(buffer)
+    unassigned: set[TestCase] = set()
+    for case in cases:
+        if not case.dependencies:
+            for group in groups:
+                if case in group:
+                    break
+            else:
+                unassigned.add(case)
+    if unassigned:
+        groups.append(unassigned)
+    if len(cases) != sum([len(group) for group in groups]):
+        raise ValueError("Incorrect partition lengths!")
+    return groups
 
 
 def partition_n(cases: list[TestCase], n: int = 8) -> list[list[TestCase]]:
     """Partition test cases into ``n`` partitions"""
-    groups = group_testcases(cases)
     partitions = defaultlist(Partition, n)
-    for group in groups:
+    for group in groupby_dep(cases):
         partition = min(partitions, key=lambda p: p.cputime)
         partition.update(group)
     return partitions
@@ -71,7 +82,7 @@ def partition_t(
             g_partition: list[TestCase] = []
             grid = tile(group, g_nodes * cores_per_node)
             assert sum(len(row) for row in grid) == len(group)
-            grid_runtime = sum([max(c.runtime for c in row) for row in grid])
+            grid_runtime = max(sum([max(c.runtime for c in row) for row in grid]), 5.0)
             target_partition_time = grid_runtime / math.ceil(grid_runtime / t)
             for row in grid:
                 r_runtime = max(c.runtime for c in row)

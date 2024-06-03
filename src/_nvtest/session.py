@@ -1,7 +1,6 @@
 import io
 import json
 import os
-import pickle
 import random
 import signal
 import threading
@@ -66,9 +65,6 @@ class ExitCode:
 class Session:
     tagfile = "SESSION.TAG"
     default_worktree = "./TestResults"
-    data_file = "session.data.json"
-    resource_file = "resources.data.json"
-    options_file = "options.data.json"
 
     def __init__(self, path: str, mode: str = "r", force: bool = False) -> None:
         if mode not in "arw":
@@ -88,6 +84,9 @@ class Session:
             if root is None:
                 raise NotASession("not a nvtest session (or any of the parent directories)")
             self.root = root
+        self.config_dir = os.path.join(self.root, ".nvtest")
+        os.environ["NVTEST_SESSION_DIR"] = self.root
+        os.environ["NVTEST_SESSION_CONFIG_DIR"] = self.config_dir
         self.mode = mode
         self.search_paths: dict[str, list[str]] = {}
         self.generators: list[TestGenerator] = list()
@@ -102,12 +101,6 @@ class Session:
         self.mode = mode
         self.start = -1.0
         self.finish = -1.0
-        os.environ["NVCFGDIR"] = self.config_dir
-        config.pdump(self.config_dir)
-
-    @property
-    def config_dir(self):
-        return os.path.join(self.root, ".nvtest")
 
     @staticmethod
     def find_root(path: str):
@@ -124,16 +117,24 @@ class Session:
 
     def load(self) -> None:
         logging.debug(f"Loading test session in {self.root}")
-        file = os.path.join(self.config_dir, self.data_file)
-        with open(file, "rb") as fh:
-            data = json.load(fh)
+        data = self.db.get("session:data")
         for var, val in data.items():
             setattr(self, var, val)
-        file = os.path.join(self.config_dir, "files.data.p")
-        if os.path.exists(file):
-            with open(file, "rb") as fh:
-                self.generators = pickle.load(fh)
-        self.cases = self.db.load()
+        self.generators = self.db.get("files")
+        self.cases = self.db.get("cases")
+        prog = self.db.get("cases:snapshot")
+        for case in self.cases:
+            if case.id in prog:
+                case.update(prog[case.id])
+        ts: TopologicalSorter = TopologicalSorter()
+        for case in self.cases:
+            ts.add(case, *case.dependencies)
+        cases: dict[str, TestCase] = {}
+        for case in ts.static_order():
+            if case.exec_root is None:
+                case.exec_root = self.root
+            case.dependencies = [cases[dep.id] for dep in case.dependencies]
+            cases[case.id] = case
         self.set_config_values()
 
     def initialize(self) -> None:
@@ -167,15 +168,12 @@ class Session:
     def save(self, ini: bool = False) -> None:
         data: dict[str, Any] = {}
         for var, value in vars(self).items():
-            if var not in ("files", "cases", "db"):
+            if var not in ("files", "cases", "db", "db2"):
                 data[var] = value
-        file = os.path.join(self.config_dir, self.data_file)
-        with open(file, "w") as fh:
-            json.dump(data, fh, indent=2)
+        self.db.put("session:data", data)
         if ini:
-            file = os.path.join(self.config_dir, self.options_file)
-            with open(file, "w") as fh:
-                json.dump({"options": config.get("option")}, fh, indent=2)
+            self.db.put("config", config.instance())
+            self.db.put("options", config.get("option"))
 
     def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:
         """Add ``path`` to this session's search paths"""
@@ -203,9 +201,7 @@ class Session:
             hook(self)
         finder.prepare()
         self.generators = finder.discover()
-        file = os.path.join(self.config_dir, "files.data.p")
-        with open(file, "wb") as fh:
-            pickle.dump(self.generators, fh)
+        self.db.put("files", self.generators)
         logging.debug(f"Discovered {len(self.generators)} test files")
 
     def freeze(
@@ -227,7 +223,9 @@ class Session:
         cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
-        self.db.makeindex(self.cases)
+        self.db.put("cases", self.cases)
+        progress = {c.id: _single_case_entry(c) for c in self.cases if not c.mask}
+        self.db.put("cases:snapshot", progress)
         logging.debug(f"Collected {len(self.cases)} test cases from {len(self.generators)} files")
 
     def populate(self, copy_all_resources: bool = False) -> None:
@@ -258,7 +256,9 @@ class Session:
                     errors += 1
                     logging.error(f"{case}: exec_root not set after setup")
             ts.done(*group)
-        self.db.update(cases)
+        self.db.apply(
+            "cases:snapshot", lambda x: x.update({c.id: _single_case_entry(c) for c in cases})
+        )
         if errors:
             raise ValueError("Stopping due to previous errors")
 
@@ -329,15 +329,15 @@ class Session:
         file = os.path.join(self.config_dir, BatchResourceQueue.store, str(batch_store), "index")
         with open(file, "r") as fh:
             fd = json.load(fh)
-        case_ids: list[str] = fd["index"][str(batch_no)]
+        batch_case_ids: list[str] = fd["index"][str(batch_no)]
         for case in self.cases:
-            if case.id in case_ids:
-                assert not case.mask
+            if case.id in batch_case_ids:
+                assert not case.mask, case.mask
                 if not case.dependencies:
                     case.status.set("ready")
-                elif any(
-                    [dep.status.value not in ("diff", "success") for dep in case.dependencies]
-                ):
+                elif all(_.id in batch_case_ids for _ in case.dependencies):
+                    case.status.set("pending")
+                elif any([_.status.value not in ("diff", "success") for _ in case.dependencies]):
                     reason = "one or more dependencies failed"
                     case.status.set("skipped", reason)
                     case.save()
@@ -369,7 +369,7 @@ class Session:
                     self.process_queue(queue=queue, rh=rh, fail_fast=fail_fast, output=output)
                     queue.close(cleanup=True)
                 except ProcessPoolExecutorFailedToStart:
-                    if int(os.getenv("NVLVL", "1")) > 1:
+                    if int(os.getenv("NVTEST_LEVEL", "1")) > 1:
                         # This can happen when the ProcessPoolExecutor fails to obtain a lock.
                         self.returncode = -3
                         for case in queue.cases():
@@ -489,19 +489,19 @@ class Session:
 
         obj.refresh()
         if isinstance(obj, TestCase):
-            self.db.update([obj])
+            self.db.apply("cases:snapshot", lambda x: x.update({obj.id: _single_case_entry(obj)}))
             if fail_fast and obj.status != "success":
                 code = compute_returncode([obj])
                 raise FailFast(str(obj), code)
         else:
             assert isinstance(obj, Batch)
-            fd = self.db.read()
+            fd = self.db.get("cases:snapshot")
             if all(case.status == "retry" for case in obj):
                 queue.retry(iid)
                 return
             for case in obj:
                 if case.id not in fd:
-                    logging.error(f"case ID {case.id} not in batch {obj.world_rank}")
+                    logging.error(f"case ID {case.id} not in batch {obj.id}")
                     continue
                 if case.status.value == "running":
                     # Job was cancelled
@@ -515,7 +515,7 @@ class Session:
                         fs = case.status.value
                         ss = fd[case.id]["status"].value
                         logging.warning(
-                            f"batch {obj.world_rank}, {case}: "
+                            f"batch {obj.id}, {case}: "
                             f"expected status of future.result to be {ss}, not {fs}"
                         )
                         case.status.set("failed", "unknown failure")
@@ -697,6 +697,17 @@ def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
     if cases and isinstance(getattr(cases[0], field), str):
         return sorted(cases, key=lambda case: getattr(case, field).lower())
     return sorted(cases, key=lambda case: getattr(case, field))
+
+
+def _single_case_entry(case: TestCase) -> dict:
+    return {
+        "id": case.id,
+        "start": case.start,
+        "finish": case.finish,
+        "status": case.status,
+        "returncode": case.returncode,
+        "dependencies": case.dependencies,
+    }
 
 
 class DirectoryExistsError(Exception):

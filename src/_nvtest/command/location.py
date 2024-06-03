@@ -35,14 +35,14 @@ def setup_parser(parser: "Parser"):
         help="Show the location of the test's log file",
     )
     group.add_argument(
-        "-d",
+        "-x",
         dest="show_exec_dir",
         action="store_true",
         default=False,
         help="Show the location of the test's execution directory",
     )
     group.add_argument(
-        "-D",
+        "-s",
         dest="show_source_dir",
         action="store_true",
         default=False,

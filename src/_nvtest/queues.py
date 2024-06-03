@@ -292,7 +292,7 @@ class BatchResourceQueue(ResourceQueue):
             super().put(batch)
         fd: dict[int, list[str]] = {}
         for batch in batches:
-            cases = fd.setdefault(batch.world_rank, [])
+            cases = fd.setdefault(batch.id, [])
             cases.extend([case.id for case in batch])
         batch_dir = os.path.join(batch_store, str(N))
         file = os.path.join(batch_dir, self.index_file)

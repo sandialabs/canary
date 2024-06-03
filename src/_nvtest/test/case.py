@@ -1,3 +1,4 @@
+import io
 import itertools
 import json
 import os
@@ -45,6 +46,8 @@ def stringify(arg: Any) -> str:
 
 
 class TestCase(Runner):
+    _dbfile = f".nvtest/case.{sys.implementation.cache_tag}.db"
+
     def __init__(
         self,
         root: str,
@@ -89,7 +92,10 @@ class TestCase(Runner):
             self.name = f"{self.name}.{'.'.join(s_params)}"
             self.display_name = f"{self.display_name}[{','.join(s_params)}]"
         self.fullname = os.path.join(os.path.dirname(self.file_path), self.name)
-        self.id: str = hashit(self.fullname, length=20)
+        unique_str = io.StringIO()
+        unique_str.write(self.fullname)
+        unique_str.write(open(self.file).read())
+        self.id: str = hashit(unique_str.getvalue(), length=20)
 
         # Execution properties
         self._status = Status("created")
@@ -153,9 +159,7 @@ class TestCase(Runner):
 
     @property
     def dbfile(self) -> str:
-        tag = sys.implementation.cache_tag
-        file = os.path.join(self.exec_dir, ".nvtest", f"case.data.{tag}.p")
-        mkdirp(os.path.dirname(file))
+        file = os.path.join(self.exec_dir, self._dbfile)
         return file
 
     @property
@@ -368,7 +372,9 @@ class TestCase(Runner):
                     fs.force_symlink(relsrc, dst, echo=logging.info)
 
     def save(self):
-        with open(self.dbfile, "wb") as fh:
+        file = self.dbfile
+        mkdirp(os.path.dirname(file))
+        with open(file, "wb") as fh:
             self.dump(fh)
 
     def dump(self, fh) -> None:
