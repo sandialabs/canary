@@ -311,7 +311,8 @@ class ArgparseMultiRstWriter(ArgparseRstWriter):
             string.write(self.begin_command(cmd.prog))
 
         if cmd.description:
-            string.write(self.description(cmd.description))
+            description = cmd.description.replace("Note: ", ".. note::\n   ")
+            string.write(self.description(description))
 
         string.write(self.usage(cmd.usage))
 
@@ -328,7 +329,8 @@ class ArgparseMultiRstWriter(ArgparseRstWriter):
             string.write(self.end_optionals())
 
         if cmd.epilog:
-            string.write(self.epilog(cmd.epilog))
+            epilog = cmd.epilog.replace("Note: ", ".. note::\n   ")
+            string.write(self.epilog(epilog))
 
         if not index and cmd.subcommands:
             string.write(self.begin_subcommands(cmd.subcommands))

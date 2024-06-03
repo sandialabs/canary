@@ -63,7 +63,7 @@ class ArgparseRstWriter(aw.ArgparseRstWriter):
         out=sys.stdout,
         aliases=False,
         documented_commands=[],
-        rst_levels=["-", "-", "^", "~", ":", "`"],
+        rst_levels=["=", "-", "^", "~", ":", "`"],
     ):
         super(ArgparseRstWriter, self).__init__(prog, out, aliases, rst_levels)
         self.documented = documented_commands
@@ -137,13 +137,13 @@ class BashCompletionWriter(aw.ArgparseCompletionWriter):
                     return value
 
         # If no matches found, return empty list
-        return 'NEVADA_COMPREPLY=""'
+        return 'NVTEST_COMPREPLY=""'
 
     def optionals(self, optionals):
-        return 'NEVADA_COMPREPLY="{0}"'.format(" ".join(optionals))
+        return 'NVTEST_COMPREPLY="{0}"'.format(" ".join(optionals))
 
     def subcommands(self, subcommands):
-        return 'NEVADA_COMPREPLY="{0}"'.format(" ".join(subcommands))
+        return 'NVTEST_COMPREPLY="{0}"'.format(" ".join(subcommands))
 
 
 @formatter
