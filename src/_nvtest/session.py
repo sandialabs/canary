@@ -172,7 +172,7 @@ class Session:
         for var, value in vars(self).items():
             if var not in ("files", "cases", "db", "db2"):
                 data[var] = value
-        self.db.put("session:data", data)
+        self.db.put("session:data", data, replace=True)
         if ini:
             self.db.put("config", config.instance())
             self.db.put("options", config.get("option"))

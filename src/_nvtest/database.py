@@ -40,10 +40,12 @@ class Database:
     def sanitize_path(field: str) -> str:
         return re.sub(r"[^\w_.-]", "-", field)
 
-    def put(self, field: str, value: Any) -> None:
+    def put(self, field: str, value: Any, replace: bool = False) -> None:
         with WriteTransaction(self.lock):
             with ZipFile(self.zfile, "a") as zh:
                 name = self.sanitize_path(field)
+                if replace and name in zh.namelist():
+                    zh.remove(name)
                 zh.writestr(name, pickle.dumps(value))
 
     def get(self, field: str) -> Any:
