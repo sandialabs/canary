@@ -6,6 +6,7 @@ from typing import Any
 from typing import Optional
 from typing import TextIO
 
+from . import config
 from . import plugin
 from .resources import ResourceHandler
 from .test.case import TestCase
@@ -104,7 +105,11 @@ class Finder:
                     if f.endswith(file_types)
                 ]
             )
-        generators: list[TestGenerator] = parallel.starmap(self.gen_factory, paths)
+        generators: list[TestGenerator]
+        if config.get("config:debug"):
+            generators = [self.gen_factory(*p) for p in paths]
+        else:
+            generators = parallel.starmap(self.gen_factory, paths)
 
         return generators
 
@@ -194,7 +199,11 @@ class Finder:
             owners=owners,
         )
         args = list(zip(files, repeat(kwds, len(files))))
-        concrete_test_groups: list[list[TestCase]] = parallel.starmap(freeze_abstract_file, args)
+        concrete_test_groups: list[list[TestCase]]
+        if config.get("config:debug"):
+            concrete_test_groups = [freeze_abstract_file(*a) for a in args]
+        else:
+            concrete_test_groups = parallel.starmap(freeze_abstract_file, args)
         cases: list[TestCase] = [case for group in concrete_test_groups for case in group if case]
 
         # this sanity check should not be necessary

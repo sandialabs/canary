@@ -85,6 +85,8 @@ class Session:
                 raise NotASession("not a nvtest session (or any of the parent directories)")
             self.root = root
         self.config_dir = os.path.join(self.root, ".nvtest")
+        if "NVTEST_LEVEL" not in os.environ:
+            os.environ["NVTEST_LEVEL"] = "0"
         os.environ["NVTEST_SESSION_DIR"] = self.root
         os.environ["NVTEST_SESSION_CONFIG_DIR"] = self.config_dir
         self.mode = mode
@@ -246,7 +248,11 @@ class Session:
         while ts.is_active():
             group = ts.get_ready()
             args = zip(group, repeat(self.root), repeat(copy_all_resources))
-            parallel.starmap(setup_individual_case, list(args))
+            if config.get("config:debug"):
+                for a in args:
+                    setup_individual_case(*a)
+            else:
+                parallel.starmap(setup_individual_case, list(args))
             for case in group:
                 # Since setup is run in a multiprocessing pool, the internal
                 # state is lost and needs to be updated
@@ -369,7 +375,7 @@ class Session:
                     self.process_queue(queue=queue, rh=rh, fail_fast=fail_fast, output=output)
                     queue.close(cleanup=True)
                 except ProcessPoolExecutorFailedToStart:
-                    if int(os.getenv("NVTEST_LEVEL", "1")) > 1:
+                    if int(os.getenv("NVTEST_LEVEL", "0")) > 1:
                         # This can happen when the ProcessPoolExecutor fails to obtain a lock.
                         self.returncode = -3
                         for case in queue.cases():

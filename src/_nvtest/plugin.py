@@ -191,7 +191,7 @@ def load_module_from_file(module_name: str, module_path: str):
 
 def factory() -> Manager:
     manager: Manager
-    if int(os.getenv("NVTEST_LEVEL", "1")) <= 1 and "NVPLGMGR" in os.environ:
+    if os.getenv("NVTEST_LEVEL") == "0" and "NVPLGMGR" in os.environ:
         manager = loads(os.environ["NVPLGMGR"])
     else:
         manager = Manager()

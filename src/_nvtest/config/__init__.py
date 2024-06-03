@@ -526,7 +526,10 @@ class ConfigSchemaError(Exception):
 
 
 def factory() -> Config:
-    if int(os.getenv("NVTEST_LEVEL", "1")) <= 1 and "NVTEST_SESSION_CONFIG_DIR" in os.environ:
+    if os.getenv("NVTEST_LEVEL") == "0" and "NVTEST_SESSION_CONFIG_DIR" in os.environ:
+        # Setting up test cases and several other operations are done in a
+        # multiprocessing Pool so we reload the configuration that existed when that pool
+        # was created
         db = Database(os.environ["NVTEST_SESSION_CONFIG_DIR"])
         if "config" in db:
             return db.get("config")

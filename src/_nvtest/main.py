@@ -27,6 +27,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     """
     parser = make_argument_parser()
 
+    if "NVTEST_LEVEL" not in os.environ:
+        os.environ["NVTEST_LEVEL"] = "0"
+
     argv = argv or sys.argv[1:]
     invocation_dir = os.getcwd()
     pre = parser.preparse(argv)
