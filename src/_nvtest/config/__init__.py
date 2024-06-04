@@ -3,6 +3,7 @@ import configparser
 import copy
 import json
 import os
+import pickle
 import sys
 from string import Template
 from typing import Any
@@ -531,8 +532,10 @@ def factory() -> Config:
         # multiprocessing Pool so we reload the configuration that existed when that pool
         # was created
         db = Database(os.environ["NVTEST_SESSION_CONFIG_DIR"])
-        if "config" in db:
-            return db.get("config")
+        with db.cursor(mode="r") as cursor:
+            cursor.execute("SELECT * FROM config")
+            objs = cursor.fetchone()
+            return pickle.loads(objs[0])
     return Config()
 
 

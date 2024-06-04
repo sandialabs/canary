@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import pickle
 import random
 import signal
 import threading
@@ -119,15 +120,30 @@ class Session:
 
     def load(self) -> None:
         logging.debug(f"Loading test session in {self.root}")
-        data = self.db.get("session:data")
+        with self.db.cursor(mode="r") as cursor:
+            cursor.execute("SELECT * FROM session_data")
+            objs = cursor.fetchone()
+            data = pickle.loads(objs[0])
+
+            cursor.execute("SELECT * FROM cases")
+            objs = cursor.fetchall()
+            self.cases = [pickle.loads(obj[1]) for obj in objs]
+
+            cursor.execute("SELECT * FROM files")
+            objs = cursor.fetchall()
+            self.generators = [pickle.loads(obj[0]) for obj in objs]
+
+            cursor.execute("SELECT * FROM snapshot")
+            objs = cursor.fetchall()
+            prog = {obj[0]: pickle.loads(obj[1]) for obj in objs}
+
         for var, val in data.items():
             setattr(self, var, val)
-        self.generators = self.db.get("files")
-        self.cases = self.db.get("cases")
-        prog = self.db.get("cases:snapshot")
+
         for case in self.cases:
             if case.id in prog:
                 case.update(prog[case.id])
+
         ts: TopologicalSorter = TopologicalSorter()
         for case in self.cases:
             ts.add(case, *case.dependencies)
@@ -172,10 +188,24 @@ class Session:
         for var, value in vars(self).items():
             if var not in ("files", "cases", "db", "db2"):
                 data[var] = value
-        self.db.put("session:data", data, replace=True)
+        params: tuple[bytes]
         if ini:
-            self.db.put("config", config.instance())
-            self.db.put("options", config.get("option"))
+            with self.db.cursor(mode="w") as cursor:
+                params = (pickle.dumps(data),)
+                cursor.execute("CREATE TABLE session_data (obj blob)")
+                cursor.execute("INSERT INTO session_data VALUES (?)", params)
+
+                params = (pickle.dumps(config.instance()),)
+                cursor.execute("CREATE TABLE config (obj blob)")
+                cursor.execute("INSERT INTO config VALUES (?)", params)
+
+                params = (pickle.dumps(config.get("option")),)
+                cursor.execute("CREATE TABLE options (obj blob)")
+                cursor.execute("INSERT INTO options VALUES (?)", params)
+        else:
+            with self.db.cursor(mode="a") as cursor:
+                params = (pickle.dumps(data),)
+                cursor.execute("UPDATE session_data SET obj = ?", params)
 
     def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:
         """Add ``path`` to this session's search paths"""
@@ -195,7 +225,7 @@ class Session:
             self.search_paths[root] = paths
         self.save()
 
-    def discover(self):
+    def discover(self) -> None:
         finder = Finder()
         for root, paths in self.search_paths.items():
             finder.add(root, *paths, tolerant=True)
@@ -203,7 +233,10 @@ class Session:
             hook(self)
         finder.prepare()
         self.generators = finder.discover()
-        self.db.put("files", self.generators)
+        with self.db.cursor(mode="w") as cursor:
+            parameters: list[tuple[bytes]] = [(pickle.dumps(f),) for f in self.generators]
+            cursor.execute("CREATE TABLE files (obj blob)")
+            cursor.executemany("INSERT INTO files VALUES (?)", parameters)
         logging.debug(f"Discovered {len(self.generators)} test files")
 
     def freeze(
@@ -225,9 +258,15 @@ class Session:
         cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
-        self.db.put("cases", self.cases)
-        progress = {c.id: _single_case_entry(c) for c in self.cases if not c.mask}
-        self.db.put("cases:snapshot", progress)
+        with self.db.cursor(mode="w") as cursor:
+            params: list[tuple[str, bytes]] = [(c.id, pickle.dumps(c)) for c in self.cases]
+            cursor.execute("CREATE TABLE cases (id text, obj blob)")
+            cursor.executemany("INSERT INTO cases VALUES (?, ?)", params)
+
+            params = [(c.id, pickle.dumps(_single_case_entry(c))) for c in self.cases]
+            cursor.execute("CREATE TABLE snapshot (id text, obj blob)")
+            cursor.executemany("INSERT INTO snapshot VALUES (?, ?)", params)
+
         logging.debug(f"Collected {len(self.cases)} test cases from {len(self.generators)} files")
 
     def populate(self, copy_all_resources: bool = False) -> None:
@@ -262,9 +301,11 @@ class Session:
                     errors += 1
                     logging.error(f"{case}: exec_root not set after setup")
             ts.done(*group)
-        self.db.apply(
-            "cases:snapshot", lambda x: x.update({c.id: _single_case_entry(c) for c in cases})
-        )
+        with self.db.cursor(mode="a") as cursor:
+            cursor.executemany(
+                "UPDATE snapshot SET obj = ? WHERE id = ?",
+                [(pickle.dumps(_single_case_entry(c)), c.id) for c in cases],
+            )
         if errors:
             raise ValueError("Stopping due to previous errors")
 
@@ -495,16 +536,21 @@ class Session:
 
         obj.refresh()
         if isinstance(obj, TestCase):
-            self.db.apply("cases:snapshot", lambda x: x.update({obj.id: _single_case_entry(obj)}))
+            with self.db.cursor(mode="a") as cursor:
+                params: tuple[bytes, str] = (pickle.dumps(_single_case_entry(obj)), obj.id)
+                cursor.execute("UPDATE snapshot SET obj = ? WHERE id = ?", params)
             if fail_fast and obj.status != "success":
                 code = compute_returncode([obj])
                 raise FailFast(str(obj), code)
         else:
             assert isinstance(obj, Batch)
-            fd = self.db.get("cases:snapshot")
             if all(case.status == "retry" for case in obj):
                 queue.retry(iid)
                 return
+            with self.db.cursor(mode="r") as cursor:
+                cursor.execute("SELECT * FROM snapshot")
+                objs = [(id, pickle.loads(obj)) for id, obj in cursor.fetchall()]
+                fd = dict(objs)
             for case in obj:
                 if case.id not in fd:
                     logging.error(f"case ID {case.id} not in batch {obj.id}")
