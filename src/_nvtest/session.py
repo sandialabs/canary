@@ -34,6 +34,7 @@ from .test.case import TestCase
 from .test.generator import TestGenerator
 from .test.status import Status
 from .third_party import color
+from .third_party import cloudpickle
 from .util import glyphs
 from .util import keyboard
 from .util import logging
@@ -202,6 +203,10 @@ class Session:
                 params = (pickle.dumps(config.get("option")),)
                 cursor.execute("CREATE TABLE options (obj blob)")
                 cursor.execute("INSERT INTO options VALUES (?)", params)
+
+                params = (cloudpickle.dumps(plugin._manager._instance),)
+                cursor.execute("CREATE TABLE plugin (obj blob)")
+                cursor.execute("INSERT INTO plugin VALUES (?)", params)
         else:
             with self.db.cursor(mode="a") as cursor:
                 params = (pickle.dumps(data),)

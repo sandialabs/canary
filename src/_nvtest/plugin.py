@@ -2,6 +2,7 @@ import functools
 import glob
 import importlib.resources as ir
 import os
+import pickle
 import sys
 from argparse import Namespace
 from typing import TYPE_CHECKING
@@ -12,6 +13,7 @@ from typing import Optional
 from typing import Type
 
 from . import config
+from .database import Database
 from .util import logging
 from .util.entry_points import get_entry_points
 from .util.serialization import deserialize
@@ -190,12 +192,16 @@ def load_module_from_file(module_name: str, module_path: str):
 
 
 def factory() -> Manager:
-    manager: Manager
-    if os.getenv("NVTEST_LEVEL") == "0" and "NVPLGMGR" in os.environ:
-        manager = loads(os.environ["NVPLGMGR"])
-    else:
-        manager = Manager()
-    return manager
+    if os.getenv("NVTEST_LEVEL") == "0" and "NVTEST_SESSION_CONFIG_DIR" in os.environ:
+        # Setting up test cases and several other operations are done in a
+        # multiprocessing Pool so we reload the configuration that existed when that pool
+        # was created
+        db = Database(os.environ["NVTEST_SESSION_CONFIG_DIR"], mode="r")
+        with db.cursor(mode="r") as cursor:
+            cursor.execute("SELECT * FROM plugin")
+            objs = cursor.fetchone()
+            return pickle.loads(objs[0])
+    return Manager()
 
 
 _manager = Singleton(Manager)
