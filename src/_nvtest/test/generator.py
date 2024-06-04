@@ -56,14 +56,10 @@ class TestGenerator(abc.ABC):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = os.path.splitext(os.path.basename(self.path))[0]
 
-    @property
-    @abc.abstractmethod
-    def file_type(self) -> str:
-        pass
-
     @classmethod
+    @abc.abstractmethod
     def matches(cls, path: str) -> bool:
-        return path.endswith(cls.file_type)  # type: ignore
+        pass
 
     @abc.abstractmethod
     def describe(

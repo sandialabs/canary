@@ -20,10 +20,12 @@ build_types: dict[str, str] = {}
 
 
 class CTestTestFile(TestGenerator):
-    file_type = "CTestTestfile.cmake"
-
     def __init__(self, root: str, path: Optional[str] = None) -> None:
         super().__init__(root, path=path)
+
+    @classmethod
+    def matches(cls, path: str) -> bool:
+        return os.path.basename(path) == "CTestTestfile.cmake"
 
     @staticmethod
     def find_cmake():
@@ -52,6 +54,7 @@ class CTestTestFile(TestGenerator):
     ) -> list[TestCase]:
         cmake = self.find_cmake()
         if cmake is None:
+            logging.warning("cmake not found, test cases cannot be generated")
             return []
         tests = self.parse()
         cases = [CTestTestCase(self.root, self.path, name, **td) for name, td in tests.items()]

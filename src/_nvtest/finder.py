@@ -5,6 +5,7 @@ from itertools import repeat
 from typing import Any
 from typing import Optional
 from typing import TextIO
+from typing import Type
 
 from . import config
 from . import plugin
@@ -91,7 +92,8 @@ class Finder:
                 return True
             return False
 
-        file_types = tuple([_.file_type for _ in plugin.test_generators()])
+        generator_types: list[Type[TestGenerator]] = plugin.test_generators()
+        g_matches = lambda f: any([g.matches(f) for g in generator_types])
         start = root if subdir is None else os.path.join(root, subdir)
         paths: list[tuple[str, str]] = []
         for dirname, dirs, files in os.walk(start):
@@ -102,7 +104,7 @@ class Finder:
                 [
                     (root, os.path.relpath(os.path.join(dirname, f), root))
                     for f in files
-                    if f.endswith(file_types)
+                    if g_matches(f)
                 ]
             )
         generators: list[TestGenerator]
@@ -114,9 +116,9 @@ class Finder:
         return generators
 
     def gen_factory(self, root: str, path: Optional[str] = None) -> TestGenerator:
-        for factory in plugin.test_generators():
-            if factory.matches(root if path is None else path):
-                return factory(root, path=path)
+        for gen_type in plugin.test_generators():
+            if gen_type.matches(root if path is None else path):
+                return gen_type(root, path=path)
         f = root if path is None else os.path.join(root, path)
         raise TypeError(f"No test generator for {f}")
 
@@ -269,8 +271,10 @@ class Finder:
 
 
 def is_test_file(file: str) -> bool:
-    file_types = tuple([_.file_type for _ in plugin.test_generators()])
-    return file.endswith(file_types)
+    for generator in plugin.test_generators():
+        if generator.matches(file):
+            return True
+    return False
 
 
 def freeze_abstract_file(file: TestGenerator, kwds: dict) -> list[TestCase]:
@@ -279,9 +283,9 @@ def freeze_abstract_file(file: TestGenerator, kwds: dict) -> list[TestCase]:
 
 
 def find(path: str) -> TestGenerator:
-    for factory in plugin.test_generators():
-        if factory.matches(path):
-            return factory(path)
+    for gen_type in plugin.test_generators():
+        if gen_type.matches(path):
+            return gen_type(path)
     raise TypeError(f"No test generator for {path}")
 
 

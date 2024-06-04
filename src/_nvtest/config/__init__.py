@@ -50,7 +50,6 @@ section_schemas: dict[str, Schema] = {
 
 read_only_sections = ("python",)
 valid_scopes = ("defaults", "global", "local", "session", "environment", "command_line")
-file_types = [".pyt"]
 
 invocation_dir = os.getcwd()
 
@@ -532,7 +531,7 @@ def factory() -> Config:
         # multiprocessing Pool so we reload the configuration that existed when that pool
         # was created
         db = Database(os.environ["NVTEST_SESSION_CONFIG_DIR"], mode="r")
-        with db.cursor(mode="r") as cursor:
+        with db.connection(mode="r") as cursor:
             cursor.execute("SELECT * FROM config")
             objs = cursor.fetchone()
             return pickle.loads(objs[0])

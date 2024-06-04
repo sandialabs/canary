@@ -1,3 +1,5 @@
+import fnmatch
+import os
 from types import ModuleType
 from typing import Any
 from typing import Optional
@@ -11,8 +13,6 @@ from _nvtest.third_party.monkeypatch import monkeypatch
 
 
 class PYTTestFile(AbstractTestFile):
-    file_type = ".pyt"
-
     def load(self):
         import _nvtest
 
@@ -33,6 +33,14 @@ class PYTTestFile(AbstractTestFile):
                     pass
         finally:
             _nvtest.FILE_SCANNING = False
+
+    @classmethod
+    def matches(cls, path: str) -> bool:
+        if path.endswith(".pyt"):
+            return True
+#        elif fnmatch.fnmatch(os.path.basename(path), "test_*.py"):
+#            return True
+        return False
 
     def f_analyze(
         self,

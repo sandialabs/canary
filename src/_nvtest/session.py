@@ -121,7 +121,7 @@ class Session:
 
     def load(self) -> None:
         logging.debug(f"Loading test session in {self.root}")
-        with self.db.cursor(mode="r") as cursor:
+        with self.db.connection(mode="r") as cursor:
             cursor.execute("SELECT * FROM session_data")
             objs = cursor.fetchone()
             data = pickle.loads(objs[0])
@@ -191,7 +191,7 @@ class Session:
                 data[var] = value
         params: tuple[bytes]
         if ini:
-            with self.db.cursor(mode="w") as cursor:
+            with self.db.connection(mode="w") as cursor:
                 params = (pickle.dumps(data),)
                 cursor.execute("CREATE TABLE session_data (obj blob)")
                 cursor.execute("INSERT INTO session_data VALUES (?)", params)
@@ -208,7 +208,7 @@ class Session:
                 cursor.execute("CREATE TABLE plugin (obj blob)")
                 cursor.execute("INSERT INTO plugin VALUES (?)", params)
         else:
-            with self.db.cursor(mode="a") as cursor:
+            with self.db.connection(mode="a") as cursor:
                 params = (pickle.dumps(data),)
                 cursor.execute("UPDATE session_data SET obj = ?", params)
 
@@ -238,7 +238,7 @@ class Session:
             hook(self)
         finder.prepare()
         self.generators = finder.discover()
-        with self.db.cursor(mode="w") as cursor:
+        with self.db.connection(mode="a") as cursor:
             parameters: list[tuple[bytes]] = [(pickle.dumps(f),) for f in self.generators]
             cursor.execute("CREATE TABLE files (obj blob)")
             cursor.executemany("INSERT INTO files VALUES (?)", parameters)
@@ -263,7 +263,7 @@ class Session:
         cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
-        with self.db.cursor(mode="w") as cursor:
+        with self.db.connection(mode="a") as cursor:
             params: list[tuple[str, bytes]] = [(c.id, pickle.dumps(c)) for c in self.cases]
             cursor.execute("CREATE TABLE cases (id text, obj blob)")
             cursor.executemany("INSERT INTO cases VALUES (?, ?)", params)
@@ -306,7 +306,7 @@ class Session:
                     errors += 1
                     logging.error(f"{case}: exec_root not set after setup")
             ts.done(*group)
-        with self.db.cursor(mode="a") as cursor:
+        with self.db.connection(mode="a") as cursor:
             cursor.executemany(
                 "UPDATE snapshot SET obj = ? WHERE id = ?",
                 [(pickle.dumps(_single_case_entry(c)), c.id) for c in cases],
@@ -541,7 +541,7 @@ class Session:
 
         obj.refresh()
         if isinstance(obj, TestCase):
-            with self.db.cursor(mode="a") as cursor:
+            with self.db.connection(mode="a") as cursor:
                 params: tuple[bytes, str] = (pickle.dumps(_single_case_entry(obj)), obj.id)
                 cursor.execute("UPDATE snapshot SET obj = ? WHERE id = ?", params)
             if fail_fast and obj.status != "success":
@@ -552,7 +552,7 @@ class Session:
             if all(case.status == "retry" for case in obj):
                 queue.retry(iid)
                 return
-            with self.db.cursor(mode="r") as cursor:
+            with self.db.connection(mode="r") as cursor:
                 cursor.execute("SELECT * FROM snapshot")
                 objs = [(id, pickle.loads(obj)) for id, obj in cursor.fetchall()]
                 fd = dict(objs)

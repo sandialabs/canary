@@ -69,7 +69,6 @@ class TestCase(Runner):
         self.url: Optional[str] = None
         self.file_dir = os.path.dirname(self.file)
         assert os.path.exists(self.file)
-        self.file_type = os.path.splitext(self.file)[1:]
         self._active: Optional[bool] = None
 
         # Other properties

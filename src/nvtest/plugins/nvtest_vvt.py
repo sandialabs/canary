@@ -27,8 +27,6 @@ if TYPE_CHECKING:
 
 
 class VVTTestFile(AbstractTestFile):
-    file_type = ".vvt"
-
     def load(self) -> None:
         try:
             args, _ = p_VVT(self.file)
@@ -59,6 +57,10 @@ class VVTTestFile(AbstractTestFile):
                 self.f_DEPENDS_ON(arg)
             else:
                 raise ValueError(f"Unknown command: {arg.command} at {arg.line_no}:{arg.line}")
+
+    @classmethod
+    def matches(cls, path: str) -> bool:
+        return path.endswith(".vvt")
 
     def f_KEYWORDS(self, arg: SimpleNamespace) -> None:
         """# VVT : keywords [:=] word1 word2 ... wordn"""

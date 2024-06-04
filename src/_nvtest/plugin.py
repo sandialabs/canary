@@ -12,7 +12,6 @@ from typing import Generator
 from typing import Optional
 from typing import Type
 
-from . import config
 from .database import Database
 from .util import logging
 from .util.entry_points import get_entry_points
@@ -69,9 +68,6 @@ class Manager:
         self._args = arg
 
     def register_test_generator(self, obj: Type["TestGenerator"]) -> None:
-        for generator in self._generators:
-            if generator.file_type == obj.file_type:
-                raise ValueError(f"duplicate test file type: {obj.file_type}")
         self._generators.append(obj)
 
     def register(self, func: Callable, scope: str, stage: str, **kwds: str) -> None:
@@ -95,13 +91,6 @@ class Manager:
         elif scope == "test":
             if stage not in ("discovery", "setup", "pre:baseline", "pre:run", "finish"):
                 raise TypeError(err_msg)
-            if stage == "load":
-                if "file_type" not in kwds:
-                    raise TypeError("test::load plugin must define 'file_type'")
-                if not kwds["file_type"].startswith("."):
-                    kwds["file_type"] = f".{kwds['file_type']}"
-                if kwds["file_type"] not in config.file_types:
-                    config.file_types.append(kwds["file_type"])
         else:
             raise TypeError(f"register() got unexpected scope {scope!r}")
 
@@ -197,7 +186,7 @@ def factory() -> Manager:
         # multiprocessing Pool so we reload the configuration that existed when that pool
         # was created
         db = Database(os.environ["NVTEST_SESSION_CONFIG_DIR"], mode="r")
-        with db.cursor(mode="r") as cursor:
+        with db.connection(mode="r") as cursor:
             cursor.execute("SELECT * FROM plugin")
             objs = cursor.fetchone()
             return pickle.loads(objs[0])
