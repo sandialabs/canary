@@ -33,8 +33,8 @@ from .test.batch import Batch
 from .test.case import TestCase
 from .test.generator import TestGenerator
 from .test.status import Status
-from .third_party import color
 from .third_party import cloudpickle
+from .third_party import color
 from .util import glyphs
 from .util import keyboard
 from .util import logging

@@ -113,7 +113,7 @@ def status(args: "argparse.Namespace") -> int:
             pathspec = os.path.abspath(args.pathspec)
             if pathspec != session.root:
                 cases = [c for c in cases if c.exec_dir.startswith(pathspec)]
-    attrs = ( "show_fail", "show_diff", "show_timeout", "show_pass", "show_notrun", "show_skip")
+    attrs = ("show_fail", "show_diff", "show_timeout", "show_pass", "show_notrun", "show_skip")
     for attr in attrs:
         if getattr(args, attr):
             break
