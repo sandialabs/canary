@@ -136,14 +136,14 @@ class Session:
 
             cursor.execute("SELECT * FROM snapshot")
             objs = cursor.fetchall()
-            prog = {id: pickle.loads(obj) for id, obj in objs}
+            snapshot = {id: pickle.loads(obj) for id, obj in objs}
 
         for var, val in data.items():
             setattr(self, var, val)
 
         for case in self.cases:
-            if case.id in prog:
-                case.update(prog[case.id])
+            if case.id in snapshot:
+                case.update(snapshot[case.id])
 
         ts: TopologicalSorter = TopologicalSorter()
         for case in self.cases:
@@ -191,7 +191,7 @@ class Session:
                 data[var] = value
         params: tuple[bytes]
         if ini:
-            with self.db.connection(mode="w") as cursor:
+            with self.db.connection(mode="a") as cursor:
                 params = (pickle.dumps(data),)
                 cursor.execute("CREATE TABLE session_data (obj blob)")
                 cursor.execute("INSERT INTO session_data VALUES (?)", params)
@@ -307,10 +307,8 @@ class Session:
                     logging.error(f"{case}: exec_root not set after setup")
             ts.done(*group)
         with self.db.connection(mode="a") as cursor:
-            cursor.executemany(
-                "UPDATE snapshot SET obj = ? WHERE id = ?",
-                [(pickle.dumps(_single_case_entry(c)), c.id) for c in cases],
-            )
+            params = [(pickle.dumps(_single_case_entry(c)), c.id) for c in cases]
+            cursor.executemany("UPDATE snapshot SET obj = ? WHERE id = ?", params)
         if errors:
             raise ValueError("Stopping due to previous errors")
 
@@ -555,7 +553,7 @@ class Session:
             with self.db.connection(mode="r") as cursor:
                 cursor.execute("SELECT * FROM snapshot")
                 objs = [(id, pickle.loads(obj)) for id, obj in cursor.fetchall()]
-                fd = dict(objs)
+            fd = dict(objs)
             for case in obj:
                 if case.id not in fd:
                     logging.error(f"case ID {case.id} not in batch {obj.id}")

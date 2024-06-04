@@ -37,7 +37,9 @@ class Database:
         return f"file:{self.file}?mode={mode}"
 
     @contextmanager
-    def connection(self, *, mode: str = "a", timeout: float = 5.0) -> Generator:
+    def connection(
+        self, *, mode: str = "a", timeout: float = 5.0
+    ) -> Generator[sqlite3.Cursor, None, None]:
         tries: int = 5
         delay: float = 0.01
         backoff: float = 2.0
@@ -59,8 +61,10 @@ class Database:
             )
 
         try:
-            yield connection.cursor()
+            cursor = connection.cursor()
+            yield cursor
         finally:
             if mode in "aw":
                 connection.commit()
+            cursor.close()
             connection.close()
