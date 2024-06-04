@@ -113,20 +113,13 @@ def status(args: "argparse.Namespace") -> int:
             pathspec = os.path.abspath(args.pathspec)
             if pathspec != session.root:
                 cases = [c for c in cases if c.exec_dir.startswith(pathspec)]
-    for attr in (
-        "show_fail",
-        "show_diff",
-        "show_timeout",
-        "show_pass",
-        "show_notrun",
-        "show_skip",
-    ):
+    attrs = ( "show_fail", "show_diff", "show_timeout", "show_pass", "show_notrun", "show_skip")
+    for attr in attrs:
         if getattr(args, attr):
             break
     else:
-        args.show_pass = args.show_diff = args.show_fail = args.show_timeout = args.show_notrun = (
-            True
-        )
+        for attr in attrs:
+            setattr(args, attr, True)
     cases_to_show: list[TestCase] = []
     if args.show_all:
         if args.show_excluded:
@@ -140,7 +133,7 @@ def status(args: "argparse.Namespace") -> int:
                     cases_to_show.append(case)
             elif args.show_skip and case.status == "skipped":
                 cases_to_show.append(case)
-            elif args.show_pass and case.status == "success":
+            elif args.show_pass and case.status.value in ("success", "xdiff", "xfail"):
                 cases_to_show.append(case)
             elif args.show_fail and case.status == "failed":
                 cases_to_show.append(case)
