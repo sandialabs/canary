@@ -94,7 +94,7 @@ class Session:
         self.search_paths: dict[str, list[str]] = {}
         self.generators: list[TestGenerator] = list()
         self.cases: list[TestCase] = list()
-        self.db = Database(self.config_dir)
+        self.db = Database(self.config_dir, mode=mode)
         if mode in "ra":
             self.load()
         else:
@@ -127,7 +127,7 @@ class Session:
 
             cursor.execute("SELECT * FROM cases")
             objs = cursor.fetchall()
-            self.cases = [pickle.loads(obj[1]) for obj in objs]
+            self.cases = [pickle.loads(obj) for _, obj in objs]
 
             cursor.execute("SELECT * FROM files")
             objs = cursor.fetchall()
@@ -135,7 +135,7 @@ class Session:
 
             cursor.execute("SELECT * FROM snapshot")
             objs = cursor.fetchall()
-            prog = {obj[0]: pickle.loads(obj[1]) for obj in objs}
+            prog = {id: pickle.loads(obj) for id, obj in objs}
 
         for var, val in data.items():
             setattr(self, var, val)
@@ -186,7 +186,7 @@ class Session:
     def save(self, ini: bool = False) -> None:
         data: dict[str, Any] = {}
         for var, value in vars(self).items():
-            if var not in ("files", "cases", "db", "db2"):
+            if var not in ("files", "cases", "db"):
                 data[var] = value
         params: tuple[bytes]
         if ini:

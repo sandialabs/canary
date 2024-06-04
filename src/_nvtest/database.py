@@ -44,6 +44,9 @@ class Database:
         with transaction_type(self.lock):
             db = sqlite3.connect(self.file)
             cursor = db.cursor()
-            yield cursor
-            if mode in "aw":
-                db.commit()
+            try:
+                yield cursor
+            finally:
+                if mode in "aw":
+                    db.commit()
+                db.close()

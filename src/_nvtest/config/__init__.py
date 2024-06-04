@@ -531,7 +531,7 @@ def factory() -> Config:
         # Setting up test cases and several other operations are done in a
         # multiprocessing Pool so we reload the configuration that existed when that pool
         # was created
-        db = Database(os.environ["NVTEST_SESSION_CONFIG_DIR"])
+        db = Database(os.environ["NVTEST_SESSION_CONFIG_DIR"], mode="r")
         with db.cursor(mode="r") as cursor:
             cursor.execute("SELECT * FROM config")
             objs = cursor.fetchone()
