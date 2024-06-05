@@ -606,9 +606,10 @@ class Session:
         if isinstance(queue, BatchResourceQueue):
             with self.db.connection(mode="a") as conn:
                 params: Any = [(lot_no, b.id, c.id) for b in queue.queued() for c in b]
-                if lot_no == 1:
-                    conn.execute("CREATE TABLE batches (lot int, batch int, case_id text)")
-                    conn.execute("CREATE TABLE batch_meta (lot int, meta blob)")
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS batches (lot int, batch int, case_id text)"
+                )
+                conn.execute("CREATE TABLE IF NOT EXISTS batch_meta (lot int, meta blob)")
                 conn.executemany("INSERT INTO batches VALUES (?, ?, ?)", params)
                 params = (lot_no, pickle.dumps(rh.data["batch"]))
                 conn.execute("INSERT INTO batch_meta VALUES (?, ?)", params)
