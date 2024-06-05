@@ -39,7 +39,7 @@ class Database:
 
     @contextmanager
     def connection(
-        self, *, mode: str = "a", timeout: float = 5.0
+        self, *, mode: str = "a", timeout: float = 30.0
     ) -> Generator[sqlite3.Cursor, None, None]:
         tries: int = 5
         delay: float = 0.01
