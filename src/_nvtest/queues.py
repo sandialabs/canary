@@ -1,7 +1,4 @@
-import glob
 import io
-import json
-import os
 import threading
 from typing import Any
 from typing import Optional
@@ -14,7 +11,6 @@ from .test.case import TestCase
 from .third_party import color
 from .third_party.rprobe import cpu_count
 from .util import logging
-from .util.filesystem import mkdirp
 from .util.partition import partition_n
 from .util.partition import partition_t
 from .util.progress import progress
@@ -33,7 +29,7 @@ class ResourceQueue:
         self.cpu_ids = list(cpu_ids)
         self.gpu_ids = list(gpu_ids)
         self.workers = workers
-        self._buffer: dict[int, Any] = {}
+        self.buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
         self._finished: dict[int, Any] = {}
         self._notrun: dict[int, Any] = {}
@@ -67,7 +63,7 @@ class ResourceQueue:
         raise NotImplementedError
 
     def empty(self) -> bool:
-        return len(self._buffer) == 0
+        return len(self.buffer) == 0
 
     def _skipped(self, obj_id: int) -> None:
         raise NotImplementedError
@@ -104,13 +100,13 @@ class ResourceQueue:
 
     @property
     def qsize(self):
-        return len(self._buffer)
+        return len(self.buffer)
 
     def put(self, *objs: Any) -> None:
         for obj in objs:
-            self._buffer[len(self._buffer)] = obj
+            self.buffer[len(self.buffer)] = obj
 
-    def prepare(self) -> None:
+    def prepare(self, **kwds: Any) -> None:
         pass
 
     def close(self, cleanup: bool = True) -> None:
@@ -122,18 +118,18 @@ class ResourceQueue:
                 elif case.status == "ready":
                     case.status.set("failed", "Case failed to start")
                     case.save()
-        keys = list(self._buffer.keys())
+        keys = list(self.buffer.keys())
         for key in keys:
-            self._notrun[key] = self._buffer.pop(key)
+            self._notrun[key] = self.buffer.pop(key)
 
     def get(self) -> Optional[tuple[int, Union[TestCase, Batch]]]:
         with self.lock:
             if self.available_workers() <= 0:
                 return None
-            if not len(self._buffer):
+            if not len(self.buffer):
                 raise Empty
             for i in self.iter_keys():
-                obj = self._buffer[i]
+                obj = self.buffer[i]
                 status = obj.status
                 if status == "skipped":
                     # job is skipped and will never be ready
@@ -141,7 +137,7 @@ class ResourceQueue:
                     continue
                 elif status == "ready":
                     if (obj.processors, obj.gpus) <= self.available_resources():
-                        self._busy[i] = self._buffer.pop(i)
+                        self._busy[i] = self.buffer.pop(i)
                         self._busy[i].assign_cpu_ids(self.acquire_cpus(self._busy[i].processors))
                         self._busy[i].assign_gpu_ids(self.acquire_gpus(self._busy[i].gpus))
                         return (i, self._busy[i])
@@ -199,7 +195,7 @@ class DirectResourceQueue(ResourceQueue):
         )
 
     def iter_keys(self) -> list[int]:
-        return sorted(self._buffer.keys(), key=lambda k: self._buffer[k].processors)
+        return sorted(self.buffer.keys(), key=lambda k: self.buffer[k].processors)
 
     def put(self, *objs: TestCase) -> None:
         for obj in objs:
@@ -211,8 +207,8 @@ class DirectResourceQueue(ResourceQueue):
             super().put(obj)
 
     def _skipped(self, obj_no: int) -> None:
-        self._finished[obj_no] = self._buffer.pop(obj_no)
-        for case in self._buffer.values():
+        self._finished[obj_no] = self.buffer.pop(obj_no)
+        for case in self.buffer.values():
             for i, dep in enumerate(case.dependencies):
                 if dep.id == self._finished[obj_no].id:
                     case.dependencies[i] = self._finished[obj_no]
@@ -224,7 +220,7 @@ class DirectResourceQueue(ResourceQueue):
             self._finished[obj_no] = self._busy.pop(obj_no)
             self.release_cpus(self._finished[obj_no].cpu_ids)
             self.release_gpus(self._finished[obj_no].gpu_ids)
-            for case in self._buffer.values():
+            for case in self.buffer.values():
                 for i, dep in enumerate(case.dependencies):
                     if dep.id == self._finished[obj_no].id:
                         case.dependencies[i] = self._finished[obj_no]
@@ -234,7 +230,7 @@ class DirectResourceQueue(ResourceQueue):
         return self.queued() + self.busy() + self.finished() + self.notrun()
 
     def queued(self) -> list[TestCase]:
-        return list(self._buffer.values())
+        return list(self.buffer.values())
 
     def busy(self) -> list[TestCase]:
         return list(self._busy.values())
@@ -248,7 +244,6 @@ class DirectResourceQueue(ResourceQueue):
 
 class BatchResourceQueue(ResourceQueue):
     store = "batches"
-    index_file = "index"
 
     def __init__(self, rh: ResourceHandler, lock: threading.Lock) -> None:
         workers = int(rh["session:workers"])
@@ -268,13 +263,11 @@ class BatchResourceQueue(ResourceQueue):
         self.tmp_buffer: list[TestCase] = []
 
     def iter_keys(self) -> list[int]:
-        return list(self._buffer.keys())
+        return list(self.buffer.keys())
 
-    def prepare(self) -> None:
-        root = self.tmp_buffer[0].exec_root
-        assert root is not None
-        batch_store = os.path.join(root, ".nvtest", self.store)
-        batch_stores = glob.glob(os.path.join(batch_store, "*"))
+    def prepare(self, **kwds: Any) -> None:
+        lot_no = kwds.pop("lot_no")
+        stage = kwds.pop("stage")
         partitions: list[list[TestCase]]
         if self.rh["batch:count"]:
             partitions = partition_n(self.tmp_buffer, n=self.rh["batch:count"])
@@ -282,26 +275,13 @@ class BatchResourceQueue(ResourceQueue):
             length = float(self.rh["batch:length"] or 30 * 60)  # 30 minute default
             partitions = partition_t(self.tmp_buffer, t=length)
         n = len(partitions)
-        N = len(batch_stores) + 1
         batches = [
-            b_factory(p, i, n, N, scheduler=self.scheduler)
+            b_factory(p, i, n, lot_no, scheduler=self.scheduler)
             for i, p in enumerate(partitions, start=1)
             if len(p)
         ]
         for batch in batches:
             super().put(batch)
-        fd: dict[int, list[str]] = {}
-        for batch in batches:
-            cases = fd.setdefault(batch.id, [])
-            cases.extend([case.id for case in batch])
-        batch_dir = os.path.join(batch_store, str(N))
-        file = os.path.join(batch_dir, self.index_file)
-        mkdirp(os.path.dirname(file))
-        with open(file, "w") as fh:
-            json.dump({"index": fd}, fh, indent=2)
-        file = os.path.join(batch_dir, "meta.json")
-        with open(file, "w") as fh:
-            json.dump({"meta": self.rh.data["batch"]}, fh, indent=2)
 
     def put(self, *objs: TestCase) -> None:
         for obj in objs:
@@ -313,9 +293,9 @@ class BatchResourceQueue(ResourceQueue):
             self.tmp_buffer.append(obj)
 
     def _skipped(self, obj_no: int) -> None:
-        self._finished[obj_no] = self._buffer.pop(obj_no)
+        self._finished[obj_no] = self.buffer.pop(obj_no)
         finished = {case.id: case for case in self._finished[obj_no]}
-        for batch in self._buffer.values():
+        for batch in self.buffer.values():
             for case in batch:
                 for i, dep in enumerate(case.dependencies):
                     if dep.id in finished:
@@ -329,7 +309,7 @@ class BatchResourceQueue(ResourceQueue):
             self.release_cpus(self._finished[obj_no].cpu_ids)
             self.release_gpus(self._finished[obj_no].gpu_ids)
             completed = dict([(_.id, _) for _ in self.finished()])
-            for batch in self._buffer.values():
+            for batch in self.buffer.values():
                 for case in batch:
                     for i, dep in enumerate(case.dependencies):
                         if dep.id in completed:
@@ -347,8 +327,8 @@ class BatchResourceQueue(ResourceQueue):
                     case.status.set("failed", "Maximum number of retries exceeded")
                     case.save()
             else:
-                self._buffer[obj_no] = self._finished.pop(obj_no)
-                for case in self._buffer[obj_no]:
+                self.buffer[obj_no] = self._finished.pop(obj_no)
+                for case in self.buffer[obj_no]:
                     if case.status.value not in ("pending", "ready"):
                         if case.dependencies:
                             case.status.set("pending")
@@ -358,14 +338,14 @@ class BatchResourceQueue(ResourceQueue):
 
     def cases(self) -> list[TestCase]:
         cases: list[TestCase] = []
-        cases.extend([case for batch in self._buffer.values() for case in batch])
+        cases.extend([case for batch in self.buffer.values() for case in batch])
         cases.extend([case for batch in self._busy.values() for case in batch])
         cases.extend([case for batch in self._finished.values() for case in batch])
         cases.extend([case for batch in self._notrun.values() for case in batch])
         return cases
 
     def queued(self) -> list[Batch]:
-        return list(self._buffer.values())
+        return list(self.buffer.values())
 
     def busy(self) -> list[Batch]:
         return list(self._busy.values())

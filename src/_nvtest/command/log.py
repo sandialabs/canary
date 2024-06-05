@@ -26,10 +26,10 @@ def log(args: "argparse.Namespace") -> int:
 
     if args.testspec.startswith("^"):
         try:
-            batch_store, batch_no = [int(_) for _ in args.testspec[1:].split(":")]
+            lot_no, batch_no = [int(_) for _ in args.testspec[1:].split(":")]
         except ValueError:
-            batch_store, batch_no = None, int(args.testspec[1:])
-        file = session.blogfile(batch_no, batch_store=batch_store)
+            lot_no, batch_no = None, int(args.testspec[1:])
+        file = session.blogfile(batch_no, lot_no=lot_no)
         print(f"{file}:")
         pydoc.pager(open(file).read())
         return 0

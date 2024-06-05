@@ -31,7 +31,7 @@ class Batch(Runner):
       runner: How to run this batch
       id: The index of this partition in the group
       nbatches: The number of partitions in the group
-      group_id: The id of the group
+      lot_no: The lot number of the group
 
     """
 
@@ -43,14 +43,14 @@ class Batch(Runner):
         cases: Union[list[TestCase], set[TestCase]],
         id: int,
         nbatches: int,
-        group_id: int = 1,
+        lot_no: int = 1,
     ) -> None:
         super().__init__()
         self.validate(cases)
         self.cases = list(cases)
         self.id = id
         self.nbatches = nbatches
-        self.group_id = group_id
+        self.lot_no = lot_no
         # self.id: str = hashit("".join(_.id for _ in self), length=20)
         self._status = Status("created")
         first = next(iter(cases))
@@ -77,7 +77,7 @@ class Batch(Runner):
         return {
             "NVTEST_BATCH_ID": str(self.id),
             "NVTEST_NBATCHES": str(self.nbatches),
-            "NVTEST_BATCH_GROUP_ID": str(self.group_id),
+            "NVTEST_BATCH_LOT": str(self.lot_no),
             "NVTEST_LEVEL": "2",
             "NVTEST_DISABLE_KB": "1",
         }
@@ -141,9 +141,7 @@ class Batch(Runner):
 
     @property
     def stage(self):
-        from ..queues import BatchResourceQueue
-
-        return os.path.join(self.root, ".nvtest", BatchResourceQueue.store, str(self.group_id))
+        return os.path.join(self.root, ".nvtest/batches", str(self.lot_no))
 
     def submission_script_filename(self) -> str:
         basename = f"submit.{self.nbatches}.{self.id}.sh"
@@ -214,9 +212,9 @@ class SubShell(Batch):
         cases: Union[list[TestCase], set[TestCase]],
         id: int,
         nbatches: int,
-        group_id: int = 1,
+        lot_no: int = 1,
     ) -> None:
-        super().__init__(cases, id, nbatches, group_id=group_id)
+        super().__init__(cases, id, nbatches, lot_no=lot_no)
         self.qtime = self.runtime * 1.5
 
     def _run(self, *args: str, **kwargs: Any) -> None:
@@ -253,7 +251,7 @@ class SubShell(Batch):
             f"-l session:workers={workers} "
             f"-l session:cpu_ids={cpu_ids} "
             f"-l test:timeoutx={timeoutx} "
-            f"^{self.group_id}:{self.id}\n)\n"
+            f"^{self.lot_no}:{self.id}\n)\n"
         )
         f = self.submission_script_filename()
         mkdirp(os.path.dirname(f))
@@ -275,12 +273,12 @@ class Slurm(Batch):
         cases: Union[list[TestCase], set[TestCase]],
         id: int,
         nbatches: int,
-        group_id: int = 1,
+        lot_no: int = 1,
     ) -> None:
         cores_per_socket = config.get("machine:cores_per_socket")
         if cores_per_socket is None:
             raise ValueError("slurm runner requires that 'machine:cores_per_socket' be defined")
-        super().__init__(cases, id, nbatches, group_id=group_id)
+        super().__init__(cases, id, nbatches, lot_no=lot_no)
 
     @property
     def processors(self) -> int:
@@ -390,7 +388,7 @@ class Slurm(Batch):
         fh.write(f"-l session:workers={workers} ")
         fh.write(f"-l session:cpu_count={session_cpus} ")
         fh.write(f"-l test:timeoutx={timeoutx} ")
-        fh.write(f"^{self.group_id}:{self.id}\n)\n")
+        fh.write(f"^{self.lot_no}:{self.id}\n)\n")
         f = self.submission_script_filename()
         mkdirp(os.path.dirname(f))
         with open(f, "w") as fp:
@@ -428,12 +426,12 @@ class PBS(Batch):
         cases: Union[list[TestCase], set[TestCase]],
         id: int,
         nbatches: int,
-        group_id: int = 1,
+        lot_no: int = 1,
     ) -> None:
         cores_per_socket = config.get("machine:cores_per_socket")
         if cores_per_socket is None:
             raise ValueError("slurm runner requires that 'machine:cores_per_socket' be defined")
-        super().__init__(cases, id, nbatches, group_id=group_id)
+        super().__init__(cases, id, nbatches, lot_no=lot_no)
 
     @property
     def processors(self) -> int:
@@ -474,7 +472,7 @@ class PBS(Batch):
             f"-l session:workers={workers} "
             f"-l session:cpu_count={session_cpus} "
             f"-l test:timeoutx={timeoutx} "
-            f"^{self.group_id}:{self.id}\n)\n"
+            f"^{self.lot_no}:{self.id}\n)\n"
         )
         f = self.submission_script_filename()
         mkdirp(os.path.dirname(f))
@@ -573,14 +571,14 @@ def factory(
     cases: Union[list[TestCase], set[TestCase]],
     id: int,
     nbatches: int,
-    group_id: int = 1,
+    lot_no: int = 1,
     scheduler: Optional[str] = None,
 ) -> Batch:
     batch: Batch
     if scheduler in (None, "shell", "subshell"):
-        batch = SubShell(cases, id, nbatches, group_id)
+        batch = SubShell(cases, id, nbatches, lot_no)
     elif scheduler and scheduler.lower() == "slurm":
-        batch = Slurm(cases, id, nbatches, group_id)
+        batch = Slurm(cases, id, nbatches, lot_no)
     else:
         raise ValueError(f"{scheduler}: Unknown batch scheduler")
     batch.setup()

@@ -1,12 +1,11 @@
 import argparse
-import json
 import os
+import pickle
 import sys
 import traceback
 from typing import TYPE_CHECKING
 
 from ..error import StopExecution
-from ..queues import BatchResourceQueue
 from ..resources import ResourceHandler
 from ..session import ExitCode
 from ..session import Session
@@ -137,21 +136,23 @@ def run(args: "argparse.Namespace") -> int:
             parameter_expr=args.parameter_expr,
             rh=args.rh,
         )
-        metafile = os.path.join(session.config_dir, BatchResourceQueue.store, "1/meta.json")
-        if os.path.exists(metafile):
+        d = os.path.join(session.config_dir, "batches/1")
+        if os.path.exists(d) and not args.batched_invocation:
             # Reload batch info so that the tests can be rerun in the scheduler
-            if not args.batched_invocation:
-                args.rh = args.rh or ResourceHandler()
-                data = json.load(open(metafile))
-                for var, val in data["meta"].items():
-                    if val is not None:
-                        args.rh.set(f"batch:{var}", val)
+            args.rh = args.rh or ResourceHandler()
+            with session.db.connection(mode="r") as conn:
+                conn.execute("SELECT meta FROM batch_meta")
+                obj = conn.fetchone()
+                batch_data = pickle.loads(obj[0])
+            for var, val in batch_data.items():
+                if val is not None:
+                    args.rh.set(f"batch:{var}", val)
         if not args.no_header:
             logging.emit(session.overview(cases))
     else:
         assert args.mode == "b"
         session = Session(args.work_tree, mode="a")
-        cases = session.bfilter(batch_store=args.batch_store, batch_no=args.batch_no)
+        cases = session.bfilter(lot_no=args.lot_no, batch_no=args.batch_no)
     output = {"b": "progress", "v": "verbose"}[args.r]
     try:
         session.exitstatus = session.run(

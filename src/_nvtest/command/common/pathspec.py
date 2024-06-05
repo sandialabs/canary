@@ -83,9 +83,12 @@ class PathSpec:
                 args.pathspec[i] = None
             elif p.startswith("^"):
                 args.mode = "b"
-                batch_store, batch_no = [int(_) for _ in p[1:].split(":")]
+                try:
+                    lot_no, batch_no = [int(_) for _ in p[1:].split(":")]
+                except ValueError:
+                    lot_no, batch_no = None, int(p[1:])
                 setdefault(args, "batch_no", batch_no)
-                setdefault(args, "batch_store", batch_store)
+                setdefault(args, "lot_no", lot_no)
             else:
                 pathspec.append(p)
         if getattr(args, "case_specs", None):

@@ -48,7 +48,7 @@ def partition_n(cases: list[TestCase], n: int = 8) -> list[list[TestCase]]:
     for group in groupby_dep(cases):
         partition = min(partitions, key=lambda p: p.cputime)
         partition.update(group)
-    return partitions
+    return [p for p in partitions if len(p)]
 
 
 def partition_t(

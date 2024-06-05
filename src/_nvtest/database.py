@@ -20,6 +20,7 @@ class Database:
 
     def __init__(self, directory: str, mode="a") -> None:
         self.file = os.path.join(os.path.abspath(directory), "nvtest.db")
+        self.lock = Lock(directory)
         mkdirp(os.path.dirname(self.file))
         if mode == "w":
             force_remove(self.file)
@@ -45,26 +46,60 @@ class Database:
         backoff: float = 2.0
         isolation_level = "EXCLUSIVE" if mode in "aw" else "DEFERRED"
         uri = self.uri(mode)
-        while tries > 1:
-            try:
+        with self.lock:
+            while tries > 1:
+                try:
+                    connection = sqlite3.connect(
+                        uri, isolation_level=isolation_level, uri=True, timeout=timeout
+                    )
+                    break
+                except sqlite3.OperationalError:
+                    time.sleep(delay)
+                tries -= 1
+                delay *= backoff
+            else:
                 connection = sqlite3.connect(
                     uri, isolation_level=isolation_level, uri=True, timeout=timeout
                 )
-                break
-            except sqlite3.OperationalError:
-                time.sleep(delay)
-            tries -= 1
-            delay *= backoff
-        else:
-            connection = sqlite3.connect(
-                uri, isolation_level=isolation_level, uri=True, timeout=timeout
-            )
 
+            try:
+                cursor = connection.cursor()
+                yield cursor
+            finally:
+                if mode in "aw":
+                    connection.commit()
+                cursor.close()
+                connection.close()
+
+
+class Lock:
+    def __init__(self, path: str, timeout: float = 5.0) -> None:
+        self.lock = os.path.join(os.path.abspath(path), "lock")
+        self.timeout = timeout
+
+    def __enter__(self) -> None:
+        delay = 0.0001
+        backoff = 2.0
+        start = time.monotonic()
+        while True:
+            try:
+                with os.fdopen(os.open(self.lock, flags=os.O_CREAT | os.O_EXCL)) as fd:
+                    os.utime(fd.fileno() if os.utime in os.supports_fd else self.lock)
+                break
+            except (FileExistsError, OSError):
+                pass
+            if time.monotonic() - start > self.timeout:
+                raise LockError(f"lock acquisition timed out at {self.timeout} s.")
+            time.sleep(delay)
+            delay *= backoff
+        return
+
+    def __exit__(self, *args):
         try:
-            cursor = connection.cursor()
-            yield cursor
-        finally:
-            if mode in "aw":
-                connection.commit()
-            cursor.close()
-            connection.close()
+            os.remove(self.lock)
+        except Exception:
+            pass
+
+
+class LockError(Exception):
+    pass
