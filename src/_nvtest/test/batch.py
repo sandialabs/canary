@@ -75,6 +75,8 @@ class Batch(Runner):
     @property
     def variables(self) -> dict[str, str]:
         return {
+            "NVTEST_LOT_NO": str(self.lot_no),
+            "NVTEST_BATCH_NO": str(self.id),
             "NVTEST_BATCH_ID": str(self.id),
             "NVTEST_NBATCHES": str(self.nbatches),
             "NVTEST_BATCH_LOT": str(self.lot_no),

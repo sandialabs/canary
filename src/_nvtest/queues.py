@@ -267,7 +267,6 @@ class BatchResourceQueue(ResourceQueue):
 
     def prepare(self, **kwds: Any) -> None:
         lot_no = kwds.pop("lot_no")
-        stage = kwds.pop("stage")
         partitions: list[list[TestCase]]
         if self.rh["batch:count"]:
             partitions = partition_n(self.tmp_buffer, n=self.rh["batch:count"])
