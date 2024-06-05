@@ -4,6 +4,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Generator
+from typing import Optional
 
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
@@ -39,14 +40,14 @@ class Database:
 
     @contextmanager
     def connection(
-        self, *, mode: str = "a", timeout: float = 30.0
+        self, *, mode: str = "a", timeout: float = 10.0
     ) -> Generator[sqlite3.Cursor, None, None]:
         tries: int = 5
         delay: float = 0.01
         backoff: float = 2.0
         isolation_level = "EXCLUSIVE" if mode in "aw" else "DEFERRED"
         uri = self.uri(mode)
-        with self.lock:
+        with self.lock(timeout=timeout):
             while tries > 1:
                 try:
                     connection = sqlite3.connect(
@@ -75,9 +76,15 @@ class Database:
 
 
 class Lock:
-    def __init__(self, path: str, timeout: float = 5.0) -> None:
+    def __init__(self, path: str, timeout: float = 10.0) -> None:
         self.lock = os.path.join(os.path.abspath(path), "lock")
         self.timeout = timeout
+        self.default_timeout = timeout
+
+    def __call__(self, timeout: Optional[float] = None) -> "Lock":
+        if timeout is not None:
+            self.timeout = timeout
+        return self
 
     def __enter__(self) -> None:
         delay = 0.0001
@@ -98,6 +105,7 @@ class Lock:
 
     def __exit__(self, *args):
         try:
+            self.timeout = self.default_timeout
             os.remove(self.lock)
         except Exception:
             pass
