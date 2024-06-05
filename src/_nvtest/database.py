@@ -64,6 +64,8 @@ class Database:
 
             try:
                 cursor = connection.cursor()
+                if mode in "aw":
+                    cursor.execute("BEGIN EXCLUSIVE")
                 yield cursor
             finally:
                 if mode in "aw":
