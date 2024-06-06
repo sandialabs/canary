@@ -65,7 +65,7 @@ class ResourceQueue:
     def empty(self) -> bool:
         return len(self.buffer) == 0
 
-    def _skipped(self, obj_id: int) -> None:
+    def skip(self, obj_id: int) -> None:
         raise NotImplementedError
 
     def available_workers(self):
@@ -81,11 +81,17 @@ class ResourceQueue:
         return (self.available_cpus(), self.available_gpus())
 
     def acquire_cpus(self, n: int) -> list[int]:
+        N = len(self.cpu_ids)
+        if N < n:
+            raise ResourceError(f"requested cpus ({n}) exceeds available cpus ({N})")
         cpu_ids = list(self.cpu_ids[:n])
         del self.cpu_ids[:n]
         return cpu_ids
 
     def acquire_gpus(self, n: int) -> list[int]:
+        N = len(self.gpu_ids)
+        if N < n:
+            raise ResourceError(f"requested gpus ({n}) exceeds available gpus ({N})")
         gpu_ids = list(self.gpu_ids[:n])
         del self.gpu_ids[:n]
         return gpu_ids
@@ -133,7 +139,7 @@ class ResourceQueue:
                 status = obj.status
                 if status == "skipped":
                     # job is skipped and will never be ready
-                    self._skipped(i)
+                    self.skip(i)
                     continue
                 elif status == "ready":
                     if (obj.processors, obj.gpus) <= self.available_resources():
@@ -206,7 +212,7 @@ class DirectResourceQueue(ResourceQueue):
                 )
             super().put(obj)
 
-    def _skipped(self, obj_no: int) -> None:
+    def skip(self, obj_no: int) -> None:
         self._finished[obj_no] = self.buffer.pop(obj_no)
         for case in self.buffer.values():
             for i, dep in enumerate(case.dependencies):
@@ -291,7 +297,7 @@ class BatchResourceQueue(ResourceQueue):
                 )
             self.tmp_buffer.append(obj)
 
-    def _skipped(self, obj_no: int) -> None:
+    def skip(self, obj_no: int) -> None:
         self._finished[obj_no] = self.buffer.pop(obj_no)
         finished = {case.id: case for case in self._finished[obj_no]}
         for batch in self.buffer.values():
@@ -357,4 +363,8 @@ class BatchResourceQueue(ResourceQueue):
 
 
 class Empty(Exception):
+    pass
+
+
+class ResourceError(Exception):
     pass
