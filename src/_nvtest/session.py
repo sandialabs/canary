@@ -618,23 +618,24 @@ class Session:
 
     @staticmethod
     def summary(cases: list[TestCase], include_pass: bool = True) -> str:
-        string = io.StringIO()
+        file = io.StringIO()
         if not cases:
-            string.write("Nothing to report\n")
-            return string.getvalue()
+            file.write("Nothing to report\n")
+            return file.getvalue()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
             totals.setdefault(case.status.value, []).append(case)
-        string.write(color.colorize("@*{Short test summary info}\n"))
         for status in Status.members:
             if not include_pass and status == "success":
                 continue
             glyph = Status.glyph(status)
             if status in totals:
                 for case in sorted(totals[status], key=lambda t: t.name):
-                    string.write("%s %s\n" % (glyph, cformat(case)))
-        string.write("\n")
-        return string.getvalue()
+                    file.write("%s %s\n" % (glyph, cformat(case)))
+        string = file.getvalue()
+        if string.strip():
+            string = color.colorize("@*{Short test summary info}\n") + string + "\n"
+        return string
 
     @staticmethod
     def footer(cases: list[TestCase], duration: float = -1, title="Session done") -> str:
@@ -657,7 +658,8 @@ class Session:
                 c = Status.colors[member]
                 stat = totals[member][0].status.name
                 summary.append(color.colorize("@%s{%d %s}" % (c, n, stat.lower())))
-        x, y = random.sample([glyphs.sparkles, glyphs.collision, glyphs.highvolt], 2)
+        emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
+        x, y = random.sample(emojis, 2)
         kwds = {
             "x": x,
             "y": y,
