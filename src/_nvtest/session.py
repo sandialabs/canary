@@ -1,7 +1,7 @@
 import glob
 import io
+import json
 import os
-import pickle
 import random
 import signal
 import threading
@@ -122,29 +122,20 @@ class Session:
 
     def load(self) -> None:
         logging.debug(f"Loading test session in {self.root}")
-        with self.db.connection(mode="r") as conn:
-            conn.execute("SELECT * FROM session_data")
-            objs = conn.fetchone()
-            data = pickle.loads(objs[0])
-
-            conn.execute("SELECT * FROM cases")
-            objs = conn.fetchall()
-            self.cases = [pickle.loads(obj) for _, obj in objs]
-
-            conn.execute("SELECT * FROM files")
-            objs = conn.fetchall()
-            self.generators = [pickle.loads(obj[0]) for obj in objs]
-
-            conn.execute("SELECT * FROM snapshot")
-            objs = conn.fetchall()
-            snapshot = {id: pickle.loads(obj) for id, obj in objs}
-
+        self.cases = self.db.load_binary("cases")
+        self.generators = self.db.load_binary("files")
+        snapshots: dict[str, dict] = {}
+        with self.db.open("snapshot", "r") as record:
+            lines = record.readlines()
+        for line in lines:
+            snapshot = json.loads(line)
+            snapshots[snapshot.pop("id")] = snapshot
+        for case in self.cases:
+            if case.id in snapshots:
+                case.update(snapshots[case.id], skip_dependencies=True)
+        data = self.db.load_binary("session")
         for var, val in data.items():
             setattr(self, var, val)
-
-        for case in self.cases:
-            if case.id in snapshot:
-                case.update(snapshot[case.id])
 
         ts: TopologicalSorter = TopologicalSorter()
         for case in self.cases:
@@ -190,28 +181,14 @@ class Session:
         for var, value in vars(self).items():
             if var not in ("files", "cases", "db"):
                 data[var] = value
-        params: tuple[bytes]
         if ini:
-            with self.db.connection(mode="a") as conn:
-                params = (pickle.dumps(data),)
-                conn.execute("CREATE TABLE session_data (obj blob)")
-                conn.execute("INSERT INTO session_data VALUES (?)", params)
-
-                params = (pickle.dumps(config.instance()),)
-                conn.execute("CREATE TABLE config (obj blob)")
-                conn.execute("INSERT INTO config VALUES (?)", params)
-
-                params = (pickle.dumps(config.get("option")),)
-                conn.execute("CREATE TABLE options (obj blob)")
-                conn.execute("INSERT INTO options VALUES (?)", params)
-
-                params = (cloudpickle.dumps(plugin._manager._instance),)
-                conn.execute("CREATE TABLE plugin (obj blob)")
-                conn.execute("INSERT INTO plugin VALUES (?)", params)
+            self.db.save_binary("session", data)
+            self.db.save_binary("config", config.instance())
+            self.db.save_binary("options", config.get("option"))
+            with self.db.open("plugin", mode="wb") as record:
+                cloudpickle.dump(plugin._manager._instance, record)
         else:
-            with self.db.connection(mode="a") as conn:
-                params = (pickle.dumps(data),)
-                conn.execute("UPDATE session_data SET obj = ?", params)
+            self.db.save_binary("session", data)
 
     def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:
         """Add ``path`` to this session's search paths"""
@@ -239,10 +216,7 @@ class Session:
             hook(self)
         finder.prepare()
         self.generators = finder.discover()
-        with self.db.connection(mode="a") as conn:
-            parameters: list[tuple[bytes]] = [(pickle.dumps(f),) for f in self.generators]
-            conn.execute("CREATE TABLE files (obj blob)")
-            conn.executemany("INSERT INTO files VALUES (?)", parameters)
+        self.db.save_binary("files", self.generators)
         logging.debug(f"Discovered {len(self.generators)} test files")
 
     def freeze(
@@ -264,15 +238,10 @@ class Session:
         cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
-        with self.db.connection(mode="a") as conn:
-            params: list[tuple[str, bytes]] = [(c.id, pickle.dumps(c)) for c in self.cases]
-            conn.execute("CREATE TABLE cases (id text, obj blob)")
-            conn.executemany("INSERT INTO cases VALUES (?, ?)", params)
-
-            params = [(c.id, pickle.dumps(_single_case_entry(c))) for c in self.cases]
-            conn.execute("CREATE TABLE snapshot (id text, obj blob)")
-            conn.executemany("INSERT INTO snapshot VALUES (?, ?)", params)
-
+        self.db.save_binary("cases", self.cases)
+        with self.db.open("snapshot", "w") as record:
+            for case in self.cases:
+                record.write(json.dumps(_single_case_entry(case)) + "\n")
         logging.debug(f"Collected {len(self.cases)} test cases from {len(self.generators)} files")
 
     def populate(self, copy_all_resources: bool = False) -> None:
@@ -307,9 +276,9 @@ class Session:
                     errors += 1
                     logging.error(f"{case}: exec_root not set after setup")
             ts.done(*group)
-        with self.db.connection(mode="a") as conn:
-            params = [(pickle.dumps(_single_case_entry(c)), c.id) for c in cases]
-            conn.executemany("UPDATE snapshot SET obj = ? WHERE id = ?", params)
+        with self.db.open("snapshot", "a") as record:
+            for case in cases:
+                record.write(json.dumps(_single_case_entry(case)) + "\n")
         if errors:
             raise ValueError("Stopping due to previous errors")
 
@@ -375,9 +344,8 @@ class Session:
 
     def bfilter(self, lot_no: Optional[int], batch_no: Optional[int]) -> list[TestCase]:
         lot_no = lot_no or len(os.path.join(self.config_dir, "batches"))
-        with self.db.connection(mode="r") as conn:
-            conn.execute("SELECT case_id FROM batches WHERE lot=? AND batch=?", (lot_no, batch_no))
-            batch_case_ids = [_[0] for _ in conn.fetchall()]
+        batch_info = self.db.load_json(f"batches/{lot_no}/index")
+        batch_case_ids = batch_info[str(batch_no)]
         for case in self.cases:
             if case.id in batch_case_ids:
                 assert not case.mask, case.mask
@@ -537,9 +505,8 @@ class Session:
 
         obj.refresh()
         if isinstance(obj, TestCase):
-            with self.db.connection(mode="a") as conn:
-                params: tuple[bytes, str] = (pickle.dumps(_single_case_entry(obj)), obj.id)
-                conn.execute("UPDATE snapshot SET obj = ? WHERE id = ?", params)
+            with self.db.open("snapshot", "a") as record:
+                record.write(json.dumps(_single_case_entry(obj)) + "\n")
             if fail_fast and obj.status != "success":
                 code = compute_returncode([obj])
                 raise FailFast(str(obj), code)
@@ -548,12 +515,14 @@ class Session:
             if all(case.status == "retry" for case in obj):
                 queue.retry(iid)
                 return
-            with self.db.connection(mode="r") as conn:
-                conn.execute("SELECT * FROM snapshot")
-                objs = [(id, pickle.loads(obj)) for id, obj in conn.fetchall()]
-            fd = dict(objs)
+            with self.db.open("snapshot", "r") as record:
+                lines = record.readlines()
+            snapshots: dict[str, dict] = {}
+            for line in lines:
+                snapshot = json.loads(line.strip())
+                snapshots[snapshot.pop("id")] = snapshot
             for case in obj:
-                if case.id not in fd:
+                if case.id not in snapshots:
                     logging.error(f"case ID {case.id} not in batch {obj.id}")
                     continue
                 if case.status.value == "running":
@@ -563,10 +532,10 @@ class Session:
                     pass
                 elif case.status.value == "ready":
                     case.status.set("skipped", "test skipped for unknown reasons")
-                elif case.status.value != fd[case.id]["status"].value:
+                elif case.status.value != snapshots[case.id]["status"][0]:
                     if config.get("config:debug"):
                         fs = case.status.value
-                        ss = fd[case.id]["status"].value
+                        ss = snapshots[case.id]["status"][0]
                         logging.warning(
                             f"batch {obj.id}, {case}: "
                             f"expected status of future.result to be {ss}, not {fs}"
@@ -604,16 +573,11 @@ class Session:
             raise ValueError("There are no cases to run in this session")
 
         if isinstance(queue, BatchResourceQueue):
-            with self.db.connection(mode="a") as conn:
-                params: Any = [(lot_no, b.id, c.id) for b in queue.queued() for c in b]
-                conn.execute(
-                    "CREATE TABLE IF NOT EXISTS batches (lot int, batch int, case_id text)"
-                )
-                conn.execute("CREATE TABLE IF NOT EXISTS batch_meta (lot int, meta blob)")
-                conn.executemany("INSERT INTO batches VALUES (?, ?, ?)", params)
-                params = (lot_no, pickle.dumps(rh.data["batch"]))
-                conn.execute("INSERT INTO batch_meta VALUES (?, ?)", params)
-
+            batches: dict[str, list[str]] = {}
+            for batch in queue.queued():
+                batches.setdefault(str(batch.id), []).extend([case.id for case in batch])
+            self.db.save_json(f"batches/{lot_no}/index", batches)
+            self.db.save_json(f"batches/{lot_no}/meta", rh.data["batch"])
         return queue
 
     def blogfile(self, batch_no: int, lot_no: Optional[int]) -> str:
@@ -770,9 +734,9 @@ def _single_case_entry(case: TestCase) -> dict:
         "id": case.id,
         "start": case.start,
         "finish": case.finish,
-        "status": case.status,
+        "status": [case.status.value, case.status.details],
         "returncode": case.returncode,
-        "dependencies": case.dependencies,
+        "dependencies": [dep.id for dep in case.dependencies],
     }
 
 

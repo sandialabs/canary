@@ -14,36 +14,28 @@ def random_chars():
 
 
 def create_db():
-    db = Database(os.getcwd(), mode="w")
-    with db.connection(mode="w") as conn:
-        conn.execute("CREATE TABLE foo (arg1 int, arg2 text)")
-
-
-def insert_db(i):
-    mode = "a" if not i % 2 else "r"
-    db = Database(os.getcwd())
-    with db.connection(mode=mode) as conn:
-        if mode == "r":
-            conn.execute("SELECT arg2 FROM foo")
-        else:
-            conn.execute("INSERT INTO foo VALUES (?, ?)", (i, random_chars()))
-
-
-def update_db (i):
-    db = Database(os.getcwd())
-    with db.connection(mode="a") as conn:
-        if i % 2:
-            conn.execute("INSERT INTO foo VALUES (?, ?)", (i, random_chars()))
-        else:
-            conn.execute("UPDATE foo SET arg2 = ? WHERE arg1 = ?", (random_chars(), i))
+    Database(os.getcwd(), mode="w")
 
 
 def read_db(i):
     db = Database(os.getcwd())
-    with db.connection(mode="r") as conn:
-        conn.execute("SELECT arg2 FROM foo WHERE arg1 = ?", (i,))
-        word = conn.fetchone()[0]
-        assert len(word) == 26, f"len({word}) = {len(word)}"
+    with db.open(f"foo-{i}", mode="r") as record:
+        parts = record.read().split()
+        assert parts[0] == str(i)
+
+
+def insert_db(i):
+    db = Database(os.getcwd())
+    with db.open(f"foo-{i}", mode="w") as record:
+        record.write(f"{i} {random_chars()}\n")
+
+
+def test_save_binary(tmpdir):
+    fs.mkdirp(tmpdir.strpath)
+    with fs.working_dir(tmpdir.strpath):
+        db = Database(os.getcwd(), mode="w")
+        db.save_binary("foo", [1, 2, 3, 4])
+        assert db.load_binary("foo") == [1, 2, 3, 4]
 
 
 def test_concurrency(tmpdir):
@@ -54,7 +46,5 @@ def test_concurrency(tmpdir):
         workers = os.cpu_count() - 1
         with multiprocessing.Pool(workers) as pool:
             pool.map(insert_db, range(a, b))
-        with multiprocessing.Pool(workers) as pool:
-            pool.map(update_db, range(a, b))
         with multiprocessing.Pool(workers) as pool:
             pool.map(read_db, range(a, b))

@@ -2,7 +2,6 @@ import functools
 import glob
 import importlib.resources as ir
 import os
-import pickle
 import sys
 from argparse import Namespace
 from typing import TYPE_CHECKING
@@ -186,10 +185,8 @@ def factory() -> Manager:
         # multiprocessing Pool so we reload the configuration that existed when that pool
         # was created
         db = Database(os.environ["NVTEST_SESSION_CONFIG_DIR"], mode="r")
-        with db.connection(mode="r") as cursor:
-            cursor.execute("SELECT * FROM plugin")
-            objs = cursor.fetchone()
-            return pickle.loads(objs[0])
+        if db.exists("plugin"):
+            return db.load_binary("plugin")
     return Manager()
 
 

@@ -1,6 +1,5 @@
 import argparse
 import os
-import pickle
 import sys
 import traceback
 from typing import TYPE_CHECKING
@@ -136,15 +135,11 @@ def run(args: "argparse.Namespace") -> int:
             parameter_expr=args.parameter_expr,
             rh=args.rh,
         )
-        d = os.path.join(session.config_dir, "batches/1")
-        if os.path.exists(d) and not args.batched_invocation:
+        if not args.batched_invocation and session.db.exists("batches/1"):
             # Reload batch info so that the tests can be rerun in the scheduler
             args.rh = args.rh or ResourceHandler()
-            with session.db.connection(mode="r") as conn:
-                conn.execute("SELECT meta FROM batch_meta")
-                obj = conn.fetchone()
-                batch_data = pickle.loads(obj[0])
-            for var, val in batch_data.items():
+            meta = session.db.load_json("batches/1/meta")
+            for var, val in meta.items():
                 if val is not None:
                     args.rh.set(f"batch:{var}", val)
         if not args.no_header:

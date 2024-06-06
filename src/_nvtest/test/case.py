@@ -455,9 +455,11 @@ class TestCase(Runner):
                     fs.force_symlink(relsrc, os.path.basename(self.file), echo=logging.info)
                 self.copy_sources_to_workdir(copy_all_resources=copy_all_resources)
 
-    def update(self, attrs: dict[str, object]) -> None:
+    def update(self, attrs: dict[str, object], skip_dependencies: bool = False) -> None:
         for key, val in attrs.items():
-            if key == "_status":
+            if key == "dependencies" and skip_dependencies:
+                continue
+            elif key == "_status":
                 if isinstance(val, (tuple, list)):
                     assert len(val) == 2
                     val = Status(val[0], val[1])
