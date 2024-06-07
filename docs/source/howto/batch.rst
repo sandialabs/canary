@@ -7,9 +7,14 @@ Tests can be run under a workload manager (scheduler) such as Slurm or PBS by ad
 
 .. code-block:: console
 
-  nvtest run [-b (count=N|length=T)] -b scheduler:SCHEDULER ...
+  nvtest run [-l batch:(count=N|length=T)] -l batch:scheduler=SCHEDULER ...
+  nvtest run [-b (count=N|length=T)] -b scheduler=SCHEDULER ...
 
 When run in "batch" mode, ``nvtest`` will group tests into "batches" and submit each batch to ``SCHEDULER``.
+
+.. note::
+
+  ``-b ARG=VAL`` is an alias for ``-l batch:ARG=VAL``
 
 Batching options
 ----------------
@@ -17,24 +22,24 @@ Batching options
 Batch size
 ..........
 
-* ``-b count=N``: group tests into ``N`` batches, each having approximately the same runtime.
-* ``-b length=T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Accepts Go's duration format eg ``1s``, ``1h``, ``4h30m30s``, etc, are accepted.
-* ``-b workers:N``: Run tests in this batch asynchronously with at most ``N`` workers.
+* ``-l batch:count=N``: group tests into ``N`` batches, each having approximately the same runtime.
+* ``-l batch:length=T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Accepts Go's duration format eg ``1s``, ``1h``, ``4h30m30s``, etc, are accepted.
+* ``-l batch:workers=N``: Run tests in this batch asynchronously with at most ``N`` workers.
 
 By default, tests are batched into groups based as follows:
 
 1. group cases by the number of compute nodes required to run; and
-2. partition each group into batches that complete in the time specified by ``-b length=T``.  A default length of 30 minutes is used if not otherwise specified.
+2. partition each group into batches that complete in the time specified by ``-l batch:length=T``.  A default length of 30 minutes is used if not otherwise specified.
 
 .. note::
 
-   ``-b count=N`` and ``-b length=T`` are mutually exclusive.
+   ``-l batch:count=N`` and ``-l batch:length=T`` are mutually exclusive.
 
 Batch scheduler
 ................
 
-* ``-b scheduler:S``: use scheduler ``S`` to run batches.
-* ``-b args:S``: pass args ``S`` directly to the scheduler.  Eg, ``-b args:--account=XYZ`` will pass ``--account=XYZ`` directly to the scheduler.
+* ``-l batch:scheduler=S``: use scheduler ``S`` to run batches.
+* ``-l batch:args=S``: pass args ``S`` directly to the scheduler.  Eg, ``-l batch:args=--account=XYZ`` will pass ``--account=XYZ`` directly to the scheduler.
 
 The following schedulers are supported:
 
@@ -50,15 +55,15 @@ Batch concurrency
 
 Batch concurrency can be controlled by
 
-* ``-l session:workers:N``: Submit ``N`` concurrent batches to the scheduler at any one time.  The default is 5.
-* ``-b workers:N``: Execute the batch asynchronously using a pool of at most ``N`` workers.  By default, the maximum number of available workers is used.
+* ``-l session:workers=N``: Submit ``N`` concurrent batches to the scheduler at any one time.  The default is 5.
+* ``-l batch:workers=N``: Execute the batch asynchronously using a pool of at most ``N`` workers.  By default, the maximum number of available workers is used.
 
 Examples
 --------
 
 * Run the nvtest example suite in 4 batches
 
-  .. command-output:: nvtest run -d TestResults.Batched -b scheduler:shell -b count=4 .
+  .. command-output:: nvtest run -d TestResults.Batched -l batch:scheduler=shell -l batch:count=4 .
     :cwd: /examples
     :extraargs: -rv -w
     :returncode: 30
@@ -66,7 +71,7 @@ Examples
 
 * Run the nvtest example suite in 4 batches, running tests in serial in each batch
 
-  .. command-output:: nvtest run -d TestResults.Batched -b scheduler:shell -b count=4 -b workers:1 .
+  .. command-output:: nvtest run -d TestResults.Batched -l batch:scheduler=shell -l batch:count=4 -l batch:workers=1 .
     :cwd: /examples
     :extraargs: -rv -w
     :returncode: 30

@@ -10,7 +10,7 @@ Machine resources
 Setting the number of workers
 -----------------------------
 
-The number of workers ``N`` be specified by the ``-l session:workers:N`` option to ``nvtest run``.  If the number of workers is not given, it will receive a default value based on the following:
+The number of workers ``N`` be specified by the ``-l session:workers=N`` option to ``nvtest run``.  If the number of workers is not given, it will receive a default value based on the following:
 
 * 5 for :ref:`batched <howto-run-batched>` test sessions,
 * the number of processors on the machine, otherwise.
@@ -21,9 +21,9 @@ Setting the number available processors
 The number of available processors is found through a system probe [#]_.  The number of available processors can be set with the following :ref:`configuration variables<userguide-config>`:
 
 * ``machine:cpu_count``
-* the product of ``machine:sockets_per_node`` and ``machine::cores_per_socket``
+* the product of ``machine:sockets_per_node`` and ``machine:cores_per_socket``
 
-or by the ``-l session:cpus:N`` option to :ref:`nvtest run <nvtest-run>`.
+or by the ``-l session:cpus=N`` option to :ref:`nvtest run <nvtest-run>`.
 
 Setting the number of processors required by a test
 ---------------------------------------------------
@@ -36,9 +36,9 @@ Setting the number available gpus
 The number of available gpus is defaults to zero.  The number of available gpus can be set with the following :ref:`configuration variables<userguide-config>`:
 
 * ``machine:gpu_count``
-* the product of ``machine:sockets_per_node`` and ``machine::gpus_per_socket``
+* the product of ``machine:sockets_per_node`` and ``machine:gpus_per_socket``
 
-or by the ``-l session:gpus:N`` option to :ref:`nvtest run <nvtest-run>`.
+or by the ``-l session:gpus=N`` option to :ref:`nvtest run <nvtest-run>`.
 
 Setting the number of gpus required by a test
 ---------------------------------------------

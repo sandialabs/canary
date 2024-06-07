@@ -1,3 +1,4 @@
+import io
 import math
 import shlex
 from types import SimpleNamespace
@@ -42,6 +43,13 @@ class ResourceHandler:
     def __getitem__(self, path: str) -> Any:
         scope, type = path.split(":")
         return self.data[scope][type]
+
+    def __repr__(self) -> str:
+        x = []
+        for scope in self.data:
+            for type, value in self.data[scope].items():
+                x.append(f"{scope}:{type}={value}")
+        return f"ResourceHandler({', '.join(x)})"
 
     def set(self, path: str, value: Any) -> None:
         scope, type = path.split(":")

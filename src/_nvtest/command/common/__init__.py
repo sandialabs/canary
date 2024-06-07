@@ -97,7 +97,7 @@ def add_batch_arguments(parser: "Parser") -> None:
         metavar="resource",
         dest="rh",
         default=None,
-        help=BatchSetter.help_page("-b"),
+        help="alias for -l batch:TYPE=VALUE"
     )
 
 
@@ -116,17 +116,23 @@ class ResourceSetter(argparse.Action):
         text = """\
 Defines resources that are required by the test session and establishes limits
 to the amount of resources that can be consumed. The %(r_arg)s argument is of
-the form: ``%(r_form)s``.  The possible ``%(r_form)s`` settings are\n\n
-• ``%(f)s session:workers=N``: Execute the test session asynchronously using a pool of at most N workers [default: auto]\n\n
-• ``%(f)s session:cpu_count=N``: Occupy at most N cpu cores at any one time.\n\n
-• ``%(f)s session:cpu_ids=L``: Comma separated list of CPU ids available to the session, mutually exclusive with session:cpu_count.\n\n
-• ``%(f)s session:gpu_count=N``: Occupy at most N gpus at any one time.\n\n
-• ``%(f)s session:gpu_ids=L``: Comma separated list of GPU ids available to the session, mutually exclusive with session:gpu_count.\n\n
-• ``%(f)s session:timeout=T``: Set a timeout on test session execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: 60m]\n\n
-• ``%(f)s test:cpus=[n:]N``: Skip tests requiring less than n and more than N cpu cores [default: 0 and machine cpu count]\n\n
-• ``%(f)s test:gpus=N``: Skip tests requiring more than N gpus.\n\n
-• ``%(f)s test:timeout=T``: Set a timeout on any single test execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s)\n\n
-• ``%(f)s test:timeoutx=R``: Set a timeout multiplier for all tests [default: 1.0]\n\n
+the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
+• session:workers=N: Execute the test session asynchronously using a pool of at most N workers [default: auto]\n\n
+• session:cpu_count=N: Occupy at most N cpu cores at any one time.\n\n
+• session:cpu_ids=L: Comma separated list of CPU ids available to the session, mutually exclusive with session:cpu_count.\n\n
+• session:gpu_count=N: Occupy at most N gpus at any one time.\n\n
+• session:gpu_ids=L: Comma separated list of GPU ids available to the session, mutually exclusive with session:gpu_count.\n\n
+• session:timeout=T: Set a timeout on test session execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: 60m]\n\n
+• test:cpus=[n:]N: Skip tests requiring less than n and more than N cpu cores [default: 0 and machine cpu count]\n\n
+• test:gpus=N: Skip tests requiring more than N gpus.\n\n
+• test:timeout=T: Set a timeout on any single test execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s)\n\n
+• test:timeoutx=R: Set a timeout multiplier for all tests [default: 1.0]\n\n
+• batch:count=N: Execute tests in N batches.\n\n
+• batch:length=T: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
+• batch:scheduler=S: Use scheduler 'S' to run the test batches.\n\n
+• batch:workers=N: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
+• batch:args=A: Any additional args 'A' are passed directly to the scheduler, for example,
+  batch:args=--account=ABC will pass --account=ABC to the scheduler
 """ % {"f": flag, "r_form": bold("scope:type=value"), "r_arg": bold(f"{flag} resource")}
         return text
 
@@ -167,55 +173,33 @@ the form: ``%(r_form)s``.  The possible ``%(r_form)s`` settings are\n\n
         elif match := re.search(r"^test:timeoutx[:=](.*)$", arg):
             raw = strip_quotes(match.group(1))
             return ("test:timeoutx", time_in_seconds(raw))
+        elif match := re.search(r"^batch:length[:=](.*)$", arg):
+            raw = strip_quotes(match.group(1))
+            length = time_in_seconds(raw)
+            if length <= 0:
+                raise ValueError("batch length <= 0")
+            return ("batch:length", time_in_seconds(raw))
+        elif match := re.search(r"^batch:(count|workers)[:=](\d+)$", arg):
+            type, raw = match.groups()
+            return (f"batch:{type}", int(raw))
+        elif match := re.search(r"^batch:scheduler[:=](\w+)$", arg):
+            raw = match.group(1)
+            return ("batch:scheduler", str(raw))
+        elif match := re.search(r"^batch:args[:=](.*)$", arg):
+            raw = strip_quotes(match.group(1))
+            return ("batch:args", shlex.split(raw))
         else:
             raise ValueError(f"invalid resource arg: {arg!r}")
 
 
 class BatchSetter(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
-        type, value = BatchSetter.parse(values)
+        key, value = ResourceSetter.parse(f"batch:{values}")
         rh = getattr(args, self.dest, None) or ResourceHandler()
-        rh.set(f"batch:{type}", value)
+        rh.set(key, value)
         rh.set("batch:batched", True)
         setattr(args, self.dest, rh)
         setattr(args, "batched_invocation", True)
-
-    @staticmethod
-    def parse(arg: str) -> tuple[str, Any]:
-        if match := re.search(r"^length[:=](.*)$", arg):
-            raw = strip_quotes(match.group(1))
-            length = time_in_seconds(raw)
-            if length <= 0:
-                raise ValueError("batch length <= 0")
-            return ("length", time_in_seconds(raw))
-        elif match := re.search(r"^(count|workers)[:=](\d+)$", arg):
-            type, raw = match.groups()
-            return (type, int(raw))
-        elif match := re.search(r"^scheduler[:=](\w+)$", arg):
-            raw = match.group(1)
-            return ("scheduler", str(raw))
-        elif match := re.search(r"^args[:=](.*)$", arg):
-            raw = strip_quotes(match.group(1))
-            return ("args", shlex.split(raw))
-        else:
-            raise ValueError(f"invalid batch arg: {arg!r}")
-
-    @staticmethod
-    def help_page(flag: str) -> str:
-        def bold(arg: str) -> str:
-            return colorize("@*{%s}" % arg)
-
-        resource_help = """\
-Defines how to batch test cases. The %(r_arg)s argument is of the form: ``%(r_form)s``.
-The possible possible ``%(r_form)s`` settings are\n\n
-• ``%(f)s count=N``: Execute tests in N batches.\n\n
-• ``%(f)s length=T``: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
-• ``%(f)s scheduler=S``: Use scheduler 'S' to run the test batches.\n\n
-• ``%(f)s workers=N``: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
-• ``%(f)s args=A``: Any additional args 'A' are passed directly to the scheduler, for example,
-  ``%(f)s args=--account=ABC`` will pass ``--account=ABC`` to the scheduler
-""" % {"f": flag, "r_form": bold("type:value"), "r_arg": bold(f"{flag} resource")}
-        return resource_help
 
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:
