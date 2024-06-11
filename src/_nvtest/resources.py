@@ -1,4 +1,3 @@
-import io
 import math
 import shlex
 from types import SimpleNamespace
@@ -45,7 +44,7 @@ class ResourceHandler:
         return self.data[scope][type]
 
     def __repr__(self) -> str:
-        x = []
+        x: list[str] = []
         for scope in self.data:
             for type, value in self.data[scope].items():
                 x.append(f"{scope}:{type}={value}")

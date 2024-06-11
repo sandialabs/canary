@@ -97,7 +97,7 @@ def add_batch_arguments(parser: "Parser") -> None:
         metavar="resource",
         dest="rh",
         default=None,
-        help="alias for -l batch:TYPE=VALUE"
+        help="alias for -l batch:TYPE=VALUE",
     )
 
 
@@ -133,7 +133,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • batch:workers=N: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
 • batch:args=A: Any additional args 'A' are passed directly to the scheduler, for example,
   batch:args=--account=ABC will pass --account=ABC to the scheduler
-""" % {"f": flag, "r_form": bold("scope:type=value"), "r_arg": bold(f"{flag} resource")}
+""" % {"r_form": bold("scope:type=value"), "r_arg": bold(f"{flag} resource")}
         return text
 
     @staticmethod
@@ -211,9 +211,3 @@ def filter_cases_by_status(cases: list["TestCase"], status: Union[tuple, str]) -
     if isinstance(status, str):
         status = (status,)
     return [c for c in cases if c.status.value in status]
-
-
-class ResourceError(Exception):
-    def __init__(self, action, values, message):
-        opt = "/".join(action.option_strings)
-        super().__init__(f"{opt} {values}: {message}")
