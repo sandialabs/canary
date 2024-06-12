@@ -470,7 +470,7 @@ def get_vvtest_attrs(case: "TestCase", baseline: bool = False, analyze: bool = F
     attrs["NAME"] = case.family
     attrs["TESTID"] = case.fullname
     attrs["PLATFORM"] = sys.platform.lower()
-    attrs["COMPILER"] = compiler_spec
+    attrs["COMPILER"] = compiler_spec or "UNKNOWN@UNKNOWN"
     attrs["TESTROOT"] = case.exec_root
     attrs["VVTESTSRC"] = ""
     attrs["PROJECT"] = ""
