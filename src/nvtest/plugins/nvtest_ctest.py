@@ -103,7 +103,15 @@ class CTestTestFile(TestGenerator):
                     fd = json.loads(line)
                     if "test" in fd:
                         td = tests.setdefault(fd["test"].pop("name"), {})
-                        td["args"] = [] if "args" not in fd["test"] else split(fd["test"]["args"])
+                        args = td.setdefault("args", [])
+                        if "args" in fd["test"]:
+                            a = cmsplit(fd["test"]["args"])
+                            if a[0] != cmake:
+                                args.extend(a)
+                            else:
+                                args.append(a[0])
+                                args.extend(group_cmargs(";".join(a[1:])))
+
                     elif "properties" in fd:
                         td = tests.setdefault(fd["properties"].pop("name"), {})
                         for key, details in fd["properties"].items():
@@ -113,7 +121,7 @@ class CTestTestFile(TestGenerator):
                             if type == "str":
                                 val = raw_value
                             elif type == "list_of_str":
-                                val = split(raw_value)
+                                val = cmsplit(raw_value)
                             elif type == "bool":
                                 val = boolean(raw_value)
                             elif type == "int":
@@ -135,13 +143,24 @@ def boolean(string: str) -> bool:
     return string.lower() in ("1", "on", "true", "yes")
 
 
-def split(string: str) -> list[str]:
+def cmsplit(string: str) -> list[str]:
     return [_.strip() for _ in string.split(";") if _.split()]
+
+
+def group_cmargs(string: str) -> list[str]:
+    p = None
+    parts = string.split("-P")
+    p = None if len(parts) == 1 else parts[1].strip(";")
+    parts = parts[0].split("-D")
+    args = [f"-D{_.strip(';')}" for _ in parts if _.split()]
+    if p:
+        args.extend(("-P", p))
+    return args
 
 
 def split_vars(string: str) -> dict[str, str]:
     vars: dict[str, str] = {}
-    for kv in split(string):
+    for kv in cmsplit(string):
         k, v = kv.split("=")
         vars[k] = v
     return vars
