@@ -97,7 +97,7 @@ def read_sinfo() -> dict:
             continue
         elif parts and parts[0].startswith("SOCKETS"):
             continue
-        spn, cps, _, cpn, nc = [int(_) for _ in parts]
+        spn, cps, _, cpn, nc = [integer(_) for _ in parts]
         break
     else:
         raise ValueError("Unable to read sinfo")
@@ -108,3 +108,9 @@ def read_sinfo() -> dict:
         "nodes": nc,
     }
     return info
+
+
+def integer(arg: str) -> int:
+    if arg.endswith("+"):
+        return int(arg[:-1])
+    return int(arg)
