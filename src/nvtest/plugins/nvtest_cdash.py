@@ -173,7 +173,7 @@ def create_reports(args):
             cdash_project=args.cdash_project,
             gitlab_url=args.gitlab_url,
             gitlab_project_id=args.gitlab_project_id,
-            data=args.data,
+            date=args.date,
             filtergroups=args.filter_groups,
             skip_sites=args.skip_sites,
             dont_close_missing=args.dont_close_missing,
