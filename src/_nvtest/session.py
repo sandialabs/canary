@@ -575,7 +575,7 @@ class Session:
         if isinstance(queue, BatchResourceQueue):
             batches: dict[str, list[str]] = {}
             for batch in queue.queued():
-                batches.setdefault(str(batch.id), []).extend([case.id for case in batch])
+                batches.setdefault(str(batch.batch_no), []).extend([case.id for case in batch])
             self.db.save_json(f"batches/{lot_no}/index", batches)
             self.db.save_json(f"batches/{lot_no}/meta", rh.data["batch"])
         return queue

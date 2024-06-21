@@ -49,6 +49,7 @@ class Batch(Runner):
         self.validate(cases)
         self.cases = list(cases)
         self.id = id
+        self.batch_no = id
         self.nbatches = nbatches
         self.lot_no = lot_no
         # self.id: str = hashit("".join(_.id for _ in self), length=20)
@@ -76,10 +77,8 @@ class Batch(Runner):
     def variables(self) -> dict[str, str]:
         return {
             "NVTEST_LOT_NO": str(self.lot_no),
-            "NVTEST_BATCH_NO": str(self.id),
-            "NVTEST_BATCH_ID": str(self.id),
+            "NVTEST_BATCH_NO": str(self.batch_no),
             "NVTEST_NBATCHES": str(self.nbatches),
-            "NVTEST_BATCH_LOT": str(self.lot_no),
             "NVTEST_LEVEL": "2",
             "NVTEST_DISABLE_KB": "1",
         }
@@ -146,11 +145,11 @@ class Batch(Runner):
         return os.path.join(self.root, ".nvtest/batches", str(self.lot_no))
 
     def submission_script_filename(self) -> str:
-        basename = f"submit.{self.nbatches}.{self.id}.sh"
+        basename = f"submit.{self.nbatches}.{self.batch_no}.sh"
         return os.path.join(self.stage, basename)
 
     def logfile(self) -> str:
-        basename = f"out.{self.nbatches}.{self.id}.txt"
+        basename = f"out.{self.nbatches}.{self.batch_no}.txt"
         return os.path.join(self.stage, basename)
 
     def setup(self) -> None:
@@ -166,7 +165,7 @@ class Batch(Runner):
 
     def start_msg(self) -> str:
         n = len(self.cases)
-        return f"SUBMITTING: Batch {self.id} of {self.nbatches} ({n} tests)"
+        return f"SUBMITTING: Batch {self.batch_no} of {self.nbatches} ({n} tests)"
 
     def end_msg(self) -> str:
         stat: dict[str, int] = {}
@@ -177,7 +176,7 @@ class Batch(Runner):
         st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
         duration: Optional[float] = self.total_duration if self.total_duration > 0 else None
         s = io.StringIO()
-        s.write(f"FINISHED: Batch {self.id} of {self.nbatches}, {st_stat} ")
+        s.write(f"FINISHED: Batch {self.batch_no} of {self.nbatches}, {st_stat} ")
         s.write(f"(time: {hhmmss(duration, threshold=0)}")
         if any(_.start > 0 for _ in self) and any(_.finish > 0 for _ in self):
             ti = min(_.start for _ in self if _.start > 0)
@@ -227,7 +226,7 @@ class SubShell(Batch):
         f = os.path.splitext(script.replace("/submit.", "/out."))[0] + ".txt"
         with open(f, "w") as fh:
             if config.get("option:r") == "v":
-                logging.emit(f"STARTING: Batch {self.id} of {self.nbatches}\n")
+                logging.emit(f"STARTING: Batch {self.batch_no} of {self.nbatches}\n")
             script_x(script, fail_on_error=False, output=fh, error=fh)
         return None
 
@@ -239,7 +238,7 @@ class SubShell(Batch):
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
         fh.write(f"# approximate runtime: {hhmmss(self.qtime * timeoutx)}\n")
-        fh.write(f"# batch {self.id} of {self.nbatches}\n")
+        fh.write(f"# batch {self.batch_no} of {self.nbatches}\n")
         fh.write("# test cases:\n")
         for case in self.cases:
             fh.write(f"# - {case.fullname}\n")
@@ -253,7 +252,7 @@ class SubShell(Batch):
             f"-l session:workers={workers} "
             f"-l session:cpu_ids={cpu_ids} "
             f"-l test:timeoutx={timeoutx} "
-            f"^{self.lot_no}:{self.id}\n)\n"
+            f"^{self.lot_no}:{self.batch_no}\n)\n"
         )
         f = self.submission_script_filename()
         mkdirp(os.path.dirname(f))
@@ -304,7 +303,7 @@ class Slurm(Batch):
             if len(parts) > 3 and parts[3]:
                 jobid = parts[3]
         else:
-            logging.error(f"Failed to find jobid for batch {self.id}/{self.nbatches}")
+            logging.error(f"Failed to find jobid for batch {self.batch_no}/{self.nbatches}")
             logging.log(
                 logging.ERROR,
                 f"    The following output was received from {self.command}:",
@@ -322,7 +321,7 @@ class Slurm(Batch):
                 state = self.poll(jobid)
                 if not running and state in ("R", "RUNNING"):
                     if config.get("option:r") == "v":
-                        logging.emit(f"STARTING: Batch {self.id} of {self.nbatches}\n")
+                        logging.emit(f"STARTING: Batch {self.batch_no} of {self.nbatches}\n")
                     running = True
                 if state is None:
                     return
@@ -378,7 +377,7 @@ class Slurm(Batch):
             fh.write(f"#SBATCH {arg}\n")
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(f"# batch {self.id} of {self.nbatches}\n")
+        fh.write(f"# batch {self.batch_no} of {self.nbatches}\n")
         fh.write(f"# approximate runtime: {hhmmss(qtime)}\n")
         fh.write("# test cases:\n")
         for case in self.cases:
@@ -390,7 +389,7 @@ class Slurm(Batch):
         fh.write(f"-l session:workers={workers} ")
         fh.write(f"-l session:cpu_count={session_cpus} ")
         fh.write(f"-l test:timeoutx={timeoutx} ")
-        fh.write(f"^{self.lot_no}:{self.id}\n)\n")
+        fh.write(f"^{self.lot_no}:{self.batch_no}\n)\n")
         f = self.submission_script_filename()
         mkdirp(os.path.dirname(f))
         with open(f, "w") as fp:
@@ -451,17 +450,21 @@ class PBS(Batch):
         dbg_flag = "-d" if config.get("config:debug") else ""
         workers = kwargs.get("workers", ns.cores_per_node)
         session_cpus = ns.nodes * ns.cores_per_node
+
+        args = list(args_in)
+        args.append(f"-l nodes={ns.nodes}:ppn={ns.cores_per_node}")
+        args.append(f"-l walltime={hhmmss(qtime * 1.25, threshold=0)}")
+        args.append("-j oe")
+        args.append(f"-o {self.logfile()}")
+
         fh = StringIO()
         fh.write(f"#!{self.shell}\n")
-        fh.write(f"#PBS -l nodes={ns.nodes}:ppn={ns.cores_per_node}")
-        fh.write(f"#PBS -l walltime={hhmmss(qtime)}\n")
-        fh.write("#PBS -j oe\n")
-        fh.write(f"#PBS -o {self.logfile()}\n")
         for arg in args_in:
             fh.write(f"#PBS {arg}\n")
+
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(f"# batch {self.id} of {self.nbatches}\n")
+        fh.write(f"# batch {self.batch_no} of {self.nbatches}\n")
         fh.write(f"# approximate runtime: {hhmmss(qtime)}\n")
         fh.write("# test cases:\n")
         for case in self.cases:
@@ -474,7 +477,7 @@ class PBS(Batch):
             f"-l session:workers={workers} "
             f"-l session:cpu_count={session_cpus} "
             f"-l test:timeoutx={timeoutx} "
-            f"^{self.lot_no}:{self.id}\n)\n"
+            f"^{self.lot_no}:{self.batch_no}\n)\n"
         )
         f = self.submission_script_filename()
         mkdirp(os.path.dirname(f))
@@ -514,7 +517,7 @@ class PBS(Batch):
         if len(parts) == 1 and parts[0]:
             jobid = parts[0]
         else:
-            logging.error(f"Failed to find jobid for batch {self.id}/{self.nbatches}")
+            logging.error(f"Failed to find jobid for batch {self.batch_no}/{self.nbatches}")
             logging.log(
                 logging.ERROR,
                 f"    The following output was received from {self.command}:",
@@ -532,7 +535,7 @@ class PBS(Batch):
                 state = self.poll(jobid)
                 if not running and state in ("R", "RUNNING"):
                     if config.get("option:r") == "v":
-                        logging.emit(f"STARTING: Batch {self.id} of {self.nbatches}\n")
+                        logging.emit(f"STARTING: Batch {self.batch_no} of {self.nbatches}\n")
                     running = True
                 if state is None:
                     return
