@@ -133,7 +133,13 @@ def setup_parser(parser):
     p.add_argument("--gitlab-project-id", type=int, required=True, help="The GitLab project's ID")
     p.add_argument("-a", dest="access_token", help="The GitLab read/write API access token.")
     p.add_argument("-d", "--date", help="Date to retrieve from CDash")
-    p.add_argument("-f", "--filtergroups", action="append", help="Groups to pull down from CDash")
+    p.add_argument(
+        "-f",
+        "--filtergroups",
+        dest="filter_groups",
+        action="append",
+        help="Groups to pull down from CDash",
+    )
     p.add_argument(
         "--skip-site",
         default=None,
@@ -985,7 +991,7 @@ def generate_test_issue(name, realizations):
     s_today = datetime.date.today().strftime("%b %d, %Y")
     notes = io.StringIO()
     m = {"Diffed": "diffing", "Failed": "failing", "Timeout": "timing out"}
-    notes.write(f"Realizations {m[fail_reason]} as of {s_today}:\n\n")
+    notes.write(f"Realizations {m.get(fail_reason, 'Failed')} as of {s_today}:\n\n")
     sites = []
     for realization in realizations:
         site = realization["site"]
@@ -1108,7 +1114,8 @@ def test_status_label(status):
         label = "timeout"
     else:
         label = status
-    assert label in ("diff", "fail", "timeout")
+    if abel not in ("diff", "fail", "timeout"):
+        label = "fail"
     scoped_label = f"test::{label}"
     return scoped_label
 
