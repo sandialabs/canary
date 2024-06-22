@@ -2,6 +2,7 @@ import math
 import shlex
 from types import SimpleNamespace
 from typing import Any
+from typing import Optional
 
 from . import config
 
@@ -42,6 +43,13 @@ class ResourceHandler:
     def __getitem__(self, path: str) -> Any:
         scope, type = path.split(":")
         return self.data[scope][type]
+
+    def get(self, path: str, default: Optional[Any] = None) -> Optional[Any]:
+        scope, type = path.split(":")
+        try:
+            return self.data[scope][type]
+        except KeyError:
+            return default
 
     def __repr__(self) -> str:
         x: list[str] = []
@@ -177,10 +185,6 @@ class ResourceHandler:
             raise ValueError(f"unknown resource name: {path!r}")
 
         self.data[scope][type] = value
-
-    def get(self, path: str) -> Any:
-        scope, type = path.split(":")
-        return self.data[scope][type]
 
 
 def calculate_allocations(tasks: int) -> SimpleNamespace:
