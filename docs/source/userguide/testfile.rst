@@ -57,23 +57,23 @@ Test case expansion
 
 Test files define one or more *test cases*.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a single test file defines parameters that expand to define multiple test cases whose names are a combination of the basename of the test file and parameter/name pairs.  For example:
 
-.. literalinclude:: /examples/parameterize/test1.pyt
+.. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
     :lines: 2-4
 
 would expand into two test instances, one with the parameter ``np=1`` and one with ``np=4``.  Each test case would execute in its own directory and the test script should query for the value of ``np`` and adjust the test accordingly.  Test parameters and other test-specific and runtime-specific information are accessed from the ``nvtest.test.instance`` object which is accessible via ``nvtest.get_instance()``:
 
-.. literalinclude:: /examples/parameterize/test1.pyt
+.. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
     :lines: 2-8
 
 A complete example
 ------------------
 
-.. literalinclude:: /examples/parameterize/test1.pyt
+.. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
 
 This test file would expand into two test instances, one with the parameter ``np=1`` and one with ``np=4``, as seen with the ``nvtest describe`` command:
 
-.. command-output:: nvtest describe parameterize/test1.pyt
+.. command-output:: nvtest describe parameterize/parameterize1.pyt
     :cwd: /examples

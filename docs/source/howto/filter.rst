@@ -8,7 +8,7 @@ The tests that are selected to run in a given ``nvtest`` invocation is called "f
 Filter by keyword
 -----------------
 
-Using ``-k`` on the command line, filters (selects) tests based on the keywords defined in each test. For example, consider two test files, ``test1.pyt``:
+Using ``-k`` on the command line, filters (selects) tests based on the keywords defined in each test. For example, consider two test files, ``parameterize1.pyt``:
 
 .. code-block:: python
 
@@ -16,15 +16,15 @@ Using ``-k`` on the command line, filters (selects) tests based on the keywords 
    nvtest.directives.keywords("3D", "mhd", "circuit")
    print("running test1")
 
-and ``test2.pyt``:
+and ``parameterize2.pyt``:
 
 .. code-block:: python
 
    import nvtest
    nvtest.directives.keywords("3D", "mhd", "conduction")
-   print("running test2")
+   print("running parameterize2")
 
-Using the command ``nvtest run -k 3D`` would cause both tests to run, because they both have the keyword ``3D``. Using the command ``nvtest run -k circuit`` would run only ``test2``, because only that test has the ``circuit`` keyword defined.
+Using the command ``nvtest run -k 3D`` would cause both tests to run, because they both have the keyword ``3D``. Using the command ``nvtest run -k circuit`` would run only ``parameterize2``, because only that test has the ``circuit`` keyword defined.
 
 ``-k`` can accept python expressions, eg, ``nvtest -k '3D and conduction'`` means run tests that satisfy the statement "3D is present in the keywords AND conduction is present".
 

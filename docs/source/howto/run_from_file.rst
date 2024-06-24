@@ -50,7 +50,7 @@ where ``<root>`` is a parent directory of the tests and ``<path_i>`` are the fil
 .. command-output:: nvtest tree --exclude-results .
     :cwd: /examples
 
-To run only ``centered_space/test.pyt`` and ``parameterize/test2.pyt``, write the following to ``tests.json``
+To run only ``centered_space/centered_space.pyt`` and ``parameterize/parameterize2.pyt``, write the following to ``tests.json``
 
 .. literalinclude:: /examples/tests.json
     :language: json

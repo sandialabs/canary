@@ -1114,7 +1114,7 @@ def test_status_label(status):
         label = "timeout"
     else:
         label = status
-    if abel not in ("diff", "fail", "timeout"):
+    if label not in ("diff", "fail", "timeout"):
         label = "fail"
     scoped_label = f"test::{label}"
     return scoped_label

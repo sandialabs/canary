@@ -6,7 +6,7 @@ Run only the analysis section of a test
 After a test is run, the verification and analysis sections can be run with the :ref:`nvtest analyze<nvtest-analyze>`
 command.  Consider the test introduced in :ref:`howto-execute-and-analyze`, repeated here for convenience:
 
-.. literalinclude:: /examples/execute_and_analyze/test.pyt
+.. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :language: python
 
 After the test has been run, the verification and analysis section can be run without rerunning the (potentially expensive) test portion:
