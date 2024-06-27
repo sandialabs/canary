@@ -175,7 +175,7 @@ class TestCase(Runner):
 
     @property
     def status(self) -> Status:
-        if self._status.value == "pending":
+        if self._status.pending():
             # Determine if dependent cases have completed and, if so, flip status to 'ready'
             if not self.dependencies:
                 raise ValueError("should never have a pending case without dependencies")
@@ -200,6 +200,12 @@ class TestCase(Runner):
             self._status.set(arg["value"], details=arg["details"])
         else:
             self._status.set(arg[0], details=arg[1])
+
+    def complete(self) -> bool:
+        return self.status.complete()
+
+    def ready(self) -> bool:
+        return self.status.ready()
 
     def matches(self, pattern) -> bool:
         if pattern.startswith("/") and self.id.startswith(pattern[1:]):
@@ -395,30 +401,17 @@ class TestCase(Runner):
 
     @contextmanager
     def rc_environ(self) -> Generator[None, None, None]:
-        save_env: dict[str, Optional[str]] = {}
+        save_env = os.environ.copy()
         variables = dict(PYTHONPATH=self.pythonpath)
         variables.update(self.variables)
         for var, val in variables.items():
-            save_env[var] = os.environ.pop(var, None)
             os.environ[var] = val
         yield
-        for var, save_val in save_env.items():
-            if save_val is not None:
-                os.environ[var] = save_val
-            else:
-                os.environ.pop(var)
+        os.environ.clear()
+        os.environ.update(save_env)
 
     def compressed_log(self) -> str:
-        done = self.status.value in (
-            "success",
-            "xfail",
-            "xdiff",
-            "skipped",
-            "diffed",
-            "failed",
-            "timeout",
-        )
-        if done:
+        if self.status.complete():
             kb_to_keep = 2 if self.status == "success" else 300
             compressed_log = compress_file(self.logfile(), kb_to_keep)
             return compressed_log

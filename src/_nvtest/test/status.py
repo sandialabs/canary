@@ -67,6 +67,21 @@ class Status:
     def __hash__(self) -> int:
         return hash(f"{self.value}%{self.details}")
 
+    def complete(self) -> bool:
+        value = self.value
+        return value in ("success", "xfail", "xdiff", "skipped", "diffed", "failed", "timeout")
+
+    def ready(self) -> bool:
+        return self.value == "ready"
+
+    def pending(self) -> bool:
+        return self.value == "pending"
+
+    def satisfies(self, arg: Union[str, tuple[str, ...]]) -> bool:
+        if isinstance(arg, str):
+            arg = (arg,)
+        return self.value in arg
+
     @staticmethod
     def glyph(status):
         map = {

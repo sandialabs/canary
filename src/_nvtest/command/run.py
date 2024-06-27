@@ -126,7 +126,7 @@ def run(args: "argparse.Namespace") -> int:
         if args.until == "populate":
             logging.info("done populating worktree")
             return 0
-        cases = [case for case in session.cases if case.status.value in ("pending", "ready")]
+        cases = [case for case in session.cases if case.status.satisfies(("pending", "ready"))]
     elif args.mode == "a":
         session = Session(args.work_tree, mode=args.mode)
         cases = session.filter(

@@ -93,7 +93,7 @@ def add_batch_arguments(parser: "Parser") -> None:
     group.add_argument("--batched-invocation", default=False, help=argparse.SUPPRESS)
     group.add_argument(
         "-b",
-        action=BatchSetter,
+        action=ResourceSetter,
         metavar="resource",
         dest="rh",
         default=None,
@@ -103,8 +103,13 @@ def add_batch_arguments(parser: "Parser") -> None:
 
 class ResourceSetter(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
-        key, value = ResourceSetter.parse(values)
         rh = getattr(args, self.dest, None) or ResourceHandler()
+        if option_string == "-b":
+            if not values.startswith("batch:"):
+                values = f"batch:{values}"
+            rh.set("batch:batched", True)
+            setattr(args, "batched_invocation", True)
+        key, value = ResourceSetter.parse(values)
         rh.set(key, value)
         setattr(args, self.dest, rh)
 
@@ -190,16 +195,6 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             return ("batch:args", shlex.split(raw))
         else:
             raise ValueError(f"invalid resource arg: {arg!r}")
-
-
-class BatchSetter(argparse.Action):
-    def __call__(self, parser, args, values, option_string=None):
-        key, value = ResourceSetter.parse(f"batch:{values}")
-        rh = getattr(args, self.dest, None) or ResourceHandler()
-        rh.set(key, value)
-        rh.set("batch:batched", True)
-        setattr(args, self.dest, rh)
-        setattr(args, "batched_invocation", True)
 
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:

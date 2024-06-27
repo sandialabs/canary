@@ -88,8 +88,7 @@ class Session:
             self.root = root
         self.config_dir = os.path.join(self.root, ".nvtest")
         self.batch_stage = os.path.join(self.root, ".nvtest/batches")
-        if "NVTEST_LEVEL" not in os.environ:
-            os.environ["NVTEST_LEVEL"] = "0"
+        os.environ.setdefault("NVTEST_LEVEL", "0")
         os.environ["NVTEST_SESSION_DIR"] = self.root
         os.environ["NVTEST_SESSION_CONFIG_DIR"] = self.config_dir
         self.mode = mode
@@ -271,7 +270,7 @@ class Session:
                 # Since setup is run in a multiprocessing pool, the internal
                 # state is lost and needs to be updated
                 case.refresh()
-                assert case.status.value in ("skipped", "ready", "pending")
+                assert case.status.satisfies(("skipped", "ready", "pending"))
                 if case.exec_root is None:
                     errors += 1
                     logging.error(f"{case}: exec_root not set after setup")
@@ -339,7 +338,7 @@ class Session:
                 else:
                     case.mask = color.colorize("deselected by @*b{when expression}")
 
-        cases = [case for case in self.cases if case.status.value in ("pending", "ready")]
+        cases = [case for case in self.cases if case.status.satisfies(("pending", "ready"))]
         return cases
 
     def bfilter(self, lot_no: Optional[int], batch_no: Optional[int]) -> list[TestCase]:
@@ -420,19 +419,15 @@ class Session:
 
     @contextmanager
     def rc_environ(self) -> Generator[None, None, None]:
-        save_env: dict[str, Optional[str]] = {}
-        variables = dict(config.get("variables"))
+        save_env = os.environ.copy()
+        variables = config.get("variables") or {}
         for var, val in variables.items():
-            save_env[var] = os.environ.pop(var, None)
             os.environ[var] = val
         level = logging.get_level()
         os.environ["NVTEST_LOG_LEVEL"] = logging.get_level_name(level)
         yield
-        for var, save_val in save_env.items():
-            if save_val is not None:
-                os.environ[var] = save_val
-            else:
-                os.environ.pop(var)
+        os.environ.clear()
+        os.environ.update(save_env)
 
     def process_queue(
         self,
@@ -525,14 +520,14 @@ class Session:
                 if case.id not in snapshots:
                     logging.error(f"case ID {case.id} not in batch {obj.id}")
                     continue
-                if case.status.value == "running":
+                if case.status == "running":
                     # Job was cancelled
                     case.status.set("cancelled", "batch cancelled")
-                elif case.status.value == "skipped":
+                elif case.status == "skipped":
                     pass
-                elif case.status.value == "ready":
+                elif case.status == "ready":
                     case.status.set("skipped", "test skipped for unknown reasons")
-                elif case.status.value != snapshots[case.id]["status"][0]:
+                elif case.status != snapshots[case.id]["status"][0]:
                     if config.get("config:debug"):
                         fs = case.status.value
                         ss = snapshots[case.id]["status"][0]
@@ -563,11 +558,11 @@ class Session:
         for case in cases:
             if case.status == "skipped":
                 case.save()
-            elif case.status.value not in ("ready", "pending"):
+            elif not case.status.satisfies(("ready", "pending")):
                 raise ValueError(f"{case}: case is not ready or pending")
             elif case.exec_root is None:
                 raise ValueError(f"{case}: exec root is not set")
-        queue.put(*[case for case in cases if case.status.value in ("ready", "pending")])
+        queue.put(*[case for case in cases if case.status.satisfies(("ready", "pending"))])
         queue.prepare(**kwds)
         if queue.empty():
             raise ValueError("There are no cases to run in this session")

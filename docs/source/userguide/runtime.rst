@@ -11,7 +11,14 @@ Test runtimes are written to ``<root>/.nvtest_cache/timing``, where ``<root>`` i
 Timeout
 -------
 
-A test case's timeout can be set by the :ref:`timeout <directive-timeout>` directive.  If the timeout is not explicitly set, it is set based on the presence of the ``fast`` and ``long`` keywords in a manner similar to `vvtest <https://cee-gitlab.sandia.gov/scidev/vvtest>`_:
+A test case's timeout can be set by the :ref:`timeout <directive-timeout>` directive.  For example, to set a tests timeout to 5 minutes add the following the test file:
+
+.. code-block:: python
+
+   import nvtest
+   nvtest.directives.timeout(5 * 60)
+
+If the timeout is not explicitly set, it is set based on the presence of the ``fast`` and ``long`` keywords in a manner similar to `vvtest <https://cee-gitlab.sandia.gov/scidev/vvtest>`_:
 
 * If a test is marked ``fast``, its timeout defaults to 30 seconds.
 * If a test is marked ``long``, its timeout defaults to 10 minutes.
@@ -22,8 +29,29 @@ These values are configurable in the ``test:timeout`` :ref:`configuration settin
 .. code-block:: ini
 
    [test:timeout]
-   fast = 30 sec
-   long = 10 min
-   default = 5 min
+   fast = 30s
+   long = 10m
+   default = 5m
 
-The timeout can also be set from the command line by ``-l test:timeout:T``.  This timeout will be applied to all tests in the session.
+which can also be set from the command line, eg:
+
+.. code-block:: console
+
+   nvtest -c test:timeout:fast:60s ...
+
+A timeout ``T`` for all tests in a session can also be set on the command line:
+
+.. code-block:: console
+
+   nvtest run -l test:timeout=T
+
+Timeout multiplier
+------------------
+
+You may also want to increase the timeout applied to tests.  Do so by specifying the ``--timeout-multiplier`` option:
+
+.. code-block:: console
+
+   nvtest run --timeout-multiplier=X ...
+
+In this case, the timeout for each test will be the ``X`` times the tests default timeout.
