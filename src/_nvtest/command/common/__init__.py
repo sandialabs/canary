@@ -38,7 +38,7 @@ def add_mark_arguments(parser: "Parser") -> None:
         default=None,
         metavar="expression",
         help="Only run tests matching given keyword expression. "
-        "For example: ``-k 'key1 and not key2'``.",
+        "For example: `-k 'key1 and not key2'`.",
     )
     group.add_argument(
         "-o",
@@ -46,14 +46,14 @@ def add_mark_arguments(parser: "Parser") -> None:
         default=[],
         metavar="option",
         action="append",
-        help="Turn option(s) on, such as ``-o dbg`` or ``-o intel``",
+        help="Turn option(s) on, such as '-o dbg' or '-o intel'",
     )
     group.add_argument(
         "-p",
         dest="parameter_expr",
         metavar="expression",
         default=None,
-        help="Filter tests by parameter name and value, such as ``-p np=8`` or ``-p np<8``",
+        help="Filter tests by parameter name and value, such as '-p np=8' or '-p np<8'",
     )
 
 
@@ -97,8 +97,12 @@ def add_batch_arguments(parser: "Parser") -> None:
         metavar="resource",
         dest="rh",
         default=None,
-        help="alias for -l batch:TYPE=VALUE",
+        help="alias for -l batch:%s=%s" % (bold("type"), bold("value")),
     )
+
+
+def bold(arg: str) -> str:
+    return colorize("@*{%s}" % arg)
 
 
 class ResourceSetter(argparse.Action):
@@ -115,9 +119,6 @@ class ResourceSetter(argparse.Action):
 
     @staticmethod
     def help_page(flag: str) -> str:
-        def bold(arg: str) -> str:
-            return colorize("@*{%s}" % arg)
-
         text = """\
 Defines resources that are required by the test session and establishes limits
 to the amount of resources that can be consumed. The %(r_arg)s argument is of

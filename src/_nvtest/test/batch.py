@@ -83,6 +83,26 @@ class Batch(Runner):
             "NVTEST_DISABLE_KB": "1",
         }
 
+    def nvtest_invocation(
+        self, *, workers: int, cpus: Optional[int] = None, timeoutx: float = 1.0
+    ) -> str:
+        fp = StringIO()
+        fp.write("nvtest ")
+        if config.get("config:debug"):
+            fp.write("-d ")
+        fp.write(f"-C {self.root} run -rv ")
+        if config.get("option:fail_fast"):
+            fp.write("--fail-fast ")
+        fp.write(f"-l session:workers={workers} ")
+        if cpus is None:
+            cpu_ids = ",".join(str(_) for _ in self.cpu_ids)
+            fp.write(f"-l session:cpu_ids={cpu_ids} ")
+        else:
+            fp.write(f"-l session:cpu_count={cpus} ")
+        fp.write(f"-l test:timeoutx={timeoutx} ")
+        fp.write(f"^{self.lot_no}:{self.batch_no}")
+        return fp.getvalue()
+
     def validate(self, cases: Union[list[TestCase], set[TestCase]]):
         errors = 0
         for case in cases:
@@ -231,7 +251,6 @@ class SubShell(Batch):
         return None
 
     def write_submission_script(self, *args: str, **kwargs: Any) -> str:
-        dbg_flag = "-d" if config.get("config:debug") else ""
         timeoutx = kwargs.get("timeoutx", 1.0)
         fh = StringIO()
         fh.write(f"#!{self.shell}\n")
@@ -246,14 +265,8 @@ class SubShell(Batch):
         for var, val in self.variables.items():
             fh.write(f"export {var}={val}\n")
         workers = kwargs.get("workers", 1)
-        cpu_ids = ",".join(str(_) for _ in self.cpu_ids)
-        fh.write(
-            f"(\n  nvtest -d {dbg_flag} -C {self.root} run -rv "
-            f"-l session:workers={workers} "
-            f"-l session:cpu_ids={cpu_ids} "
-            f"-l test:timeoutx={timeoutx} "
-            f"^{self.lot_no}:{self.batch_no}\n)\n"
-        )
+        invocation = self.nvtest_invocation(workers=workers, timeoutx=timeoutx)
+        fh.write(f"(\n  {invocation}\n)\n")
         f = self.submission_script_filename()
         mkdirp(os.path.dirname(f))
         with open(f, "w") as fp:
@@ -370,7 +383,6 @@ class Slurm(Batch):
         args.append(f"--error={file}")
         args.append(f"--output={file}")
 
-        dbg_flag = "-d" if config.get("config:debug") else ""
         fh = StringIO()
         fh.write(f"#!{self.shell}\n")
         for arg in args:
@@ -385,11 +397,8 @@ class Slurm(Batch):
         fh.write(f"# total: {len(self.cases)} test cases\n")
         for var, val in self.variables.items():
             fh.write(f"export {var}={val}\n")
-        fh.write(f"(\n  nvtest {dbg_flag} -C {self.root} run -rv ")
-        fh.write(f"-l session:workers={workers} ")
-        fh.write(f"-l session:cpu_count={session_cpus} ")
-        fh.write(f"-l test:timeoutx={timeoutx} ")
-        fh.write(f"^{self.lot_no}:{self.batch_no}\n)\n")
+        invocation = self.nvtest_invocation(workers=workers, cpus=session_cpus, timeoutx=timeoutx)
+        fh.write(f"(\n  {invocation}\n)\n")
         f = self.submission_script_filename()
         mkdirp(os.path.dirname(f))
         with open(f, "w") as fp:
@@ -472,13 +481,8 @@ class PBS(Batch):
         fh.write(f"# total: {len(self.cases)} test cases\n")
         for var, val in self.variables.items():
             fh.write(f"export {var}={val}\n")
-        fh.write(
-            f"(\n  nvtest {dbg_flag} -C {self.root} run -rv "
-            f"-l session:workers={workers} "
-            f"-l session:cpu_count={session_cpus} "
-            f"-l test:timeoutx={timeoutx} "
-            f"^{self.lot_no}:{self.batch_no}\n)\n"
-        )
+        invocation = self.nvtest_invocation(workers=workers, cpus=session_cpus, timeoutx=timeoutx)
+        fh.write(f"(\n  {invocation}\n)\n")
         f = self.submission_script_filename()
         mkdirp(os.path.dirname(f))
         with open(f, "w") as fp:

@@ -156,26 +156,26 @@ The behavior %(run)s is context dependent.
 For %(new)s test sessions, the %(pathspec)s argument is scanned for test files to add
 to the session.  %(pathspec)s can be one (or more) of the following types:
 
-* directory name:  the directory is recursively searched for test files ending in
-  ``.vvt`` or ``.pyt`` (specific file extensions are configurable);
-* ``.vvt`` or ``.pyt`` file: specific test files; and
-* json or yaml file: file containing specific paths to tests and/or directories.
+• directory name: the directory is recursively searched for test files ending in
+  '.vvt', '.pyt', or CTestTestfile.cmake;
+• '.vvt', '.pyt', or CTestTestfile.cmake file: specific test files; and
+• '.json' or '.yaml' file: file containing specific paths to tests and/or directories with the following schema:
 
-The input file has the following schema::
+  .. code-block:: yaml
 
-   testpaths:
-   - root: str
-     paths: [path, ...]
+    testpaths:
+    - root: str
+      paths: [path, ...]
 
-where %(paths)s is a list of file paths relative to %(root)s.
+  where %(paths)s is a list of file paths relative to %(root)s.
 
 For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests to rerun.
 %(pathspec)s can be one (or more) of the following types:
 
-* directory name: run test files in this directory and its children;
-* test id: run this specific test, specified as ``%(id)s``;
-* test file: run the test defined in this file; and
-* batch number: run this batch of tests, specified as ``%(batch_no)s``.
+• directory name: run test files in this directory and its children;
+• test id: run this specific test, specified as ``%(id)s``;
+• test file: run the test defined in this file; and
+• batch number: run this batch of tests, specified as ``%(batch_no)s``.
 """ % {
             "run": bold("nvtest run"),
             "new": bold("new"),
