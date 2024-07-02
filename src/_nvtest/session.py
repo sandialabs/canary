@@ -1,3 +1,4 @@
+import datetime
 import glob
 import io
 import json
@@ -711,7 +712,14 @@ def cformat(case: TestCase, show_log: bool = False) -> str:
         return color.colorize(string)
     string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
     if case.duration > 0:
-        string += " (%.2fs.)" % case.duration
+        today = datetime.datetime.today()
+        start = datetime.datetime.fromtimestamp(case.start)
+        finish = datetime.datetime.fromtimestamp(case.finish)
+        dt = today - start
+        fmt = "%H:%m:%S" if dt.days <= 1 else "%M %d %H:%m:%S"
+        a = start.strftime(fmt)
+        b = finish.strftime(fmt)
+        string += f" started: {a}, finished: {b}, duration: {case.duration:.2f}s."
     elif case.status == "skipped":
         string += ": Skipped due to %s" % case.status.details
     if show_log:

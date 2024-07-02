@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 description = "Print locations of test files and directories"
 epilog = """\
-If no options are give, -l is assumed.
+If no options are give, -x is assumed.
 
 Note: this command must be run from inside of a test session directory.
 """
