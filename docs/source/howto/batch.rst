@@ -24,7 +24,6 @@ Batch size
 
 * ``-l batch:count=N``: group tests into ``N`` batches, each having approximately the same runtime.
 * ``-l batch:length=T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Accepts Go's duration format eg ``1s``, ``1h``, ``4h30m30s``, etc, are accepted.
-* ``-l batch:workers=N``: Run tests in this batch asynchronously with at most ``N`` workers.
 
 By default, tests are batched into groups based as follows:
 

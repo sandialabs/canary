@@ -17,6 +17,7 @@ The how-to guides in the documentation were auto-generated using a set of exampl
 
    finding
    basic
+   rerun
    run_from_file
    batch
    parameterize

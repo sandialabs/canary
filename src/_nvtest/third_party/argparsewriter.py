@@ -87,6 +87,8 @@ class ArgparseWriter(argparse.HelpFormatter):
         positionals = []
         subcommands = []
         for action in actions:
+            if action.help == argparse.SUPPRESS:
+                continue
             if action.option_strings:
                 flags = action.option_strings
                 dest_flags = fmt._format_action_invocation(action)

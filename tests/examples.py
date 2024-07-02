@@ -41,7 +41,7 @@ def test_execute_and_analyze(tmp_path):
 
 def test_status(tmp_path):
     with working_dir(tmp_path):
-        assert nvtest("run", "-w", f"{examples_dir}/status") == 22
+        assert nvtest("run", "-w", f"{examples_dir}/status") == 30
 
 
 def test_xstatus(tmp_path):
