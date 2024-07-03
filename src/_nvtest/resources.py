@@ -5,6 +5,7 @@ from typing import Any
 from typing import Optional
 
 from . import config
+from .util.string import strip_quotes
 
 schedulers = ("slurm", "shell", None)
 
@@ -21,13 +22,13 @@ class ResourceHandler:
                 "gpu_count": gpu_count,
                 "gpu_ids": list(range(gpu_count)),
                 "workers": -1,
-                "timeout": -1.0,
+                "timeout": None,
                 "meta": {},
             },
             "test": {
                 "cpus": [0, cpu_count],
                 "gpus": gpu_count,
-                "timeout": -1.0,
+                "timeout": None,
                 "timeoutx": 1.0,
             },
             "batch": {
@@ -117,8 +118,7 @@ class ResourceHandler:
                 raise ValueError("session worker request exceeds machine cpu count")
 
         elif (scope, type) == ("session", "timeout"):
-            if value <= 0.0:
-                raise ValueError("session timeout must be > 0")
+            pass
 
         # --- test resources
         elif (scope, type) == ("test", "cpus"):
@@ -143,8 +143,7 @@ class ResourceHandler:
                 raise ValueError("test gpu request exceeds session gpu limit")
 
         elif (scope, type) == ("test", "timeout"):
-            if value <= 0.0:
-                raise ValueError("test timeout must be > 0")
+            pass
 
         elif (scope, type) == ("test", "timeoutx"):
             if value <= 0.0:
@@ -175,8 +174,8 @@ class ResourceHandler:
 
         elif (scope, type) == ("batch", "args"):
             if isinstance(value, str):
-                value = shlex.split(value)
-            value = self.data[scope][type] + value
+                value = shlex.split(strip_quotes(value))
+            value = self.data[scope][type] + list(value)
 
         elif (scope, type) == ("batch", "batched"):
             value = bool(value)
@@ -185,6 +184,8 @@ class ResourceHandler:
             raise ValueError(f"unknown resource name: {path!r}")
 
         self.data[scope][type] = value
+        if scope == "batch":
+            self.data["batch"]["batched"] = True
 
 
 def calculate_allocations(tasks: int) -> SimpleNamespace:

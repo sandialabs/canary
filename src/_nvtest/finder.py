@@ -195,7 +195,7 @@ class Finder:
             cpus=rh["test:cpus"],
             gpus=rh["test:gpus"],
             keyword_expr=keyword_expr,
-            timelimit=rh["test:timeout"],
+            timeout=rh["test:timeout"],
             parameter_expr=parameter_expr,
             on_options=on_options,
             owners=owners,

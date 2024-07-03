@@ -49,7 +49,7 @@ class CTestTestFile(TestGenerator):
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
-        timelimit: Optional[float] = None,
+        timeout: Optional[float] = None,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         cmake = self.find_cmake()

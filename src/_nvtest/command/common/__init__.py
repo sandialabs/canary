@@ -110,7 +110,6 @@ class ResourceSetter(argparse.Action):
         key, value = ResourceSetter.parse(values)
         rh.set(key, value)
         if key.startswith("batch:"):
-            rh.set("batch:batched", True)
             setattr(args, "batched_invocation", True)
         setattr(args, self.dest, rh)
 

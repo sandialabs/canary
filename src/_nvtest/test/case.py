@@ -585,7 +585,7 @@ class TestCase(Runner):
                     while True:
                         if proc.poll() is not None:
                             break
-                        if time.monotonic() - start > timeout:
+                        if timeout > 0 and time.monotonic() - start > timeout:
                             os.kill(proc.pid, signal.SIGINT)
                             return -2
                         time.sleep(0.05)

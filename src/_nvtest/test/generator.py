@@ -78,7 +78,7 @@ class TestGenerator(abc.ABC):
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
-        timelimit: Optional[float] = None,
+        timeout: Optional[float] = None,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         pass
@@ -200,7 +200,7 @@ class AbstractTestFile(TestGenerator):
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
-        timelimit: Optional[float] = None,
+        timeout: Optional[float] = None,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         try:
@@ -209,7 +209,7 @@ class AbstractTestFile(TestGenerator):
                 gpus=gpus,
                 keyword_expr=keyword_expr,
                 on_options=on_options,
-                timelimit=timelimit,
+                timeout=timeout,
                 parameter_expr=parameter_expr,
                 owners=owners,
             )
@@ -226,7 +226,7 @@ class AbstractTestFile(TestGenerator):
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
-        timelimit: Optional[float] = None,
+        timeout: Optional[float] = None,
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         min_cpus, max_cpus = cpus or (0, config.get("machine:cpu_count"))
@@ -301,18 +301,17 @@ class AbstractTestFile(TestGenerator):
                     family=name,
                     keywords=keywords,
                     parameters=parameters,
-                    timeout=self.timeout(testname=name, parameters=parameters),
+                    timeout=timeout or self.timeout(testname=name, parameters=parameters),
                     baseline=self.baseline(testname=name, parameters=parameters),
                     sources=self.sources(testname=name, parameters=parameters),
                     xstatus=self.xstatus(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
                 )
-                timelimit = timelimit or -1
                 if mask is not None:
                     case.mask = mask
-                elif timelimit > 0 and case.runtime > timelimit:
-                    case.mask = "runtime excceeds timelimt"
+                elif timeout is not None and timeout > 0 and case.runtime > timeout:
+                    case.mask = "runtime exceeds time limit"
                 for attr, value in attributes.items():
                     case.set_attribute(attr, value)
                 cases.append(case)
@@ -330,7 +329,7 @@ class AbstractTestFile(TestGenerator):
                     flag=analyze,
                     family=name,
                     keywords=self.keywords(testname=name),
-                    timeout=self.timeout(testname=name),
+                    timeout=timeout or self.timeout(testname=name),
                     baseline=self.baseline(testname=name),
                     sources=self.sources(testname=name),
                     xstatus=self.xstatus(
