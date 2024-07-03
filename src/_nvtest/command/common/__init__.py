@@ -12,7 +12,6 @@ __all__ = [
     "add_mark_arguments",
     "add_work_tree_arguments",
     "add_resource_arguments",
-    "add_batch_arguments",
 ]
 
 
@@ -87,9 +86,6 @@ def add_resource_arguments(parser: "Parser") -> None:
         help=ResourceSetter.help_page("-l"),
     )
 
-
-def add_batch_arguments(parser: "Parser") -> None:
-    group = parser.add_argument_group("batch control")
     group.add_argument("--batched-invocation", default=False, help=argparse.SUPPRESS)
     group.add_argument(
         "-b",
@@ -97,7 +93,7 @@ def add_batch_arguments(parser: "Parser") -> None:
         metavar="resource",
         dest="rh",
         default=None,
-        help="alias for -l batch:%s=%s" % (bold("type"), bold("value")),
+        help=argparse.SUPPRESS,
     )
 
 
@@ -111,10 +107,11 @@ class ResourceSetter(argparse.Action):
         if option_string == "-b":
             if not values.startswith("batch:"):
                 values = f"batch:{values}"
-            rh.set("batch:batched", True)
-            setattr(args, "batched_invocation", True)
         key, value = ResourceSetter.parse(values)
         rh.set(key, value)
+        if key.startswith("batch:"):
+            rh.set("batch:batched", True)
+            setattr(args, "batched_invocation", True)
         setattr(args, self.dest, rh)
 
     @staticmethod

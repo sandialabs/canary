@@ -7,10 +7,9 @@ import traceback
 from types import FunctionType
 from typing import Optional
 
+from . import command as cmd
 from . import config
 from . import plugin
-from .command import add_all_commands
-from .command import get_command
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
 from .util import logging
@@ -44,7 +43,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         for hook in plugin.plugins("main", "setup"):
             hook(parser)
 
-        add_all_commands(parser)
+        cmd.add_all_commands(parser)
 
         args = parser.parse_args(argv)
         config.set_main_options(args)
@@ -66,7 +65,7 @@ class NVTestCommand:
     def __init__(self, command_name: str, debug: bool = False) -> None:
         from _nvtest.util.executable import Executable
 
-        command_module = get_command(command_name)
+        command_module = cmd.get_command(command_name)
         if command_module is None:
             raise ValueError(f"Unknown command {command_name!r}")
         self.python = Executable(sys.executable)

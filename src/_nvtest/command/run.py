@@ -14,7 +14,6 @@ from ..util import graph
 from ..util import logging
 from ..util.banner import banner
 from .common import PathSpec
-from .common import add_batch_arguments
 from .common import add_mark_arguments
 from .common import add_resource_arguments
 from .common import add_work_tree_arguments
@@ -72,7 +71,6 @@ def setup_parser(parser: "Parser"):
         help="Do not link resources to the test directory, only copy [default: %(default)s]",
     )
     add_resource_arguments(parser)
-    add_batch_arguments(parser)
     parser.add_argument(
         "pathspec",
         metavar="pathspec",
