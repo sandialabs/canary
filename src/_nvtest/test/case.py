@@ -185,11 +185,11 @@ class TestCase(Runner):
             elif any([_ == "skipped" for _ in stat]):
                 self._status.set("skipped", "one or more dependency was skipped")
             elif any([_ == "cancelled" for _ in stat]):
-                self._status.set("skipped", "one or more dependency was cancelled")
+                self._status.set("not_run", "one or more dependency was cancelled")
             elif any([_ == "timeout" for _ in stat]):
-                self._status.set("skipped", "one or more dependency timed out")
+                self._status.set("not_run", "one or more dependency timed out")
             elif any([_ == "failed" for _ in stat]):
-                self._status.set("skipped", "one or more dependency failed")
+                self._status.set("not_run", "one or more dependency failed")
         return self._status
 
     @status.setter

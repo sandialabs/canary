@@ -4,6 +4,7 @@ import glob
 import io
 import json
 import os
+import re
 import sys
 import time
 import xml.dom.minidom as xdom
@@ -40,7 +41,7 @@ def setup_parser(parser):
     p.add_argument(
         "--site",
         metavar="name",
-        help="The site name that will be reported to CDash. " "[default: current system hostname]",
+        help="The site name that will be reported to CDash. [default: current system hostname]",
     )
     p.add_argument(
         "-f",
@@ -376,18 +377,21 @@ class CDashReporter(Reporter):
         for case in cases:
             add_text_node(testlist, "Test", f"./{case.fullname}")
         l1.appendChild(testlist)
+        not_done = ("retry", "created", "pending", "ready", "running", "cancelled", "skipped")
+        success = ("success", "xfail", "xdiff")
 
         status: str
         for case in cases:
             exit_value = case.returncode
             fail_reason = None
-            if case.mask or case.status.value in ("created", "pending", "ready", "cancelled"):
+            if case.mask or case.status.value in not_done:
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.status == "timeout":
-                status = "failed"
-                exit_code = completion_status = "Timeout"
+            elif case.status.value in success:
+                status = "passed"
+                exit_code = "Passed"
+                completion_status = "Completed"
             elif case.status == "diffed":
                 status = "failed"
                 exit_code = "Diffed"
@@ -398,19 +402,23 @@ class CDashReporter(Reporter):
                 exit_code = "Failed"
                 completion_status = "Completed"
                 fail_reason = "Test execution failed"
-            elif case.status == "success":
-                status = "passed"
-                exit_code = "Passed"
-                completion_status = "Completed"
+            elif case.status == "timeout":
+                status = "failed"
+                exit_code = completion_status = "Timeout"
+            elif case.status == "not_run":
+                status = "failed"
+                exit_code = "Not Run"
+                completion_status = "notrun"
+                fail_reason = "Not run due to failed dependency"
             else:
                 status = "failed"
                 exit_code = "No Status"
                 completion_status = "Completed"
             test_node = doc.createElement("Test")
             test_node.setAttribute("Status", status)
-            add_text_node(test_node, "Name", case.family)
-            add_text_node(test_node, "Path", f"./{case.fullname}")
-            add_text_node(test_node, "FullName", case.name)
+            add_text_node(test_node, "Name", case.display_name)
+            add_text_node(test_node, "Path", f"./{case.file_path}")
+            add_text_node(test_node, "FullName", case.fullname)
             add_text_node(test_node, "FullCommandLine", case.cmd_line)
             results = doc.createElement("Results")
 
@@ -965,7 +973,10 @@ def groupby_status_and_testname(tests):
     grouped = {}
     logging.info("Grouping failed tests by status and name")
     for test in tests:
-        name = test["name"].split(".")[0]
+        if re.search("\[.*\]", test["name"]):
+            name = test["name"].split("[")[0]
+        else:
+            name = test["name"].split(".")[0]
         details = test.pop("details")
         status = details_map.get(details, "Unknown")
         test["fail_reason"] = status
