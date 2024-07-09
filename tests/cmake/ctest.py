@@ -1,6 +1,7 @@
 import os
 
 import pytest
+from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import set_executable
 from _nvtest.util.filesystem import touchp
 from _nvtest.util.filesystem import which
@@ -43,12 +44,42 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         cases = file.freeze()
         assert len(cases) == 2
 
-        assert cases[0]._processors == 5
-        assert cases[0]._gpus == 5
-        assert "baz" in cases[0]._keywords
-        assert "SPAM" in cases[0].variables
+        case = cases[0]
+        assert case._processors == 5
+        assert case._gpus == 5
+        assert "foo" in case._keywords
+        assert "baz" in case._keywords
+        assert case.variables["CTEST_NUM_RANKS"] == "5"
+        assert case.variables["SPAM"] == "BAZ"
 
-        assert cases[1].launcher.endswith("mpiexec")
-        assert cases[1]._processors == 4
-        assert "foo" in cases[1]._keywords
-        assert "EGGS" in cases[1].variables
+        case = cases[1]
+        assert case.launcher.endswith("mpiexec")
+        assert case._processors == 4
+        assert "foo" in case._keywords
+        assert "spam" in case._keywords
+        assert case.variables["CTEST_NUM_RANKS"] == "5"
+        assert case.variables["EGGS"] == "SPAM"
+
+
+@pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
+def test_parse_ctesttestfile_1(tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        with open("foo.c", "w") as fh:
+            fh.write("int main() { return 0; }\n")
+        with open("CMakeLists.txt", "w") as fh:
+            fh.write("cmake_minimum_required(VERSION 3.1...3.28)\n")
+            fh.write("project(Foo VERSION 1.0 LANGUAGES C)\n")
+            fh.write("enable_testing()\n")
+            fh.write("add_executable(foo foo.c)\n")
+            fh.write("add_test(NAME foo COMMAND foo)\n")
+            fh.write('set_tests_properties(foo PROPERTIES LABELS "foo;baz" PROCESSORS 4)\n')
+        with working_dir("build", create=True):
+            cmake = Executable("cmake")
+            cmake("..")
+            file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
+            cases = file.freeze()
+            assert len(cases) == 1
+            case = cases[0]
+            assert case._processors == 4
+            assert "foo" in case._keywords
+            assert "baz" in case._keywords

@@ -16,8 +16,6 @@ from _nvtest.util import graph
 from _nvtest.util import logging
 from _nvtest.util.filesystem import is_exe
 
-build_types: dict[str, str] = {}
-
 
 class CTestTestFile(TestGenerator):
     def __init__(self, root: str, path: Optional[str] = None) -> None:
@@ -283,19 +281,37 @@ class CTestTestCase(TestCase):
         return self._gpus
 
 
-def find_build_type(directory) -> Optional[str]:
+class CMakeCache(dict):
+    def __init__(self, file: str) -> None:
+        self.directory = os.path.dirname(os.path.abspath(file))
+        with open(file) as fh:
+            for line in fh:
+                if line.strip().startswith("CMAKE_"):
+                    type = "string"
+                    var, val = [_.strip() for _ in line.split("=", 1)]
+                    if ":" in var:
+                        var, type = var.split(":", 1)
+                    self[var.replace("CMAKE_", "").lower()] = {"type": type, "value": val}
+
+
+cmake_caches: dict[str, CMakeCache] = {}
+
+
+def find_cmake_cache(directory: str) -> Optional[CMakeCache]:
     if directory == os.path.sep:
         return None
-    if directory in build_types:
-        return build_types[directory]
-    if os.path.exists(os.path.join(directory, "CMakeCache.txt")):
-        with open(os.path.join(directory, "CMakeCache.txt")) as fh:
-            for line in fh:
-                if line.strip().startswith("CMAKE_BUILD_TYPE"):
-                    _, build_type = line.split("=")
-                    build_types[directory] = build_type
-                    return build_type
-    return find_build_type(os.path.dirname(directory))
+    if directory in cmake_caches:
+        return cmake_caches[directory]
+    file = os.path.join(directory, "CMakeCache.txt")
+    if os.path.exists(file):
+        cmake_caches[directory] = CMakeCache(file)
+        return cmake_caches[directory]
+    return find_cmake_cache(os.path.dirname(directory))
+
+
+def find_build_type(directory: str) -> Optional[str]:
+    cache = find_cmake_cache(directory)
+    return None if cache is None else cache["build_type"]["value"]
 
 
 def is_mpi_launcher(arg: str) -> bool:
