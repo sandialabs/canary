@@ -969,6 +969,7 @@ def groupby_status_and_testname(tests):
         "Timeout (Timeout)": "Timeout",
         "Completed (Diffed)": "Diffed",
         "Completed (Failed)": "Failed",
+        "notrun (Not Run)": "Failed",
     }
     grouped = {}
     logging.info("Grouping failed tests by status and name")
