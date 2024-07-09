@@ -1119,15 +1119,15 @@ def create_new_issue(repo, new_issue_data):
 
 def test_status_label(status):
     if status == "Diffed":
-        label = "diff"
+        label = "diffed"
     elif status == "Failed":
-        label = "fail"
+        label = "failed"
     elif status == "Timeout":
         label = "timeout"
     else:
         label = status
-    if label not in ("diff", "fail", "timeout"):
-        label = "fail"
+    if label not in ("diffed", "failed", "timeout"):
+        label = "failed"
     scoped_label = f"test::{label}"
     return scoped_label
 
