@@ -22,6 +22,8 @@ from ..util.time import hhmmss
 from .case import TestCase
 from .runner import Runner
 
+schedulers = ("shell", "slurm", "pbs", "flux")
+
 
 class Batch(Runner):
     """A batch of test cases
@@ -440,7 +442,7 @@ class PBS(Batch):
     ) -> None:
         cores_per_socket = config.get("machine:cores_per_socket")
         if cores_per_socket is None:
-            raise ValueError("slurm runner requires that 'machine:cores_per_socket' be defined")
+            raise ValueError("PBS runner requires that 'machine:cores_per_socket' be defined")
         super().__init__(cases, id, nbatches, lot_no=lot_no)
 
     @property
@@ -576,6 +578,155 @@ class PBS(Batch):
         qdel(jobid)
 
 
+class Flux(Batch):
+    """Setup and submit jobs to the Flux scheduler"""
+
+    name = "flux"
+    shell = "/bin/sh"
+    command = "flux"
+
+    def __init__(
+        self,
+        cases: Union[list[TestCase], set[TestCase]],
+        id: int,
+        nbatches: int,
+        lot_no: int = 1,
+    ) -> None:
+        cores_per_socket = config.get("machine:cores_per_socket")
+        if cores_per_socket is None:
+            raise ValueError("flux runner requires that 'machine:cores_per_socket' be defined")
+        super().__init__(cases, id, nbatches, lot_no=lot_no)
+
+    @property
+    def processors(self) -> int:
+        return 1
+
+    @property
+    def gpus(self) -> int:
+        return 0
+
+    def write_submission_script(self, *args_in: str, **kwargs: Any) -> str:
+        """Write the flux submission script"""
+        ns = calculate_allocations(self.max_cpus_required)
+        timeoutx = kwargs.get("timeoutx", 1.0)
+        qtime = self.qtime * timeoutx
+        qtime_in_minutes = qtime // 60
+        if qtime % 60 > 0:
+            qtime_in_minutes += 1
+
+        workers = kwargs.get("workers", ns.cores_per_node)
+        session_cpus = ns.nodes * ns.cores_per_node
+
+        args = list(args_in)
+        args.append(f"--nodes={ns.nodes}")
+        args.append(f"--time-limit={qtime_in_minutes}")
+        args.append(f"--output={self.logfile()}")
+        args.append(f"--error={self.logfile()}")
+
+        fh = StringIO()
+        fh.write(f"#!{self.shell}\n")
+        for arg in args_in:
+            fh.write(f"#FLUX: {arg}\n")
+
+        fh.write(f"# user: {getuser()}\n")
+        fh.write(f"# date: {datetime.now().strftime('%c')}\n")
+        fh.write(f"# batch {self.batch_no} of {self.nbatches}\n")
+        fh.write(f"# approximate runtime: {hhmmss(qtime)}\n")
+        fh.write("# test cases:\n")
+        for case in self.cases:
+            fh.write(f"# - {case.fullname}\n")
+        fh.write(f"# total: {len(self.cases)} test cases\n")
+        for var, val in self.variables.items():
+            fh.write(f"export {var}={val}\n")
+        invocation = self.nvtest_invocation(workers=workers, cpus=session_cpus, timeoutx=timeoutx)
+        fh.write(f"(\n  {invocation}\n)\n")
+        f = self.submission_script_filename()
+        mkdirp(os.path.dirname(f))
+        with open(f, "w") as fp:
+            fp.write(fh.getvalue())
+        set_executable(f)
+        return f
+
+    @property
+    def qtime(self) -> float:
+        if len(self.cases) == 1:
+            return self.cases[0].timeout
+        total_runtime = self.runtime
+        if total_runtime < 100.0:
+            total_runtime = 300.0
+        elif total_runtime < 300.0:
+            total_runtime = 600.0
+        elif total_runtime < 600.0:
+            total_runtime = 1200.0
+        elif total_runtime < 1800.0:
+            total_runtime = 2400.0
+        elif total_runtime < 3600.0:
+            total_runtime = 5000.0
+        else:
+            total_runtime *= 1.1
+        return total_runtime
+
+    def _run(self, *args_in: str, **kwargs: Any) -> None:
+        script = self.write_submission_script(*args_in, **kwargs)
+        if not os.path.exists(script):
+            raise ValueError("submission script not found, did you call setup()?")
+        args = [self.command, "batch", "--job-name", os.path.basename(script), script]
+        p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        out, _ = p.communicate()
+        result = str(out.decode("utf-8")).strip()
+        parts = result.split()
+        if len(parts) == 1 and parts[0]:
+            jobid = parts[0]
+        else:
+            logging.error(f"Failed to find jobid for batch {self.batch_no}/{self.nbatches}")
+            logging.log(
+                logging.ERROR,
+                f"    The following output was received from {self.command}:",
+                prefix=None,
+            )
+            for line in result.split("\n"):
+                logging.log(logging.ERROR, f"    {line}", prefix=None)
+            return
+        logging.debug(f"Submitted batch with jobid={jobid}")
+
+        time.sleep(1)
+        running = False
+        try:
+            while True:
+                state = self.poll(jobid)
+                if state is None:
+                    return
+                if not running and state.lower() == "run":
+                    if config.get("option:r") == "v":
+                        logging.emit(f"STARTING: Batch {self.batch_no} of {self.nbatches}\n")
+                    running = True
+                time.sleep(0.5)
+        except BaseException as e:
+            logging.warning(f"cancelling flux job {jobid}")
+            self.cancel(jobid)
+            if isinstance(e, KeyboardInterrupt):
+                return
+            raise
+
+    def poll(self, jobid: str) -> Optional[str]:
+        flux = Executable("flux")
+        out = flux("jobs", "--no-header", "--format={id} {state}", output=str)
+        lines = [line.strip() for line in out.splitlines() if line.split()]
+        for line in lines:
+            # Output of flux jobs is something like:
+            # ID RUN
+            parts = line.split()
+            if len(parts) == 2:
+                jid, state = parts[0], parts[4]
+                if jid == jobid:
+                    return state
+        return None
+
+    def cancel(self, jobid: str) -> None:
+        flux = Executable("flux")
+        flux("cancel", jobid)
+
+
 def factory(
     cases: Union[list[TestCase], set[TestCase]],
     id: int,
@@ -588,6 +739,10 @@ def factory(
         batch = SubShell(cases, id, nbatches, lot_no)
     elif scheduler and scheduler.lower() == "slurm":
         batch = Slurm(cases, id, nbatches, lot_no)
+    elif scheduler and scheduler.lower() == "pbs":
+        batch = PBS(cases, id, nbatches, lot_no)
+    elif scheduler and scheduler.lower() == "flux":
+        batch = Flux(cases, id, nbatches, lot_no)
     else:
         raise ValueError(f"{scheduler}: Unknown batch scheduler")
     batch.setup()

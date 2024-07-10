@@ -7,6 +7,7 @@ from typing import Union
 from .resources import ResourceHandler
 from .test.batch import Batch
 from .test.batch import factory as b_factory
+from .test.batch import schedulers
 from .test.case import TestCase
 from .third_party import color
 from .third_party.rprobe import cpu_count
@@ -263,7 +264,7 @@ class BatchResourceQueue(ResourceQueue):
         scheduler = self.rh["batch:scheduler"]
         if scheduler is None:
             raise ValueError("BatchResourceQueue requires a scheduler")
-        elif scheduler not in ("slurm", "shell"):
+        elif scheduler not in schedulers:
             raise ValueError(f"{scheduler}: unknown scheduler")
         self.scheduler: str = str(scheduler)
         self.tmp_buffer: list[TestCase] = []

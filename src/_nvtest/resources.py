@@ -7,8 +7,6 @@ from typing import Optional
 from . import config
 from .util.string import strip_quotes
 
-schedulers = ("slurm", "shell", None)
-
 
 class ResourceHandler:
     def __init__(self) -> None:
@@ -163,8 +161,7 @@ class ResourceHandler:
                 raise ValueError("batch count and length are mutually exclusive")
 
         elif (scope, type) == ("batch", "scheduler"):
-            if value not in schedulers:
-                raise ValueError(f"unsupported scheduler: {value!r}")
+            pass
 
         elif (scope, type) == ("batch", "workers"):
             if value < 0:
