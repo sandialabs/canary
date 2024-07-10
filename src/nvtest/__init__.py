@@ -18,6 +18,7 @@ from _nvtest.test.instance import TestInstance
 from _nvtest.util import filesystem
 from _nvtest.util import logging
 from _nvtest.util import module
+from _nvtest.util import shell
 from _nvtest.util.executable import Executable
 
 from . import directives

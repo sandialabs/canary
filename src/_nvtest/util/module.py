@@ -56,8 +56,11 @@ def _module(*args, environb: Optional[MutableMapping] = None) -> Optional[str]:
 
 
 @contextmanager
-def loaded(module_name: str) -> Generator[None, None, None]:
+def load(module_name: str, use: Optional[str] = None) -> Generator[None, None, None]:
     save_environb = dict(os.environb)
+    if use is not None:
+        existing_modulepath = os.getenv("MODULEPATH", "")
+        os.environb[b"MODULEPATH"] = f"{use}:{existing_modulepath}".encode()
     text = _module("show", module_name).split()  # type: ignore
     for i, word in enumerate(text):
         if word == "conflict":
@@ -66,3 +69,6 @@ def loaded(module_name: str) -> Generator[None, None, None]:
     yield
     os.environb.clear()
     os.environb.update(save_environb)
+
+
+loaded = load

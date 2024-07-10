@@ -1,0 +1,53 @@
+import os
+import re
+import subprocess
+from contextlib import contextmanager
+from typing import Generator
+
+
+class Bash:
+    def source_file(self, file: str) -> dict[str, str]:
+        """Source the shell script `file` and return the state before/after
+
+        Parameters
+        ----------
+        file : str
+            The file to source
+
+        Returns
+        -------
+        environ : dict
+            The environment resulting from source `file`
+
+        """
+        if not os.path.exists(file):
+            raise FileNotFoundError(file)
+        file = os.path.abspath(file)
+        cmd = ["bash", "--noprofile", "-c"]
+        args = ["set -a", f". {file}", "echo 'env<<<'", "export -p", "echo '>>>'"]
+        cmd.append(" ; ".join(args))
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p.wait()
+        stdout = p.communicate()[0].decode("utf-8")
+        environ: dict[str, str] = {}
+        skip_vars = ["PWD", "SHLVL"]
+        var_regex = "declare -x (\w+)=(.*)\n"
+        match = re.search("env<<<(.*?)>>>", stdout, re.DOTALL)
+        if not match:
+            return environ
+        for name, value in re.findall(var_regex, match.group(1)):
+            if name in skip_vars:
+                continue
+            environ[name] = value[1:-1]  # strip quotes
+        return environ
+
+
+@contextmanager
+def source(file: str) -> Generator[None, None, None]:
+    save_env = dict(os.environ)
+    shell = Bash()
+    environ = shell.source_file(file)
+    os.environ.update(environ)
+    yield
+    os.environ.clear()
+    os.environ.update(save_env)

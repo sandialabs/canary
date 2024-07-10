@@ -31,6 +31,7 @@ The how-to guides in the documentation were auto-generated using a set of exampl
    location
    xstatus
    centered_parameter_space
+   environ
    report
    cmake
    ctest
