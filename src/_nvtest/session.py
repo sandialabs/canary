@@ -1,5 +1,4 @@
 import datetime
-import glob
 import io
 import json
 import os
@@ -88,7 +87,7 @@ class Session:
                 raise NotASession("not a nvtest session (or any of the parent directories)")
             self.root = root
         self.config_dir = os.path.join(self.root, ".nvtest")
-        self.batch_stage = os.path.join(self.root, ".nvtest/batches")
+        self.log_dir = os.path.join(self.config_dir, "logs")
         os.environ.setdefault("NVTEST_LEVEL", "0")
         os.environ["NVTEST_SESSION_DIR"] = self.root
         os.environ["NVTEST_SESSION_CONFIG_DIR"] = self.config_dir
@@ -483,17 +482,18 @@ class Session:
     def heartbeat(self, queue: ResourceQueue) -> None:
         if isinstance(queue, BatchResourceQueue):
             return None
-        file: str
-        if "NVTEST_LOT_NO" in os.environ:
-            lot_no, batch_no = os.environ["NVTEST_LOT_NO"], os.environ["NVTEST_BATCH_NO"]
-            file = os.path.join(self.config_dir, "batches", lot_no, f"hb.{batch_no}.json")
-        else:
-            file = os.path.join(self.config_dir, "hb.json")
         hb: dict[str, Any] = {"date": datetime.datetime.now().strftime("%c")}
         busy = queue.busy()
         hb["busy"] = [case.id for case in busy]
         hb["busy cpus"] = [cpu_id for case in busy for cpu_id in case.cpu_ids]
         hb["busy gpus"] = [gpu_id for case in busy for gpu_id in case.gpu_ids]
+        file: str
+        if "NVTEST_LOT_NO" in os.environ:
+            lot_no, batch_no = os.environ["NVTEST_LOT_NO"], os.environ["NVTEST_BATCH_NO"]
+            file = os.path.join(self.log_dir, f"batches/{lot_no}/hb.{batch_no}.json")
+        else:
+            file = os.path.join(self.log_dir, "hb.json")
+        mkdirp(os.path.dirname(file))
         with open(file, "a") as fh:
             fh.write(json.dumps(hb) + "\n")
         return None
@@ -537,7 +537,7 @@ class Session:
                 snapshots[snapshot.pop("id")] = snapshot
             for case in obj:
                 if case.id not in snapshots:
-                    logging.error(f"case ID {case.id} not in batch {obj.id}")
+                    logging.error(f"case ID {case.id} not in batch {obj.batch_no}")
                     continue
                 if case.status == "running":
                     # Job was cancelled
@@ -551,7 +551,7 @@ class Session:
                         fs = case.status.value
                         ss = snapshots[case.id]["status"][0]
                         logging.warning(
-                            f"batch {obj.id}, {case}: "
+                            f"batch {obj.batch_no}, {case}: "
                             f"expected status of future.result to be {ss}, not {fs}"
                         )
                         case.status.set("failed", "unknown failure")
@@ -570,9 +570,10 @@ class Session:
             if rh["batch:count"] is None and rh["batch:length"] is None:
                 rh.set("batch:length", config.get("config:batch_length"))
             queue = BatchResourceQueue(rh, global_session_lock)
-            mkdirp(self.batch_stage)
-            kwds["stage"] = self.batch_stage
-            lot_no = len(os.listdir(self.batch_stage)) + 1
+            batch_stage = os.path.join(self.config_dir, "batches")
+            mkdirp(batch_stage)
+            kwds["stage"] = batch_stage
+            lot_no = len(os.listdir(batch_stage)) + 1
             kwds["lot_no"] = lot_no
         for case in cases:
             if case.status == "skipped":
@@ -595,11 +596,10 @@ class Session:
         return queue
 
     def blogfile(self, batch_no: int, lot_no: Optional[int]) -> str:
-        dir = os.path.join(self.config_dir, "batches")
         if lot_no is None:
-            lot_no = len(os.listdir(dir))  # use latest
-        file = glob.glob(os.path.join(dir, f"{lot_no}/out.*.{batch_no}.txt"))
-        return file[0]
+            lot_no = len(os.listdir(os.path.join(self.config_dir, "batches")))  # use latest
+        file = os.path.join(self.config_dir, f"batches/{lot_no}/batch.{batch_no}-out.txt")
+        return file
 
     @staticmethod
     def overview(cases: list[TestCase]) -> str:

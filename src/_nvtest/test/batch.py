@@ -30,8 +30,7 @@ class Batch(Runner):
 
     Args:
       cases: The list of test cases in this batch
-      runner: How to run this batch
-      id: The index of this partition in the group
+      batch_no: The index of this batch in the group
       nbatches: The number of partitions in the group
       lot_no: The lot number of the group
 
@@ -43,18 +42,17 @@ class Batch(Runner):
     def __init__(
         self,
         cases: Union[list[TestCase], set[TestCase]],
-        id: int,
+        batch_no: int,
         nbatches: int,
         lot_no: int = 1,
     ) -> None:
         super().__init__()
         self.validate(cases)
         self.cases = list(cases)
-        self.id = id
-        self.batch_no = id
+        self.id = self.batch_no = batch_no
         self.nbatches = nbatches
         self.lot_no = lot_no
-        # self.id: str = hashit("".join(_.id for _ in self), length=20)
+        self.name = f"nv.{self.lot_no}/{self.batch_no}/{self.nbatches}"
         self._status = Status("created")
         first = next(iter(cases))
         self.root = first.exec_root
@@ -167,11 +165,11 @@ class Batch(Runner):
         return os.path.join(self.root, ".nvtest/batches", str(self.lot_no))
 
     def submission_script_filename(self) -> str:
-        basename = f"submit.{self.nbatches}.{self.batch_no}.sh"
+        basename = f"batch.{self.batch_no}-inp.sh"
         return os.path.join(self.stage, basename)
 
     def logfile(self) -> str:
-        basename = f"out.{self.nbatches}.{self.batch_no}.txt"
+        basename = f"batch.{self.batch_no}-out.txt"
         return os.path.join(self.stage, basename)
 
     def setup(self) -> None:
@@ -233,11 +231,11 @@ class SubShell(Batch):
     def __init__(
         self,
         cases: Union[list[TestCase], set[TestCase]],
-        id: int,
+        batch_no: int,
         nbatches: int,
         lot_no: int = 1,
     ) -> None:
-        super().__init__(cases, id, nbatches, lot_no=lot_no)
+        super().__init__(cases, batch_no, nbatches, lot_no=lot_no)
         self.qtime = self.runtime * 1.5
 
     def _run(self, *args: str, **kwargs: Any) -> None:
@@ -245,7 +243,7 @@ class SubShell(Batch):
         if not os.path.exists(script):
             raise ValueError("submission script not found, did you call setup()?")
         script_x = Executable(self.command)
-        f = os.path.splitext(script.replace("/submit.", "/out."))[0] + ".txt"
+        f = self.logfile()
         with open(f, "w") as fh:
             if config.get("option:r") == "v":
                 logging.emit(f"STARTING: Batch {self.batch_no} of {self.nbatches}\n")
@@ -277,24 +275,61 @@ class SubShell(Batch):
         return f
 
 
-class Slurm(Batch):
+class QBatch(Batch):
+    def __init__(
+        self,
+        cases: Union[list[TestCase], set[TestCase]],
+        batch_no: int,
+        nbatches: int,
+        lot_no: int = 1,
+    ) -> None:
+        cores_per_socket = config.get("machine:cores_per_socket")
+        if cores_per_socket is None:
+            name = type(self).__name__
+            raise ValueError(f"{name}: 'machine:cores_per_socket' must be defined")
+        super().__init__(cases, batch_no, nbatches, lot_no=lot_no)
+
+    def qtime(self, minutes: bool = False) -> float:
+        if len(self.cases) == 1:
+            return self.cases[0].timeout
+        total_runtime = self.runtime
+        if total_runtime < 100.0:
+            total_runtime = 300.0
+        elif total_runtime < 300.0:
+            total_runtime = 600.0
+        elif total_runtime < 600.0:
+            total_runtime = 1200.0
+        elif total_runtime < 1800.0:
+            total_runtime = 2400.0
+        elif total_runtime < 3600.0:
+            total_runtime = 5000.0
+        else:
+            total_runtime *= 1.1
+        if not minutes:
+            return total_runtime
+        qtime_in_minutes = total_runtime // 60
+        if total_runtime % 60 > 0:
+            qtime_in_minutes += 1
+        return qtime_in_minutes
+
+
+class Slurm(QBatch):
     """Setup and submit jobs to the slurm scheduler"""
 
-    name = "slurm"
     shell = "/bin/sh"
     command = "sbatch"
 
     def __init__(
         self,
         cases: Union[list[TestCase], set[TestCase]],
-        id: int,
+        batch_no: int,
         nbatches: int,
         lot_no: int = 1,
     ) -> None:
         cores_per_socket = config.get("machine:cores_per_socket")
         if cores_per_socket is None:
             raise ValueError("slurm runner requires that 'machine:cores_per_socket' be defined")
-        super().__init__(cases, id, nbatches, lot_no=lot_no)
+        super().__init__(cases, batch_no, nbatches, lot_no=lot_no)
 
     @property
     def processors(self) -> int:
@@ -348,29 +383,10 @@ class Slurm(Batch):
                 return
             raise
 
-    @property
-    def qtime(self) -> float:
-        if len(self.cases) == 1:
-            return self.cases[0].timeout
-        total_runtime = self.runtime
-        if total_runtime < 100.0:
-            total_runtime = 300.0
-        elif total_runtime < 300.0:
-            total_runtime = 600.0
-        elif total_runtime < 600.0:
-            total_runtime = 1200.0
-        elif total_runtime < 1800.0:
-            total_runtime = 2400.0
-        elif total_runtime < 3600.0:
-            total_runtime = 5000.0
-        else:
-            total_runtime *= 1.1
-        return total_runtime
-
     def write_submission_script(self, *args_in: str, **kwargs: Any) -> str:
         ns = calculate_allocations(self.max_cpus_required)
         timeoutx = kwargs.get("timeoutx", 1.0)
-        qtime = self.qtime * timeoutx
+        qtime = self.qtime() * timeoutx
 
         workers = kwargs.get("workers", ns.cores_per_node)
         session_cpus = ns.nodes * ns.cores_per_node
@@ -381,6 +397,7 @@ class Slurm(Batch):
         args.append(f"--ntasks-per-node={tpn}")
         args.append(f"--cpus-per-task={ns.cpus_per_task}")
         args.append(f"--time={hhmmss(qtime * 1.25, threshold=0)}")
+        args.append(f"--job-name={self.name}")
         file = self.logfile()
         args.append(f"--error={file}")
         args.append(f"--output={file}")
@@ -426,24 +443,23 @@ class Slurm(Batch):
         scancel(jobid, "--clusters=all")
 
 
-class PBS(Batch):
+class PBS(QBatch):
     """Setup and submit jobs to the PBS scheduler"""
 
-    name = "pbs"
     shell = "/bin/sh"
     command = "qsub"
 
     def __init__(
         self,
         cases: Union[list[TestCase], set[TestCase]],
-        id: int,
+        batch_no: int,
         nbatches: int,
         lot_no: int = 1,
     ) -> None:
         cores_per_socket = config.get("machine:cores_per_socket")
         if cores_per_socket is None:
             raise ValueError("PBS runner requires that 'machine:cores_per_socket' be defined")
-        super().__init__(cases, id, nbatches, lot_no=lot_no)
+        super().__init__(cases, batch_no, nbatches, lot_no=lot_no)
 
     @property
     def processors(self) -> int:
@@ -457,8 +473,8 @@ class PBS(Batch):
         """Write the pbs submission script"""
         ns = calculate_allocations(self.max_cpus_required)
         timeoutx = kwargs.get("timeoutx", 1.0)
-        qtime = self.qtime * timeoutx
-        dbg_flag = "-d" if config.get("config:debug") else ""
+        qtime = self.qtime() * timeoutx
+
         workers = kwargs.get("workers", ns.cores_per_node)
         session_cpus = ns.nodes * ns.cores_per_node
 
@@ -467,6 +483,7 @@ class PBS(Batch):
         args.append(f"-l walltime={hhmmss(qtime * 1.25, threshold=0)}")
         args.append("-j oe")
         args.append(f"-o {self.logfile()}")
+        args.append(f"-N {self.name}")
 
         fh = StringIO()
         fh.write(f"#!{self.shell}\n")
@@ -491,25 +508,6 @@ class PBS(Batch):
             fp.write(fh.getvalue())
         set_executable(f)
         return f
-
-    @property
-    def qtime(self) -> float:
-        if len(self.cases) == 1:
-            return self.cases[0].timeout
-        total_runtime = self.runtime
-        if total_runtime < 100.0:
-            total_runtime = 300.0
-        elif total_runtime < 300.0:
-            total_runtime = 600.0
-        elif total_runtime < 600.0:
-            total_runtime = 1200.0
-        elif total_runtime < 1800.0:
-            total_runtime = 2400.0
-        elif total_runtime < 3600.0:
-            total_runtime = 5000.0
-        else:
-            total_runtime *= 1.1
-        return total_runtime
 
     def _run(self, *args_in: str, **kwargs: Any) -> None:
         script = self.write_submission_script(*args_in, **kwargs)
@@ -578,24 +576,23 @@ class PBS(Batch):
         qdel(jobid)
 
 
-class Flux(Batch):
+class Flux(QBatch):
     """Setup and submit jobs to the Flux scheduler"""
 
-    name = "flux"
     shell = "/bin/sh"
     command = "flux"
 
     def __init__(
         self,
         cases: Union[list[TestCase], set[TestCase]],
-        id: int,
+        batch_no: int,
         nbatches: int,
         lot_no: int = 1,
     ) -> None:
         cores_per_socket = config.get("machine:cores_per_socket")
         if cores_per_socket is None:
             raise ValueError("flux runner requires that 'machine:cores_per_socket' be defined")
-        super().__init__(cases, id, nbatches, lot_no=lot_no)
+        super().__init__(cases, batch_no, nbatches, lot_no=lot_no)
 
     @property
     def processors(self) -> int:
@@ -609,17 +606,14 @@ class Flux(Batch):
         """Write the flux submission script"""
         ns = calculate_allocations(self.max_cpus_required)
         timeoutx = kwargs.get("timeoutx", 1.0)
-        qtime = self.qtime * timeoutx
-        qtime_in_minutes = qtime // 60
-        if qtime % 60 > 0:
-            qtime_in_minutes += 1
+        qtime = self.qtime(minutes=True) * timeoutx
 
         workers = kwargs.get("workers", ns.cores_per_node)
         session_cpus = ns.nodes * ns.cores_per_node
 
         args = list(args_in)
         args.append(f"--nodes={ns.nodes}")
-        args.append(f"--time-limit={qtime_in_minutes}")
+        args.append(f"--time-limit={qtime}")
         args.append(f"--output={self.logfile()}")
         args.append(f"--error={self.logfile()}")
 
@@ -647,30 +641,11 @@ class Flux(Batch):
         set_executable(f)
         return f
 
-    @property
-    def qtime(self) -> float:
-        if len(self.cases) == 1:
-            return self.cases[0].timeout
-        total_runtime = self.runtime
-        if total_runtime < 100.0:
-            total_runtime = 300.0
-        elif total_runtime < 300.0:
-            total_runtime = 600.0
-        elif total_runtime < 600.0:
-            total_runtime = 1200.0
-        elif total_runtime < 1800.0:
-            total_runtime = 2400.0
-        elif total_runtime < 3600.0:
-            total_runtime = 5000.0
-        else:
-            total_runtime *= 1.1
-        return total_runtime
-
     def _run(self, *args_in: str, **kwargs: Any) -> None:
         script = self.write_submission_script(*args_in, **kwargs)
         if not os.path.exists(script):
             raise ValueError("submission script not found, did you call setup()?")
-        args = [self.command, "batch", "--job-name", os.path.basename(script), script]
+        args = [self.command, "batch", "--job-name", self.name, script]
         p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         out, _ = p.communicate()
         result = str(out.decode("utf-8")).strip()
@@ -729,20 +704,20 @@ class Flux(Batch):
 
 def factory(
     cases: Union[list[TestCase], set[TestCase]],
-    id: int,
+    batch_no: int,
     nbatches: int,
     lot_no: int = 1,
     scheduler: Optional[str] = None,
 ) -> Batch:
     batch: Batch
     if scheduler in (None, "shell", "subshell"):
-        batch = SubShell(cases, id, nbatches, lot_no)
+        batch = SubShell(cases, batch_no, nbatches, lot_no)
     elif scheduler and scheduler.lower() == "slurm":
-        batch = Slurm(cases, id, nbatches, lot_no)
+        batch = Slurm(cases, batch_no, nbatches, lot_no)
     elif scheduler and scheduler.lower() == "pbs":
-        batch = PBS(cases, id, nbatches, lot_no)
+        batch = PBS(cases, batch_no, nbatches, lot_no)
     elif scheduler and scheduler.lower() == "flux":
-        batch = Flux(cases, id, nbatches, lot_no)
+        batch = Flux(cases, batch_no, nbatches, lot_no)
     else:
         raise ValueError(f"{scheduler}: Unknown batch scheduler")
     batch.setup()
