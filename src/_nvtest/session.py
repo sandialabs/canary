@@ -342,8 +342,7 @@ class Session:
         cases = [case for case in self.cases if case.status.satisfies(("pending", "ready"))]
         return cases
 
-    def bfilter(self, lot_no: Optional[int], batch_no: Optional[int]) -> list[TestCase]:
-        lot_no = lot_no or len(os.path.join(self.config_dir, "batches"))
+    def bfilter(self, *, lot_no: int, batch_no: int) -> list[TestCase]:
         batch_info = self.db.load_json(f"batches/{lot_no}/index")
         batch_case_ids = batch_info[str(batch_no)]
         for case in self.cases:
@@ -465,6 +464,7 @@ class Session:
                             time.sleep(0.01)
                             continue
                         iid, obj = iid_obj
+                        self.heartbeat(queue)
                     except EmptyQueue:
                         break
                     future = ppe.submit(obj, *runner_args, **runner_kwargs)
@@ -479,6 +479,24 @@ class Session:
                     os.kill(proc, signal.SIGINT)
             ppe.shutdown(wait=True)
             raise
+
+    def heartbeat(self, queue: ResourceQueue) -> None:
+        if isinstance(queue, BatchResourceQueue):
+            return None
+        file: str
+        if "NVTEST_LOT_NO" in os.environ:
+            lot_no, batch_no = os.environ["NVTEST_LOT_NO"], os.environ["NVTEST_BATCH_NO"]
+            file = os.path.join(self.config_dir, "batches", lot_no, f"hb.{batch_no}.json")
+        else:
+            file = os.path.join(self.config_dir, "hb.json")
+        hb: dict[str, Any] = {"date": datetime.datetime.now().strftime("%c")}
+        busy = queue.busy()
+        hb["busy"] = [case.id for case in busy]
+        hb["busy cpus"] = [cpu_id for case in busy for cpu_id in case.cpu_ids]
+        hb["busy gpus"] = [gpu_id for case in busy for gpu_id in case.gpu_ids]
+        with open(file, "a") as fh:
+            fh.write(json.dumps(hb) + "\n")
+        return None
 
     def done_callback(
         self, iid: int, queue: ResourceQueue, fail_fast: bool, future: Future

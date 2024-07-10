@@ -86,9 +86,17 @@ class PathSpec:
                 try:
                     lot_no, batch_no = [int(_) for _ in p[1:].split(":")]
                 except ValueError:
-                    lot_no, batch_no = None, int(p[1:])
+                    raise ValueError(f"{p}: invalid batch spec") from None
                 setdefault(args, "batch_no", batch_no)
                 setdefault(args, "lot_no", lot_no)
+                if "NVTEST_LOT_NO" not in os.environ:
+                    os.environ["NVTEST_LOT_NO"] = str(lot_no)
+                elif not lot_no == int(os.environ["NVTEST_LOT_NO"]):
+                    raise ValueError("env batch lot inconsistent with cli batch lot")
+                if "NVTEST_BATCH_NO" not in os.environ:
+                    os.environ["NVTEST_BATCH_NO"] = str(batch_no)
+                elif not batch_no == int(os.environ["NVTEST_BATCH_NO"]):
+                    raise ValueError("env batch number inconsistent with cli batch number")
             else:
                 pathspec.append(p)
         if getattr(args, "case_specs", None):
@@ -175,14 +183,14 @@ For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests t
 • directory name: run test files in this directory and its children;
 • test id: run this specific test, specified as ``%(id)s``;
 • test file: run the test defined in this file; and
-• batch number: run this batch of tests, specified as ``%(batch_no)s``.
+• batch spec: run this batch of tests, specified as ``%(batch_no)s``.
 """ % {
             "run": bold("nvtest run"),
             "new": bold("new"),
             "existing": bold("existing"),
             "pathspec": bold("pathspec"),
             "id": bold("/ID"),
-            "batch_no": bold("^[BATCH_ID]:BATCH_NO"),
+            "batch_no": bold("^BATCH_LOT:BATCH_NO"),
             "paths": bold("paths"),
             "root": bold("root"),
         }

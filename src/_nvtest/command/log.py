@@ -15,7 +15,7 @@ epilog = "Note: this command must be run from inside of a test session directory
 
 
 def setup_parser(parser: "Parser"):
-    parser.add_argument("testspec", help="Test name, /TEST_ID, or ^BATCH_NO")
+    parser.add_argument("testspec", help="Test name, /TEST_ID, or ^BATCH_LOT:BATCH_NO")
 
 
 def log(args: "argparse.Namespace") -> int:
@@ -25,10 +25,7 @@ def log(args: "argparse.Namespace") -> int:
         session = Session(os.getcwd(), mode="r")
 
     if args.testspec.startswith("^"):
-        try:
-            lot_no, batch_no = [int(_) for _ in args.testspec[1:].split(":")]
-        except ValueError:
-            lot_no, batch_no = None, int(args.testspec[1:])
+        lot_no, batch_no = [int(_) for _ in args.testspec[1:].split(":")]
         file = session.blogfile(batch_no, lot_no=lot_no)
         print(f"{file}:")
         pydoc.pager(open(file).read())

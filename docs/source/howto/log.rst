@@ -25,9 +25,9 @@ Similar to individual test cases, the output of each batch is logged and can be 
 
 .. code-block:: console
 
-    nvtest log ^N
+    nvtest log ^M:N
 
-where ``N`` is the batch number.
+where ``M`` is the batch lot and ``N`` is the batch number within the lot.
 
 .. note::
 
