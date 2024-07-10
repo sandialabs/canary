@@ -29,13 +29,12 @@ class Bash:
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         p.wait()
         stdout = p.communicate()[0].decode("utf-8")
-        environ: dict[str, str] = {}
-        skip_vars = ["PWD", "SHLVL"]
-        var_regex = "declare -x (\w+)=(.*)\n"
         match = re.search("env<<<(.*?)>>>", stdout, re.DOTALL)
-        if not match:
-            return environ
-        for name, value in re.findall(var_regex, match.group(1)):
+        if match is None:
+            return {}
+        environ: dict[str, str] = {}
+        skip_vars = ("PWD", "SHLVL")
+        for name, value in re.findall("declare -x (\w+)=(.*)\n", match.group(1)):
             if name in skip_vars:
                 continue
             environ[name] = value[1:-1]  # strip quotes

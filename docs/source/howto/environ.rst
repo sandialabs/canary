@@ -3,7 +3,7 @@
 Modify your environment with modules and rc files
 =================================================
 
-Some tests require a modified environment.  When the required environment modifications are contained in module and/rc files use the following constructs.
+Some tests require a modified environment.  When the required environment modifications are contained in module and/or rc files use the following constructs.
 
 * To modify your environment by loading a module:
 
