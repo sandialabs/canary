@@ -20,6 +20,7 @@ The how-to guides in the documentation were auto-generated using a set of exampl
    rerun
    run_from_file
    batch
+   resources
    parameterize
    execute_and_analyze
    analyze_only

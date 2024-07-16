@@ -3,7 +3,7 @@
 The test session
 ================
 
-When ``nvtest run [path [path...]]`` is executed, ``path`` is searched for test files, the test files are expanded into test cases, and each test case is run in a separate execution directory.  Each test case's execution directory is relative to the session's root directory (default: ``./TestResults``).
+When ``nvtest run [path [path...]]`` is executed, ``path`` is searched for test files, the test files are expanded into test cases, and each test case is run in a separate execution directory relative to the session's root directory (default: ``./TestResults``).
 
 Phases of a test session
 ------------------------
@@ -97,9 +97,9 @@ Batch
 Group test cases into batches to run in a scheduler.  The default batching scheme is to:
 
 1. group cases by the number of compute nodes required to run; and
-2. partition each group into batches that complete in a set time (defined by the ``-b length=T`` option)
+2. partition each group into batches that complete in a set time (defined by the ``-l batch:length=T`` option)
 
-Optionally, a fixed number of batches can be requested (``-b count=N``).
+Optionally, a fixed number of batches can be requested (``-l batch:count=N``).
 
 .. _run:
 
@@ -123,4 +123,4 @@ Note the output files (``output.json``) from each of the parameterized test case
 
 .. note::
 
-   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type:X`` option.  See :ref:`userguide-resource`.
+   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type:X`` option.  See :ref:`userguide-resource` and :ref:`howto-resources`.
