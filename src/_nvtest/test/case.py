@@ -404,6 +404,8 @@ class TestCase(Runner):
         save_env = os.environ.copy()
         variables = dict(PYTHONPATH=self.pythonpath)
         variables.update(self.variables)
+        variables["NVTEST_CPU_IDS"] = ",".join(str(_) for _ in self.cpu_ids)
+        variables["NVTEST_GPU_IDS"] = ",".join(str(_) for _ in self.gpu_ids)
         for var, val in variables.items():
             os.environ[var] = val
         yield

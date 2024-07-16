@@ -32,8 +32,8 @@ class TestInstance:
     file_path: str
     name: str
     file: str
-    processors: int
-    gpus: int
+    cpu_ids: list[int]
+    gpu_ids: list[int]
     analyze: bool
     family: str
     keywords: list[str]
@@ -63,8 +63,8 @@ class TestInstance:
             file_path=case.file_path,
             name=case.name,
             file=os.path.join(case.file_root, case.file_path),
-            processors=case.processors,
-            gpus=case.gpus,
+            cpu_ids=case.cpu_ids,
+            gpu_ids=case.gpu_ids,
             family=case.family,
             analyze=isinstance(case, AnalyzeTestCase),
             keywords=case.keywords(),
@@ -85,6 +85,14 @@ class TestInstance:
             dependencies=dependencies,
         )
         return self
+
+    @property
+    def processors(self) -> int:
+        return len(self.cpu_ids)
+
+    @property
+    def gpus(self) -> int:
+        return len(self.gpu_ids)
 
     @classmethod
     def load(cls: Type["TestInstance"], arg_path: Optional[str] = None) -> "TestInstance":
