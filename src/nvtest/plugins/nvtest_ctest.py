@@ -49,6 +49,7 @@ class CTestTestFile(TestGenerator):
         parameter_expr: Optional[str] = None,
         timeout: Optional[float] = None,
         owners: Optional[set[str]] = None,
+        env_mods: Optional[dict[str, str]] = None,
     ) -> list[TestCase]:
         cmake = self.find_cmake()
         if cmake is None:
@@ -251,8 +252,7 @@ class CTestTestCase(TestCase):
         elif self.preflags:
             self._processors = parse_np(self.preflags)
         if environment:
-            for var, val in environment.items():
-                self.add_default_env(var, val)
+            self.add_default_env(**environment)
 
         self._gpus: int = 0
         if resource_groups:

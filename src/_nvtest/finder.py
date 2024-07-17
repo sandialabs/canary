@@ -182,6 +182,7 @@ class Finder:
         parameter_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         owners: Optional[set[str]] = None,
+        env_mods: Optional[dict[str, str]] = None,
     ) -> list[TestCase]:
         o = ",".join(on_options or [])
         logging.debug(
@@ -199,6 +200,7 @@ class Finder:
             parameter_expr=parameter_expr,
             on_options=on_options,
             owners=owners,
+            env_mods=env_mods,
         )
         args = list(zip(files, repeat(kwds, len(files))))
         concrete_test_groups: list[list[TestCase]]

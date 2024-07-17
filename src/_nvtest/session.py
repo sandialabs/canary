@@ -225,6 +225,7 @@ class Session:
         parameter_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         owners: Optional[set[str]] = None,
+        env_mods: Optional[dict[str, str]] = None,
     ) -> None:
         self.cases = Finder.freeze(
             self.generators,
@@ -233,6 +234,7 @@ class Session:
             parameter_expr=parameter_expr,
             on_options=on_options,
             owners=owners,
+            env_mods=env_mods,
         )
         cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:

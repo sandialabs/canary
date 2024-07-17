@@ -4,6 +4,7 @@ import sys
 import traceback
 from typing import TYPE_CHECKING
 
+from ..config.argparsing import EnvironmentModification
 from ..error import StopExecution
 from ..resources import ResourceHandler
 from ..session import ExitCode
@@ -72,6 +73,15 @@ def setup_parser(parser: "Parser"):
     )
     add_resource_arguments(parser)
     parser.add_argument(
+        "-e",
+        dest="run_env_mods",
+        metavar="var=val",
+        default={},
+        action=EnvironmentModification,
+        help="Add environment variable %s to each test's environment with value %s, "
+        "values are expanded before " % (colorize("@*{var}"), colorize("@*{val}")),
+    )
+    parser.add_argument(
         "pathspec",
         metavar="pathspec",
         nargs="*",
@@ -108,6 +118,7 @@ def run(args: "argparse.Namespace") -> int:
             keyword_expr=args.keyword_expr,
             parameter_expr=args.parameter_expr,
             on_options=args.on_options,
+            env_mods=args.run_env_mods,
         )
         if args.until is not None:
             cases = [case for case in session.cases if not case.mask]

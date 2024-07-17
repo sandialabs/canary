@@ -10,6 +10,8 @@ from . import describe
 from . import find
 from . import location
 from . import log
+from . import mkdocs
+from . import pre_commit
 from . import rebaseline
 from . import report
 from . import run
@@ -28,6 +30,8 @@ def all_commands() -> list[ModuleType]:
         find,
         location,
         log,
+        mkdocs,
+        pre_commit,
         report,
         rebaseline,
         run,

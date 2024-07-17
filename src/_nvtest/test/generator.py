@@ -80,6 +80,7 @@ class TestGenerator(abc.ABC):
         parameter_expr: Optional[str] = None,
         timeout: Optional[float] = None,
         owners: Optional[set[str]] = None,
+        env_mods: Optional[dict[str, str]] = None,
     ) -> list[TestCase]:
         pass
 
@@ -202,6 +203,7 @@ class AbstractTestFile(TestGenerator):
         parameter_expr: Optional[str] = None,
         timeout: Optional[float] = None,
         owners: Optional[set[str]] = None,
+        env_mods: Optional[dict[str, str]] = None,
     ) -> list[TestCase]:
         try:
             cases = self._freeze(
@@ -212,6 +214,7 @@ class AbstractTestFile(TestGenerator):
                 timeout=timeout,
                 parameter_expr=parameter_expr,
                 owners=owners,
+                env_mods=env_mods,
             )
             return cases
         except Exception as e:
@@ -228,6 +231,7 @@ class AbstractTestFile(TestGenerator):
         parameter_expr: Optional[str] = None,
         timeout: Optional[float] = None,
         owners: Optional[set[str]] = None,
+        env_mods: Optional[dict[str, str]] = None,
     ) -> list[TestCase]:
         min_cpus, max_cpus = cpus or (0, config.get("machine:cpu_count"))
         min_gpus, max_gpus = gpus or (0, config.get("machine:gpu_count"))
@@ -311,6 +315,8 @@ class AbstractTestFile(TestGenerator):
                         testname=name, on_options=on_options, parameters=parameters
                     ),
                 )
+                if env_mods:
+                    case.add_default_env(**env_mods)
                 if mask is not None:
                     case.mask = mask
                 elif timeout is not None and timeout > 0 and case.runtime > timeout:
@@ -341,6 +347,8 @@ class AbstractTestFile(TestGenerator):
                 )
                 if mask_analyze_case is not None:
                     parent.mask = mask_analyze_case
+                if env_mods:
+                    parent.add_default_env(**env_mods)
                 for case in cases:
                     parent.add_dependency(case)
                 cases.append(parent)
