@@ -125,8 +125,8 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • session:gpu_count=N: Occupy at most N gpus at any one time.\n\n
 • session:gpu_ids=L: Comma separated list of GPU ids available to the session, mutually exclusive with session:gpu_count.\n\n
 • session:timeout=T: Set a timeout on test session execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: 60m]\n\n
-• test:cpus=[n:]N: Skip tests requiring less than n and more than N cpu cores [default: 0 and machine cpu count]\n\n
-• test:gpus=N: Skip tests requiring more than N gpus.\n\n
+• test:cpus=[n:]N: Skip tests requiring less than n and more than N cpu cores [default: [0, machine:cpu_count]]\n\n
+• test:gpus=[n:]N: Skip tests requiring less than n and more than N gpus [default: [0, machine:gpu_count]]\n\n
 • test:timeout=T: Set a timeout on any single test execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s)\n\n
 • test:timeoutx=R: Set a timeout multiplier for all tests [default: 1.0]\n\n
 • batch:count=N: Execute tests in N batches.\n\n
@@ -157,9 +157,15 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         elif match := re.search(r"^session:(gpu_count|devices|gpus)[:=](\d+)$", arg):
             raw = match.group(2)
             return ("session:gpu_count", int(raw))
-        elif match := re.search(r"^test:(devices|gpus)[:=](\d+)$", arg):
+        elif match := re.search(r"^test:(devices|gpus)[:=]:?(\d+)$", arg):
             raw = match.group(2)
-            return ("test:gpus", int(raw))
+            return ("test:gpus", [0, int(raw)])
+        elif match := re.search(r"^test:(devices:gpus)[:=](\d+):$", arg):
+            raw = match.group(2)
+            return ("test:gpus", [int(raw), config.get("machine:gpu_count")])
+        elif match := re.search(r"^test:(devices|gpus)[:=](\d+):(\d+)$", arg):
+            _, a, b = match.groups()
+            return ("test:gpus", [int(a), int(b)])
         elif match := re.search(r"^test:(cpus|cores|processors)[:=]:?(\d+)$", arg):
             raw = match.group(2)
             return ("test:cpus", [0, int(raw)])

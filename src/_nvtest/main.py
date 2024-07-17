@@ -37,7 +37,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         os.chdir(pre.C or invocation_dir)
         if pre.echo:
             a = [os.path.join(sys.prefix, "bin/nvtest")] + [_ for _ in argv if _ != "--echo"]
-            logging.info(shlex.join(a))
+            logging.emit(shlex.join(a) + "\n")
 
         load_plugins(pre.plugin_dirs or [])
         for hook in plugin.plugins("main", "setup"):

@@ -43,7 +43,7 @@ class CTestTestFile(TestGenerator):
     def freeze(
         self,
         cpus: Optional[list[int]] = None,
-        gpus: Optional[int] = None,
+        gpus: Optional[list[int]] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -70,7 +70,7 @@ class CTestTestFile(TestGenerator):
         rh = rh or ResourceHandler()
         cases = self.freeze(
             cpus=rh["test:cpus"],
-            gpus=int(rh["test:gpus"]),
+            gpus=rh["test:gpus"],
             on_options=on_options,
             keyword_expr=keyword_expr,
         )

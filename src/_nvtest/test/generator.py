@@ -74,7 +74,7 @@ class TestGenerator(abc.ABC):
     def freeze(
         self,
         cpus: Optional[list[int]] = None,
-        gpus: Optional[int] = None,
+        gpus: Optional[list[int]] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -185,7 +185,7 @@ class AbstractTestFile(TestGenerator):
         rh = rh or ResourceHandler()
         cases: list[TestCase] = self.freeze(
             cpus=rh["test:cpus"],
-            gpus=int(rh["test:gpus"]),
+            gpus=rh["test:gpus"],
             on_options=on_options,
             keyword_expr=keyword_expr,
         )
@@ -196,7 +196,7 @@ class AbstractTestFile(TestGenerator):
     def freeze(
         self,
         cpus: Optional[list[int]] = None,
-        gpus: Optional[int] = None,
+        gpus: Optional[list[int]] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -222,7 +222,7 @@ class AbstractTestFile(TestGenerator):
     def _freeze(
         self,
         cpus: Optional[list[int]] = None,
-        gpus: Optional[int] = None,
+        gpus: Optional[list[int]] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -230,7 +230,7 @@ class AbstractTestFile(TestGenerator):
         owners: Optional[set[str]] = None,
     ) -> list[TestCase]:
         min_cpus, max_cpus = cpus or (0, config.get("machine:cpu_count"))
-        max_gpus = gpus or config.get("machine:gpu_count")
+        min_gpus, max_gpus = gpus or (0, config.get("machine:gpu_count"))
         testcases: list[TestCase] = []
         names = ", ".join(self.names())
         logging.debug(f"Generating test cases for {self} using the following test names: {names}")
@@ -263,11 +263,11 @@ class AbstractTestFile(TestGenerator):
                         f"{self.name}: expected np={np} to be an int, not {class_name}"
                     )
                 if mask is None and np and np > max_cpus:
-                    s = "deselected due to @*b{exceeding max cpu count}"
+                    s = "deselected due to @*b{requiring more cpus than max cpu count}"
                     mask = colorize(s)
 
                 if mask is None and np and np < min_cpus:
-                    s = "deselected due to @*b{exceeding min cpu count}"
+                    s = "deselected due to @*b{requiring fewer cpus than min cpu count}"
                     mask = colorize(s)
 
                 for key in ("ngpu", "ndevice"):
@@ -281,7 +281,10 @@ class AbstractTestFile(TestGenerator):
                             f"{self.name}: expected {key}={nd} " f"to be an int, not {class_name}"
                         )
                     if mask is None and nd and nd > max_gpus:
-                        s = "deselected due to @*b{exceeding gpu count of machine}"
+                        s = "deselected due to @*b{requiring more gpus than max gpu count}"
+                        mask = colorize(s)
+                    if mask is None and nd and nd < min_gpus:
+                        s = "deselected due to @*b{requiring fewer gpus than min gpu count}"
                         mask = colorize(s)
                     break
 

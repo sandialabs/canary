@@ -25,7 +25,7 @@ class ResourceHandler:
             },
             "test": {
                 "cpus": [0, cpu_count],
-                "gpus": gpu_count,
+                "gpus": [0, gpu_count],
                 "timeout": None,
                 "timeoutx": 1.0,
             },
@@ -121,23 +121,32 @@ class ResourceHandler:
         # --- test resources
         elif (scope, type) == ("test", "cpus"):
             min_cpus, max_cpus = value
+            if isinstance(value, int):
+                value = [0, value]
             if min_cpus > max_cpus:
                 raise ValueError("test min cpus > test max cpus")
             elif min_cpus < 0:
-                raise ValueError(f"test:cpus:{min_cpus} < 0")
+                raise ValueError(f"test:min_cpus = {min_cpus} < 0")
             elif max_cpus < 0:
-                raise ValueError(f"test:cpus:{max_cpus} < 0")
+                raise ValueError(f"test:max_cpus = {max_cpus} < 0")
             elif max_cpus > config.get("machine:cpu_count"):
                 raise ValueError("test max cpu request exceeds machine cpu count")
             elif self["session:cpu_count"] > 0 and max_cpus > self["session:cpu_count"]:
                 raise ValueError("test cpu request exceeds session cpu limit")
 
         elif (scope, type) == ("test", "gpus"):
-            if value < 0:
-                raise ValueError(f"test:gpus = {value} < 0")
-            elif value > config.get("machine:gpu_count"):
-                raise ValueError("test gpu request exceeds machine gpu count")
-            elif self["session:gpu_count"] > 0 and value > self["session:gpu_count"]:
+            if isinstance(value, int):
+                value = [0, value]
+            min_gpus, max_gpus = value
+            if min_gpus > max_gpus:
+                raise ValueError("test min gpus > test max gpus")
+            elif min_gpus < 0:
+                raise ValueError(f"test:min_gpus = {min_gpus} < 0")
+            elif max_gpus < 0:
+                raise ValueError(f"test:max_gpus = {max_gpus} < 0")
+            elif max_gpus > config.get("machine:gpu_count"):
+                raise ValueError("test max gpu request exceeds machine gpu count")
+            elif self["session:gpu_count"] > 0 and max_gpus > self["session:gpu_count"]:
                 raise ValueError("test gpu request exceeds session gpu limit")
 
         elif (scope, type) == ("test", "timeout"):

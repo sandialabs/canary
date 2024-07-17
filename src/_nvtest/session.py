@@ -316,8 +316,8 @@ class Session:
                 n = rh["test:cpus"][1]
                 case.mask = f"test requires more than {n} cpus"
                 continue
-            if rh["test:gpus"] and case.gpus > rh["test:gpus"]:
-                n = rh["test:gpus"]
+            if rh["test:gpus"][1] and case.gpus > rh["test:gpus"][1]:
+                n = rh["test:gpus"][1]
                 case.mask = f"test requires more than {n} gpus"
                 continue
             when_expr: dict[str, str] = {}
