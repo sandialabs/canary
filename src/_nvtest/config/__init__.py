@@ -387,7 +387,7 @@ class Config:
             if data["cpu_count"] != data["cores_per_socket"] * sockets_per_node * nodes:
                 raise ValueError("cpu_count != cores_per_socket*sockets_per_node*nodes")
         elif "cores_per_socket" in data:
-            data["cpu_count"] != data["cores_per_socket"] * sockets_per_node * nodes
+            data["cpu_count"] = data["cores_per_socket"] * sockets_per_node * nodes
 
         if "gpu_count" in data:
             if "gpus_per_socket" not in data:
@@ -397,7 +397,7 @@ class Config:
             if data["gpu_count"] != data["gpus_per_socket"] * sockets_per_node * nodes:
                 raise ValueError("gpu_count != gpus_per_socket*sockets_per_node*nodes")
         elif "gpus_per_socket" in data:
-            data["gpu_count"] != data["gpus_per_socket"] * sockets_per_node * nodes
+            data["gpu_count"] = data["gpus_per_socket"] * sockets_per_node * nodes
 
     def describe(self, section: Optional[str] = None) -> str:
         if section is not None:
