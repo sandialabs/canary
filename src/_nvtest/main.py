@@ -32,6 +32,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     argv = argv or sys.argv[1:]
     invocation_dir = os.getcwd()
     pre = parser.preparse(argv)
+    config.set_main_options(pre)
 
     try:
         os.chdir(pre.C or invocation_dir)
@@ -44,10 +45,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             hook(parser)
 
         cmd.add_all_commands(parser)
-
         args = parser.parse_args(argv)
-        config.set_main_options(args)
-
         command = parser.get_command(args.command)
         if command is None:
             parser.print_help()

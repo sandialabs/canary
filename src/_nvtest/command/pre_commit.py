@@ -19,6 +19,7 @@ def mypy(*args_in: str) -> None:
     args.extend(args_in)
     proc = subprocess.Popen(args)
     proc.wait()
+    assert proc.returncode == 0
 
 
 def ruff(*args_in: str) -> None:
@@ -26,6 +27,7 @@ def ruff(*args_in: str) -> None:
     args.extend(args_in)
     proc = subprocess.Popen(args)
     proc.wait()
+    assert proc.returncode == 0
 
 
 def pytest(*args_in: str) -> None:
@@ -33,6 +35,7 @@ def pytest(*args_in: str) -> None:
     args.extend(args_in)
     proc = subprocess.Popen(args)
     proc.wait()
+    assert proc.returncode == 0
 
 
 def pre_commit(args: argparse.Namespace) -> int:

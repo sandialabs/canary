@@ -12,7 +12,6 @@ class ResourceHandler:
     def __init__(self) -> None:
         cpu_count = config.get("machine:cpu_count")
         gpu_count = config.get("machine:gpu_count")
-
         self.data: dict[str, Any] = {
             "session": {
                 "cpu_count": cpu_count,

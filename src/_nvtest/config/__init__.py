@@ -195,17 +195,23 @@ class Config:
             merged = _merge(merged, scope_data)
         return merged
 
-    def highest_precedence_scope(self) -> dict:
-        scope = next(reversed(self.scopes.keys()))
-        return self.scopes[scope]
+    def highest_precedence_scope(self) -> str:
+        return next(reversed(self.scopes.keys()))
 
     def validate_section_name(self, section: str) -> None:
         if section not in section_schemas:
             raise ValueError(f"{section!r} is not a valid configuration section")
 
-    def validate_scope(self, scope: Union[str, None]) -> dict:
+    def validate_scope_name(self, scope: Union[str, None]) -> None:
         if scope is None:
-            return self.highest_precedence_scope()
+            return
+        if scope not in self.scopes and scope not in valid_scopes:
+            raise ValueError(f"{scope!r} is not a valid configuration scope")
+
+    def get_scope_data(self, scope: Union[str, None]) -> dict:
+        if scope is None:
+            scope = self.highest_precedence_scope()
+            return self.scopes[scope]
         elif scope in self.scopes:
             return self.scopes[scope]
         elif scope in valid_scopes:
@@ -229,16 +235,13 @@ class Config:
         if scope is None:
             cfg_scopes = list(self.scopes.values())
         else:
-            cfg_scopes = [self.validate_scope(scope)]
+            cfg_scopes = [self.get_scope_data(scope)]
         merged: dict[str, Any] = {}
         for cfg_scope in cfg_scopes:
             data = cfg_scope.get(section)
             if not data or not isinstance(data, dict):
                 continue
-            if section == "machine":
-                merged = {section: data}
-            else:
-                merged = _merge(merged, {section: data})
+            merged = _merge(merged, {section: data})
         self._cache[cache_key] = {} if section not in merged else merged[section]
         return self._cache[cache_key]
 
@@ -364,9 +367,37 @@ class Config:
             scope (str): scope to be updated
         """
         self.validate_section_name(section)
-        scope_data = self.validate_scope(scope)
+        self.validate_scope_name(scope)
+        scope_data = self.get_scope_data(scope)
+        if section == "machine":
+            self.validate_machine_config_and_fill_missing(update_data)
         scope_data[section] = update_data
         self.invalidate_cache(section)
+
+    def validate_machine_config_and_fill_missing(self, data: dict) -> None:
+        defaults = self.get_config("machine")
+        nodes = data.get("nodes") or defaults["nodes"]
+        sockets_per_node = data.get("sockets_per_nodes") or defaults["sockets_per_node"]
+
+        if "cpu_count" in data:
+            if "cores_per_socket" not in data:
+                data["cores_per_socket"] = int(data["cpu_count"] / nodes / sockets_per_node)
+            elif nodes == 1:
+                data["cores_per_socket"] = data["cpu_count"]
+            if data["cpu_count"] != data["cores_per_socket"] * sockets_per_node * nodes:
+                raise ValueError("cpu_count != cores_per_socket*sockets_per_node*nodes")
+        elif "cores_per_socket" in data:
+            data["cpu_count"] != data["cores_per_socket"] * sockets_per_node * nodes
+
+        if "gpu_count" in data:
+            if "gpus_per_socket" not in data:
+                data["gpus_per_socket"] = int(data["gpu_count"] / nodes / sockets_per_node)
+            elif nodes == 1:
+                data["gpus_per_socket"] = data["gpu_count"]
+            if data["gpu_count"] != data["gpus_per_socket"] * sockets_per_node * nodes:
+                raise ValueError("gpu_count != gpus_per_socket*sockets_per_node*nodes")
+        elif "gpus_per_socket" in data:
+            data["gpu_count"] != data["gpus_per_socket"] * sockets_per_node * nodes
 
     def describe(self, section: Optional[str] = None) -> str:
         if section is not None:
