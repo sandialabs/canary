@@ -58,7 +58,7 @@ class PathSpec:
             if os.path.exists(path) and path.endswith((".yaml", ".yml", ".json")):
                 PathSpec.read_paths(path, args.paths)
             elif os.path.isfile(path) and is_test_file(path):
-                root, name = os.path.split(path)
+                root, name = os.path.split(os.path.abspath(path))
                 args.paths.setdefault(root, []).append(name)
             elif os.path.isdir(path):
                 args.paths.setdefault(path, [])
