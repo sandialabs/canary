@@ -49,9 +49,11 @@ Which is equivalent to
 
 """  # noqa: E501
 
-# NOTE: This module has empty stubs for each directive.  When a test is loaded,
-# it replaces (monkeypatches) each method with its own so that side-effects of
-# each directive are applied to the file.
+# ---------------------------------------- NOTE ------------------------------------------------- #
+# This module has empty stubs for each directive.  When a test is loaded, it replaces             #
+# (monkeypatches) each method with its own so that side-effects of each directive are applied to  #
+# the particular test.                                                                            #
+# ----------------------------------------------------------------------------------------------- #
 
 from typing import Any
 from typing import Optional
