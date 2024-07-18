@@ -197,14 +197,16 @@ class Session:
             raise ValueError("session is already populated")
         errors = 0
         for root, paths in search_paths.items():
+            if not root:
+                root = os.getcwd()
             if not os.path.isdir(root):
                 errors += 1
                 logging.warning(f"{root}: directory does not exist and will not be searched")
+            else:
+                root = os.path.abspath(root)
+                self.search_paths[root] = paths
         if errors:
             logging.warning("one or more search paths does not exist")
-        for root, paths in search_paths.items():
-            root = os.path.abspath(root)
-            self.search_paths[root] = paths
         self.save()
 
     def discover(self) -> None:

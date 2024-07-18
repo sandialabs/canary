@@ -97,9 +97,9 @@ def run(args: "argparse.Namespace") -> int:
     if args.mode == "w":
         path = args.work_tree or Session.default_worktree
         session = Session(path, mode=args.mode, force=args.wipe)
-        s = ", ".join(os.path.relpath(p, os.getcwd()) for p in args.paths) if args.paths else "."
-        logging.emit(colorize("@*{searching} for tests in %s\n" % s))
         session.add_search_paths(args.paths)
+        s = ", ".join(os.path.relpath(p, os.getcwd()) for p in session.search_paths)
+        logging.emit(colorize("@*{searching} for tests in %s\n" % s))
         session.discover()
         if args.until is not None:
             generators = session.generators
