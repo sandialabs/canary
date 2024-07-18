@@ -178,7 +178,7 @@ class Config:
         if args.debug:
             logging.set_level(logging.DEBUG)
             scope_data.setdefault("config", {})["debug"] = True
-        for var, val in args.env_mods.items():
+        for var, val in args.env_mods.get("session", {}).items():
             os.environ[var] = val
             scope_data.setdefault("variables", {})[var] = val
         for path in args.config_mods:

@@ -74,10 +74,11 @@ def setup_parser(parser: "Parser"):
     add_resource_arguments(parser)
     parser.add_argument(
         "-e",
-        dest="run_env_mods",
+        dest="env_mods",
         metavar="var=val",
         default={},
         action=EnvironmentModification,
+        default_scope="test",
         help="Add environment variable %s to each test's environment with value %s, "
         "values are expanded before " % (colorize("@*{var}"), colorize("@*{val}")),
     )
@@ -118,7 +119,7 @@ def run(args: "argparse.Namespace") -> int:
             keyword_expr=args.keyword_expr,
             parameter_expr=args.parameter_expr,
             on_options=args.on_options,
-            env_mods=args.run_env_mods,
+            env_mods=args.env_mods.get("test") or {},
         )
         if args.until is not None:
             cases = [case for case in session.cases if not case.mask]

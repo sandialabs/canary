@@ -196,6 +196,10 @@ def identity(arg):
 
 
 class EnvironmentModification(argparse.Action):
+    def __init__(self, option_strings, dest, default_scope="session", **kwargs):
+        self.default_scope = default_scope
+        super().__init__(option_strings, dest, **kwargs)
+
     def __call__(
         self,
         parser: argparse.ArgumentParser,
@@ -210,8 +214,11 @@ class EnvironmentModification(argparse.Action):
             raise argparse.ArgumentTypeError(
                 f"Invalid environment variable {option!r} specification. Expected form NAME=VAL"
             ) from None
-        env_mods: dict[str, str] = getattr(namespace, self.dest, None) or {}
-        env_mods[var] = val
+        scope = self.default_scope
+        if ":" in var:
+            scope, var = var.split(":", 1)
+        env_mods: dict[str, dict[str, str]] = getattr(namespace, self.dest, None) or {}
+        env_mods.setdefault(scope, {})[var] = val
         setattr(namespace, self.dest, env_mods)
 
 
@@ -310,6 +317,7 @@ def make_argument_parser(**kwargs):
         metavar="var=val",
         default={},
         action=EnvironmentModification,
+        default_scope="session",
         help="Add environment variable %s to the testing environment with value %s"
         % (colorize("@*{var}"), colorize("@*{val}")),
     )

@@ -492,17 +492,13 @@ def no_proxy():
     environment in order to upload data.
 
     """
+    save_env = dict(os.environ)
     keys = ("http_proxy", "https_proxy", "ftp_proxy", "no_proxy")
-    store = {}
     for key in keys:
-        if key in os.environ:
-            store[key] = os.environ.pop(key)
-
+        os.environ.pop(key, None)
     yield
-
-    # restore original os.environ
-    for key, value in store.items():
-        os.environ[key] = value
+    os.environ.clear()
+    os.environ.update(save_env)
 
 
 def checksum(hashlib_algo, filename, **kwargs):
