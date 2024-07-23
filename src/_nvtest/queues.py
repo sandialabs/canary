@@ -85,6 +85,8 @@ class ResourceQueue:
         N = len(self.cpu_ids)
         if N < n:
             raise ResourceError(f"requested cpus ({n}) exceeds available cpus ({N})")
+        elif n:
+            logging.debug(f"Acquiring {n} CPU{'s ' if n > 1 else ' '}from {N} available")
         cpu_ids = list(self.cpu_ids[:n])
         del self.cpu_ids[:n]
         return cpu_ids
@@ -93,15 +95,21 @@ class ResourceQueue:
         N = len(self.gpu_ids)
         if N < n:
             raise ResourceError(f"requested gpus ({n}) exceeds available gpus ({N})")
+        elif n:
+            logging.debug(f"Acquiring {n} GPU{'s ' if n > 1 else ' '}from {N} available")
         gpu_ids = list(self.gpu_ids[:n])
         del self.gpu_ids[:n]
         return gpu_ids
 
     def release_cpus(self, ids: list[int]) -> None:
+        if ids:
+            logging.debug(f"Releasing {len(ids)} CPU IDs ({idjoin(ids)})")
         self.cpu_ids.extend(ids)
         self.cpu_ids.sort()
 
     def release_gpus(self, ids: list[int]) -> None:
+        if ids:
+            logging.debug(f"Releasing {len(ids)} GPU IDs ({idjoin(ids)})")
         self.gpu_ids.extend(ids)
         self.gpu_ids.sort()
 
@@ -143,7 +151,7 @@ class ResourceQueue:
                     self.skip(i)
                     continue
                 elif status == "ready":
-                    if (obj.processors, obj.gpus) <= self.available_resources():
+                    if le((obj.processors, obj.gpus), self.available_resources()):
                         self._busy[i] = self.buffer.pop(i)
                         self._busy[i].assign_cpu_ids(self.acquire_cpus(self._busy[i].processors))
                         self._busy[i].assign_gpu_ids(self.acquire_gpus(self._busy[i].gpus))
@@ -361,6 +369,19 @@ class BatchResourceQueue(ResourceQueue):
 
     def notrun(self) -> list[Batch]:
         return list(self._notrun.values())
+
+
+def idjoin(ids: list[int], threshold: int = 4) -> str:
+    if len(ids) <= threshold:
+        return ",".join(str(_) for _ in ids)
+    i = int(min(threshold / 2, 3))
+    return idjoin(ids[:i]) + ",...," + idjoin(ids[-i:])
+
+
+def le(arg1: tuple[int, ...], arg2: tuple[int, ...]) -> bool:
+    if len(arg1) != len(arg2):
+        raise ValueError(f"lengths of operands must be equal ({len(arg1)}, {len(arg2)})")
+    return all(a <= b for a, b in zip(arg1, arg2))
 
 
 class Empty(Exception):
