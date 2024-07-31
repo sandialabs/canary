@@ -1,4 +1,4 @@
-.. _userguide-config:
+.. _introduction-config:
 
 Configuration settings
 ======================
@@ -11,7 +11,7 @@ Additional configuration is not required to run ``nvtest``.  To see the current 
 Configuration variables can be set on the command line or read from a
 configuration file.
 
-.. _userguide-config-file:
+.. _introduction-config-file:
 
 Configuration file
 ------------------

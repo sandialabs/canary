@@ -8,4 +8,10 @@ Introduction
 
    install
    getting_started
+   configuration
+   testfile
+   session
+   status
+   runtime
+   resource
    getting_help

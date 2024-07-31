@@ -1,4 +1,4 @@
-.. _userguide-session:
+.. _introduction-session:
 
 The test session
 ================
@@ -123,4 +123,4 @@ Note the output files (``output.json``) from each of the parameterized test case
 
 .. note::
 
-   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type:X`` option.  See :ref:`userguide-resource` and :ref:`howto-resources`.
+   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type:X`` option.  See :ref:`introduction-resource` and :ref:`howto-resources`.

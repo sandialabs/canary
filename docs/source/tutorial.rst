@@ -7,8 +7,8 @@ Getting Started
 ---------------
 
 * :ref:`intro-install`
-* :ref:`userguide-testfile`
-* :ref:`userguide-session`
+* :ref:`introduction-testfile`
+* :ref:`introduction-session`
 
 Selected how-to guides
 ----------------------

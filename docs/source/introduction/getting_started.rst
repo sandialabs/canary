@@ -26,7 +26,7 @@ To run the test, navigate to the examples directory and run:
     :extraargs: -rv -w
     :setup: rm -rf TestResults
 
-A test is considered to have successfully completed if its exit code is 0.  See :ref:`userguide-status` for more details on test statuses.
+A test is considered to have successfully completed if its exit code is 0.  See :ref:`introduction-status` for more details on test statuses.
 
 A second test
 -------------

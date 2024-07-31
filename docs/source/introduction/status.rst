@@ -1,4 +1,4 @@
-.. _userguide-status:
+.. _introduction-status:
 
 Test statuses
 =============
