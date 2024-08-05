@@ -66,6 +66,12 @@ class PYTTestFile(AbstractTestFile):
     def f_gpus(self, *ngpus: int, when: Optional[str] = None) -> None:
         self.m_parameterize("ngpu", list(ngpus), when=when)
 
+    def f_cpus(self, *values: int, when: Optional[str] = None) -> None:
+        self.m_parameterize("np", list(values), when=when)
+
+    def f_processors(self, *values: int, when: Optional[str] = None) -> None:
+        self.m_parameterize("np", list(values), when=when)
+
     def f_enable(self, *args: bool, when: Optional[str] = None):
         arg = True if not args else args[0]
         self.m_enable(arg, when=when)
@@ -91,9 +97,6 @@ class PYTTestFile(AbstractTestFile):
 
     def f_preload(self, arg: str, *, when: Optional[str] = None, source: bool = False):
         self.m_preload(arg, when=when, source=source)
-
-    def f_processors(self, *values: int, when: Optional[str] = None) -> None:
-        self.m_parameterize("np", list(values), when=when)
 
     def f_set_attribute(self, *, when: Optional[str] = None, **attributes: Any) -> None:
         self.m_set_attribute(when=when, **attributes)

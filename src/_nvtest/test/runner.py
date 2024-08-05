@@ -24,7 +24,7 @@ class Runner(abc.ABC):
         return self._cpu_ids
 
     def assign_cpu_ids(self, arg: list[int]) -> None:
-        assert len(arg) == self.processors
+        assert len(arg) == self.cpus
         self._cpu_ids = list(arg)
 
     @property
@@ -45,7 +45,7 @@ class Runner(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def processors(self) -> int: ...
+    def cpus(self) -> int: ...
 
     @property
     @abc.abstractmethod

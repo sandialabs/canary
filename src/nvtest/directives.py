@@ -846,7 +846,7 @@ def preload(arg: str, *, when: Optional[str] = None, source: bool = False) -> No
     """
 
 
-def processors(*values: int, when: Optional[str] = None) -> None:
+def cpus(*values: int, when: Optional[str] = None) -> None:
     """Run the test with this many processors
 
     Usage
@@ -857,7 +857,7 @@ def processors(*values: int, when: Optional[str] = None) -> None:
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.processors(*nprocs, when=...)
+       nvtest.directives.cpus(*nprocs, when=...)
 
 
     ``.vvt``: NA
@@ -878,7 +878,7 @@ def processors(*values: int, when: Optional[str] = None) -> None:
     Notes
     -----
 
-    * ``processors(...)`` is equivalent to ``parameterize("np", ...)``
+    * ``cpus(...)`` is equivalent to ``parameterize("np", ...)``
 
     Examples
     --------
@@ -890,7 +890,7 @@ def processors(*values: int, when: Optional[str] = None) -> None:
     .. code-block:: python
 
        # test1
-       nvtest.directives.processors(4, 8, 12, 32)
+       nvtest.directives.cpus(4, 8, 12, 32)
 
     .. code-block:: console
 
@@ -901,6 +901,9 @@ def processors(*values: int, when: Optional[str] = None) -> None:
        ├── test1[np=32]
 
     """
+
+
+processors = cpus
 
 
 def set_attribute(*, when: Optional[str] = None, **attributes: Any) -> None:

@@ -316,7 +316,7 @@ class Session:
             elif explicit_start_path:
                 case.status.set("ready")
                 continue
-            if rh["test:cpus"][1] and case.processors > rh["test:cpus"][1]:
+            if rh["test:cpus"][1] and case.cpus > rh["test:cpus"][1]:
                 n = rh["test:cpus"][1]
                 case.mask = f"test requires more than {n} cpus"
                 continue

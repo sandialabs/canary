@@ -430,7 +430,9 @@ class CDashReporter(Reporter):
                 add_measurement(results, name="Fail Reason", value=fail_reason)
             add_measurement(results, name="Completion Status", value=completion_status)
             add_measurement(results, name="Command Line", cdata=case.cmd_line)
-            add_measurement(results, name="Processors", value=int(case.processors or 0))
+            add_measurement(results, name="Processors", value=int(case.cpus or 1))
+            if case.gpus:
+                add_measurement(results, name="GPUs", value=case.gpus)
             if url := getattr(case, "url", None):
                 add_measurement(results, name="Script", cdata=url)
             add_measurement(

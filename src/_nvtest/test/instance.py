@@ -88,6 +88,10 @@ class TestInstance:
 
     @property
     def processors(self) -> int:
+        return self.cpus
+
+    @property
+    def cpus(self) -> int:
         return len(self.cpu_ids)
 
     @property

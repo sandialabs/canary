@@ -286,8 +286,12 @@ class TestCase(Runner):
         return os.path.normpath(os.path.join(exec_root, self.exec_path))
 
     @property
-    def processors(self) -> int:
+    def cpus(self) -> int:
         return int(self.parameters.get("np") or 1)  # type: ignore
+
+    @property
+    def processors(self) -> int:
+        return self.cpus
 
     @property
     def gpus(self) -> int:
@@ -300,7 +304,7 @@ class TestCase(Runner):
 
     @property
     def cputime(self) -> Union[float, int]:
-        return self.runtime * self.processors
+        return self.runtime * self.cpus
 
     @property
     def runtime(self) -> Union[float, int]:

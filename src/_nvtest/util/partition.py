@@ -10,7 +10,7 @@ from ..util.collections import defaultlist
 class Partition(set):
     @property
     def cputime(self):
-        return sum(case.processors * case.runtime for case in self if not case.mask)
+        return sum(case.cpus * case.runtime for case in self if not case.mask)
 
 
 def groupby_dep(cases: list[TestCase]) -> list[set[TestCase]]:
@@ -75,7 +75,7 @@ def partition_t(
         # group tests requiring the same number of nodes and attempt to create
         # partitions with equal runtimes
         for case in ready:
-            c_nodes = math.ceil(case.processors / cores_per_node)
+            c_nodes = math.ceil(case.cpus / cores_per_node)
             groups.setdefault(c_nodes, []).append(case)
         for g_nodes, group in groups.items():
             g_runtime = 0.0
@@ -124,8 +124,8 @@ def tile(cases: Sequence[TestCase], cores: int) -> list[list[TestCase]]:
     grid: list[list[TestCase]] = []
     for case in sorted(cases, key=lambda c: c.runtime, reverse=True):
         for row in grid:
-            row_cpus = sum(c.processors for c in row)
-            if row_cpus + case.processors <= cores:
+            row_cpus = sum(c.cpus for c in row)
+            if row_cpus + case.cpus <= cores:
                 row.append(case)
                 break
         else:

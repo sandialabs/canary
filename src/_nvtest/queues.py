@@ -151,9 +151,9 @@ class ResourceQueue:
                     self.skip(i)
                     continue
                 elif status == "ready":
-                    if le((obj.processors, obj.gpus), self.available_resources()):
+                    if le((obj.cpus, obj.gpus), self.available_resources()):
                         self._busy[i] = self.buffer.pop(i)
-                        self._busy[i].assign_cpu_ids(self.acquire_cpus(self._busy[i].processors))
+                        self._busy[i].assign_cpu_ids(self.acquire_cpus(self._busy[i].cpus))
                         self._busy[i].assign_gpu_ids(self.acquire_gpus(self._busy[i].gpus))
                         return (i, self._busy[i])
         return None
@@ -210,13 +210,13 @@ class DirectResourceQueue(ResourceQueue):
         )
 
     def iter_keys(self) -> list[int]:
-        return sorted(self.buffer.keys(), key=lambda k: self.buffer[k].processors)
+        return sorted(self.buffer.keys(), key=lambda k: self.buffer[k].cpus)
 
     def put(self, *objs: TestCase) -> None:
         for obj in objs:
-            if obj.processors > self.cpu_count:
+            if obj.cpus > self.cpu_count:
                 raise ValueError(
-                    f"{obj!r}: required cpus ({obj.processors}) "
+                    f"{obj!r}: required cpus ({obj.cpus}) "
                     f"exceeds max cpu count ({self.cpu_count})"
                 )
             super().put(obj)
@@ -299,9 +299,9 @@ class BatchResourceQueue(ResourceQueue):
 
     def put(self, *objs: TestCase) -> None:
         for obj in objs:
-            if obj.processors > self.cpu_count:
+            if obj.cpus > self.cpu_count:
                 raise ValueError(
-                    f"{obj!r}: required cpus ({obj.processors}) "
+                    f"{obj!r}: required cpus ({obj.cpus}) "
                     f"exceeds max cpu count ({self.cpu_count})"
                 )
             self.tmp_buffer.append(obj)

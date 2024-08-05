@@ -57,7 +57,7 @@ class Batch(Runner):
         first = next(iter(cases))
         self.root = first.exec_root
         self.total_duration: float = -1
-        self.max_cpus_required = max([case.processors for case in self.cases])
+        self.max_cpus_required = max([case.cpus for case in self.cases])
         self.max_gpus_required = max([case.gpus for case in self.cases])
         self._runtime: float
         if len(self.cases) == 1:
@@ -118,7 +118,7 @@ class Batch(Runner):
 
     @property
     def cputime(self) -> float:
-        return sum(case.processors * min(case.runtime, 5.0) for case in self) * 1.5
+        return sum(case.cpus * min(case.runtime, 5.0) for case in self) * 1.5
 
     @property
     def runtime(self) -> float:
@@ -129,7 +129,7 @@ class Batch(Runner):
         return any(case.dependencies for case in self.cases)
 
     @property
-    def processors(self) -> int:
+    def cpus(self) -> int:
         return self.max_cpus_required
 
     @property
@@ -332,7 +332,7 @@ class Slurm(QBatch):
         super().__init__(cases, batch_no, nbatches, lot_no=lot_no)
 
     @property
-    def processors(self) -> int:
+    def cpus(self) -> int:
         return 1
 
     @property
@@ -462,7 +462,7 @@ class PBS(QBatch):
         super().__init__(cases, batch_no, nbatches, lot_no=lot_no)
 
     @property
-    def processors(self) -> int:
+    def cpus(self) -> int:
         return 1
 
     @property
@@ -595,7 +595,7 @@ class Flux(QBatch):
         super().__init__(cases, batch_no, nbatches, lot_no=lot_no)
 
     @property
-    def processors(self) -> int:
+    def cpus(self) -> int:
         return 1
 
     @property

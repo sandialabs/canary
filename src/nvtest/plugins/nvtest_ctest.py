@@ -246,11 +246,11 @@ class CTestTestCase(TestCase):
         self.preflags = ns.preflags
         self.command = ns.command
         self.postflags = ns.postflags
-        self._processors: int = 1
+        self._cpus: int = 1
         if processors:
-            self._processors = processors
+            self._cpus = processors
         elif self.preflags:
-            self._processors = parse_np(self.preflags)
+            self._cpus = parse_np(self.preflags)
         if environment:
             self.add_default_env(**environment)
 
@@ -273,8 +273,8 @@ class CTestTestCase(TestCase):
         return super().run(*args, **kwargs)
 
     @property
-    def processors(self) -> int:
-        return self._processors
+    def cpus(self) -> int:
+        return self._cpus
 
     @property
     def gpus(self) -> int:
