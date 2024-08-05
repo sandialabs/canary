@@ -381,11 +381,11 @@ class Session:
         verbose: bool = output == "verbose"
         with self.rc_environ():
             with working_dir(self.root):
+                cleanup_queue = True
                 try:
                     self.start = timestamp()
                     self.finish = -1.0
                     self.process_queue(queue=queue, rh=rh, fail_fast=fail_fast, output=output)
-                    queue.close(cleanup=True)
                 except ProcessPoolExecutorFailedToStart:
                     if int(os.getenv("NVTEST_LEVEL", "0")) > 1:
                         # This can happen when the ProcessPoolExecutor fails to obtain a lock.
@@ -398,23 +398,23 @@ class Session:
                     raise
                 except KeyboardInterrupt:
                     self.returncode = signal.SIGINT.value
-                    queue.close(cleanup=False)
+                    cleanup_queue = False
                     raise
                 except FailFast as e:
                     name, code = e.args
                     self.returncode = code
-                    queue.close(cleanup=False)
+                    cleanup_queue = False
                     raise StopExecution(f"fail_fast: {name}", code)
                 except Exception:
                     logging.error(traceback.format_exc())
                     self.returncode = compute_returncode(queue.cases())
-                    queue.close(cleanup=True)
                     raise
                 else:
                     if not verbose:
                         queue.display_progress(self.start, last=True)
                     self.returncode = compute_returncode(queue.cases())
                 finally:
+                    queue.close(cleanup=cleanup_queue)
                     self.finish = timestamp()
                 for hook in plugin.plugins("session", "finish"):
                     hook(self)

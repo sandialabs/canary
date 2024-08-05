@@ -8,6 +8,7 @@ from . import commands
 from . import config
 from . import describe
 from . import find
+from . import help
 from . import location
 from . import log
 from . import mkdocs
@@ -28,6 +29,7 @@ def all_commands() -> list[ModuleType]:
         config,
         describe,
         find,
+        help,
         location,
         log,
         mkdocs,

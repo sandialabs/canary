@@ -20,6 +20,7 @@ Tests can receive one of the following statuses:
    * :ref:`stat-success`
    * :ref:`stat-xfail`
    * :ref:`stat-xdiff`
+   * :ref:`stat-not_run`
 
 .. _stat-created:
 
@@ -54,14 +55,14 @@ The test case is currently running.
 cancelled
 ---------
 
-The test case was cancelled (usually by a keyboard interrupt).
+The test case was cancelled while running (usually by a keyboard interrupt).
 
 .. _stat-skipped:
 
 skipped
 -------
 
-The test case was skipped due to a failed dependency or skipped at runtime by exiting a ``63`` exit code.
+The test case was skipped due to a skipped dependency or by exiting with a ``63`` exit code.
 
 .. admonition:: Tip
 
@@ -94,7 +95,7 @@ A test fails if it exits with any nonzero code not previously defined.
 timeout
 -------
 
-The test exceeded its allowed run time.
+The test case exceeded its allowed run time.
 
 .. _stat-success:
 
@@ -108,11 +109,18 @@ A test is considered successfully passed if it exits with a ``0`` exit code.
 xfail
 -----
 
-The test is marked as :ref:`expected to fail<directive-xfail>`
+The test case is marked as :ref:`expected to fail<directive-xfail>`
 
 .. _stat-xdiff:
 
 xdiff
 -----
 
-The test is marked as :ref:`expected to diff<directive-xdiff>`
+The test case is marked as :ref:`expected to diff<directive-xdiff>`
+
+.. _stat-not_run:
+
+not_run
+-------
+
+A test case that was expected to run was not run.  Common reasons for being marked ``not_run`` are the test case not being run due to a failed or skipped dependency and the test session being stopped prematurely.

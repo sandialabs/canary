@@ -3,7 +3,7 @@
 The test session
 ================
 
-When ``nvtest run [path [path...]]`` is executed, ``path`` is searched for test files, the test files are expanded into test cases, and each test case is run in a separate execution directory relative to the session's root directory (default: ``./TestResults``).
+When ``nvtest run [path [path...]]`` is executed, ``path`` is searched for :ref:`test files<introduction-testfile>`, the test files are expanded into test cases, and each test case is run in a separate execution directory relative to the session's root directory (default: ``./TestResults``).
 
 Phases of a test session
 ------------------------

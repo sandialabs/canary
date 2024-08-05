@@ -9,8 +9,8 @@ Introduction
    install
    getting_started
    configuration
-   testfile
    session
+   testfile
    status
    runtime
    resource

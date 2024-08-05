@@ -11,7 +11,9 @@ def compute_returncode(cases: Union[list[TestCase], set[TestCase]]) -> int:
         results[case.status.value] = results.get(case.status.value, 0) + 1
     for result, n in results.items():
         for i in range(n):
-            if result == "diffed":
+            if result in ("success", "xfail", "xdiff"):
+                continue
+            elif result == "diffed":
                 returncode |= 2**1
             elif result == "failed":
                 returncode |= 2**2
@@ -25,4 +27,6 @@ def compute_returncode(cases: Union[list[TestCase], set[TestCase]]) -> int:
                 returncode |= 2**6
             elif result == "cancelled":
                 returncode |= 2**7
+            elif result == "not_run":
+                returncode |= 2**8
     return returncode

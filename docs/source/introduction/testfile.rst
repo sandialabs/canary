@@ -61,7 +61,7 @@ Test files define one or more *test cases*.  In the simplest case, a test file d
     :language: python
     :lines: 2-4
 
-would expand into two test instances, one with the parameter ``np=1`` and one with ``np=4``.  Each test case would execute in its own directory and the test script should query for the value of ``np`` and adjust the test accordingly.  Test parameters and other test-specific and runtime-specific information are accessed from the ``nvtest.test.instance`` object which is accessible via ``nvtest.get_instance()``:
+would expand into two test instances, one with the parameter ``a=1`` and one with ``a=4``.  Each test case would execute in its own directory and the test script should query for the value of ``a`` and adjust the test accordingly.  Test parameters and other test-specific and runtime-specific information are accessed from the ``nvtest.test.instance`` object which is accessible via ``nvtest.get_instance()``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
@@ -73,7 +73,7 @@ A complete example
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
 
-This test file would expand into two test instances, one with the parameter ``np=1`` and one with ``np=4``, as seen with the ``nvtest describe`` command:
+This test file would expand into two test instances, one with the parameter ``a=1`` and one with ``a=4``, as seen with the ``nvtest describe`` command:
 
 .. command-output:: nvtest describe parameterize/parameterize1.pyt
     :cwd: /examples

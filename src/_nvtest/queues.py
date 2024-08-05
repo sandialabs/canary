@@ -130,8 +130,8 @@ class ResourceQueue:
                 if case.status == "running":
                     case.status.set("cancelled", "Case failed to stop")
                     case.save()
-                elif case.status == "ready":
-                    case.status.set("failed", "Case failed to start")
+                elif case.status.value in ("retry", "created", "pending", "ready"):
+                    case.status.set("not_run", "Case failed to start")
                     case.save()
         keys = list(self.buffer.keys())
         for key in keys:
