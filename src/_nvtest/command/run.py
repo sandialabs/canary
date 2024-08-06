@@ -8,6 +8,7 @@ from ..config.argparsing import EnvironmentModification
 from ..error import StopExecution
 from ..resources import ResourceHandler
 from ..session import ExitCode
+from ..session import OutputLevel
 from ..session import Session
 from ..test.case import TestCase
 from ..third_party.color import colorize
@@ -158,7 +159,7 @@ def run(args: "argparse.Namespace") -> int:
         assert args.mode == "b"
         session = Session(args.work_tree, mode="a")
         cases = session.bfilter(lot_no=args.lot_no, batch_no=args.batch_no)
-    output = {"b": "progress", "v": "verbose"}[args.r]
+    output = OutputLevel[{"b": "progress_bar", "v": "verbose"}[args.r]]
     try:
         session.exitstatus = session.run(
             cases,

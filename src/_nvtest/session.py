@@ -1,4 +1,5 @@
 import datetime
+import enum
 import io
 import json
 import os
@@ -62,6 +63,12 @@ class ExitCode:
     @staticmethod
     def compute(cases: list[TestCase]) -> int:
         return compute_returncode(cases)
+
+
+class OutputLevel(enum.Enum):
+    progress_bar = 0
+    verbose = 1
+    default = 0
 
 
 class Session:
@@ -372,13 +379,16 @@ class Session:
         *,
         rh: Optional[ResourceHandler] = None,
         fail_fast: bool = False,
-        output: str = "progress-bar",
+        output: OutputLevel = OutputLevel.default,
     ) -> int:
+        """Run each test case in ``cases``.  ``rh`` is a ``ResourceHandler``
+        object, usually set up by the ``nvtest run`` command.  If ``fail_fast is
+        True``, stop the execution at the first detected test failure, otherwise
+        continuing running until all tests have been run."""
         if not cases:
             raise ValueError("There are no cases to run in this session")
         rh = rh or ResourceHandler()
         queue = self.setup_queue(cases, rh)
-        verbose: bool = output == "verbose"
         with self.rc_environ():
             with working_dir(self.root):
                 cleanup_queue = True
@@ -410,7 +420,7 @@ class Session:
                     self.returncode = compute_returncode(queue.cases())
                     raise
                 else:
-                    if not verbose:
+                    if output == OutputLevel.progress_bar:
                         queue.display_progress(self.start, last=True)
                     self.returncode = compute_returncode(queue.cases())
                 finally:
@@ -438,9 +448,8 @@ class Session:
         queue: ResourceQueue,
         rh: ResourceHandler,
         fail_fast: bool,
-        output: str = "progress-bar",
+        output: OutputLevel = OutputLevel.default,
     ) -> None:
-        verbose: bool = output == "verbose"
         futures: dict = {}
         duration = lambda: timestamp() - self.start
         timeout = rh["session:timeout"] or -1
@@ -448,7 +457,9 @@ class Session:
             ppe: Optional[ProcessPoolExecutor] = None
             with ProcessPoolExecutor(max_workers=queue.workers) as ppe:
                 runner_args = []
-                runner_kwargs = dict(verbose=verbose, timeoutx=rh["test:timeoutx"])
+                runner_kwargs = dict(
+                    verbose=output == OutputLevel.verbose, timeoutx=rh["test:timeoutx"]
+                )
                 if rh["batch:batched"]:
                     runner_args.extend(rh["batch:args"])
                     if rh["batch:workers"]:
@@ -457,7 +468,7 @@ class Session:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
                         logging.emit(queue.status())
-                    if not verbose:
+                    if output == OutputLevel.progress_bar:
                         queue.display_progress(self.start)
                     if timeout >= 0.0 and duration() > timeout:
                         raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
@@ -723,6 +734,8 @@ class Session:
 
 
 def setup_individual_case(case, exec_root, copy_all_resources):
+    """Set up the test case.  This is done in a free function so that it can
+    more easily be parallelized in a multiprocessor Pool"""
     logging.debug(f"Setting up {case}")
     case.setup(exec_root, copy_all_resources=copy_all_resources)
 
