@@ -193,8 +193,9 @@ class Finder:
         )
         rh = rh or ResourceHandler()
         kwds = dict(
-            cpus=rh["test:cpus"],
-            gpus=rh["test:gpus"],
+            cpus=rh["test:cpu_count"],
+            gpus=rh["test:gpu_count"],
+            nodes=rh["test:node_count"],
             keyword_expr=keyword_expr,
             timeout=rh["test:timeout"],
             parameter_expr=parameter_expr,

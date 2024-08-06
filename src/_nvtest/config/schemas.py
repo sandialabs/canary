@@ -61,7 +61,7 @@ test_schema = Schema(
 machine_schema = Schema(
     {
         "machine": {
-            Optional("nodes"): Or(int, None),
+            Optional("node_count"): Or(int, None),
             Optional("cores_per_socket"): int,
             Optional("sockets_per_node"): int,
             Optional("cpu_count"): int,

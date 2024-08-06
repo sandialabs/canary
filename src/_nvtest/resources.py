@@ -12,19 +12,23 @@ class ResourceHandler:
     def __init__(self) -> None:
         cpu_count = config.get("machine:cpu_count")
         gpu_count = config.get("machine:gpu_count")
+        node_count = config.get("machine:node_count")
         self.data: dict[str, Any] = {
             "session": {
                 "cpu_count": cpu_count,
                 "cpu_ids": list(range(cpu_count)),
                 "gpu_count": gpu_count,
                 "gpu_ids": list(range(gpu_count)),
+                "node_count": node_count,
+                "node_ids": list(range(node_count)),
                 "workers": -1,
                 "timeout": None,
                 "meta": {},
             },
             "test": {
-                "cpus": [0, cpu_count],
-                "gpus": [0, gpu_count],
+                "cpu_count": [1, cpu_count],
+                "gpu_count": [0, gpu_count],
+                "node_count": [1, node_count],
                 "timeout": None,
                 "timeoutx": 1.0,
             },
@@ -118,22 +122,22 @@ class ResourceHandler:
             pass
 
         # --- test resources
-        elif (scope, type) == ("test", "cpus"):
-            min_cpus, max_cpus = value
+        elif (scope, type) == ("test", "cpu_count"):
             if isinstance(value, int):
                 value = [0, value]
+            min_cpus, max_cpus = value
             if min_cpus > max_cpus:
                 raise ValueError("test min cpus > test max cpus")
-            elif min_cpus < 0:
-                raise ValueError(f"test:min_cpus = {min_cpus} < 0")
-            elif max_cpus < 0:
-                raise ValueError(f"test:max_cpus = {max_cpus} < 0")
+            elif min_cpus < 1:
+                raise ValueError(f"test:min_cpus = {min_cpus} < 1")
+            elif max_cpus < 1:
+                raise ValueError(f"test:max_cpus = {max_cpus} < 1")
             elif max_cpus > config.get("machine:cpu_count"):
                 raise ValueError("test max cpu request exceeds machine cpu count")
-            elif self["session:cpu_count"] > 0 and max_cpus > self["session:cpu_count"]:
+            elif self["session:cpu_count"] > 1 and max_cpus > self["session:cpu_count"]:
                 raise ValueError("test cpu request exceeds session cpu limit")
 
-        elif (scope, type) == ("test", "gpus"):
+        elif (scope, type) == ("test", "gpu_count"):
             if isinstance(value, int):
                 value = [0, value]
             min_gpus, max_gpus = value
@@ -147,6 +151,19 @@ class ResourceHandler:
                 raise ValueError("test max gpu request exceeds machine gpu count")
             elif self["session:gpu_count"] > 0 and max_gpus > self["session:gpu_count"]:
                 raise ValueError("test gpu request exceeds session gpu limit")
+
+        elif (scope, type) == ("test", "node_count"):
+            if isinstance(value, int):
+                value = [0, value]
+            min_nodes, max_nodes = value
+            if min_nodes > max_nodes:
+                raise ValueError("test min nodes > test max nodes")
+            elif min_nodes < 1:
+                raise ValueError(f"test:min_nodes = {min_nodes} < 1")
+            elif max_nodes < 1:
+                raise ValueError(f"test:max_nodes = {max_nodes} < 1")
+            elif max_nodes > config.get("machine:node_count"):
+                raise ValueError("test max node request exceeds machine node count")
 
         elif (scope, type) == ("test", "timeout"):
             pass

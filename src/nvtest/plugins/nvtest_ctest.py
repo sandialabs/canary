@@ -44,6 +44,7 @@ class CTestTestFile(TestGenerator):
         self,
         cpus: Optional[list[int]] = None,
         gpus: Optional[list[int]] = None,
+        nodes: Optional[list[int]] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -70,8 +71,9 @@ class CTestTestFile(TestGenerator):
         file.write(f"File: {self.file}\n")
         rh = rh or ResourceHandler()
         cases = self.freeze(
-            cpus=rh["test:cpus"],
-            gpus=rh["test:gpus"],
+            cpus=rh["test:cpu_count"],
+            gpus=rh["test:gpu_count"],
+            nodes=rh["test:node_count"],
             on_options=on_options,
             keyword_expr=keyword_expr,
         )

@@ -316,12 +316,12 @@ class Session:
             elif explicit_start_path:
                 case.status.set("ready")
                 continue
-            if rh["test:cpus"][1] and case.cpus > rh["test:cpus"][1]:
-                n = rh["test:cpus"][1]
+            if rh["test:cpu_count"][1] and case.cpus > rh["test:cpu_count"][1]:
+                n = rh["test:cpu_count"][1]
                 case.mask = f"test requires more than {n} cpus"
                 continue
-            if rh["test:gpus"][1] and case.gpus > rh["test:gpus"][1]:
-                n = rh["test:gpus"][1]
+            if rh["test:gpu_count"][1] and case.gpus > rh["test:gpu_count"][1]:
+                n = rh["test:gpu_count"][1]
                 case.mask = f"test requires more than {n} gpus"
                 continue
             when_expr: dict[str, str] = {}

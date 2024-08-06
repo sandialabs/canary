@@ -125,8 +125,9 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • session:gpu_count=N: Occupy at most N gpus at any one time.\n\n
 • session:gpu_ids=L: Comma separated list of GPU ids available to the session, mutually exclusive with session:gpu_count.\n\n
 • session:timeout=T: Set a timeout on test session execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: 60m]\n\n
-• test:cpus=[n:]N: Skip tests requiring less than n and more than N cpu cores [default: [0, machine:cpu_count]]\n\n
-• test:gpus=[n:]N: Skip tests requiring less than n and more than N gpus [default: [0, machine:gpu_count]]\n\n
+• test:cpu_count=[n:]N: Skip tests requiring less than n and more than N cpu cores [default: [0, machine:cpu_count]]\n\n
+• test:gpu_count=[n:]N: Skip tests requiring less than n and more than N gpus [default: [0, machine:gpu_count]]\n\n
+• test:node_count=[n:]N: Skip tests requiring less than n and more than N nodes [default: [0, machine:node_count]]\n\n
 • test:timeout=T: Set a timeout on any single test execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s)\n\n
 • test:timeoutx=R: Set a timeout multiplier for all tests [default: 1.0]\n\n
 • batch:count=N: Execute tests in N batches.\n\n
@@ -154,27 +155,36 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         elif match := re.search(r"^session:workers[:=](\d+)$", arg):
             raw = match.group(1)
             return ("session:workers", int(raw))
-        elif match := re.search(r"^session:(gpu_count|devices|gpus)[:=](\d+)$", arg):
+        elif match := re.search(r"^session:(gpu_count|gpus|devices)[:=](\d+)$", arg):
             raw = match.group(2)
             return ("session:gpu_count", int(raw))
-        elif match := re.search(r"^test:(devices|gpus)[:=]:?(\d+)$", arg):
+        elif match := re.search(r"^test:(gpu_count|gpus|devices)[:=]:?(\d+)$", arg):
             raw = match.group(2)
-            return ("test:gpus", [0, int(raw)])
-        elif match := re.search(r"^test:(devices:gpus)[:=](\d+):$", arg):
+            return ("test:gpu_count", [0, int(raw)])
+        elif match := re.search(r"^test:(gpu_count|gpus|devices)[:=](\d+):$", arg):
             raw = match.group(2)
-            return ("test:gpus", [int(raw), config.get("machine:gpu_count")])
-        elif match := re.search(r"^test:(devices|gpus)[:=](\d+):(\d+)$", arg):
+            return ("test:gpu_count", [int(raw), config.get("machine:gpu_count")])
+        elif match := re.search(r"^test:(gpu_count|gpus|devices)[:=](\d+):(\d+)$", arg):
             _, a, b = match.groups()
-            return ("test:gpus", [int(a), int(b)])
-        elif match := re.search(r"^test:(cpus|cores|processors)[:=]:?(\d+)$", arg):
+            return ("test:gpu_count", [int(a), int(b)])
+        elif match := re.search(r"^test:(cpu_count|cpus|cores|processors)[:=]:?(\d+)$", arg):
             raw = match.group(2)
-            return ("test:cpus", [0, int(raw)])
-        elif match := re.search(r"^test:(cpus|cores|processors)[:=](\d+):$", arg):
+            return ("test:cpu_count", [0, int(raw)])
+        elif match := re.search(r"^test:(cpu_count|cpus|cores|processors)[:=](\d+):$", arg):
             raw = match.group(2)
-            return ("test:cpus", [int(raw), config.get("machine:cpu_count")])
-        elif match := re.search(r"^test:(cpus|cores|processors)[:=](\d+):(\d+)$", arg):
+            return ("test:cpu_count", [int(raw), config.get("machine:cpu_count")])
+        elif match := re.search(r"^test:(cpu_count|cpus|cores|processors)[:=](\d+):(\d+)$", arg):
             _, a, b = match.groups()
-            return ("test:cpus", [int(a), int(b)])
+            return ("test:cpu_count", [int(a), int(b)])
+        elif match := re.search(r"^test:(node_count|nodes)[:=]:?(\d+)$", arg):
+            raw = match.group(2)
+            return ("test:node_count", [0, int(raw)])
+        elif match := re.search(r"^test:(node_count|nodes)[:=](\d+):$", arg):
+            raw = match.group(2)
+            return ("test:node_count", [int(raw), config.get("machine:node_count")])
+        elif match := re.search(r"^test:(node_count|nodes)[:=](\d+):(\d+)$", arg):
+            _, a, b = match.groups()
+            return ("test:node_count", [int(a), int(b)])
         elif match := re.search(r"^(session|test):timeout[:=](.*)$", arg):
             scope, raw = match.group(1), strip_quotes(match.group(2))
             return (f"{scope}:timeout", time_in_seconds(raw))

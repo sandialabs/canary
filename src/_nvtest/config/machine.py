@@ -11,7 +11,7 @@ from . import macos
 
 editable_properties = (
     "cpu_count",
-    "nodes",
+    "node_count",
     "cores_per_socket",
     "sockets_per_node",
     "gpu_count",
@@ -58,7 +58,7 @@ def machine_config() -> dict:
         cores_per_socket=ns["cores_per_socket"],
         sockets_per_node=ns["sockets_per_node"],
         cpu_count=ns["cpu_count"],
-        nodes=ns["nodes"],
+        node_count=ns["node_count"],
         gpu_count=0,
         gpus_per_socket=0,
         os=os_config,
@@ -68,7 +68,7 @@ def machine_config() -> dict:
 
 def read_machine_info() -> dict:
     info = dict(
-        nodes=1,
+        node_count=1,
         cores_per_socket=rprobe.cpu_count(),
         sockets_per_node=1,
         cpu_count=rprobe.cpu_count(),
@@ -105,7 +105,7 @@ def read_sinfo() -> dict:
         "sockets_per_node": spn,
         "cores_per_socket": cps,
         "cpu_count": spn * cps * nc,
-        "nodes": nc,
+        "node_count": nc,
     }
     return info
 

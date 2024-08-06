@@ -3,6 +3,7 @@ import errno
 import fnmatch
 import glob
 import io
+import math
 import os
 from string import Template
 from typing import TYPE_CHECKING
@@ -75,6 +76,7 @@ class TestGenerator(abc.ABC):
         self,
         cpus: Optional[list[int]] = None,
         gpus: Optional[list[int]] = None,
+        nodes: Optional[list[int]] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -185,8 +187,9 @@ class AbstractTestFile(TestGenerator):
                     file.write("\n")
         rh = rh or ResourceHandler()
         cases: list[TestCase] = self.freeze(
-            cpus=rh["test:cpus"],
-            gpus=rh["test:gpus"],
+            cpus=rh["test:cpu_count"],
+            gpus=rh["test:gpu_count"],
+            nodes=rh["test:node_count"],
             on_options=on_options,
             keyword_expr=keyword_expr,
         )
@@ -198,6 +201,7 @@ class AbstractTestFile(TestGenerator):
         self,
         cpus: Optional[list[int]] = None,
         gpus: Optional[list[int]] = None,
+        nodes: Optional[list[int]] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -209,6 +213,7 @@ class AbstractTestFile(TestGenerator):
             cases = self._freeze(
                 cpus=cpus,
                 gpus=gpus,
+                nodes=nodes,
                 keyword_expr=keyword_expr,
                 on_options=on_options,
                 timeout=timeout,
@@ -226,6 +231,7 @@ class AbstractTestFile(TestGenerator):
         self,
         cpus: Optional[list[int]] = None,
         gpus: Optional[list[int]] = None,
+        nodes: Optional[list[int]] = None,
         keyword_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameter_expr: Optional[str] = None,
@@ -233,8 +239,12 @@ class AbstractTestFile(TestGenerator):
         owners: Optional[set[str]] = None,
         env_mods: Optional[dict[str, str]] = None,
     ) -> list[TestCase]:
+        cores_per_socket = config.get("machine:cores_per_socket")
+        sockets_per_node = config.get("machine:sockets_per_node") or 1
+        cores_per_node = cores_per_socket * sockets_per_node
         min_cpus, max_cpus = cpus or (0, config.get("machine:cpu_count"))
         min_gpus, max_gpus = gpus or (0, config.get("machine:gpu_count"))
+        min_nodes, max_nodes = nodes or (0, config.get("machine:node_count"))
         testcases: list[TestCase] = []
         names = ", ".join(self.names())
         logging.debug(f"Generating test cases for {self} using the following test names: {names}")
@@ -260,18 +270,28 @@ class AbstractTestFile(TestGenerator):
                         logging.debug(f"Skipping {self}::{name}")
                         mask = colorize("deselected by @*b{keyword expression}")
 
-                np = parameters.get("np")
-                if not isinstance(np, int) and np is not None:
+                np = parameters.get("np") or 1
+                if not isinstance(np, int):
                     class_name = np.__class__.__name__
                     raise ValueError(
                         f"{self.name}: expected np={np} to be an int, not {class_name}"
                     )
-                if mask is None and np and np > max_cpus:
+
+                if mask is None and np > max_cpus:
                     s = "deselected due to @*b{requiring more cpus than max cpu count}"
                     mask = colorize(s)
 
-                if mask is None and np and np < min_cpus:
+                if mask is None and np < min_cpus:
                     s = "deselected due to @*b{requiring fewer cpus than min cpu count}"
+                    mask = colorize(s)
+
+                nc = int(math.ceil(np / cores_per_node))
+                if mask is None and nc > max_nodes:
+                    s = "deselected due to @*b{requiring more nodes than max node count}"
+                    mask = colorize(s)
+
+                if mask is None and nc < max_nodes:
+                    s = "deselected due to @*b{requiring fewer nodes than min node count}"
                     mask = colorize(s)
 
                 for key in ("ngpu", "ndevice"):

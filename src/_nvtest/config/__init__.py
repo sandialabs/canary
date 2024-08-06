@@ -376,28 +376,28 @@ class Config:
 
     def validate_machine_config_and_fill_missing(self, data: dict) -> None:
         defaults = self.get_config("machine")
-        nodes = data.get("nodes") or defaults["nodes"]
-        sockets_per_node = data.get("sockets_per_nodes") or defaults["sockets_per_node"]
+        node_count = data.get("node_count") or defaults["node_count"]
+        sockets_per_node = data.get("sockets_per_node") or defaults["sockets_per_node"]
 
         if "cpu_count" in data:
             if "cores_per_socket" not in data:
-                data["cores_per_socket"] = int(data["cpu_count"] / nodes / sockets_per_node)
-            elif nodes == 1:
+                data["cores_per_socket"] = int(data["cpu_count"] / node_count / sockets_per_node)
+            elif node_count == 1:
                 data["cores_per_socket"] = data["cpu_count"]
-            if data["cpu_count"] != data["cores_per_socket"] * sockets_per_node * nodes:
-                raise ValueError("cpu_count != cores_per_socket*sockets_per_node*nodes")
+            if data["cpu_count"] != data["cores_per_socket"] * sockets_per_node * node_count:
+                raise ValueError("cpu_count != cores_per_socket*sockets_per_node*node_count")
         elif "cores_per_socket" in data:
-            data["cpu_count"] = data["cores_per_socket"] * sockets_per_node * nodes
+            data["cpu_count"] = data["cores_per_socket"] * sockets_per_node * node_count
 
         if "gpu_count" in data:
             if "gpus_per_socket" not in data:
-                data["gpus_per_socket"] = int(data["gpu_count"] / nodes / sockets_per_node)
-            elif nodes == 1:
+                data["gpus_per_socket"] = int(data["gpu_count"] / node_count / sockets_per_node)
+            elif node_count == 1:
                 data["gpus_per_socket"] = data["gpu_count"]
-            if data["gpu_count"] != data["gpus_per_socket"] * sockets_per_node * nodes:
-                raise ValueError("gpu_count != gpus_per_socket*sockets_per_node*nodes")
+            if data["gpu_count"] != data["gpus_per_socket"] * sockets_per_node * node_count:
+                raise ValueError("gpu_count != gpus_per_socket*sockets_per_node*node_count")
         elif "gpus_per_socket" in data:
-            data["gpu_count"] = data["gpus_per_socket"] * sockets_per_node * nodes
+            data["gpu_count"] = data["gpus_per_socket"] * sockets_per_node * node_count
 
     def describe(self, section: Optional[str] = None) -> str:
         if section is not None:

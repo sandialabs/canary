@@ -51,11 +51,12 @@ is
    var = value # (str) environment variables to set for the test session
 
    [machine]
-   cores_per_socket = N  # (int) default computed from os.cpu_count()
+   cores_per_socket = N  # (int) default determined from system probe
    sockets_per_node = N  # (int) default: 1
    gpus_per_socket = N  # (int)
-   cpu_count = N  # (int) default computed from os.cpu_count()
-   gpu_count = N  # (int) default computed from os.cpu_count()
+   cpu_count = N  # (int) default determined from system probe
+   gpu_count = N  # (int) default determined from system probe
+   node_count = N  # (int) default determined from system probe
 
   [build]
    type = ... # str

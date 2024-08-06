@@ -37,7 +37,7 @@ def setup_parser(subparser):
 def call(command: str, *args_in: str, verbose: bool = False) -> None:
     args = [which(command, required=True)]
     args.extend(args_in)
-    print(shlex.join(args), end="... ")
+    print(shlex.join(args), end="\n" if verbose else " ... ", flush=True)
     tmpfile = ".tmp-pre-commit-subproc-out.txt"
     try:
         try:
@@ -48,12 +48,12 @@ def call(command: str, *args_in: str, verbose: bool = False) -> None:
             if not verbose:
                 fh.close()
         if proc.returncode != 0:
-            print("failed")
+            print("failed", flush=True)
             if not verbose:
-                print(open(tmpfile).read())
+                print(open(tmpfile).read(), flush=True)
             raise SystemExit(f"Command failed: {shlex.join(args)}")
         else:
-            print("success")
+            print("success", flush=True)
     finally:
         force_remove(tmpfile)
 
