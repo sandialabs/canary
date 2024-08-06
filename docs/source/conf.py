@@ -101,5 +101,5 @@ for subdir in ("directives",):
 	dir = os.path.join(docs_source_dir, subdir)
 	if os.path.exists(dir):
 		shutil.rmtree(dir)
-args = [sys.executable, "-m", "nvtest", "autodoc", docs_source_dir]
+args = [sys.executable, "-m", "nvtest", "self", "autodoc", docs_source_dir]
 subprocess.call(args)

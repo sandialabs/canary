@@ -3,19 +3,16 @@ from typing import Optional
 
 from ..config.argparsing import Parser
 from . import analyze
-from . import autodoc
-from . import commands
 from . import config
 from . import describe
 from . import find
 from . import help
 from . import location
 from . import log
-from . import mkdocs
-from . import pre_commit
 from . import rebaseline
 from . import report
 from . import run
+from . import self
 from . import show
 from . import status
 from . import tree
@@ -24,19 +21,16 @@ from . import tree
 def all_commands() -> list[ModuleType]:
     return [
         analyze,
-        autodoc,
-        commands,
         config,
         describe,
         find,
         help,
         location,
         log,
-        mkdocs,
-        pre_commit,
         report,
         rebaseline,
         run,
+        self,
         show,
         status,
         tree,
