@@ -244,7 +244,7 @@ def autodoc_commands(dest):
 
     mkdirp(dest)
     parser = make_argument_parser()
-    _nvtest.command.add_all_commands(parser, add_help_override=True)
+    _nvtest.command.add_all_commands(parser)
     writer = aw.ArgparseMultiRstWriter(parser.prog, dest)
     writer.write(parser)
 

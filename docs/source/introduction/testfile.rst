@@ -3,11 +3,11 @@
 The test file
 =============
 
-A test file is a python script ending with ``.pyt``.  If execution of the script exits with code ``0``, the test passes.  Non-zero exit code indicates some other type of test failure (see :ref:`introduction-status` for additional test statuses).  A good test ensures the correctness of output given a set of inputs and should be as simple and fast running as possible.
+A test file is a python script ending with ``.pyt``.  If execution of the script results in an exit code of ``0``, the test passes.  Non-zero exit codes indicate some other type of test failure (see :ref:`introduction-status` for additional test statuses).  A good test ensures the correctness of output given a set of inputs and should be as simple, and fast running, as possible.
 
 .. note::
 
-    ``nvtest`` also runs ``vvtest`` ``.vvt`` test files and while ``vvtest`` allows for its test files to be written in any language, ``nvtest`` assumes the files are written in python.
+    ``nvtest`` also runs ``vvtest`` ``.vvt`` test files with the restriction that ``nvtest`` assumes that the files are written in Python (``vvtest`` allows for its test files to be written in any language).
 
 Test file structure
 -------------------

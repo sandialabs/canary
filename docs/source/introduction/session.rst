@@ -3,7 +3,7 @@
 The test session
 ================
 
-When ``nvtest run [path [path...]]`` is executed, ``path`` is searched for :ref:`test files<introduction-testfile>`, the test files are expanded into test cases, and each test case is run in a separate execution directory relative to the session's root directory (default: ``./TestResults``).
+When ``nvtest run [options] path [path...]`` is executed, ``path`` is searched for :ref:`test files<introduction-testfile>`, the test files are expanded into test cases, and each test case is run in a separate execution directory, relative to the session's root directory (default: ``./TestResults``).
 
 Phases of a test session
 ------------------------
@@ -24,7 +24,7 @@ A test session consists of the following phases:
   For :ref:`batched<howto-run-batched>` sessions, group test cases into batches to run in a scheduler.
 
 :ref:`Run<run>`:
-  For each test, move into its execution directory and run the test script (after each dependency has completed).
+  For each test, move into its execution directory and run the test script (after each dependency has completed, if necessary).
 
 Finish:
   Perform clean up actions, if any.
@@ -97,7 +97,11 @@ Batch
 Group test cases into batches to run in a scheduler.  The default batching scheme is to:
 
 1. group cases by the number of compute nodes required to run; and
-2. partition each group into batches that complete in a set time (defined by the ``-l batch:length=T`` option)
+2. partition each group into batches that complete in a set time (defined by the ``-l batch:length=T`` option).
+
+.. note::
+
+   A test is always batched with tests requiring the same node count.
 
 Optionally, a fixed number of batches can be requested (``-l batch:count=N``).
 
@@ -118,9 +122,6 @@ During test execution, ``nvtest`` navigates to each test directory and runs the 
    :cwd: /examples
    :nocache:
 
-Note the output files (``output.json``) from each of the parameterized test cases.
-
-
 .. note::
 
-   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type:X`` option.  See :ref:`introduction-resource` and :ref:`howto-resources`.
+   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type=X`` option.  See :ref:`introduction-resource` and :ref:`howto-resources`.

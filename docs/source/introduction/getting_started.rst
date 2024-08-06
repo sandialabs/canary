@@ -36,7 +36,7 @@ In this second example, the external program "``add.py``" adds two numbers and w
 .. literalinclude:: /examples/basic/second.pyt
    :language: python
 
-The program script:
+The ``add.py`` program:
 
 .. literalinclude:: /examples/basic/add.py
    :language: python

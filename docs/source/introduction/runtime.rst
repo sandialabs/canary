@@ -48,10 +48,10 @@ A timeout ``T`` for all tests in a session can also be set on the command line:
 Timeout multiplier
 ------------------
 
-You may also want to increase the timeout applied to tests.  Do so by specifying the ``--timeout-multiplier`` option:
+You may also want to increase the timeout applied to tests.  Do so by specifying ``-l test:timeoutx`` option:
 
 .. code-block:: console
 
-   nvtest run --timeout-multiplier=X ...
+   nvtest run -l test:timeoutx=X ...
 
-In this case, the timeout for each test will be the ``X`` times the tests default timeout.
+In this case, the timeout for each test will be the ``X`` times the test's default timeout.

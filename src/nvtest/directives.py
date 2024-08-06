@@ -846,6 +846,12 @@ def preload(arg: str, *, when: Optional[str] = None, source: bool = False) -> No
 
        # VVT: preload ([source]) : arg
 
+    .. warning::
+
+       The ``preload`` currently has no effect.  Use ``nvtest.shell.source`` instead,
+       see :ref:`howto-environ`.
+
+
     """
 
 

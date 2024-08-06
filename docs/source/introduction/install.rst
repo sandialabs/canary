@@ -6,7 +6,7 @@ Installing nvtest
 
 .. note::
 
-   ``nvtest`` requires Python 3.9+
+   ``nvtest`` requires Python 3.10+
 
 Basic installation
 ------------------

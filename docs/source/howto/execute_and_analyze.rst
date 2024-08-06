@@ -18,7 +18,7 @@ The dependency graph for this test is
 .. command-output:: nvtest describe execute_and_analyze/execute_and_analyze.pyt
     :cwd: /examples
 
-As can be seen, the test ``test`` depends on ``test[a=1]``, ``test[a=2]``, and ``test[a=3]``.  When the test is run, these "children" tests are run first and then ``test``:
+As can be seen, the test ``execute_and_analyze`` depends on ``execute_and_analyze[a=1]``, ``execute_and_analyze[a=2]``, and ``execute_and_analyze[a=3]``.  When the test is run, these "children" tests are run first and then ``execute_and_analyze``:
 
 .. command-output:: nvtest run -d TestResults.ExecuteAndAnalyze ./execute_and_analyze
     :cwd: /examples
@@ -27,7 +27,7 @@ As can be seen, the test ``test`` depends on ``test[a=1]``, ``test[a=2]``, and `
 The full example
 ----------------
 
-Define separate functions for the "test" and "verification" portions of the test, as defined in ``test`` and ``verify_parameterized_test`` below.
+Define separate functions for the "test" and "verification" portions of the test, as defined in the ``test`` and ``verify_parameterized_test`` functions below.
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :lines: 9-22

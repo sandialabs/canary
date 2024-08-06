@@ -15,15 +15,16 @@ The following machine resources can be set in the :ref:`global or local configur
 
 * ``cpu_count``: the number of CPUs available to this test session
 * ``gpu_count``: the number of GPUs available to this test session
+* ``node_count``: the number of compute modes available to this test session
 
 Finer-grained control over machine resources can be set via the following variables:
 
-* ``nodes``: the number of compute nodes on the compute cluster
+* ``node_count``: the number of compute nodes on the compute cluster
 * ``sockets_per_node``: the number of sockets on each compute node
 * ``cores_per_socket``: the number of CPU cores on each socket
 * ``gpus_per_socket``: the number of GPUs on each socket
 
-If the latter variables are defined, then ``cpu_count`` is set equal to ``nodes * sockets_per_node * cores_per_socket`` and  ``gpu_count = nodes * sockets_per_node * gpus_per_socket``.
+If the latter variables are defined, then ``cpu_count`` is set equal to ``node_count * sockets_per_node * cores_per_socket`` and  ``gpu_count = node_count * sockets_per_node * gpus_per_socket``.
 
 By default, ``nvtest`` performs a system probe to determine appropriate values for each machine configuration variable.
 
@@ -54,6 +55,7 @@ The number of resources made available to a test session can be limited by passi
 * ``cpu_ids``: comma-separate list of CPU IDs available to this session.
 * ``gpu_count``: the number of GPUs available to this session.
 * ``gpu_ids``: comma-separate list of GPU IDs available to this session.
+* ``node_count``: the number of compute nodes available to this session.
 * ``workers``: the number of simultaneous tests or batches to run.
 * ``timeout``: the time, in seconds, the test session can run.  Also accepts GO's time format.
 
@@ -66,7 +68,8 @@ Setting resources available to individual tests
 
 The number of resources made available to individual tests can be limited by passing ``-l test:<resource>=<value>`` to :ref:`nvtest run<nvtest-run>`.  Recognized resources are:
 
-* ``cpus``: ``[min:]max`` CPUs available per test.  Tests requiring less than ``min`` CPUs (default: 0) and tests requiring more than ``max`` CPUs are ignored.
-* ``gpus``: GPUs available per test.  Tests requiring more than ``gpus`` GPUs are ignored.
+* ``cpu_count``: ``[min:]max`` CPUs available per test.  Tests requiring less than ``min`` CPUs (default: 1) and tests requiring more than ``max`` CPUs are ignored.
+* ``gpu_count``: ``[min:]max`` GPUs available per test.  Tests requiring less than ``min`` GPUs (default: 0) and tests requiring more than ``max`` GPUs are ignored.
+* ``node_count``: ``[min:]max`` Compute nodes available per test.  Tests requiring less than ``min`` nodes (default: 1) and tests requiring more than ``max`` nodes are ignored.
 * ``timeout``: the time, in seconds, the test can run.  Tests requiring more than ``timeout`` seconds are ignored.  Also accepts GO's time format.
 * ``timeoutx``: apply this multiplier to the test's default timeout.

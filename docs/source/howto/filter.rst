@@ -3,7 +3,7 @@
 Filter and select tests
 =======================
 
-The tests that are selected to run in a given ``nvtest`` invocation is called "filtering the tests", which is important when managing a large set of tests.  Described next are the three main ways to filter tests via the command line: by :ref:`keyword expression <directive-keywords>`, by :ref:`parameter expression <directive-parameterize>`, and by `platform expression <directive-platform>`.
+``nvtest`` can perform filtering actions to reduce the number of tests run in a session.  Described next are the three main ways to filter tests via the command line: by :ref:`keyword expression <directive-keywords>`, by :ref:`parameter expression <directive-parameterize>`, and by `platform expression <directive-platform>`.
 
 Filter by keyword
 -----------------
