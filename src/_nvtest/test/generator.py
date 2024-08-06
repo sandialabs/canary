@@ -277,14 +277,6 @@ class AbstractTestFile(TestGenerator):
                         f"{self.name}: expected np={np} to be an int, not {class_name}"
                     )
 
-                if mask is None and np > max_cpus:
-                    s = "deselected due to @*b{requiring more cpus than max cpu count}"
-                    mask = colorize(s)
-
-                if mask is None and np < min_cpus:
-                    s = "deselected due to @*b{requiring fewer cpus than min cpu count}"
-                    mask = colorize(s)
-
                 nc = int(math.ceil(np / cores_per_node))
                 if mask is None and nc > max_nodes:
                     s = "deselected due to @*b{requiring more nodes than max node count}"
@@ -292,6 +284,14 @@ class AbstractTestFile(TestGenerator):
 
                 if mask is None and nc < min_nodes:
                     s = "deselected due to @*b{requiring fewer nodes than min node count}"
+                    mask = colorize(s)
+
+                if mask is None and np > max_cpus:
+                    s = "deselected due to @*b{requiring more cpus than max cpu count}"
+                    mask = colorize(s)
+
+                if mask is None and np < min_cpus:
+                    s = "deselected due to @*b{requiring fewer cpus than min cpu count}"
                     mask = colorize(s)
 
                 for key in ("ngpu", "ndevice"):

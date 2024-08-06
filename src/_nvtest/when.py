@@ -286,9 +286,12 @@ class PlatformMatcher:
         if "SNLSYSTEM" in os.environ:
             self.own_platform_names.add(os.environ["SNLSYSTEM"])
         if "NVTEST_PLATFORM" in os.environ:
-            self.own_platform_names.add(os.environ["NVTEST_PLATFORM"])
+            platforms = os.environ["NVTEST_PLATFORM"].split(",")
+            self.own_platform_names.update(platforms)
 
     def __call__(self, name: str) -> bool:
+        if "any" in self.own_platform_names:
+            return True
         return anymatch(self.own_platform_names, name, case_sensitive=False)
 
 

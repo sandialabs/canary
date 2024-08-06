@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 from ..finder import Finder
 from ..session import Session
 from ..util import logging
-from .common import add_mark_arguments
-from .common import add_resource_arguments
+from ..util.banner import banner
+from .common import PathSpec
 
 if TYPE_CHECKING:
     from _nvtest.config.argparsing import Parser
@@ -16,14 +16,8 @@ description = "Search paths for test files"
 
 
 def setup_parser(parser: "Parser"):
-    add_mark_arguments(parser)
-    group = parser.add_argument_group("console reporting")
-    group.add_argument(
-        "--no-header",
-        action="store_true",
-        default=False,
-        help="Disable header [default: %(default)s]",
-    )
+    from .run import setup_parser as setup_run_parser
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--paths",
@@ -56,15 +50,35 @@ def setup_parser(parser: "Parser"):
     parser.add_argument(
         "--owner", dest="owners", action="append", help="Show tests owned by 'owner'"
     )
-    add_resource_arguments(parser)
-    parser.add_argument("search_paths", nargs="*", help="Search path[s]")
+    setup_run_parser(parser)
 
 
-def find(args: "argparse.Namespace") -> int:
+def parse_search_paths(args: argparse.Namespace) -> dict[str, list[str]]:
+    PathSpec.parse(args)
+    parsed: dict[str, list[str]] = {}
+    if isinstance(args.paths, list):
+        args.paths = {path: [] for path in args.paths}
+    errors = 0
+    for root, paths in args.paths.items():
+        if not root:
+            root = os.getcwd()
+        if not os.path.isdir(root):
+            errors += 1
+            logging.warning(f"{root}: directory does not exist and will not be searched")
+        else:
+            root = os.path.abspath(root)
+            parsed[root] = paths
+    if errors:
+        logging.warning("one or more search paths does not exist")
+    return parsed
+
+
+def find(args: argparse.Namespace) -> int:
+    logging.emit(banner() + "\n")
+    search_paths = parse_search_paths(args)
     finder = Finder()
-    search_paths = args.search_paths or [os.getcwd()]
-    for path in search_paths:
-        finder.add(path)
+    for root, paths in search_paths.items():
+        finder.add(root, *paths, tolerant=True)
     finder.prepare()
     generators = finder.discover()
     cases = Finder.freeze(
@@ -74,9 +88,10 @@ def find(args: "argparse.Namespace") -> int:
         parameter_expr=args.parameter_expr,
         on_options=args.on_options,
         owners=None if not args.owners else set(args.owners),
+        env_mods=args.env_mods.get("test") or {},
     )
-    values = ("ready", "created", "pending")
-    cases_to_run = sorted([c for c in cases if c.status.value in values], key=lambda x: x.name)
+    cases_to_run = [case for case in cases if not case.mask]
+    cases_to_run.sort(key=lambda x: x.name)
     if not args.files and not args.no_header:
         logging.emit(Session.overview(cases))
     if args.keywords:
