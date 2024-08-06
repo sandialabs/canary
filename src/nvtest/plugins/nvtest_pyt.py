@@ -72,6 +72,9 @@ class PYTTestFile(AbstractTestFile):
     def f_processors(self, *values: int, when: Optional[str] = None) -> None:
         self.m_parameterize("np", list(values), when=when)
 
+    def f_nodes(self, *values: int, when: Optional[str] = None) -> None:
+        self.m_parameterize("nnode", list(values), when=when)
+
     def f_enable(self, *args: bool, when: Optional[str] = None):
         arg = True if not args else args[0]
         self.m_enable(arg, when=when)

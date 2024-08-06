@@ -420,6 +420,9 @@ def gpus(*ngpus: int, when: Optional[str] = None) -> None:
     """
 
 
+devices = gpus
+
+
 def enable(*args: bool, when: Optional[str] = None) -> None:
     """
     Explicitly mark a test to be enabled (or not)
@@ -904,6 +907,63 @@ def cpus(*values: int, when: Optional[str] = None) -> None:
 
 
 processors = cpus
+
+
+def nodes(*values: int, when: Optional[str] = None) -> None:
+    """Run the test with this many processors
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code-block:: python
+
+       import nvtest
+       nvtest.directives.nodes(*nnode, when=...)
+
+
+    ``.vvt``: NA
+
+    Parameters
+    ----------
+
+    * ``nnodes``: List of node counts
+    * ``when``: Restrict processing of the directive to this condition
+
+    The ``when`` expression is limited to the following conditions:
+
+    * ``testname``: Restrict processing of the directive to this test name
+    * ``platform``: Restrict processing of the directive to certain platform or
+      platforms
+    * ``option``: Restrict processing of the directive to command line ``-o`` options
+
+    Notes
+    -----
+
+    * ``nodes(...)`` is equivalent to ``parameterize("nnode", ...)``
+
+    Examples
+    --------
+
+    The following test specification result in 4 test instantiations
+
+    ``test1.pyt``:
+
+    .. code-block:: python
+
+       # test1
+       nvtest.directives.nodes(4, 8, 12, 32)
+
+    .. code-block:: console
+
+       4 test cases:
+       ├── test1[nnode=4]
+       ├── test1[nnode=8]
+       ├── test1[nnode=12]
+       ├── test1[nnode=32]
+
+    """
 
 
 def set_attribute(*, when: Optional[str] = None, **attributes: Any) -> None:

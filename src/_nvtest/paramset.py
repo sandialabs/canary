@@ -17,6 +17,10 @@ class ParameterSet:
                 n = len(self.keys)
                 raise ValueError(f"expected {n} items in row {i + 1}")
 
+    def __iter__(self):
+        for row in self.values:
+            yield [(self.keys[i], value) for i, value in enumerate(row)]
+
     def describe(self, indent=0) -> str:
         fp = StringIO()
         fp.write(f"{' ' * indent}{','.join(self.keys)} = ")

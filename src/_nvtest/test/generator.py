@@ -290,7 +290,7 @@ class AbstractTestFile(TestGenerator):
                     s = "deselected due to @*b{requiring more nodes than max node count}"
                     mask = colorize(s)
 
-                if mask is None and nc < max_nodes:
+                if mask is None and nc < min_nodes:
                     s = "deselected due to @*b{requiring fewer nodes than min node count}"
                     mask = colorize(s)
 
@@ -639,7 +639,8 @@ class AbstractTestFile(TestGenerator):
         type = type or _nvtest.enums.list_parameter_space
         if not isinstance(type, _nvtest.enums.enums):
             raise ValueError(
-                f"parameterize: type: expected " f"nvtest.enums, got {type.__class__.__name__}"
+                f"{self.path}: parameterize: type: expected "
+                f"nvtest.enums, got {type.__class__.__name__}"
             )
         if type is _nvtest.enums.centered_parameter_space:
             pset = ParameterSet.centered_parameter_space(argnames, argvalues, file=self.file)
@@ -651,6 +652,17 @@ class AbstractTestFile(TestGenerator):
                 argvalues,
                 file=self.file,
             )
+        for row in pset:
+            for key, value in row:
+                if key in ("np", "ngpu", "ndevice", "nnode"):
+                    if not isinstance(value, int):
+                        raise ValueError(
+                            f"{self.path}: parameterize: expected {key}={value} to be an int"
+                        )
+                    elif value < 0:
+                        raise ValueError(
+                            f"{self.path}: parameterize: expected {key}={value} to be >= 0"
+                        )
         ns = FilterNamespace(pset, when=when)
         self._paramsets.append(ns)
 

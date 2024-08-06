@@ -1,6 +1,7 @@
 import io
 import itertools
 import json
+import math
 import os
 import pickle
 import re
@@ -292,6 +293,16 @@ class TestCase(Runner):
     @property
     def processors(self) -> int:
         return self.cpus
+
+    @property
+    def nodes(self) -> int:
+        if "nnode" in self.parameters:
+            return int(self.parameters["nnode"])  # type: ignore
+        else:
+            cores_per_socket = config.get("machine:cores_per_socket")
+            sockets_per_node = config.get("machine:sockets_per_node") or 1
+            cores_per_node = cores_per_socket * sockets_per_node
+            return int(math.ceil(self.cpus / cores_per_node))
 
     @property
     def gpus(self) -> int:
