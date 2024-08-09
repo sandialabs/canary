@@ -55,7 +55,7 @@ Because ``.pyt`` test files are imported during the discovery process, the test 
 Test case expansion
 -------------------
 
-Test files define one or more *test cases*.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a single test file defines parameters that expand to define multiple test cases whose names are a combination of the basename of the test file and parameter/name pairs.  For example:
+Test files define one or more :ref:`test cases <introduction-testcase>`.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a single test file defines parameters that expand to define multiple test cases whose names are a combination of the basename of the test file and parameter/name pairs.  For example:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python

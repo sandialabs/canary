@@ -163,6 +163,68 @@ def analyze(
     """
 
 
+def baseline(
+    *,
+    src: Optional[str] = None,
+    dst: Optional[str] = None,
+    when: Optional[str] = None,
+    flag: Optional[str] = None,
+) -> None:
+    """Rebaseline a test
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code-block:: python
+
+       import nvtest
+       nvtest.directives.baseline(src, dst, when=...)
+       nvtest.directives.baseline(flag=..., when=...)
+
+    ``.vvt``:
+
+    .. code-block:: python
+
+       #VVT: baseline (options=..., platforms=..., testname=...) : src,dst
+       #VVT: baseline (options=..., platforms=..., testname=...) : flag
+
+    Parameters
+    ----------
+
+    * ``src``: The source file.
+    * ``dst``: The destination file to replace with ``src``
+    * ``when``: Restrict processing of the directive to this condition
+    * ``flag``: Run the test script with the ``--FLAG`` option on the command
+      line to perform rebaselining.  ``flag`` should start with a hyphen (``-``).  The script should
+      parse this value and perform the appropriate rebaselining.
+
+    The ``when`` expression is limited to the following conditions:
+
+    * ``testname``: Restrict processing of the directive to this test name
+    * ``platforms``: Restrict processing of the directive to certain platform or
+      platforms
+    * ``parameters``: Restrict processing of the directive to certain parameter
+      names and values
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+       import nvtest
+       nvtest.directives.analyze("file.exo", "file.base_exo", when="platforms='not darwin'")
+
+    .. code-block:: python
+
+       # VVT: baseline (platforms="not darwin") : file.exo,file.base_exo
+
+    will replace ``file.base_exo`` with ``file.exo``.
+
+    """
+
+
 def copy(*args: str, when: Optional[str] = None, rename: bool = False) -> None:
     """Copy files from the source directory into the execution directory.
 

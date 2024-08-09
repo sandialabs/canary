@@ -712,7 +712,7 @@ class AbstractTestFile(TestGenerator):
     ) -> None:
         if flag is not None and script is not None:
             raise ValueError(
-                "TestFile.analyze: 'script' and 'flag' " "keyword arguments are mutually exclusive"
+                "TestFile.analyze: 'script' and 'flag' keyword arguments are mutually exclusive"
             )
         if script is not None:
             string = script
@@ -748,13 +748,24 @@ class AbstractTestFile(TestGenerator):
 
     def m_baseline(
         self,
-        arg1: Optional[str] = None,
-        arg2: Optional[str] = None,
+        src: Optional[str] = None,
+        dst: Optional[str] = None,
         when: Optional[str] = None,
         flag: Optional[str] = None,
     ) -> None:
-        if flag is not None:
+        ns: FilterNamespace
+        if (src is not None) or (dst is not None):
+            if src is None:
+                raise TypeError("TestFile.baseline: missing required positional argument: `src`")
+            if dst is None:
+                raise TypeError("TestFile.baseline: missing required positional argument: `dst`")
+            if flag is not None:
+                raise ValueError(
+                    "TestFile.baseline: 'src/dst' and 'flag' keyword arguments are mutually exclusive"
+                )
+            ns = FilterNamespace((src, dst), when=when)
+        elif flag is not None:
             ns = FilterNamespace(flag, when=when)
         else:
-            ns = FilterNamespace((arg1, arg2), when=when)
+            raise ValueError("TestFile.baseline: missing required argument 'src'/'dst' or 'flag'")
         self._baseline.append(ns)

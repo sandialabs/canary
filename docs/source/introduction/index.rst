@@ -11,6 +11,7 @@ Introduction
    configuration
    session
    testfile
+   testcase
    status
    runtime
    resource

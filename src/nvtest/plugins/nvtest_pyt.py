@@ -17,6 +17,9 @@ class PYTTestFile(AbstractTestFile):
         import _nvtest
 
         try:
+            # Replace functions in the dummy nvtest.directives module with
+            # instance methods of this test file so that calls to the directives
+            # are passed to this test
             m = ModuleType("directives")
             m.__file__ = f"{m.__name__}.py"
             for item in dir(self):
@@ -123,6 +126,15 @@ class PYTTestFile(AbstractTestFile):
 
     def f_xfail(self, *, code: int = -1, when: Optional[str] = None):
         self.m_xfail(code=code, when=when)
+
+    def f_baseline(
+        self,
+        arg1: Optional[str] = None,
+        arg2: Optional[str] = None,
+        when: Optional[str] = None,
+        flag: Optional[str] = None,
+    ) -> None:
+        self.m_baseline(arg1, arg2, when=when, flag=flag)
 
 
 nvtest.plugin.test_generator(PYTTestFile)
