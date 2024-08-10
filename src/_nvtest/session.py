@@ -1,3 +1,5 @@
+"""Setup and manage the test session"""
+
 import datetime
 import enum
 import io
@@ -72,6 +74,18 @@ class OutputLevel(enum.Enum):
 
 
 class Session:
+    """Open the test session and return a corresponding object. If the session cannot be opened, an
+    error is raised.
+
+    ``path`` is a path-like object giving the pathname (absolute or relative to the current working
+    directory) of the directory to create the test session.
+
+    ``mode`` is an optional string that specifies the mode in which the session is opened. It
+    defaults to 'r' which means open for reading. Other values are 'w' for writing (creating a new
+    session), and 'a' for appending to an existing session.
+
+    """
+
     tagfile = "SESSION.TAG"
     default_worktree = "./TestResults"
 
@@ -115,6 +129,8 @@ class Session:
 
     @staticmethod
     def find_root(path: str):
+        """Walk up ``path``, looking for a test session root.  The search is stops when the root
+        directory is reached"""
         path = os.path.abspath(path)
         while True:
             if os.path.exists(os.path.join(path, Session.tagfile)):
@@ -127,6 +143,14 @@ class Session:
         return None
 
     def load(self) -> None:
+        """Load an existing test session:
+
+        - load test files and cases from the database;
+        - update test cases based on their latest snapshots;
+        - update each test case's dependencies; and
+        - set configuration values.
+
+        """
         logging.debug(f"Loading test session in {self.root}")
         self.cases = self.db.load_binary("cases")
         self.generators = self.db.load_binary("files")
@@ -155,6 +179,12 @@ class Session:
         self.set_config_values()
 
     def initialize(self) -> None:
+        """Initialize the the test session:
+
+        - create the session's config directory; and
+        - save local configuration values to the session configuration scope
+
+        """
         logging.debug(f"Initializing test session in {self.root}")
         file = os.path.join(self.config_dir, self.tagfile)
         mkdirp(os.path.dirname(file))
@@ -165,6 +195,8 @@ class Session:
         self.save(ini=True)
 
     def set_config_values(self, write: bool = False):
+        """Save session configuration data, including copying local configuration data to the
+        session scope"""
         config.set("session:root", self.root, scope="session")
         config.set("session:invocation_dir", config.invocation_dir, scope="session")
         config.set("session:start", config.invocation_dir, scope="session")
@@ -183,18 +215,17 @@ class Session:
                 config.dump(fh, scope="session")
 
     def save(self, ini: bool = False) -> None:
+        """Save session data, exlcuding data that is stored separately in the database"""
         data: dict[str, Any] = {}
         for var, value in vars(self).items():
             if var not in ("files", "cases", "db"):
                 data[var] = value
+        self.db.save_binary("session", data)
         if ini:
-            self.db.save_binary("session", data)
             self.db.save_binary("config", config.instance())
             self.db.save_binary("options", config.get("option"))
             with self.db.open("plugin", mode="wb") as record:
                 cloudpickle.dump(plugin._manager._instance, record)
-        else:
-            self.db.save_binary("session", data)
 
     def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:
         """Add ``path`` to this session's search paths"""
@@ -217,6 +248,7 @@ class Session:
         self.save()
 
     def discover(self) -> None:
+        """Walk each path in the session's search path and collect test files"""
         finder = Finder()
         for root, paths in self.search_paths.items():
             finder.add(root, *paths, tolerant=True)
@@ -236,6 +268,7 @@ class Session:
         owners: Optional[set[str]] = None,
         env_mods: Optional[dict[str, str]] = None,
     ) -> None:
+        """Freeze test files into concrete (parameterized) test cases"""
         self.cases = Finder.freeze(
             self.generators,
             rh=rh,
@@ -262,6 +295,7 @@ class Session:
                 self.setup_testcases(copy_all_resources=copy_all_resources)
 
     def setup_testcases(self, copy_all_resources: bool = False) -> None:
+        """Setup the test cases and take a snapshot"""
         logging.debug("Setting up test cases")
         cases = [case for case in self.cases if not case.mask]
         ts: TopologicalSorter = TopologicalSorter()
@@ -300,6 +334,19 @@ class Session:
         rh: Optional[ResourceHandler] = None,
         case_specs: Optional[list[str]] = None,
     ) -> list[TestCase]:
+        """Filter test cases (mask test cases that don't meet a specific criteria)
+
+        Args:
+          keyword_expr: Include those tests matching this keyword expression
+          parameter_expr: Include those tests matching this parameter expression
+          start: The starting directory the python session was invoked in
+          rh: resource handler
+          case_specs: Include those tests matching these specs
+
+        Returns:
+          A list of test cases
+
+        """
         rh = rh or ResourceHandler()
         explicit_start_path = start is not None
         if start is None:
@@ -307,7 +354,7 @@ class Session:
         elif not os.path.isabs(start):
             start = os.path.join(self.root, start)
         start = os.path.normpath(start)
-        # mask tests and then later enable based on additional conditions
+        # mask all tests and then later enable based on additional conditions
         for case in self.cases:
             if case.mask:
                 continue
@@ -319,9 +366,6 @@ class Session:
                     case.status.set("ready")
                 else:
                     case.mask = color.colorize("deselected by @*b{testspec expression}")
-                continue
-            elif explicit_start_path:
-                case.status.set("ready")
                 continue
             if rh["test:cpu_count"][1] and case.cpus > rh["test:cpu_count"][1]:
                 n = rh["test:cpu_count"][1]
@@ -336,7 +380,13 @@ class Session:
                 when_expr.update({"parameters": parameter_expr})
             if keyword_expr:
                 when_expr.update({"keywords": keyword_expr})
-            if when_expr:
+            if explicit_start_path and not when_expr:
+                case.status.set("ready")
+                continue
+            if not when_expr:
+                if case.status.value in ("not_run", "cancelled"):
+                    case.status.set("ready" if not case.dependencies else "pending")
+            else:
                 match = when(
                     when_expr,
                     parameters=case.parameters,
@@ -349,10 +399,19 @@ class Session:
                 else:
                     case.mask = color.colorize("deselected by @*b{when expression}")
 
-        cases = [case for case in self.cases if case.status.satisfies(("pending", "ready"))]
+        cases: list[TestCase] = []
+        for case in self.cases:
+            if case.status.satisfies(("pending", "ready")):
+                for dep in case.dependencies:
+                    if not dep.status.satisfies(("pending", "ready", "success", "diff")):
+                        case.mask = color.colorize("deselected due to @*b{dependency status}")
+                        break
+                else:
+                    cases.append(case)
         return cases
 
     def bfilter(self, *, lot_no: int, batch_no: int) -> list[TestCase]:
+        """Mask any test cases not in batch number ``batch_no`` from batch lot ``lot_no``"""
         batch_info = self.db.load_json(f"batches/{lot_no}/index")
         batch_case_ids = batch_info[str(batch_no)]
         for case in self.cases:
@@ -381,10 +440,19 @@ class Session:
         fail_fast: bool = False,
         output: OutputLevel = OutputLevel.default,
     ) -> int:
-        """Run each test case in ``cases``.  ``rh`` is a ``ResourceHandler``
-        object, usually set up by the ``nvtest run`` command.  If ``fail_fast is
-        True``, stop the execution at the first detected test failure, otherwise
-        continuing running until all tests have been run."""
+        """Run each test case in ``cases``.
+
+        Args:
+          cases: test cases to run
+          rh: resource handler, usually set up by the ``nvtest run`` command.
+          fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
+            continuing running until all tests have been run.
+          output: level of verbosity
+
+        Returns:
+          The session returncode (0 for success)
+
+        """
         if not cases:
             raise ValueError("There are no cases to run in this session")
         rh = rh or ResourceHandler()
@@ -432,6 +500,7 @@ class Session:
 
     @contextmanager
     def rc_environ(self) -> Generator[None, None, None]:
+        """Set the runtime environment"""
         save_env = os.environ.copy()
         variables = config.get("variables") or {}
         for var, val in variables.items():
@@ -450,6 +519,16 @@ class Session:
         fail_fast: bool,
         output: OutputLevel = OutputLevel.default,
     ) -> None:
+        """Process the test queue, asynchronously
+
+        Args:
+          queue: the test queue to process
+          rh: resource handler, usually set up by the ``nvtest run`` command.
+          fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
+            continuing running until all tests have been run.
+          output: level of verbosity
+
+        """
         futures: dict = {}
         duration = lambda: timestamp() - self.start
         timeout = rh["session:timeout"] or -1
@@ -495,6 +574,10 @@ class Session:
             raise
 
     def heartbeat(self, queue: ResourceQueue) -> None:
+        """Take a heartbeat of the simulation by dumping the case, cpu, and gpu IDs that are
+        currently busy
+
+        """
         if isinstance(queue, BatchResourceQueue):
             return None
         hb: dict[str, Any] = {"date": datetime.datetime.now().strftime("%c")}
@@ -516,6 +599,16 @@ class Session:
     def done_callback(
         self, iid: int, queue: ResourceQueue, fail_fast: bool, future: Future
     ) -> None:
+        """Function registered to the process pool executor to be called when a test (or batch of
+        tests) completes
+
+        Args:
+          iid: the queue's internal ID of the test (or batch)
+          queue: the active test queue
+          fail_fast: whether to stop the test session at the first failed test
+          future: the future return by the process pool executor
+
+        """
         if future.cancelled():
             return
         try:
@@ -575,6 +668,13 @@ class Session:
                 raise FailFast(str(obj), code)
 
     def setup_queue(self, cases: list[TestCase], rh: ResourceHandler) -> ResourceQueue:
+        """Setup the test queue
+
+        Args:
+          cases: the test cases to run
+          rh: resource handler
+
+        """
         kwds: dict[str, Any] = {}
         queue: ResourceQueue
         if rh["batch:scheduler"] is None:
@@ -611,6 +711,7 @@ class Session:
         return queue
 
     def blogfile(self, batch_no: int, lot_no: Optional[int]) -> str:
+        """Get the path of the batch log file"""
         if lot_no is None:
             lot_no = len(os.listdir(os.path.join(self.config_dir, "batches")))  # use latest
         file = os.path.join(self.config_dir, f"batches/{lot_no}/batch.{batch_no}-out.txt")
@@ -618,6 +719,8 @@ class Session:
 
     @staticmethod
     def overview(cases: list[TestCase]) -> str:
+        """Return an overview of the test session"""
+
         def unreachable(c):
             return c.status == "skipped" and c.status.details.startswith("Unreachable")
 
@@ -647,6 +750,10 @@ class Session:
 
     @staticmethod
     def summary(cases: list[TestCase], include_pass: bool = True) -> str:
+        """Return a summary of the completed test cases.  if ``include_pass is True``, include
+        passed tests in the summary
+
+        """
         file = io.StringIO()
         if not cases:
             file.write("Nothing to report\n")
@@ -660,7 +767,7 @@ class Session:
             glyph = Status.glyph(status)
             if status in totals:
                 for case in sorted(totals[status], key=lambda t: t.name):
-                    file.write("%s %s\n" % (glyph, cformat(case)))
+                    file.write("%s %s\n" % (glyph, case.describe()))
         string = file.getvalue()
         if string.strip():
             string = color.colorize("@*{Short test summary info}\n") + string + "\n"
@@ -668,6 +775,7 @@ class Session:
 
     @staticmethod
     def footer(cases: list[TestCase], duration: float = -1, title="Session done") -> str:
+        """Return a short, high-level, summary of test results"""
         string = io.StringIO()
         if duration == -1:
             has_a = any(_.start for _ in cases if _.start > 0)
@@ -701,6 +809,7 @@ class Session:
 
     @staticmethod
     def durations(cases: list[TestCase], N: int) -> str:
+        """Return a string describing the ``N`` slowest tests"""
         string = io.StringIO()
         cases = [c for c in cases if c.duration > 0]
         sorted_cases = sorted(cases, key=lambda x: x.duration)
@@ -715,6 +824,7 @@ class Session:
 
     @staticmethod
     def status(cases: list[TestCase], show_logs: bool = False, sortby: str = "duration") -> str:
+        """Return a string describing the status of each test (grouped by status)"""
         string = io.StringIO()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
@@ -724,12 +834,14 @@ class Session:
                 totals.setdefault(case.status.value, []).append(case)
         if "masked" in totals:
             for case in sort_cases_by(totals["masked"], field=sortby):
-                string.write("%s %s\n" % (glyphs.masked, cformat(case, show_log=show_logs)))
+                description = case.describe(include_logfile_path=show_logs)
+                string.write("%s %s\n" % (glyphs.masked, description))
         for member in Status.members:
             if member in totals:
                 for case in sort_cases_by(totals[member], field=sortby):
                     glyph = Status.glyph(case.status.value)
-                    string.write("%s %s\n" % (glyph, cformat(case, show_log=show_logs)))
+                    description = case.describe(include_logfile_path=show_logs)
+                    string.write("%s %s\n" % (glyph, description))
         return string.getvalue()
 
 
@@ -738,29 +850,6 @@ def setup_individual_case(case, exec_root, copy_all_resources):
     more easily be parallelized in a multiprocessor Pool"""
     logging.debug(f"Setting up {case}")
     case.setup(exec_root, copy_all_resources=copy_all_resources)
-
-
-def cformat(case: TestCase, show_log: bool = False) -> str:
-    id = color.colorize("@*b{%s}" % case.id[:7])
-    if case.mask:
-        string = "@*c{EXCLUDED} %s %s: %s" % (id, case.pretty_repr(), case.mask)
-        return color.colorize(string)
-    string = "%s %s %s" % (case.status.cname, id, case.pretty_repr())
-    if case.duration > 0:
-        today = datetime.datetime.today()
-        start = datetime.datetime.fromtimestamp(case.start)
-        finish = datetime.datetime.fromtimestamp(case.finish)
-        dt = today - start
-        fmt = "%H:%m:%S" if dt.days <= 1 else "%M %d %H:%m:%S"
-        a = start.strftime(fmt)
-        b = finish.strftime(fmt)
-        string += f" started: {a}, finished: {b}, duration: {case.duration:.2f}s."
-    elif case.status == "skipped":
-        string += ": Skipped due to %s" % case.status.details
-    if show_log:
-        f = os.path.relpath(case.logfile(), os.getcwd())
-        string += color.colorize(": @m{%s}" % f)
-    return string
 
 
 def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:

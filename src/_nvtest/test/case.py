@@ -1,3 +1,4 @@
+import datetime
 import io
 import itertools
 import json
@@ -156,6 +157,29 @@ class TestCase(Runner):
         for name, value in vars.items():
             setattr(self, name, value)
         return self
+
+    def describe(self, include_logfile_path: bool = False) -> str:
+        """Write a string describing the test case"""
+        id = colorize("@*b{%s}" % self.id[:7])
+        if self.mask:
+            string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.mask)
+            return colorize(string)
+        string = "%s %s %s" % (self.status.cname, id, self.pretty_repr())
+        if self.duration > 0:
+            today = datetime.datetime.today()
+            start = datetime.datetime.fromtimestamp(self.start)
+            finish = datetime.datetime.fromtimestamp(self.finish)
+            dt = today - start
+            fmt = "%H:%m:%S" if dt.days <= 1 else "%M %d %H:%m:%S"
+            a = start.strftime(fmt)
+            b = finish.strftime(fmt)
+            string += f" started: {a}, finished: {b}, duration: {self.duration:.2f}s."
+        elif self.status == "skipped":
+            string += ": Skipped due to %s" % self.status.details
+        if include_logfile_path:
+            f = os.path.relpath(self.logfile(), os.getcwd())
+            string += colorize(": @m{%s}" % f)
+        return string
 
     @property
     def dbfile(self) -> str:
