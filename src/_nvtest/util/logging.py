@@ -224,6 +224,7 @@ def hline(
     char: str = "-",
     max_width: int = 64,
     file: TextIO = sys.stdout,
+    end="\n",
 ) -> None:
     """Draw a labeled horizontal line.
 
@@ -245,6 +246,7 @@ def hline(
         file.write(prefix)
         file.write(label)
         file.write(suffix)
+        file.write(end)
 
 
 def fileno(file_or_fd):

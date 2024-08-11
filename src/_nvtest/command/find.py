@@ -7,6 +7,8 @@ from ..session import Session
 from ..util import logging
 from ..util.banner import banner
 from .common import PathSpec
+from .common import add_mark_arguments
+from .common import add_resource_arguments
 
 if TYPE_CHECKING:
     from _nvtest.config.argparsing import Parser
@@ -15,42 +17,31 @@ if TYPE_CHECKING:
 description = "Search paths for test files"
 
 
-def setup_parser(parser: "Parser"):
-    from .run import setup_parser as setup_run_parser
+def _add_group_argument(group, name, help_string, add_short_arg=True):
+    args = [f"--{name}"]
+    if add_short_arg:
+        args.insert(0, f"-{name[0]}")
+    kwargs = dict(dest=f"print_{name}", action="store_true", default=False, help=help_string)
+    group.add_argument(*args, **kwargs)
 
+
+def setup_parser(parser: "Parser"):
     group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--paths",
-        dest="paths",
-        action="store_true",
-        default=False,
-        help="Print file paths, grouped by root",
-    )
-    group.add_argument(
-        "-f",
-        "--files",
-        dest="files",
-        action="store_true",
-        default=False,
-        help="Print file paths",
-    )
-    group.add_argument(
-        "-g",
-        dest="graph",
-        action="store_true",
-        default=False,
-        help="Print DAG of test cases",
-    )
-    group.add_argument(
-        "--keywords",
-        action="store_true",
-        default=False,
-        help="Show available keywords",
-    )
+    _add_group_argument(group, "paths", "Print file paths, grouped by root", False)
+    _add_group_argument(group, "files", "Print file paths")
+    _add_group_argument(group, "graph", "Print DAG of test cases")
+    _add_group_argument(group, "keywords", "Show available keywords", False)
     parser.add_argument(
         "--owner", dest="owners", action="append", help="Show tests owned by 'owner'"
     )
-    setup_run_parser(parser)
+    add_mark_arguments(parser)
+    add_resource_arguments(parser)
+    parser.add_argument(
+        "pathspec",
+        metavar="pathspec",
+        nargs="*",
+        help="Test file[s] or directories to search",
+    )
 
 
 def parse_search_paths(args: argparse.Namespace) -> dict[str, list[str]]:
@@ -92,15 +83,15 @@ def find(args: argparse.Namespace) -> int:
     )
     cases_to_run = [case for case in cases if not case.mask]
     cases_to_run.sort(key=lambda x: x.name)
-    if not args.files and not args.no_header:
+    if not args.print_files:
         logging.emit(Session.overview(cases))
-    if args.keywords:
+    if args.print_keywords:
         Finder.pprint_keywords(cases_to_run)
-    elif args.paths:
+    elif args.print_paths:
         Finder.pprint_paths(cases_to_run)
-    elif args.files:
+    elif args.print_files:
         Finder.pprint_files(cases_to_run)
-    elif args.graph:
+    elif args.print_graph:
         Finder.pprint_graph(cases_to_run)
     else:
         Finder.pprint(cases_to_run)
