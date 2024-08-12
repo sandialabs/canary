@@ -82,7 +82,6 @@ class Config:
                 },
             }
         }
-        self._cache: dict[tuple[str, Optional[str]], Any] = {}
         file = self.config_file("global")
         if file is not None and os.path.exists(file):
             self.load_config(file, "global")
@@ -229,9 +228,6 @@ class Config:
         """
         self.validate_section_name(section)
         cfg_scopes: list[dict[str, Any]]
-        cache_key = (section, scope)
-        if cache_key in self._cache:
-            return self._cache[cache_key]
         if scope is None:
             cfg_scopes = list(self.scopes.values())
         else:
@@ -242,8 +238,7 @@ class Config:
             if not data or not isinstance(data, dict):
                 continue
             merged = _merge(merged, {section: data})
-        self._cache[cache_key] = {} if section not in merged else merged[section]
-        return self._cache[cache_key]
+        return {} if section not in merged else merged[section]
 
     def get(self, path: str, default: Optional[Any] = None, scope: Optional[str] = None) -> Any:
         """Get a config section or a single value from one.
@@ -342,12 +337,6 @@ class Config:
         new = _merge(existing, value)
         self.set(path, new, scope=scope)
 
-    def invalidate_cache(self, section):
-        keys = list(self._cache.keys())
-        for key in keys:
-            if key[0] == section:
-                self._cache.pop(key)
-
     def update_config(self, section, update_data, scope=None):
         """Update the configuration file for a particular scope.
 
@@ -372,7 +361,6 @@ class Config:
         if section == "machine":
             self.validate_machine_config_and_fill_missing(update_data)
         scope_data[section] = update_data
-        self.invalidate_cache(section)
 
     def validate_machine_config_and_fill_missing(self, data: dict) -> None:
         defaults = self.get_config("machine")
