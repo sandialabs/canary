@@ -734,8 +734,7 @@ class Session:
         cases_to_run = [case for case in cases if not case.mask and not case.skipped]
         files = {case.file for case in cases_to_run}
         n, N = len(cases_to_run), len(files)
-        s = "s " if n > 1 else " "
-        S = "s " if N > 1 else ""
+        s, S = "s" if n > 1 else "", "s" if N > 1 else ""
         string.write(color.colorize(fmt % ("g", "selected", n, s, N, S)))
         skipped = [case for case in cases if case.mask]
         skipped_reasons: dict[str, int] = {}
