@@ -53,7 +53,6 @@ def setup_parser(parser: "Parser"):
     group.add_argument(
         "-r",
         metavar="{b, v}",
-        default="b",
         choices=("b", "v"),
         help="During test execution, show progress bar (``-rb``, default) or print each "
         "test case as it starts/finishes of every case (``-rv``)",
@@ -159,7 +158,7 @@ def run(args: "argparse.Namespace") -> int:
         assert args.mode == "b"
         session = Session(args.work_tree, mode="a")
         cases = session.bfilter(lot_no=args.lot_no, batch_no=args.batch_no)
-    output = OutputLevel[{"b": "progress_bar", "v": "verbose"}[args.r]]
+    output = OutputLevel(args.r)
     try:
         session.exitstatus = session.run(
             cases,
