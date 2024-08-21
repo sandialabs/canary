@@ -57,7 +57,7 @@ Dependency parameters can be accessed directly from the analysis test instance's
     self = nvtest.get_instance()
     self.dependencies[0].parameters
 
-Additionally, the parameters of dependencies are stored in the analyze test instance's ``parameters`` attribute.  Consider the following test:
+or, in the analyze test instance's ``parameters`` attribute.  Consider the following test:
 
 .. literalinclude:: /examples/analyze_only/analyze_only.pyt
     :lines: 8-10
@@ -71,7 +71,7 @@ The parameters ``np``, ``a``, and ``b`` of each dependency can be accessed direc
 
 The ordering of the parameters is guaranteed to be the same as the ordering the ``dependencies``.  Eg, ``self.dependencies[i].parameters.a == self.parameters.a[i]``.
 
-Additionally, the full table of dependency parameters is accessible as:
+Additionally, a full table of dependency parameters is accessible via key entry into the ``parameters`` attribute, where the key is a tuple containing each individual parameter name, eg:
 
 .. literalinclude:: /examples/analyze_only/analyze_only.pyt
     :lines: 34-36
