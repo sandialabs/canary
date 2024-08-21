@@ -47,8 +47,32 @@ Finally, the ``ExecuteAndAnalyze`` object is used to set up the test to broker w
     :lines: 33-42
     :language: python
 
-Full test file
---------------
+Accessing dependency parameters
+-------------------------------
 
-.. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
+Dependency parameters can be accessed directly from the analysis test instance's ``dependencies``, eg,
+
+.. code-block:: python
+
+    self = nvtest.get_instance()
+    self.dependencies[0].parameters
+
+Additionally, the parameters of dependencies are stored in the analyze test instance's ``parameters`` attribute.  Consider the following test:
+
+.. literalinclude:: /examples/analyze_only/analyze_only.pyt
+    :lines: 8-10
+    :language: python
+
+The parameters ``np``, ``a``, and ``b`` of each dependency can be accessed directly:
+
+.. literalinclude:: /examples/analyze_only/analyze_only.pyt
+    :lines: 31-33
+    :language: python
+
+The ordering of the parameters is guaranteed to be the same as the ordering the ``dependencies``.  Eg, ``self.dependencies[i].parameters.a == self.parameters.a[i]``.
+
+Additionally, the full table of dependency parameters is accessible as:
+
+.. literalinclude:: /examples/analyze_only/analyze_only.pyt
+    :lines: 34-36
     :language: python

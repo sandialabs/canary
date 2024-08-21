@@ -1,7 +1,7 @@
 import dataclasses
 import os
-from types import SimpleNamespace
 from typing import Any
+from typing import Generator
 from typing import Optional
 from typing import Type
 from typing import Union
@@ -11,19 +11,70 @@ from .case import TestCase
 from .status import Status
 
 
-class Parameters(SimpleNamespace):
+class Parameters:
+    def __init__(self, **kwargs: Any) -> None:
+        self._keys: list[Union[tuple[str, ...], str]] = list(kwargs.keys())
+        self._values: list[Any] = list(kwargs.values())
+
+    def __str__(self) -> str:
+        s = ", ".join(f"{k}={v}" for k, v in self.items())
+        return f"Parameters({s})"
+
+    def __contains__(self, key: Union[tuple[str, ...], str]) -> bool:
+        return key in self._keys
+
+    def __getitem__(self, key: Union[tuple[str, ...], str]) -> Any:
+        if key not in self._keys:
+            raise KeyError(key)
+        i = self._keys.index(key)
+        return self._values[i]
+
+    def __setitem__(self, key: Union[tuple[str, ...], str], value: Any) -> None:
+        self._keys.append(key)
+        self._values.append(value)
+
+    def __getattr__(self, key: str) -> Any:
+        if key not in self._keys:
+            raise AttributeError(f"Parameters object has no attribute {key!r}")
+        index = self._keys.index(key)
+        return self._values[index]
+
     def __eq__(self, other: object) -> bool:
-        if isinstance(other, (Parameters, SimpleNamespace)):
-            return self == other
+        if isinstance(other, Parameters):
+            return self._keys == other._keys and self._values == other._values
         assert isinstance(other, dict)
-        if len(self.__dict__) != len(other):
+        if len(self._keys) != len(other):
             return False
         for key, value in other.items():
-            if key not in self.__dict__:
+            if key not in self._keys:
                 return False
-            if self.__dict__[key] != value:
+            if self._keys[key] != value:
                 return False
         return True
+
+    def items(self) -> Generator[Any, None, None]:
+        for i, key in enumerate(self._keys):
+            yield key, self._values[i]
+
+    def keys(self) -> list:
+        return list(self._keys)
+
+    def values(self) -> list:
+        return list(self._values)
+
+    def get(
+        self, key: Union[tuple[str, ...], str], default: Optional[Any] = None
+    ) -> Optional[Any]:
+        if key in self._keys:
+            index = self._keys.index(key)
+            return self._values[index]
+        return default
+
+    def asdict(self) -> dict[Union[tuple[str, ...], str], Any]:
+        d: dict[Union[tuple[str, ...], str], Any] = {}
+        for i, key in enumerate(self._keys):
+            d[key] = self._values[i]
+        return d
 
 
 @dataclasses.dataclass(frozen=True)
@@ -58,6 +109,25 @@ class TestInstance:
         dependencies: list[TestInstance] = []
         for dep in case.dependencies:
             dependencies.append(TestInstance.from_case(dep))
+        parameters: Parameters
+        if not isinstance(case, AnalyzeTestCase):
+            parameters = Parameters(**case.parameters)
+        else:
+            parameters = Parameters()
+            keys = tuple(case.dependencies[0].parameters.keys())
+            if len(keys) == 1:
+                parameters[keys[0]] = tuple([dep.parameters[keys[0]] for dep in case.dependencies])
+            else:
+                table = []
+                for dep in case.dependencies:
+                    row = []
+                    for key in keys:
+                        row.append(dep.parameters[key])
+                    table.append(tuple(row))
+                parameters[keys] = tuple(table)
+                for i, key in enumerate(keys):
+                    parameters[key] = tuple([row[i] for row in table])
+
         self = cls(
             file_root=case.file_root,
             file_path=case.file_path,
@@ -68,7 +138,7 @@ class TestInstance:
             family=case.family,
             analyze=isinstance(case, AnalyzeTestCase),
             keywords=case.keywords(),
-            parameters=Parameters(**case.parameters),
+            parameters=parameters,
             timeout=case.timeout,
             runtime=case.runtime,
             baseline=case.baseline,
