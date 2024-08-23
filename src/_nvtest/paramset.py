@@ -9,6 +9,20 @@ from typing import Union
 
 
 class ParameterSet:
+    """Data type that stores a test file's parameters from which test cases are instantiated.  Data
+    is stored in a two-dimensional table given by ``values`` with associated column labels given by
+    ``keys``.  The number of columns in ``values`` must equal the number of ``keys``.
+
+    Parameters
+    ----------
+    keys: names of parameters
+    values: table of values
+
+    Notes
+    -----
+    The ``ParameterSet`` is most easily created through one of its class factory methods.
+
+    """
     def __init__(self, keys: list[str], values: Sequence[Sequence[Any]]) -> None:
         self.keys: list[str] = keys
         self.values: Sequence[Sequence[Any]] = values
