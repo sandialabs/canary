@@ -6,6 +6,7 @@ from datetime import datetime
 from io import StringIO
 from typing import Any
 from typing import Optional
+from typing import TextIO
 from typing import Union
 
 from .. import config
@@ -18,11 +19,10 @@ from ..util.executable import Executable
 from ..util.filesystem import getuser
 from ..util.filesystem import mkdirp
 from ..util.filesystem import set_executable
+from ..util.filesystem import which
 from ..util.time import hhmmss
 from .case import TestCase
 from .runner import Runner
-
-schedulers = ("shell", "slurm", "pbs", "flux")
 
 
 class Batch(Runner):
@@ -66,6 +66,7 @@ class Batch(Runner):
             ns = calculate_allocations(self.max_cpus_required)
             grid = partition.tile(self.cases, ns.cores_per_node * ns.nodes)
             self._runtime = sum([max(case.runtime for case in row) for row in grid])
+        self.default_args: list[str] = []
 
     def __iter__(self):
         return iter(self.cases)
@@ -74,14 +75,24 @@ class Batch(Runner):
         return len(self.cases)
 
     @property
-    def variables(self) -> dict[str, str]:
+    def variables(self) -> dict[str, Optional[str]]:
         return {
             "NVTEST_LOT_NO": str(self.lot_no),
             "NVTEST_BATCH_NO": str(self.batch_no),
             "NVTEST_NBATCHES": str(self.nbatches),
-            "NVTEST_LEVEL": "2",
+            "NVTEST_LEVEL": "1",
             "NVTEST_DISABLE_KB": "1",
+            "NVTEST_BATCH_SCHEDULER": None,
+            "NVTEST_BATCH_SCHEDULER_ARGS": None,
+            "NVTEST_BATCH_LENGTH": None,
         }
+
+    def dump_variables(self, stream: TextIO) -> None:
+        for var, val in self.variables.items():
+            if val is None:
+                stream.write(f"unset {var}\n")
+            else:
+                stream.write(f"export {var}={val}\n")
 
     def nvtest_invocation(
         self, *, workers: int, cpus: Optional[int] = None, timeoutx: float = 1.0
@@ -179,6 +190,12 @@ class Batch(Runner):
                 break
         else:
             self._status.set("ready")
+        self.read_default_args_from_config()
+
+    def read_default_args_from_config(self) -> None:
+        default_args = config.get("batch:scheduler_args")
+        if default_args is not None:
+            self.default_args.extend(default_args)
 
     def _run(self, *args: str, **kwargs: Any) -> None:
         raise NotImplementedError
@@ -262,8 +279,7 @@ class SubShell(Batch):
         for case in self.cases:
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
-        for var, val in self.variables.items():
-            fh.write(f"export {var}={val}\n")
+        self.dump_variables(fh)
         workers = kwargs.get("workers", 1)
         invocation = self.nvtest_invocation(workers=workers, timeoutx=timeoutx)
         fh.write(f"(\n  {invocation}\n)\n")
@@ -392,7 +408,8 @@ class Slurm(QBatch):
         session_cpus = ns.nodes * ns.cores_per_node
         tpn = int(ns.cores_per_node / ns.cpus_per_task if workers > 1 else ns.tasks_per_node)
 
-        args = list(args_in)
+        args = list(self.default_args)
+        args.extend(args_in)
         args.append(f"--nodes={ns.nodes}")
         args.append(f"--ntasks-per-node={tpn}")
         args.append(f"--cpus-per-task={ns.cpus_per_task}")
@@ -414,8 +431,7 @@ class Slurm(QBatch):
         for case in self.cases:
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
-        for var, val in self.variables.items():
-            fh.write(f"export {var}={val}\n")
+        self.dump_variables(fh)
         invocation = self.nvtest_invocation(workers=workers, cpus=session_cpus, timeoutx=timeoutx)
         fh.write(f"(\n  {invocation}\n)\n")
         f = self.submission_script_filename()
@@ -478,7 +494,8 @@ class PBS(QBatch):
         workers = kwargs.get("workers", ns.cores_per_node)
         session_cpus = ns.nodes * ns.cores_per_node
 
-        args = list(args_in)
+        args = list(self.default_args)
+        args.extend(args_in)
         args.append(f"-l nodes={ns.nodes}:ppn={ns.cores_per_node}")
         args.append(f"-l walltime={hhmmss(qtime * 1.25, threshold=0)}")
         args.append("-j oe")
@@ -487,7 +504,7 @@ class PBS(QBatch):
 
         fh = StringIO()
         fh.write(f"#!{self.shell}\n")
-        for arg in args_in:
+        for arg in args:
             fh.write(f"#PBS {arg}\n")
 
         fh.write(f"# user: {getuser()}\n")
@@ -498,8 +515,7 @@ class PBS(QBatch):
         for case in self.cases:
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
-        for var, val in self.variables.items():
-            fh.write(f"export {var}={val}\n")
+        self.dump_variables(fh)
         invocation = self.nvtest_invocation(workers=workers, cpus=session_cpus, timeoutx=timeoutx)
         fh.write(f"(\n  {invocation}\n)\n")
         f = self.submission_script_filename()
@@ -611,7 +627,8 @@ class Flux(QBatch):
         workers = kwargs.get("workers", ns.cores_per_node)
         session_cpus = ns.nodes * ns.cores_per_node
 
-        args = list(args_in)
+        args = list(self.default_args)
+        args.extend(args_in)
         args.append(f"--nodes={ns.nodes}")
         args.append(f"--time-limit={qtime}")
         args.append(f"--output={self.logfile()}")
@@ -619,7 +636,7 @@ class Flux(QBatch):
 
         fh = StringIO()
         fh.write(f"#!{self.shell}\n")
-        for arg in args_in:
+        for arg in args:
             fh.write(f"#FLUX: {arg}\n")
 
         fh.write(f"# user: {getuser()}\n")
@@ -630,8 +647,7 @@ class Flux(QBatch):
         for case in self.cases:
             fh.write(f"# - {case.fullname}\n")
         fh.write(f"# total: {len(self.cases)} test cases\n")
-        for var, val in self.variables.items():
-            fh.write(f"export {var}={val}\n")
+        self.dump_variables(fh)
         invocation = self.nvtest_invocation(workers=workers, cpus=session_cpus, timeoutx=timeoutx)
         fh.write(f"(\n  {invocation}\n)\n")
         f = self.submission_script_filename()
@@ -710,15 +726,44 @@ def factory(
     scheduler: Optional[str] = None,
 ) -> Batch:
     batch: Batch
-    if scheduler in (None, "shell", "subshell"):
-        batch = SubShell(cases, batch_no, nbatches, lot_no)
-    elif scheduler and scheduler.lower() == "slurm":
-        batch = Slurm(cases, batch_no, nbatches, lot_no)
-    elif scheduler and scheduler.lower() == "pbs":
-        batch = PBS(cases, batch_no, nbatches, lot_no)
-    elif scheduler and scheduler.lower() == "flux":
-        batch = Flux(cases, batch_no, nbatches, lot_no)
-    else:
-        raise ValueError(f"{scheduler}: Unknown batch scheduler")
+    batch_scheduler, command = validate(scheduler)
+    match batch_scheduler:
+        case "shell":
+            batch = SubShell(cases, batch_no, nbatches, lot_no)
+        case "slurm":
+            batch = Slurm(cases, batch_no, nbatches, lot_no)
+        case "pbs":
+            batch = PBS(cases, batch_no, nbatches, lot_no)
+        case "flux":
+            batch = Flux(cases, batch_no, nbatches, lot_no)
+        case _:
+            raise ValueError(f"{scheduler}: Unknown batch scheduler")
+    if command is not None:
+        batch.command = command
     batch.setup()
     return batch
+
+
+def validate(scheduler: Optional[str] = None) -> tuple[str, Optional[str]]:
+    if scheduler is None:
+        return "shell", None
+    schedulers = ("shell", "slurm", "pbs", "flux")
+    if scheduler.lower() in schedulers:
+        return scheduler.lower(), None
+    elif os.path.basename(scheduler) == "sbatch":
+        command = which(scheduler)
+        if command is None:
+            raise ValueError(f"{scheduler}: no such file")
+        return "slurm", command
+    elif os.path.basename(scheduler) == "qsub":
+        command = which(scheduler)
+        if command is None:
+            raise ValueError(f"{scheduler}: no such file")
+        return "pbs", command
+    elif os.path.basename(scheduler) == "flux":
+        command = which(scheduler)
+        if command is None:
+            raise ValueError(f"{scheduler}: no such file")
+        return "flux", command
+    else:
+        raise ValueError(f"{scheduler}: Unknown batch scheduler")

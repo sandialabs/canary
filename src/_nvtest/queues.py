@@ -4,10 +4,11 @@ from typing import Any
 from typing import Optional
 from typing import Union
 
+from . import config
 from .resources import ResourceHandler
 from .test.batch import Batch
 from .test.batch import factory as b_factory
-from .test.batch import schedulers
+from .test.batch import validate as b_validate
 from .test.case import TestCase
 from .third_party import color
 from .third_party.rprobe import cpu_count
@@ -272,8 +273,7 @@ class BatchResourceQueue(ResourceQueue):
         scheduler = self.rh["batch:scheduler"]
         if scheduler is None:
             raise ValueError("BatchResourceQueue requires a scheduler")
-        elif scheduler not in schedulers:
-            raise ValueError(f"{scheduler}: unknown scheduler")
+        b_validate(scheduler)
         self.scheduler: str = str(scheduler)
         self.tmp_buffer: list[TestCase] = []
 
@@ -286,7 +286,8 @@ class BatchResourceQueue(ResourceQueue):
         if self.rh["batch:count"]:
             partitions = partition_n(self.tmp_buffer, n=self.rh["batch:count"])
         else:
-            length = float(self.rh["batch:length"] or 30 * 60)  # 30 minute default
+            default_length = config.get("batch:length") or 30 * 60
+            length = float(self.rh["batch:length"] or default_length)  # 30 minute default
             partitions = partition_t(self.tmp_buffer, t=length)
         n = len(partitions)
         batches = [

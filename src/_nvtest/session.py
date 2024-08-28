@@ -705,8 +705,6 @@ class Session:
                 raise ValueError("batched execution requires a scheduler")
             queue = DirectResourceQueue(rh, global_session_lock)
         else:
-            if rh["batch:count"] is None and rh["batch:length"] is None:
-                rh.set("batch:length", config.get("config:batch_length"))
             queue = BatchResourceQueue(rh, global_session_lock)
             batch_stage = os.path.join(self.config_dir, "batches")
             mkdirp(batch_stage)

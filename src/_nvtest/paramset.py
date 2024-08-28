@@ -23,6 +23,7 @@ class ParameterSet:
     The ``ParameterSet`` is most easily created through one of its class factory methods.
 
     """
+
     def __init__(self, keys: list[str], values: Sequence[Sequence[Any]]) -> None:
         self.keys: list[str] = keys
         self.values: Sequence[Sequence[Any]] = values

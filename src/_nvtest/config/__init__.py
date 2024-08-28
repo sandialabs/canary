@@ -19,6 +19,7 @@ from ..util.singleton import Singleton
 from ..util.time import time_in_seconds
 from . import machine
 from .schemas import any_schema
+from .schemas import batch_schema
 from .schemas import build_schema
 from .schemas import config_schema
 from .schemas import machine_schema
@@ -37,6 +38,7 @@ config_dir = ".nvtest"
 
 section_schemas: dict[str, Schema] = {
     "build": build_schema,
+    "batch": batch_schema,
     "config": config_schema,
     "machine": machine_schema,
     "python": python_schema,
@@ -68,10 +70,10 @@ class Config:
                 "config": {
                     "debug": False,
                     "no_cache": False,
-                    "batch_length": 30 * 60,  # 30 minutes
                     "log_level": "INFO",
                 },
                 "test": {"timeout": {"fast": 120.0, "long": 15 * 60.0, "default": 7.5 * 60.0}},
+                "batch": {"length": 30 * 60, "scheduler": None, "scheduler_args": []},
                 "machine": editable_machine_config,
                 "system": static_machine_config,
                 "variables": {},
@@ -88,7 +90,7 @@ class Config:
         file = self.config_file("local")
         if file is not None and os.path.exists(file):
             self.load_config(file, "local")
-        self.load_env_config()
+        self.load_config_from_env()
 
     def config_file(self, scope) -> Optional[str]:
         if scope == "global":
@@ -115,20 +117,34 @@ class Config:
             for key, val in self.scopes[scope]["test"]["timeout"].items():
                 self.scopes[scope]["test"]["timeout"][key] = time_in_seconds(val)
 
-    def load_env_config(self) -> None:
-        if "NVTEST_LOG_LEVEL" in os.environ:
+    def load_config_from_env(self) -> None:
+        for varname, raw_value in os.environ.items():
+            if not varname.startswith("NVTEST_"):
+                continue
             scope_data = self.scopes.setdefault("environment", {})
-            level_name = os.environ["NVTEST_LOG_LEVEL"]
-            level = logging.get_level(level_name.upper())
-            logging.set_level(level)
-            scope_data.setdefault("config", {})["log_level"] = level_name
-        if os.getenv("NVTEST_NOCACHE", "off").lower() in ("on", "1", "true", "yes"):
-            scope_data.setdefault("config", {})["no_cache"] = True
-        if os.getenv("NVTEST_DEBUG", "off").lower() in ("on", "1", "true", "yes"):
-            scope_data = self.scopes.setdefault("environment", {})
-            scope_data.setdefault("config", {})["debug"] = True
-            scope_data.setdefault("config", {})["log_level"] = "DEBUG"
-            logging.set_level(logging.DEBUG)
+            match varname.lower().split("_", 2)[1:]:
+                case ["config", "debug"] | ["debug"]:
+                    if raw_value.lower() in ("on", "1", "true", "yes"):
+                        scope_data.setdefault("config", {})["debug"] = True
+                        scope_data.setdefault("config", {})["log_level"] = "DEBUG"
+                        logging.set_level(logging.DEBUG)
+                case ["config", "log_level"] | ["log_level"]:
+                    level = logging.get_level(raw_value.upper())
+                    logging.set_level(level)
+                    scope_data.setdefault("config", {})["log_level"] = raw_value.upper()
+                case ["config", "no_cache"] | ["no_cache"]:
+                    scope_data.setdefault("config", {})["no_cache"] = True
+                case ["batch", "length"]:
+                    value = time_in_seconds(raw_value)
+                    scope_data.setdefault("batch", {})["length"] = value
+                case ["machine", key]:
+                    value = int(raw_value)
+                    scope_data.setdefault("machine", {})[key] = value
+                case ["test", keys]:
+                    field, key = keys.split("_", 1)
+                    test_data = scope_data.setdefault("test", {})
+                    if field == "timeout":
+                        test_data.setdefault(field, {})[key] = time_in_seconds(raw_value)
 
     def dump(self, fh: TextIO, scope: Optional[str] = None):
         if scope is not None:
