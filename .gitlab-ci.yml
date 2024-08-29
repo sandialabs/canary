@@ -51,4 +51,6 @@ pages:
     - docs/**/*.rst
     - docs/Makefile
     - docs/source/conf.py
+    - docs/source/dot/*.png
+    - docs/source/images/*.png
     when: always
