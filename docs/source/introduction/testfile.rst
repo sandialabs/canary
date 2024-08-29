@@ -61,7 +61,12 @@ Test files define one or more :ref:`test cases <introduction-testcase>`.  In the
     :language: python
     :lines: 2-4
 
-would expand into two test instances, one with the parameter ``a=1`` and one with ``a=4``.  Each test case would execute in its own directory and the test script should query for the value of ``a`` and adjust the test accordingly.  Test parameters and other test-specific and runtime-specific information are accessed from the ``nvtest.test.instance`` object which is accessible via ``nvtest.get_instance()``:
+would expand into two test instances, one with the parameter ``a=1`` and one with ``a=4`` as shown.
+
+.. image:: /dot/TestFile.png
+    :align: center
+
+Each test case would execute in its own directory and the test script should query for the value of ``a`` and adjust the test accordingly.  Test parameters and other test-specific and runtime-specific information are accessed from the ``nvtest.test.instance`` object which is accessible via ``nvtest.get_instance()``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python

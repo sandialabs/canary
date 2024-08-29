@@ -74,16 +74,10 @@ During the ``populate`` stage, the test execution directories are made and popul
    :extraargs: -rv -w
    :setup: rm -rf TestResults
 
-.. code-block:: console
+The resultant test session directory, shown below, will be populated with test execution directories that have the following naming convention: ``[relpath/]testname[.key=val[...]]``.  ``relpath`` is the relative path from the search path root to the test file ``testname.pyt`` and the ``key``\ s are the name of the test cases parameters (if any) with associated ``val``\ s.  The test script is symbolically linked into the execution directory.
 
-  $ ls .
-  centered_space/   TestResults/
-
-.. command-output:: nvtest tree ./TestResults
-   :cwd: /examples
-   :nocache:
-
-Each test's execution directory has the following naming convention: ``[relpath/]testname[.key=val[...]]``.  ``relpath`` is the relative path from the search path root to the test file ``testname.pyt`` and the ``key``\ s are the name of the test cases parameters (if any) with associated ``val``\ s.  The test script is symbolically linked into the execution directory.
+.. image:: /images/Session0.png
+   :align: center
 
 .. warning::
 
@@ -94,7 +88,7 @@ Each test's execution directory has the following naming convention: ``[relpath/
 Batch
 .....
 
-Group test cases into batches to run in a scheduler.  The default batching scheme is to:
+[Optional] Group test cases into batches to run in a scheduler.  The default batching scheme is to:
 
 1. group cases by the number of compute nodes required to run; and
 2. partition each group into batches that complete in a set time (defined by the ``-l batch:length=T`` option).
@@ -118,9 +112,8 @@ During test execution, ``nvtest`` navigates to each test directory and runs the 
    :nocache:
    :setup: rm -rf TestResults
 
-.. command-output:: nvtest tree ./TestResults
-   :cwd: /examples
-   :nocache:
+.. image:: /images/Session.png
+   :align: center
 
 .. note::
 

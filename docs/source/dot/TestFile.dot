@@ -1,0 +1,33 @@
+digraph G {
+
+bgcolor=transparent;
+overlap=compress;
+rankdir=LR;
+
+node[
+  fontname=Monaco,
+  penwidth=1,
+  fontsize=20,
+  margin=.1,
+  shape=box,
+  style="filled"
+]
+
+root [
+  label="filename.pyt",
+  imagescale=both,
+  fixedsize=true,
+  width=3,
+  height=3,
+  fillcolor="transparent",
+  image="FileIcon.png",
+  style="",
+  pad=0,
+  penwidth=0
+]
+param1 [label="filename[a=1]"]
+param4 [label="filename[a=4]"]
+
+root -> param1 [style=tapered, shape=rectangle]
+root -> param4 [style=tapered, shape=rectangle]
+}
