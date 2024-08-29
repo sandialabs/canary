@@ -13,6 +13,7 @@ node[
   style="filled"
 ]
 
+/*
 root [
   label="filename.pyt",
   imagescale=both,
@@ -25,6 +26,8 @@ root [
   pad=0,
   penwidth=0
 ]
+*/
+root [label="filename.pyt"]
 param1 [label="filename[a=1]"]
 param4 [label="filename[a=4]"]
 
