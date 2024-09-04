@@ -43,6 +43,6 @@ The number of gpus used by a test session can be limited by setting the ``-l ses
 Setting the number of gpus required by a test
 ---------------------------------------------
 
-The number of gpus required by a test is inferred from the :ref:`np<np-ngpu-parameters>` parameter.  If ``ngpu`` is not set, the number of gpus required by the test is assumed to by ``0``.
+The number of gpus required by a test is inferred from the :ref:`ngpu<np-ngpu-parameters>` parameter.  If ``ngpu`` is not set, the number of gpus required by the test is assumed to by ``0``.
 
 .. [#] If `sinfo <https://slurm.schedmd.com/sinfo.html>`_ is detected, it will be used to query the number of available processors on the Slurm nodes.

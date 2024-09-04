@@ -3,12 +3,14 @@
 Filter and select tests
 =======================
 
-``nvtest`` can perform filtering actions to reduce the number of tests run in a session.  Described next are the three main ways to filter tests via the command line: by :ref:`keyword expression <directive-keywords>`, by :ref:`parameter expression <directive-parameterize>`, and by `platform expression <directive-platform>`.
+``nvtest`` can perform filtering actions to reduce the number of tests run in a session.  Described next are the three main ways to filter tests via the command line: by :ref:`keyword expression <filter-kwd>`, by :ref:`parameter expression <filter-parameters>`, and by `platform expression <filter-platform>`.
+
+.. _filter-kwd:
 
 Filter by keyword
 -----------------
 
-Using ``-k`` on the command line, filters (selects) tests based on the keywords defined in each test. For example, consider two test files, ``parameterize1.pyt``:
+Using ``-k`` on the command line, filters (selects) tests based on the :ref:`keywords<directive-keywords>` defined in each test. For example, consider two test files, ``parameterize1.pyt``:
 
 .. code-block:: python
 
@@ -30,10 +32,12 @@ Using the command ``nvtest run -k 3D`` would cause both tests to run, because th
 
 Use ``not`` to do the inverse, eg, ``nvtest run -k 'not conduction'`` means run tests such that do not have the ``conduction`` keyword.
 
+.. _filter-parameters:
+
 Filtering by parameters
 -----------------------
 
-When tests define parameters using the ``parameterize`` directive, then the resulting parameter names and values can be used to select tests.  Consider the test file ``p1.pyt``
+When tests define parameters using the :ref:`parameterize directive<directive-parameterize>`, then the resulting parameter names and values can be used to select tests.  Consider the test file ``p1.pyt``
 
 .. code-block:: python
 
@@ -54,6 +58,8 @@ The command ``nvtest run -p np`` would only run test ``p1``, because the ``np`` 
 The value of a parameter can be specified as well. For example, the command ``nvtest run -p MODEL=elastic`` would only run the ``p2.MODEL=elastic`` test and no others. In general, ``-p name=value`` means run any test that defines the parameter ``name`` and which has the value ``value``.
 
 More comparison operators in addition to ``=`` can be used, such as ``>``, ``<``, ``>=``, ``!=``, etc. For example, the command ``nvtest run -p 'np>1'`` would run the ``p1.np=4`` test and no others.
+
+.. _filter-platform:
 
 Filter by platform
 ------------------
