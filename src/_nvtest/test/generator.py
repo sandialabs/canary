@@ -674,15 +674,16 @@ class AbstractTestFile(TestGenerator):
         self,
         action: str,
         *files: str,
-        rename: bool = False,
+        src: Optional[str] = None,
+        dst: Optional[str] = None,
         when: Optional[str] = None,
     ) -> None:
-        dst: Union[None, str] = None
-        if rename:
-            try:
-                src, dst = files
-            except ValueError:
-                raise ValueError("Expected 2 file arguments with rename=True") from None
+        if src is not None:
+            if files:
+                raise ValueError(
+                    "positional file arguments incompatible with "
+                    "explicit src and dst keyword arguments"
+                )
             ns = FilterNamespace((src, dst), action=action, when=when)
             self._sources.append(ns)
             return
@@ -690,11 +691,23 @@ class AbstractTestFile(TestGenerator):
             ns = FilterNamespace((file, None), action=action, when=when)
             self._sources.append(ns)
 
-    def m_copy(self, *files: str, rename: bool = False, when: Optional[str] = None) -> None:
-        self.add_sources("copy", *files, rename=rename, when=when)
+    def m_copy(
+        self,
+        *files: str,
+        src: Optional[str] = None,
+        dst: Optional[str] = None,
+        when: Optional[str] = None,
+    ) -> None:
+        self.add_sources("copy", *files, src=src, dst=dst, when=when)
 
-    def m_link(self, *files: str, rename: bool = False, when: Optional[str] = None) -> None:
-        self.add_sources("link", *files, rename=rename, when=when)
+    def m_link(
+        self,
+        *files: str,
+        src: Optional[str] = None,
+        dst: Optional[str] = None,
+        when: Optional[str] = None,
+    ) -> None:
+        self.add_sources("link", *files, src=src, dst=dst, when=when)
 
     def m_sources(
         self,

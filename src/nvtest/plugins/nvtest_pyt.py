@@ -54,8 +54,14 @@ class PYTTestFile(AbstractTestFile):
     ):
         self.m_analyze(when=when, flag=flag, script=script)
 
-    def f_copy(self, *args: str, when: Optional[str] = None, rename: bool = False):
-        self.m_copy(*args, rename=rename, when=when)
+    def f_copy(
+        self,
+        *args: str,
+        src: Optional[str] = None,
+        dst: Optional[str] = None,
+        when: Optional[str] = None,
+    ):
+        self.m_copy(*args, src=src, dst=dst, when=when)
 
     def f_depends_on(
         self,
@@ -85,8 +91,14 @@ class PYTTestFile(AbstractTestFile):
     def f_keywords(self, *args: str, when: Optional[str] = None) -> None:
         self.m_keywords(*args, when=when)
 
-    def f_link(self, *args: str, when: Optional[str] = None, rename: bool = False):
-        self.m_link(*args, rename=rename, when=when)
+    def f_link(
+        self,
+        *args: str,
+        src: Optional[str] = None,
+        dst: Optional[str] = None,
+        when: Optional[str] = None,
+    ):
+        self.m_link(*args, src=src, dst=dst, when=when)
 
     def f_owners(self, *args: str):
         self.m_owners(*args)

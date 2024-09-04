@@ -53,8 +53,11 @@ class ResourceHandler:
 
     def get(self, path: str, default: Optional[Any] = None) -> Optional[Any]:
         scope, type = path.split(":")
+        if scope not in self.data:
+            raise ValueError(f"{scope!r} is not a valid ResourceHandler scope")
+        scoped_data = self.data[scope]
         try:
-            return self.data[scope][type]
+            return scoped_data[type]
         except KeyError:
             return default
 

@@ -9,7 +9,12 @@ import stat
 import tempfile
 import time
 from contextlib import contextmanager
+from datetime import UTC
 from datetime import datetime
+from typing import Any
+from typing import Callable
+from typing import Generator
+from typing import Optional
 from typing import Union
 
 from . import logging
@@ -44,11 +49,13 @@ __all__ = [
 ]
 
 
-def is_hidden(path):
+def is_hidden(path: str) -> bool:
     return os.path.basename(path).startswith(".")
 
 
-def which(*args, path=None, required=False):
+def which(
+    *args: str, path: Optional[Union[str, list, tuple]] = None, required: bool = False
+) -> Optional[str]:
     """Finds an executable in the path like command-line which.
 
     If given multiple executables, returns the first one that is found.
@@ -74,14 +81,17 @@ def which(*args, path=None, required=False):
     else:
         path = os.getenv("PATH") or []
 
+    paths: list[str]
     if isinstance(path, str):
-        path = path.split(os.pathsep)
+        paths = path.split(os.pathsep)
+    else:
+        paths.extend(path)
 
     for name in args:
         exe = os.path.abspath(name)
         if os.path.isfile(exe) and os.access(exe, os.X_OK):
             return exe
-        for directory in path:
+        for directory in paths:
             exe = os.path.join(directory, name)
             if os.path.isfile(exe) and os.access(exe, os.X_OK):
                 return exe
@@ -92,7 +102,7 @@ def which(*args, path=None, required=False):
     return None
 
 
-def copyfile(src, dst):
+def copyfile(src: str, dst: str) -> None:
     """Copy file `src` to `dst`"""
     if os.path.isdir(dst):
         basename = os.path.basename(src)
@@ -100,12 +110,19 @@ def copyfile(src, dst):
     shutil.copyfile(src, dst)
 
 
-def movefile(src, dst):
+def movefile(src: str, dst: str) -> None:
     """Move file `src` to `dst`"""
     shutil.move(src, dst)
 
 
-def synctree(src, dst, ignore=None, delete=False, verbose=False, **kwargs):
+def synctree(
+    src: str,
+    dst: str,
+    ignore: Optional[Union[str, list, tuple]] = None,
+    delete: bool = False,
+    verbose: bool = False,
+    **kwargs: Any,
+):
     """Wrapper around rsync"""
     from .executable import Executable
 
@@ -133,14 +150,14 @@ def synctree(src, dst, ignore=None, delete=False, verbose=False, **kwargs):
     return rsync.returncode
 
 
-def force_remove(file_or_dir):
+def force_remove(file_or_dir: str) -> None:
     try:
-        return remove(file_or_dir)
+        remove(file_or_dir)
     except Exception:
         pass
 
 
-def force_copy(src, dst, echo=lambda x: None):
+def force_copy(src: str, dst: str, echo: Callable = lambda x: None) -> None:
     echo(f"link {src} -> {dst}\n")
     if os.path.isfile(src):
         remove(dst)
@@ -152,7 +169,7 @@ def force_copy(src, dst, echo=lambda x: None):
         raise ValueError(f"force_copy: file not found: {src}")
 
 
-def remove(file_or_dir: Union[pathlib.Path, str]):
+def remove(file_or_dir: Union[pathlib.Path, str]) -> None:
     """Removes file or directory `file_or_dir`"""
     path = pathlib.Path(file_or_dir)
     if path.is_symlink():
@@ -163,7 +180,7 @@ def remove(file_or_dir: Union[pathlib.Path, str]):
         os.remove(path)
 
 
-def rmtree2(path, n=5):
+def rmtree2(path: Union[pathlib.Path, str], n: int = 5) -> None:
     """Wrapper around shutil.rmtree to make it more robust when used on NFS
     mounted file systems."""
     ok = False
@@ -180,7 +197,7 @@ def rmtree2(path, n=5):
         attempts += 1
 
 
-def getuser():
+def getuser() -> str:
     """Return the name of the logged on user"""
     try:
         return getpass.getuser()
@@ -188,10 +205,10 @@ def getuser():
         home = os.path.expanduser("~")
         if home != "~":
             return os.path.basename(home)
-        return os.getenv("USER", os.getenv("LOGNAME"))
+        return os.getenv("USER", os.getenv("LOGNAME"))  # type: ignore
 
 
-def gethost():
+def gethost() -> str:
     """Return the host name of the machine, as reported by os.uname().nodename"""
     return os.uname().nodename
 
@@ -199,7 +216,7 @@ def gethost():
 getnode = gethost
 
 
-def gettempdir(user=False, suffix=None):
+def gettempdir(user: bool = False, suffix: Optional[str] = None) -> str:
     """Get the name of the system's preferred temporary directory. If `user`
     is given, postfix the directory with the user name"""
     tempdir = tempfile.gettempdir()
@@ -211,7 +228,7 @@ def gettempdir(user=False, suffix=None):
 
 
 @contextmanager
-def tmpdir(remove=True, suffix=None):
+def tmpdir(remove: bool = True, suffix: Optional[str] = None) -> Generator[str, None, None]:
     dirname = gettempdir(user=True, suffix=suffix)
     mkdirp(dirname)
     yield dirname
@@ -219,24 +236,24 @@ def tmpdir(remove=True, suffix=None):
         rmtree2(dirname)
 
 
-def gethome():
+def gethome() -> str:
     """Return the home directory of the currently logged in user"""
     return os.path.expanduser("~")
 
 
-def filesize(filename, *, units=None):
+def filesize(filename: str, *, units: Optional[str] = None) -> int:
     size_in_bytes = os.path.getsize(filename)
     if units == "kilobytes":
-        return size_in_bytes / 1024
+        return int(size_in_bytes / 1024)
     elif units == "megabytes":
-        return size_in_bytes / 1024 / 1024
+        return int(size_in_bytes / 1024 / 1024)
     elif units == "gigbytes":
-        return size_in_bytes / 1024 / 1024 / 1024
+        return int(size_in_bytes / 1024 / 1024 / 1024)
     else:
         return size_in_bytes
 
 
-def git_revision(path):
+def git_revision(path: str) -> str:
     from .executable import Executable
 
     f = which("git", required=True)
@@ -245,18 +262,19 @@ def git_revision(path):
         return git("rev-parse", "HEAD", output=str).strip()
 
 
-def file_age_in_days(file):
+def file_age_in_days(file: str) -> float:
     now = datetime.utcnow()
-    mtime = datetime.utcfromtimestamp(os.path.getmtime(file))
+    now = datetime.now(UTC)
+    mtime = datetime.fromtimestamp(os.path.getmtime(file), UTC)
     delta = now - mtime
     return delta.days
 
 
-def sortby_mtime(files):
+def sortby_mtime(files: list[str]) -> list[str]:
     return sorted(files, key=os.path.getmtime)
 
 
-def touch(path):
+def touch(path: str) -> None:
     """Creates an empty file at the specified path."""
     perms = os.O_WRONLY | os.O_CREAT | os.O_NONBLOCK | os.O_NOCTTY
     fd = None
@@ -268,15 +286,15 @@ def touch(path):
             os.close(fd)
 
 
-def touchp(path):
+def touchp(path: str) -> None:
     """Like ``touch``, but creates any parent directories needed for the file."""
     mkdirp(os.path.dirname(os.path.abspath(path)))
     touch(path)
 
 
 @contextmanager
-def working_dir(dirname, **kwargs):
-    if kwargs.get("create", False):
+def working_dir(dirname: str, create: bool = False) -> Generator[None, None, None]:
+    if create:
         mkdirp(dirname)
 
     orig_dir = os.getcwd()
@@ -285,7 +303,7 @@ def working_dir(dirname, **kwargs):
     os.chdir(orig_dir)
 
 
-def mkdirp(*paths, **kwargs):
+def mkdirp(*paths: str, mode: Optional[int] = None) -> None:
     """Creates a directory, as well as parent directories if needed.
 
     Arguments:
@@ -295,7 +313,6 @@ def mkdirp(*paths, **kwargs):
         mode (permission bits or None, optional): optional permissions to
             set on the created directory -- use OS default if not provided
     """
-    mode = kwargs.get("mode", None)
     for path in paths:
         if not os.path.exists(path):
             try:
@@ -309,7 +326,7 @@ def mkdirp(*paths, **kwargs):
             raise OSError(errno.EEXIST, "File already exists", path)
 
 
-def set_executable(path):
+def set_executable(path: str) -> None:
     mode = os.stat(path).st_mode
     if mode & stat.S_IRUSR:
         mode |= stat.S_IXUSR
@@ -320,12 +337,12 @@ def set_executable(path):
     os.chmod(path, mode)
 
 
-def is_exe(path):
+def is_exe(path: str) -> bool:
     """True if path is an executable file."""
     return os.path.isfile(path) and os.access(path, os.X_OK)
 
 
-def force_symlink(src, dest, echo=lambda x: None):
+def force_symlink(src: str, dest: str, echo: Callable = lambda x: None) -> None:
     echo(f"link {src} -> {dest}\n")
     try:
         os.symlink(src, dest)
@@ -347,7 +364,7 @@ def writeable(file_name: str) -> bool:
     return os.access(file_name, os.W_OK)
 
 
-def chgrp(path, group):
+def chgrp(path: str, group: str) -> None:
     """Implement the bash chgrp function on a single path"""
     if isinstance(group, str):
         gid = grp.getgrnam(group).gr_gid
@@ -356,7 +373,7 @@ def chgrp(path, group):
     os.chown(path, -1, gid)
 
 
-def chmod_x(entry, perms):
+def chmod_x(entry: str, perms: int) -> None:
     """Implements chmod, treating all executable bits as set using the chmod
     utility's `+X` option.
     """
@@ -369,11 +386,11 @@ def chmod_x(entry, perms):
     os.chmod(entry, perms)
 
 
-def samepath(path1, path2):
+def samepath(path1: str, path2: str) -> bool:
     return os.path.normpath(path1) == os.path.normpath(path2)
 
 
-def ancestor(dir, n=1):
+def ancestor(dir: str, n: int = 1) -> str:
     """Get the nth ancestor of a directory."""
     parent = os.path.abspath(dir)
     for i in range(n):

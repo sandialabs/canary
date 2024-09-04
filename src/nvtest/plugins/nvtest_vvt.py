@@ -73,12 +73,15 @@ class VVTTestFile(AbstractTestFile):
         """
         assert arg.command in ("copy", "link", "sources")
         fun = {"copy": self.m_copy, "link": self.m_link, "sources": self.m_sources}[arg.command]
-        if arg.options and arg.options.get("rename"):
+        kwds = dict(arg.options or {})
+        if "rename" in kwds:
+            kwds.pop("rename")
             s = re.sub(",\s*", ",", arg.argument)
             file_pairs = [_.split(",") for _ in s.split()]
             for file_pair in file_pairs:
-                assert len(file_pair) == 2
-                fun(*file_pair, when=arg.when, **arg.options)  # type: ignore
+                if len(file_pair) != 2:
+                    raise ValueError("rename option requires src,dst file pairs")
+                fun(src=file_pair[0], dst=file_pair[1], when=arg.when, **kwds)  # type: ignore
         else:
             files = arg.argument.split()
             fun(*files, when=arg.when, **arg.options)  # type: ignore

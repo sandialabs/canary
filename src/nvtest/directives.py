@@ -225,7 +225,9 @@ def baseline(
     """
 
 
-def copy(*args: str, when: Optional[str] = None, rename: bool = False) -> None:
+def copy(
+    *files: str, src: Optional[str] = None, dst: Optional[str] = None, when: Optional[str] = None
+) -> None:
     """Copy files from the source directory into the execution directory.
 
     Usage
@@ -236,21 +238,22 @@ def copy(*args: str, when: Optional[str] = None, rename: bool = False) -> None:
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.copy(*args, rename=False, when=...)
-       nvtest.directives.copy(src, dst, rename=True, when=...)
+       nvtest.directives.copy(*files, when=...)
+       nvtest.directives.copy(src=..., dst=..., when=...)
 
     ``.vvt``:
 
     .. code-block:: python
 
-       #VVT: copy (rename, options=..., platforms=..., parameters=..., testname=...) : args ...
+       #VVT: copy (rename, options=..., platforms=..., parameters=..., testname=...) : files ...
 
     Parameters
     ----------
 
-    * ``args``: File names to copy
+    * ``files``: File names to copy
+    * ``src``: Source file to copy
+    * ``dst``: Copy ``src`` to this destination
     * ``when``: Restrict processing of the directive to this condition
-    * ``rename``: Copy the target file with a different name from the source file
 
     The ``when`` expression is limited to the following conditions:
 
@@ -260,6 +263,10 @@ def copy(*args: str, when: Optional[str] = None, rename: bool = False) -> None:
     * ``options``: Restrict processing of the directive to command line ``-o`` options
     * ``parameters``: Restrict processing of the directive to certain parameter
       names and values
+
+    .. note::
+
+       The ``files`` positional arguments and ``src,dst`` keyword arguments are mutually exclusive.
 
     Examples
     --------
@@ -284,12 +291,12 @@ def copy(*args: str, when: Optional[str] = None, rename: bool = False) -> None:
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.copy("file1.txt", "x_file1.txt", rename=True)
-       nvtest.directives.copy("file2.txt", "x_file2.txt", rename=True)
+       nvtest.directives.copy(src="file1.txt", dst="file1_copy.txt")
+       nvtest.directives.copy(src="file2.txt", dst="file2_copy.txt")
 
     .. code-block:: python
 
-       #VVT: copy (rename) : file1.txt,x_file1.txt file2.txt,x_file2.txt
+       #VVT: copy (rename) : file1.txt,file1_copy.txt file2.txt,file2_copy.txt
 
     """  # noqa: E501
 
@@ -656,7 +663,9 @@ def keywords(*args: str, when: Optional[str] = None) -> None:
     """
 
 
-def link(*args: str, when: Optional[str] = None, rename: bool = False) -> None:
+def link(
+    *files: str, src: Optional[str] = None, dst: Optional[str] = None, when: Optional[str] = None
+) -> None:
     """Link files from the source directory into the execution directory.
 
     Usage
@@ -667,21 +676,22 @@ def link(*args: str, when: Optional[str] = None, rename: bool = False) -> None:
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.link(*args, rename=False, when=...)
-       nvtest.directives.link(src, dst, rename=True, when=...)
+       nvtest.directives.link(*files, when=...)
+       nvtest.directives.link(src=..., dst=..., when=...)
 
     ``.vvt``:
 
     .. code-block:: python
 
-       #VVT: link (rename, options=..., platforms=..., parameters=..., testname=...) : args ...
+       #VVT: link (rename, options=..., platforms=..., parameters=..., testname=...) : files ...
 
     Parameters
     ----------
 
-    * ``args``: File names to link
+    * ``files``: File names to link
+    * ``src``: Source file to link
+    * ``dst``: Link ``src`` to this destination
     * ``when``: Restrict processing of the directive to this condition
-    * ``rename``: Link the target file with a different name from the source file
 
     The ``when`` expression is limited to the following conditions:
 
@@ -691,6 +701,10 @@ def link(*args: str, when: Optional[str] = None, rename: bool = False) -> None:
     * ``options``: Restrict processing of the directive to command line ``-o`` options
     * ``parameters``: Restrict processing of the directive to certain parameter
       names and values
+
+    .. note::
+
+       The ``files`` positional arguments and ``src,dst`` keyword arguments are mutually exclusive.
 
     Examples
     --------
@@ -715,12 +729,12 @@ def link(*args: str, when: Optional[str] = None, rename: bool = False) -> None:
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.link("file1.txt", "x_file1.txt", rename=True)
-       nvtest.directives.link("file2.txt", "x_file2.txt", rename=True)
+       nvtest.directives.link(src="file1.txt", dst="file1_link.txt")
+       nvtest.directives.link(src="file2.txt", dst="file2_link.txt")
 
     .. code-block:: python
 
-       #VVT: link (rename) : file1.txt,x_file1.txt file2.txt,x_file2.txt
+       #VVT: link (rename) : file1.txt,file1_link.txt file2.txt,file2_link.txt
 
     """  # noqa: E501
 
@@ -1158,7 +1172,7 @@ def testname(arg: str) -> None:
     .. code-block:: python
 
        import nvtest
-       pytest.directives.name(arg)
+       nvtest.directives.name(arg)
 
     ``.vvt``:
 
@@ -1174,20 +1188,38 @@ def testname(arg: str) -> None:
     Examples
     --------
 
-    For the test file ``a.vvt`` containing
+    For the test file ``a.pyt`` containing
 
     .. code-block:: python
 
-       #VVT: testname : spam
+       import nvtest
+       nvtest.directives.testname("spam")
        ...
 
     a test instance with name "spam" would be created, even though the file is
-    named ``a.vvt``.
+    named ``a.pyt``.
 
     -------
 
     ``testname`` can be called multiple times.  Each call will create a new test
     instance with a different name, e.g.
+
+    ``.pyt``:
+
+    .. code:: python
+
+       import nvtest
+       nvtest.directives.testname("foo")
+       nvtest.directives.testname("bar")
+
+       def test():
+           self = nvtest.get_instance()
+           if self.name == "foo":
+               do_foo_stuff()
+           elif self.name == "bar":
+               do_bar_stuff()
+
+    ``.vvt``:
 
     .. code:: python
 
@@ -1196,10 +1228,11 @@ def testname(arg: str) -> None:
 
        import vvtest_util as vvt
 
-       if vvt.NAME == "foo":
-           do_foo_stuff()
-       elif vvt.NAME == "bar":
-           do_bar_stuff()
+       def test():
+           if vvt.NAME == "foo":
+               do_foo_stuff()
+           elif vvt.NAME == "bar":
+               do_bar_stuff()
 
     This file would result in two tests: "foo" and "bar".
 

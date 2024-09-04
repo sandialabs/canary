@@ -84,7 +84,10 @@ def setup_parser(parser: Parser):
 
 
 def call(command: str, *args_in: str, verbose: bool = False) -> None:
-    args = [which(command, required=True)]
+    file = which(command)
+    if file is None:
+        raise ValueError(f"{command}: command not found")
+    args = [file]
     args.extend(args_in)
     print(shlex.join(args), end="\n" if verbose else " ... ", flush=True)
     tmpfile = ".tmp-nvtest-self-op-subproc-out.txt"
