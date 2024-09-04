@@ -3,6 +3,8 @@
 Getting started
 ===============
 
+Let's get started with ``nvtest`` by creating and running two simple tests.
+
 A first test
 ------------
 
@@ -17,7 +19,7 @@ In this first test, the test file ``first.pyt`` defines a function that adds two
 
 .. note::
 
-   This test defines optional ``keywords`` that can be used to :ref:`filter tests<howto-filter>`.
+   This test defines optional ``keywords`` directive that is used to :ref:`filter tests<howto-filter>`.
 
 To run the test, navigate to the examples directory and run:
 

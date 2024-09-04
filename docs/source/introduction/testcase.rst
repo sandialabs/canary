@@ -3,7 +3,7 @@
 The test case
 =============
 
-A test case is a concrete instantiation of a :ref:`test file <introduction-testfile>` with a unique set of parameters.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a single test file defines parameters that expand to define multiple test cases whose names are a combination of the basename of the test file and parameter ``name=value`` pairs.  For example, the test file ``parameterize.pyt``:
+A test case is a concrete instantiation of a :ref:`test file <introduction-testfile>` with a unique set of parameters.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a test file defines :ref:`parameters<howto-parameterize>` that expand to define multiple test cases whose names are a combination of the test name (default: ``basename testfile``) and parameter ``name=value`` pairs.  For example, the test file ``parameterize1.pyt``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
@@ -25,70 +25,70 @@ During a test session, ``nvtest`` creates a :ref:`unique test execution director
 
 The test instance object defines the following attributes and methods:
 
-``file_root``:
+``file_root: str``:
   The test case file's root search path, as passed to ``nvtest run``.
 
-``file_path``:
+``file_path: str``:
   Path to the test case's file, relative to ``file_root``.
 
-``file``:
+``file: str``:
   Full path to the test case's file.
 
-``name``:
+``name: str``:
   The test case's name.
 
-``cpu_ids``:
+``cpu_ids: list[int]``:
   List of CPUs reserved for this job [1]_.
 
-``gpu_ids``:
+``gpu_ids: list[int]``:
   List of GPUs reserved for this job [1]_.
 
-``analyze``:
+``analyze: bool``:
   Whether this job is an :ref:`analyze <directive-analyze>` job, or not.
 
-``family``:
+``family: str``:
   The test case family is the basename of ``test_path``
 
-``keywords``:
+``keywords: list[str]``:
   The test file's :ref:`keywords  <directive-keywords>`.
 
-``parameters``:
+``parameters: dict[str, Union[str, float, int]]``:
   The expanded :ref:`parameters <directive-parameterize>` for this test case.
 
-``timeout``:
+``timeout: float``:
   The test cases :ref:`timeout <directive-timeout>`.
 
-``runtime``:
+``runtime: float``:
   The approximate :ref:`run time <introduction-runtimes>`.
 
-``baseline``:
+``baseline: list[str]``:
   List of :ref:`baseline <directive-baseline>` assets.
 
-``exec_root``:
+``exec_root: str``:
   The root :ref:`session <introduction-session>` execution directory.
 
-``exec_dir``:
+``exec_dir: str``:
   The test case's execution directory.
 
-``id``:
+``id: str``:
   The test case's ID.
 
-``cmd_line``:
+``cmd_line: str``:
   The command line used to launch this test.
 
-``variables``:
+``variables: dict[str, str]``:
   Extra environment variables defined for this test.
 
-``dependencies``:
+``dependencies: list[TestInstance]``:
   List of dependencies.
 
-``cpus``:
+``cpus: int``:
   Number of cpus.
 
-``gpus``:
+``gpus: int``:
   Number of gpus.
 
-``def get_dependency(**params)``:
+``get_dependency(**params) -> TestInstance``:
   Returns the dependency having parameters equal to ``params``.
 
 .. _test-exec-dir:
