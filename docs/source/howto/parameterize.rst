@@ -41,6 +41,8 @@ results in the following 6 test cases:
 .. command-output:: nvtest describe parameterize/parameterize4.pyt
     :cwd: /examples
 
+.. _np-ngpu-parameters:
+
 np and ngpu parameters
 ----------------------
 
