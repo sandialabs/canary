@@ -1,3 +1,4 @@
+import datetime
 import errno
 import getpass
 import grp
@@ -9,8 +10,6 @@ import stat
 import tempfile
 import time
 from contextlib import contextmanager
-from datetime import UTC
-from datetime import datetime
 from typing import Any
 from typing import Callable
 from typing import Generator
@@ -265,9 +264,8 @@ def git_revision(path: str) -> str:
 
 
 def file_age_in_days(file: str) -> float:
-    now = datetime.utcnow()
-    now = datetime.now(UTC)
-    mtime = datetime.fromtimestamp(os.path.getmtime(file), UTC)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    mtime = datetime.datetime.fromtimestamp(os.path.getmtime(file), datetime.timezone.utc)
     delta = now - mtime
     return delta.days
 
