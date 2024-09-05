@@ -34,7 +34,7 @@ def main():
     pattern = nvtest.patterns.ExecuteAndAnalyze(
         test_fn=test, verify_fn=verify_parameterized_test, analyze_fn=analyze
     )
-    pattern()
+    pattern.execute()
     return 0
 
 

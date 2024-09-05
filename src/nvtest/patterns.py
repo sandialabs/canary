@@ -27,9 +27,9 @@ class ExecuteAndAnalyze:
         verify_fn: Callable = identity,
         analyze_fn: Callable = identity,
     ) -> None:
-        self.test_fn = test_fn
-        self.verify_fn = verify_fn
-        self.analyze_fn = analyze_fn
+        self.run_test = test_fn
+        self.analyze_parameterized_test = verify_fn
+        self.analyze_group = analyze_fn
 
     @staticmethod
     def make_parser() -> argparse.ArgumentParser:
@@ -51,12 +51,15 @@ class ExecuteAndAnalyze:
         return parser
 
     def __call__(self, args: Optional[argparse.Namespace] = None) -> None:
+        return self.execute()
+
+    def execute(self, args: Optional[argparse.Namespace] = None) -> None:
         if args is None:
             parser = self.make_parser()
             args, _ = parser.parse_known_args()
         if args.analyze:
-            self.analyze_fn()
+            self.analyze_group()
         else:
             if not args.execute_analysis_sections:
-                self.test_fn()
-            self.verify_fn()
+                self.run_test()
+            self.analyze_parameterized_test()
