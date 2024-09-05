@@ -564,7 +564,6 @@ class Session:
         duration = lambda: timestamp() - self.start
         timeout = rh["session:timeout"] or -1
         try:
-            ppe: Optional[ProcessPoolExecutor] = None
             with ProcessPoolExecutor(max_workers=queue.workers) as ppe:
                 runner_args = []
                 runner_kwargs = dict(
