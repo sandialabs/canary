@@ -276,8 +276,12 @@ class TestCase(Runner):
             raise KeyError(f"{name} is already an attribute of {self}")
         setattr(self, name, value)
 
-    def add_default_env(self, **kwds: str) -> None:
-        self.variables.update(kwds)
+    def add_default_env(self, *args: dict[str, str], **kwds: str) -> None:
+        if args:
+            for arg in args:
+                self.variables.update(arg)
+        if kwds:
+            self.variables.update(kwds)
 
     def copy(self) -> "TestCase":
         return deepcopy(self)

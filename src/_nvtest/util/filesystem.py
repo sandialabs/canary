@@ -54,7 +54,9 @@ def is_hidden(path: str) -> bool:
 
 
 def which(
-    *args: str, path: Optional[Union[str, list, tuple]] = None, required: bool = False
+    *args: str,
+    path: Optional[Union[str, list[str], tuple[str, ...]]] = None,
+    required: bool = False,
 ) -> Optional[str]:
     """Finds an executable in the path like command-line which.
 

@@ -144,6 +144,8 @@ class Session:
             self.load()
         else:
             self.initialize()
+        for hook in plugin.plugins("session", "setup"):
+            hook(self)
         self.exitstatus = -1
         self.returncode = -1
         self.mode = mode
@@ -214,12 +216,10 @@ class Session:
         with open(file, "w") as fh:
             fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
             fh.write("# This file is a results directory tag automatically created by nvtest.\n")
-        for hook in plugin.plugins("session", "setup"):
-            hook(self)
-        self.set_config_values(write=True)
+        self.set_config_values()
         self.save(ini=True)
 
-    def set_config_values(self, write: bool = False):
+    def set_config_values(self):
         """Save session configuration data, including copying local configuration data to the
         session scope"""
         config.set("session:root", self.root, scope="session")
@@ -241,10 +241,6 @@ class Session:
             data = config.get(section, scope="local") or {}
             for key, value in data.items():
                 config.set(f"{section}:{key}", value, scope="session")
-        if write:
-            file = os.path.join(self.config_dir, "config")
-            with open(file, "w") as fh:
-                config.dump(fh, scope="session")
 
     def save(self, ini: bool = False) -> None:
         """Save session data, exlcuding data that is stored separately in the database"""
@@ -258,6 +254,9 @@ class Session:
             self.db.save_binary("options", config.get("option"))
             with self.db.open("plugin", mode="wb") as record:
                 cloudpickle.dump(plugin._manager._instance, record)
+            file = os.path.join(self.config_dir, "config")
+            with open(file, "w") as fh:
+                config.dump(fh, scope="session")
 
     def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:
         """Add ``path`` to this session's search paths"""
