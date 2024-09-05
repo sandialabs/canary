@@ -766,7 +766,7 @@ def owners(*args: str) -> None:
 
 def parameterize(
     names: Union[str, Sequence[str]],
-    values: list[Union[Sequence[object], object]],
+    values: Sequence[Union[Sequence[Any], Any]],
     *,
     when: Optional[str] = None,
     type: enums.enums = enums.list_parameter_space,

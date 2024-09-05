@@ -214,6 +214,8 @@ class Session:
         with open(file, "w") as fh:
             fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
             fh.write("# This file is a results directory tag automatically created by nvtest.\n")
+        for hook in plugin.plugins("session", "setup"):
+            hook(self)
         self.set_config_values(write=True)
         self.save(ini=True)
 
@@ -223,7 +225,14 @@ class Session:
         config.set("session:root", self.root, scope="session")
         config.set("session:invocation_dir", config.invocation_dir, scope="session")
         config.set("session:start", config.invocation_dir, scope="session")
-        for attr in ("sockets_per_node", "cores_per_socket", "cpu_count"):
+        attrs = (
+            "sockets_per_node",
+            "cores_per_socket",
+            "cpu_count",
+            "gpus_per_socket",
+            "gpu_count",
+        )
+        for attr in attrs:
             value = config.get(f"machine:{attr}", scope="local")
             if value is not None:
                 config.set(f"machine:{attr}", value, scope="session")

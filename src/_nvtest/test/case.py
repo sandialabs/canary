@@ -443,9 +443,8 @@ class TestCase(Runner):
         save_env = os.environ.copy()
         variables = dict(PYTHONPATH=self.pythonpath)
         vars = {}
-        vars["cpu_ids"] = variables["NVTEST_CPU_IDS"] = ",".join(str(_) for _ in self.cpu_ids)
-        if self.gpu_ids:
-            vars["gpu_ids"] = variables["NVTEST_GPU_IDS"] = ",".join(str(_) for _ in self.gpu_ids)
+        vars["cpu_ids"] = variables["NVTEST_CPU_IDS"] = ",".join(map(str, self.cpu_ids))
+        vars["gpu_ids"] = variables["NVTEST_GPU_IDS"] = ",".join(map(str, self.gpu_ids))
         for key, value in self.variables.items():
             variables[key] = value % vars
         for var, val in variables.items():
