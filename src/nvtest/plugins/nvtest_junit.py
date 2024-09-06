@@ -107,7 +107,7 @@ class JunitDocument(xdom.Document):
         element.setAttribute("name", case.display_name)
         element.setAttribute("classname", case.classname)
         element.setAttribute("time", str(case.duration))
-        element.setAttribute("file", case.file_path)
+        element.setAttribute("file", getattr(case, "relpath", case.file_path))
         not_done = ("retry", "created", "pending", "ready", "running", "cancelled", "not_run")
         el: Optional[xdom.Element] = None
         if case.status.value == "failed":
