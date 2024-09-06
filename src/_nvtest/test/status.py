@@ -17,6 +17,7 @@ class Status:
         "ready",
         "running",
         "cancelled",
+        "not_run",
         "success",
         "xfail",
         "xdiff",
@@ -24,7 +25,6 @@ class Status:
         "diffed",
         "failed",
         "timeout",
-        "not_run",
     )
     colors = {
         "retry": "r",
