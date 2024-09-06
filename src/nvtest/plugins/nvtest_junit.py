@@ -1,12 +1,13 @@
 import os
+import sys
 import xml.dom.minidom as xdom
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Optional
 
 import nvtest
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
-from _nvtest.test.status import Status
 from _nvtest.util import logging
 from _nvtest.util.filesystem import mkdirp
 
@@ -31,71 +32,129 @@ def create_report(args):
         raise ValueError(f"{args.child_command}: unknown `nvtest report junit` subcommand")
 
 
-def strftimestamp(timestamp: float) -> str:
-    fmt = "%Y-%m-%dT%H:%M:%S"
-    return datetime.fromtimestamp(timestamp).strftime(fmt)
-
-
 class JunitReporter(Reporter):
     def __init__(self, session: Session) -> None:
         super().__init__(session)
+        self.session = session
 
     def create(self, file: Optional[str] = None) -> None:
         """Collect information and create reports"""
-        cases = self.group_testcases_by_status(self.data.cases)
 
-        not_done = Status.members[: Status.members.index("not_run")]
-        num_skipped = sum([len(v) for k, v in cases.items() if k in not_done])
-
-        failed = Status.members[Status.members.index("diffed") :]
-        num_failed = sum([len(v) for k, v in cases.items() if k in failed])
-
-        doc = xdom.Document()
-        suites = doc.createElement("testsuites")
-        suite = doc.createElement("testsuite")
-        suite.setAttribute("name", "nvtest")
-        suite.setAttribute("tests", str(len(self.data.cases)))
-        suite.setAttribute("errors", "0")
-        suite.setAttribute("skipped", str(num_skipped))
-        suite.setAttribute("failures", str(num_failed))
-        suite.setAttribute("time", str(self.data.finish - self.data.start))
-        suite.setAttribute("timestamp", strftimestamp(self.data.start))
-        for case in self.data.cases:
-            self.add_test_element(suite, case)
-        suites.appendChild(suite)
-        doc.appendChild(suites)
-
-        file = file or "./junit.xml"
+        doc = JunitDocument()
+        root = doc.create_testsuite_element(
+            self.data.cases, name=self.get_root_name(), tagname="testsuites"
+        )
+        groups = self.groupby_classname(self.data.cases)
+        for classname, cases in groups.items():
+            suite = doc.create_testsuite_element(cases, name=classname)
+            for case in cases:
+                el = doc.create_testcase_element(case)
+                suite.appendChild(el)
+            root.appendChild(suite)
+        doc.appendChild(root)
+        file = os.path.abspath(file or "./junit.xml")
         mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
             fh.write(doc.toprettyxml(indent="  ", newl="\n"))
 
     @staticmethod
-    def add_test_element(parent: xdom.Element, case: TestCase) -> None:
-        doc = xdom.Document()
-        child = doc.createElement("testcase")
-        child.setAttribute("name", case.display_name)
-        child.setAttribute("classname", case.name.replace(".", "_"))
-        child.setAttribute("time", str(case.duration))
-        not_done = Status.members[: Status.members.index("not_run")]
-        if case.status.value in ("failed", "timeout"):
-            el = xdom.Document().createElement("failure")
-            el.setAttribute("message", case.status.value.upper())
-            child.appendChild(el)
-        elif case.status == "diffed":
-            el = xdom.Document().createElement("failure")
-            el.setAttribute("message", "DIFF")
-            child.appendChild(el)
-        elif case.status.value in not_done:
-            el = xdom.Document().createElement("skipped")
-            el.setAttribute("message", case.status.value.upper())
-            child.appendChild(el)
-        parent.appendChild(child)
+    def get_root_name() -> str:
+        name = "NVTest Session"
+        if "CI_MERGE_REQUEST_IID" in os.environ:
+            name = f"Merge Request {os.environ['CI_MERGE_REQUEST_IID']}"
+        elif "CI_JOB_NAME" in os.environ:
+            name = os.environ["CI_JOB_NAME"].replace(":", " ")
+        return name
 
     @staticmethod
-    def group_testcases_by_status(cases: list[TestCase]) -> dict[str, list[TestCase]]:
+    def groupby_classname(cases: list[TestCase]) -> dict[str, list[TestCase]]:
         """Group tests by status"""
         grouped: dict[str, list[TestCase]] = {}
         for case in cases:
-            grouped.setdefault(case.status.value, []).append(case)
+            grouped.setdefault(case.classname, []).append(case)
         return grouped
+
+
+class JunitDocument(xdom.Document):
+    def create_element(self, tagname: str) -> xdom.Element:
+        element = xdom.Element(tagname)
+        element.ownerDocument = self
+        return element
+
+    def create_text_node(self, text: str) -> xdom.Text:
+        node = xdom.Text()
+        node.data = text
+        node.ownerDocument = self
+        return node
+
+    def create_testsuite_element(
+        self, cases: list[TestCase], tagname: str = "testsuite", **attrs: str
+    ) -> xdom.Element:
+        element = self.create_element(tagname)
+        stats = gather_statistics(cases)
+        for name, value in attrs.items():
+            element.setAttribute(name, value)
+        element.setAttribute("tests", str(stats.num_tests))
+        element.setAttribute("errors", str(stats.num_error))
+        element.setAttribute("skipped", str(stats.num_skipped))
+        element.setAttribute("failures", str(stats.num_failed))
+        element.setAttribute("time", str(stats.time))
+        element.setAttribute("timestamp", stats.timestamp)
+        return element
+
+    def create_testcase_element(self, case: TestCase) -> xdom.Element:
+        element = self.create_element("testcase")
+        element.setAttribute("name", case.display_name)
+        element.setAttribute("classname", case.classname)
+        element.setAttribute("time", str(case.duration))
+        element.setAttribute("file", case.file_path)
+        not_done = ("retry", "created", "pending", "ready", "running", "cancelled", "not_run")
+        el: Optional[xdom.Element] = None
+        if case.status.value == "failed":
+            el = self.create_element("failure")
+            el.setAttribute("message", "Test case failed")
+            el.setAttribute("type", "Fail")
+            text = self.create_text_node(case.output())
+            el.appendChild(text)
+        elif case.status.value == "timeout":
+            el = self.create_element("failure")
+            el.setAttribute("message", "Test case timed out")
+            el.setAttribute("type", "Timeout")
+            text = self.create_text_node(case.output())
+            el.appendChild(text)
+        elif case.status == "diffed":
+            el = self.create_element("failure")
+            el.setAttribute("message", "Test case diffed")
+            el.setAttribute("type", "Diff")
+            text = self.create_text_node(case.output())
+            el.appendChild(text)
+        elif case.status.value in not_done:
+            el = self.create_element("skipped")
+            el.setAttribute("message", case.status.value.upper())
+        if el is not None:
+            element.appendChild(el)
+        return element
+
+
+def gather_statistics(cases: list[TestCase]) -> SimpleNamespace:
+    stats = SimpleNamespace(
+        num_skipped=0, num_failed=0, num_error=0, num_tests=0, start=sys.maxsize, finish=-1
+    )
+    for case in cases:
+        if case.mask:
+            continue
+        stats.num_tests += 1
+        if case.status.value in ("diffed", "failed", "timeout"):
+            stats.num_failed += 1
+        elif case.status.value in ("cancelled", "not_run", "skipped"):
+            stats.num_skipped += 1
+        elif case.status.value in ("retry", "created", "pending", "ready", "running"):
+            stats.num_error += 1
+        if case.status.complete():
+            if case.start > 0 and case.start < stats.start:
+                stats.start = case.start
+            if case.finish > 0 and case.finish > stats.finish:
+                stats.finish = case.finish
+    stats.time = max(0.0, stats.finish - stats.start)
+    stats.timestamp = datetime.fromtimestamp(stats.start).strftime("%Y-%m-%dT%H:%M:%S")
+    return stats

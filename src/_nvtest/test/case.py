@@ -93,6 +93,7 @@ class TestCase(Runner):
             self.name = f"{self.name}.{'.'.join(s_params)}"
             self.display_name = f"{self.display_name}[{','.join(s_params)}]"
         self.fullname = os.path.join(os.path.dirname(self.file_path), self.name)
+        self.classname = os.path.dirname(self.file_path).replace(os.path.sep, ".")
         unique_str = io.StringIO()
         unique_str.write(self.fullname)
         unique_str.write(open(self.file).read())
@@ -462,6 +463,11 @@ class TestCase(Runner):
             kb_to_keep = 2 if self.status == "success" else 300
             compressed_log = compress_file(self.logfile(), kb_to_keep)
             return compressed_log
+        return "Log not found"
+
+    def output(self) -> str:
+        if self.status.complete():
+            return open(self.logfile()).read()
         return "Log not found"
 
     def setup(self, exec_root: str, copy_all_resources: bool = False) -> None:

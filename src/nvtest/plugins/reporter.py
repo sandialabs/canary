@@ -41,7 +41,7 @@ class TestData:
             self.status |= 2**4
         elif case.status == "ready":
             self.status |= 2**5
-        elif case.status == "skipped":
+        elif case.status == "not_run":
             self.status |= 2**6
 
     def add_test(self, case: "TestCase") -> None:
