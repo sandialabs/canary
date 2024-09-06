@@ -1,12 +1,14 @@
 import os
 import xml.dom.minidom as xdom
 from datetime import datetime
+from typing import Optional
 
 import nvtest
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.test.status import Status
 from _nvtest.util import logging
+from _nvtest.util.filesystem import mkdirp
 
 from .reporter import Reporter
 
@@ -14,7 +16,8 @@ from .reporter import Reporter
 @nvtest.plugin.register(scope="report", stage="setup", type="junit")
 def setup_parser(parser):
     sp = parser.add_subparsers(dest="child_command", metavar="")
-    sp.add_parser("create", help="Create junit report")
+    p = sp.add_parser("create", help="Create junit report (must be run in test session directory)")
+    p.add_argument("-o", default="junit.xml", help="Output file [default: %(default)s]")
 
 
 @nvtest.plugin.register(scope="report", stage="create", type="junit")
@@ -23,7 +26,7 @@ def create_report(args):
         session = Session(os.getcwd(), mode="r")
     reporter = JunitReporter(session)
     if args.child_command == "create":
-        reporter.create()
+        reporter.create(file=args.o)
     else:
         raise ValueError(f"{args.child_command}: unknown `nvtest report junit` subcommand")
 
@@ -36,9 +39,8 @@ def strftimestamp(timestamp: float) -> str:
 class JunitReporter(Reporter):
     def __init__(self, session: Session) -> None:
         super().__init__(session)
-        self.file = os.path.join(session.root, "rspec.xml")
 
-    def create(self) -> None:
+    def create(self, file: Optional[str] = None) -> None:
         """Collect information and create reports"""
         cases = self.group_testcases_by_status(self.data.cases)
 
@@ -63,7 +65,9 @@ class JunitReporter(Reporter):
         suites.appendChild(suite)
         doc.appendChild(suites)
 
-        with open(self.file, "w") as fh:
+        file = file or "./junit.xml"
+        mkdirp(os.path.dirname(file))
+        with open(file, "w") as fh:
             fh.write(doc.toprettyxml(indent="  ", newl="\n"))
 
     @staticmethod
