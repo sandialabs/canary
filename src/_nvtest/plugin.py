@@ -79,11 +79,6 @@ class Manager:
         if scope == "main":
             if stage not in ("setup",):
                 raise TypeError(err_msg)
-        elif scope == "report":
-            if stage not in ("setup", "create"):
-                raise TypeError(err_msg)
-            if scope in ("setup", "create") and "type" not in kwds:
-                raise TypeError("report::setup plugin must define 'type'")
         elif scope == "session":
             if stage not in ("discovery", "setup", "finish"):
                 raise TypeError(err_msg)

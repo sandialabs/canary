@@ -2,20 +2,17 @@ import json
 import os
 from typing import Optional
 
-import nvtest
 from _nvtest.session import Session
 from _nvtest.util import logging
 
-from .reporter import Reporter
+from .base import Reporter
 
 
-@nvtest.plugin.register(scope="report", stage="setup", type="json")
 def setup_parser(parser):
     sp = parser.add_subparsers(dest="child_command", metavar="")
     sp.add_parser("create", help="Create json report")
 
 
-@nvtest.plugin.register(scope="report", stage="create", type="json")
 def create_report(args):
     with logging.level(logging.WARNING):
         session = Session(os.getcwd(), mode="r")

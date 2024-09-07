@@ -1,44 +1,43 @@
 import io
 import os
 import re
+from argparse import Namespace
 from typing import Optional
 
-import nvtest
+from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.util import gitlab
 from _nvtest.util import logging
 
+description = "Create reports on GitLab"
 
-@nvtest.plugin.register(scope="report", stage="setup", type="gitlab-mr")
-def setup_parser(parser):
-    if "CI_MERGE_REQUEST_IID" not in os.environ:
-        return
+
+def setup_parser(parser: Parser):
     sp = parser.add_subparsers(dest="child_command", metavar="")
     p = sp.add_parser("create", help="Create GitLab Merge request report")
     p.add_argument("--cdash-url", help="CDash build URL")
     p.add_argument("-a", dest="access_token", help="GitLab access token")
 
 
-@nvtest.plugin.register(scope="report", stage="create", type="gitlab-mr")
-def create_report(args):
-    if args.child_command != "create":
-        return
-    if "CI_MERGE_REQUEST_IID" not in os.environ:
-        return
-    try:
-        mr = MergeRequest(access_token=args.access_token)
-    except MissingCIVariable:
-        return
+def create_report(args: Namespace) -> int:
+    if args.child_command == "create":
+        return _create_report(args)
     else:
-        with logging.level(logging.WARNING):
-            session = Session(os.getcwd(), mode="r")
-        cases = [case for case in session.cases if not case.mask]
-        failed = group_failed_tests(cases)
-        if failed:
-            mr.report_failed(failed, cdash_build_url=args.cdash_url)
-        else:
-            mr.report_success(cdash_build_url=args.cdash_url)
+        raise ValueError(f"nvtest report gitlab: unknown subcommand {args.child_command!r}")
+
+
+def _create_report(args: Namespace) -> int:
+    mr = MergeRequest(access_token=args.access_token)
+    with logging.level(logging.WARNING):
+        session = Session(os.getcwd(), mode="r")
+    cases = [case for case in session.cases if not case.mask]
+    failed = group_failed_tests(cases)
+    if failed:
+        mr.report_failed(failed, cdash_build_url=args.cdash_url)
+    else:
+        mr.report_success(cdash_build_url=args.cdash_url)
+    return 0
 
 
 class MergeRequest:

@@ -1,7 +1,6 @@
 import os
 from typing import TextIO
 
-import nvtest
 from _nvtest import config
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
@@ -9,16 +8,14 @@ from _nvtest.util import logging
 from _nvtest.util.filesystem import force_remove
 from _nvtest.util.filesystem import mkdirp
 
-from .reporter import Reporter
+from .base import Reporter
 
 
-@nvtest.plugin.register(scope="report", stage="setup", type="html")
 def setup_parser(parser):
     sp = parser.add_subparsers(dest="child_command", metavar="")
     sp.add_parser("create", help="Create local HTML report files")
 
 
-@nvtest.plugin.register(scope="report", stage="create", type="html")
 def create_report(args):
     with logging.level(logging.WARNING):
         session = Session(os.getcwd(), mode="r")

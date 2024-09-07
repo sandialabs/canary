@@ -5,23 +5,20 @@ from datetime import datetime
 from types import SimpleNamespace
 from typing import Optional
 
-import nvtest
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.util import logging
 from _nvtest.util.filesystem import mkdirp
 
-from .reporter import Reporter
+from .base import Reporter
 
 
-@nvtest.plugin.register(scope="report", stage="setup", type="junit")
 def setup_parser(parser):
     sp = parser.add_subparsers(dest="child_command", metavar="")
     p = sp.add_parser("create", help="Create junit report (must be run in test session directory)")
     p.add_argument("-o", default="junit.xml", help="Output file [default: %(default)s]")
 
 
-@nvtest.plugin.register(scope="report", stage="create", type="junit")
 def create_report(args):
     with logging.level(logging.WARNING):
         session = Session(os.getcwd(), mode="r")
@@ -29,7 +26,7 @@ def create_report(args):
     if args.child_command == "create":
         reporter.create(file=args.o)
     else:
-        raise ValueError(f"{args.child_command}: unknown `nvtest report junit` subcommand")
+        raise ValueError(f"nvtest report junit: unknown subcommand {args.child_command!r}")
 
 
 class JunitReporter(Reporter):
