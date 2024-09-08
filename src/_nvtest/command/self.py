@@ -136,6 +136,7 @@ def pre_commit(args: argparse.Namespace) -> int:
         logging.warning("nvtest pre-commit must be run from a clone of nvtest")
         return 0
     with working_dir(str(root)):
+        print(f"cd {os.getcwd()}")
         if "f" in flags:
             ruff("format", "./src", verbose=args.verbose_pc)
             ruff("format", "./tests", verbose=args.verbose_pc)
@@ -165,6 +166,7 @@ def mkdocs(args: argparse.Namespace) -> int:
         logging.warning("nvtest mkdocs must be run from a clone of nvtest")
         return 0
     with working_dir(str(root.joinpath("docs"))):
+        print(f"cd {os.getcwd()}")
         if args.clean_first:
             make("clean", verbose=args.verbose_pc)
         make(args.what, verbose=args.verbose_pc)

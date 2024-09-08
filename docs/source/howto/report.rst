@@ -5,9 +5,27 @@ Generate reports
 
 Several report formats are available:
 
+* :ref:`Junit<howto-junit>`
 * :ref:`Markdown<howto-md>`
 * :ref:`HTML<howto-html>`
 * :ref:`CDash XML<howto-cdash>`
+
+.. _howto-junit:
+
+Junit
+-----
+A junit report of a test session can be generated after the session has completed:
+
+.. command-output:: nvtest run -d TestResults.junit ./basic
+    :cwd: /examples
+    :extraargs: -rv -w
+    :ellipsis: 0
+
+.. command-output:: nvtest -C TestResults.junit report junit create
+    :cwd: /examples
+
+.. literalinclude:: /examples/TestResults.junit/junit.xml
+    :language: xml
 
 .. _howto-md:
 
@@ -49,12 +67,12 @@ A HTML report of a test session can be generated after the session has completed
 CDash XML
 ---------
 
-After completing a test session
+A CDash report of a test session can be generated after the session has completed:
 
 .. code-block:: console
 
     $ cd TestResults
-    $ nvtest report cdash create -p <PROJECT_NAME> -b <BUILD_NAME>
+    $ nvtest report cdash create -p PROJECT_NAME -b BUILD_NAME
 
 The report can be uploaded to a CDash server via
 

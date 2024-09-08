@@ -33,6 +33,7 @@ pages:
   - cd docs
   - make clean
   - make html
+  - make html
   - cd ..
   - rm -rf public
   - mv docs/build/html public
