@@ -1,6 +1,7 @@
 import os
 import sys
 import xml.dom.minidom as xdom
+import xml.sax.saxutils
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Optional
@@ -80,7 +81,7 @@ class JunitDocument(xdom.Document):
 
     def create_text_node(self, text: str) -> xdom.Text:
         node = xdom.Text()
-        node.data = text
+        node.data = xml.sax.saxutils.escape(text)
         node.ownerDocument = self
         return node
 

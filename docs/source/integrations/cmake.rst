@@ -1,4 +1,4 @@
-.. _howto-cmake-integration:
+.. _integrations-cmake:
 
 Integrate with CMake
 ====================
@@ -209,7 +209,7 @@ and then
    write_nvtest_config()
 
 Generates a ``nvtest.cfg`` configuration file in the project's build directory.
-The configuration populates the :ref:`build section <introduction-config>` of the
+The configuration populates the :ref:`build section <configuration>` of the
 configuration file.
 
 ``add_nvtest_options``

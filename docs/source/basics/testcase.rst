@@ -1,9 +1,9 @@
-.. _introduction-testcase:
+.. _basics-testcase:
 
 The test case
 =============
 
-A test case is a concrete instantiation of a :ref:`test file <introduction-testfile>` with a unique set of parameters.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a test file defines :ref:`parameters<howto-parameterize>` that expand to define multiple test cases whose names are a combination of the test name (default: ``basename testfile``) and parameter ``name=value`` pairs.  For example, the test file ``parameterize1.pyt``:
+A test case is a concrete instantiation of a :ref:`test file <basics-testfile>` with a unique set of parameters.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a test file defines :ref:`parameters<howto-parameterize>` that expand to define multiple test cases whose names are a combination of the test name (default: ``basename testfile``) and parameter ``name=value`` pairs.  For example, the test file ``parameterize1.pyt``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
@@ -59,13 +59,13 @@ The test instance object defines the following attributes and methods:
   The test cases :ref:`timeout <directive-timeout>`.
 
 ``runtime: float``:
-  The approximate :ref:`run time <introduction-runtimes>`.
+  The approximate :ref:`run time <basics-runtimes>`.
 
 ``baseline: list[str]``:
   List of :ref:`baseline <directive-baseline>` assets.
 
 ``exec_root: str``:
-  The root :ref:`session <introduction-session>` execution directory.
+  The root :ref:`session <basics-session>` execution directory.
 
 ``exec_dir: str``:
   The test case's execution directory.

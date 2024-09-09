@@ -1,4 +1,4 @@
-.. _introduction-resource:
+.. _basics-resource:
 
 Machine resources
 =================
@@ -18,7 +18,7 @@ The number of workers ``N`` be specified by the ``-l session:workers=N`` option 
 Setting the number available processors
 ---------------------------------------
 
-The number of available processors is found through a system probe [#]_.  The number of available processors can be set with the following :ref:`configuration variables<introduction-config>`:
+The number of available processors is found through a system probe [#]_.  The number of available processors can be set with the following :ref:`configuration variables<configuration>`:
 
 * ``machine:cpu_count``
 * the product of ``machine:sockets_per_node`` and ``machine:cores_per_socket``
@@ -33,7 +33,7 @@ The number of processors required by a test is inferred from the :ref:`np<np-ngp
 Setting the number available gpus
 ---------------------------------
 
-The number of available gpus defaults to zero.  The number of available gpus can be set with the following :ref:`configuration variables<introduction-config>`:
+The number of available gpus defaults to zero.  The number of available gpus can be set with the following :ref:`configuration variables<configuration>`:
 
 * ``machine:gpu_count``
 * the product of ``machine:sockets_per_node`` and ``machine:gpus_per_socket``

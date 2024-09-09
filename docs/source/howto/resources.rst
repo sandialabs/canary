@@ -11,7 +11,7 @@ Set available resources
 Setting available machine resources
 -----------------------------------
 
-The following machine resources can be set in the :ref:`global or local configuration file<introduction-config>` or from the command line:
+The following machine resources can be set in the :ref:`global or local configuration file<configuration>` or from the command line:
 
 * ``cpu_count``: the number of CPUs available to this test session
 * ``gpu_count``: the number of GPUs available to this test session

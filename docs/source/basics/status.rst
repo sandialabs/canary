@@ -1,4 +1,4 @@
-.. _introduction-status:
+.. _basics-status:
 
 Test statuses
 =============

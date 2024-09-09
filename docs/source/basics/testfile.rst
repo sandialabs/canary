@@ -1,9 +1,9 @@
-.. _introduction-testfile:
+.. _basics-testfile:
 
 The test file
 =============
 
-A test file is a python script ending with ``.pyt``.  If execution of the script results in an exit code of ``0``, the test passes.  Non-zero exit codes indicate some other type of test failure (see :ref:`introduction-status` for additional test statuses).  A good test ensures the correctness of output given a set of inputs and should be as simple, and fast running, as possible.
+A test file is a python script ending with ``.pyt``.  If execution of the script results in an exit code of ``0``, the test passes.  Non-zero exit codes indicate some other type of test failure (see :ref:`basics-status` for additional test statuses).  A good test ensures the correctness of output given a set of inputs and should be as simple, and fast running, as possible.
 
 .. note::
 
@@ -55,7 +55,7 @@ Because ``.pyt`` test files are imported during the discovery process, the test 
 Test case expansion
 -------------------
 
-Test files define one or more :ref:`test cases <introduction-testcase>`.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a single test file defines parameters that expand to define multiple test cases whose names are a combination of the basename of the test file and parameter/name pairs.  For example:
+Test files define one or more :ref:`test cases <basics-testcase>`.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a single test file defines parameters that expand to define multiple test cases whose names are a combination of the basename of the test file and parameter/name pairs.  For example:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python

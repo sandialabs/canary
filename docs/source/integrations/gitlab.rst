@@ -1,4 +1,4 @@
-.. _howto-gitlab:
+.. _integrations-gitlab:
 
 Integrate with GitLab
 =====================

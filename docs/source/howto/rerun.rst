@@ -19,7 +19,7 @@ or
 
 where ``TEST_RESULTS_DIR`` is the test results directory.
 
-By default, only tests that had previously not run, or failed, will be rerun, ie, those tests having ``failed``, ``diffed``, ``timeout``, and ``cancelled`` :ref:`status <introduction-status>`.
+By default, only tests that had previously not run, or failed, will be rerun, ie, those tests having ``failed``, ``diffed``, ``timeout``, and ``cancelled`` :ref:`status <basics-status>`.
 
 Optionally, a ``PATH`` argument can be passed to the ``nvtest run`` invocation, causing ``nvtest`` to rerun only those tests that are in ``PATH`` and its children:
 

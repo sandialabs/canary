@@ -1,9 +1,9 @@
-.. _introduction-session:
+.. _basics-session:
 
 The test session
 ================
 
-When ``nvtest run [options] path [path...]`` is executed, ``path`` is searched for :ref:`test files<introduction-testfile>`, the test files are expanded into test cases, and each test case is run in a separate execution directory, relative to the session's root directory (default: ``./TestResults``).
+When ``nvtest run [options] path [path...]`` is executed, ``path`` is searched for :ref:`test files<basics-testfile>`, the test files are expanded into test cases, and each test case is run in a separate execution directory, relative to the session's root directory (default: ``./TestResults``).
 
 Phases of a test session
 ------------------------
@@ -117,4 +117,4 @@ During test execution, ``nvtest`` navigates to each test directory and runs the 
 
 .. note::
 
-   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type=X`` option.  See :ref:`introduction-resource` and :ref:`howto-resources`.
+   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type=X`` option.  See :ref:`basics-resource` and :ref:`howto-resources`.

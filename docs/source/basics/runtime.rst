@@ -1,4 +1,4 @@
-.. _introduction-runtimes:
+.. _basics-runtimes:
 
 Time resources
 ==============
