@@ -8,8 +8,8 @@ nvtest.directives.link("add.py")
 
 def test():
     add = nvtest.Executable("./add.py")
-    output = add("2", "3", output=str)
-    assert output.strip() == "5"
+    result = add("2", "3", stdout=str)
+    assert result.out.strip() == "5"
 
 
 if __name__ == "__main__":

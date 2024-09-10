@@ -90,8 +90,9 @@ def read_sinfo() -> dict:
         "%D",  # Number of nodes
     ]
     format = " ".join(opts)
-    out = sinfo("-o", format, fail_on_error=False, output=str)
-    for line in out.split("\n"):
+    result = sinfo("-o", format, fail_on_error=False, output=str)
+    assert isinstance(result.out, str)
+    for line in result.out.split("\n"):
         parts = line.split()
         if not parts:
             continue

@@ -127,8 +127,8 @@ class server:
             efile = ".curl-err.txt"
             try:
                 with open(efile, "w") as fh:
-                    response = curl(*args, output=str, error=fh)
-                doc = dom.parseString(response)
+                    result = curl(*args, output=str, error=fh)
+                doc = dom.parseString(result.out)
                 stat = doc.getElementsByTagName("status")[0].firstChild.data.strip()
                 status = 0 if stat == "OK" else 1
             except xml.parsers.expat.ExpatError as e:
@@ -180,8 +180,8 @@ class server:
         logging.debug(f"Getting build ID from CDash using the following query: {url}")
         curl = Executable("curl")
         try:
-            response = curl("-k", url, output=str, error=os.devnull)
-            doc = dom.parseString(response)
+            result = curl("-k", url, output=str, error=os.devnull)
+            doc = dom.parseString(result.out)
             buildid = doc.getElementsByTagName("buildid")[0].firstChild.data.strip()
         except xml.parsers.expat.ExpatError:
             buildid = "not found"

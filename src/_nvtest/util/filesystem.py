@@ -128,6 +128,7 @@ def synctree(
     from .executable import Executable
 
     f = which("rsync", required=True)
+    assert isinstance(f, str)
     rsync = Executable(f)
 
     src = os.path.normpath(src)
@@ -258,9 +259,12 @@ def git_revision(path: str) -> str:
     from .executable import Executable
 
     f = which("git", required=True)
+    assert isinstance(f, str)
     git = Executable(f)
     with working_dir(path):
-        return git("rev-parse", "HEAD", output=str).strip()
+        result = git("rev-parse", "HEAD", output=str)
+        assert isinstance(result.out, str)
+        return result.out.strip()
 
 
 def file_age_in_days(file: str) -> float:

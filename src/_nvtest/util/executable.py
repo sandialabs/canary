@@ -1,271 +1,256 @@
-import io
+import dataclasses
 import os
-import re
 import shlex
 import subprocess
+import tempfile
+import time
+from pathlib import Path
+from typing import Optional
+from typing import TextIO
+from typing import Type
+from typing import Union
 
-from ..error import timeout_exit_status
-from ..util import logging
-
-__all__ = ["Executable", "ProcessError"]
+from . import logging
 
 
 class Executable:
-    """Class representing a program that can be run on the command line."""
+    def __init__(self, name: Union[str, Path]) -> None:
+        self.file = Executable.find(name)
+        self.default_args: list[str] = []
+        self.default_env: dict[str, str] = {}
+        self.returncode: int = -1
 
-    def __init__(self, name):
-        self.exe = shlex.split(str(name))
-        self.default_env = {}
-        self.returncode = None
-        self.cmd_line = None
-
-        if not self.exe:
-            raise ProcessError("Cannot construct executable for '%s'" % name)
-
-    def add_default_arg(self, *args):
-        """Add a default argument to the command."""
-        self.exe.extend(args)
-
-    add_default_args = add_default_arg
-
-    def add_default_env(self, *args, **kwargs):
-        """Set an environment variable when the command is run.
-
-        Parameters
-        ----------
-        args : tuple
-            args[0] is the environment variable to set
-            args[1] is the value to set it to
-        kwargs : dict
-            Dictionary of key: value environment variables
-        """
-        if args:
-            key, value = args
-            kwargs[key] = value
-        for key, value in kwargs.items():
-            if value is None:
-                raise ValueError(f"The value of {key} must not be None")
-            self.default_env[str(key)] = str(value)
+    @staticmethod
+    def find(name: Union[str, Path]) -> Path:
+        if is_executable(name):
+            return Path(name).absolute()
+        paths = [Path(p) for p in os.getenv("PATH", "").split(os.pathsep) if p.split()]
+        for path in paths:
+            file = path.joinpath(name)
+            if is_executable(file):
+                return file
+        raise FileNotFoundError(name)
 
     @property
-    def command(self):
+    def command(self) -> str:
         """The command-line string.
 
         Returns:
             str: The executable and default arguments
         """
-        return " ".join(self.exe)
+        return str(self.file)
 
     @property
-    def name(self):
+    def name(self) -> str:
         """The executable name.
 
         Returns:
             str: The basename of the executable
         """
-        return os.path.basename(self.path)
+        return self.file.name
 
     @property
-    def path(self):
+    def path(self) -> Path:
         """The path to the executable.
 
         Returns:
             str: The path to the executable
         """
-        return self.exe[0]
+        return self.file
 
-    def __call__(self, *args, **kwargs):
+    def add_default_args(self, *args: str) -> None:
+        """Add flags to this executable's default arguments"""
+        self.default_args.extend(map(str, args))
+
+    def add_default_env(self, *args: dict[str, str], **kwargs: str) -> None:
+        """Add variables to this executable's runtime environment
+
+        Args:
+          args: A dictionary of environment variables
+          kwargs: Environment variables
+
+        """
+        if args:
+            self.default_env.update(args[0])
+        if kwargs:
+            self.default_env.update(kwargs)
+
+    def __call__(
+        self,
+        *args_in: str,
+        stdout: Optional[Union[Type, TextIO, Path, str]] = None,
+        stderr: Optional[Union[Type, TextIO, Path, str]] = None,
+        output: Optional[Union[Type, TextIO, Path, str]] = None,
+        error: Optional[Union[Type, TextIO, Path, str]] = None,
+        env: Optional[dict[str, str]] = None,
+        expected_returncode: int = 0,
+        fail_on_error: bool = True,
+        timeout: float = -1.0,
+        verbose: bool = False,
+    ) -> "Result":
         """Run this executable in a subprocess.
 
-        Parameters:
-            *args (str): Command-line arguments to the executable to run
+        Args:
+            *args_in: Command-line arguments to the executable to run
 
-        Keyword Arguments:
-            _dump_env (dict): Dict to be set to the environment actually
-                used (envisaged for testing purposes only)
-            env (dict): The environment to run the executable with
-            extra_env (dict): Extra items to add to the environment
-                (neither requires nor precludes env)
-            fail_on_error (bool): Raise an exception if the subprocess returns
-                an error. Default is True. The return code is available as
-                ``exe.returncode``
-            ignore_errors (int or list): A list of error codes to ignore.
-                If these codes are returned, this process will not raise
-                an exception even if ``fail_on_error`` is set to ``True``
-            input: Where to read stdin from
-            output: Where to send stdout
-            error: Where to send stderr
+        Keyword Args:
+            env: The environment to run the executable with
+            fail_on_error: Raise an exception if the subprocess returns an error. Default is True.
+                The return code is available as ``exe.returncode``
+            expected_returncode: Expected returncode.  If ``expected_returncode < 0``, this process
+                will not raise an exception even if ``fail_on_error`` is set to ``True``
+            stdout: Where to send stdout
+            stderr: Where to send stderr
+            output: Alias for stdout
+            error: Alias for stderr
             verbose: Write the command line to ``output``
-            script: write a shell script with the environment and commands
 
-        Accepted values for input, output, and error:
+        Returns:
+            result: A Result dataclass with the following members:
+                result.cmd: The command line
+                result.returncode: Exit code from subprocess
+                result.out, result.err: See discussion below
+
+        Accepted values for stdout and stderr:
 
         * python streams, e.g. open Python file objects, or ``os.devnull``
         * filenames, which will be automatically opened for writing
-        * ``str``, as in the Python string type. If you set these to ``str``,
-          output and error will be written to pipes and returned as a string.
-          If both ``output`` and ``error`` are set to ``str``, then one string
-          is returned containing output concatenated with error. Not valid
-          for ``input``
-
-        By default, the subprocess inherits the parent's file descriptors.
+        * ``str``, as in the Python string type. If you set these to ``str``, result.out and
+          result.err will contain the processes stdout and stderr, respectively, as strings.
 
         """
-        # Environment
-        env_arg = kwargs.get("env", None)
-        if env_arg is None:
-            env = os.environ.copy()
-            env.update(self.default_env)
-        else:
-            env = self.default_env.copy()
-            env.update(env_arg)
-        env["PATH"] = f"{os.getcwd()}:{env['PATH']}"
-        env.update(kwargs.get("extra_env", {}))
-        if "_dump_env" in kwargs:
-            kwargs["_dump_env"].clear()
-            kwargs["_dump_env"].update(env)
+        self.returncode = -1
 
-        fail_on_error = kwargs.pop("fail_on_error", True)
-        ignore_errors = kwargs.pop("ignore_errors", ())
-        verbose = kwargs.pop("verbose", False)
+        args: list[str] = [self.command]
+        args.extend(self.default_args)
+        args.extend(map(str, args_in))
 
-        # If they just want to ignore one error code, make it a tuple.
-        if isinstance(ignore_errors, int):
-            ignore_errors = (ignore_errors,)
+        env = env or dict(os.environ)
+        env.update(self.default_env)
 
-        input = kwargs.pop("input", None)
-        output = kwargs.pop("output", None)
-        error = kwargs.pop("error", None)
-        timeout = kwargs.pop("timeout", None)
-
-        if input is str:
-            raise ValueError("Cannot use `str` as input stream.")
-
-        def streamify(arg, mode):
-            if isinstance(arg, str):
-                return open(arg, mode), True
-            elif arg is str:
-                return subprocess.PIPE, False
-            else:
-                return arg, False
-
-        ostream, close_ostream = streamify(output, "w")
-        estream, close_estream = streamify(error, "w")
-        istream, close_istream = streamify(input, "r")
-
-        args = [str(_) for _ in args]
-        cmd = self.exe + list(args)
-        cmd_line = join_command(cmd)
-        self.cmd_line = cmd_line
+        result = Result(shlex.join(args))
 
         if verbose:
-            logging.info(f"Command line: {cmd_line}")
-        else:
-            logging.trace(cmd_line)
+            logging.info(f"Command line: {result.cmd}")
 
         try:
-            proc = subprocess.Popen(
-                cmd, stdin=istream, stderr=estream, stdout=ostream, env=env, **kwargs
-            )
-            out, err = proc.communicate(timeout=timeout)
-
-            result = None
-            if output is str or error is str:
-                result = ""
-                if output is str:
-                    result += str(out.decode("utf-8"))
-                if error is str:
-                    result += str(err.decode("utf-8"))
-
-            rc = self.returncode = proc.returncode
-            if fail_on_error and rc != 0 and (rc not in ignore_errors):
-                long_msg = cmd_line
-                if result:
-                    # If the output is not captured in the result, it will have
-                    # been stored either in the specified files (e.g. if
-                    # 'output' specifies a file) or written to the parent's
-                    # stdout/stderr (e.g. if 'output' is not specified)
-                    long_msg += "\n" + result
-
-                raise ProcessError(
-                    "Command exited with status %d: %s" % (proc.returncode, long_msg)
+            f1: _StreamHandler
+            f2: _StreamHandler
+            with _StreamHandler(stdout or output) as f1, _StreamHandler(stderr or error) as f2:
+                proc = subprocess.Popen(
+                    args, env=env, stdout=f1.stream, stderr=f2.stream, start_new_session=True
                 )
-
+                start = time.monotonic()
+                while True:
+                    if proc.poll() is not None:
+                        break
+                    if timeout > 0 and time.monotonic() - start > timeout:
+                        proc.kill()
+                        raise CommandTimedOutError
+                    time.sleep(0.05)
+            result.returncode = self.returncode = proc.returncode
+            result.out = f1.getvalue()
+            result.err = f2.getvalue()
+            if fail_on_error and result.returncode != expected_returncode:
+                raise ProcessError(
+                    f"Command exited with status {self.returncode}: {shlex.join(args)}"
+                )
             return result
 
         except OSError as e:
-            msg = f"{self.exe[0]}: {e.strerror}"
+            result.returncode = self.returncode = e.errno
+            msg = f"{self.file}: {e.strerror}"
             if fail_on_error:
-                raise ProcessError(msg) from None
+                raise ProcessError(msg)
             logging.error(msg)
-            self.returncode = proc.returncode
 
-        except subprocess.TimeoutExpired as e:
-            msg = f"{e}\nExecution timed out when invoking command: {cmd_line}"
-            proc.kill()
+        except CommandTimedOutError as e:
+            result.returncode = self.returncode = 101
+            msg = f"{e}\nExecution timed out when invoking command: {result.cmd}"
             if fail_on_error:
-                raise ProcessError(msg) from None
-            self.returncode = timeout_exit_status
-
-        except subprocess.CalledProcessError as e:
-            rc = proc.returncode
-            msg = f"{e}\nExit status {rc} when invoking command: {cmd_line}"
-            if fail_on_error:
-                raise ProcessError(msg) from None
+                raise TimeoutError(msg) from None
             logging.error(msg)
-            self.returncode = rc
 
         except Exception as e:
-            msg = f"{e}\nUnknown failure occurred when invoking command: {cmd_line}"
+            result.returncode = self.returncode = 1
+            msg = f"{e}\nUnknown failure occurred when invoking command: {result.cmd}"
             if fail_on_error:
-                raise ProcessError(msg) from None
+                raise ProcessError(msg)
             logging.error(msg)
-            self.returncode = 1
 
-        finally:
-            if close_ostream:
-                ostream.close()
-            if close_estream:
-                estream.close()
-            if close_istream:
-                istream.close()
+        return result
 
     def __eq__(self, other):
-        return self.exe == other.exe
+        return self.path == other.path
 
     def __neq__(self, other):
         return not (self == other)
 
     def __hash__(self):
-        return hash((type(self),) + tuple(self.exe))
+        return hash((type(self),) + (self.command,))
 
     def __repr__(self):
-        return "<exe: %s>" % self.exe
+        return f"<exe: {self.command}>"
 
     def __str__(self):
-        return " ".join(self.exe)
+        return f"<exe: {self.command}>"
 
 
-def join_command(args):
-    """Join the command `args`.
+def is_executable(path: Union[str, Path]) -> bool:
+    f = Path(path)
+    return f.exists() and os.access(f, os.X_OK)
 
-    `args` should be a sequence of commands to run or else a single string
 
-    """
-    if isinstance(args, str):
-        args = shlex.split(args)
-    args = [str(_) for _ in args]
-    quoted_args = [arg for arg in args if re.search(r'^"|^\'|"$|\'$', arg)]
-    if quoted_args:
-        msg = io.StringIO()
-        msg.write("Quotes in command arguments can confuse scripts like configure.\n")
-        msg.write("The following arguments may cause problems when executed:\n")
-        msg.write("    " + "\n".join(["    " + arg for arg in quoted_args]) + "\n")
-        msg.write("Quotes aren't needed because a shell is not used.  Consider removing them\n")
-        logging.warning(msg.getvalue())
-    cmd = list(args)
-    return "'%s'" % "' '".join(map(lambda arg: arg.replace("'", "'\"'\"'"), cmd))
+class _StreamHandler:
+    def __init__(self, fp: Optional[Union[Type, TextIO, str, Path]]) -> None:
+        self.name: str
+        self.stream: Union[TextIO, tempfile._TemporaryFileWrapper, None] = None
+        self.owned: bool = False
+        self.temporary: bool = False
+        self.value: Optional[str] = None
+        if fp is None:
+            self.name = "<None>"
+        elif hasattr(fp, "fileno"):
+            if fp.closed:  # type: ignore
+                raise TypeError(f"{fp}: file must be opened for writing")
+            self.stream = fp  # type: ignore
+            self.name = getattr(self.stream, "name", "<file>")
+        elif fp is str:
+            self.temporary = self.owned = True
+            self.stream = tempfile.NamedTemporaryFile(mode="w+")
+            self.name = self.stream.name
+        elif isinstance(fp, (str, Path)):
+            self.owned = True
+            self.stream = open(fp, "w")
+            self.name = self.stream.name
+        else:
+            raise TypeError(f"{fp}: unknown input argument type: {type(fp).__class__.__name__}")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, ex_type, ex_value, ex_traceback):
+        if self.temporary:
+            self.stream.seek(0)
+            self.value = self.stream.read()
+        if self.owned:
+            self.stream.close()
+
+    def getvalue(self) -> Optional[str]:
+        return self.value
+
+
+@dataclasses.dataclass
+class Result:
+    cmd: str
+    returncode: int = -1
+    out: Optional[str] = None
+    err: Optional[str] = None
 
 
 class ProcessError(Exception):
-    """ProcessErrors are raised when Executables exit with an error code."""
+    pass
+
+
+class CommandTimedOutError(Exception):
+    pass
