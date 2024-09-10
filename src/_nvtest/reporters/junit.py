@@ -85,6 +85,12 @@ class JunitDocument(xdom.Document):
         node.ownerDocument = self
         return node
 
+    def create_cdata_node(self, text: str) -> xdom.Text:
+        node = xdom.CDATASection()
+        node.data = text
+        node.ownerDocument = self
+        return node
+
     def create_testsuite_element(
         self, cases: list[TestCase], tagname: str = "testsuite", **attrs: str
     ) -> xdom.Element:
@@ -112,19 +118,19 @@ class JunitDocument(xdom.Document):
             el = self.create_element("failure")
             el.setAttribute("message", "Test case failed")
             el.setAttribute("type", "Fail")
-            text = self.create_text_node(case.output())
+            text = self.create_cdata_node(case.output())
             el.appendChild(text)
         elif case.status.value == "timeout":
             el = self.create_element("failure")
             el.setAttribute("message", "Test case timed out")
             el.setAttribute("type", "Timeout")
-            text = self.create_text_node(case.output())
+            text = self.create_cdata_node(case.output())
             el.appendChild(text)
         elif case.status == "diffed":
             el = self.create_element("failure")
             el.setAttribute("message", "Test case diffed")
             el.setAttribute("type", "Diff")
-            text = self.create_text_node(case.output())
+            text = self.create_cdata_node(case.output())
             el.appendChild(text)
         elif case.status.value in not_done:
             el = self.create_element("skipped")
