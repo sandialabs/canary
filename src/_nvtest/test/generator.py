@@ -193,7 +193,7 @@ class AbstractTestFile(TestGenerator):
             on_options=on_options,
             keyword_expr=keyword_expr,
         )
-        file.write(f"{len(cases)} test cases:\n")
+        file.write(f"{len(cases)} test case{'' if len(cases) <= 1 else 's'}:\n")
         graph.print(cases, file=file)
         return file.getvalue()
 
