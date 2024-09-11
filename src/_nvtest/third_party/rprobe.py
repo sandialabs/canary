@@ -38,7 +38,7 @@ def read_lscpu(default=4):
     result = lscpu(output=str, fail_on_error=False)
     cores_per_socket, sockets = default, 1
     if lscpu.returncode == 0:
-        for line in result.out.split("\n"):
+        for line in result.get_output().split("\n"):
             if line.startswith("Core(s) per socket:"):
                 cores_per_socket = int(line.split(":")[1])
             elif line.startswith("Socket(s):"):
@@ -84,6 +84,5 @@ def read_sysctl():
         sysctl = Executable("sysctl")
         result = sysctl("-n", "hw.physicalcpu", output=str, fail_on_error=False)
         if sysctl.returncode == 0:
-            assert isinstance(result.out, str)
-            return int(result.out.strip())
+            return int(result.get_output())
     return None

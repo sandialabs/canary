@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import xml.dom.minidom as xdom
 import xml.sax.saxutils
@@ -81,19 +82,23 @@ class JunitDocument(xdom.Document):
 
     def create_text_node(self, text: str) -> xdom.Text:
         node = xdom.Text()
-        node.data = xml.sax.saxutils.escape(text)
+        node.data = cleanup_text(text, escape=True)
         node.ownerDocument = self
         return node
 
     def create_cdata_node(self, text: str) -> xdom.Text:
         node = xdom.CDATASection()
-        node.data = text
+        node.data = cleanup_text(text)
         node.ownerDocument = self
         return node
 
     def create_testsuite_element(
         self, cases: list[TestCase], tagname: str = "testsuite", **attrs: str
     ) -> xdom.Element:
+        """
+        <testsuite tests="..." errors="..." skipped="..." failures="..." time="..." timestamp="...">
+        </testsuite>
+        """
         element = self.create_element(tagname)
         stats = gather_statistics(cases)
         for name, value in attrs.items():
@@ -107,43 +112,38 @@ class JunitDocument(xdom.Document):
         return element
 
     def create_testcase_element(self, case: TestCase) -> xdom.Element:
-        element = self.create_element("testcase")
-        element.setAttribute("name", case.display_name)
-        element.setAttribute("classname", case.classname)
-        element.setAttribute("time", str(case.duration))
-        element.setAttribute("file", getattr(case, "relpath", case.file_path))
+        """
+        <testcase name="..." classname="..." time="..." file="...">
+          <failure type="..." message="..."> </failure>
+          <system-out> ... </system-out>
+        </testcase>
+        """
+        testcase = self.create_element("testcase")
+        testcase.setAttribute("name", case.display_name)
+        testcase.setAttribute("classname", case.classname)
+        testcase.setAttribute("time", str(case.duration))
+        testcase.setAttribute("file", getattr(case, "relpath", case.file_path))
         not_done = ("retry", "created", "pending", "ready", "running", "cancelled", "not_run")
-        el: Optional[xdom.Element] = None
-        if case.status.value == "failed":
-            el = self.create_element("failure")
-            el.setAttribute("message", "Test case failed")
-            el.setAttribute("type", "Fail")
-            so = self.create_element("system-out")
+        if case.status.value in ("failed", "timeout", "diffed"):
+            failure = self.create_element("failure")
+            failure.setAttribute("message", f"Test case status: {case.status.value}")
+            failure.setAttribute("type", case.status.name)
+            testcase.appendChild(failure)
             text = self.create_cdata_node(case.output())
-            so.appendChild(text)
-            el.appendChild(so)
-        elif case.status.value == "timeout":
-            el = self.create_element("failure")
-            el.setAttribute("message", "Test case timed out")
-            el.setAttribute("type", "Timeout")
-            so = self.create_element("system-out")
-            text = self.create_cdata_node(case.output())
-            so.appendChild(text)
-            el.appendChild(so)
-        elif case.status == "diffed":
-            el = self.create_element("failure")
-            el.setAttribute("message", "Test case diffed")
-            el.setAttribute("type", "Diff")
-            so = self.create_element("system-out")
-            text = self.create_cdata_node(case.output())
-            so.appendChild(text)
-            el.appendChild(so)
+            system_out = self.create_element("system-out")
+            system_out.appendChild(text)
+            testcase.appendChild(system_out)
+            if "CI_SERVER_VERSION_MAJOR" in os.environ:
+                # Older versions of gitlab only read from <failure> ... </failure>
+                major = int(os.environ["CI_SERVER_VERSION_MAJOR"])
+                minor = int(os.environ["CI_SERVER_VERSION_MINOR"])
+                if (major, minor) < (16, 5):
+                    failure.appendChild(text)
         elif case.status.value in not_done:
-            el = self.create_element("skipped")
-            el.setAttribute("message", case.status.value.upper())
-        if el is not None:
-            element.appendChild(el)
-        return element
+            skipped = self.create_element("skipped")
+            skipped.setAttribute("message", case.status.value.upper())
+            testcase.appendChild(skipped)
+        return testcase
 
 
 def gather_statistics(cases: list[TestCase]) -> SimpleNamespace:
@@ -168,3 +168,11 @@ def gather_statistics(cases: list[TestCase]) -> SimpleNamespace:
     stats.time = max(0.0, stats.finish - stats.start)
     stats.timestamp = datetime.fromtimestamp(stats.start).strftime("%Y-%m-%dT%H:%M:%S")
     return stats
+
+
+def cleanup_text(text: str, escape: bool = False) -> str:
+    # First strip ansi color sequences from string
+    text = re.sub(r"\033[^m]*m", "", text)
+    if escape:
+        text = xml.sax.saxutils.escape(text)
+    return text

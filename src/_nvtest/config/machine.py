@@ -91,8 +91,7 @@ def read_sinfo() -> dict:
     ]
     format = " ".join(opts)
     result = sinfo("-o", format, fail_on_error=False, output=str)
-    assert isinstance(result.out, str)
-    for line in result.out.split("\n"):
+    for line in result.get_output().split("\n"):
         parts = line.split()
         if not parts:
             continue

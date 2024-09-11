@@ -128,7 +128,7 @@ class server:
             try:
                 with open(efile, "w") as fh:
                     result = curl(*args, output=str, error=fh)
-                doc = dom.parseString(result.out)
+                doc = dom.parseString(result.get_output())
                 stat = doc.getElementsByTagName("status")[0].firstChild.data.strip()
                 status = 0 if stat == "OK" else 1
             except xml.parsers.expat.ExpatError as e:
@@ -181,7 +181,7 @@ class server:
         curl = Executable("curl")
         try:
             result = curl("-k", url, output=str, error=os.devnull)
-            doc = dom.parseString(result.out)
+            doc = dom.parseString(result.get_output())
             buildid = doc.getElementsByTagName("buildid")[0].firstChild.data.strip()
         except xml.parsers.expat.ExpatError:
             buildid = "not found"

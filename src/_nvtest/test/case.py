@@ -27,7 +27,7 @@ from ..third_party.color import colorize
 from ..util import cache
 from ..util import filesystem as fs
 from ..util import logging
-from ..util.compression import compress_file
+from ..util.compression import compress_str
 from ..util.executable import Executable
 from ..util.filesystem import copyfile
 from ..util.filesystem import mkdirp
@@ -461,17 +461,14 @@ class TestCase(Runner):
         os.environ.clear()
         os.environ.update(save_env)
 
-    def compressed_log(self) -> str:
-        if self.status.complete():
+    def output(self, compress: bool = False) -> str:
+        if not self.status.complete():
+            return "Log not found"
+        text = io.open(self.logfile(), errors="ignore").read()
+        if compress:
             kb_to_keep = 2 if self.status == "success" else 300
-            compressed_log = compress_file(self.logfile(), kb_to_keep)
-            return compressed_log
-        return "Log not found"
-
-    def output(self) -> str:
-        if self.status.complete():
-            return open(self.logfile()).read()
-        return "Log not found"
+            text = compress_str(text, kb_to_keep=kb_to_keep)
+        return text
 
     def setup(self, exec_root: str, copy_all_resources: bool = False) -> None:
         logging.trace(f"Setting up {self}")

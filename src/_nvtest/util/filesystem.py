@@ -263,8 +263,7 @@ def git_revision(path: str) -> str:
     git = Executable(f)
     with working_dir(path):
         result = git("rev-parse", "HEAD", output=str)
-        assert isinstance(result.out, str)
-        return result.out.strip()
+        return result.get_output()
 
 
 def file_age_in_days(file: str) -> float:

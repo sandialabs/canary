@@ -444,8 +444,7 @@ class Slurm(QBatch):
     def poll(self, jobid: str) -> Optional[str]:
         squeue = Executable("squeue")
         result = squeue("--noheader", "-o", "%i %t", output=str)
-        assert isinstance(result.out, str)
-        for line in result.out.splitlines():
+        for line in result.get_output().splitlines():
             # a line should be something like "16004759 PD"
             try:
                 id, state = line.split()
@@ -571,8 +570,7 @@ class PBS(QBatch):
     def poll(self, jobid: str) -> Optional[str]:
         qstat = Executable("qstat")
         result = qstat(output=str)
-        assert isinstance(result.out, str)
-        lines = [line.strip() for line in result.out.splitlines() if line.split()]
+        lines = [line.strip() for line in result.get_output().splitlines() if line.split()]
         for line in lines:
             # Output of qstat is something like:
             # Job id            Name             User              Time Use S Queue
@@ -704,8 +702,7 @@ class Flux(QBatch):
     def poll(self, jobid: str) -> Optional[str]:
         flux = Executable("flux")
         result = flux("jobs", "--no-header", "--format={id} {state}", output=str)
-        assert isinstance(result.out, str)
-        lines = [line.strip() for line in result.out.splitlines() if line.split()]
+        lines = [line.strip() for line in result.get_output().splitlines() if line.split()]
         for line in lines:
             # Output of flux jobs is something like:
             # ID RUN

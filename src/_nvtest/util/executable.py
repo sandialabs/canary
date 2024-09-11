@@ -247,6 +247,18 @@ class Result:
     out: Optional[str] = None
     err: Optional[str] = None
 
+    def get_output(self) -> str:
+        if self.out is None:
+            raise ValueError("No output string")
+        assert isinstance(self.out, str)
+        return self.out.strip()
+
+    def get_error(self) -> str:
+        if self.err is None:
+            raise ValueError("No error string")
+        assert isinstance(self.err, str)
+        return self.err.strip()
+
 
 class ProcessError(Exception):
     pass

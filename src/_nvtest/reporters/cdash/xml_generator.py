@@ -229,7 +229,7 @@ class CDashReporter(Reporter):
                 add_measurement(results, name="Script", cdata=url)
             add_measurement(
                 results,
-                value=case.compressed_log(),
+                value=case.output(compress=True),
                 encoding="base64",
                 compression="gzip",
             )
