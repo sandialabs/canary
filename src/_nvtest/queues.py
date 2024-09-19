@@ -147,8 +147,8 @@ class ResourceQueue:
             for i in self.iter_keys():
                 obj = self.buffer[i]
                 status = obj.status
-                if status == "skipped":
-                    # job is skipped and will never be ready
+                if status.value not in ("retry", "pending", "ready", "running"):
+                    # job will never be ready
                     self.skip(i)
                     continue
                 elif status == "ready":
