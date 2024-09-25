@@ -8,6 +8,7 @@ from typing import Union
 
 from .case import AnalyzeTestCase
 from .case import TestCase
+from .case import load as load_testcase
 from .status import Status
 
 
@@ -175,8 +176,8 @@ class TestInstance:
             arg_path = dbf
         elif arg_path.endswith((".vvt", ".pyt")):
             arg_path = os.path.join(os.path.dirname(arg_path), dbf)
-        with open(arg_path, "rb") as fh:
-            case = TestCase.load(fh)
+        with open(arg_path, "r") as fh:
+            case = load_testcase(fh)
         return TestInstance.from_case(case)
 
     def get_dependency(self, **params: Any) -> "Optional[TestInstance]":

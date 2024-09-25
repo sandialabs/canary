@@ -1,10 +1,10 @@
 import datetime
+import inspect
 import io
 import itertools
 import json
 import math
 import os
-import pickle
 import re
 import signal
 import subprocess
@@ -14,9 +14,11 @@ from contextlib import contextmanager
 from copy import deepcopy
 from string import Template
 from typing import Any
-from typing import BinaryIO
+from typing import Callable
 from typing import Generator
 from typing import Optional
+from typing import TextIO
+from typing import Type
 from typing import Union
 
 from .. import config
@@ -48,7 +50,7 @@ def stringify(arg: Any) -> str:
 
 
 class TestCase(Runner):
-    _dbfile = f".nvtest/case.{sys.implementation.cache_tag}.db"
+    _dbfile = "testcase.lock"
 
     def __init__(
         self,
@@ -71,7 +73,6 @@ class TestCase(Runner):
         self.url: Optional[str] = None
         self.file_dir = os.path.dirname(self.file)
         assert os.path.exists(self.file)
-        self._active: Optional[bool] = None
 
         # Other properties
         self._mask = ""
@@ -139,11 +140,6 @@ class TestCase(Runner):
 
     def __repr__(self) -> str:
         return self.display_name
-
-    @classmethod
-    def load(cls, fh: BinaryIO) -> "TestCase":
-        self = pickle.load(fh)
-        return self
 
     @classmethod
     def from_vars(cls, vars: dict) -> "TestCase":
@@ -291,14 +287,6 @@ class TestCase(Runner):
         return deepcopy(self)
 
     @property
-    def active(self) -> bool:
-        return self._active or False
-
-    @active.setter
-    def active(self, arg: bool) -> None:
-        self._active = bool(arg)
-
-    @property
     def duration(self):
         if self.start == -1 or self.finish == -1:
             return -1
@@ -426,23 +414,22 @@ class TestCase(Runner):
     def save(self):
         file = self.dbfile
         mkdirp(os.path.dirname(file))
-        with open(file, "wb") as fh:
-            self.dump(fh)
-
-    def dump(self, fh) -> None:
-        pickle.dump(self, fh)
+        with open(file, "w") as fh:
+            dump(self, fh)
 
     def refresh(self) -> None:
         file = self.dbfile
         if not os.path.exists(file):
             raise FileNotFoundError(file)
-        with open(file, "rb") as fh:
-            case = pickle.load(fh)
-        self.start = case.start
-        self.finish = case.finish
-        self.returncode = case.returncode
-        self._status.set(case.status.value, details=case.status.details)
-        self.exec_root = case.exec_root
+        with open(file, "r") as fh:
+            state = json.load(fh)
+        props = state["properties"]
+        self.start = props["start"]["value"]
+        self.finish = props["finish"]["value"]
+        self.returncode = props["returncode"]["value"]
+        status = props["status"]
+        self._status.set(status["value"], details=status["details"])
+        self.exec_root = props["exec_root"]["value"]
         for dep in self.dependencies:
             dep.refresh()
 
@@ -725,15 +712,135 @@ class AnalyzeTestCase(TestCase):
             sources=sources,
             xstatus=xstatus,
         )
+        self.flag = flag
         self.paramsets = paramsets
-        if flag.startswith("-"):
+        if self.flag.startswith("-"):
             self.command = os.path.basename(self.file)
-            self.postflags = [flag]
+            self.postflags = [self.flag]
         else:
-            self.command = flag
+            self.command = self.flag
 
     def do_analyze(self) -> None:
         return self.run(stage="analyze", analyze=True)
+
+
+def getargspec(callable_obj: Callable) -> tuple[list[str], list[str]]:
+    argspec = inspect.getfullargspec(callable_obj)
+    args = list(argspec.args or [])
+    if args and args[0] == "self":
+        args = args[1:]
+    kwargs = list(argspec.kwonlyargs or [])
+    if argspec.defaults:
+        n = len(argspec.defaults)
+        kwargs[0:0] = args[n:]
+        args = args[:-n]
+    return args, kwargs
+
+
+def getstate(case: Union[TestCase, AnalyzeTestCase]) -> dict[str, Any]:
+    state: dict[str, Any] = {}
+
+    obj_class = case.__class__
+    state["type"] = obj_class.__name__
+    properties = state.setdefault("properties", {})
+    argnames, kwargnames = getargspec(obj_class)
+    for attr, value in case.__dict__.items():
+        name, private = attr, False
+        if name.startswith("_"):
+            name, private = name[1:], True
+        prop = properties.setdefault(name, {})
+        p_props = prop.setdefault("properties", {})
+        p_props["private"] = private
+        if name in ("file_root", "file_path"):
+            p_props["inarg"] = True
+        else:
+            p_props["inarg"] = name in argnames + kwargnames
+        p_props["kwarg"] = name in kwargnames
+        if name == "dependencies":
+            prop["value"] = [getstate(dep) for dep in value]
+        elif name == "keywords":
+            prop["value"] = case.keywords()
+        elif name == "status":
+            prop["value"] = value.value
+            prop["details"] = value.details
+        elif name == "paramsets":
+            prop["value"] = [{"keys": p.keys, "values": p.values} for p in value]
+        elif isinstance(value, (list, dict)):
+            prop["value"] = value
+        else:
+            if not isinstance(value, (str, float, int, type(None))):
+                raise TypeError(f"Cannot serialize {name} = {value}")
+            prop["value"] = value
+    return state
+
+
+def loadstate(state: dict[str, Any]) -> Union[TestCase, AnalyzeTestCase]:
+    obj_class: Type[Union[TestCase, AnalyzeTestCase]]
+    if state["type"] == "TestCase":
+        obj_class = TestCase
+    elif state["type"] == "AnalyzeTestCase":
+        obj_class = AnalyzeTestCase
+    else:
+        raise ValueError(state["type"])
+
+    properties = state["properties"]
+
+    # replace values in state with their instantiated objects
+    kwargs: dict[str, Any] = {}
+    for name, prop in properties.items():
+        if name == "paramsets":
+            prop["value"] = [ParameterSet(p["keys"], p["values"]) for p in prop["value"]]
+        elif name == "dependencies":
+            for i, dep_state in enumerate(prop["value"]):
+                prop["value"][i] = loadstate(dep_state)
+        elif name == "status":
+            prop["value"] = Status(prop["value"], details=prop["details"])
+        if prop["properties"]["kwarg"]:
+            kwargs[name] = prop["value"]
+
+    case = obj_class(properties["file_root"]["value"], properties["file_path"]["value"], **kwargs)
+
+    # update attributes of case from the saved state
+    for name, prop in properties.items():
+        if prop["properties"]["inarg"]:
+            continue
+        attr = f"_{name}" if prop["properties"]["private"] else name
+        if name == "dependencies":
+            for dep in prop["value"]:
+                case.add_dependency(dep)
+        else:
+            setattr(case, attr, prop["value"])
+
+    return case
+
+
+def dump(case: Union[TestCase, AnalyzeTestCase], fname: Union[str, TextIO]) -> None:
+    file: TextIO
+    own_fh = False
+    if isinstance(fname, str):
+        file = open(fname, "w")
+        own_fh = True
+    else:
+        file = fname
+    state = getstate(case)
+    json.dump(state, file, indent=2)
+    if own_fh:
+        file.close()
+
+
+def load(fname: Union[str, TextIO]) -> Union[TestCase, AnalyzeTestCase]:
+    file: TextIO
+    own_fh = False
+    if isinstance(fname, str):
+        file = open(fname, "w")
+        own_fh = True
+    else:
+        file = fname
+    state = json.load(file)
+    case = loadstate(state)
+    if own_fh:
+        file.close()
+    return case
 
 
 class MissingSourceError(Exception):

@@ -3,6 +3,7 @@ import os
 from typing import Optional
 
 from _nvtest.session import Session
+from _nvtest.test.case import getstate as get_testcase_state
 from _nvtest.util import logging
 
 from .base import Reporter
@@ -32,13 +33,6 @@ class JsonReporter(Reporter):
         """Collect information and create reports"""
         data: dict = {}
         for case in self.data.cases:
-            d = data.setdefault(case.id, {})
-            for var, val in vars(case).items():
-                if var.startswith("_"):
-                    continue
-                d[var] = val
-            d["keywords"] = case.keywords()
-            d["status"] = {"value": case.status.value, "details": case.status.details}
-            d["dependencies"] = [dep.id for dep in case.dependencies]
+            data[case.id] = get_testcase_state(case)
         with open(self.file, "w") as fh:
             json.dump(data, fh, indent=2)

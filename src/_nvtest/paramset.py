@@ -26,11 +26,13 @@ class ParameterSet:
 
     def __init__(self, keys: list[str], values: Sequence[Sequence[Any]]) -> None:
         self.keys: list[str] = keys
-        self.values: Sequence[Sequence[Any]] = values
-        for i, item in enumerate(self.values):
+        self.values: list[list[Any]] = []
+        for i, item in enumerate(values):
             if len(item) != len(self.keys):
                 n = len(self.keys)
                 raise ValueError(f"expected {n} items in row {i + 1}")
+            else:
+                self.values.append(list(item))
 
     def __iter__(self):
         for row in self.values:

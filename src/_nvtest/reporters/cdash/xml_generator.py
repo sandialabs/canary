@@ -3,6 +3,7 @@ import json
 import os
 import time
 import xml.dom.minidom as xdom
+from graphlib import TopologicalSorter
 from typing import Optional
 
 from _nvtest import config
@@ -10,6 +11,7 @@ from _nvtest._version import version as nvtest_version
 from _nvtest.config.machine import machine_config
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
+from _nvtest.test.case import loadstate as load_testcase_state
 from _nvtest.util import cdash
 from _nvtest.util import logging
 from _nvtest.util.filesystem import mkdirp
@@ -28,18 +30,21 @@ class CDashReporter(Reporter):
 
     @classmethod
     def from_json(cls, file: str, dest: Optional[str] = None) -> "CDashReporter":
+        """Create an xml report from a json report"""
         dest = dest or os.path.join(os.path.dirname(file), "xml")
         self = cls(dest=dest)
         data = json.load(open(file))
+        ts: TopologicalSorter = TopologicalSorter()
+        for id, state in data.items():
+            dependencies = state["properties"]["dependencies"]["value"]
+            ts.add(id, *[d["properties"]["id"]["value"] for d in dependencies])
         cases: dict[str, TestCase] = {}
-        for id, details in data.items():
-            case = TestCase.from_vars(details)
-            case.id = id
-            cases[id] = case
-        for id, case in cases.items():
+        for id in ts.static_order():
+            state = data[id]
+            case = load_testcase_state(state)
             for i, dep in enumerate(case.dependencies):
-                if isinstance(dep, str):
-                    case.dependencies[i] = cases[dep]
+                case.dependencies[i] = cases[dep.id]
+            cases[id] = case
         for case in cases.values():
             if not case.mask:
                 self.data.add_test(case)

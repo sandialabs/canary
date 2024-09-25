@@ -41,8 +41,25 @@ See :ref:`howto-junit` for examples of creating JUnit formatted reports.
             classname   The name of the parent folder (same as the suite's name)
             time        Execution time of the test in seconds
             file        Source code file of this test case
-            line        Source code line number of the start of this test case
             -->
-            <testcase name="..." classname="..." time="..."/>
+            <testcase name="..." classname="..." time="..." file="..."/>
+
+            <!-- Test case that failed -->
+            <testcase name="..." classname="..." time="..." file="...">
+
+              <!-- <failure> The test failed. -->
+              <failure message="..." type="..."> ... </failure>
+
+              <!-- <system-out> Optional data written to standard out for the failed test case. -->
+              <system-out> ... </system-out>
+            </testcase>
+
+            <!-- Test case that was skipped -->
+            <testcase name="..." classname="..." time="..." file="...">
+
+              <!-- <failure> The test failed. -->
+              <skipped message="..."/>
+
+            </testcase>
         </testsuite>
     </testsuites>

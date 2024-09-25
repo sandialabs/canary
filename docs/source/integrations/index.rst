@@ -6,8 +6,8 @@ Integrations
 .. toctree::
    :maxdepth: 1
 
-   cmake
-   ctest
-   gitlab
-   cdash
-   junit
+   CMake<cmake>
+   CTest<ctest>
+   CDash<cdash>
+   GitLab<gitlab>
+   JUnit<junit>
