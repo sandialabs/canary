@@ -148,8 +148,8 @@ def run(args: "argparse.Namespace") -> int:
         if not args.batched_invocation and session.db.exists("batches/1"):
             # Reload batch info so that the tests can be rerun in the scheduler
             args.rh = args.rh or ResourceHandler()
-            meta = session.db.load_json("batches/1/meta")
-            for var, val in meta.items():
+            batch_cfg = session.db.load_json("batches/1/config")
+            for var, val in batch_cfg.items():
                 if val is not None:
                     args.rh.set(f"batch:{var}", val)
         if not args.no_header:

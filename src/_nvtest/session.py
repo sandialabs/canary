@@ -543,6 +543,8 @@ class Session:
                     self.finish = timestamp()
                 for hook in plugin.plugins("session", "finish"):
                     hook(self)
+        self.exitstatus = self.returncode
+        self.save()
         return self.returncode
 
     @contextmanager
@@ -744,7 +746,7 @@ class Session:
             for batch in queue.queued():
                 batches.setdefault(str(batch.batch_no), []).extend([case.id for case in batch])
             self.db.save_json(f"batches/{lot_no}/index", batches)
-            self.db.save_json(f"batches/{lot_no}/meta", rh.data["batch"])
+            self.db.save_json(f"batches/{lot_no}/config", rh.data["batch"])
         return queue
 
     def blogfile(self, batch_no: int, lot_no: Optional[int]) -> str:
