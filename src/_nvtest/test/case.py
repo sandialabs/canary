@@ -1025,6 +1025,7 @@ class AnalyzeTestCase(TestCase):
 
 
 def getstate(case: Union[TestCase, AnalyzeTestCase]) -> dict[str, Any]:
+    """Return a serializable dictionary from which the test case can be later loaded"""
     state: dict[str, Any] = {}
     obj_class = case.__class__
     state["type"] = obj_class.__name__
@@ -1034,7 +1035,7 @@ def getstate(case: Union[TestCase, AnalyzeTestCase]) -> dict[str, Any]:
     for attr, value in case.__dict__.items():
         private = attr.startswith("_")
         name = attr[1:] if private else attr
-        prop: dict[str, Any] = {"name": name, "access": "private" if private else "public"}
+        prop: dict[str, Any] = {"name": name}
         properties.append(prop)
         if name == "dependencies":
             prop["value"] = [getstate(dep) for dep in value]
@@ -1052,6 +1053,7 @@ def getstate(case: Union[TestCase, AnalyzeTestCase]) -> dict[str, Any]:
 
 
 def loadstate(state: dict[str, Any]) -> Union[TestCase, AnalyzeTestCase]:
+    """The reverse of getstate - return a test case from a dictionary"""
     obj_class: Type[Union[TestCase, AnalyzeTestCase]]
     if state["type"] == "TestCase":
         obj_class = TestCase

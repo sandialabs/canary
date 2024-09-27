@@ -11,7 +11,6 @@ from typing import Optional
 from typing import TextIO
 from typing import Union
 
-from ..database import Database
 from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
 from ..util import logging
@@ -61,37 +60,45 @@ class Config:
 
     fb = f"config.{sys.implementation.cache_tag}.p"
 
-    def __init__(self) -> None:
+    def __init__(self, state: Optional[dict] = None) -> None:
         static_machine_config = machine.machine_config()
         editable_machine_config = {
             key: static_machine_config.pop(key) for key in machine.editable_properties
         }
-        self.scopes: dict = {
-            "defaults": {
-                "config": {
-                    "debug": False,
-                    "no_cache": False,
-                    "log_level": "INFO",
-                },
-                "test": {"timeout": {"fast": 120.0, "long": 15 * 60.0, "default": 7.5 * 60.0}},
-                "batch": {"length": 30 * 60, "scheduler": None, "scheduler_args": []},
-                "machine": editable_machine_config,
-                "system": static_machine_config,
-                "variables": {},
-                "python": {
-                    "executable": sys.executable,
-                    "version": ".".join(str(_) for _ in sys.version_info[:3]),
-                    "version_info": list(sys.version_info),
-                },
+        self.scopes: dict
+        if state is not None:
+            self.scopes = state["scopes"]
+            for scope_data in self.scopes.values():
+                if scope_data.get("variables"):
+                    for var, val in scope_data["variables"].items():
+                        os.environ[var] = val
+        else:
+            self.scopes = {
+                "defaults": {
+                    "config": {
+                        "debug": False,
+                        "no_cache": False,
+                        "log_level": "INFO",
+                    },
+                    "test": {"timeout": {"fast": 120.0, "long": 15 * 60.0, "default": 7.5 * 60.0}},
+                    "batch": {"length": 30 * 60, "scheduler": None, "scheduler_args": []},
+                    "machine": editable_machine_config,
+                    "system": static_machine_config,
+                    "variables": {},
+                    "python": {
+                        "executable": sys.executable,
+                        "version": ".".join(str(_) for _ in sys.version_info[:3]),
+                        "version_info": list(sys.version_info),
+                    },
+                }
             }
-        }
-        file = self.config_file("global")
-        if file is not None and os.path.exists(file):
-            self.load_config(file, "global")
-        file = self.config_file("local")
-        if file is not None and os.path.exists(file):
-            self.load_config(file, "local")
-        self.load_config_from_env()
+            file = self.config_file("global")
+            if file is not None and os.path.exists(file):
+                self.load_config(file, "global")
+            file = self.config_file("local")
+            if file is not None and os.path.exists(file):
+                self.load_config(file, "local")
+            self.load_config_from_env()
 
     def config_file(self, scope) -> Optional[str]:
         if scope == "global":
@@ -149,12 +156,24 @@ class Config:
                     if field == "timeout":
                         test_data.setdefault(field, {})[key] = time_in_seconds(raw_value)
 
-    def dump(self, fh: TextIO, scope: Optional[str] = None):
-        if scope is not None:
-            merged = self.scopes[scope]
-        else:
-            merged = self.merge()
-        table = self.flatten(merged)
+    def dump(self, file: TextIO) -> None:
+        state = self.getstate()
+        json.dump({"scopes": state}, file, indent=2)
+
+    def loadstate(self, state: dict[str, Any]) -> None:
+        state["scopes"].pop("command_line", None)
+        self.scopes.update(state["scopes"])
+
+    def load(self, file: TextIO) -> None:
+        state = json.load(file)
+        self.loadstate(state)
+
+    def getstate(self) -> dict[str, Any]:
+        return dict(self.scopes)
+
+    def save(self, fh: TextIO, *, scope: str) -> None:
+        data = self.scopes[scope]
+        table = self.flatten(data)
         for section in sorted(table):
             fh.write(f"[{section}]\n")
             subsections: list[str] = []
@@ -562,22 +581,48 @@ class ConfigSchemaError(Exception):
         super().__init__(msg)
 
 
+def find_session_root() -> Optional[str]:
+    path = os.getcwd()
+    tagfile = "SESSION.TAG"
+    while True:
+        if os.path.exists(os.path.join(path, tagfile)):
+            return os.path.dirname(path)
+        elif os.path.exists(os.path.join(path, ".nvtest", tagfile)):
+            return path
+        path = os.path.dirname(path)
+        if path == os.path.sep:
+            break
+    return None
+
+
 def factory() -> Config:
-    if "NVTEST_SESSION_CONFIG_DIR" in os.environ:
+    root = find_session_root()
+    if root:
         # Setting up test cases and several other operations are done in a
         # multiprocessing Pool so we reload the configuration that existed when that pool
         # was created
-        db = Database(os.environ["NVTEST_SESSION_CONFIG_DIR"], mode="r")
-        if db.exists("config"):
-            return db.load_binary("config")
+        file = os.path.join(root, ".nvtest/config")
+        if os.path.exists(file):
+            with open(file) as fh:
+                state = json.load(fh)
+                return Config(state=state)
+        logging.warning("We appear to be running in a session but no config was found")
     return Config()
 
 
 config = Singleton(factory)
 
 
-def dump(fh: TextIO, scope: Optional[str] = None):
-    return config.dump(fh, scope=scope)
+def dump(fh: TextIO) -> None:
+    config.dump(fh)
+
+
+def load(fh: TextIO) -> None:
+    config.load(fh)
+
+
+def save(fh: TextIO, *, scope: str) -> None:
+    return config.save(fh, scope=scope)
 
 
 def config_file(scope: str) -> Optional[str]:

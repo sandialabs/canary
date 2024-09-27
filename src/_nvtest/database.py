@@ -1,6 +1,5 @@
 import json
 import os
-import pickle
 from contextlib import contextmanager
 from datetime import datetime
 from typing import IO
@@ -26,7 +25,7 @@ class Database:
     """
 
     def __init__(self, directory: str, mode="a") -> None:
-        self.home = os.path.join(os.path.abspath(directory), "db")
+        self.home = os.path.join(os.path.abspath(directory), "objects")
         if mode in "ra":
             if not os.path.exists(self.home):
                 raise FileNotFoundError(self.home)
@@ -54,19 +53,6 @@ class Database:
         with transaction_type(self.lock):
             with open(path, mode) as fh:
                 yield fh
-
-    def load_binary(self, name: str) -> Any:
-        path = self.join_path(name)
-        with ReadTransaction(self.lock):
-            with open(path, "rb") as fh:
-                return pickle.load(fh)
-
-    def save_binary(self, name: str, obj: Any) -> None:
-        path = self.join_path(name)
-        mkdirp(os.path.dirname(path))
-        with WriteTransaction(self.lock):
-            with open(path, "wb") as fh:
-                pickle.dump(obj, fh)
 
     def load_json(self, name: str) -> Any:
         path = self.join_path(name)

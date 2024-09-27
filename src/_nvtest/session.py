@@ -37,8 +37,9 @@ from .test.case import TestCase
 from .test.case import dump as dump_testcase
 from .test.case import load as load_testcase
 from .test.generator import TestGenerator
+from .test.generator import getstate as get_testfile_state
+from .test.generator import loadstate as load_testfile_state
 from .test.status import Status
-from .third_party import cloudpickle
 from .third_party import color
 from .util import glyphs
 from .util import keyboard
@@ -172,7 +173,7 @@ class Session:
 
     def load_snapshot(self) -> dict[str, dict]:
         snapshots: dict[str, dict] = {}
-        with self.db.open("snapshot", "r") as record:
+        with self.db.open("cases/snapshot", "r") as record:
             for line in record:
                 snapshot = json.loads(line)
                 snapshots[snapshot.get("id")] = snapshot
@@ -188,16 +189,18 @@ class Session:
 
         """
         logging.debug(f"Loading test session in {self.root}")
-        #        self.cases = self.db.load_binary("cases")
-        d = self.db.join_path("_cases")
+        with open(os.path.join(self.config_dir, "config")) as fh:
+            config.load(fh)
+        d = self.db.join_path("cases")
         self.cases = [load_testcase(p) for p in glob.glob(os.path.join(d, "*/*"))]
-
-        self.generators = self.db.load_binary("files")
+        with self.db.open("files", "r") as record:
+            self.generators = [load_testfile_state(state) for state in json.load(record)]
         snapshots = self.load_snapshot()
         for case in self.cases:
             if case.id in snapshots:
                 case.restore_snapshot(snapshots[case.id])
-        data = self.db.load_binary("session")
+        with self.db.open("session", "r") as record:
+            data = json.load(record)
         for var, val in data.items():
             setattr(self, var, val)
 
@@ -255,17 +258,15 @@ class Session:
         """Save session data, exlcuding data that is stored separately in the database"""
         data: dict[str, Any] = {}
         for var, value in vars(self).items():
-            if var not in ("files", "cases", "db"):
+            if var not in ("generators", "cases", "db"):
                 data[var] = value
-        self.db.save_binary("session", data)
+        self.db.save_json("session", data)
         if ini:
-            self.db.save_binary("config", config.instance())
-            self.db.save_binary("options", config.get("option"))
-            with self.db.open("plugin", mode="wb") as record:
-                cloudpickle.dump(plugin._manager._instance, record)
+            self.db.save_json("options", config.get("option"))
             file = os.path.join(self.config_dir, "config")
             with open(file, "w") as fh:
-                config.dump(fh, scope="session")
+                config.dump(fh)
+            self.db.save_json("plugin", plugin.getstate())
 
     def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:
         """Add ``path`` to this session's search paths"""
@@ -296,7 +297,8 @@ class Session:
             hook(self)
         finder.prepare()
         self.generators = finder.discover()
-        self.db.save_binary("files", self.generators)
+        files = [get_testfile_state(f) for f in self.generators]
+        self.db.save_json("files", files)
         logging.debug(f"Discovered {len(self.generators)} test files")
 
     def freeze(
@@ -321,11 +323,10 @@ class Session:
         cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
-        #        self.db.save_binary("cases", self.cases)
         for case in self.cases:
             with self.db.open(f"cases/{case.id[:2]}/{case.id[2:]}", "w") as fh:
                 dump_testcase(case, fh)
-        with self.db.open("snapshot", "w") as record:
+        with self.db.open("cases/snapshot", "w") as record:
             for case in self.cases:
                 record.write(json.dumps(case.snapshot()) + "\n")
         logging.debug(f"Collected {len(self.cases)} test cases from {len(self.generators)} files")
@@ -363,11 +364,11 @@ class Session:
                     errors += 1
                     logging.error(f"{case}: exec_root not set after setup")
             ts.done(*group)
-        with self.db.open("snapshot", "a") as record:
+        with self.db.open("cases/snapshot", "a") as record:
             for case in cases:
                 record.write(json.dumps(case.snapshot()) + "\n")
         for case in cases:
-            with self.db.open(f"_cases/{case.id[:2]}/{case.id[2:]}", "w") as fh:
+            with self.db.open(f"cases/{case.id[:2]}/{case.id[2:]}", "w") as fh:
                 dump_testcase(case, fh)
         if errors:
             raise ValueError("Stopping due to previous errors")
@@ -623,6 +624,8 @@ class Session:
         currently busy
 
         """
+        if not config.get("config:debug"):
+            return None
         if isinstance(queue, BatchResourceQueue):
             return None
         hb: dict[str, Any] = {"date": datetime.datetime.now().strftime("%c")}
@@ -672,11 +675,9 @@ class Session:
         obj.refresh()
 
         if isinstance(obj, TestCase):
-            from _nvtest.test.case import dump as dump_testcase
-
-            with self.db.open(f"_cases/{obj.id}", "w") as fh:
+            with self.db.open(f"cases/{obj.id[:2]}/{obj.id[2:]}", "w") as fh:
                 dump_testcase(obj, fh)
-            with self.db.open("snapshot", "a") as record:
+            with self.db.open("cases/snapshot", "a") as record:
                 record.write(json.dumps(obj.snapshot()) + "\n")
             if fail_fast and obj.status != "success":
                 code = compute_returncode([obj])
@@ -698,10 +699,10 @@ class Session:
                     pass
                 elif case.status == "ready":
                     case.status.set("skipped", "test skipped for unknown reasons")
-                elif case.status != snapshots[case.id]["status"][0]:
+                elif case.status != snapshots[case.id]["status"]["value"]:
                     if config.get("config:debug"):
                         fs = case.status.value
-                        ss = snapshots[case.id]["status"][0]
+                        ss = snapshots[case.id]["status"]["value"]
                         logging.warning(
                             f"batch {obj.batch_no}, {case}: "
                             f"expected status of future.result to be {ss}, not {fs}"

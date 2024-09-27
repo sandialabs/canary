@@ -30,14 +30,6 @@ def insert_db(i):
         record.write(f"{i} {random_chars()}\n")
 
 
-def test_save_binary(tmpdir):
-    fs.mkdirp(tmpdir.strpath)
-    with fs.working_dir(tmpdir.strpath):
-        db = Database(os.getcwd(), mode="w")
-        db.save_binary("foo", [1, 2, 3, 4])
-        assert db.load_binary("foo") == [1, 2, 3, 4]
-
-
 def test_concurrency(tmpdir):
     fs.mkdirp(tmpdir.strpath)
     with fs.working_dir(tmpdir.strpath):

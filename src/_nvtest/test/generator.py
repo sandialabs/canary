@@ -3,9 +3,11 @@ import errno
 import fnmatch
 import glob
 import io
+import json
 import math
 import os
 from string import Template
+from typing import IO
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
@@ -13,6 +15,7 @@ from typing import Sequence
 from typing import Union
 
 from .. import config
+from .. import plugin
 from .. import when as m_when
 from ..error import diff_exit_status
 from ..paramset import ParameterSet
@@ -782,3 +785,40 @@ class AbstractTestFile(TestGenerator):
         else:
             raise ValueError("TestFile.baseline: missing required argument 'src'/'dst' or 'flag'")
         self._baseline.append(ns)
+
+
+def getstate(generator: TestGenerator) -> dict[str, str]:
+    state: dict[str, str] = {}
+    state["type"] = generator.__class__.__name__
+    state["root"] = generator.root
+    state["path"] = generator.path
+    state["name"] = generator.name
+    return state
+
+
+def loadstate(state: dict[str, str]) -> TestGenerator:
+    generator = factory(state["root"], state["path"])
+    return generator
+
+
+def load(fname: Union[str, IO[Any]]) -> TestGenerator:
+    file: IO[Any]
+    own_fh = False
+    if isinstance(fname, str):
+        file = open(fname, "r")
+        own_fh = True
+    else:
+        file = fname
+    state = json.load(file)
+    generator = loadstate(state)
+    if own_fh:
+        file.close()
+    return generator
+
+
+def factory(root: str, path: Optional[str] = None) -> TestGenerator:
+    for gen_type in plugin.test_generators():
+        if gen_type.matches(root if path is None else path):
+            return gen_type(root, path=path)
+    f = root if path is None else os.path.join(root, path)
+    raise TypeError(f"No test generator for {f}")

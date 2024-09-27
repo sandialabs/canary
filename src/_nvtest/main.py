@@ -30,12 +30,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         os.environ["NVTEST_LEVEL"] = "0"
 
     argv = argv or sys.argv[1:]
-    invocation_dir = os.getcwd()
-    pre = parser.preparse(argv)
-    config.set_main_options(pre)
 
     try:
-        os.chdir(pre.C or invocation_dir)
+        pre = parser.preparse(argv)
+        os.chdir(pre.C or config.invocation_dir)
+        config.set_main_options(pre)
         if pre.echo:
             a = [os.path.join(sys.prefix, "bin/nvtest")] + [_ for _ in argv if _ != "--echo"]
             logging.emit(shlex.join(a) + "\n")
@@ -56,7 +55,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         else:
             return invoke_command(command, args)
     finally:
-        os.chdir(invocation_dir)
+        os.chdir(config.invocation_dir)
 
 
 class NVTestCommand:

@@ -59,7 +59,7 @@ def config(args: "argparse.Namespace") -> int:
         file = _config.config_file(args.scope)
         assert file is not None
         with open(file, "w") as fh:
-            _config.dump(fh, scope=args.scope)
+            _config.save(fh, scope=args.scope)
     elif args.command is None:
         raise ValueError("nvtest config: missing required subcommand (choose from show, add)")
     else:

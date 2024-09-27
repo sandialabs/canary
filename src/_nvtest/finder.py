@@ -12,6 +12,7 @@ from . import plugin
 from .resources import ResourceHandler
 from .test.case import TestCase
 from .test.generator import TestGenerator
+from .test.generator import factory as generator_factory
 from .third_party.colify import colified
 from .third_party.color import colorize
 from .util import filesystem as fs
@@ -58,7 +59,7 @@ class Finder:
         for root, paths in self.roots.items():
             logging.debug(f"Searching {root} for test files")
             if os.path.isfile(root):
-                f = self.gen_factory(root)
+                f = generator_factory(root)
                 root = f.root
                 generators = tree.setdefault(root, set())
                 generators.add(f)
@@ -67,7 +68,7 @@ class Finder:
                 for path in paths:
                     p = os.path.join(root, path)
                     if os.path.isfile(p):
-                        generators.add(self.gen_factory(root, path))
+                        generators.add(generator_factory(root, path))
                     elif os.path.isdir(p):
                         generators.update(self.rfind(root, subdir=path))
                     else:
@@ -109,18 +110,11 @@ class Finder:
             )
         generators: list[TestGenerator]
         if config.get("config:debug"):
-            generators = [self.gen_factory(*p) for p in paths]
+            generators = [generator_factory(*p) for p in paths]
         else:
-            generators = parallel.starmap(self.gen_factory, paths)
+            generators = parallel.starmap(generator_factory, paths)
 
         return generators
-
-    def gen_factory(self, root: str, path: Optional[str] = None) -> TestGenerator:
-        for gen_type in plugin.test_generators():
-            if gen_type.matches(root if path is None else path):
-                return gen_type(root, path=path)
-        f = root if path is None else os.path.join(root, path)
-        raise TypeError(f"No test generator for {f}")
 
     @property
     def search_paths(self) -> list[str]:
