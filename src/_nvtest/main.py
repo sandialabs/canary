@@ -76,8 +76,8 @@ class NVTestCommand:
     def returncode(self) -> int:
         return self.python.returncode
 
-    def __call__(self, *args: str) -> None:
-        self.python(*args)
+    def __call__(self, *args: str, fail_on_error: bool = True) -> None:
+        self.python(*args, fail_on_error=fail_on_error)
 
 
 def invoke_command(command: FunctionType, args: argparse.Namespace) -> int:

@@ -1,6 +1,7 @@
 """Setup and manage the test session"""
 
 import datetime
+import glob
 import io
 import json
 import os
@@ -27,12 +28,14 @@ from .error import FailFast
 from .error import StopExecution
 from .finder import Finder
 from .queues import BatchResourceQueue
-from .queues import DirectResourceQueue
 from .queues import Empty as EmptyQueue
 from .queues import ResourceQueue
+from .queues import factory as q_factory
 from .resources import ResourceHandler
 from .test.batch import Batch
 from .test.case import TestCase
+from .test.case import dump as dump_testcase
+from .test.case import load as load_testcase
 from .test.generator import TestGenerator
 from .test.status import Status
 from .third_party import cloudpickle
@@ -167,6 +170,14 @@ class Session:
                 break
         return None
 
+    def load_snapshot(self) -> dict[str, dict]:
+        snapshots: dict[str, dict] = {}
+        with self.db.open("snapshot", "r") as record:
+            for line in record:
+                snapshot = json.loads(line)
+                snapshots[snapshot.get("id")] = snapshot
+        return snapshots
+
     def load(self) -> None:
         """Load an existing test session:
 
@@ -177,17 +188,15 @@ class Session:
 
         """
         logging.debug(f"Loading test session in {self.root}")
-        self.cases = self.db.load_binary("cases")
+        #        self.cases = self.db.load_binary("cases")
+        d = self.db.join_path("_cases")
+        self.cases = [load_testcase(p) for p in glob.glob(os.path.join(d, "*/*"))]
+
         self.generators = self.db.load_binary("files")
-        snapshots: dict[str, dict] = {}
-        with self.db.open("snapshot", "r") as record:
-            lines = record.readlines()
-        for line in lines:
-            snapshot = json.loads(line)
-            snapshots[snapshot.pop("id")] = snapshot
+        snapshots = self.load_snapshot()
         for case in self.cases:
             if case.id in snapshots:
-                case.update(snapshots[case.id], skip_dependencies=True)
+                case.restore_snapshot(snapshots[case.id])
         data = self.db.load_binary("session")
         for var, val in data.items():
             setattr(self, var, val)
@@ -312,10 +321,13 @@ class Session:
         cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
-        self.db.save_binary("cases", self.cases)
+        #        self.db.save_binary("cases", self.cases)
+        for case in self.cases:
+            with self.db.open(f"cases/{case.id[:2]}/{case.id[2:]}", "w") as fh:
+                dump_testcase(case, fh)
         with self.db.open("snapshot", "w") as record:
             for case in self.cases:
-                record.write(json.dumps(_single_case_entry(case)) + "\n")
+                record.write(json.dumps(case.snapshot()) + "\n")
         logging.debug(f"Collected {len(self.cases)} test cases from {len(self.generators)} files")
 
     def populate(self, copy_all_resources: bool = False) -> None:
@@ -353,7 +365,10 @@ class Session:
             ts.done(*group)
         with self.db.open("snapshot", "a") as record:
             for case in cases:
-                record.write(json.dumps(_single_case_entry(case)) + "\n")
+                record.write(json.dumps(case.snapshot()) + "\n")
+        for case in cases:
+            with self.db.open(f"_cases/{case.id[:2]}/{case.id[2:]}", "w") as fh:
+                dump_testcase(case, fh)
         if errors:
             raise ValueError("Stopping due to previous errors")
 
@@ -421,7 +436,7 @@ class Session:
                 match = when(
                     when_expr,
                     parameters=case.parameters,
-                    keywords=case.keywords(implicit=True),
+                    keywords=case.get_keywords(implicit=True),
                 )
                 if match:
                     case.status.set("ready" if not case.dependencies else "pending")
@@ -654,11 +669,15 @@ class Session:
         if not isinstance(obj, (Batch, TestCase)):
             logging.error(f"Expected TestCase or Batch, got {obj.__class__.__name__}")
             return
-
         obj.refresh()
+
         if isinstance(obj, TestCase):
+            from _nvtest.test.case import dump as dump_testcase
+
+            with self.db.open(f"_cases/{obj.id}", "w") as fh:
+                dump_testcase(obj, fh)
             with self.db.open("snapshot", "a") as record:
-                record.write(json.dumps(_single_case_entry(obj)) + "\n")
+                record.write(json.dumps(obj.snapshot()) + "\n")
             if fail_fast and obj.status != "success":
                 code = compute_returncode([obj])
                 raise FailFast(str(obj), code)
@@ -667,12 +686,7 @@ class Session:
             if all(case.status == "retry" for case in obj):
                 queue.retry(iid)
                 return
-            with self.db.open("snapshot", "r") as record:
-                lines = record.readlines()
-            snapshots: dict[str, dict] = {}
-            for line in lines:
-                snapshot = json.loads(line.strip())
-                snapshots[snapshot.pop("id")] = snapshot
+            snapshots = self.load_snapshot()
             for case in obj:
                 if case.id not in snapshots:
                     logging.error(f"case ID {case.id} not in batch {obj.batch_no}")
@@ -706,13 +720,8 @@ class Session:
 
         """
         kwds: dict[str, Any] = {}
-        queue: ResourceQueue
-        if rh["batch:scheduler"] is None:
-            if rh["batch:count"] is not None or rh["batch:length"] is not None:
-                raise ValueError("batched execution requires a scheduler")
-            queue = DirectResourceQueue(rh, global_session_lock)
-        else:
-            queue = BatchResourceQueue(rh, global_session_lock)
+        queue: ResourceQueue = q_factory(rh, global_session_lock)
+        if isinstance(queue, BatchResourceQueue):
             batch_stage = os.path.join(self.config_dir, "batches")
             mkdirp(batch_stage)
             kwds["stage"] = batch_stage
@@ -729,7 +738,6 @@ class Session:
         queue.prepare(**kwds)
         if queue.empty():
             raise ValueError("There are no cases to run in this session")
-
         if isinstance(queue, BatchResourceQueue):
             batches: dict[str, list[str]] = {}
             for batch in queue.queued():
@@ -883,17 +891,6 @@ def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
     if cases and isinstance(getattr(cases[0], field), str):
         return sorted(cases, key=lambda case: getattr(case, field).lower())
     return sorted(cases, key=lambda case: getattr(case, field))
-
-
-def _single_case_entry(case: TestCase) -> dict:
-    return {
-        "id": case.id,
-        "start": case.start,
-        "finish": case.finish,
-        "status": [case.status.value, case.status.details],
-        "returncode": case.returncode,
-        "dependencies": [dep.id for dep in case.dependencies],
-    }
 
 
 class DirectoryExistsError(Exception):

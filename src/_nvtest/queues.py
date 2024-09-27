@@ -385,6 +385,24 @@ def le(arg1: tuple[int, ...], arg2: tuple[int, ...]) -> bool:
     return all(a <= b for a, b in zip(arg1, arg2))
 
 
+def factory(rh: ResourceHandler, lock: threading.Lock) -> ResourceQueue:
+    """Setup the test queue
+
+    Args:
+      cases: the test cases to run
+      rh: resource handler
+
+    """
+    queue: ResourceQueue
+    if rh["batch:scheduler"] is None:
+        if rh["batch:count"] is not None or rh["batch:length"] is not None:
+            raise ValueError("batched execution requires a scheduler")
+        queue = DirectResourceQueue(rh, lock)
+    else:
+        queue = BatchResourceQueue(rh, lock)
+    return queue
+
+
 class Empty(Exception):
     pass
 

@@ -158,6 +158,8 @@ def test_analyze(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.freeze(files)
+    print(cases)
+    print(vars(cases[-1]))
     assert len([c for c in cases if not c.mask]) == 10
     assert cases[-1].postflags == ["--analyze"]
     assert all(case in cases[-1].dependencies for case in cases[:-1])

@@ -36,8 +36,13 @@ class CDashReporter(Reporter):
         data = json.load(open(file))
         ts: TopologicalSorter = TopologicalSorter()
         for id, state in data.items():
-            dependencies = state["properties"]["dependencies"]["value"]
-            ts.add(id, *[d["properties"]["id"]["value"] for d in dependencies])
+            properties = state["properties"]
+            for prop in properties:
+                if prop["name"] == "dependencies":
+                    dependencies = prop["value"]
+                    dep_ids = [p["value"] for p in dependencies if p["name"] == "id"]
+                    ts.add(id, *dep_ids)
+                    break
         cases: dict[str, TestCase] = {}
         for id in ts.static_order():
             state = data[id]
@@ -241,7 +246,7 @@ class CDashReporter(Reporter):
             test_node.appendChild(results)
 
             labels = doc.createElement("Labels")
-            for keyword in case.keywords():
+            for keyword in case.keywords:
                 add_text_node(labels, "Label", keyword)
             test_node.appendChild(labels)
 

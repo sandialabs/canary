@@ -246,7 +246,7 @@ class Finder:
     def pprint_keywords(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
         unique_kwds: dict[str, set[str]] = dict()
         for case in cases:
-            unique_kwds.setdefault(case.file_root, set()).update(case.keywords())
+            unique_kwds.setdefault(case.file_root, set()).update(case.keywords)
         _, max_width = terminal_size()
         for root, kwds in unique_kwds.items():
             label = colorize("@m{%s}" % root)

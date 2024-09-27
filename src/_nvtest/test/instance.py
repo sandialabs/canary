@@ -100,7 +100,7 @@ class TestInstance:
     start: float
     finish: float
     id: str
-    cmd_line: str
+    cmd_line: Optional[str]
     returncode: int
     variables: dict[str, str]
     dependencies: list["TestInstance"]
@@ -138,7 +138,7 @@ class TestInstance:
             gpu_ids=case.gpu_ids,
             family=case.family,
             analyze=isinstance(case, AnalyzeTestCase),
-            keywords=case.keywords(),
+            keywords=case.keywords,
             parameters=parameters,
             timeout=case.timeout,
             runtime=case.runtime,

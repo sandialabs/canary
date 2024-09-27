@@ -1,8 +1,9 @@
 import os
 
+import _nvtest.test.instance as inst
 from _nvtest.finder import Finder
 from _nvtest.test.case import AnalyzeTestCase
-from _nvtest.test.instance import TestInstance
+from _nvtest.util.filesystem import mkdirp
 from _nvtest.util.filesystem import working_dir
 
 
@@ -21,9 +22,11 @@ def test_instance_deps(tmpdir):
     files = finder.discover()
     cases = finder.freeze(files)
     assert len([c for c in cases if not c.mask]) == 7
+    exec_root = os.path.join(workdir, "tests")
+    mkdirp(exec_root)
     for case in cases:
-        case.setup(exec_root=os.path.join(workdir, "tests"))
-        instance = TestInstance.from_case(case)
+        case.setup(exec_root=exec_root)
+        instance = inst.TestInstance.from_case(case)
         if isinstance(case, AnalyzeTestCase):
             assert instance.parameters.a == (0, 2, 4, 0, 2, 4)
             assert instance.parameters.b == (1, 3, 5, 1, 3, 5)

@@ -1,5 +1,4 @@
 import datetime
-import inspect
 import io
 import itertools
 import json
@@ -12,12 +11,10 @@ import sys
 import time
 from contextlib import contextmanager
 from copy import deepcopy
-from string import Template
+from typing import IO
 from typing import Any
-from typing import Callable
 from typing import Generator
 from typing import Optional
-from typing import TextIO
 from typing import Type
 from typing import Union
 
@@ -39,7 +36,9 @@ from .runner import Runner
 from .status import Status
 
 
-def stringify(arg: Any) -> str:
+def stringify(arg: Any, float_fmt: Optional[str] = None) -> str:
+    if isinstance(arg, float) and float_fmt is not None:
+        return float_fmt % arg
     if hasattr(arg, "string"):
         return arg.string
     elif isinstance(arg, float):
@@ -54,78 +53,79 @@ class TestCase(Runner):
 
     def __init__(
         self,
-        root: str,
-        path: str,
+        file_root: Optional[str] = None,
+        file_path: Optional[str] = None,
         *,
         family: Optional[str] = None,
-        keywords: list[str] = [],
-        parameters: dict[str, object] = {},
+        keywords: Optional[list[str]] = None,
+        parameters: Optional[dict[str, Any]] = None,
         timeout: Optional[float] = None,
-        baseline: list[Union[str, tuple[str, str]]] = [],
-        sources: dict[str, list[tuple[str, str]]] = {},
-        xstatus: int = 0,
+        baseline: Optional[list[Union[str, tuple[str, str]]]] = None,
+        sources: Optional[dict[str, list[tuple[str, str]]]] = None,
+        xstatus: Optional[int] = None,
     ):
-        # file properties
         super().__init__()
-        self.file_root = root
-        self.file_path = path
-        self.file = os.path.join(root, path)
-        self.url: Optional[str] = None
-        self.file_dir = os.path.dirname(self.file)
-        assert os.path.exists(self.file)
 
-        # Other properties
-        self._mask = ""
-        self._keywords = keywords
-        self.parameters = {} if parameters is None else dict(parameters)
-        self.baseline = baseline
-        self.sources = sources
-        # Environment variables specific to this case
-        self.variables: dict[str, str] = {}
+        # We need to be able to dump the test case to a json file and then reload it.  To do so, we
+        # initialize all attributes as private and employ getters/setters
+        self._file_root: str = ""
+        self._file_path: str = ""
+        self._url: Optional[str] = None
+        self._family: str = ""
+        self._keywords: list[str] = []
+        self._parameters: dict[str, Any] = {}
+        self._timeout: Optional[float] = None
+        self._baseline: list[Union[str, tuple[str, str]]] = []
+        self._sources: dict[str, list[tuple[str, str]]] = {}
+        self._xstatus: int = 0
 
-        # Name properties
-        self.family = family or os.path.splitext(os.path.basename(self.file_path))[0]
-        self.name = self.family
-        self.display_name = self.family
-        if self.parameters:
-            keys = sorted(self.parameters.keys())
-            s_vals = [stringify(self.parameters[k]) for k in keys]
-            s_params = [f"{k}={s_vals[i]}" for (i, k) in enumerate(keys)]
-            self.name = f"{self.name}.{'.'.join(s_params)}"
-            self.display_name = f"{self.display_name}[{','.join(s_params)}]"
-        self.fullname = os.path.join(os.path.dirname(self.file_path), self.name)
-        classname = os.path.dirname(self.file_path).strip()
-        if not classname:
-            classname = os.path.basename(self.file_dir).strip()
-        self.classname = classname.replace(os.path.sep, ".")
-        unique_str = io.StringIO()
-        unique_str.write(self.fullname)
-        unique_str.write(open(self.file).read())
-        self.id: str = hashit(unique_str.getvalue(), length=20)
+        if file_root is not None:
+            self.file_root = file_root
+        if file_path is not None:
+            self.file_path = file_path
+        if family is not None:
+            self.family = family
+        if keywords is not None:
+            self.keywords = keywords
+        if parameters is not None:
+            self.parameters = parameters
+        if timeout is not None:
+            self.timeout = timeout
+        if baseline is not None:
+            self.baseline = baseline
+        if sources is not None:
+            self.sources = sources
+        if xstatus is not None:
+            self.xstatus = xstatus
 
-        # Execution properties
-        self._status = Status("created")
+        self._mask: str = ""
+        self._name: Optional[str] = None
+        self._display_name: Optional[str] = None
+        self._classname: Optional[str] = None
+        self._id: Optional[str] = None
+        self._status: Status = Status()
+        self._cmd_line: Optional[str] = None
+        self._exec_root: Optional[str] = None
 
-        self.cmd_line: str = ""
-        self.exec_root: Optional[str] = None
-        self.exec_path = os.path.join(os.path.dirname(self.file_path), self.name)
         # The process running the test case
-        self.start: float = -1
-        self.finish: float = -1
-        self.returncode: int = -1
+        self._start: float = -1.0
+        self._finish: float = -1.0
+        self._returncode: int = -1
 
         # Dependency management
-        self.dep_patterns: list[str] = []
-        self.dependencies: list["TestCase"] = []
+        self._dep_patterns: list[str] = []
+        self._dependencies: list["TestCase"] = []
 
-        self._timeout = timeout
-        self._runtimes = self.load_runtimes()
-        self.xstatus = xstatus
+        # mean, min, max runtimes
+        self._runtimes: list[Optional[float]] = [None, None, None]
 
-        self.launcher: Optional[str] = sys.executable
-        self.preflags: Optional[list[str]] = None
-        self.command = os.path.basename(self.file)
-        self.postflags: Optional[list[str]] = None
+        self._launcher: str = sys.executable
+        self._preflags: Optional[list[str]] = None
+        self._command: Optional[str] = None
+        self._postflags: Optional[list[str]] = None
+
+        # Environment variables specific to this case
+        self._variables: dict[str, str] = {}
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -141,58 +141,147 @@ class TestCase(Runner):
     def __repr__(self) -> str:
         return self.display_name
 
-    @classmethod
-    def from_vars(cls, vars: dict) -> "TestCase":
-        self = cls(
-            root=vars.pop("file_root"),
-            path=vars.pop("file_path"),
-            family=vars.pop("family", None),
-            keywords=vars.pop("keywords", []),
-            parameters=vars.pop("parameters", {}),
-            timeout=vars.pop("timeout", None),
-            baseline=vars.pop("baseline", []),
-            sources=vars.pop("sources", {}),
-            xstatus=vars.pop("xstatus", 0),
-        )
-        for name, value in vars.items():
-            setattr(self, name, value)
-        return self
-
-    def describe(self, include_logfile_path: bool = False) -> str:
-        """Write a string describing the test case"""
-        id = colorize("@*b{%s}" % self.id[:7])
-        if self.mask:
-            string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.mask)
-            return colorize(string)
-        string = "%s %s %s" % (self.status.cname, id, self.pretty_repr())
-        if self.duration > 0:
-            today = datetime.datetime.today()
-            start = datetime.datetime.fromtimestamp(self.start)
-            finish = datetime.datetime.fromtimestamp(self.finish)
-            dt = today - start
-            fmt = "%H:%m:%S" if dt.days <= 1 else "%M %d %H:%m:%S"
-            a = start.strftime(fmt)
-            b = finish.strftime(fmt)
-            string += f" started: {a}, finished: {b}, duration: {self.duration:.2f}s."
-        elif self.status == "skipped":
-            string += ": Skipped due to %s" % self.status.details
-        if include_logfile_path:
-            f = os.path.relpath(self.logfile(), os.getcwd())
-            string += colorize(": @m{%s}" % f)
-        return string
-
     @property
     def dbfile(self) -> str:
         file = os.path.join(self.exec_dir, self._dbfile)
         return file
 
     @property
-    def mask(self) -> str:
-        return self._mask
+    def file_root(self) -> str:
+        assert self._file_root is not None
+        return self._file_root
 
-    @mask.setter
-    def mask(self, arg: str) -> None:
-        self._mask = arg
+    @file_root.setter
+    def file_root(self, arg: str) -> None:
+        assert os.path.exists(arg)
+        self._file_root = arg
+
+    @property
+    def file_path(self) -> str:
+        assert self._file_path is not None
+        return self._file_path
+
+    @file_path.setter
+    def file_path(self, arg: str) -> None:
+        assert os.path.exists(os.path.join(self.file_root, arg))
+        self._file_path = arg
+
+    @property
+    def file(self) -> str:
+        return os.path.join(self.file_root, self.file_path)
+
+    @property
+    def file_dir(self) -> str:
+        return os.path.dirname(self.file)
+
+    @property
+    def exec_root(self) -> Optional[str]:
+        return self._exec_root
+
+    @exec_root.setter
+    def exec_root(self, arg: str) -> None:
+        assert os.path.exists(arg)
+        self._exec_root = arg
+
+    @property
+    def exec_path(self) -> str:
+        return os.path.join(os.path.dirname(self.file_path), self.name)
+
+    @property
+    def exec_dir(self) -> str:
+        exec_root = self.exec_root
+        if not exec_root:
+            exec_root = config.get("session:root")
+        if not exec_root:
+            raise ValueError("exec_root must be set during set up") from None
+        return os.path.normpath(os.path.join(exec_root, self.exec_path))
+
+    @property
+    def family(self) -> str:
+        if not self._family:
+            self._family = os.path.splitext(os.path.basename(self.file_path))[0]
+        return self._family
+
+    @family.setter
+    def family(self, arg: str) -> None:
+        self._family = arg
+
+    @property
+    def keywords(self) -> list[str]:
+        return self._keywords
+
+    @keywords.setter
+    def keywords(self, arg: list[str]) -> None:
+        self._keywords = list(arg)
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return self._parameters
+
+    @parameters.setter
+    def parameters(self, arg: dict[str, Any]) -> None:
+        self._parameters = dict(arg)
+
+    @property
+    def dep_patterns(self) -> list[str]:
+        return self._dep_patterns
+
+    @dep_patterns.setter
+    def dep_patterns(self, arg: list[str]) -> None:
+        self._dep_patterns = list(arg)
+
+    @property
+    def dependencies(self) -> list["TestCase"]:
+        return self._dependencies
+
+    @dependencies.setter
+    def dependencies(self, arg: list["TestCase"]) -> None:
+        self._dependencies = arg
+
+    @property
+    def runtimes(self) -> list[Optional[float]]:
+        if self._runtimes[0] is None:
+            self.load_runtimes()
+        return self._runtimes
+
+    @runtimes.setter
+    def runtimes(self, arg: list[Optional[float]]) -> None:
+        self._runtimes = arg
+
+    @property
+    def timeout(self) -> float:
+        if self._timeout is None:
+            self.set_default_timeout()
+        assert isinstance(self._timeout, float)
+        return self._timeout
+
+    @timeout.setter
+    def timeout(self, arg: float) -> None:
+        self._timeout = arg
+
+    @property
+    def baseline(self) -> list[Union[str, tuple[str, str]]]:
+        return self._baseline
+
+    @baseline.setter
+    def baseline(self, arg: list[Union[str, tuple[str, str]]]) -> None:
+        self._baseline = list(arg)
+
+    @property
+    def sources(self) -> dict[str, list[tuple[str, str]]]:
+        return self._sources
+
+    @sources.setter
+    def sources(self, arg: dict[str, list[tuple[str, str]]]) -> None:
+        self._sources = arg
+
+    @property
+    def xstatus(self) -> int:
+        return self._xstatus
+
+    @xstatus.setter
+    def xstatus(self, arg: int) -> None:
+        self._xstatus = arg
 
     @property
     def skipped(self) -> bool:
@@ -218,73 +307,133 @@ class TestCase(Runner):
         return self._status
 
     @status.setter
-    def status(self, arg: Union[Status, list[str], dict[str, str]]) -> None:
+    def status(self, arg: Union[Status, dict[str, str]]) -> None:
         if isinstance(arg, Status):
             self._status.set(arg.value, details=arg.details)
         elif isinstance(arg, dict):
             self._status.set(arg["value"], details=arg["details"])
         else:
-            self._status.set(arg[0], details=arg[1])
+            raise ValueError(arg)
 
-    def complete(self) -> bool:
-        return self.status.complete()
+    @property
+    def url(self) -> Optional[str]:
+        return self._url
 
-    def ready(self) -> bool:
-        return self.status.ready()
+    @url.setter
+    def url(self, arg: str) -> None:
+        self._url = arg
 
-    def matches(self, pattern) -> bool:
-        if pattern.startswith("/") and self.id.startswith(pattern[1:]):
-            return True
-        elif self.display_name == pattern:
-            return True
-        elif self.file_path.endswith(pattern):
-            return True
-        return False
+    @property
+    def launcher(self) -> str:
+        return self._launcher
 
-    @staticmethod
-    def spec_like(spec: str) -> bool:
-        display_name_pattern = r"^[a-zA-Z_]\w*\[.*\]$"
-        if spec.startswith("/") and not os.path.exists(spec):
-            return True
-        elif re.search(display_name_pattern, spec):
-            return True
-        return False
+    @launcher.setter
+    def launcher(self, arg: str) -> None:
+        self._launcher = arg
 
-    def pretty_repr(self) -> str:
-        family = colorize("@*{%s}" % self.family)
-        i = self.display_name.find("[")
-        if i == -1:
-            return family
-        parts = self.display_name[i + 1 : -1].split(",")
-        colors = itertools.cycle("bmgycr")
-        for j, part in enumerate(parts):
-            color = next(colors)
-            parts[j] = colorize("@%s{%s}" % (color, part))
-        return f"{family}[{','.join(parts)}]"
+    @property
+    def preflags(self) -> list[str]:
+        return self._preflags or []
 
-    def keywords(self, implicit: bool = False) -> list[str]:
-        kwds = {kw for kw in self._keywords}
-        if implicit:
-            kwds.add(self.status.name.lower())
-            kwds.add(self.name)
-            kwds.add(self.family)
-            kwds.update(self.parameters.keys())
-        return list(kwds)
+    @preflags.setter
+    def preflags(self, arg: list[str]) -> None:
+        self._preflags = arg
 
-    def set_attribute(self, name: str, value: Any) -> None:
-        if name in self.__dict__:
-            raise KeyError(f"{name} is already an attribute of {self}")
-        setattr(self, name, value)
+    @property
+    def postflags(self) -> list[str]:
+        return self._postflags or []
 
-    def add_default_env(self, *args: dict[str, str], **kwds: str) -> None:
-        if args:
-            for arg in args:
-                self.variables.update(arg)
-        if kwds:
-            self.variables.update(kwds)
+    @postflags.setter
+    def postflags(self, arg: list[str]) -> None:
+        self._postflags = arg
 
-    def copy(self) -> "TestCase":
-        return deepcopy(self)
+    @property
+    def command(self) -> str:
+        if self._command is None:
+            self._command = os.path.basename(self.file)
+        assert self._command is not None
+        return self._command
+
+    @command.setter
+    def command(self, arg: str) -> None:
+        self._command = arg
+
+    @property
+    def variables(self) -> dict[str, str]:
+        return self._variables
+
+    @variables.setter
+    def variables(self, arg: dict[str, str]) -> None:
+        self._variables = dict(arg)
+
+    @property
+    def mask(self) -> str:
+        return self._mask
+
+    @mask.setter
+    def mask(self, arg: str) -> None:
+        self._mask = arg
+
+    @property
+    def name(self) -> str:
+        if self._name is None:
+            self.set_default_names()
+        assert self._name is not None
+        return self._name
+
+    @name.setter
+    def name(self, arg: str) -> None:
+        self._name = arg
+
+    @property
+    def display_name(self) -> str:
+        if self._display_name is None:
+            self.set_default_names()
+        assert self._display_name is not None
+        return self._display_name
+
+    @display_name.setter
+    def display_name(self, arg: str) -> None:
+        self._display_name = arg
+
+    @property
+    def fullname(self) -> str:
+        return os.path.join(os.path.dirname(self.file_path), self.name)
+
+    @property
+    def classname(self) -> str:
+        if self._classname is None:
+            self.set_default_names()
+        assert self._classname is not None
+        return self._classname
+
+    @classname.setter
+    def classname(self, arg: str) -> None:
+        self._classname = arg
+
+    @property
+    def cmd_line(self) -> Optional[str]:
+        return self._cmd_line
+
+    @cmd_line.setter
+    def cmd_line(self, arg: str) -> None:
+        self._cmd_line = arg
+
+    @property
+    def start(self) -> float:
+        return self._start
+
+    @start.setter
+    def start(self, arg: float) -> None:
+        self._start = arg
+
+    @property
+    def finish(self) -> float:
+        return self._finish
+
+    @finish.setter
+    def finish(self, arg: float) -> None:
+        self._finish = arg
 
     @property
     def duration(self):
@@ -292,19 +441,29 @@ class TestCase(Runner):
             return -1
         return self.finish - self.start
 
-    def logfile(self, stage: Optional[str] = None) -> str:
-        if stage is None:
-            return os.path.join(self.exec_dir, "nvtest-out.txt")
-        return os.path.join(self.exec_dir, f"nvtest-{stage}-out.txt")
+    @property
+    def returncode(self) -> int:
+        return self._returncode
+
+    @returncode.setter
+    def returncode(self, arg: int) -> None:
+        self._returncode = int(arg)
 
     @property
-    def exec_dir(self) -> str:
-        exec_root = self.exec_root
-        if not exec_root:
-            exec_root = config.get("session:root")
-        if not exec_root:
-            raise ValueError("exec_root must be set during set up") from None
-        return os.path.normpath(os.path.join(exec_root, self.exec_path))
+    def id(self):
+        if not self._id:
+            unique_str = io.StringIO()
+            unique_str.write(self.name)
+            unique_str.write(f",{self.file_path}")
+            for k in sorted(self.parameters):
+                unique_str.write(f",{k}={stringify(self.parameters[k], float_fmt='%.16e')}")
+            self._id = hashit(unique_str.getvalue(), length=20)
+        return self._id
+
+    @id.setter
+    def id(self, arg: str) -> None:
+        assert isinstance(arg, str)
+        self._id = arg
 
     @property
     def cpus(self) -> int:
@@ -344,12 +503,36 @@ class TestCase(Runner):
         return self._runtimes[0]
 
     @property
-    def timeout(self) -> float:
-        timeout: float
-        if self._timeout is not None:
-            timeout = float(self._timeout)
-        elif self._runtimes[2] is not None:
-            max_runtime = self._runtimes[2]
+    def pythonpath(self):
+        path = [_ for _ in os.getenv("PYTHONPATH", "").split(os.pathsep) if _.split()]
+        if self.exec_dir not in path:
+            path.insert(0, self.exec_dir)
+        else:
+            path.insert(0, path.pop(path.index(self.exec_dir)))
+        return os.pathsep.join(path)
+
+    def logfile(self, stage: Optional[str] = None) -> str:
+        if stage is None:
+            return os.path.join(self.exec_dir, "nvtest-out.txt")
+        return os.path.join(self.exec_dir, f"nvtest-{stage}-out.txt")
+
+    def set_default_names(self) -> None:
+        self.name = self.family
+        self.display_name = self.family
+        if self.parameters:
+            keys = sorted(self.parameters.keys())
+            s_vals = [stringify(self.parameters[k]) for k in keys]
+            s_params = [f"{k}={s_vals[i]}" for (i, k) in enumerate(keys)]
+            self.name = f"{self._name}.{'.'.join(s_params)}"
+            self.display_name = f"{self._display_name}[{','.join(s_params)}]"
+        classname = os.path.dirname(self.file_path).strip()
+        if not classname:
+            classname = os.path.basename(self.file_dir).strip()
+        self.classname = classname.replace(os.path.sep, ".")
+
+    def set_default_timeout(self) -> None:
+        if self.runtimes[2] is not None:
+            max_runtime = self.runtimes[2]
             if max_runtime < 5.0:
                 timeout = 120.0
             elif max_runtime < 120.0:
@@ -359,14 +542,172 @@ class TestCase(Runner):
             elif max_runtime < 600.0:
                 timeout = 1800.0
             else:
-                timeout = 2.0 * self._runtimes[2]
-        elif "fast" in self._keywords:
+                timeout = 2.0 * self.runtimes[2]
+        elif "fast" in self.keywords:
             timeout = config.get("test:timeout:fast")
-        elif "long" in self._keywords:
+        elif "long" in self.keywords:
             timeout = config.get("test:timeout:long")
         else:
             timeout = config.get("test:timeout:default")
-        return timeout
+        self._timeout = timeout
+
+    def load_runtimes(self):
+        # return mean, min, max runtimes
+        if config.get("config:no_cache"):
+            return [None, None, None]
+        cache_dir = cache.get_cache_dir(self.file_root)
+        file = self.cache_file(cache_dir)
+        if not os.path.exists(file):
+            return [None, None, None]
+        tries = 0
+        while tries < 3:
+            try:
+                _, mean, minimum, maximum = json.load(open(file))
+                return [mean, minimum, maximum]
+            except json.decoder.JSONDecodeError:
+                tries += 1
+        return [None, None, None]
+
+    def cache_file(self, path):
+        return os.path.join(path, f"timing/{self.id[:2]}/{self.id[2:]}.json")
+
+    def cache_runtime(self) -> None:
+        """store mean, min, max runtimes"""
+        if config.get("config:no_cache"):
+            return
+        if self.status.value not in ("success", "diffed"):
+            return
+        cache_dir = cache.create_cache_dir(self.file_root)
+        if cache_dir is None:
+            return
+        file = self.cache_file(cache_dir)
+        if not os.path.exists(file):
+            n = 0
+            mean = minimum = maximum = self.duration
+        else:
+            try:
+                n, mean, minimum, maximum = json.load(open(file))
+            except json.decoder.JSONDecodeError:
+                n = 0
+                mean = minimum = maximum = self.duration
+            finally:
+                mean = (self.duration + mean * n) / (n + 1)
+                minimum = min(minimum, self.duration)
+                maximum = max(maximum, self.duration)
+        mkdirp(os.path.dirname(file))
+        tries = 0
+        while tries < 3:
+            try:
+                with open(file, "w") as fh:
+                    json.dump([n + 1, mean, minimum, maximum], fh)
+                break
+            except Exception:
+                tries += 1
+
+    def get_keywords(self, implicit: bool = False) -> list[str]:
+        kwds = {kw for kw in self._keywords}
+        if implicit:
+            kwds.add(self.status.name.lower())
+            kwds.add(self.name)
+            kwds.add(self.family)
+            kwds.update(self.parameters.keys())
+        return list(kwds)
+
+    def set_attribute(self, name: str, value: Any) -> None:
+        if name in self.__dict__:
+            raise KeyError(f"{name} is already an attribute of {self}")
+        setattr(self, name, value)
+
+    def add_default_env(self, *args: dict[str, str], **kwds: str) -> None:
+        if args:
+            for arg in args:
+                self.variables.update(arg)
+        if kwds:
+            self.variables.update(kwds)
+
+    def snapshot(self) -> dict[str, Any]:
+        snapshot = {
+            "id": self.id,
+            "start": self.start,
+            "finish": self.finish,
+            "status": {"value": self.status.value, "details": self.status.details},
+            "returncode": self.returncode,
+            "dependencies": [dep.id for dep in self.dependencies],
+        }
+        return snapshot
+
+    def restore_snapshot(self, snapshot: dict[str, Any]) -> None:
+        """Restore values from a snapshot"""
+        assert self.id == snapshot["id"]
+        self.start = snapshot["start"]
+        self.finish = snapshot["finish"]
+        self.status = snapshot["status"]
+        self.returncode = snapshot["returncode"]
+        for i, dep in enumerate(snapshot["dependencies"]):
+            if isinstance(dep, TestCase):
+                self.dependencies[i] = dep
+
+    def describe(self, include_logfile_path: bool = False) -> str:
+        """Write a string describing the test case"""
+        id = colorize("@*b{%s}" % self.id[:7])
+        if self.mask:
+            string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.mask)
+            return colorize(string)
+        string = "%s %s %s" % (self.status.cname, id, self.pretty_repr())
+        if self.duration > 0:
+            today = datetime.datetime.today()
+            start = datetime.datetime.fromtimestamp(self.start)
+            finish = datetime.datetime.fromtimestamp(self.finish)
+            dt = today - start
+            fmt = "%H:%m:%S" if dt.days <= 1 else "%M %d %H:%m:%S"
+            a = start.strftime(fmt)
+            b = finish.strftime(fmt)
+            string += f" started: {a}, finished: {b}, duration: {self.duration:.2f}s."
+        elif self.status == "skipped":
+            string += ": Skipped due to %s" % self.status.details
+        if include_logfile_path:
+            f = os.path.relpath(self.logfile(), os.getcwd())
+            string += colorize(": @m{%s}" % f)
+        return string
+
+    def complete(self) -> bool:
+        return self.status.complete()
+
+    def ready(self) -> bool:
+        return self.status.ready()
+
+    def matches(self, pattern) -> bool:
+        if pattern.startswith("/") and self.id.startswith(pattern[1:]):
+            return True
+        elif self.display_name == pattern:
+            return True
+        elif self.file_path.endswith(pattern):
+            return True
+        return False
+
+    @staticmethod
+    def spec_like(spec: str) -> bool:
+        display_name_pattern = r"^[a-zA-Z_]\w*\[.*\]$"
+        if spec.startswith("/") and not os.path.exists(spec):
+            return True
+        elif re.search(display_name_pattern, spec):
+            return True
+        return False
+
+    def pretty_repr(self) -> str:
+        family = colorize("@*{%s}" % self.family)
+        i = self.display_name.find("[")
+        if i == -1:
+            return family
+        parts = self.display_name[i + 1 : -1].split(",")
+        colors = itertools.cycle("bmgycr")
+        for j, part in enumerate(parts):
+            color = next(colors)
+            parts[j] = colorize("@%s{%s}" % (color, part))
+        return f"{family}[{','.join(parts)}]"
+
+    def copy(self) -> "TestCase":
+        return deepcopy(self)
 
     def add_dependency(self, *cases: Union["TestCase", str]) -> None:
         for case in cases:
@@ -374,21 +715,6 @@ class TestCase(Runner):
                 self.dependencies.append(case)
             else:
                 self.dep_patterns.append(case)
-
-    @property
-    def pythonpath(self):
-        path = [_ for _ in os.getenv("PYTHONPATH", "").split(os.pathsep) if _.split()]
-        if self.exec_dir not in path:
-            path.insert(0, self.exec_dir)
-        else:
-            path.insert(0, path.pop(path.index(self.exec_dir)))
-        return os.pathsep.join(path)
-
-    def safe_substitute(self, string: str, **kwds: str) -> str:
-        if "$" in string:
-            t = Template(string)
-            return t.safe_substitute(**kwds)
-        return string.format(**kwds)
 
     def copy_sources_to_workdir(self, copy_all_resources: bool = False):
         workdir = self.exec_dir
@@ -423,13 +749,9 @@ class TestCase(Runner):
             raise FileNotFoundError(file)
         with open(file, "r") as fh:
             state = json.load(fh)
-        props = state["properties"]
-        self.start = props["start"]["value"]
-        self.finish = props["finish"]["value"]
-        self.returncode = props["returncode"]["value"]
-        status = props["status"]
-        self._status.set(status["value"], details=status["details"])
-        self.exec_root = props["exec_root"]["value"]
+        for prop in state["properties"]:
+            if prop["name"] in ("start", "finish", "returncode", "exec_root", "status"):
+                setattr(self, prop["name"], prop["value"])
         for dep in self.dependencies:
             dep.refresh()
 
@@ -444,6 +766,7 @@ class TestCase(Runner):
             variables[key] = value % vars
         for var, val in variables.items():
             os.environ[var] = val
+        os.environ["PATH"] = f"{self.exec_dir}:{os.environ['PATH']}"
         yield
         os.environ.clear()
         os.environ.update(save_env)
@@ -487,17 +810,6 @@ class TestCase(Runner):
                     relsrc = os.path.relpath(self.file, os.getcwd())
                     fs.force_symlink(relsrc, os.path.basename(self.file), echo=logging.info)
                 self.copy_sources_to_workdir(copy_all_resources=copy_all_resources)
-
-    def update(self, attrs: dict[str, object], skip_dependencies: bool = False) -> None:
-        for key, val in attrs.items():
-            if key == "dependencies" and skip_dependencies:
-                continue
-            elif key == "_status":
-                if isinstance(val, (tuple, list)):
-                    assert len(val) == 2
-                    val = Status(val[0], val[1])
-                assert isinstance(val, Status)
-            setattr(self, key, val)
 
     def do_baseline(self) -> None:
         if not self.baseline:
@@ -633,68 +945,15 @@ class TestCase(Runner):
 
     def teardown(self) -> None: ...
 
-    def cache_file(self, path):
-        return os.path.join(path, f"timing/{self.id[:2]}/{self.id[2:]}.json")
-
-    def cache_runtime(self) -> None:
-        """store mean, min, max runtimes"""
-        if config.get("config:no_cache"):
-            return
-        if self.status.value not in ("success", "diffed"):
-            return
-        cache_dir = cache.create_cache_dir(self.file_root)
-        if cache_dir is None:
-            return
-        file = self.cache_file(cache_dir)
-        if not os.path.exists(file):
-            n = 0
-            mean = minimum = maximum = self.duration
-        else:
-            try:
-                n, mean, minimum, maximum = json.load(open(file))
-            except json.decoder.JSONDecodeError:
-                n = 0
-                mean = minimum = maximum = self.duration
-            finally:
-                mean = (self.duration + mean * n) / (n + 1)
-                minimum = min(minimum, self.duration)
-                maximum = max(maximum, self.duration)
-        mkdirp(os.path.dirname(file))
-        tries = 0
-        while tries < 3:
-            try:
-                with open(file, "w") as fh:
-                    json.dump([n + 1, mean, minimum, maximum], fh)
-                break
-            except Exception:
-                tries += 1
-
-    def load_runtimes(self):
-        # return mean, min, max runtimes
-        if config.get("config:no_cache"):
-            return [None, None, None]
-        cache_dir = cache.get_cache_dir(self.file_root)
-        file = self.cache_file(cache_dir)
-        if not os.path.exists(file):
-            return [None, None, None]
-        tries = 0
-        while tries < 3:
-            try:
-                _, mean, minimum, maximum = json.load(open(file))
-                return [mean, minimum, maximum]
-            except json.decoder.JSONDecodeError:
-                tries += 1
-        return [None, None, None]
-
 
 class AnalyzeTestCase(TestCase):
     def __init__(
         self,
-        root: str,
-        path: str,
+        file_root: Optional[str] = None,
+        file_path: Optional[str] = None,
         *,
-        flag: str,
-        paramsets: list[ParameterSet],
+        flag: Optional[str] = None,
+        paramsets: Optional[list[ParameterSet]] = None,
         family: Optional[str] = None,
         keywords: list[str] = [],
         timeout: Optional[float] = None,
@@ -703,8 +962,8 @@ class AnalyzeTestCase(TestCase):
         xstatus: int = 0,
     ):
         super().__init__(
-            root,
-            path,
+            file_root=file_root,
+            file_path=file_path,
             family=family,
             keywords=keywords,
             timeout=timeout,
@@ -712,57 +971,75 @@ class AnalyzeTestCase(TestCase):
             sources=sources,
             xstatus=xstatus,
         )
-        self.flag = flag
-        self.paramsets = paramsets
-        if self.flag.startswith("-"):
-            self.command = os.path.basename(self.file)
-            self.postflags = [self.flag]
-        else:
-            self.command = self.flag
+        self._flag = flag
+        self._paramsets = paramsets
+
+    @property
+    def flag(self) -> str:
+        assert self._flag is not None
+        return self._flag
+
+    @flag.setter
+    def flag(self, arg: str) -> None:
+        self._flag = arg
+
+    @property
+    def postflags(self) -> list[str]:
+        if self._postflags is None:
+            if self.flag.startswith("-"):
+                self._postflags = [self.flag]
+        return self._postflags or []
+
+    @postflags.setter
+    def postflags(self, arg: list[str]) -> None:
+        self._postflags = arg
+
+    @property
+    def command(self) -> str:
+        if self._command is None:
+            if self.flag.startswith("-"):
+                self._command = os.path.basename(self.file)
+                return self._command
+            else:
+                self._command = self.flag
+        assert self._command is not None
+        return self._command
+
+    @command.setter
+    def command(self, arg: str) -> None:
+        self._command = arg
+
+    @property
+    def paramsets(self) -> list[ParameterSet]:
+        assert self._paramsets is not None
+        return self._paramsets
+
+    @paramsets.setter
+    def paramsets(self, arg: list[ParameterSet]) -> None:
+        self._paramsets = arg
+        if self._paramsets:
+            assert isinstance(self._paramsets[0], ParameterSet)
 
     def do_analyze(self) -> None:
         return self.run(stage="analyze", analyze=True)
 
 
-def getargspec(callable_obj: Callable) -> tuple[list[str], list[str]]:
-    argspec = inspect.getfullargspec(callable_obj)
-    args = list(argspec.args or [])
-    if args and args[0] == "self":
-        args = args[1:]
-    kwargs = list(argspec.kwonlyargs or [])
-    if argspec.defaults:
-        n = len(argspec.defaults)
-        kwargs[0:0] = args[n:]
-        args = args[:-n]
-    return args, kwargs
-
-
 def getstate(case: Union[TestCase, AnalyzeTestCase]) -> dict[str, Any]:
     state: dict[str, Any] = {}
-
     obj_class = case.__class__
     state["type"] = obj_class.__name__
-    properties = state.setdefault("properties", {})
-    argnames, kwargnames = getargspec(obj_class)
+    properties = state.setdefault("properties", [])
+
+    # convert properties into json serializable objects
     for attr, value in case.__dict__.items():
-        name, private = attr, False
-        if name.startswith("_"):
-            name, private = name[1:], True
-        prop = properties.setdefault(name, {})
-        p_props = prop.setdefault("properties", {})
-        p_props["private"] = private
-        if name in ("file_root", "file_path"):
-            p_props["inarg"] = True
-        else:
-            p_props["inarg"] = name in argnames + kwargnames
-        p_props["kwarg"] = name in kwargnames
+        private = attr.startswith("_")
+        name = attr[1:] if private else attr
+        prop: dict[str, Any] = {"name": name, "access": "private" if private else "public"}
+        properties.append(prop)
         if name == "dependencies":
             prop["value"] = [getstate(dep) for dep in value]
-        elif name == "keywords":
-            prop["value"] = case.keywords()
         elif name == "status":
-            prop["value"] = value.value
-            prop["details"] = value.details
+            prop["value"] = {"value": value.value, "details": value.details}
         elif name == "paramsets":
             prop["value"] = [{"keys": p.keys, "values": p.values} for p in value]
         elif isinstance(value, (list, dict)):
@@ -783,39 +1060,38 @@ def loadstate(state: dict[str, Any]) -> Union[TestCase, AnalyzeTestCase]:
     else:
         raise ValueError(state["type"])
 
-    properties = state["properties"]
-
     # replace values in state with their instantiated objects
-    kwargs: dict[str, Any] = {}
-    for name, prop in properties.items():
+    for prop in state["properties"]:
+        name = prop["name"]
         if name == "paramsets":
             prop["value"] = [ParameterSet(p["keys"], p["values"]) for p in prop["value"]]
         elif name == "dependencies":
             for i, dep_state in enumerate(prop["value"]):
                 prop["value"][i] = loadstate(dep_state)
         elif name == "status":
-            prop["value"] = Status(prop["value"], details=prop["details"])
-        if prop["properties"]["kwarg"]:
-            kwargs[name] = prop["value"]
-
-    case = obj_class(properties["file_root"]["value"], properties["file_path"]["value"], **kwargs)
+            prop["value"] = Status(prop["value"]["value"], details=prop["value"]["details"])
 
     # update attributes of case from the saved state
-    for name, prop in properties.items():
-        if prop["properties"]["inarg"]:
+    case = obj_class()
+    for prop in state["properties"]:
+        name = prop["name"]
+        if prop["value"] is None:
             continue
-        attr = f"_{name}" if prop["properties"]["private"] else name
         if name == "dependencies":
             for dep in prop["value"]:
                 case.add_dependency(dep)
+        elif name == "cpu_ids":
+            case._cpu_ids = prop["value"]
+        elif name == "gpu_ids":
+            case._gpu_ids = prop["value"]
         else:
-            setattr(case, attr, prop["value"])
+            setattr(case, name, prop["value"])
 
     return case
 
 
-def dump(case: Union[TestCase, AnalyzeTestCase], fname: Union[str, TextIO]) -> None:
-    file: TextIO
+def dump(case: Union[TestCase, AnalyzeTestCase], fname: Union[str, IO[Any]]) -> None:
+    file: IO[Any]
     own_fh = False
     if isinstance(fname, str):
         file = open(fname, "w")
@@ -828,11 +1104,13 @@ def dump(case: Union[TestCase, AnalyzeTestCase], fname: Union[str, TextIO]) -> N
         file.close()
 
 
-def load(fname: Union[str, TextIO]) -> Union[TestCase, AnalyzeTestCase]:
-    file: TextIO
+def load(fname: Union[str, IO[Any]]) -> Union[TestCase, AnalyzeTestCase]:
+    file: IO[Any]
     own_fh = False
     if isinstance(fname, str):
-        file = open(fname, "w")
+        if os.path.isdir(fname):
+            fname = os.path.join(fname, TestCase._dbfile)
+        file = open(fname, "r")
         own_fh = True
     else:
         file = fname

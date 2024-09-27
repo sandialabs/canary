@@ -69,7 +69,10 @@ def test_cmake_integration_parallel(tmpdir):
             make = ex.Executable("make")
             make()
             run = NVTestCommand("run", debug=True)
-            run("-w", ".")
+            run("-w", ".", fail_on_error=False)
+            if run.python.returncode != 0:
+                print(open("TestResults/foo.np=4/nvtest-out.txt").read())
+                assert 0, "test failed"
             assert os.path.exists("TestResults/foo.np=4")
 
 

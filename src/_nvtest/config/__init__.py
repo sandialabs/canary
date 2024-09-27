@@ -3,6 +3,7 @@ import configparser
 import copy
 import json
 import os
+import shlex
 import sys
 from string import Template
 from typing import Any
@@ -121,7 +122,7 @@ class Config:
         for varname, raw_value in os.environ.items():
             if not varname.startswith("NVTEST_"):
                 continue
-            scope_data = self.scopes.setdefault("environment", {})
+            scope_data: dict[str, Any] = self.scopes.setdefault("environment", {})
             match varname.lower().split("_", 2)[1:]:
                 case ["config", "debug"] | ["debug"]:
                     if raw_value.lower() in ("on", "1", "true", "yes"):
@@ -135,11 +136,13 @@ class Config:
                 case ["config", "no_cache"] | ["no_cache"]:
                     scope_data.setdefault("config", {})["no_cache"] = True
                 case ["batch", "length"]:
-                    value = time_in_seconds(raw_value)
-                    scope_data.setdefault("batch", {})["length"] = value
+                    scope_data.setdefault("batch", {})["length"] = time_in_seconds(raw_value)
+                case ["batch", "scheduler"]:
+                    scope_data.setdefault("batch", {})["scheduler"] = raw_value.lower()
+                case ["batch", "scheduler_args"]:
+                    scope_data.setdefault("batch", {})["args"] = shlex.split(raw_value)
                 case ["machine", key]:
-                    value = int(raw_value)
-                    scope_data.setdefault("machine", {})[key] = value
+                    scope_data.setdefault("machine", {})[key] = int(raw_value)
                 case ["test", keys]:
                     field, key = keys.split("_", 1)
                     test_data = scope_data.setdefault("test", {})

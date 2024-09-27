@@ -343,6 +343,11 @@ class AbstractTestFile(TestGenerator):
                     case.mask = "runtime exceeds time limit"
                 for attr, value in attributes.items():
                     case.set_attribute(attr, value)
+
+                dependencies = self.depends_on(testname=name, parameters=parameters)
+                if dependencies:
+                    case.add_dependency(*dependencies)
+
                 cases.append(case)
 
             analyze = self.analyze(testname=name, on_options=on_options)
@@ -361,9 +366,7 @@ class AbstractTestFile(TestGenerator):
                     timeout=timeout or self.timeout(testname=name),
                     baseline=self.baseline(testname=name),
                     sources=self.sources(testname=name),
-                    xstatus=self.xstatus(
-                        testname=name, on_options=on_options, parameters=parameters
-                    ),
+                    xstatus=self.xstatus(testname=name, on_options=on_options),
                 )
                 if mask_analyze_case is not None:
                     parent.mask = mask_analyze_case
@@ -372,10 +375,7 @@ class AbstractTestFile(TestGenerator):
                 for case in cases:
                     parent.add_dependency(case)
                 cases.append(parent)
-            dependencies = self.depends_on(testname=name, parameters=parameters)
-            if dependencies:
-                for case in cases:
-                    case.add_dependency(*dependencies)
+
             testcases.extend(cases)
         self.resolve_dependencies(testcases)
         return testcases
