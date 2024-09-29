@@ -215,6 +215,11 @@ class TestCase(Runner):
         self._keywords = list(arg)
 
     @property
+    def implicit_keywords(self) -> list[str]:
+        kwds = {self.status.name.lower(), self.status.value.lower(), self.name, self.family}
+        return list(kwds)
+
+    @property
     def parameters(self) -> dict[str, Any]:
         return self._parameters
 
@@ -603,15 +608,6 @@ class TestCase(Runner):
                 break
             except Exception:
                 tries += 1
-
-    def get_keywords(self, implicit: bool = False) -> list[str]:
-        kwds = {kw for kw in self._keywords}
-        if implicit:
-            kwds.add(self.status.name.lower())
-            kwds.add(self.name)
-            kwds.add(self.family)
-            kwds.update(self.parameters.keys())
-        return list(kwds)
 
     def set_attribute(self, name: str, value: Any) -> None:
         if name in self.__dict__:

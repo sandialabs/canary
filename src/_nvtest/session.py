@@ -437,7 +437,7 @@ class Session:
                 match = when(
                     when_expr,
                     parameters=case.parameters,
-                    keywords=case.get_keywords(implicit=True),
+                    keywords=case.keywords + case.implicit_keywords,
                 )
                 if match:
                     case.status.set("ready" if not case.dependencies else "pending")

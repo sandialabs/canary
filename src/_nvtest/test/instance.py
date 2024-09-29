@@ -165,7 +165,7 @@ class TestInstance:
     file: str
     cpu_ids: list[int]
     gpu_ids: list[int]
-    analyze: bool
+    multicase: bool
     family: str
     keywords: list[str]
     parameters: Parameters
@@ -183,6 +183,11 @@ class TestInstance:
     returncode: int
     variables: dict[str, str]
     dependencies: list["TestInstance"]
+
+    @property
+    def analyze(self) -> bool:
+        # compatibility with nvtest
+        return self.multicase
 
     @classmethod
     def from_case(cls: Type["TestInstance"], case: TestCase) -> "TestInstance":
@@ -208,7 +213,7 @@ class TestInstance:
             cpu_ids=case.cpu_ids,
             gpu_ids=case.gpu_ids,
             family=case.family,
-            analyze=isinstance(case, TestMultiCase),
+            multicase=isinstance(case, TestMultiCase),
             keywords=case.keywords,
             parameters=parameters,
             timeout=case.timeout,
