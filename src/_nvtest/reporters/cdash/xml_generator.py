@@ -36,11 +36,10 @@ class CDashReporter(Reporter):
         data = json.load(open(file))
         ts: TopologicalSorter = TopologicalSorter()
         for id, state in data.items():
-            properties = state["properties"]
-            for prop in properties:
-                if prop["name"] == "dependencies":
-                    dependencies = prop["value"]
-                    dep_ids = [p["value"] for p in dependencies if p["name"] == "id"]
+            for name, value in state["properties"].items():
+                if name == "dependencies":
+                    dependencies = value
+                    dep_ids = [v for d, v in dependencies.items() if d == "id"]
                     ts.add(id, *dep_ids)
                     break
         cases: dict[str, TestCase] = {}

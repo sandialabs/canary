@@ -749,9 +749,9 @@ class TestCase(Runner):
             raise FileNotFoundError(file)
         with open(file, "r") as fh:
             state = json.load(fh)
-        for prop in state["properties"]:
-            if prop["name"] in ("start", "finish", "returncode", "exec_root", "status"):
-                setattr(self, prop["name"], prop["value"])
+        for name, value in state["properties"].items():
+            if name in ("start", "finish", "returncode", "exec_root", "status"):
+                setattr(self, name, value)
         for dep in self.dependencies:
             dep.refresh()
 
@@ -1029,26 +1029,25 @@ def getstate(case: Union[TestCase, AnalyzeTestCase]) -> dict[str, Any]:
     state: dict[str, Any] = {}
     obj_class = case.__class__
     state["type"] = obj_class.__name__
-    properties = state.setdefault("properties", [])
+    state["name"] = case.name
+    properties = state.setdefault("properties", {})
 
     # convert properties into json serializable objects
     for attr, value in case.__dict__.items():
         private = attr.startswith("_")
         name = attr[1:] if private else attr
-        prop: dict[str, Any] = {"name": name}
-        properties.append(prop)
         if name == "dependencies":
-            prop["value"] = [getstate(dep) for dep in value]
+            value = [getstate(dep) for dep in value]
         elif name == "status":
-            prop["value"] = {"value": value.value, "details": value.details}
+            value = {"value": value.value, "details": value.details}
         elif name == "paramsets":
-            prop["value"] = [{"keys": p.keys, "values": p.values} for p in value]
+            value = [{"keys": p.keys, "values": p.values} for p in value]
         elif isinstance(value, (list, dict)):
-            prop["value"] = value
+            value = value
         else:
             if not isinstance(value, (str, float, int, type(None))):
                 raise TypeError(f"Cannot serialize {name} = {value}")
-            prop["value"] = value
+        properties[name] = value
     return state
 
 
@@ -1063,31 +1062,31 @@ def loadstate(state: dict[str, Any]) -> Union[TestCase, AnalyzeTestCase]:
         raise ValueError(state["type"])
 
     # replace values in state with their instantiated objects
-    for prop in state["properties"]:
-        name = prop["name"]
+    properties = state["properties"]
+    for name, value in properties.items():
         if name == "paramsets":
-            prop["value"] = [ParameterSet(p["keys"], p["values"]) for p in prop["value"]]
+            properties[name] = [ParameterSet(p["keys"], p["values"]) for p in value]
         elif name == "dependencies":
-            for i, dep_state in enumerate(prop["value"]):
-                prop["value"][i] = loadstate(dep_state)
+            for i, dep_state in enumerate(value):
+                value[i] = loadstate(dep_state)
+            properties[name] = value
         elif name == "status":
-            prop["value"] = Status(prop["value"]["value"], details=prop["value"]["details"])
+            properties[name] = Status(value["value"], details=value["details"])
 
     # update attributes of case from the saved state
     case = obj_class()
-    for prop in state["properties"]:
-        name = prop["name"]
-        if prop["value"] is None:
+    for name, value in properties.items():
+        if value is None:
             continue
         if name == "dependencies":
-            for dep in prop["value"]:
+            for dep in value:
                 case.add_dependency(dep)
         elif name == "cpu_ids":
-            case._cpu_ids = prop["value"]
+            case._cpu_ids = value
         elif name == "gpu_ids":
-            case._gpu_ids = prop["value"]
+            case._gpu_ids = value
         else:
-            setattr(case, name, prop["value"])
+            setattr(case, name, value)
 
     return case
 

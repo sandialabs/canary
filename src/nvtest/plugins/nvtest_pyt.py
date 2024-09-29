@@ -41,7 +41,7 @@ class PYTTestFile(AbstractTestFile):
     def matches(cls, path: str) -> bool:
         if path.endswith(".pyt"):
             return True
-        elif fnmatch.fnmatch(os.path.basename(path), "*.nvtest.py"):
+        elif fnmatch.fnmatch(os.path.basename(path), "nvtest_*.py"):
             return True
         return False
 
