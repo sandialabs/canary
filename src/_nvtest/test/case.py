@@ -946,7 +946,7 @@ class TestCase(Runner):
     def teardown(self) -> None: ...
 
 
-class AnalyzeTestCase(TestCase):
+class TestMultiCase(TestCase):
     def __init__(
         self,
         file_root: Optional[str] = None,
@@ -1024,7 +1024,7 @@ class AnalyzeTestCase(TestCase):
         return self.run(stage="analyze", analyze=True)
 
 
-def getstate(case: Union[TestCase, AnalyzeTestCase]) -> dict[str, Any]:
+def getstate(case: Union[TestCase, TestMultiCase]) -> dict[str, Any]:
     """Return a serializable dictionary from which the test case can be later loaded"""
     state: dict[str, Any] = {}
     obj_class = case.__class__
@@ -1051,13 +1051,13 @@ def getstate(case: Union[TestCase, AnalyzeTestCase]) -> dict[str, Any]:
     return state
 
 
-def loadstate(state: dict[str, Any]) -> Union[TestCase, AnalyzeTestCase]:
+def loadstate(state: dict[str, Any]) -> Union[TestCase, TestMultiCase]:
     """The reverse of getstate - return a test case from a dictionary"""
-    obj_class: Type[Union[TestCase, AnalyzeTestCase]]
+    obj_class: Type[Union[TestCase, TestMultiCase]]
     if state["type"] == "TestCase":
         obj_class = TestCase
-    elif state["type"] == "AnalyzeTestCase":
-        obj_class = AnalyzeTestCase
+    elif state["type"] == "TestMultiCase":
+        obj_class = TestMultiCase
     else:
         raise ValueError(state["type"])
 
@@ -1091,7 +1091,7 @@ def loadstate(state: dict[str, Any]) -> Union[TestCase, AnalyzeTestCase]:
     return case
 
 
-def dump(case: Union[TestCase, AnalyzeTestCase], fname: Union[str, IO[Any]]) -> None:
+def dump(case: Union[TestCase, TestMultiCase], fname: Union[str, IO[Any]]) -> None:
     file: IO[Any]
     own_fh = False
     if isinstance(fname, str):
@@ -1105,7 +1105,7 @@ def dump(case: Union[TestCase, AnalyzeTestCase], fname: Union[str, IO[Any]]) -> 
         file.close()
 
 
-def load(fname: Union[str, IO[Any]]) -> Union[TestCase, AnalyzeTestCase]:
+def load(fname: Union[str, IO[Any]]) -> Union[TestCase, TestMultiCase]:
     file: IO[Any]
     own_fh = False
     if isinstance(fname, str):

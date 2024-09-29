@@ -20,8 +20,8 @@ from .. import when as m_when
 from ..error import diff_exit_status
 from ..paramset import ParameterSet
 from ..resources import ResourceHandler
-from ..test.case import AnalyzeTestCase
 from ..test.case import TestCase
+from ..test.case import TestMultiCase
 from ..third_party.color import colorize
 from ..util import graph
 from ..util import logging
@@ -359,7 +359,7 @@ class AbstractTestFile(TestGenerator):
                 mask_analyze_case: Optional[str] = None
                 if all(case.mask for case in cases):
                     mask_analyze_case = colorize("deselected due to @*b{skipped dependencies}")
-                parent = AnalyzeTestCase(
+                parent = TestMultiCase(
                     self.root,
                     self.path,
                     paramsets=paramsets,

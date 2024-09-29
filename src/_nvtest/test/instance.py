@@ -6,33 +6,51 @@ from typing import Optional
 from typing import Type
 from typing import Union
 
-from .case import AnalyzeTestCase
 from .case import TestCase
+from .case import TestMultiCase
 from .case import load as load_testcase
 from .status import Status
 
+key_type = Union[tuple[str, ...], str]
+index_type = Union[tuple[int, ...], int]
+
 
 class Parameters:
+    """Store parameters for a single test instance (case)
+
+    Examples:
+
+      >>> p = Parameters(a=1, b=2, c=3)
+      >>> p['a']
+      1
+      >>> assert p.a == p['a']
+      >>> p[('a', 'b')]
+      (1, 2)
+      >>> assert p['a,b'] == p[('a', 'b')]
+      >>> p[('b', 'c', 'a')]
+      (2, 3, 1)
+
+    """
+
     def __init__(self, **kwargs: Any) -> None:
-        self._keys: list[Union[tuple[str, ...], str]] = list(kwargs.keys())
+        self._keys: list[str] = list(kwargs.keys())
         self._values: list[Any] = list(kwargs.values())
 
     def __str__(self) -> str:
+        name = self.__class__.__name__
         s = ", ".join(f"{k}={v}" for k, v in self.items())
-        return f"Parameters({s})"
+        return f"{name}({s})"
 
-    def __contains__(self, key: Union[tuple[str, ...], str]) -> bool:
-        return key in self._keys
+    def __contains__(self, arg: key_type) -> bool:
+        return self.multi_index(arg) is not None
 
-    def __getitem__(self, key: Union[tuple[str, ...], str]) -> Any:
-        if key not in self._keys:
-            raise KeyError(key)
-        i = self._keys.index(key)
-        return self._values[i]
-
-    def __setitem__(self, key: Union[tuple[str, ...], str], value: Any) -> None:
-        self._keys.append(key)
-        self._values.append(value)
+    def __getitem__(self, arg: key_type) -> Any:
+        ix = self.multi_index(arg)
+        if ix is None:
+            raise KeyError(arg)
+        elif isinstance(ix, int):
+            return self._values[ix]
+        return tuple([self._values[i] for i in ix])
 
     def __getattr__(self, key: str) -> Any:
         if key not in self._keys:
@@ -53,29 +71,90 @@ class Parameters:
                 return False
         return True
 
+    def multi_index(self, arg: key_type) -> Optional[index_type]:
+        keys: tuple[str, ...]
+        if isinstance(arg, str):
+            if arg in self._keys:
+                value = self._keys.index(arg)
+                if isinstance(value, list):
+                    return tuple(value)
+                return value
+            elif "," in arg:
+                keys = tuple(arg.split(","))
+            else:
+                return None
+        else:
+            keys = tuple(arg)
+        return tuple([self._keys.index(key) for key in keys])
+
     def items(self) -> Generator[Any, None, None]:
         for i, key in enumerate(self._keys):
             yield key, self._values[i]
 
-    def keys(self) -> list:
+    def keys(self) -> list[str]:
         return list(self._keys)
 
-    def values(self) -> list:
+    def values(self) -> list[Any]:
         return list(self._values)
 
-    def get(
-        self, key: Union[tuple[str, ...], str], default: Optional[Any] = None
-    ) -> Optional[Any]:
-        if key in self._keys:
-            index = self._keys.index(key)
-            return self._values[index]
-        return default
+    def get(self, key: str, default: Optional[Any] = None) -> Optional[Any]:
+        try:
+            return self[key]
+        except KeyError:
+            return default
 
-    def asdict(self) -> dict[Union[tuple[str, ...], str], Any]:
-        d: dict[Union[tuple[str, ...], str], Any] = {}
+    def asdict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {}
         for i, key in enumerate(self._keys):
             d[key] = self._values[i]
         return d
+
+
+class MultiParameters(Parameters):
+    """Store parameters for a single test instance (case)
+
+    Examples:
+
+      >>> p = Parameters(a=[1, 2, 3], b=[4, 5, 6], c=[7, 8, 9])
+      >>> a = p['a']
+      >>> a
+      (1, 2, 3)
+      >>> b = p['b']
+      >>> b
+      (4, 5, 6)
+      >>> for i, values in enumerate(p[('a', 'b')]):
+      ...     assert values == (a[i], b[i])
+      ...     print(values)
+      (1, 4)
+      (2, 5)
+
+      As a consequence of the above, note the following:
+
+      >>> x = p[('a',)]
+      >>> x
+      ((1,), (2,), (3,))
+
+      etc.
+
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        self._keys: list[str] = list(kwargs.keys())
+        it = iter(kwargs.values())
+        p_len = len(next(it))
+        assert all(len(p) == p_len for p in it)
+        self._values: list[Any] = [tuple(_) for _ in kwargs.values()]
+
+    def __getitem__(self, arg: key_type) -> Any:
+        ix = self.multi_index(arg)
+        if ix is None:
+            raise KeyError(arg)
+        elif isinstance(ix, int):
+            return self._values[ix]
+        rows = [self._values[i] for i in ix]
+        # return colum data, now row data
+        columns = tuple(zip(*rows))
+        return columns
 
 
 @dataclasses.dataclass(frozen=True)
@@ -111,23 +190,15 @@ class TestInstance:
         for dep in case.dependencies:
             dependencies.append(TestInstance.from_case(dep))
         parameters: Parameters
-        if not isinstance(case, AnalyzeTestCase):
+        if not isinstance(case, TestMultiCase):
             parameters = Parameters(**case.parameters)
         else:
-            parameters = Parameters()
-            keys = tuple(case.dependencies[0].parameters.keys())
-            if len(keys) == 1:
-                parameters[keys[0]] = tuple([dep.parameters[keys[0]] for dep in case.dependencies])
-            else:
-                table = []
+            columns: dict[str, list[Any]] = {}
+            for key in case.dependencies[0].parameters.keys():
+                col = columns.setdefault(key, [])
                 for dep in case.dependencies:
-                    row = []
-                    for key in keys:
-                        row.append(dep.parameters[key])
-                    table.append(tuple(row))
-                parameters[keys] = tuple(table)
-                for i, key in enumerate(keys):
-                    parameters[key] = tuple([row[i] for row in table])
+                    col.append(dep.parameters[key])
+            parameters = MultiParameters(**columns)
 
         self = cls(
             file_root=case.file_root,
@@ -137,7 +208,7 @@ class TestInstance:
             cpu_ids=case.cpu_ids,
             gpu_ids=case.gpu_ids,
             family=case.family,
-            analyze=isinstance(case, AnalyzeTestCase),
+            analyze=isinstance(case, TestMultiCase),
             keywords=case.keywords,
             parameters=parameters,
             timeout=case.timeout,

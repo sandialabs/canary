@@ -462,7 +462,7 @@ def to_seconds(
 
 @typing.no_type_check
 def get_vvtest_attrs(case: "TestCase", baseline: bool = False, analyze: bool = False) -> dict:
-    from _nvtest.test.case import AnalyzeTestCase
+    from _nvtest.test.case import TestMultiCase
 
     attrs = {}
     compiler_spec = None
@@ -485,13 +485,13 @@ def get_vvtest_attrs(case: "TestCase", baseline: bool = False, analyze: bool = F
     attrs["diff_exit_status"] = 64
     attrs["skip_exit_status"] = 63
     attrs["opt_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"
-    attrs["is_analyze"] = isinstance(case, AnalyzeTestCase)
+    attrs["is_analyze"] = isinstance(case, TestMultiCase)
     attrs["is_baseline"] = baseline
     attrs["is_analysis_only"] = analyze
     attrs["PARAM_DICT"] = case.parameters or {}
     for key, val in case.parameters.items():
         attrs[key] = val
-    if isinstance(case, AnalyzeTestCase):
+    if isinstance(case, TestMultiCase):
         for paramset in case.paramsets:
             key = "_".join(paramset.keys)
             table = attrs.setdefault(f"PARAM_{key}", [])

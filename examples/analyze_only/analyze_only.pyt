@@ -27,7 +27,6 @@ def analyze():
             assert parameters["np"] == dep.parameters.np
             assert parameters["a"] == dep.parameters.a
             assert parameters["b"] == dep.parameters.b
-    assert self.parameters.keys() == [("np", "a", "b"), "np", "a", "b"]
     assert self.parameters.np == (1, 1, 1, 2, 2, 2)
     assert self.parameters.a == (1, 2, 4, 1, 2, 4)
     assert self.parameters.b == (2, 3, 5, 2, 3, 5)
