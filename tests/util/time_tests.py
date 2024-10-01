@@ -1,6 +1,6 @@
+from _nvtest.plugins.nvtest_vvt import to_seconds
 from _nvtest.util.time import pretty_seconds
 from _nvtest.util.time import time_in_seconds
-from nvtest.plugins.nvtest_vvt import to_seconds
 
 
 def isclose(a, b, rtol=1e-16, atol=1e-16):

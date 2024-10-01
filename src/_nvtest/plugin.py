@@ -62,7 +62,7 @@ class Manager:
     def load_builtin(self, disable: Optional[list[str]] = None) -> None:
         if self.state["builtins_loaded"]:
             return
-        path = ir.files("nvtest").joinpath("plugins")
+        path = ir.files("_nvtest").joinpath("plugins")
         disable = disable or []
         logging.debug(f"Loading builtin plugins from {path}")
         if path.exists():  # type: ignore
@@ -130,7 +130,7 @@ class Manager:
         if os.path.abspath(file) in self.state["files"]:
             return
         basename = os.path.splitext(os.path.basename(file))[0]
-        name = f"nvtest.plugins.{basename}"
+        name = f"_nvtest.plugins.{basename}"
         # simply importing the module will load the plugins
         self.state["files"].add(os.path.abspath(file))
         load_module_from_file(name, file)

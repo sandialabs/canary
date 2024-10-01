@@ -16,6 +16,7 @@ from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
 from functools import partial
 from itertools import repeat
+from typing import IO
 from typing import Any
 from typing import Generator
 from typing import Optional
@@ -34,7 +35,6 @@ from .queues import factory as q_factory
 from .resources import ResourceHandler
 from .test.batch import Batch
 from .test.case import TestCase
-from .test.case import dump as dump_testcase
 from .test.case import load as load_testcase
 from .test.generator import TestGenerator
 from .test.generator import getstate as get_testfile_state
@@ -171,13 +171,28 @@ class Session:
                 break
         return None
 
-    def load_snapshot(self) -> dict[str, dict]:
+    def load_snapshots(self) -> dict[str, dict]:
         snapshots: dict[str, dict] = {}
         with self.db.open("cases/snapshot", "r") as record:
             for line in record:
                 snapshot = json.loads(line)
-                snapshots[snapshot.get("id")] = snapshot
+                snapshots[snapshot["id"]] = snapshot
         return snapshots
+
+    def dump_snapshot(self, case: TestCase, file: IO[Any]) -> None:
+        snapshot = {
+            "id": case.id,
+            "start": case.start,
+            "finish": case.finish,
+            "status": {"value": case.status.value, "details": case.status.details},
+            "returncode": case.returncode,
+            "dependencies": [dep.id for dep in case.dependencies],
+        }
+        file.write(json.dumps(snapshot) + "\n")
+
+    def save_case_to_db(self, case: TestCase) -> None:
+        with self.db.open(f"cases/{case.id[:2]}/{case.id[2:]}", "w") as record:
+            case.dump(record)
 
     def load(self) -> None:
         """Load an existing test session:
@@ -195,10 +210,11 @@ class Session:
         self.cases = [load_testcase(p) for p in glob.glob(os.path.join(d, "*/*"))]
         with self.db.open("files", "r") as record:
             self.generators = [load_testfile_state(state) for state in json.load(record)]
-        snapshots = self.load_snapshot()
+        snapshots = self.load_snapshots()
         for case in self.cases:
-            if case.id in snapshots:
-                case.restore_snapshot(snapshots[case.id])
+            snapshot = snapshots.get(case.id)
+            if snapshot is not None:
+                case.update(**snapshot)
         with self.db.open("session", "r") as record:
             data = json.load(record)
         for var, val in data.items():
@@ -323,12 +339,11 @@ class Session:
         cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
-        for case in self.cases:
-            with self.db.open(f"cases/{case.id[:2]}/{case.id[2:]}", "w") as fh:
-                dump_testcase(case, fh)
         with self.db.open("cases/snapshot", "w") as record:
             for case in self.cases:
-                record.write(json.dumps(case.snapshot()) + "\n")
+                self.dump_snapshot(case, record)
+        for case in self.cases:
+            self.save_case_to_db(case)
         logging.debug(f"Collected {len(self.cases)} test cases from {len(self.generators)} files")
 
     def populate(self, copy_all_resources: bool = False) -> None:
@@ -366,10 +381,9 @@ class Session:
             ts.done(*group)
         with self.db.open("cases/snapshot", "a") as record:
             for case in cases:
-                record.write(json.dumps(case.snapshot()) + "\n")
+                self.dump_snapshot(case, record)
         for case in cases:
-            with self.db.open(f"cases/{case.id[:2]}/{case.id[2:]}", "w") as fh:
-                dump_testcase(case, fh)
+            self.save_case_to_db(case)
         if errors:
             raise ValueError("Stopping due to previous errors")
 
@@ -677,10 +691,9 @@ class Session:
         obj.refresh()
 
         if isinstance(obj, TestCase):
-            with self.db.open(f"cases/{obj.id[:2]}/{obj.id[2:]}", "w") as fh:
-                dump_testcase(obj, fh)
+            self.save_case_to_db(obj)
             with self.db.open("cases/snapshot", "a") as record:
-                record.write(json.dumps(obj.snapshot()) + "\n")
+                self.dump_snapshot(obj, record)
             if fail_fast and obj.status != "success":
                 code = compute_returncode([obj])
                 raise FailFast(str(obj), code)
@@ -689,7 +702,7 @@ class Session:
             if all(case.status == "retry" for case in obj):
                 queue.retry(iid)
                 return
-            snapshots = self.load_snapshot()
+            snapshots = self.load_snapshots()
             for case in obj:
                 if case.id not in snapshots:
                     logging.error(f"case ID {case.id} not in batch {obj.batch_no}")

@@ -9,7 +9,6 @@ import typing
 from functools import wraps
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
 from typing import Generator
 from typing import Optional
 from typing import Union
@@ -17,16 +16,16 @@ from typing import Union
 import nvtest
 from _nvtest import config
 from _nvtest.enums import list_parameter_space
-from _nvtest.test.generator import AbstractTestFile
+from _nvtest.test.case import TestCase
+from _nvtest.test.case import TestMultiCase
 from _nvtest.third_party.color import colorize
 from _nvtest.util import scalar
 from _nvtest.util import string
 
-if TYPE_CHECKING:
-    from _nvtest.test.case import TestCase
+from .nvtest_pyt import TestFile
 
 
-class VVTTestFile(AbstractTestFile):
+class VVTTestFile(TestFile):
     def load(self) -> None:
         try:
             args, _ = p_VVT(self.file)
@@ -462,8 +461,6 @@ def to_seconds(
 
 @typing.no_type_check
 def get_vvtest_attrs(case: "TestCase", baseline: bool = False, analyze: bool = False) -> dict:
-    from _nvtest.test.case import TestMultiCase
-
     attrs = {}
     compiler_spec = None
     if config.get("build:compiler:vendor") is None:

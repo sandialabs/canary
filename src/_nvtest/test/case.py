@@ -125,7 +125,7 @@ class TestCase(Runner):
         # mean, min, max runtimes
         self._runtimes: list[Optional[float]] = [None, None, None]
 
-        self._launcher: str = sys.executable
+        self._launcher: Optional[str] = None
         self._preflags: Optional[list[str]] = None
         self._command: Optional[str] = None
         self._postflags: Optional[list[str]] = None
@@ -335,11 +335,11 @@ class TestCase(Runner):
         self._url = arg
 
     @property
-    def launcher(self) -> str:
+    def launcher(self) -> Optional[str]:
         return self._launcher
 
     @launcher.setter
-    def launcher(self, arg: str) -> None:
+    def launcher(self, arg: Optional[str]) -> None:
         self._launcher = arg
 
     @property
@@ -627,27 +627,22 @@ class TestCase(Runner):
         if kwds:
             self.variables.update(kwds)
 
-    def snapshot(self) -> dict[str, Any]:
-        snapshot = {
-            "id": self.id,
-            "start": self.start,
-            "finish": self.finish,
-            "status": {"value": self.status.value, "details": self.status.details},
-            "returncode": self.returncode,
-            "dependencies": [dep.id for dep in self.dependencies],
-        }
-        return snapshot
-
-    def restore_snapshot(self, snapshot: dict[str, Any]) -> None:
+    def update(self, **attrs: Any) -> None:
         """Restore values from a snapshot"""
-        assert self.id == snapshot["id"]
-        self.start = snapshot["start"]
-        self.finish = snapshot["finish"]
-        self.status = snapshot["status"]
-        self.returncode = snapshot["returncode"]
-        for i, dep in enumerate(snapshot["dependencies"]):
-            if isinstance(dep, TestCase):
-                self.dependencies[i] = dep
+        for name, value in attrs.items():
+            if name == "id":
+                if value != self.id:
+                    raise ValueError("Incorrect case ID")
+            elif name == "dependencies":
+                for i, dep in enumerate(value):
+                    if isinstance(dep, TestCase):
+                        self.dependencies[i] = dep
+            elif name == "cpu_ids":
+                self._cpu_ids = value
+            elif name == "gpu_ids":
+                self._gpu_ids = value
+            else:
+                setattr(self, name, value)
 
     def describe(self, include_logfile_path: bool = False) -> str:
         """Write a string describing the test case"""
@@ -996,8 +991,6 @@ class TestCase(Runner):
             elif name == "status":
                 properties[name] = Status(value["value"], details=value["details"])
         for name, value in properties.items():
-            if value is None:
-                continue
             if name == "dependencies":
                 for dep in value:
                     self.add_dependency(dep)

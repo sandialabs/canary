@@ -1,13 +1,13 @@
 import os
 
 import pytest
+from _nvtest.plugins.nvtest_ctest import CTestTestFile
+from _nvtest.plugins.nvtest_ctest import parse_np
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import set_executable
 from _nvtest.util.filesystem import touchp
 from _nvtest.util.filesystem import which
 from _nvtest.util.filesystem import working_dir
-from nvtest.plugins.nvtest_ctest import CTestTestFile
-from nvtest.plugins.nvtest_ctest import parse_np
 
 
 def test_parse_np():
@@ -49,11 +49,14 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         assert case.gpus == 5
         assert "foo" in case.keywords
         assert "baz" in case.keywords
+        assert case.launcher is None
+        assert case.command == "script.sh"
         assert case.variables["CTEST_NUM_RANKS"] == "5"
         assert case.variables["SPAM"] == "BAZ"
 
         case = cases[1]
         assert case.launcher.endswith("mpiexec")
+        assert case.command == "some-exe"
         assert case.cpus == 4
         assert "foo" in case.keywords
         assert "spam" in case.keywords

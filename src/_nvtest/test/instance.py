@@ -142,7 +142,8 @@ class MultiParameters(Parameters):
         self._keys: list[str] = list(kwargs.keys())
         it = iter(kwargs.values())
         p_len = len(next(it))
-        assert all(len(p) == p_len for p in it)
+        if not all(len(p) == p_len for p in it):
+            raise ValueError(f"{self.__class__.__name__}: all arguments must be the same length")
         self._values: list[Any] = [tuple(_) for _ in kwargs.values()]
 
     def __getitem__(self, arg: key_type) -> Any:
