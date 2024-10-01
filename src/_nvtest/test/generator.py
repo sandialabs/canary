@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
 from typing import Sequence
+from typing import Type
 from typing import Union
 
 from .. import config
-from .. import plugin
 from .. import when as m_when
 from ..error import diff_exit_status
 from ..paramset import ParameterSet
@@ -49,6 +49,12 @@ class TestGenerator(abc.ABC):
     based on a user-defined configuration.
 
     """
+
+    REGISTRY: set[Type["TestGenerator"]] = set()
+
+    def __init_subclass__(cls, **kwargs):
+        cls.REGISTRY.add(cls)
+        return super().__init_subclass__(**kwargs)
 
     def __init__(self, root: str, path: Optional[str] = None) -> None:
         if path is None:
@@ -817,7 +823,7 @@ def load(fname: Union[str, IO[Any]]) -> TestGenerator:
 
 
 def factory(root: str, path: Optional[str] = None) -> TestGenerator:
-    for gen_type in plugin.test_generators():
+    for gen_type in TestGenerator.REGISTRY:
         if gen_type.matches(root if path is None else path):
             return gen_type(root, path=path)
     f = root if path is None else os.path.join(root, path)

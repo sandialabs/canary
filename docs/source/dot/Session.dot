@@ -2,189 +2,220 @@ digraph G {
 
 bgcolor=transparent;
 overlap=compress;
-rankdir=LR;
+layout=dot;
+splines=ortho;
+rankdir=TB;
 
 node[
   fontname=Monaco,
   penwidth=1,
-  fontsize=10,
+  fontsize=12,
   margin=.1,
   shape=box,
   style="filled"
 ]
 
+
 root [
   label="TestResults",
   imagescale=both,
+  fontsize=25
   fixedsize=true,
   width=3,
   height=3,
   fillcolor="transparent",
   image="FolderIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
-centered_space [
-  label="centered_space",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FolderIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
-centered_space_pyt [
-  label="centered_space.pyt@",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FileIcon.png",
   style="",
   pad=0,
   penwidth=0
 ]
 
-centered_space_1 [
-  label="centered_space.a=-10.b=0",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FolderIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
-centered_space_1_pyt [
-  label="centered_space.pyt@",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FileIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
+{
+  rank=same
+  centered_space [
+    label="centered_space",
+    imagescale=both,
+    fixedsize=true,
+    fontsize=20
+    width=3,
+    height=3,
+    fillcolor="transparent",
+    image="FolderIcon.png",
+    style="",
+    pad=0,
+    penwidth=0
+  ]
+  centered_space_1 [
+    label="centered_space.a=-10.b=0",
+    imagescale=both,
+    fixedsize=true,
+    width=3,
+    height=3,
+    fillcolor="transparent",
+    image="FolderIcon.png",
+    style="",
+    pad=0,
+    penwidth=0
+  ]
+  centered_space_2 [
+    label="centered_space.a=-10.b=0",
+    imagescale=both,
+    fixedsize=true,
+    width=3,
+    height=3,
+    fillcolor="transparent",
+    image="FolderIcon.png",
+    style="",
+    pad=0,
+    penwidth=0
+  ]
+  centered_space_3 [
+    label="centered_space.a=-10.b=0",
+    imagescale=both,
+    fixedsize=true,
+    width=3,
+    height=3,
+    fillcolor="transparent",
+    image="FolderIcon.png",
+    style="",
+    pad=0,
+    penwidth=0
+  ]
+  centered_space_4 [
+    label="centered_space.a=-10.b=0",
+    imagescale=both,
+    fixedsize=true,
+    width=3,
+    height=3,
+    fillcolor="transparent",
+    image="FolderIcon.png",
+    style="",
+    pad=0,
+    penwidth=0
+  ]
+  centered_space_5 [
+    label="centered_space.a=-10.b=0",
+    imagescale=both,
+    fixedsize=true,
+    width=3,
+    height=3,
+    fillcolor="transparent",
+    image="FolderIcon.png",
+    style="",
+    pad=0,
+    penwidth=0
+  ]
+}
 
-centered_space_2 [
-  label="centered_space.a=-10.b=0",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FolderIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
-centered_space_2_pyt [
-  label="centered_space.pyt@",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FileIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
+{
+  root_point [shape=point width=0]
+}
+{
+  rank=same
+  point_0 [shape=point width=0]
+  point_1 [shape=point width=0]
+  point_2 [shape=point width=0]
+  point_m [shape=point width=0]
+  point_3 [shape=point width=0]
+  point_4 [shape=point width=0]
+  point_5 [shape=point width=0]
+  point_0 -> point_1 -> point_2 -> point_m -> point_3 -> point_4 -> point_5 [arrowhead=none]
+}
 
-centered_space_3 [
-  label="centered_space.a=-10.b=0",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FolderIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
-centered_space_3_pyt [
-  label="centered_space.pyt@",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FileIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
+root -> root_point [arrowhead=none]
+root_point -> point_m [arrowhead=none]
+
+point_0 -> centered_space [weight=20]
+point_1 -> centered_space_1 [weight=20]
+point_2 -> centered_space_2 [weight=20]
+point_3 -> centered_space_3 [weight=20]
+point_4 -> centered_space_4 [weight=20]
+point_5 -> centered_space_5 [weight=20]
+
+{
+  centered_space_pyt [
+    label="centered_space.pyt@",
+    imagescale=both,
+    fixedsize=true,
+    width=3,
+    height=3,
+    fillcolor="transparent",
+    image="FileIcon.png",
+    style="",
+    pad=0,
+    penwidth=0
+  ]
+
+  centered_space_1_pyt [
+    label="centered_space.pyt@",
+    imagescale=both,
+    fixedsize=true,
+    width=3,
+    height=3,
+    fillcolor="transparent",
+    image="FileIcon.png",
+    style="",
+    pad=0,
+    penwidth=0
+  ]
+
+  centered_space_2_pyt [
+    label="centered_space.pyt@",
+    imagescale=both,
+    fixedsize=true,
+    width=3,
+    height=3,
+    fillcolor="transparent",
+    image="FileIcon.png",
+    style="",
+    pad=0,
+    penwidth=0
+  ]
+
+  centered_space_3_pyt [
+    label="centered_space.pyt@",
+    imagescale=both,
+    fixedsize=true,
+    width=3,
+    height=3,
+    fillcolor="transparent",
+    image="FileIcon.png",
+    style="",
+    pad=0,
+    penwidth=0
+  ]
 
 
-centered_space_4 [
-  label="centered_space.a=-10.b=0",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FolderIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
-centered_space_4_pyt [
-  label="centered_space.pyt@",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FileIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
+  centered_space_4_pyt [
+    label="centered_space.pyt@",
+    imagescale=both,
+    fixedsize=true,
+    width=3,
+    height=3,
+    fillcolor="transparent",
+    image="FileIcon.png",
+    style="",
+    pad=0,
+    penwidth=0
+  ]
 
-centered_space_5 [
-  label="centered_space.a=-10.b=0",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FolderIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
-centered_space_5_pyt [
-  label="centered_space.pyt@",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FileIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
-root -> centered_space
-centered_space -> centered_space_pyt
-root -> centered_space_1
-centered_space_1 -> centered_space_1_pyt
-root -> centered_space_2
-centered_space_2 -> centered_space_2_pyt
-root -> centered_space_3
-centered_space_3 -> centered_space_3_pyt
-root -> centered_space_4
-centered_space_4 -> centered_space_4_pyt
-root -> centered_space_5
-centered_space_5 -> centered_space_5_pyt
+  centered_space_5_pyt [
+    label="centered_space.pyt@",
+    imagescale=both,
+    fixedsize=true,
+    width=3,
+    height=3,
+    fillcolor="transparent",
+    image="FileIcon.png",
+    style="",
+    pad=0,
+    penwidth=0
+  ]
+  centered_space -> centered_space_pyt
+  centered_space_1 -> centered_space_1_pyt
+  centered_space_2 -> centered_space_2_pyt
+  centered_space_3 -> centered_space_3_pyt
+  centered_space_4 -> centered_space_4_pyt
+  centered_space_5 -> centered_space_5_pyt
+}
 }

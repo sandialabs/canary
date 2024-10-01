@@ -5,24 +5,14 @@ import json
 import os
 import sys
 from argparse import Namespace
-from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
 from typing import Generator
 from typing import Optional
-from typing import Type
 
 from .util import logging
 from .util.entry_points import get_entry_points
 from .util.singleton import Singleton
-
-if TYPE_CHECKING:
-    from .test.generator import TestGenerator
-
-
-# need to be able to create the manager on the fly
-# when created it should load builtin and from plugins
-# when loaded from directory, save the directory
 
 
 class PluginHook:
@@ -41,7 +31,6 @@ class PluginHook:
 class Manager:
     def __init__(self) -> None:
         self._plugins: dict[str, dict[str, list[PluginHook]]] = {}
-        self._generators: list[Type["TestGenerator"]] = []
         self._args: Optional[Namespace] = None
         self.state: dict[str, Any] = {}
         self.state["files"] = set()
@@ -53,12 +42,6 @@ class Manager:
         if not self.state["builtins_loaded"]:
             self.load_builtin()
         return self._plugins
-
-    @property
-    def generators(self):
-        if not self.state["builtins_loaded"]:
-            self.load_builtin()
-        return self._generators
 
     def getstate(self) -> dict[str, Any]:
         state: dict[str, Any] = dict(self.state)
@@ -102,9 +85,6 @@ class Manager:
 
     def set_args(self, arg: Namespace) -> None:
         self._args = arg
-
-    def register_test_generator(self, obj: Type["TestGenerator"]) -> None:
-        self.generators.append(obj)
 
     def register(self, func: Callable, scope: str, stage: str, **kwds: str) -> None:
         name = func.__name__
@@ -255,14 +235,6 @@ def register(*, scope: str, stage: str, **kwds: str):
         return wrapper
 
     return decorator
-
-
-def test_generator(hook: Callable) -> None:
-    _manager.register_test_generator(hook)
-
-
-def test_generators() -> list[Type["TestGenerator"]]:
-    return _manager.generators
 
 
 def load_builtin_plugins(disable: Optional[list[str]] = None) -> None:

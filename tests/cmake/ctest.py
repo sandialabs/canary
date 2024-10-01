@@ -45,18 +45,18 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         assert len(cases) == 2
 
         case = cases[0]
-        assert case._cpus == 5
-        assert case._gpus == 5
-        assert "foo" in case._keywords
-        assert "baz" in case._keywords
+        assert case.cpus == 5
+        assert case.gpus == 5
+        assert "foo" in case.keywords
+        assert "baz" in case.keywords
         assert case.variables["CTEST_NUM_RANKS"] == "5"
         assert case.variables["SPAM"] == "BAZ"
 
         case = cases[1]
         assert case.launcher.endswith("mpiexec")
-        assert case._cpus == 4
-        assert "foo" in case._keywords
-        assert "spam" in case._keywords
+        assert case.cpus == 4
+        assert "foo" in case.keywords
+        assert "spam" in case.keywords
         assert case.variables["CTEST_NUM_RANKS"] == "5"
         assert case.variables["EGGS"] == "SPAM"
 
@@ -80,6 +80,6 @@ def test_parse_ctesttestfile_1(tmpdir):
             cases = file.freeze()
             assert len(cases) == 1
             case = cases[0]
-            assert case._cpus == 4
-            assert "foo" in case._keywords
-            assert "baz" in case._keywords
+            assert case.cpus == 4
+            assert "foo" in case.keywords
+            assert "baz" in case.keywords

@@ -11,7 +11,7 @@ from _nvtest._version import version as nvtest_version
 from _nvtest.config.machine import machine_config
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
-from _nvtest.test.case import loadstate as load_testcase_state
+from _nvtest.test.case import factory as testcase_factory
 from _nvtest.util import cdash
 from _nvtest.util import logging
 from _nvtest.util.filesystem import mkdirp
@@ -45,7 +45,8 @@ class CDashReporter(Reporter):
         cases: dict[str, TestCase] = {}
         for id in ts.static_order():
             state = data[id]
-            case = load_testcase_state(state)
+            case = testcase_factory(state.pop("type"))
+            case.setstate(state)
             for i, dep in enumerate(case.dependencies):
                 case.dependencies[i] = cases[dep.id]
             cases[id] = case

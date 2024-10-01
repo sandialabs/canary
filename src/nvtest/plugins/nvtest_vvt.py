@@ -513,9 +513,6 @@ def get_vvtest_attrs(case: "TestCase", baseline: bool = False, analyze: bool = F
     return attrs
 
 
-nvtest.plugin.test_generator(VVTTestFile)
-
-
 def write_vvtest_util(case: "TestCase", baseline: bool = False, analyze: bool = False) -> None:
     if not case.file_path.endswith(".vvt"):
         return

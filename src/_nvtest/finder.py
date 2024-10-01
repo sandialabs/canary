@@ -5,7 +5,6 @@ from itertools import repeat
 from typing import Any
 from typing import Optional
 from typing import TextIO
-from typing import Type
 
 from . import config
 from . import plugin
@@ -93,8 +92,6 @@ class Finder:
                 return True
             return False
 
-        generator_types: list[Type[TestGenerator]] = plugin.test_generators()
-        g_matches = lambda f: any([g.matches(f) for g in generator_types])
         start = root if subdir is None else os.path.join(root, subdir)
         paths: list[tuple[str, str]] = []
         for dirname, dirs, files in os.walk(start):
@@ -105,7 +102,7 @@ class Finder:
                 [
                     (root, os.path.relpath(os.path.join(dirname, f), root))
                     for f in files
-                    if g_matches(f)
+                    if any([g.matches(f) for g in TestGenerator.REGISTRY])
                 ]
             )
         generators: list[TestGenerator]
@@ -268,7 +265,7 @@ class Finder:
 
 
 def is_test_file(file: str) -> bool:
-    for generator in plugin.test_generators():
+    for generator in TestGenerator.REGISTRY:
         if generator.matches(file):
             return True
     return False
@@ -280,7 +277,7 @@ def freeze_abstract_file(file: TestGenerator, kwds: dict) -> list[TestCase]:
 
 
 def find(path: str) -> TestGenerator:
-    for gen_type in plugin.test_generators():
+    for gen_type in TestGenerator.REGISTRY:
         if gen_type.matches(path):
             return gen_type(path)
     raise TypeError(f"No test generator for {path}")

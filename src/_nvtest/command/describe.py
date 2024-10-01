@@ -18,6 +18,7 @@ def setup_parser(parser: Parser):
 
 
 def describe(args: argparse.Namespace) -> int:
+    return describe_generator(args)
     try:
         return describe_generator(args)
     except Exception:

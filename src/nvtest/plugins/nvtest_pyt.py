@@ -147,6 +147,3 @@ class PYTTestFile(AbstractTestFile):
         flag: Optional[str] = None,
     ) -> None:
         self.m_baseline(arg1, arg2, when=when, flag=flag)
-
-
-nvtest.plugin.test_generator(PYTTestFile)

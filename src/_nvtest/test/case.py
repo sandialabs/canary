@@ -51,6 +51,12 @@ def stringify(arg: Any, float_fmt: Optional[str] = None) -> str:
 class TestCase(Runner):
     _dbfile = "testcase.lock"
 
+    REGISTRY: set[Type["TestCase"]] = set()
+
+    def __init_subclass__(cls, **kwargs):
+        cls.REGISTRY.add(cls)
+        return super().__init_subclass__(**kwargs)
+
     def __init__(
         self,
         file_root: Optional[str] = None,
@@ -941,6 +947,68 @@ class TestCase(Runner):
 
     def teardown(self) -> None: ...
 
+    def dump(self, fname: Union[str, IO[Any]]) -> None:
+        file: IO[Any]
+        own_fh = False
+        if isinstance(fname, str):
+            file = open(fname, "w")
+            own_fh = True
+        else:
+            file = fname
+        state = self.getstate()
+        json.dump(state, file, indent=2)
+        if own_fh:
+            file.close()
+
+    def getstate(self) -> dict[str, Any]:
+        """Return a serializable dictionary from which the test case can be later loaded"""
+        state: dict[str, Any] = {"type": self.__class__.__name__, "name": self.name}
+        properties = state.setdefault("properties", {})
+        for attr, value in self.__dict__.items():
+            private = attr.startswith("_")
+            name = attr[1:] if private else attr
+            if name == "dependencies":
+                value = [dep.getstate() for dep in value]
+            elif name == "status":
+                value = {"value": value.value, "details": value.details}
+            elif name == "paramsets":
+                value = [{"keys": p.keys, "values": p.values} for p in value]
+            elif isinstance(value, (list, dict)):
+                value = value
+            else:
+                if not isinstance(value, (str, float, int, type(None))):
+                    raise TypeError(f"Cannot serialize {name} = {value}")
+            properties[name] = value
+        return state
+
+    def setstate(self, state: dict[str, Any]) -> None:
+        """The reverse of getstate - set the object state from a dict"""
+        # replace values in state with their instantiated objects
+        properties = state["properties"]
+        for name, value in properties.items():
+            if name == "paramsets":
+                properties[name] = [ParameterSet(p["keys"], p["values"]) for p in value]
+            elif name == "dependencies":
+                for i, dep_state in enumerate(value):
+                    value[i] = factory(dep_state.pop("type"))
+                    value[i].setstate(dep_state)
+                properties[name] = value
+            elif name == "status":
+                properties[name] = Status(value["value"], details=value["details"])
+        for name, value in properties.items():
+            if value is None:
+                continue
+            if name == "dependencies":
+                for dep in value:
+                    self.add_dependency(dep)
+            elif name == "cpu_ids":
+                self._cpu_ids = value
+            elif name == "gpu_ids":
+                self._gpu_ids = value
+            else:
+                setattr(self, name, value)
+        return
+
 
 class TestMultiCase(TestCase):
     def __init__(
@@ -1020,85 +1088,29 @@ class TestMultiCase(TestCase):
         return self.run(stage="analyze", analyze=True)
 
 
-def getstate(case: Union[TestCase, TestMultiCase]) -> dict[str, Any]:
-    """Return a serializable dictionary from which the test case can be later loaded"""
-    state: dict[str, Any] = {}
-    obj_class = case.__class__
-    state["type"] = obj_class.__name__
-    state["name"] = case.name
-    properties = state.setdefault("properties", {})
-
-    # convert properties into json serializable objects
-    for attr, value in case.__dict__.items():
-        private = attr.startswith("_")
-        name = attr[1:] if private else attr
-        if name == "dependencies":
-            value = [getstate(dep) for dep in value]
-        elif name == "status":
-            value = {"value": value.value, "details": value.details}
-        elif name == "paramsets":
-            value = [{"keys": p.keys, "values": p.values} for p in value]
-        elif isinstance(value, (list, dict)):
-            value = value
-        else:
-            if not isinstance(value, (str, float, int, type(None))):
-                raise TypeError(f"Cannot serialize {name} = {value}")
-        properties[name] = value
-    return state
-
-
-def loadstate(state: dict[str, Any]) -> Union[TestCase, TestMultiCase]:
+def factory(type: str, **kwargs: Any) -> Union[TestCase, TestMultiCase]:
     """The reverse of getstate - return a test case from a dictionary"""
-    obj_class: Type[Union[TestCase, TestMultiCase]]
-    if state["type"] == "TestCase":
-        obj_class = TestCase
-    elif state["type"] == "TestMultiCase":
-        obj_class = TestMultiCase
+
+    case: Union[TestCase, TestMultiCase]
+    if type == "TestCase":
+        case = TestCase()
     else:
-        raise ValueError(state["type"])
-
-    # replace values in state with their instantiated objects
-    properties = state["properties"]
-    for name, value in properties.items():
-        if name == "paramsets":
-            properties[name] = [ParameterSet(p["keys"], p["values"]) for p in value]
-        elif name == "dependencies":
-            for i, dep_state in enumerate(value):
-                value[i] = loadstate(dep_state)
-            properties[name] = value
-        elif name == "status":
-            properties[name] = Status(value["value"], details=value["details"])
-
-    # update attributes of case from the saved state
-    case = obj_class()
-    for name, value in properties.items():
-        if value is None:
-            continue
-        if name == "dependencies":
-            for dep in value:
-                case.add_dependency(dep)
-        elif name == "cpu_ids":
-            case._cpu_ids = value
-        elif name == "gpu_ids":
-            case._gpu_ids = value
+        for T in TestCase.REGISTRY:
+            if T.__name__ == type:
+                case = T()
+                break
         else:
-            setattr(case, name, value)
-
+            raise ValueError(type)
     return case
 
 
+def getstate(case: Union[TestCase, TestMultiCase]) -> dict[str, Any]:
+    """Return a serializable dictionary from which the test case can be later loaded"""
+    return case.getstate()
+
+
 def dump(case: Union[TestCase, TestMultiCase], fname: Union[str, IO[Any]]) -> None:
-    file: IO[Any]
-    own_fh = False
-    if isinstance(fname, str):
-        file = open(fname, "w")
-        own_fh = True
-    else:
-        file = fname
-    state = getstate(case)
-    json.dump(state, file, indent=2)
-    if own_fh:
-        file.close()
+    case.dump(fname)
 
 
 def load(fname: Union[str, IO[Any]]) -> Union[TestCase, TestMultiCase]:
@@ -1112,7 +1124,8 @@ def load(fname: Union[str, IO[Any]]) -> Union[TestCase, TestMultiCase]:
     else:
         file = fname
     state = json.load(file)
-    case = loadstate(state)
+    case = factory(state.pop("type"))
+    case.setstate(state)
     if own_fh:
         file.close()
     return case

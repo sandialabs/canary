@@ -2,7 +2,7 @@ import os
 
 import _nvtest.test.instance as inst
 from _nvtest.finder import Finder
-from _nvtest.test.case import TestMultiCase
+from _nvtest.test.case import TestMultiCase as TMC
 from _nvtest.util.filesystem import mkdirp
 from _nvtest.util.filesystem import working_dir
 
@@ -27,7 +27,7 @@ def test_instance_deps(tmpdir):
     for case in cases:
         case.setup(exec_root=exec_root)
         instance = inst.TestInstance.from_case(case)
-        if isinstance(case, TestMultiCase):
+        if isinstance(case, TMC):
             assert instance.parameters.a == (0, 2, 4, 0, 2, 4)
             assert instance.parameters.b == (1, 3, 5, 1, 3, 5)
             assert instance.parameters.np == (1, 1, 1, 2, 2, 2)

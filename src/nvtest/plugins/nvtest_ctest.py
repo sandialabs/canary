@@ -57,7 +57,10 @@ class CTestTestFile(TestGenerator):
             logging.warning("cmake not found, test cases cannot be generated")
             return []
         tests = self.parse()
-        cases = [CTestTestCase(self.root, self.path, name, **td) for name, td in tests.items()]
+        cases = [
+            CTestTestCase(file_root=self.root, file_path=self.path, family=family, **td)
+            for family, td in tests.items()
+        ]
         return cases  # type: ignore
 
     def describe(
@@ -213,55 +216,70 @@ def split_vars(string: str) -> dict[str, str]:
 class CTestTestCase(TestCase):
     def __init__(
         self,
-        root: str,
-        path: str,
-        name: str,
         *,
-        args: list[str],
+        file_root: Optional[str] = None,
+        file_path: Optional[str] = None,
+        family: Optional[str] = None,
+        args: Optional[list[str]] = None,
         working_directory: Optional[str] = None,
-        will_fail: Optional[bool] = False,
-        timeout: float = 10.0,
+        will_fail: Optional[bool] = None,
+        timeout: Optional[float] = None,
         environment: Optional[dict[str, str]] = None,
         labels: Optional[list[str]] = None,
         processors: Optional[int] = None,
         resource_groups: Optional[list[str]] = None,
         **kwds,
     ) -> None:
-        directory = os.path.join(root, os.path.dirname(path))
-        with nvtest.filesystem.working_dir(directory):
-            ns = parse_test_args(args)
-
-        keywords = ["unit", "ctest"]
-        if labels:
-            keywords.extend(labels)
-
         super().__init__(
-            root,
-            path,
-            family=name,
-            keywords=keywords,
-            timeout=timeout,
-            xstatus=0 if not will_fail else -1,
-            sources={"link": [(ns.command, os.path.basename(ns.command))]},
+            file_root=file_root,
+            file_path=file_path,
+            family=family,
+            keywords=labels,
+            timeout=timeout or 10.0,
         )
-        self.launcher = ns.launcher
-        self.preflags = ns.preflags
-        self.command = ns.command
-        self.postflags = ns.postflags
-        self._cpus: int = 1
-        if processors:
-            self._cpus = processors
+        self._resource_groups: Optional[list[str]] = None
+
+        if args is not None:
+            directory = os.path.join(self.file_root, os.path.dirname(self.file_path))
+            with nvtest.filesystem.working_dir(directory):
+                ns = parse_test_args(args)
+
+            self.sources = {"link": [(ns.command, os.path.basename(ns.command))]}
+            self.launcher = ns.launcher
+            self.preflags = ns.preflags
+            self.command = ns.command
+            self.postflags = ns.postflags
+
+        if will_fail:
+            self.xstatus = -1
+
+        if "unit" not in self.keywords:
+            self.keywords.append("unit")
+        if "ctest" not in self.keywords:
+            self.keywords.append("ctest")
+
+        if processors is not None:
+            self.parameters["np"] = processors
         elif self.preflags:
-            self._cpus = parse_np(self.preflags)
-        if environment:
+            self.parameters["np"] = parse_np(self.preflags)
+
+        if environment is not None:
             self.add_default_env(**environment)
 
-        self._gpus: int = 0
-        if resource_groups:
-            self.read_resource_groups(resource_groups)
+        if resource_groups is not None:
+            self.resource_groups = resource_groups
 
-    def read_resource_groups(self, resource_groups: list[str]) -> None:
-        for rg in resource_groups:
+    @property
+    def resource_groups(self) -> list[str]:
+        return self._resource_groups or []
+
+    @resource_groups.setter
+    def resource_groups(self, arg: list[str]) -> None:
+        self._resource_groups = arg
+        self.read_resource_groups()
+
+    def read_resource_groups(self) -> None:
+        for rg in self.resource_groups:
             groups = rg.split(",")
             n = 1
             if match := re.search(r"[0-9]+", groups[0]):
@@ -269,18 +287,12 @@ class CTestTestCase(TestCase):
                 groups = groups[1:]
             for group in groups:
                 if group.startswith("gpus:"):
-                    self._gpus += int(group[5:]) * n
+                    gpus = self.parameters.setdefault("ngpu", 0)
+                    gpus += int(group[5:]) * n
+                    self.parameters["ngpu"] = gpus
 
     def run(self, *args, **kwargs):
         return super().run(*args, **kwargs)
-
-    @property
-    def cpus(self) -> int:
-        return self._cpus
-
-    @property
-    def gpus(self) -> int:
-        return self._gpus
 
 
 class CMakeCache(dict):
@@ -357,6 +369,3 @@ def parse_np(args: list[str]) -> int:
         elif match := re.search("^--np=([0-9]+)$", arg):
             return int(match.group(1))
     return 1
-
-
-nvtest.plugin.test_generator(CTestTestFile)
