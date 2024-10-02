@@ -52,10 +52,17 @@ def setup_parser(parser: "Parser"):
     )
     group.add_argument(
         "-r",
-        metavar="{b, v}",
         choices=("b", "v"),
-        help="During test execution, show progress bar (``-rb``, default) or print each "
-        "test case as it starts/finishes of every case (``-rv``)",
+        help=argparse.SUPPRESS,
+    )
+    group.add_argument(
+        "-v",
+        metavar="level",
+        choices=(0, 1),
+        default=1,
+        type=int,
+        help="Level of test execution verbosity.  If -v1 (default) report the start/finish/status "
+        "of each test case, if -v0, show only a status bar",
     )
     parser.add_argument(
         "-u", "--until", choices=("discover", "freeze", "populate"), help=argparse.SUPPRESS
@@ -158,7 +165,12 @@ def run(args: "argparse.Namespace") -> int:
         assert args.mode == "b"
         session = Session(args.work_tree, mode="a")
         cases = session.bfilter(lot_no=args.lot_no, batch_no=args.batch_no)
-    output = OutputLevel(args.r)
+    output = OutputLevel(level=args.v)
+    if args.r:
+        # old flag
+        logging.debug("prefer -v over -r")
+        level = OutputLevel.progress_bar if args.r == "b" else OutputLevel.verbose
+        output.level = level
     try:
         session.exitstatus = session.run(
             cases,

@@ -185,9 +185,10 @@ class TestCase(Runner):
         return self._exec_root
 
     @exec_root.setter
-    def exec_root(self, arg: str) -> None:
-        assert os.path.exists(arg)
-        self._exec_root = arg
+    def exec_root(self, arg: Optional[str]) -> None:
+        if arg is not None:
+            assert os.path.exists(arg)
+            self._exec_root = arg
 
     @property
     def exec_path(self) -> str:
@@ -998,7 +999,7 @@ class TestCase(Runner):
                 self._cpu_ids = value
             elif name == "gpu_ids":
                 self._gpu_ids = value
-            else:
+            elif value is not None:
                 setattr(self, name, value)
         return
 

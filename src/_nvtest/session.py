@@ -74,24 +74,8 @@ class OutputLevel:
     progress_bar = 0
     verbose = 1
 
-    def __init__(self, key: Optional[Union[int, str]] = None):
-        self.level: int
-        if key is None:
-            self.level = self.verbose if config.get("config:debug") else self.progress_bar
-        elif isinstance(key, str):
-            if key in ("verbose", "v"):
-                self.level = self.verbose
-            elif key in ("progress_bar", "b"):
-                self.level = self.progress_bar
-            else:
-                raise ValueError(f"{key} not in OutputLevel")
-        else:
-            if key == 1:
-                self.level = self.verbose
-            elif key == 0:
-                self.level = self.progress_bar
-            else:
-                raise ValueError(f"{key} not in OutputLevel")
+    def __init__(self, level: int = 1) -> None:
+        self.level = max(0, min(level, 1))
 
     def __eq__(self, other) -> bool:
         if isinstance(other, OutputLevel):
