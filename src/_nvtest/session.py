@@ -190,29 +190,32 @@ class Session:
         logging.debug(f"Loading test session in {self.root}")
         with open(os.path.join(self.config_dir, "config")) as fh:
             config.load(fh)
-        d = self.db.join_path("cases")
-        self.cases = [load_testcase(p) for p in glob.glob(os.path.join(d, "*/*"))]
+        logging.debug("Loading test generators")
         with self.db.open("files", "r") as record:
             self.generators = [load_testfile_state(state) for state in json.load(record)]
+        d = self.db.join_path("cases")
+        logging.debug("Loading test cases")
+        self.cases.clear()
+        for file in glob.glob(os.path.join(d, "*/*")):
+            case = load_testcase(file)
+            self.cases.append(case)
+        logging.debug("Loading snapshots")
         snapshots = self.load_snapshots()
+        case_map: dict[str, TestCase] = {}
         for case in self.cases:
             snapshot = snapshots.get(case.id)
             if snapshot is not None:
                 case.update(**snapshot)
+                case_map[case.id] = case
+        logging.debug("Loading session configuration")
         with self.db.open("session", "r") as record:
             data = json.load(record)
         for var, val in data.items():
             setattr(self, var, val)
 
-        ts: TopologicalSorter = TopologicalSorter()
+        logging.debug("Resolving dependencies")
         for case in self.cases:
-            ts.add(case, *case.dependencies)
-        cases: dict[str, TestCase] = {}
-        for case in ts.static_order():
-            if case.exec_root is None:
-                case.exec_root = self.root
-            case.dependencies = [cases[dep.id] for dep in case.dependencies]
-            cases[case.id] = case
+            case.dependencies = [case_map[dep.id] for dep in case.dependencies]
         self.set_config_values()
 
     def initialize(self) -> None:
@@ -459,20 +462,35 @@ class Session:
         """Mask any test cases not in batch number ``batch_no`` from batch lot ``lot_no``"""
         batch_info = self.db.load_json(f"batches/{lot_no}/index")
         batch_case_ids = batch_info[str(batch_no)]
+        expected = len(batch_case_ids)
+        logging.info(f"Selecting {expected} tests from batch {lot_no}:{batch_no}")
         for case in self.cases:
             if case.id in batch_case_ids:
                 assert not case.mask, case.mask
                 if not case.dependencies:
                     case.status.set("ready")
+                elif all(_.status.value in ("success", "diff") for _ in case.dependencies):
+                    case.status.set("ready")
                 elif all(_.id in batch_case_ids for _ in case.dependencies):
                     case.status.set("pending")
-                elif any([_.status.value not in ("diff", "success") for _ in case.dependencies]):
-                    reason = "one or more dependencies failed"
-                    case.status.set("skipped", reason)
-                    case.save()
-                    case.mask = reason
                 else:
+                    failed_deps: list[TestCase] = []
                     case.status.set("pending")
+                    for dep in case.dependencies:
+                        if dep.status == "success":
+                            continue
+                        elif dep.status == "ready" and dep.id in batch_case_ids:
+                            continue
+                        else:
+                            failed_deps.append(dep)
+                    if failed_deps:
+                        logging.warning(
+                            f"Not running {case} because the following dependencies failed:"
+                        )
+                        for dep in failed_deps:
+                            logging.emit(f"  - {dep} [id={dep.id}, status={dep.status.value}]\n")
+                        case.status.set("not_run", "one or more dependencies failed")
+                        case.mask = case.status.details
             else:
                 case.mask = f"Case not in batch {lot_no}:{batch_no}"
         return [case for case in self.cases if not case.mask]
