@@ -6,9 +6,8 @@ from typing import Union
 
 from . import config
 from .resources import ResourceHandler
-from .test.batch import Batch
+from .test.batch import BatchRunner
 from .test.batch import factory as b_factory
-from .test.batch import validate as b_validate
 from .test.case import TestCase
 from .third_party import color
 from .third_party.rprobe import cpu_count
@@ -138,7 +137,7 @@ class ResourceQueue:
         for key in keys:
             self._notrun[key] = self.buffer.pop(key)
 
-    def get(self) -> Optional[tuple[int, Union[TestCase, Batch]]]:
+    def get(self) -> Optional[tuple[int, Union[TestCase, BatchRunner]]]:
         with self.lock:
             if self.available_workers() <= 0:
                 return None
@@ -273,7 +272,6 @@ class BatchResourceQueue(ResourceQueue):
         scheduler = self.rh["batch:scheduler"]
         if scheduler is None:
             raise ValueError("BatchResourceQueue requires a scheduler")
-        b_validate(scheduler)
         self.scheduler: str = str(scheduler)
         self.tmp_buffer: list[TestCase] = []
 
@@ -291,7 +289,7 @@ class BatchResourceQueue(ResourceQueue):
             partitions = partition_t(self.tmp_buffer, t=length)
         n = len(partitions)
         batches = [
-            b_factory(p, i, n, lot_no, scheduler=self.scheduler)
+            b_factory(p, i, n, lot_no, type=self.scheduler)
             for i, p in enumerate(partitions, start=1)
             if len(p)
         ]
@@ -316,7 +314,7 @@ class BatchResourceQueue(ResourceQueue):
                     if dep.id in finished:
                         case.dependencies[i] = finished[dep.id]
 
-    def done(self, obj_no: int) -> Batch:
+    def done(self, obj_no: int) -> BatchRunner:
         with self.lock:
             if obj_no not in self._busy:
                 raise RuntimeError(f"batch {obj_no} is not running")
@@ -359,16 +357,16 @@ class BatchResourceQueue(ResourceQueue):
         cases.extend([case for batch in self._notrun.values() for case in batch])
         return cases
 
-    def queued(self) -> list[Batch]:
+    def queued(self) -> list[BatchRunner]:
         return list(self.buffer.values())
 
-    def busy(self) -> list[Batch]:
+    def busy(self) -> list[BatchRunner]:
         return list(self._busy.values())
 
-    def finished(self) -> list[Batch]:
+    def finished(self) -> list[BatchRunner]:
         return list(self._finished.values())
 
-    def notrun(self) -> list[Batch]:
+    def notrun(self) -> list[BatchRunner]:
         return list(self._notrun.values())
 
 

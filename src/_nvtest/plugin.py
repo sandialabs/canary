@@ -41,6 +41,8 @@ class Manager:
     def plugins(self):
         if not self.state["builtins_loaded"]:
             self.load_builtin()
+        if not self.state["entry_points_loaded"]:
+            self.load_from_entry_points()
         return self._plugins
 
     def getstate(self) -> dict[str, Any]:
@@ -51,13 +53,12 @@ class Manager:
     def loadstate(self, state: dict[str, Any]) -> None:
         for file in state["files"]:
             self.load_from_file(file)
-        if state["entry_points_loaded"]:
-            self.load_from_entry_points(disable=state.get("disabled_entry_points"))
         # we don't need to load the builtins since they were done above with the files
         self.state["builtins_loaded"] = state["builtins_loaded"]
         if "disabled_builtins" in state:
             self.state["disabled_builtins"] = state["disabled_builtins"]
-        self.state.update(state)
+        if state["entry_points_loaded"]:
+            self.load_from_entry_points(disable=state.get("disabled_entry_points"))
 
     def load_builtin(self, disable: Optional[list[str]] = None) -> None:
         if self.state["builtins_loaded"]:

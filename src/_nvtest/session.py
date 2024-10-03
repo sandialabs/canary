@@ -32,7 +32,7 @@ from .queues import Empty as EmptyQueue
 from .queues import ResourceQueue
 from .queues import factory as q_factory
 from .resources import ResourceHandler
-from .test.batch import Batch
+from .test.batch import BatchRunner
 from .test.case import TestCase
 from .test.case import TestMultiCase
 from .test.case import from_state as testcase_from_state
@@ -730,9 +730,9 @@ class Session:
         # The case (or batch) was run in a subprocess.  The object must be
         # refreshed so that the state in this main thread is up to date.
 
-        obj: Union[TestCase, Batch] = queue.done(iid)
-        if not isinstance(obj, (Batch, TestCase)):
-            logging.error(f"Expected TestCase or Batch, got {obj.__class__.__name__}")
+        obj: Union[TestCase, BatchRunner] = queue.done(iid)
+        if not isinstance(obj, (BatchRunner, TestCase)):
+            logging.error(f"Expected TestCase or BatchRunner, got {obj.__class__.__name__}")
             return
         obj.refresh()
 
@@ -743,7 +743,7 @@ class Session:
                 code = compute_returncode([obj])
                 raise FailFast(str(obj), code)
         else:
-            assert isinstance(obj, Batch)
+            assert isinstance(obj, BatchRunner)
             if all(case.status == "retry" for case in obj):
                 queue.retry(iid)
                 return
