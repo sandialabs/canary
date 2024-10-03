@@ -317,8 +317,8 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         elif match := re.search(r"^batch:(count|workers)[:=](\d+)$", arg):
             type, raw = match.groups()
             return (f"batch:{type}", int(raw))
-        elif match := re.search(r"^batch:scheduler[:=](\w+)$", arg):
-            raw = match.group(1)
+        elif match := re.search(r"^batch:(scheduler|type)[:=](\w+)$", arg):
+            raw = match.group(2)
             return ("batch:scheduler", str(raw))
         elif match := re.search(r"^batch:args[:=](.*)$", arg):
             raw = strip_quotes(match.group(1))

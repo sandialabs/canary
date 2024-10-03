@@ -1,7 +1,6 @@
 """Setup and manage the test session"""
 
 import datetime
-import glob
 import io
 import json
 import os
@@ -35,10 +34,10 @@ from .queues import factory as q_factory
 from .resources import ResourceHandler
 from .test.batch import Batch
 from .test.case import TestCase
-from .test.case import load as load_testcase
+from .test.case import TestMultiCase
+from .test.case import from_state as testcase_from_state
 from .test.generator import TestGenerator
-from .test.generator import getstate as get_testfile_state
-from .test.generator import loadstate as load_testfile_state
+from .test.generator import from_state as testfile_from_state
 from .test.status import Status
 from .third_party import color
 from .util import glyphs
@@ -155,12 +154,29 @@ class Session:
                 break
         return None
 
-    def load_snapshots(self) -> dict[str, dict]:
+    def dump_attrs(self, file: IO[Any]) -> None:
+        attrs: dict[str, Any] = {}
+        for var, value in vars(self).items():
+            if var not in ("generators", "cases", "db"):
+                attrs[var] = value
+        json.dump(attrs, file, indent=2)
+
+    def load_attrs(self, file: IO[Any]) -> None:
+        attrs = json.load(file)
+        for var, value in attrs.items():
+            setattr(self, var, value)
+
+    def dump_snapshots(self, file: IO[Any]) -> None:
+        logging.debug("Dumping test case snapshots")
+        for case in self.cases:
+            self.dump_snapshot(case, file)
+
+    def load_snapshots(self, file: IO[Any]) -> dict[str, dict]:
+        logging.debug("Loading test case snapshots")
         snapshots: dict[str, dict] = {}
-        with self.db.open("cases/snapshot", "r") as record:
-            for line in record:
-                snapshot = json.loads(line)
-                snapshots[snapshot["id"]] = snapshot
+        for line in file:
+            snapshot = json.loads(line)
+            snapshots[snapshot["id"]] = snapshot
         return snapshots
 
     def dump_snapshot(self, case: TestCase, file: IO[Any]) -> None:
@@ -174,9 +190,55 @@ class Session:
         }
         file.write(json.dumps(snapshot) + "\n")
 
-    def save_case_to_db(self, case: TestCase) -> None:
-        with self.db.open(f"cases/{case.id[:2]}/{case.id[2:]}", "w") as record:
-            case.dump(record)
+    def dump_testcases(self, file: IO[Any]) -> None:
+        logging.debug("Dumping test cases")
+        states: list[dict] = []
+        for case in self.cases:
+            state = case.getstate()
+            props = state["properties"]
+            props["dependencies"] = [dep["properties"]["id"] for dep in props["dependencies"]]
+            props.pop("exec_root", None)
+            states.append(state)
+        json.dump(states, file, indent=2)
+
+    def load_testcases(self, file: IO[Any]) -> list[Union[TestCase, TestMultiCase]]:
+        logging.debug("Loading test cases")
+        states = json.load(file)
+        ts: TopologicalSorter = TopologicalSorter()
+        mapping: dict[str, dict] = {}
+        for state in states:
+            case_id = state["properties"]["id"]
+            ts.add(case_id, *state["properties"]["dependencies"])
+            mapping[case_id] = state
+        cases: dict[str, TestCase] = {}
+
+        logging.debug("Resolving test case dependencies")
+        for case_id in ts.static_order():
+            state = mapping[case_id]
+            state["properties"]["exec_root"] = self.root
+            dependency_ids = state["properties"].pop("dependencies", [])
+            case = testcase_from_state(state)
+            case.dependencies = [cases[dep_id] for dep_id in dependency_ids]
+            cases[case.id] = case
+
+        logging.debug("Updating test case state to latest snapshot")
+        with self.db.open("snapshots", "r") as record:
+            snapshots = self.load_snapshots(record)
+        for case in cases.values():
+            snapshot = snapshots.get(case.id)
+            if snapshot is not None:
+                case.update(**snapshot)
+        return list(cases.values())
+
+    def dump_testfiles(self, file: IO[Any]) -> None:
+        logging.debug("Dumping test case generators")
+        testfiles = [f.getstate() for f in self.generators]
+        json.dump(testfiles, file, indent=2)
+
+    def load_testfiles(self, file: IO[Any]) -> list[TestGenerator]:
+        logging.debug("Loading test case generators")
+        testfiles = [testfile_from_state(state) for state in json.load(file)]
+        return testfiles
 
     def load(self) -> None:
         """Load an existing test session:
@@ -190,32 +252,16 @@ class Session:
         logging.debug(f"Loading test session in {self.root}")
         with open(os.path.join(self.config_dir, "config")) as fh:
             config.load(fh)
-        logging.debug("Loading test generators")
-        with self.db.open("files", "r") as record:
-            self.generators = [load_testfile_state(state) for state in json.load(record)]
-        d = self.db.join_path("cases")
-        logging.debug("Loading test cases")
-        self.cases.clear()
-        for file in glob.glob(os.path.join(d, "*/*")):
-            case = load_testcase(file)
-            self.cases.append(case)
-        logging.debug("Loading snapshots")
-        snapshots = self.load_snapshots()
-        case_map: dict[str, TestCase] = {}
-        for case in self.cases:
-            snapshot = snapshots.get(case.id)
-            if snapshot is not None:
-                case.update(**snapshot)
-                case_map[case.id] = case
-        logging.debug("Loading session configuration")
-        with self.db.open("session", "r") as record:
-            data = json.load(record)
-        for var, val in data.items():
-            setattr(self, var, val)
 
-        logging.debug("Resolving dependencies")
-        for case in self.cases:
-            case.dependencies = [case_map[dep.id] for dep in case.dependencies]
+        with self.db.open("files", "r") as record:
+            self.generators = self.load_testfiles(record)
+
+        with self.db.open("cases", "r") as record:
+            self.cases = self.load_testcases(record)
+
+        with self.db.open("session", "r") as record:
+            self.load_attrs(record)
+
         self.set_config_values()
 
     def initialize(self) -> None:
@@ -259,17 +305,16 @@ class Session:
 
     def save(self, ini: bool = False) -> None:
         """Save session data, exlcuding data that is stored separately in the database"""
-        data: dict[str, Any] = {}
-        for var, value in vars(self).items():
-            if var not in ("generators", "cases", "db"):
-                data[var] = value
-        self.db.save_json("session", data)
+        with self.db.open("session", "w") as record:
+            self.dump_attrs(record)
         if ini:
-            self.db.save_json("options", config.get("option"))
+            with self.db.open("options", "w") as record:
+                json.dump(config.get("option"), record, indent=2)
             file = os.path.join(self.config_dir, "config")
             with open(file, "w") as fh:
                 config.dump(fh)
-            self.db.save_json("plugin", plugin.getstate())
+            with self.db.open("plugin", "w") as record:
+                json.dump(plugin.getstate(), record, indent=2)
 
     def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:
         """Add ``path`` to this session's search paths"""
@@ -300,8 +345,8 @@ class Session:
             hook(self)
         finder.prepare()
         self.generators = finder.discover()
-        files = [get_testfile_state(f) for f in self.generators]
-        self.db.save_json("files", files)
+        with self.db.open("files", "w") as record:
+            self.dump_testfiles(record)
         logging.debug(f"Discovered {len(self.generators)} test files")
 
     def freeze(
@@ -326,11 +371,10 @@ class Session:
         cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
-        with self.db.open("cases/snapshot", "w") as record:
-            for case in self.cases:
-                self.dump_snapshot(case, record)
-        for case in self.cases:
-            self.save_case_to_db(case)
+        with self.db.open("snapshots", "w") as record:
+            self.dump_snapshots(record)
+        with self.db.open("cases", "w") as record:
+            self.dump_testcases(record)
         logging.debug(f"Collected {len(self.cases)} test cases from {len(self.generators)} files")
 
     def populate(self, copy_all_resources: bool = False) -> None:
@@ -366,11 +410,10 @@ class Session:
                     errors += 1
                     logging.error(f"{case}: exec_root not set after setup")
             ts.done(*group)
-        with self.db.open("cases/snapshot", "a") as record:
-            for case in cases:
-                self.dump_snapshot(case, record)
-        for case in cases:
-            self.save_case_to_db(case)
+        with self.db.open("snapshots", "a") as record:
+            self.dump_snapshots(record)
+        with self.db.open("cases", "w") as record:
+            self.dump_testcases(record)
         if errors:
             raise ValueError("Stopping due to previous errors")
 
@@ -460,7 +503,8 @@ class Session:
 
     def bfilter(self, *, lot_no: int, batch_no: int) -> list[TestCase]:
         """Mask any test cases not in batch number ``batch_no`` from batch lot ``lot_no``"""
-        batch_info = self.db.load_json(f"batches/{lot_no}/index")
+        with self.db.open(f"batches/{lot_no}/index", "r") as record:
+            batch_info = json.load(record)
         batch_case_ids = batch_info[str(batch_no)]
         expected = len(batch_case_ids)
         logging.info(f"Selecting {expected} tests from batch {lot_no}:{batch_no}")
@@ -490,7 +534,7 @@ class Session:
                         for dep in failed_deps:
                             logging.emit(f"  - {dep} [id={dep.id}, status={dep.status.value}]\n")
                         case.status.set("not_run", "one or more dependencies failed")
-                        case.mask = case.status.details
+                        case.mask = str(case.status.details)
             else:
                 case.mask = f"Case not in batch {lot_no}:{batch_no}"
         return [case for case in self.cases if not case.mask]
@@ -693,8 +737,7 @@ class Session:
         obj.refresh()
 
         if isinstance(obj, TestCase):
-            self.save_case_to_db(obj)
-            with self.db.open("cases/snapshot", "a") as record:
+            with self.db.open("snapshots", "a") as record:
                 self.dump_snapshot(obj, record)
             if fail_fast and obj.status != "success":
                 code = compute_returncode([obj])
@@ -704,7 +747,8 @@ class Session:
             if all(case.status == "retry" for case in obj):
                 queue.retry(iid)
                 return
-            snapshots = self.load_snapshots()
+            with self.db.open("snapshots") as record:
+                snapshots = self.load_snapshots(record)
             for case in obj:
                 if case.id not in snapshots:
                     logging.error(f"case ID {case.id} not in batch {obj.batch_no}")
@@ -760,8 +804,10 @@ class Session:
             batches: dict[str, list[str]] = {}
             for batch in queue.queued():
                 batches.setdefault(str(batch.batch_no), []).extend([case.id for case in batch])
-            self.db.save_json(f"batches/{lot_no}/index", batches)
-            self.db.save_json(f"batches/{lot_no}/config", rh.data["batch"])
+            with self.db.open(f"batches/{lot_no}/index", "w") as record:
+                json.dump(batches, record, indent=2)
+            with self.db.open(f"batches/{lot_no}/config", "w") as record:
+                json.dump(rh.data["batch"], record, indent=2)
         return queue
 
     def blogfile(self, batch_no: int, lot_no: Optional[int]) -> str:
@@ -793,6 +839,7 @@ class Session:
         skipped = [case for case in cases if case.mask]
         skipped_reasons: dict[str, int] = {}
         for case in skipped:
+            assert case.mask is not None
             skipped_reasons[case.mask] = skipped_reasons.get(case.mask, 0) + 1
         if skipped:
             string.write(color.colorize("@*b{skipping} %d test cases" % len(skipped)) + "\n")

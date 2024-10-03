@@ -1,13 +1,9 @@
 import abc
 import errno
-import json
 import os
-from typing import IO
 from typing import TYPE_CHECKING
-from typing import Any
 from typing import Optional
 from typing import Type
-from typing import Union
 
 from ..resources import ResourceHandler
 from ..test.case import TestCase
@@ -80,33 +76,17 @@ class TestGenerator(abc.ABC):
     ) -> list[TestCase]:
         pass
 
+    def getstate(self) -> dict[str, str]:
+        state: dict[str, str] = {}
+        state["type"] = self.__class__.__name__
+        state["root"] = self.root
+        state["path"] = self.path
+        state["name"] = self.name
+        return state
 
-def getstate(generator: TestGenerator) -> dict[str, str]:
-    state: dict[str, str] = {}
-    state["type"] = generator.__class__.__name__
-    state["root"] = generator.root
-    state["path"] = generator.path
-    state["name"] = generator.name
-    return state
 
-
-def loadstate(state: dict[str, str]) -> TestGenerator:
+def from_state(state: dict[str, str]) -> TestGenerator:
     generator = factory(state["root"], state["path"])
-    return generator
-
-
-def load(fname: Union[str, IO[Any]]) -> TestGenerator:
-    file: IO[Any]
-    own_fh = False
-    if isinstance(fname, str):
-        file = open(fname, "r")
-        own_fh = True
-    else:
-        file = fname
-    state = json.load(file)
-    generator = loadstate(state)
-    if own_fh:
-        file.close()
     return generator
 
 

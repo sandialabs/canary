@@ -104,7 +104,7 @@ class TestCase(Runner):
         if xstatus is not None:
             self.xstatus = xstatus
 
-        self._mask: str = ""
+        self._mask: Optional[str] = None
         self._name: Optional[str] = None
         self._display_name: Optional[str] = None
         self._classname: Optional[str] = None
@@ -379,7 +379,7 @@ class TestCase(Runner):
         self._variables = dict(arg)
 
     @property
-    def mask(self) -> str:
+    def mask(self) -> Optional[str]:
         return self._mask
 
     @mask.setter
@@ -648,7 +648,7 @@ class TestCase(Runner):
     def describe(self, include_logfile_path: bool = False) -> str:
         """Write a string describing the test case"""
         id = colorize("@*b{%s}" % self.id[:7])
-        if self.mask:
+        if self.mask is not None:
             string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.mask)
             return colorize(string)
         string = "%s %s %s" % (self.status.cname, id, self.pretty_repr())
@@ -958,7 +958,7 @@ class TestCase(Runner):
 
     def getstate(self) -> dict[str, Any]:
         """Return a serializable dictionary from which the test case can be later loaded"""
-        state: dict[str, Any] = {"type": self.__class__.__name__, "name": self.name}
+        state: dict[str, Any] = {"type": self.__class__.__name__}
         properties = state.setdefault("properties", {})
         for attr, value in self.__dict__.items():
             private = attr.startswith("_")
@@ -1107,21 +1107,9 @@ def dump(case: Union[TestCase, TestMultiCase], fname: Union[str, IO[Any]]) -> No
     case.dump(fname)
 
 
-def load(fname: Union[str, IO[Any]]) -> Union[TestCase, TestMultiCase]:
-    file: IO[Any]
-    own_fh = False
-    if isinstance(fname, str):
-        if os.path.isdir(fname):
-            fname = os.path.join(fname, TestCase._dbfile)
-        file = open(fname, "r")
-        own_fh = True
-    else:
-        file = fname
-    state = json.load(file)
+def from_state(state: dict[str, Any]) -> Union[TestCase, TestMultiCase]:
     case = factory(state.pop("type"))
     case.setstate(state)
-    if own_fh:
-        file.close()
     return case
 
 

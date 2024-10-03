@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import os
 from typing import Any
 from typing import Generator
@@ -8,7 +9,7 @@ from typing import Union
 
 from .case import TestCase
 from .case import TestMultiCase
-from .case import load as load_testcase
+from .case import from_state as testcase_from_state
 from .status import Status
 
 key_type = Union[tuple[str, ...], str]
@@ -254,7 +255,8 @@ class TestInstance:
         elif arg_path.endswith((".vvt", ".pyt")):
             arg_path = os.path.join(os.path.dirname(arg_path), dbf)
         with open(arg_path, "r") as fh:
-            case = load_testcase(fh)
+            state = json.load(fh)
+            case = testcase_from_state(state)
         return TestInstance.from_case(case)
 
     def get_dependency(self, **params: Any) -> "Optional[TestInstance]":
