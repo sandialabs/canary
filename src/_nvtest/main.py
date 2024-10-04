@@ -4,12 +4,12 @@ import shlex
 import signal
 import sys
 import traceback
-from types import FunctionType
 from typing import Optional
 
 from . import command as cmd
 from . import config
 from . import plugin
+from .command import Command
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
 from .util import logging
@@ -62,14 +62,14 @@ class NVTestCommand:
     def __init__(self, command_name: str, debug: bool = False) -> None:
         from _nvtest.util.executable import Executable
 
-        command_module = cmd.get_command(command_name)
-        if command_module is None:
+        command = cmd.get_command(command_name)
+        if command is None:
             raise ValueError(f"Unknown command {command_name!r}")
         self.python = Executable(sys.executable)
         self.python.add_default_args("-m", "nvtest")
         if debug:
             self.python.add_default_args("-d")
-        self.python.add_default_args(command_name)
+        self.python.add_default_args(command_name.lower())
 
     @property
     def returncode(self) -> int:
@@ -79,8 +79,8 @@ class NVTestCommand:
         self.python(*args, fail_on_error=fail_on_error)
 
 
-def invoke_command(command: FunctionType, args: argparse.Namespace) -> int:
-    return command(args)
+def invoke_command(command: Command, args: argparse.Namespace) -> int:
+    return command.execute(args)
 
 
 class Profiler:

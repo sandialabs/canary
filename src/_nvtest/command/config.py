@@ -1,33 +1,57 @@
+import argparse
 import os
-from typing import TYPE_CHECKING
 
 from .. import config as _config
+from ..config.argparsing import Parser
 from ..session import Session
-
-if TYPE_CHECKING:
-    import argparse
-
-    from ..config.argparsing import Parser
+from .command import Command
 
 
-description = "Show configuration variable values"
+class Config(Command):
+    @property
+    def description(self) -> str:
+        return "Show configuration variable values"
 
+    def setup_parser(self, parser: Parser):
+        sp = parser.add_subparsers(dest="subcommand")
+        p = sp.add_parser("show", help="Show the current configuration")
+        p.add_argument("section", nargs="?", help="Show only this section")
+        p = sp.add_parser("add", help="Show the current configuration")
+        p.add_argument(
+            "--scope",
+            choices=("local", "global", "session"),
+            default="local",
+            help="Configuration scope",
+        )
+        p.add_argument(
+            "path",
+            help="colon-separated path to config to be set, e.g. 'config:debug:true'",
+        )
 
-def setup_parser(parser: "Parser"):
-    sp = parser.add_subparsers(dest="subcommand")
-    p = sp.add_parser("show", help="Show the current configuration")
-    p.add_argument("section", nargs="?", help="Show only this section")
-    p = sp.add_parser("add", help="Show the current configuration")
-    p.add_argument(
-        "--scope",
-        choices=("local", "global", "session"),
-        default="local",
-        help="Configuration scope",
-    )
-    p.add_argument(
-        "path",
-        help="colon-separated path to config to be set, e.g. 'config:debug:true'",
-    )
+    def execute(self, args: "argparse.Namespace") -> int:
+        if Session.find_root(os.getcwd()):
+            Session(os.getcwd(), mode="r")
+        if args.subcommand == "show":
+            text = _config.describe(section=args.section)
+            try:
+                if "NVTEST_MAKE_DOCS" in os.environ:
+                    print(text)
+                else:
+                    pretty_print(text)
+            except ImportError:
+                print(text)
+            return 0
+        elif args.subcommand == "add":
+            _config.add(args.path, scope=args.scope)
+            file = _config.config_file(args.scope)
+            assert file is not None
+            with open(file, "w") as fh:
+                _config.save(fh, scope=args.scope)
+        elif args.command is None:
+            raise ValueError("nvtest config: missing required subcommand (choose from show, add)")
+        else:
+            raise ValueError(f"nvtest config: unknown subcommand: {args.subcommand}")
+        return 1
 
 
 def pretty_print(text: str):
@@ -39,29 +63,3 @@ def pretty_print(text: str):
     formatter = Formatter(bg="dark", style="monokai", linenos=True)
     formatted_text = highlight(text.strip(), lexer, formatter)
     print(formatted_text)
-
-
-def config(args: "argparse.Namespace") -> int:
-    if Session.find_root(os.getcwd()):
-        Session(os.getcwd(), mode="r")
-    if args.subcommand == "show":
-        text = _config.describe(section=args.section)
-        try:
-            if "NVTEST_MAKE_DOCS" in os.environ:
-                print(text)
-            else:
-                pretty_print(text)
-        except ImportError:
-            print(text)
-        return 0
-    elif args.subcommand == "add":
-        _config.add(args.path, scope=args.scope)
-        file = _config.config_file(args.scope)
-        assert file is not None
-        with open(file, "w") as fh:
-            _config.save(fh, scope=args.scope)
-    elif args.command is None:
-        raise ValueError("nvtest config: missing required subcommand (choose from show, add)")
-    else:
-        raise ValueError(f"nvtest config: unknown subcommand: {args.subcommand}")
-    return 1

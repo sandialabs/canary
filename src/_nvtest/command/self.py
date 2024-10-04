@@ -19,68 +19,79 @@ from ..util.filesystem import force_remove
 from ..util.filesystem import mkdirp
 from ..util.filesystem import which
 from ..util.filesystem import working_dir
-
-description = "perform operations on this instance of nvtest"
-add_help = False
+from .command import Command
 
 
-class Add(argparse.Action):
-    def __call__(self, parser, args, values, option_string=None):
-        flags = getattr(args, self.dest, None) or set()
-        flags.add(option_string.lstrip("-"))
-        setattr(args, self.dest, flags)
+class Self(Command):
+    @property
+    def description(self) -> str:
+        return "perform operations on this instance of nvtest"
 
+    @property
+    def add_help(self) -> bool:
+        return False
 
-def setup_parser(parser: Parser):
-    subparsers = parser.add_subparsers(dest="self_subparser", metavar="")
+    def setup_parser(self, parser: Parser):
+        subparsers = parser.add_subparsers(dest="self_subparser", metavar="")
 
-    subparser = subparsers.add_parser(
-        "check",
-        help="Perform pre-commit testing",
-        epilog="-fcmt implied if no other options are passed",
-    )
-    subparser.add_argument(
-        "-f", nargs=0, dest="flags", action=Add, help="Run ruff format on source"
-    )
-    subparser.add_argument(
-        "-c", nargs=0, dest="flags", action=Add, help="Run ruff check --fix on source"
-    )
-    subparser.add_argument("-m", nargs=0, dest="flags", action=Add, help="Run mypy on source")
-    subparser.add_argument("-t", nargs=0, dest="flags", action=Add, help="Run unit tests")
-    subparser.add_argument("-d", nargs=0, dest="flags", action=Add, help="Build documentation")
-    subparser.add_argument("-a", nargs=0, dest="flags", action=Add, help="Same as -mtdfc")
-    subparser.add_argument("-v", action="store_true", dest="verbose_pc", help="Verbose")
+        subparser = subparsers.add_parser(
+            "check",
+            help="Perform pre-commit testing",
+            epilog="-fcmt implied if no other options are passed",
+        )
+        subparser.add_argument(
+            "-f", nargs=0, dest="flags", action=Add, help="Run ruff format on source"
+        )
+        subparser.add_argument(
+            "-c", nargs=0, dest="flags", action=Add, help="Run ruff check --fix on source"
+        )
+        subparser.add_argument("-m", nargs=0, dest="flags", action=Add, help="Run mypy on source")
+        subparser.add_argument("-t", nargs=0, dest="flags", action=Add, help="Run unit tests")
+        subparser.add_argument("-d", nargs=0, dest="flags", action=Add, help="Build documentation")
+        subparser.add_argument("-a", nargs=0, dest="flags", action=Add, help="Same as -mtdfc")
+        subparser.add_argument("-v", action="store_true", dest="verbose_pc", help="Verbose")
 
-    subparser = subparsers.add_parser(
-        "update", help="Update this installation in place with the most current"
-    )
-    subparser.add_argument(
-        "-b",
-        metavar="branch",
-        default="main",
-        help="Use this branch (or committish) to fetch latest version [default: %(default)s]",
-    )
-    subparser.add_argument(
-        "--pip-args",
-        metavar="args",
-        dest="default_pip_args",
-        help="Pass these arguments directly to pip",
-    )
-    subparser.add_argument(
-        "--pip-install-args",
-        metavar="args",
-        dest="default_pip_install_args",
-        help="Pass these arguments directly to pip install",
-    )
+        subparser = subparsers.add_parser(
+            "update", help="Update this installation in place with the most current"
+        )
+        subparser.add_argument(
+            "-b",
+            metavar="branch",
+            default="main",
+            help="Use this branch (or committish) to fetch latest version [default: %(default)s]",
+        )
+        subparser.add_argument(
+            "--pip-args",
+            metavar="args",
+            dest="default_pip_args",
+            help="Pass these arguments directly to pip",
+        )
+        subparser.add_argument(
+            "--pip-install-args",
+            metavar="args",
+            dest="default_pip_install_args",
+            help="Pass these arguments directly to pip install",
+        )
 
-    subparser = subparsers.add_parser("mkdocs", help="Make nvtest documents")
-    subparser.add_argument("what", nargs="?", default="html")
-    subparser.add_argument(
-        "-c", action="store_true", dest="clean_first", help="Run make clean first"
-    )
+        subparser = subparsers.add_parser("mkdocs", help="Make nvtest documents")
+        subparser.add_argument("what", nargs="?", default="html")
+        subparser.add_argument(
+            "-c", action="store_true", dest="clean_first", help="Run make clean first"
+        )
 
-    subparser = subparsers.add_parser("autodoc", help="Generate rst documentation files")
-    subparser.add_argument("dest", help="Destination folder to write documentation")
+        subparser = subparsers.add_parser("autodoc", help="Generate rst documentation files")
+        subparser.add_argument("dest", help="Destination folder to write documentation")
+
+    def execute(self, args: argparse.Namespace) -> int:
+        if args.self_subparser == "check":
+            return pre_commit(args)
+        elif args.self_subparser == "update":
+            return update(args)
+        elif args.self_subparser == "mkdocs":
+            return mkdocs(args)
+        elif args.self_subparser == "autodoc":
+            return autodoc(args)
+        raise ValueError(f"nvtest self: unknown subcommand: {args.self_subparser}")
 
 
 def call(command: str, *args_in: str, verbose: bool = False) -> None:
@@ -108,6 +119,13 @@ def call(command: str, *args_in: str, verbose: bool = False) -> None:
             print("success", flush=True)
     finally:
         force_remove(tmpfile)
+
+
+class Add(argparse.Action):
+    def __call__(self, parser, args, values, option_string=None):
+        flags = getattr(args, self.dest, None) or set()
+        flags.add(option_string.lstrip("-"))
+        setattr(args, self.dest, flags)
 
 
 def mypy(*args_in: str, verbose: bool = False) -> None:
@@ -261,15 +279,3 @@ def autodoc(args: argparse.Namespace) -> int:
     autodoc_directives(os.path.join(args.dest, "directives"))
     autodoc_commands(os.path.join(args.dest, "commands"))
     return 0
-
-
-def self(args: argparse.Namespace) -> int:
-    if args.self_subparser == "check":
-        return pre_commit(args)
-    elif args.self_subparser == "update":
-        return update(args)
-    elif args.self_subparser == "mkdocs":
-        return mkdocs(args)
-    elif args.self_subparser == "autodoc":
-        return autodoc(args)
-    raise ValueError(f"nvtest self: unknown subcommand: {args.self_subparser}")

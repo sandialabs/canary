@@ -1,17 +1,18 @@
 import argparse
-import inspect
 import pstats
 import re
 import shlex
 import sys
 import textwrap as textwrap
-from types import ModuleType
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
 from typing import Optional
 from typing import Sequence
-from typing import Type
 from typing import Union
+
+if TYPE_CHECKING:
+    from ..command.command import Command
 
 import _nvtest._version
 
@@ -59,12 +60,12 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
             yield from get_subactions()
 
 
-def cmd_name(module: ModuleType) -> str:
-    return module.__name__.lower().split(".")[-1].replace("_", "-")
+def cmd_name(command: "Command") -> str:
+    return command.__class__.__name__.lower()
 
 
-def py_name(module: ModuleType) -> str:
-    return module.__name__.lower().split(".")[-1]
+def py_name(command: "Command") -> str:
+    return command.__class__.__name__.lower()
 
 
 class Parser(argparse.ArgumentParser):
@@ -72,7 +73,7 @@ class Parser(argparse.ArgumentParser):
         positionals_title = kwargs.pop("positionals_title", None)
         super().__init__(*args, **kwargs)
         self.register("type", None, identity)
-        self.__subcommand_modules: dict[str, ModuleType] = {}
+        self.__subcommand_objects: dict[str, "Command"] = {}
         self.argv: Sequence[str] = sys.argv[1:]
         if positionals_title:
             self._positionals.title = positionals_title
@@ -94,28 +95,6 @@ class Parser(argparse.ArgumentParser):
         args = [_ for _ in args if _ not in ("-h", "--help")]
         return super().parse_known_args(args, namespace=namespace)[0]
 
-    @staticmethod
-    def _validate_command_module(module: ModuleType):
-        def _defines_method(module, method_name):
-            method = getattr(module, method_name, None)
-            return callable(method)
-
-        name: str = module.__name__
-        if not inspect.ismodule(module):
-            raise TypeError(f"{module} is not a module")
-
-        for method in ("setup_parser", py_name(module)):
-            if not _defines_method(module, method):
-                raise AttributeError(f"{name} must define a {method} method")
-
-        for attr in ("description",):
-            if not hasattr(module, attr):
-                raise AttributeError(f"{name} must define a {attr} attribute")
-
-        if hasattr(module, "aliases") and not isinstance(module.aliases, list):
-            a_type = type(module.aliases).__name__
-            raise TypeError(f"{name}.aliases must be a list, not {a_type}")
-
     def parse_known_args(self, args=None, namespace=None):
         if args is not None:
             self.argv = args
@@ -129,7 +108,7 @@ class Parser(argparse.ArgumentParser):
         self.argv = arg_strings
         return arg_strings
 
-    def add_command(self, module: ModuleType, add_help_override: bool = False) -> None:
+    def add_command(self, command: "Command", add_help_override: bool = False) -> None:
         """Add one subcommand to this parser."""
         # lazily initialize any subparsers
         if not hasattr(self, "subparsers"):
@@ -137,28 +116,26 @@ class Parser(argparse.ArgumentParser):
             if self._actions[-1].dest == "command":
                 self._remove_action(self._actions[-1])
             self.subparsers = self.add_subparsers(metavar="", dest="command")
-        self._validate_command_module(module)
-        cmdname = cmd_name(module)
-        kwds = dict(
-            aliases=getattr(module, "aliases", None) or [],
-            description=module.description,
+        cmdname = cmd_name(command)
+        kwds: dict[str, Any] = dict(
+            aliases=command.aliases,
+            description=command.description,
             formatter_class=HelpFormatter,
         )
-        add_help = getattr(module, "add_help", True)
-        if add_help or add_help_override:
+        if command.add_help or add_help_override:
             kwds["add_help"] = True
-            kwds["epilog"] = getattr(module, "epilog", None)
-            kwds["help"] = module.description
+            kwds["epilog"] = command.epilog
+            kwds["help"] = command.description
         subparser = self.subparsers.add_parser(cmdname, **kwds)
         subparser.register("type", None, identity)
-        module.setup_parser(subparser)  # type: ignore
-        self.__subcommand_modules[cmdname] = module
+        command.setup_parser(subparser)  # type: ignore
+        self.__subcommand_objects[cmdname] = command
 
-    def get_command(self, cmdname: str) -> Optional[Type]:
-        for name, module in self.__subcommand_modules.items():
-            candidates = [name] + getattr(module, "aliases", [])
+    def get_command(self, cmdname: str) -> Optional["Command"]:
+        for name, command in self.__subcommand_objects.items():
+            candidates = [name] + command.aliases
             if cmdname in candidates:
-                return getattr(module, py_name(module))
+                return command
         return None
 
     def remove_argument(self, opt_string):

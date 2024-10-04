@@ -1,5 +1,6 @@
 from types import ModuleType
 from typing import Optional
+from typing import Type
 
 from ..config.argparsing import Parser
 from . import analyze
@@ -15,41 +16,28 @@ from . import run
 from . import self
 from . import status
 from . import tree
+from .command import Command
 
 
-def all_commands() -> list[ModuleType]:
-    return [
-        analyze,
-        config,
-        describe,
-        find,
-        help,
-        location,
-        log,
-        report,
-        rebaseline,
-        run,
-        self,
-        status,
-        tree,
-    ]
+def all_commands() -> list[Type]:
+    return list(Command.REGISTRY)
 
 
 def add_all_commands(parser: Parser, add_help_override: bool = False) -> None:
-    for command in all_commands():
-        parser.add_command(command, add_help_override=add_help_override)
+    for command_class in Command.REGISTRY:
+        parser.add_command(command_class(), add_help_override=add_help_override)
 
 
-def _cmd_name(command_module: ModuleType) -> str:
-    return command_module.__name__.split(".")[-1]
+def _cmd_name(command_class: Type) -> str:
+    return command_class.__name__.lower()
 
 
 def command_names() -> list[str]:
-    return [_cmd_name(m) for m in all_commands()]
+    return [c.__name__.lower() for c in Command.REGISTRY]
 
 
-def get_command(command_name: str) -> Optional[ModuleType]:
-    for command_module in all_commands():
-        if _cmd_name(command_module) == command_name:
-            return command_module
+def get_command(command_name: str) -> Optional[Type]:
+    for command_class in Command.REGISTRY:
+        if _cmd_name(command_class) == command_name:
+            return command_class
     return None

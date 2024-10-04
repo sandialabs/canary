@@ -1,41 +1,45 @@
 import argparse
 import os
 import sys
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from ..config.argparsing import Parser
-
-description = "list contents of directories in a tree-like format"
-add_help = False
+from ..config.argparsing import Parser
+from .command import Command
 
 
-def setup_parser(parser: "Parser"):
-    parser.add_argument(
-        "-a",
-        action="store_true",
-        default=False,
-        help="All files are printed. By default, hidden files are not printed",
-    )
-    parser.add_argument("-d", action="store_true", default=False, help="List directories only")
-    parser.add_argument("-i", action="append", help="Ignore pattern")
-    parser.add_argument(
-        "--exclude-results",
-        default=False,
-        action="store_true",
-        help="Exclude test result directories",
-    )
-    parser.add_argument("directory")
+class Tree(Command):
+    @property
+    def description(self) -> str:
+        return "list contents of directories in a tree-like format"
 
+    @property
+    def add_help(self) -> bool:
+        return False
 
-def tree(args: "argparse.Namespace") -> int:
-    _tree(
-        args.directory,
-        limit_to_directories=args.d,
-        skip_hidden=not args.a,
-        exclude_results=args.exclude_results,
-    )
-    return 0
+    def setup_parser(self, parser: "Parser"):
+        parser.add_argument(
+            "-a",
+            action="store_true",
+            default=False,
+            help="All files are printed. By default, hidden files are not printed",
+        )
+        parser.add_argument("-d", action="store_true", default=False, help="List directories only")
+        parser.add_argument("-i", action="append", help="Ignore pattern")
+        parser.add_argument(
+            "--exclude-results",
+            default=False,
+            action="store_true",
+            help="Exclude test result directories",
+        )
+        parser.add_argument("directory")
+
+    def execute(self, args: "argparse.Namespace") -> int:
+        _tree(
+            args.directory,
+            limit_to_directories=args.d,
+            skip_hidden=not args.a,
+            exclude_results=args.exclude_results,
+        )
+        return 0
 
 
 def _tree(
