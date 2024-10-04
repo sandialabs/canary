@@ -2,8 +2,8 @@ import argparse
 import os
 import sys
 
-from ..config.argparsing import Parser
-from .command import Command
+from _nvtest.config.argparsing import Parser
+from _nvtest.command import Command
 
 
 class Tree(Command):

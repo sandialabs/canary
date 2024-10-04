@@ -5,10 +5,12 @@ import json
 import os
 import sys
 from argparse import Namespace
+from pathlib import Path
 from typing import Any
 from typing import Callable
 from typing import Generator
 from typing import Optional
+from typing import Union
 
 from .util import logging
 from .util.entry_points import get_entry_points
@@ -67,14 +69,13 @@ class Manager:
         disable = disable or []
         logging.debug(f"Loading builtin plugins from {path}")
         if path.exists():  # type: ignore
-            for file in path.iterdir():
-                if file.name.startswith("nvtest_"):
-                    name = os.path.splitext(file.name[7:])[0]
-                    if name in disable:
-                        logging.debug(f"Skipping disabled plugin {name}")
-                        continue
-                    logging.debug(f"Loading {file.name} builtin plugin")
-                    self.load_from_file(str(file))
+            for file in path.rglob("nvtest_*.py"):
+                name = os.path.splitext(file.name[7:])[0]
+                if name in disable:
+                    logging.debug(f"Skipping disabled plugin {name}")
+                    continue
+                logging.debug(f"Loading {file.name} builtin plugin")
+                self.load_from_file(file)
         self.state["builtins_loaded"] = True
         self.state["disabled_builtins"] = disable
 
@@ -127,13 +128,13 @@ class Manager:
         for file in glob.glob(os.path.join(path, "nvtest_*.py")):
             self.load_from_file(file)
 
-    def load_from_file(self, file: str) -> None:
-        if os.path.abspath(file) in self.state["files"]:
+    def load_from_file(self, file: Union[Path, str]) -> None:
+        file = Path(file)
+        if str(file.resolve()) in self.state["files"]:
             return
-        basename = os.path.splitext(os.path.basename(file))[0]
-        name = f"_nvtest.plugins.{basename}"
+        name = f"_nvtest.plugins.{file.parent.name}.{file.stem}"
         # simply importing the module will load the plugins
-        self.state["files"].add(os.path.abspath(file))
+        self.state["files"].add(str(file.resolve()))
         load_module_from_file(name, file)
 
     def load_from_entry_points(self, disable: Optional[list[str]] = None):
@@ -152,37 +153,36 @@ class Manager:
         self.state["disabled_entry_points"] = disable
 
 
-def load_module_from_file(module_name: str, module_path: str):
+def load_module_from_file(name: str, path: Union[Path, str]):
     """Loads a python module from the path of the corresponding file.
 
     If the module is already in ``sys.modules`` it will be returned as
     is and not reloaded.
 
     Args:
-        module_name (str): namespace where the python module will be loaded,
-            e.g. ``foo.bar``
-        module_path (str): path of the python file containing the module
+        name: namespace where the python module will be loaded, e.g. ``foo.bar``
+        path: path of the python file containing the module
 
     Returns:
         A valid module object
 
     Raises:
         ImportError: when the module can't be loaded
-        FileNotFoundError: when module_path doesn't exist
+        FileNotFoundError: when path doesn't exist
     """
     import importlib.util
 
-    if module_name in sys.modules:
-        return sys.modules[module_name]
+    if name in sys.modules:
+        return sys.modules[name]
 
     # This recipe is adapted from https://stackoverflow.com/a/67692/771663
 
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    spec = importlib.util.spec_from_file_location(name, str(path))
     if spec is None:
-        raise ValueError(f"Could not find spec for plugin {module_path}")
+        raise ValueError(f"Could not find spec for plugin {path}")
     module = importlib.util.module_from_spec(spec)
     if spec is None:
-        raise ImportError(module_name)
+        raise ImportError(name)
     # The module object needs to exist in sys.modules before the
     # loader executes the module code.
     #

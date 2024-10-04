@@ -7,23 +7,23 @@ from typing import Any
 from typing import Optional
 from typing import Union
 
-from .. import config
-from ..resources import calculate_allocations
-from ..test.batch import BatchRunner
-from ..test.case import TestCase
-from ..util import logging
-from ..util.executable import Executable
-from ..util.filesystem import getuser
-from ..util.filesystem import mkdirp
-from ..util.filesystem import set_executable
-from ..util.time import hhmmss
+from _nvtest import config
+from _nvtest.resources import calculate_allocations
+from _nvtest.test.batch import BatchRunner
+from _nvtest.test.case import TestCase
+from _nvtest.util import logging
+from _nvtest.util.executable import Executable
+from _nvtest.util.filesystem import getuser
+from _nvtest.util.filesystem import mkdirp
+from _nvtest.util.filesystem import set_executable
+from _nvtest.util.time import hhmmss
 
 
-class PBS(BatchRunner):
-    """Setup and submit jobs to the PBS scheduler"""
+class Flux(BatchRunner):
+    """Setup and submit jobs to the Flux scheduler"""
 
     shell = "/bin/sh"
-    command_name = "qsub"
+    command_name = "flux"
 
     def __init__(
         self,
@@ -34,12 +34,12 @@ class PBS(BatchRunner):
     ) -> None:
         cores_per_socket = config.get("machine:cores_per_socket")
         if cores_per_socket is None:
-            raise ValueError("PBS runner requires that 'machine:cores_per_socket' be defined")
+            raise ValueError("flux runner requires that 'machine:cores_per_socket' be defined")
         super().__init__(cases, batch_no, nbatches, lot_no=lot_no)
 
     @staticmethod
     def matches(name: Optional[str]) -> bool:
-        return name is not None and name.lower() in ("pbs", PBS.command_name)
+        return name is not None and name.lower() == "flux"
 
     @property
     def cpus(self) -> int:
@@ -50,26 +50,25 @@ class PBS(BatchRunner):
         return 0
 
     def write_submission_script(self, *args_in: str, **kwargs: Any) -> str:
-        """Write the pbs submission script"""
+        """Write the flux submission script"""
         ns = calculate_allocations(self.max_cpus_required)
         timeoutx = kwargs.get("timeoutx", 1.0)
-        qtime = self.qtime() * timeoutx
+        qtime = self.qtime(minutes=True) * timeoutx
 
         workers = kwargs.get("workers", ns.cores_per_node)
         session_cpus = ns.nodes * ns.cores_per_node
 
         args = list(self.default_args)
         args.extend(args_in)
-        args.append(f"-l nodes={ns.nodes}:ppn={ns.cores_per_node}")
-        args.append(f"-l walltime={hhmmss(qtime * 1.25, threshold=0)}")
-        args.append("-j oe")
-        args.append(f"-o {self.logfile()}")
-        args.append(f"-N {self.name}")
+        args.append(f"--nodes={ns.nodes}")
+        args.append(f"--time-limit={qtime}")
+        args.append(f"--output={self.logfile()}")
+        args.append(f"--error={self.logfile()}")
 
         fh = StringIO()
         fh.write(f"#!{self.shell}\n")
         for arg in args:
-            fh.write(f"#PBS {arg}\n")
+            fh.write(f"#FLUX: {arg}\n")
 
         fh.write(f"# user: {getuser()}\n")
         fh.write(f"# date: {datetime.now().strftime('%c')}\n")
@@ -93,7 +92,7 @@ class PBS(BatchRunner):
         script = self.write_submission_script(*args_in, **kwargs)
         if not os.path.exists(script):
             raise ValueError("submission script not found, did you call setup()?")
-        args = [self.command, script]
+        args = [self.command, "batch", "--job-name", self.name, script]
         p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         out, _ = p.communicate()
         result = str(out.decode("utf-8")).strip()
@@ -117,40 +116,34 @@ class PBS(BatchRunner):
         try:
             while True:
                 state = self.poll(jobid)
-                if not running and state in ("R", "RUNNING"):
+                if state is None:
+                    return
+                if not running and state.lower() == "run":
                     if config.get("option:r") == "v":
                         logging.emit(f"STARTING: Batch {self.batch_no} of {self.nbatches}\n")
                     running = True
-                if state is None:
-                    return
                 time.sleep(0.5)
         except BaseException as e:
-            logging.warning(f"cancelling pbs job {jobid}")
+            logging.warning(f"cancelling flux job {jobid}")
             self.cancel(jobid)
             if isinstance(e, KeyboardInterrupt):
                 return
             raise
 
     def poll(self, jobid: str) -> Optional[str]:
-        qstat = Executable("qstat")
-        result = qstat(output=str)
+        flux = Executable("flux")
+        result = flux("jobs", "--no-header", "--format={id} {state}", output=str)
         lines = [line.strip() for line in result.get_output().splitlines() if line.split()]
         for line in lines:
-            # Output of qstat is something like:
-            # Job id            Name             User              Time Use S Queue
-            # ----------------  ---------------- ----------------  -------- - -----
-            # 9932285.string-*  spam.sh          username                 0 W serial
+            # Output of flux jobs is something like:
+            # ID RUN
             parts = line.split()
-            if len(parts) >= 6:
+            if len(parts) == 2:
                 jid, state = parts[0], parts[4]
                 if jid == jobid:
-                    return state
-                elif jid[-1] == "*" and jobid.startswith(jid[:-1]):
-                    # the output from qstat may return a truncated job id,
-                    # so match the beginning of the incoming 'jobids' strings
                     return state
         return None
 
     def cancel(self, jobid: str) -> None:
-        qdel = Executable("qdel")
-        qdel(jobid)
+        flux = Executable("flux")
+        flux("cancel", jobid)

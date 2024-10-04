@@ -1,9 +1,9 @@
 from argparse import Namespace
 from typing import Optional
 
-from ..config.argparsing import Parser
-from ..reporters import cli
-from .command import Command
+from _nvtest.config.argparsing import Parser
+from _nvtest.reporters import cli
+from _nvtest.command import Command
 
 
 class Report(Command):

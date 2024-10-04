@@ -2,12 +2,12 @@ import argparse
 import json
 import os
 
-from ...config.schemas import testpaths_schema
-from ...finder import is_test_file
-from ...session import Session
-from ...test.case import TestCase
-from ...third_party.color import colorize
-from ...util.filesystem import working_dir
+from _nvtest.config.schemas import testpaths_schema
+from _nvtest.finder import is_test_file
+from _nvtest.session import Session
+from _nvtest.test.case import TestCase
+from _nvtest.third_party.color import colorize
+from _nvtest.util.filesystem import working_dir
 
 
 def setdefault(obj, attr, default):

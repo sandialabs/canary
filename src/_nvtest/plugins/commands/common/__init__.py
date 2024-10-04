@@ -12,7 +12,7 @@ __all__ = [
 ]
 
 
-from ...resources import ResourceSetter
+from _nvtest.resources import ResourceSetter
 from .pathspec import PathSpec
 from .pathspec import setdefault
 

@@ -1,12 +1,12 @@
 import argparse
 import os
 
-from ..config.argparsing import Parser
-from ..finder import Finder
-from ..session import Session
-from ..util import logging
-from ..util.banner import banner
-from .command import Command
+from _nvtest.config.argparsing import Parser
+from _nvtest.finder import Finder
+from _nvtest.session import Session
+from _nvtest.util import logging
+from _nvtest.util.banner import banner
+from _nvtest.command import Command
 from .common import PathSpec
 from .common import add_mark_arguments
 from .common import add_resource_arguments

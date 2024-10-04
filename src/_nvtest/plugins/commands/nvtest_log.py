@@ -2,10 +2,10 @@ import argparse
 import os
 from typing import Optional
 
-from ..config.argparsing import Parser
-from ..session import Session
-from ..util import logging
-from .command import Command
+from _nvtest.config.argparsing import Parser
+from _nvtest.session import Session
+from _nvtest.util import logging
+from _nvtest.command import Command
 
 
 class Log(Command):

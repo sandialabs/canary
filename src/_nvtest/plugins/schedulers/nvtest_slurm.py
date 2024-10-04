@@ -7,16 +7,16 @@ from typing import Any
 from typing import Optional
 from typing import Union
 
-from .. import config
-from ..resources import calculate_allocations
-from ..test.batch import BatchRunner
-from ..test.case import TestCase
-from ..util import logging
-from ..util.executable import Executable
-from ..util.filesystem import getuser
-from ..util.filesystem import mkdirp
-from ..util.filesystem import set_executable
-from ..util.time import hhmmss
+from _nvtest import config
+from _nvtest.resources import calculate_allocations
+from _nvtest.test.batch import BatchRunner
+from _nvtest.test.case import TestCase
+from _nvtest.util import logging
+from _nvtest.util.executable import Executable
+from _nvtest.util.filesystem import getuser
+from _nvtest.util.filesystem import mkdirp
+from _nvtest.util.filesystem import set_executable
+from _nvtest.util.time import hhmmss
 
 
 class Slurm(BatchRunner):

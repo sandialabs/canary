@@ -28,9 +28,6 @@ from _nvtest.util import graph
 from _nvtest.util import logging
 from _nvtest.util.time import time_in_seconds
 
-if TYPE_CHECKING:
-    import _nvtest.enums
-
 
 class FilterNamespace:
     def __init__(
@@ -552,19 +549,18 @@ class TestFile(TestGenerator):
         argnames: Union[str, Sequence[str]],
         argvalues: list[Union[Sequence[Any], Any]],
         when: Optional[str] = None,
-        type: Optional["_nvtest.enums.enums"] = None,
+        type: Optional[enums.enums] = None,
     ) -> None:
-        import _nvtest.enums
 
-        type = type or _nvtest.enums.list_parameter_space
-        if not isinstance(type, _nvtest.enums.enums):
+        type = type or enums.list_parameter_space
+        if not isinstance(type, enums.enums):
             raise ValueError(
                 f"{self.path}: parameterize: type: expected "
                 f"nvtest.enums, got {type.__class__.__name__}"
             )
-        if type is _nvtest.enums.centered_parameter_space:
+        if type is enums.centered_parameter_space:
             pset = ParameterSet.centered_parameter_space(argnames, argvalues, file=self.file)
-        elif type is _nvtest.enums.random_parameter_space:
+        elif type is enums.random_parameter_space:
             pset = ParameterSet.random_parameter_space(argnames, argvalues, file=self.file)
         else:
             pset = ParameterSet.list_parameter_space(

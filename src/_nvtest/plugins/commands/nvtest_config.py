@@ -1,10 +1,10 @@
 import argparse
 import os
 
-from .. import config as _config
-from ..config.argparsing import Parser
-from ..session import Session
-from .command import Command
+import _nvtest.config as _config
+from _nvtest.config.argparsing import Parser
+from _nvtest.session import Session
+from _nvtest.command import Command
 
 
 class Config(Command):
