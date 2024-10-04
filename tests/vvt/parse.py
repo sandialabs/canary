@@ -1,4 +1,4 @@
-import _nvtest.plugins.nvtest_vvt as vvtest
+import _nvtest.plugins.generators.nvtest_vvt as vvtest
 from _nvtest.enums import list_parameter_space
 
 

@@ -2,9 +2,9 @@ import argparse
 import os
 
 import _nvtest.config as _config
+from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
-from _nvtest.command import Command
 
 
 class Config(Command):

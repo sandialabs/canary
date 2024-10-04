@@ -2,11 +2,12 @@ import argparse
 import os
 from typing import Optional
 
+from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.util import logging
-from _nvtest.command import Command
+
 from .common import filter_cases_by_path
 from .common import filter_cases_by_status
 

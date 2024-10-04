@@ -2,7 +2,7 @@ import argparse
 
 
 def test_batch_args():
-    import _nvtest.command.common as common
+    import _nvtest.plugins.commands.common as common
 
     parser = argparse.ArgumentParser()
     common.add_resource_arguments(parser)

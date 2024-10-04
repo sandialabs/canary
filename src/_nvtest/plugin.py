@@ -65,17 +65,18 @@ class Manager:
     def load_builtin(self, disable: Optional[list[str]] = None) -> None:
         if self.state["builtins_loaded"]:
             return
-        path = ir.files("_nvtest").joinpath("plugins")
+        path = ir.files("_nvtest").joinpath("plugins")  # type: ignore
         disable = disable or []
         logging.debug(f"Loading builtin plugins from {path}")
         if path.exists():  # type: ignore
-            for file in path.rglob("nvtest_*.py"):
-                name = os.path.splitext(file.name[7:])[0]
-                if name in disable:
-                    logging.debug(f"Skipping disabled plugin {name}")
-                    continue
-                logging.debug(f"Loading {file.name} builtin plugin")
-                self.load_from_file(file)
+            with ir.as_file(path) as p:
+                for file in p.rglob("nvtest_*.py"):
+                    name = os.path.splitext(file.name[7:])[0]
+                    if name in disable:
+                        logging.debug(f"Skipping disabled plugin {name}")
+                        continue
+                    logging.debug(f"Loading {file.name} builtin plugin")
+                    self.load_from_file(file)
         self.state["builtins_loaded"] = True
         self.state["disabled_builtins"] = disable
 

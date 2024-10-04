@@ -10,6 +10,7 @@ import types
 
 import nvtest.directives
 
+from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.config.argparsing import make_argument_parser
 from _nvtest.third_party import argparsewriter as aw
@@ -19,7 +20,6 @@ from _nvtest.util.filesystem import force_remove
 from _nvtest.util.filesystem import mkdirp
 from _nvtest.util.filesystem import which
 from _nvtest.util.filesystem import working_dir
-from _nvtest.command import Command
 
 
 class Self(Command):

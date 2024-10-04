@@ -2,10 +2,11 @@ import argparse
 import os
 
 import _nvtest.finder as finder
+from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
 from _nvtest.util import logging
-from _nvtest.command import Command
+
 from .common import add_mark_arguments
 from .common import add_resource_arguments
 

@@ -1,8 +1,8 @@
 import os
 
 import pytest
-from _nvtest.plugins.nvtest_ctest import CTestTestFile
-from _nvtest.plugins.nvtest_ctest import parse_np
+from _nvtest.plugins.generators.nvtest_ctest import CTestTestFile
+from _nvtest.plugins.generators.nvtest_ctest import parse_np
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import set_executable
 from _nvtest.util.filesystem import touchp

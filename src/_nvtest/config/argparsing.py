@@ -12,7 +12,7 @@ from typing import Sequence
 from typing import Union
 
 if TYPE_CHECKING:
-    from ..command.command import Command
+    from _nvtest.command import Command
 
 import _nvtest._version
 

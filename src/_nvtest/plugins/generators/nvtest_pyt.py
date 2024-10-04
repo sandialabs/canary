@@ -6,15 +6,15 @@ import os
 import sys
 from string import Template
 from types import ModuleType
-from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
 from typing import Sequence
 from typing import Union
 
+import nvtest
+
 import _nvtest.config as config
 import _nvtest.when as m_when
-import nvtest
 from _nvtest import enums
 from _nvtest.error import diff_exit_status
 from _nvtest.paramset import ParameterSet
@@ -551,7 +551,6 @@ class TestFile(TestGenerator):
         when: Optional[str] = None,
         type: Optional[enums.enums] = None,
     ) -> None:
-
         type = type or enums.list_parameter_space
         if not isinstance(type, enums.enums):
             raise ValueError(

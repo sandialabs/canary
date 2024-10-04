@@ -3,9 +3,6 @@ from abc import ABC
 from abc import abstractmethod
 from typing import Optional
 from typing import Type
-from typing import Optional
-from typing import Type
-
 
 from .config.argparsing import Parser
 
@@ -38,7 +35,6 @@ class Command(ABC):
 
     @abstractmethod
     def execute(self, args: argparse.Namespace) -> int: ...
-
 
 
 def all_commands() -> list[Type]:
