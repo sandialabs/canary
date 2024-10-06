@@ -1,43 +1,32 @@
 import io
 import os
 import re
-from argparse import Namespace
 from typing import Optional
 
-from _nvtest.config.argparsing import Parser
-from _nvtest.session import Session
+from _nvtest.reporter import Reporter
 from _nvtest.test.case import TestCase
 from _nvtest.util import gitlab
 from _nvtest.util import logging
 
-description = "Create reports on GitLab"
 
+class GitLabReporter(Reporter):
+    @classmethod
+    def label(cls) -> str:
+        return "gitlab-mr"
 
-def setup_parser(parser: Parser):
-    sp = parser.add_subparsers(dest="child_command", metavar="")
-    p = sp.add_parser("create", help="Create GitLab Merge request report")
-    p.add_argument("--cdash-url", help="CDash build URL")
-    p.add_argument("-a", dest="access_token", help="GitLab access token")
+    @classmethod
+    def description(cls) -> str:
+        return "Create GitLab merge request reports"
 
-
-def create_report(args: Namespace) -> int:
-    if args.child_command == "create":
-        return _create_report(args)
-    else:
-        raise ValueError(f"nvtest report gitlab: unknown subcommand {args.child_command!r}")
-
-
-def _create_report(args: Namespace) -> int:
-    mr = MergeRequest(access_token=args.access_token)
-    with logging.level(logging.WARNING):
-        session = Session(os.getcwd(), mode="r")
-    cases = [case for case in session.cases if not case.mask]
-    failed = group_failed_tests(cases)
-    if failed:
-        mr.report_failed(failed, cdash_build_url=args.cdash_url)
-    else:
-        mr.report_success(cdash_build_url=args.cdash_url)
-    return 0
+    def create(self, cdash_url: Optional[str] = None, access_token: Optional[str] = None) -> None:  # type: ignore
+        mr = MergeRequest(access_token=access_token)
+        cases = self.data.cases
+        failed = group_failed_tests(cases)
+        if failed:
+            mr.report_failed(failed, cdash_build_url=cdash_url)
+        else:
+            mr.report_success(cdash_build_url=cdash_url)
+        return
 
 
 class MergeRequest:

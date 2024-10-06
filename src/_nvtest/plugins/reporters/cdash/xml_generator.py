@@ -9,6 +9,7 @@ from typing import Optional
 from _nvtest import config
 from _nvtest._version import version as nvtest_version
 from _nvtest.config.machine import machine_config
+from _nvtest.reporter import TestData
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.test.case import factory as testcase_factory
@@ -18,18 +19,20 @@ from _nvtest.util.filesystem import mkdirp
 from _nvtest.util.time import strftimestamp
 from _nvtest.util.time import timestamp
 
-from ..base import Reporter
 
-
-class CDashReporter(Reporter):
+class CDashXMLReporter:
     def __init__(self, session: Optional[Session] = None, dest: Optional[str] = None) -> None:
-        super().__init__(session)
+        self.data = TestData()
+        if session:
+            cases_to_run: list["TestCase"] = [c for c in session.cases if not c.mask]
+            for case in cases_to_run:
+                self.data.add_test(case)
         dest = dest or os.path.join("." if not session else session.root, "_reports/cdash")
         self.xml_dir = os.path.abspath(dest)
         self.xml_files: list[str] = []
 
     @classmethod
-    def from_json(cls, file: str, dest: Optional[str] = None) -> "CDashReporter":
+    def from_json(cls, file: str, dest: Optional[str] = None) -> "CDashXMLReporter":
         """Create an xml report from a json report"""
         dest = dest or os.path.join(os.path.dirname(file), "xml")
         self = cls(dest=dest)
@@ -112,7 +115,7 @@ class CDashReporter(Reporter):
         if not files:
             raise ValueError("No files to post")
         server = cdash.server(url, project)
-        ns = CDashReporter.read_site_info(files[0])
+        ns = CDashXMLReporter.read_site_info(files[0])
         upload_errors = 0
         for file in files:
             upload_errors += server.upload(

@@ -1,40 +1,25 @@
 import os
+from typing import Optional
 from typing import TextIO
 
 from _nvtest import config
-from _nvtest.session import Session
+from _nvtest.reporter import Reporter
 from _nvtest.test.case import TestCase
 from _nvtest.util import logging
 from _nvtest.util.filesystem import force_remove
 from _nvtest.util.filesystem import mkdirp
 
-from .base import Reporter
-
-
-def setup_parser(parser):
-    sp = parser.add_subparsers(dest="child_command", metavar="")
-    sp.add_parser("create", help="Create local HTML report files")
-
-
-def create_report(args):
-    with logging.level(logging.WARNING):
-        session = Session(os.getcwd(), mode="r")
-    reporter = HTMLReporter(session)
-    if args.child_command == "create":
-        reporter.create()
-    else:
-        raise ValueError(f"{args.child_command}: unknown `nvtest report html` subcommand")
-
 
 class HTMLReporter(Reporter):
-    def __init__(self, session: Session) -> None:
-        super().__init__(session)
-        self.html_dir = os.path.join(session.root, "_reports/html")
-        self.cases_dir = os.path.join(self.html_dir, "cases")
-        self.index = os.path.join(session.root, "Results.html")
-
-    def create(self):
+    def create(self, dest: Optional[str] = None) -> None:  # type: ignore
         """Collect information and create reports"""
+
+        dest = dest or self.session.root
+
+        self.html_dir = os.path.join(dest, "HTML")
+        self.cases_dir = os.path.join(self.html_dir, "cases")
+        self.index = os.path.join(dest, "Results.html")
+
         force_remove(self.html_dir)
         mkdirp(self.cases_dir)
         for case in self.data.cases:

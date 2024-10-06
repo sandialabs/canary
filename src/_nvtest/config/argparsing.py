@@ -116,7 +116,7 @@ class Parser(argparse.ArgumentParser):
             if self._actions[-1].dest == "command":
                 self._remove_action(self._actions[-1])
             self.subparsers = self.add_subparsers(metavar="", dest="command")
-        cmdname = cmd_name(command)
+        cmdname = command.cmd_name()
         kwds: dict[str, Any] = dict(
             aliases=command.aliases,
             description=command.description,

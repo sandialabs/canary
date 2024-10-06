@@ -36,6 +36,10 @@ class Command(ABC):
     @abstractmethod
     def execute(self, args: argparse.Namespace) -> int: ...
 
+    @classmethod
+    def cmd_name(cls) -> str:
+        return cls.__name__.lower()
+
 
 def all_commands() -> list[Type]:
     return list(Command.REGISTRY)
@@ -47,16 +51,12 @@ def add_all_commands(parser: Parser, add_help_override: bool = False) -> None:
         parser.add_command(command, add_help_override=add_help_override)
 
 
-def _cmd_name(command_class: Type) -> str:
-    return command_class.__name__.lower()
-
-
 def command_names() -> list[str]:
-    return [c.__name__.lower() for c in Command.REGISTRY]
+    return [c.cmd_name() for c in Command.REGISTRY]
 
 
-def get_command(command_name: str) -> Optional[Type]:
+def get_command(command_name: str) -> Optional[Command]:
     for command_class in Command.REGISTRY:
-        if _cmd_name(command_class) == command_name:
-            return command_class
+        if command_class.cmd_name() == command_name:
+            return command_class()
     return None

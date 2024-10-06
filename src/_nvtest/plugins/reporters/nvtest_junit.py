@@ -5,38 +5,14 @@ import xml.dom.minidom as xdom
 import xml.sax.saxutils
 from datetime import datetime
 from types import SimpleNamespace
-from typing import Optional
 
-from _nvtest.session import Session
+from _nvtest.reporter import Reporter
 from _nvtest.test.case import TestCase
-from _nvtest.util import logging
 from _nvtest.util.filesystem import mkdirp
-
-from .base import Reporter
-
-
-def setup_parser(parser):
-    sp = parser.add_subparsers(dest="child_command", metavar="")
-    p = sp.add_parser("create", help="Create junit report (must be run in test session directory)")
-    p.add_argument("-o", default="junit.xml", help="Output file [default: %(default)s]")
-
-
-def create_report(args):
-    with logging.level(logging.WARNING):
-        session = Session(os.getcwd(), mode="r")
-    reporter = JunitReporter(session)
-    if args.child_command == "create":
-        reporter.create(file=args.o)
-    else:
-        raise ValueError(f"nvtest report junit: unknown subcommand {args.child_command!r}")
 
 
 class JunitReporter(Reporter):
-    def __init__(self, session: Session) -> None:
-        super().__init__(session)
-        self.session = session
-
-    def create(self, file: Optional[str] = None) -> None:
+    def create(self, dest: str = "./junit.xml") -> None:  # type: ignore
         """Collect information and create reports"""
 
         doc = JunitDocument()
@@ -51,7 +27,7 @@ class JunitReporter(Reporter):
                 suite.appendChild(el)
             root.appendChild(suite)
         doc.appendChild(root)
-        file = os.path.abspath(file or "./junit.xml")
+        file = os.path.abspath(dest)
         mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
             fh.write(doc.toprettyxml(indent="  ", newl="\n"))
