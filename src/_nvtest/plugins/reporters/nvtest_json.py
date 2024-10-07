@@ -8,8 +8,6 @@ from _nvtest.test.case import getstate as get_testcase_state
 
 
 class JSONReporter(Reporter):
-    def __init__(self, session: Session) -> None:
-        super().__init__(session)
 
     def create(self, dest: Optional[str] = None) -> None:  # type: ignore
         """Collect information and create reports"""
