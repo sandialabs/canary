@@ -2,12 +2,10 @@ import json
 import os
 
 from _nvtest.reporter import Reporter
-from _nvtest.session import Session
 from _nvtest.test.case import getstate as get_testcase_state
 
 
 class JSONReporter(Reporter):
-
     def create(self, o: str = "./Results.json") -> None:  # type: ignore
         """Create JSON report
 
