@@ -48,6 +48,9 @@ The possible combinations of ``scope`` and ``stage`` are:
 |              | ``setup``     | Called after a test has been setup with a single argument:        |
 |              |               | ``case: TestCase``                                                |
 |              +---------------+-------------------------------------------------------------------+
+|              | ``prepare``   | Called immediately before a test is run with a single argument:   |
+|              |               | ``case: TestCase``                                                |
+|              +---------------+-------------------------------------------------------------------+
 |              | ``finish``    | Called after a test has completed with a single argument:         |
 |              |               | ``case: TestCase``                                                |
 +--------------+---------------+-------------------------------------------------------------------+

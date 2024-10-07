@@ -30,7 +30,6 @@ class Command(ABC):
     def epilog(self) -> Optional[str]:
         return None
 
-    @abstractmethod
     def setup_parser(self, parser: Parser) -> None: ...
 
     @abstractmethod

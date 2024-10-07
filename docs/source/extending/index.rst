@@ -7,3 +7,5 @@ Extending nvtest
    :maxdepth: 1
 
    plugins
+   report
+   command

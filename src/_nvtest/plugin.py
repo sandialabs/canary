@@ -25,6 +25,11 @@ if TYPE_CHECKING:
 
 
 class PluginHook:
+    """Defines hooks into the nvtest execution.  User's can extend nvtest by subclassing this class
+    or decorating a function with ``@register(scope=..., stage=...)``
+
+    """
+
     REGISTRY: set[Type["PluginHook"]] = set()
 
     def __init_subclass__(cls) -> None:
@@ -68,40 +73,78 @@ class PluginHook:
 
 class Manager:
     def __init__(self) -> None:
-        self.state: dict[str, Any] = {}
-        self.state["files"] = set()
-        self.state["builtins_loaded"] = False
-        self.state["entry_points_loaded"] = False
+        self.files: set[str] = set()
+        self.builtins_loaded: bool = False
+        self.disabled_builtins: list[str] = []
+        self.entry_points_loaded: bool = False
+        self.disabled_entry_points: list[str] = []
 
     @property
     def plugins(self) -> set[Type[PluginHook]]:
-        if not self.state["builtins_loaded"]:
+        if not self.builtins_loaded:
             self.load_builtin()
-        if not self.state["entry_points_loaded"]:
+        if not self.entry_points_loaded:
             self.load_from_entry_points()
         return PluginHook.REGISTRY
+
+    def register(self, func: Callable, *, scope: str, stage: str) -> None:
+        name = func.__name__
+        logging.debug(f"Registering plugin {name}::{scope}::{stage}")
+        err_msg = f"register() got unexpected stage '{scope}::{stage}'"
+
+        method_name: str
+        match [scope, stage]:
+            case ["main", "setup"]:
+                method_name = "main_setup"
+            case ["session", "discovery"]:
+                method_name = "session_discovery"
+            case ["session", "setup"]:
+                method_name = "session_setup"
+            case ["session", "finish"] | ["session", "teardown"]:
+                method_name = "session_finish"
+            case ["test", "discovery"]:
+                method_name = "test_discovery"
+            case ["test", "setup"]:
+                method_name = "test_setup"
+            case ["test", "prepare"]:
+                method_name = "test_prepare"
+            case ["test", "finish"] | ["test", "teardown"]:
+                method_name = "test_finish"
+            case _:
+                raise TypeError(err_msg)
+
+        attributes = {method_name: staticmethod(func)}
+        module = func.__module__
+        plugin_class_name = f"{module.replace('.', '_')}_{name}"
+
+        # By simply creating the class, the plugin is registered with the base class
+        new_class(plugin_class_name, (PluginHook,), exec_body=lambda ns: ns.update(attributes))
 
     def iterplugins(self) -> Generator[Type[PluginHook], None, None]:
         for hook in self.plugins:
             yield hook
 
     def getstate(self) -> dict[str, Any]:
-        state: dict[str, Any] = dict(self.state)
-        state["files"] = list(state["files"])
+        state: dict[str, Any] = {
+            "files": list(self.files),
+            "builtins_loaded": self.builtins_loaded,
+            "disabled_builtins": self.disabled_builtins,
+            "entry_points_loaded": self.entry_points_loaded,
+            "disabled_entry_points": self.disabled_entry_points,
+        }
         return state
 
     def loadstate(self, state: dict[str, Any]) -> None:
         for file in state["files"]:
             self.load_from_file(file)
         # we don't need to load the builtins since they were done above with the files
-        self.state["builtins_loaded"] = state["builtins_loaded"]
-        if "disabled_builtins" in state:
-            self.state["disabled_builtins"] = state["disabled_builtins"]
+        self.builtins_loaded = state["builtins_loaded"]
+        self.disabled_builtins = state["disabled_builtins"]
         if state["entry_points_loaded"]:
-            self.load_from_entry_points(disable=state.get("disabled_entry_points"))
+            self.load_from_entry_points(disable=state["disabled_entry_points"])
 
     def load_builtin(self, disable: Optional[list[str]] = None) -> None:
-        if self.state["builtins_loaded"]:
+        if self.builtins_loaded:
             return
         path = ir.files("_nvtest").joinpath("plugins")  # type: ignore
         disable = disable or []
@@ -115,8 +158,9 @@ class Manager:
                         continue
                     logging.debug(f"Loading {file.name} builtin plugin")
                     self.load_from_file(file)
-        self.state["builtins_loaded"] = True
-        self.state["disabled_builtins"] = disable
+        self.builtins_loaded = True
+        self.disabled_builtins.clear()
+        self.disabled_builtins.extend(disable)
 
     def load_from_directory(self, path: str) -> None:
         for file in glob.glob(os.path.join(path, "nvtest_*.py")):
@@ -124,16 +168,16 @@ class Manager:
 
     def load_from_file(self, file: Union[Path, str]) -> None:
         file = Path(file)
-        if str(file.resolve()) in self.state["files"]:
+        if str(file.resolve()) in self.files:
             return
         name = f"_nvtest.plugins.{file.parent.name}.{file.stem}"
         # simply importing the module will load the plugins
-        self.state["files"].add(str(file.resolve()))
+        self.files.add(str(file.resolve()))
         load_module_from_file(name, file)
 
     def load_from_entry_points(self, disable: Optional[list[str]] = None):
         disable = disable or []
-        if self.state["entry_points_loaded"]:
+        if self.entry_points_loaded:
             return
         entry_points = get_entry_points(group="nvtest.plugin")
         if entry_points:
@@ -143,8 +187,9 @@ class Manager:
                     continue
                 logging.debug(f"Loading the {entry_point.name} plugin from {entry_point.module}")
                 entry_point.load()
-        self.state["entry_points_loaded"] = True
-        self.state["disabled_entry_points"] = disable
+        self.entry_points_loaded = True
+        self.disabled_entry_points.clear()
+        self.disabled_entry_points.extend(disable)
 
 
 def load_module_from_file(name: str, path: Union[Path, str]):
@@ -218,39 +263,7 @@ def register(*, scope: str, stage: str, **kwds: str):
     """Decorator to register a callback"""
 
     def decorator(func: Callable):
-        name = func.__name__
-        logging.debug(f"Registering plugin {name}::{scope}::{stage}")
-        err_msg = f"register() got unexpected stage '{scope}::{stage}'"
-
-        method_name: str
-        match [scope, stage]:
-            case ["main", "setup"]:
-                method_name = "main_setup"
-            case ["session", "discovery"]:
-                method_name = "session_discovery"
-            case ["session", "setup"]:
-                method_name = "session_setup"
-            case ["session", "finish"] | ["session", "teardown"]:
-                method_name = "session_finish"
-            case ["test", "discovery"]:
-                method_name = "test_discovery"
-            case ["test", "setup"]:
-                method_name = "test_setup"
-            case ["test", "prepare"]:
-                method_name = "test_prepare"
-            case ["test", "finish"] | ["test", "teardown"]:
-                method_name = "test_finish"
-            case _:
-                raise TypeError(err_msg)
-
-        attributes = {method_name: staticmethod(func)}
-        module = func.__module__
-        plugin_class_name = f"{module.replace('.', '_')}_{name}"
-
-        # By simply creating the class, the plugin is registered with the base class
-        plugin_class = new_class(
-            plugin_class_name, (PluginHook,), exec_body=lambda ns: ns.update(attributes)
-        )
+        _manager.register(func, scope=scope, stage=stage)
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any):

@@ -7,11 +7,13 @@ from _nvtest import enums
 from _nvtest._version import __version__
 from _nvtest._version import version
 from _nvtest._version import version_tuple
+from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.error import TestDiffed
 from _nvtest.error import TestFailed
 from _nvtest.error import TestSkipped
 from _nvtest.main import console_main
+from _nvtest.reporter import Reporter
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.test.instance import TestInstance
@@ -47,7 +49,6 @@ def __getattr__(name):
     if name == "FILE_SCANNING":
         return _nvtest.FILE_SCANNING
     elif name == "test":
-        test = type("", (), {})()
-        test.instance = get_instance()
+        test = type("Test", (), {"instance": get_instance()})()
         return test
     raise AttributeError(name)
