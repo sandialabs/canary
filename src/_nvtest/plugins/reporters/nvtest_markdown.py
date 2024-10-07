@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+import string
 from typing import TextIO
 
 from _nvtest import config
@@ -11,10 +11,15 @@ from _nvtest.util.filesystem import mkdirp
 
 
 class MarkdownReporter(Reporter):
-    def create(self, dest: Optional[str] = None) -> None:  # type: ignore
-        """Collect information and create reports"""
-        dest = dest or self.session.root
-        self.md_dir = os.path.join(dest, "_reports/markdown")
+    def create(self, dest: str = "$session_root") -> None:  # type: ignore
+        """Create a multi-page markdown report
+
+        Args:
+          dest: Directory to write report
+
+        """
+        dest = string.Template(dest).safe_substitute(session_root=self.session.root)
+        self.md_dir = os.path.join(dest, "MARKDOWN")
         self.index = os.path.join(dest, "Results.md")
         self.root = dest
         force_remove(self.md_dir)

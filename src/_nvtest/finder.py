@@ -209,9 +209,9 @@ class Finder:
         Finder.resolve_dependencies(cases)
         Finder.check_for_skipped_dependencies(cases)
 
-        for hook in plugin.plugins("test", "discovery"):
+        for p in plugin.plugins():
             for case in cases:
-                hook(case)
+                p.test_discovery(case)
 
         logging.debug("Done creating test cases")
         return cases

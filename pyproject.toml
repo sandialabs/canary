@@ -28,7 +28,8 @@ exclude = [
     "src/_nvtest/third_party/distro.py",
     "src/_nvtest/third_party/programoutput/*",
     "src/_nvtest/third_party/monkeypatch.py",
-    "src/_nvtest/third_party/cloudpickle.py"
+    "src/_nvtest/third_party/cloudpickle.py",
+    "src/_nvtest/third_party/docstring_parser/*",
 ]
 
 [[tool.mypy.overrides]]

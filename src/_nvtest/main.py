@@ -40,8 +40,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             logging.emit(shlex.join(a) + "\n")
 
         load_plugins(pre.plugin_dirs or [])
-        for hook in plugin.plugins("main", "setup"):
-            hook(parser)
+        for hook in plugin.plugins():
+            hook.main_setup(parser)
 
         cmd.add_all_commands(parser)
         args = parser.parse_args(argv)
@@ -62,6 +62,7 @@ class NVTestCommand:
     def __init__(self, command_name: str, debug: bool = False) -> None:
         from _nvtest.util.executable import Executable
 
+        load_plugins([])
         command = cmd.get_command(command_name)
         if command is None:
             raise ValueError(f"Unknown command {command_name!r}")

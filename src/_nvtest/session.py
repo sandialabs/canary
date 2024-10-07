@@ -131,8 +131,8 @@ class Session:
             self.load()
         else:
             self.initialize()
-        for hook in plugin.plugins("session", "setup"):
-            hook(self)
+        for hook in plugin.plugins():
+            hook.session_setup(self)
         self.exitstatus = -1
         self.returncode = -1
         self.mode = mode
@@ -341,8 +341,8 @@ class Session:
         finder = Finder()
         for root, paths in self.search_paths.items():
             finder.add(root, *paths, tolerant=True)
-        for hook in plugin.plugins("session", "discovery"):
-            hook(self)
+        for hook in plugin.plugins():
+            hook.session_discovery(self)
         finder.prepare()
         self.generators = finder.discover()
         with self.db.open("files", "w") as record:
@@ -601,8 +601,8 @@ class Session:
                 finally:
                     queue.close(cleanup=cleanup_queue)
                     self.finish = timestamp()
-                for hook in plugin.plugins("session", "finish"):
-                    hook(self)
+                for hook in plugin.plugins():
+                    hook.session_finish(self)
         self.exitstatus = self.returncode
         self.save()
         return self.returncode

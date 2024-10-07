@@ -4,48 +4,86 @@ import importlib.resources as ir
 import json
 import os
 import sys
-from argparse import Namespace
 from pathlib import Path
+from types import new_class
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
 from typing import Generator
 from typing import Optional
+from typing import Type
 from typing import Union
 
 from .util import logging
 from .util.entry_points import get_entry_points
 from .util.singleton import Singleton
 
+if TYPE_CHECKING:
+    from .config.argparsing import Parser
+    from .session import Session
+    from .test.case import TestCase
+
 
 class PluginHook:
-    def __init__(self, func: Callable, **kwds: str) -> None:
-        self.func = func
-        self.specname = f"{func.__name__}_impl"  # type: ignore
-        self.attrs = dict(kwds)
+    REGISTRY: set[Type["PluginHook"]] = set()
 
-    def __call__(self, *args, **kwargs):
-        return self.func(*args, **kwargs)
+    def __init_subclass__(cls) -> None:
+        PluginHook.REGISTRY.add(cls)
 
-    def get_attribute(self, name: str) -> Optional[str]:
-        return self.attrs.get(name)
+    @staticmethod
+    def main_setup(parser: "Parser") -> None:
+        """Call user plugin before arguments are parsed"""
+
+    @staticmethod
+    def session_discovery(session: "Session") -> None:
+        """Call user plugin during the discovery stage, after search paths passed on the command
+        line are searched
+
+        """
+
+    @staticmethod
+    def session_setup(session: "Session") -> None:
+        """Call user plugin at the end of the session setup stage"""
+
+    @staticmethod
+    def session_finish(session: "Session") -> None:
+        """Call user plugin at the end of the session"""
+
+    @staticmethod
+    def test_discovery(case: "TestCase") -> None:
+        """Call user plugin during the test discovery stage"""
+
+    @staticmethod
+    def test_setup(case: "TestCase") -> None:
+        """Call user plugin at the end of the test setup stage"""
+
+    @staticmethod
+    def test_prepare(case: "TestCase", *, stage: Optional[str] = None) -> None:
+        """Call user plugin immediately before running the test"""
+
+    @staticmethod
+    def test_finish(case: "TestCase") -> None:
+        """Call user plugin after the test has ran"""
 
 
 class Manager:
     def __init__(self) -> None:
-        self._plugins: dict[str, dict[str, list[PluginHook]]] = {}
-        self._args: Optional[Namespace] = None
         self.state: dict[str, Any] = {}
         self.state["files"] = set()
         self.state["builtins_loaded"] = False
         self.state["entry_points_loaded"] = False
 
     @property
-    def plugins(self):
+    def plugins(self) -> set[Type[PluginHook]]:
         if not self.state["builtins_loaded"]:
             self.load_builtin()
         if not self.state["entry_points_loaded"]:
             self.load_from_entry_points()
-        return self._plugins
+        return PluginHook.REGISTRY
+
+    def iterplugins(self) -> Generator[Type[PluginHook], None, None]:
+        for hook in self.plugins:
+            yield hook
 
     def getstate(self) -> dict[str, Any]:
         state: dict[str, Any] = dict(self.state)
@@ -79,51 +117,6 @@ class Manager:
                     self.load_from_file(file)
         self.state["builtins_loaded"] = True
         self.state["disabled_builtins"] = disable
-
-    @property
-    def args(self) -> Namespace:
-        if self._args is None:
-            return Namespace()
-        return self._args
-
-    def set_args(self, arg: Namespace) -> None:
-        self._args = arg
-
-    def register(self, func: Callable, scope: str, stage: str, **kwds: str) -> None:
-        name = func.__name__
-        logging.debug(f"Registering plugin {name}::{scope}::{stage}")
-        err_msg = f"register() got unexpected stage '{scope}::{stage}'"
-        if stage == "teardown":
-            logging.warning(f"plugin::{name}: prefer 'finish' to 'teardown'")
-            stage = "finish"
-        if scope == "main":
-            if stage not in ("setup",):
-                raise TypeError(err_msg)
-        elif scope == "session":
-            if stage not in ("discovery", "setup", "finish"):
-                raise TypeError(err_msg)
-        elif scope == "test":
-            if stage not in ("discovery", "setup", "pre:baseline", "pre:run", "finish"):
-                raise TypeError(err_msg)
-        else:
-            raise TypeError(f"register() got unexpected scope {scope!r}")
-
-        scope_plugins = self.plugins.setdefault(scope, {})
-        stage_plugins = scope_plugins.setdefault(stage, [])
-        hook = PluginHook(func, **kwds)
-        stage_plugins.append(hook)
-
-    def iterplugins(self, scope: str, stage: str) -> Generator[PluginHook, None, None]:
-        for hook in self.plugins.get(scope, {}).get(stage, []):
-            yield hook
-
-    def get_plugin(self, scope: str, stage: str, name: str) -> Optional[PluginHook]:
-        if scope in self.plugins and stage in self.plugins[scope]:
-            specname = f"{name}_impl"
-            for hook in self.plugins[scope][stage]:
-                if hook.specname == specname:  # type: ignore
-                    return hook
-        return None
 
     def load_from_directory(self, path: str) -> None:
         for file in glob.glob(os.path.join(path, "nvtest_*.py")):
@@ -217,23 +210,52 @@ def factory() -> Manager:
 _manager = Singleton(Manager)
 
 
-def set_args(args: Namespace) -> None:
-    _manager.set_args(args)
-
-
-def plugins(scope: str, stage: str) -> Generator[PluginHook, None, None]:
-    return _manager.iterplugins(scope, stage)
+def plugins() -> Generator[Type[PluginHook], None, None]:
+    return _manager.iterplugins()
 
 
 def register(*, scope: str, stage: str, **kwds: str):
     """Decorator to register a callback"""
 
     def decorator(func: Callable):
+        name = func.__name__
+        logging.debug(f"Registering plugin {name}::{scope}::{stage}")
+        err_msg = f"register() got unexpected stage '{scope}::{stage}'"
+
+        method_name: str
+        match [scope, stage]:
+            case ["main", "setup"]:
+                method_name = "main_setup"
+            case ["session", "discovery"]:
+                method_name = "session_discovery"
+            case ["session", "setup"]:
+                method_name = "session_setup"
+            case ["session", "finish"] | ["session", "teardown"]:
+                method_name = "session_finish"
+            case ["test", "discovery"]:
+                method_name = "test_discovery"
+            case ["test", "setup"]:
+                method_name = "test_setup"
+            case ["test", "prepare"]:
+                method_name = "test_prepare"
+            case ["test", "finish"] | ["test", "teardown"]:
+                method_name = "test_finish"
+            case _:
+                raise TypeError(err_msg)
+
+        attributes = {method_name: staticmethod(func)}
+        module = func.__module__
+        plugin_class_name = f"{module.replace('.', '_')}_{name}"
+
+        # By simply creating the class, the plugin is registered with the base class
+        plugin_class = new_class(
+            plugin_class_name, (PluginHook,), exec_body=lambda ns: ns.update(attributes)
+        )
+
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any):
             return func(*args, **kwargs)
 
-        _manager.register(func, scope, stage, **kwds)
         return wrapper
 
     return decorator

@@ -13,6 +13,7 @@ from typing import Union
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
+from _nvtest.third_party.docstring_parser import parser as docstring_parser
 from _nvtest.util import logging
 
 
@@ -130,6 +131,10 @@ class Reporter(ABC):
     def add_parser_arguments_from_method(parser: Parser, method: Callable) -> None:
         method_flags: list[dict[str, Any]] = []
         signature = inspect.signature(method)
+        docstring = docstring_parser.parse(method.__doc__ or "")
+        descriptions: dict[str, Optional[str]] = {}
+        for p in docstring.params:
+            descriptions[p.arg_name] = p.description
         for param in signature.parameters.values():
             if param.name == "self":
                 continue
@@ -150,7 +155,12 @@ class Reporter(ABC):
                 elif param.default in (None, False):
                     param_flags["default"] = False
                     param_flags["action"] = "store_true"
-            param_flags["help"] = None
+            elif param.default is not param.empty:
+                param_flags["default"] = param.default
+            if param.name in descriptions:
+                param_flags["help"] = f"{descriptions[param.name]} [default: %(default)s]"
+            else:
+                param_flags["help"] = "[default: %(default)s]"
             method_flags.append(param_flags)
         for param_flags in method_flags:
             name_or_flag = param_flags.pop("name_or_flag")

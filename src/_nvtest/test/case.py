@@ -790,8 +790,8 @@ class TestCase(Runner):
         with fs.working_dir(self.exec_dir, create=True):
             self.setup_exec_dir(copy_all_resources=copy_all_resources)
             self._status.set("ready" if not self.dependencies else "pending")
-            for hook in plugin.plugins("test", "setup"):
-                hook(self)
+            for hook in plugin.plugins():
+                hook.test_setup(self)
             self.save()
         logging.trace(f"Done setting up {self}")
 
@@ -814,8 +814,8 @@ class TestCase(Runner):
             return
         logging.info(f"Rebaselining {self.pretty_repr()}")
         with fs.working_dir(self.exec_dir):
-            for hook in plugin.plugins("test", "pre:baseline"):
-                hook(self)
+            for hook in plugin.plugins():
+                hook.test_prepare(self, stage="baseline")
             for arg in self.baseline:
                 if isinstance(arg, str):
                     if os.path.exists(arg):
@@ -836,7 +836,7 @@ class TestCase(Runner):
 
     def do_analyze(self) -> None:
         args = ["--execute-analysis-sections"]
-        return self.run(*args, stage="analyze", analyze=True)
+        return self.run(*args, stage="analyze")
 
     def start_msg(self) -> str:
         id = colorize("@b{%s}" % self.id[:7])
@@ -849,8 +849,7 @@ class TestCase(Runner):
     def run(
         self,
         *args: str,
-        stage: Optional[str] = None,
-        analyze: bool = False,
+        stage: str = "test",
         timeoutx: float = 1.0,
         **kwargs: Any,
     ) -> None:
@@ -862,7 +861,7 @@ class TestCase(Runner):
         try:
             self.start = timestamp()
             self.finish = -1
-            self.returncode = self._run(*args, stage=stage, timeoutx=timeoutx, analyze=analyze)
+            self.returncode = self.do_run(*args, stage=stage, timeoutx=timeoutx)
             if self.xstatus == diff_exit_status:
                 if self.returncode != diff_exit_status:
                     self._status.set("failed", f"expected {self.name} to diff")
@@ -898,24 +897,18 @@ class TestCase(Runner):
                     file = self.logfile(stage)
                     if os.path.exists(file):
                         fh.write(open(file).read())
-            for hook in plugin.plugins("test", "finish"):
-                hook(self)
+            for hook in plugin.plugins():
+                hook.test_finish(self)
         return
 
-    def _run(
-        self,
-        *args: str,
-        stage: Optional[str] = None,
-        analyze: bool = False,
-        timeoutx: float = 1.0,
-    ) -> int:
+    def do_run(self, *args: str, stage: str = "test", timeoutx: float = 1.0) -> int:
         self._status.set("running")
         self.save()
-        stage = stage or "test"
         timeout = self.timeout * timeoutx
+        assert stage in ("test", "analyze")
         with fs.working_dir(self.exec_dir):
-            for hook in plugin.plugins("test", "pre:run"):
-                hook(self, analyze=analyze)
+            for hook in plugin.plugins():
+                hook.test_prepare(self, stage=stage)
             with logging.capture(self.logfile(stage), mode="w"), logging.timestamps():
                 cmd: list[str] = []
                 if self.launcher:
@@ -1079,7 +1072,7 @@ class TestMultiCase(TestCase):
             assert isinstance(self._paramsets[0], ParameterSet)
 
     def do_analyze(self) -> None:
-        return self.run(stage="analyze", analyze=True)
+        return self.run(stage="analyze")
 
 
 def factory(type: str, **kwargs: Any) -> Union[TestCase, TestMultiCase]:

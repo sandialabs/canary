@@ -461,7 +461,7 @@ def to_seconds(
 
 
 @typing.no_type_check
-def get_vvtest_attrs(case: "TestCase", baseline: bool = False, analyze: bool = False) -> dict:
+def get_vvtest_attrs(case: "TestCase", stage: str = "test") -> dict:
     attrs = {}
     compiler_spec = None
     if config.get("build:compiler:vendor") is None:
@@ -484,8 +484,8 @@ def get_vvtest_attrs(case: "TestCase", baseline: bool = False, analyze: bool = F
     attrs["skip_exit_status"] = 63
     attrs["opt_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"
     attrs["is_analyze"] = isinstance(case, TestMultiCase)
-    attrs["is_baseline"] = baseline
-    attrs["is_analysis_only"] = analyze
+    attrs["is_baseline"] = stage == "baseline"
+    attrs["is_analysis_only"] = stage == "analyze"
     attrs["PARAM_DICT"] = case.parameters or {}
     for key, val in case.parameters.items():
         attrs[key] = val
@@ -511,11 +511,14 @@ def get_vvtest_attrs(case: "TestCase", baseline: bool = False, analyze: bool = F
     return attrs
 
 
-def write_vvtest_util(case: "TestCase", baseline: bool = False, analyze: bool = False) -> None:
+def write_vvtest_util(case: "TestCase", stage: str = "test") -> None:
     if not case.file_path.endswith(".vvt"):
         return
-    attrs = get_vvtest_attrs(case, baseline=baseline, analyze=analyze)
-    with open("vvtest_util.py", "w") as fh:
+    attrs = get_vvtest_attrs(case, stage=stage)
+    file = os.path.abspath("./vvtest_util.py")
+    if os.path.dirname(file) != case.exec_dir:
+        raise ValueError("Incorrect directory for writing vvtest_util")
+    with open(file, "w") as fh:
         fh.write("import os\n")
         fh.write("import sys\n")
         for key, value in attrs.items():
@@ -534,14 +537,9 @@ def setup(case: "TestCase") -> None:
     write_vvtest_util(case)
 
 
-@nvtest.plugin.register(scope="test", stage="pre:run")
-def pre_run(case: "TestCase", analyze: bool = False) -> None:
-    write_vvtest_util(case, analyze=analyze)
-
-
-@nvtest.plugin.register(scope="test", stage="pre:baseline")
-def pre_baseline(case: "TestCase") -> None:
-    write_vvtest_util(case, baseline=True)
+@nvtest.plugin.register(scope="test", stage="prepare")
+def prepare(case: "TestCase", stage: str = "test") -> None:
+    write_vvtest_util(case, stage=stage)
 
 
 @nvtest.plugin.register(scope="test", stage="finish")

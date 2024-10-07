@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+import string
 from typing import TextIO
 
 from _nvtest import config
@@ -11,11 +11,14 @@ from _nvtest.util.filesystem import mkdirp
 
 
 class HTMLReporter(Reporter):
-    def create(self, dest: Optional[str] = None) -> None:  # type: ignore
-        """Collect information and create reports"""
+    def create(self, dest: str = "$session_root") -> None:  # type: ignore
+        """Create a multi-page HTML report
 
-        dest = dest or self.session.root
+        Args:
+          dest: Directory to write report
 
+        """
+        dest = string.Template(dest).safe_substitute(session_root=self.session.root)
         self.html_dir = os.path.join(dest, "HTML")
         self.cases_dir = os.path.join(self.html_dir, "cases")
         self.index = os.path.join(dest, "Results.html")

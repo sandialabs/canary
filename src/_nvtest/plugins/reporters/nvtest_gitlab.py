@@ -19,6 +19,13 @@ class GitLabReporter(Reporter):
         return "Create GitLab merge request reports"
 
     def create(self, cdash_url: Optional[str] = None, access_token: Optional[str] = None) -> None:  # type: ignore
+        """Create a merge request report and post it to the active merge request
+
+        Args:
+          cdash_url: Add a link to a CDash report for this merge request
+          access_token: A GitLab access token that allows to GET/POST to the merge request API
+
+        """
         mr = MergeRequest(access_token=access_token)
         cases = self.data.cases
         failed = group_failed_tests(cases)

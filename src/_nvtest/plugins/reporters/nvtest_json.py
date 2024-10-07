@@ -1,6 +1,5 @@
 import json
 import os
-from typing import Optional
 
 from _nvtest.reporter import Reporter
 from _nvtest.session import Session
@@ -9,10 +8,14 @@ from _nvtest.test.case import getstate as get_testcase_state
 
 class JSONReporter(Reporter):
 
-    def create(self, dest: Optional[str] = None) -> None:  # type: ignore
-        """Collect information and create reports"""
-        dest = dest or self.session.root
-        file = os.path.join(dest, "Results.json")
+    def create(self, o: str = "./Results.json") -> None:  # type: ignore
+        """Create JSON report
+
+        Args:
+          o: Output file name
+
+        """
+        file = os.path.abspath(o)
         data: dict = {}
         for case in self.data.cases:
             data[case.id] = get_testcase_state(case)

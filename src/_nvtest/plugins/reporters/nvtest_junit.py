@@ -12,9 +12,13 @@ from _nvtest.util.filesystem import mkdirp
 
 
 class JunitReporter(Reporter):
-    def create(self, dest: str = "./junit.xml") -> None:  # type: ignore
-        """Collect information and create reports"""
+    def create(self, o: str = "./junit.xml") -> None:  # type: ignore
+        """Create JUnit report
 
+        Args:
+          o: Output file name
+
+        """
         doc = JunitDocument()
         root = doc.create_testsuite_element(
             self.data.cases, name=self.get_root_name(), tagname="testsuites"
@@ -27,7 +31,7 @@ class JunitReporter(Reporter):
                 suite.appendChild(el)
             root.appendChild(suite)
         doc.appendChild(root)
-        file = os.path.abspath(dest)
+        file = os.path.abspath(o)
         mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
             fh.write(doc.toprettyxml(indent="  ", newl="\n"))
