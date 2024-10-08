@@ -87,7 +87,7 @@ class CTestTestFile(TestGenerator):
 
     def parse(self) -> dict:
         build_type = find_build_type(os.path.dirname(self.file))
-        cmake_helper = ir.files("_nvtest").joinpath("plugins/ctest_helpers.cmake")
+        cmake_helper = ir.files("_nvtest").joinpath("plugins/generators/ctest_helpers.cmake")
         tests: dict = {}
         with nvtest.filesystem.working_dir(os.path.dirname(self.file)):
             try:
