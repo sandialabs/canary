@@ -132,7 +132,7 @@ class Manager:
         }
         return state
 
-    def loadstate(self, state: dict[str, Any]) -> None:
+    def setstate(self, state: dict[str, Any]) -> None:
         for file in state["files"]:
             self.load_from_file(file)
         # we don't need to load the builtins since they were done above with the files
@@ -237,7 +237,7 @@ def factory() -> Manager:
         if os.path.exists(file):
             state = json.load(open(file))
             mgr = Manager()
-            mgr.loadstate(state)
+            mgr.setstate(state)
             return mgr
     return Manager()
 
