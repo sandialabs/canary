@@ -164,18 +164,19 @@ class TestFile(TestGenerator):
         names = ", ".join(self.names())
         logging.debug(f"Generating test cases for {self} using the following test names: {names}")
         for name in self.names():
-            mask = self.skipif_reason
+            global_mask = self.skipif_reason
             if owners and not owners.intersection(self.owners):
-                mask = colorize("deselected by @*b{owner expression}")
+                global_mask = colorize("deselected by @*b{owner expression}")
             enabled, reason = self.enable(testname=name, on_options=on_options)
-            if not enabled and mask is None:
-                mask = f"deselected due to {reason}"
+            if not enabled and global_mask is None:
+                global_mask = f"deselected due to {reason}"
                 logging.debug(f"{self}::{name} has been disabled")
             cases: list[TestCase] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
+                local_mask: Optional[str] = global_mask
                 keywords = self.keywords(testname=name, parameters=parameters)
-                if mask is None and keyword_expr is not None:
+                if local_mask is None and keyword_expr is not None:
                     kwds = {kw for kw in keywords}
                     kwds.add(name)
                     kwds.update(parameters.keys())
@@ -183,7 +184,7 @@ class TestFile(TestGenerator):
                     match = m_when.when({"keywords": keyword_expr}, keywords=list(kwds))
                     if not match:
                         logging.debug(f"Skipping {self}::{name}")
-                        mask = colorize("deselected by @*b{keyword expression}")
+                        local_mask = colorize("deselected by @*b{keyword expression}")
 
                 np = parameters.get("np") or 1
                 if not isinstance(np, int):
@@ -193,21 +194,21 @@ class TestFile(TestGenerator):
                     )
 
                 nc = int(math.ceil(np / cores_per_node))
-                if mask is None and nc > max_nodes:
+                if local_mask is None and nc > max_nodes:
                     s = "deselected due to @*b{requiring more nodes than max node count}"
-                    mask = colorize(s)
+                    local_mask = colorize(s)
 
-                if mask is None and nc < min_nodes:
+                if local_mask is None and nc < min_nodes:
                     s = "deselected due to @*b{requiring fewer nodes than min node count}"
-                    mask = colorize(s)
+                    local_mask = colorize(s)
 
-                if mask is None and np > max_cpus:
+                if local_mask is None and np > max_cpus:
                     s = "deselected due to @*b{requiring more cpus than max cpu count}"
-                    mask = colorize(s)
+                    local_mask = colorize(s)
 
-                if mask is None and np < min_cpus:
+                if local_mask is None and np < min_cpus:
                     s = "deselected due to @*b{requiring fewer cpus than min cpu count}"
-                    mask = colorize(s)
+                    local_mask = colorize(s)
 
                 for key in ("ngpu", "ndevice"):
                     # ndevice provides backward compatibility with vvtest
@@ -219,20 +220,20 @@ class TestFile(TestGenerator):
                         raise ValueError(
                             f"{self.name}: expected {key}={nd} " f"to be an int, not {class_name}"
                         )
-                    if mask is None and nd and nd > max_gpus:
+                    if local_mask is None and nd and nd > max_gpus:
                         s = "deselected due to @*b{requiring more gpus than max gpu count}"
-                        mask = colorize(s)
-                    if mask is None and nd and nd < min_gpus:
+                        local_mask = colorize(s)
+                    if local_mask is None and nd and nd < min_gpus:
                         s = "deselected due to @*b{requiring fewer gpus than min gpu count}"
-                        mask = colorize(s)
+                        local_mask = colorize(s)
                     break
 
-                if mask is None and ("TDD" in keywords or "tdd" in keywords):
-                    mask = colorize("deselected due to @*b{TDD keyword}")
-                if mask is None and parameter_expr:
+                if local_mask is None and ("TDD" in keywords or "tdd" in keywords):
+                    local_mask = colorize("deselected due to @*b{TDD keyword}")
+                if local_mask is None and parameter_expr:
                     match = m_when.when(f"parameters={parameter_expr!r}", parameters=parameters)
                     if not match:
-                        mask = colorize("deselected due to @*b{parameter expression}")
+                        local_mask = colorize("deselected due to @*b{parameter expression}")
                 attributes = self.attributes(
                     testname=name, on_options=on_options, parameters=parameters
                 )
@@ -253,8 +254,8 @@ class TestFile(TestGenerator):
                 case.launcher = sys.executable
                 if env_mods:
                     case.add_default_env(**env_mods)
-                if mask is not None:
-                    case.mask = mask
+                if local_mask is not None:
+                    case.mask = local_mask
                 elif timeout is not None and timeout > 0 and case.runtime > timeout:
                     case.mask = "runtime exceeds time limit"
                 for attr, value in attributes.items():
@@ -270,7 +271,7 @@ class TestFile(TestGenerator):
             if analyze:
                 # add previous cases as dependencies
                 mask_analyze_case: Optional[str] = None
-                if all(case.mask for case in cases):
+                if any(case.mask for case in cases):
                     mask_analyze_case = colorize("deselected due to @*b{skipped dependencies}")
                 parent = TestMultiCase(
                     self.root,
