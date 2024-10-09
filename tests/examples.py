@@ -3,6 +3,7 @@ import subprocess
 import sys
 
 import pytest
+
 from _nvtest.util.filesystem import working_dir
 
 this_dir = os.path.dirname(__file__)

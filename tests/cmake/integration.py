@@ -1,9 +1,10 @@
 import importlib.resources
 import os
 
+import pytest
+
 import _nvtest.util.executable as ex
 import _nvtest.util.filesystem as fs
-import pytest
 
 f1 = fs.which("gcc") or os.getenv("CC")
 f2 = fs.which("cmake")
@@ -70,7 +71,7 @@ def test_cmake_integration_parallel(tmpdir):
             make()
             run = NVTestCommand("run", debug=True)
             run("-w", ".", fail_on_error=False)
-            if run.python.returncode != 0:
+            if run.returncode != 0:
                 print(open("TestResults/foo.np=4/nvtest-out.txt").read())
                 assert 0, "test failed"
             assert os.path.exists("TestResults/foo.np=4")

@@ -11,10 +11,9 @@ from typing import Optional
 from typing import Sequence
 from typing import Union
 
-import nvtest
-
 import _nvtest.config as config
 import _nvtest.when as m_when
+import nvtest
 from _nvtest import enums
 from _nvtest.error import diff_exit_status
 from _nvtest.paramset import ParameterSet

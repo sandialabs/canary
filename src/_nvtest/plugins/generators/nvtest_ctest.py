@@ -9,7 +9,6 @@ from typing import Any
 from typing import Optional
 
 import nvtest
-
 from _nvtest.resources import ResourceHandler
 from _nvtest.test.case import TestCase
 from _nvtest.test.generator import TestGenerator

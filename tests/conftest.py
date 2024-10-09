@@ -1,7 +1,8 @@
 import os
 
-import _nvtest.config
 import pytest
+
+import _nvtest.config
 
 
 @pytest.fixture(scope="function", autouse=True)

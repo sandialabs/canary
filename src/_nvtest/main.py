@@ -10,6 +10,7 @@ from . import command as cmd
 from . import config
 from . import plugin
 from .command import Command
+from .config.argparsing import Parser
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
 from .util import logging
@@ -24,6 +25,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     :returns: An exit code.
     """
+    plugin.load_builtin_plugins()
     parser = make_argument_parser()
 
     if "NVTEST_LEVEL" not in os.environ:
@@ -60,24 +62,32 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 class NVTestCommand:
     def __init__(self, command_name: str, debug: bool = False) -> None:
-        from _nvtest.util.executable import Executable
-
-        load_plugins([])
+        plugin.load_builtin_plugins()
         command = cmd.get_command(command_name)
         if command is None:
             raise ValueError(f"Unknown command {command_name!r}")
-        self.python = Executable(sys.executable)
-        self.python.add_default_args("-m", "nvtest")
-        if debug:
-            self.python.add_default_args("-d")
-        self.python.add_default_args(command_name.lower())
+        self.command = command
+        self.debug = debug
+        self.returncode = -1
 
-    @property
-    def returncode(self) -> int:
-        return self.python.returncode
-
-    def __call__(self, *args: str, fail_on_error: bool = True) -> None:
-        self.python(*args, fail_on_error=fail_on_error)
+    def __call__(self, *args_in: str, fail_on_error: bool = True) -> None:
+        try:
+            save_debug: Optional[bool] = None
+            if self.debug:
+                save_debug = config.get("config:debug")
+                config.set("config:debug", True)
+            parser = Parser()
+            self.command.setup_parser(parser)
+            args = parser.parse_args(args_in)
+            self.command.execute(args)
+            self.returncode = 0
+        except Exception:
+            if fail_on_error:
+                raise
+            self.returncode = 1
+        finally:
+            if save_debug is not None:
+                config.set("config:debug", save_debug)
 
 
 def invoke_command(command: Command, args: argparse.Namespace) -> int:
@@ -138,7 +148,6 @@ def load_plugins(paths: list[str]) -> None:
             logging.warning(f"{path}: plugin directory not found")
         else:
             dirs.append(path)
-    plugin.load_builtin_plugins(disable=disable)
     plugin.load_from_entry_points(disable=disable)
     for dir in dirs:
         path = os.path.abspath(dir)

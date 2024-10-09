@@ -1,6 +1,7 @@
 import sys
 
 import pytest
+
 from _nvtest.when import InvalidSyntax
 from _nvtest.when import When
 

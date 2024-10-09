@@ -6,7 +6,6 @@ import sys
 import textwrap as textwrap
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Callable
 from typing import Optional
 from typing import Sequence
 from typing import Union
@@ -60,14 +59,6 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
             yield from get_subactions()
 
 
-def cmd_name(command: "Command") -> str:
-    return command.__class__.__name__.lower()
-
-
-def py_name(command: "Command") -> str:
-    return command.__class__.__name__.lower()
-
-
 class Parser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs) -> None:
         positionals_title = kwargs.pop("positionals_title", None)
@@ -77,7 +68,6 @@ class Parser(argparse.ArgumentParser):
         self.argv: Sequence[str] = sys.argv[1:]
         if positionals_title:
             self._positionals.title = positionals_title
-        self.callbacks: list[Callable] = []
 
     def convert_arg_line_to_args(self, arg_line: str) -> list[str]:
         return shlex.split(arg_line.split("#", 1)[0].strip())
@@ -99,8 +89,6 @@ class Parser(argparse.ArgumentParser):
         if args is not None:
             self.argv = args
         namespace, unknown_args = super().parse_known_args(args, namespace)
-        for callback in self.callbacks:
-            callback(namespace)
         return namespace, unknown_args
 
     def _read_args_from_files(self, arg_strings: list[str]) -> list[str]:
@@ -163,9 +151,6 @@ class Parser(argparse.ArgumentParser):
     def add_plugin_argument(self, *args, **kwargs):
         group = self.get_group("plugin options")
         group.add_argument(*args, **kwargs)
-
-    def add_default_setter_callback(self, fun: Callable) -> None:
-        self.callbacks.append(fun)
 
 
 def identity(arg):

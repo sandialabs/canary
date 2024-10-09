@@ -75,14 +75,13 @@ class Manager:
     def __init__(self) -> None:
         self.files: set[str] = set()
         self.builtins_loaded: bool = False
-        self.disabled_builtins: list[str] = []
         self.entry_points_loaded: bool = False
         self.disabled_entry_points: list[str] = []
 
     @property
     def plugins(self) -> set[Type[PluginHook]]:
         if not self.builtins_loaded:
-            self.load_builtin()
+            self.load_builtins()
         if not self.entry_points_loaded:
             self.load_from_entry_points()
         return PluginHook.REGISTRY
@@ -128,7 +127,6 @@ class Manager:
         state: dict[str, Any] = {
             "files": list(self.files),
             "builtins_loaded": self.builtins_loaded,
-            "disabled_builtins": self.disabled_builtins,
             "entry_points_loaded": self.entry_points_loaded,
             "disabled_entry_points": self.disabled_entry_points,
         }
@@ -139,28 +137,20 @@ class Manager:
             self.load_from_file(file)
         # we don't need to load the builtins since they were done above with the files
         self.builtins_loaded = state["builtins_loaded"]
-        self.disabled_builtins = state["disabled_builtins"]
         if state["entry_points_loaded"]:
             self.load_from_entry_points(disable=state["disabled_entry_points"])
 
-    def load_builtin(self, disable: Optional[list[str]] = None) -> None:
+    def load_builtins(self) -> None:
         if self.builtins_loaded:
             return
         path = ir.files("_nvtest").joinpath("plugins")  # type: ignore
-        disable = disable or []
         logging.debug(f"Loading builtin plugins from {path}")
         if path.exists():  # type: ignore
             with ir.as_file(path) as p:
                 for file in p.rglob("nvtest_*.py"):
-                    name = os.path.splitext(file.name[7:])[0]
-                    if name in disable:
-                        logging.debug(f"Skipping disabled plugin {name}")
-                        continue
                     logging.debug(f"Loading {file.name} builtin plugin")
                     self.load_from_file(file)
         self.builtins_loaded = True
-        self.disabled_builtins.clear()
-        self.disabled_builtins.extend(disable)
 
     def load_from_directory(self, path: str) -> None:
         for file in glob.glob(os.path.join(path, "nvtest_*.py")):
@@ -252,7 +242,7 @@ def factory() -> Manager:
     return Manager()
 
 
-_manager = Singleton(Manager)
+_manager = Singleton(factory)
 
 
 def plugins() -> Generator[Type[PluginHook], None, None]:
@@ -274,8 +264,8 @@ def register(*, scope: str, stage: str, **kwds: str):
     return decorator
 
 
-def load_builtin_plugins(disable: Optional[list[str]] = None) -> None:
-    _manager.load_builtin(disable=disable)
+def load_builtin_plugins() -> None:
+    _manager.load_builtins()
 
 
 def load_from_entry_points(disable: Optional[list[str]] = None) -> None:
