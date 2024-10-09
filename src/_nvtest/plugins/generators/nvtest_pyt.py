@@ -69,7 +69,7 @@ class TestFile(TestGenerator):
         self._sources: list[FilterNamespace] = []
         self._baseline: list[FilterNamespace] = []
         self._enable: list[FilterNamespace] = []
-        self._preload: list[FilterNamespace] = []
+        self._preload: Optional[FilterNamespace] = None
         self._depends_on: list[FilterNamespace] = []
         self._skipif_reason: Optional[str] = None
         self._xstatus: Optional[FilterNamespace] = None
@@ -163,19 +163,19 @@ class TestFile(TestGenerator):
         names = ", ".join(self.names())
         logging.debug(f"Generating test cases for {self} using the following test names: {names}")
         for name in self.names():
-            global_mask = self.skipif_reason
+            test_mask = self.skipif_reason
             if owners and not owners.intersection(self.owners):
-                global_mask = colorize("deselected by @*b{owner expression}")
+                test_mask = colorize("deselected by @*b{owner expression}")
             enabled, reason = self.enable(testname=name, on_options=on_options)
-            if not enabled and global_mask is None:
-                global_mask = f"deselected due to {reason}"
+            if not enabled and test_mask is None:
+                test_mask = f"deselected due to {reason}"
                 logging.debug(f"{self}::{name} has been disabled")
             cases: list[TestCase] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
-                local_mask: Optional[str] = global_mask
+                case_mask: Optional[str] = test_mask
                 keywords = self.keywords(testname=name, parameters=parameters)
-                if local_mask is None and keyword_expr is not None:
+                if case_mask is None and keyword_expr is not None:
                     kwds = {kw for kw in keywords}
                     kwds.add(name)
                     kwds.update(parameters.keys())
@@ -183,7 +183,7 @@ class TestFile(TestGenerator):
                     match = m_when.when({"keywords": keyword_expr}, keywords=list(kwds))
                     if not match:
                         logging.debug(f"Skipping {self}::{name}")
-                        local_mask = colorize("deselected by @*b{keyword expression}")
+                        case_mask = colorize("deselected by @*b{keyword expression}")
 
                 np = parameters.get("np") or 1
                 if not isinstance(np, int):
@@ -193,21 +193,21 @@ class TestFile(TestGenerator):
                     )
 
                 nc = int(math.ceil(np / cores_per_node))
-                if local_mask is None and nc > max_nodes:
+                if case_mask is None and nc > max_nodes:
                     s = "deselected due to @*b{requiring more nodes than max node count}"
-                    local_mask = colorize(s)
+                    case_mask = colorize(s)
 
-                if local_mask is None and nc < min_nodes:
+                if case_mask is None and nc < min_nodes:
                     s = "deselected due to @*b{requiring fewer nodes than min node count}"
-                    local_mask = colorize(s)
+                    case_mask = colorize(s)
 
-                if local_mask is None and np > max_cpus:
+                if case_mask is None and np > max_cpus:
                     s = "deselected due to @*b{requiring more cpus than max cpu count}"
-                    local_mask = colorize(s)
+                    case_mask = colorize(s)
 
-                if local_mask is None and np < min_cpus:
+                if case_mask is None and np < min_cpus:
                     s = "deselected due to @*b{requiring fewer cpus than min cpu count}"
-                    local_mask = colorize(s)
+                    case_mask = colorize(s)
 
                 for key in ("ngpu", "ndevice"):
                     # ndevice provides backward compatibility with vvtest
@@ -219,20 +219,20 @@ class TestFile(TestGenerator):
                         raise ValueError(
                             f"{self.name}: expected {key}={nd} " f"to be an int, not {class_name}"
                         )
-                    if local_mask is None and nd and nd > max_gpus:
+                    if case_mask is None and nd and nd > max_gpus:
                         s = "deselected due to @*b{requiring more gpus than max gpu count}"
-                        local_mask = colorize(s)
-                    if local_mask is None and nd and nd < min_gpus:
+                        case_mask = colorize(s)
+                    if case_mask is None and nd and nd < min_gpus:
                         s = "deselected due to @*b{requiring fewer gpus than min gpu count}"
-                        local_mask = colorize(s)
+                        case_mask = colorize(s)
                     break
 
-                if local_mask is None and ("TDD" in keywords or "tdd" in keywords):
-                    local_mask = colorize("deselected due to @*b{TDD keyword}")
-                if local_mask is None and parameter_expr:
+                if case_mask is None and ("TDD" in keywords or "tdd" in keywords):
+                    case_mask = colorize("deselected due to @*b{TDD keyword}")
+                if case_mask is None and parameter_expr:
                     match = m_when.when(f"parameters={parameter_expr!r}", parameters=parameters)
                     if not match:
-                        local_mask = colorize("deselected due to @*b{parameter expression}")
+                        case_mask = colorize("deselected due to @*b{parameter expression}")
                 attributes = self.attributes(
                     testname=name, on_options=on_options, parameters=parameters
                 )
@@ -249,12 +249,15 @@ class TestFile(TestGenerator):
                     xstatus=self.xstatus(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
+                    preload=self.preload(
+                        testname=name, on_options=on_options, parameters=parameters
+                    ),
                 )
                 case.launcher = sys.executable
                 if env_mods:
                     case.add_default_env(**env_mods)
-                if local_mask is not None:
-                    case.mask = local_mask
+                if case_mask is not None:
+                    case.mask = case_mask
                 elif timeout is not None and timeout > 0 and case.runtime > timeout:
                     case.mask = "runtime exceeds time limit"
                 for attr, value in attributes.items():
@@ -283,6 +286,7 @@ class TestFile(TestGenerator):
                     baseline=self.baseline(testname=name),
                     sources=self.sources(testname=name),
                     xstatus=self.xstatus(testname=name, on_options=on_options),
+                    preload=self.preload(testname=name, on_options=on_options),
                 )
                 parent.launcher = sys.executable
                 if mask_analyze_case is not None:
@@ -350,6 +354,20 @@ class TestFile(TestGenerator):
             if result.value:
                 return self._xstatus.value
         return 0
+
+    def preload(
+        self,
+        testname: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        parameters: Optional[dict[str, Any]] = None,
+    ) -> Optional[str]:
+        if self._preload is not None:
+            result = self._preload.when.evaluate(
+                testname=testname, parameters=parameters, on_options=on_options
+            )
+            if result.value:
+                return self._preload.value
+        return None
 
     def paramsets(
         self, testname: Optional[str] = None, on_options: Optional[list[str]] = None
@@ -540,9 +558,9 @@ class TestFile(TestGenerator):
         ns = FilterNamespace(arg, when=when, result=result, expect=expect)
         self._depends_on.append(ns)
 
-    def m_preload(self, arg: str, source: bool = False, when: Optional[str] = None) -> None:
-        ns = FilterNamespace(arg, action="source" if source else None, when=when)
-        self._preload.append(ns)
+    def m_preload(self, arg: str, when: Optional[str] = None) -> None:
+        ns = FilterNamespace(arg, when=when)
+        self._preload = ns
 
     def m_parameterize(
         self,
@@ -798,8 +816,8 @@ class TestFile(TestGenerator):
     ) -> None:
         self.m_parameterize(names, values, when=when, type=type)
 
-    def f_preload(self, arg: str, *, when: Optional[str] = None, source: bool = False):
-        self.m_preload(arg, when=when, source=source)
+    def f_preload(self, arg: str, *, when: Optional[str] = None):
+        self.m_preload(arg, when=when)
 
     def f_set_attribute(self, *, when: Optional[str] = None, **attributes: Any) -> None:
         self.m_set_attribute(when=when, **attributes)

@@ -903,7 +903,7 @@ def parameterize(
     """  # noqa: E501
 
 
-def preload(arg: str, *, when: Optional[str] = None, source: bool = False) -> None:
+def preload(arg: str, *, when: Optional[str] = None) -> None:
     """Load shell shell script before test execution
 
     Usage

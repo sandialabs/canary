@@ -69,6 +69,7 @@ class TestCase(Runner):
         baseline: Optional[list[Union[str, tuple[str, str]]]] = None,
         sources: Optional[dict[str, list[tuple[str, str]]]] = None,
         xstatus: Optional[int] = None,
+        preload: Optional[str] = None,
     ):
         super().__init__()
 
@@ -84,6 +85,7 @@ class TestCase(Runner):
         self._baseline: list[Union[str, tuple[str, str]]] = []
         self._sources: dict[str, list[tuple[str, str]]] = {}
         self._xstatus: int = 0
+        self._preload: Optional[str] = None
 
         if file_root is not None:
             self.file_root = file_root
@@ -103,6 +105,8 @@ class TestCase(Runner):
             self.sources = sources
         if xstatus is not None:
             self.xstatus = xstatus
+        if preload is not None:
+            self.preload = preload
 
         self._mask: Optional[str] = None
         self._name: Optional[str] = None
@@ -294,6 +298,14 @@ class TestCase(Runner):
     @xstatus.setter
     def xstatus(self, arg: int) -> None:
         self._xstatus = arg
+
+    @property
+    def preload(self) -> Optional[str]:
+        return self._preload
+
+    @preload.setter
+    def preload(self, arg: Optional[str]) -> None:
+        self._preload = arg
 
     @property
     def skipped(self) -> bool:
@@ -1011,6 +1023,7 @@ class TestMultiCase(TestCase):
         baseline: list[Union[str, tuple[str, str]]] = [],
         sources: dict[str, list[tuple[str, str]]] = {},
         xstatus: int = 0,
+        preload: Optional[str] = None,
     ):
         super().__init__(
             file_root=file_root,
@@ -1021,6 +1034,7 @@ class TestMultiCase(TestCase):
             baseline=baseline,
             sources=sources,
             xstatus=xstatus,
+            preload=preload,
         )
         self._flag = flag
         self._paramsets = paramsets
