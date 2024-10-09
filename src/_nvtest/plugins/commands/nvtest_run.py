@@ -4,7 +4,6 @@ import sys
 import traceback
 
 from _nvtest.command import Command
-from _nvtest.config.argparsing import EnvironmentModification
 from _nvtest.config.argparsing import Parser
 from _nvtest.error import StopExecution
 from _nvtest.resources import ResourceHandler
@@ -80,16 +79,6 @@ class Run(Command):
             help="Do not link resources to the test directory, only copy [default: %(default)s]",
         )
         add_resource_arguments(parser)
-        parser.add_argument(
-            "-e",
-            dest="env_mods",
-            metavar="var=val",
-            default={},
-            action=EnvironmentModification,
-            default_scope="test",
-            help="Add environment variable %s to each test's environment with value %s, "
-            "values are expanded before " % (colorize("@*{var}"), colorize("@*{val}")),
-        )
         parser.add_argument(
             "pathspec",
             metavar="pathspec",
