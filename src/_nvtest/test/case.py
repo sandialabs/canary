@@ -391,6 +391,10 @@ class TestCase(Runner):
         self._variables = dict(arg)
 
     @property
+    def masked(self) -> bool:
+        return True if self._mask else False
+
+    @property
     def mask(self) -> Optional[str]:
         return self._mask
 

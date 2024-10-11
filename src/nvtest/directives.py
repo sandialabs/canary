@@ -764,6 +764,9 @@ def owners(*args: str) -> None:
     """
 
 
+owner = owners
+
+
 def parameterize(
     names: Union[str, Sequence[str]],
     values: Sequence[Union[Sequence[Any], Any]],

@@ -159,6 +159,7 @@ class TestFile(TestGenerator):
         min_cpus, max_cpus = cpus or (0, config.get("machine:cpu_count"))
         min_gpus, max_gpus = gpus or (0, config.get("machine:gpu_count"))
         min_nodes, max_nodes = nodes or (0, config.get("machine:node_count"))
+        owners = set(owners or [])
         testcases: list[TestCase] = []
         names = ", ".join(self.names())
         logging.debug(f"Generating test cases for {self} using the following test names: {names}")
@@ -805,6 +806,9 @@ class TestFile(TestGenerator):
 
     def f_owners(self, *args: str):
         self.m_owners(*args)
+
+    def f_owner(self, arg: str):
+        self.m_owners(arg)
 
     def f_parameterize(
         self,
