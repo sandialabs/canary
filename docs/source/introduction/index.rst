@@ -7,5 +7,5 @@ Introduction
    :maxdepth: 1
 
    about
-   getting-help
    installing
+   getting-help

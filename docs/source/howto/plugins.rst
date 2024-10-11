@@ -12,7 +12,18 @@ Plugin discovery
 
 * builtin plugins;
 * plugins specified by the ``-p PATH`` command line option; and
-* plugins registered through `setuptools entry points <https://docs.pytest.org/en/7.1.x/how-to/writing_plugins.html#setuptools-entry-points>`_
+* plugins registered through `setuptools entry points <https://setuptools.pypa.io/en/latest/userguide/entry_point.html>`_
+
+Installing a plugin via entry points
+....................................
+
+``nvtest`` looks up the ``nvtest.plugin`` entrypoint to discover its plugins.  Make your plugin available by defining it in your ``pyproject.toml``:
+
+.. code-block:: toml
+
+    [project.entry-points."nvtest.plugin"]
+    plugin_name = "myproject.pluginmodule"
+
 
 Writing plugins
 ---------------
@@ -46,6 +57,9 @@ The possible combinations of ``scope`` and ``stage`` are:
 |              |               | with a single argument: ``case: TestCase``                        |
 |              +---------------+-------------------------------------------------------------------+
 |              | ``setup``     | Called after a test has been setup with a single argument:        |
+|              |               | ``case: TestCase``                                                |
+|              +---------------+-------------------------------------------------------------------+
+|              | ``prepare``   | Called immediately before a test is run with a single argument:   |
 |              |               | ``case: TestCase``                                                |
 |              +---------------+-------------------------------------------------------------------+
 |              | ``finish``    | Called after a test has completed with a single argument:         |
@@ -97,3 +111,25 @@ Examples
         files = find_raw_profiling_files(session.root)
         combined_files = combine_profiling_files(files)
         create_coverage_maps(combined_files)
+
+----------------
+
+Alternatively, a plugin can be created by subclassing the ``nvtest.plugin.PluginHook`` class and overriding one or more of its methods.  For example, the plugins above can be implemented as:
+
+.. code-block:: python
+
+    import nvtest
+
+    class LLVMCoverage(nvtest.plugin.PluginHook):
+
+        @staticmethod
+        def main_setup(parser: nvtest.Parser) -> None:
+            ...
+
+        @staticmethod
+        def session_finish(session: nvtest.Session) -> None:
+            ...
+
+        @staticmethod
+        def test_setup(case: nvtest.TestCase) -> None:
+            ...

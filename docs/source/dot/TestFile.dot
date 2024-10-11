@@ -2,7 +2,7 @@ digraph G {
 
 bgcolor=transparent;
 overlap=compress;
-rankdir=LR;
+rankdir=TB;
 
 node[
   fontname=Monaco,
@@ -13,24 +13,46 @@ node[
   style="filled"
 ]
 
-/*
-root [
-  label="filename.pyt",
-  imagescale=both,
-  fixedsize=true,
-  width=3,
-  height=3,
-  fillcolor="transparent",
-  image="FileIcon.png",
-  style="",
-  pad=0,
-  penwidth=0
-]
-*/
-root [label="filename.pyt"]
-param1 [label="filename[a=1]"]
-param4 [label="filename[a=4]"]
+session [label="Session"]
 
-root -> param1 [style=tapered, shape=rectangle]
-root -> param4 [style=tapered, shape=rectangle]
+generator_1 [label="Generator"]
+case_1_1 [label="Case"]
+case_1_2 [label="Case"]
+dots_1 [label="..."]
+case_1_3 [label="Case"]
+
+generator_2 [label="Generator"]
+case_2_1 [label="Case"]
+case_2_2 [label="Case"]
+dots_2 [label="..."]
+case_2_3 [label="Case"]
+
+// generator_3 [label="..."]
+
+generator_4 [label="Generator"]
+case_4_1 [label="Case"]
+case_4_2 [label="Case"]
+dots_4 [label="..."]
+case_4_3 [label="Case"]
+
+session -> generator_1 [style=tapered, shape=rectangle]
+session -> generator_2 [style=tapered, shape=rectangle]
+// session -> generator_3 [style=tapered, shape=rectangle]
+session -> generator_4 [style=tapered, shape=rectangle]
+
+generator_1 -> case_1_1 [style=tapered, shape=rectangle]
+generator_1 -> case_1_2 [style=tapered, shape=rectangle]
+generator_1 -> dots_1 [style=tapered, shape=rectangle]
+generator_1 -> case_1_3 [style=tapered, shape=rectangle]
+
+generator_2 -> case_2_1 [style=tapered, shape=rectangle]
+generator_2 -> case_2_2 [style=tapered, shape=rectangle]
+generator_2 -> dots_2 [style=tapered, shape=rectangle]
+generator_2 -> case_2_3 [style=tapered, shape=rectangle]
+
+generator_4 -> case_4_1 [style=tapered, shape=rectangle]
+generator_4 -> case_4_2 [style=tapered, shape=rectangle]
+generator_4 -> dots_4 [style=tapered, shape=rectangle]
+generator_4 -> case_4_3 [style=tapered, shape=rectangle]
+
 }
