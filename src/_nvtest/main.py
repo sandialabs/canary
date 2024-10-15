@@ -76,9 +76,10 @@ class NVTestCommand:
             if self.debug:
                 save_debug = config.get("config:debug")
                 config.set("config:debug", True)
-            parser = Parser()
-            self.command.setup_parser(parser)
-            args = parser.parse_args(args_in)
+            parser = make_argument_parser()
+            parser.add_command(self.command)
+            argv = [self.command.cmd_name()] + list(args_in)
+            args = parser.parse_args(argv)
             self.command.execute(args)
             self.returncode = 0
         except Exception:

@@ -1,3 +1,4 @@
+my-env.sh
 *.pyc
 .nvtest_cache
 .nvtest_cache/*
