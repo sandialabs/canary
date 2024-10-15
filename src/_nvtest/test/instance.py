@@ -7,10 +7,10 @@ from typing import Optional
 from typing import Type
 from typing import Union
 
+from ..status import Status
 from .case import TestCase
 from .case import TestMultiCase
 from .case import from_state as testcase_from_state
-from .status import Status
 
 key_type = Union[tuple[str, ...], str]
 index_type = Union[tuple[int, ...], int]

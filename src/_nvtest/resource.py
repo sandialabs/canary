@@ -40,9 +40,9 @@ class ResourceHandler:
             "batch": {
                 "length": None,
                 "count": None,
-                "scheduler": None,
+                "runner": None,
+                "runner_args": [],
                 "workers": None,
-                "args": [],
                 "batched": False,
             },
         }
@@ -72,146 +72,155 @@ class ResourceHandler:
         scope, type = path.split(":")
 
         # --- session resources
-        if (scope, type) == ("session", "cpu_count"):
-            if not isinstance(value, int):
-                raise ValueError("session cpu count must be an integer")
-            if value <= 0:
-                raise ValueError(f"session:cpu_count = {value} <= 0")
-            elif value > config.get("machine:cpu_count"):
-                raise ValueError("session cpu request exceeds machine cpu count")
-            if self.data["session"]["meta"].get("cpu_ids"):
-                raise ValueError("session:cpu_count and session:cpu_ids are mutually exclusive")
-            self.data["session"]["meta"]["cpu_count"] = 1
-            self.data["session"]["cpu_ids"] = list(range(value))
+        match (scope, type):
+            case ("session", "cpu_count"):
+                if not isinstance(value, int):
+                    raise ValueError("session cpu count must be an integer")
+                if value <= 0:
+                    raise ValueError(f"session:cpu_count = {value} <= 0")
+                elif value > config.get("machine:cpu_count"):
+                    raise ValueError("session cpu request exceeds machine cpu count")
+                if self.data["session"]["meta"].get("cpu_ids"):
+                    raise ValueError(
+                        "session:cpu_count and session:cpu_ids are mutually exclusive"
+                    )
+                self.data["session"]["meta"]["cpu_count"] = 1
+                self.data["session"]["cpu_ids"] = list(range(value))
 
-        elif (scope, type) == ("session", "cpu_ids"):
-            if not isinstance(value, list) and not all([isinstance(x, int) for x in value]):
-                raise ValueError("session cpu ids must be a list of integers")
-            if self.data["session"]["meta"].get("cpu_count"):
-                raise ValueError("session:cpu_ids and session:cpu_count are mutually exclusive")
-            if len(value) == 0:
-                raise ValueError("len(session:cpu_ids) = 0")
-            elif len(value) > config.get("machine:cpu_count"):
-                raise ValueError("number of session cpu ids exceeds machine cpu count")
-            self.data["session"]["meta"]["cpu_ids"] = 1
-            self.data["session"]["cpu_count"] = len(value)
+            case ("session", "cpu_ids"):
+                if not isinstance(value, list) and not all([isinstance(x, int) for x in value]):
+                    raise ValueError("session cpu ids must be a list of integers")
+                if self.data["session"]["meta"].get("cpu_count"):
+                    raise ValueError(
+                        "session:cpu_ids and session:cpu_count are mutually exclusive"
+                    )
+                if len(value) == 0:
+                    raise ValueError("len(session:cpu_ids) = 0")
+                elif len(value) > config.get("machine:cpu_count"):
+                    raise ValueError("number of session cpu ids exceeds machine cpu count")
+                self.data["session"]["meta"]["cpu_ids"] = 1
+                self.data["session"]["cpu_count"] = len(value)
 
-        elif (scope, type) == ("session", "gpu_count"):
-            if not isinstance(value, int):
-                raise ValueError("session gpu count must be an integer")
-            if value < 0:
-                raise ValueError(f"session:gpu_count = {value} < 0")
-            elif value > config.get("machine:gpu_count"):
-                raise ValueError("session gpu request exceeds machine gpu count")
-            if self.data["session"]["meta"].get("gpu_ids"):
-                raise ValueError("session:gpu_count and session:gpu_ids are mutually exclusive")
-            self.data["session"]["meta"]["gpu_count"] = 1
-            self.data["session"]["gpu_ids"] = list(range(value))
+            case ("session", "gpu_count"):
+                if not isinstance(value, int):
+                    raise ValueError("session gpu count must be an integer")
+                if value < 0:
+                    raise ValueError(f"session:gpu_count = {value} < 0")
+                elif value > config.get("machine:gpu_count"):
+                    raise ValueError("session gpu request exceeds machine gpu count")
+                if self.data["session"]["meta"].get("gpu_ids"):
+                    raise ValueError(
+                        "session:gpu_count and session:gpu_ids are mutually exclusive"
+                    )
+                self.data["session"]["meta"]["gpu_count"] = 1
+                self.data["session"]["gpu_ids"] = list(range(value))
 
-        elif (scope, type) == ("session", "gpu_ids"):
-            if not isinstance(value, list) and not all([isinstance(x, int) for x in value]):
-                raise ValueError("session gpu ids must be a list of integers")
-            if self.data["session"]["meta"].get("gpu_count"):
-                raise ValueError("session:gpu_ids and session:gpu_count are mutually exclusive")
-            if len(value) == 0:
-                raise ValueError("len(session:gpu_ids) = 0")
-            elif len(value) > config.get("machine:gpu_count"):
-                raise ValueError("number of session gpu ids exceeds machine gpu count")
-            self.data["session"]["meta"]["gpu_ids"] = 1
-            self.data["session"]["gpu_count"] = len(value)
+            case ("session", "gpu_ids"):
+                if not isinstance(value, list) and not all([isinstance(x, int) for x in value]):
+                    raise ValueError("session gpu ids must be a list of integers")
+                if self.data["session"]["meta"].get("gpu_count"):
+                    raise ValueError(
+                        "session:gpu_ids and session:gpu_count are mutually exclusive"
+                    )
+                if len(value) == 0:
+                    raise ValueError("len(session:gpu_ids) = 0")
+                elif len(value) > config.get("machine:gpu_count"):
+                    raise ValueError("number of session gpu ids exceeds machine gpu count")
+                self.data["session"]["meta"]["gpu_ids"] = 1
+                self.data["session"]["gpu_count"] = len(value)
 
-        elif (scope, type) == ("session", "workers"):
-            if value < 0:
-                raise ValueError(f"session:workers = {value} < 0")
-            elif value > config.get("machine:cpu_count"):
-                raise ValueError("session worker request exceeds machine cpu count")
+            case ("session", "workers"):
+                if value < 0:
+                    raise ValueError(f"session:workers = {value} < 0")
+                elif value > config.get("machine:cpu_count"):
+                    raise ValueError("session worker request exceeds machine cpu count")
 
-        elif (scope, type) == ("session", "timeout"):
-            pass
+            case ("session", "timeout"):
+                pass
 
-        # --- test resources
-        elif (scope, type) == ("test", "cpu_count"):
-            if isinstance(value, int):
-                value = [0, value]
-            min_cpus, max_cpus = value
-            if min_cpus > max_cpus:
-                raise ValueError("test min cpus > test max cpus")
-            elif min_cpus < 1:
-                raise ValueError(f"test:min_cpus = {min_cpus} < 1")
-            elif max_cpus < 1:
-                raise ValueError(f"test:max_cpus = {max_cpus} < 1")
-            elif max_cpus > config.get("machine:cpu_count"):
-                raise ValueError("test max cpu request exceeds machine cpu count")
-            elif self["session:cpu_count"] > 1 and max_cpus > self["session:cpu_count"]:
-                raise ValueError("test cpu request exceeds session cpu limit")
+            # --- test resources
+            case ("test", "cpu_count"):
+                if isinstance(value, int):
+                    value = [0, value]
+                min_cpus, max_cpus = value
+                if min_cpus > max_cpus:
+                    raise ValueError("test min cpus > test max cpus")
+                elif min_cpus < 1:
+                    raise ValueError(f"test:min_cpus = {min_cpus} < 1")
+                elif max_cpus < 1:
+                    raise ValueError(f"test:max_cpus = {max_cpus} < 1")
+                elif max_cpus > config.get("machine:cpu_count"):
+                    raise ValueError("test max cpu request exceeds machine cpu count")
+                elif self["session:cpu_count"] > 1 and max_cpus > self["session:cpu_count"]:
+                    raise ValueError("test cpu request exceeds session cpu limit")
 
-        elif (scope, type) == ("test", "gpu_count"):
-            if isinstance(value, int):
-                value = [0, value]
-            min_gpus, max_gpus = value
-            if min_gpus > max_gpus:
-                raise ValueError("test min gpus > test max gpus")
-            elif min_gpus < 0:
-                raise ValueError(f"test:min_gpus = {min_gpus} < 0")
-            elif max_gpus < 0:
-                raise ValueError(f"test:max_gpus = {max_gpus} < 0")
-            elif max_gpus > config.get("machine:gpu_count"):
-                raise ValueError("test max gpu request exceeds machine gpu count")
-            elif self["session:gpu_count"] > 0 and max_gpus > self["session:gpu_count"]:
-                raise ValueError("test gpu request exceeds session gpu limit")
+            case ("test", "gpu_count"):
+                if isinstance(value, int):
+                    value = [0, value]
+                min_gpus, max_gpus = value
+                if min_gpus > max_gpus:
+                    raise ValueError("test min gpus > test max gpus")
+                elif min_gpus < 0:
+                    raise ValueError(f"test:min_gpus = {min_gpus} < 0")
+                elif max_gpus < 0:
+                    raise ValueError(f"test:max_gpus = {max_gpus} < 0")
+                elif max_gpus > config.get("machine:gpu_count"):
+                    raise ValueError("test max gpu request exceeds machine gpu count")
+                elif self["session:gpu_count"] > 0 and max_gpus > self["session:gpu_count"]:
+                    raise ValueError("test gpu request exceeds session gpu limit")
 
-        elif (scope, type) == ("test", "node_count"):
-            if isinstance(value, int):
-                value = [0, value]
-            min_nodes, max_nodes = value
-            if min_nodes > max_nodes:
-                raise ValueError("test min nodes > test max nodes")
-            elif min_nodes < 1:
-                raise ValueError(f"test:min_nodes = {min_nodes} < 1")
-            elif max_nodes < 1:
-                raise ValueError(f"test:max_nodes = {max_nodes} < 1")
-            elif max_nodes > config.get("machine:node_count"):
-                raise ValueError("test max node request exceeds machine node count")
+            case ("test", "node_count"):
+                if isinstance(value, int):
+                    value = [0, value]
+                min_nodes, max_nodes = value
+                if min_nodes > max_nodes:
+                    raise ValueError("test min nodes > test max nodes")
+                elif min_nodes < 1:
+                    raise ValueError(f"test:min_nodes = {min_nodes} < 1")
+                elif max_nodes < 1:
+                    raise ValueError(f"test:max_nodes = {max_nodes} < 1")
+                elif max_nodes > config.get("machine:node_count"):
+                    raise ValueError("test max node request exceeds machine node count")
 
-        elif (scope, type) == ("test", "timeout"):
-            pass
+            case ("test", "timeout"):
+                pass
 
-        elif (scope, type) == ("test", "timeoutx"):
-            if value <= 0.0:
-                raise ValueError("test timeoutx must be > 0")
+            case ("test", "timeoutx"):
+                if value <= 0.0:
+                    raise ValueError("test timeoutx must be > 0")
 
-        # --- batch resources
-        elif (scope, type) == ("batch", "length"):
-            if value <= 0.0:
-                raise ValueError("batch length must be > 0")
-            if self.data["batch"]["count"] is not None:
-                raise ValueError("batch length and count are mutually exclusive")
+            # --- batch resources
+            case ("batch", "length"):
+                if value <= 0.0:
+                    raise ValueError("batch length must be > 0")
+                if self.data["batch"]["count"] is not None:
+                    raise ValueError("batch length and count are mutually exclusive")
 
-        elif (scope, type) == ("batch", "count"):
-            if value <= 0:
-                raise ValueError("batch count must be > 0")
-            if self.data["batch"]["length"] is not None:
-                raise ValueError("batch count and length are mutually exclusive")
+            case ("batch", "count"):
+                if value <= 0:
+                    raise ValueError("batch count must be > 0")
+                if self.data["batch"]["length"] is not None:
+                    raise ValueError("batch count and length are mutually exclusive")
 
-        elif (scope, type) == ("batch", "scheduler"):
-            pass
+            case ("batch", "runner"):
+                pass
 
-        elif (scope, type) == ("batch", "workers"):
-            if value < 0:
-                raise ValueError(f"batch:workers = {value} < 0")
-            elif value > config.get("machine:cpu_count"):
-                raise ValueError("batch worker request exceeds machine cpu count")
+            case ("batch", "workers"):
+                if value < 0:
+                    raise ValueError(f"batch:workers = {value} < 0")
+                elif value > config.get("machine:cpu_count"):
+                    raise ValueError("batch worker request exceeds machine cpu count")
 
-        elif (scope, type) == ("batch", "args"):
-            if isinstance(value, str):
-                value = shlex.split(strip_quotes(value))
-            value = self.data[scope][type] + list(value)
+            case ("batch", "runner_args"):
+                if isinstance(value, str):
+                    value = shlex.split(strip_quotes(value))
+                value = self.data[scope][type] + list(value)
 
-        elif (scope, type) == ("batch", "batched"):
-            value = bool(value)
+            case ("batch", "batched"):
+                value = bool(value)
 
-        else:
-            raise ValueError(f"unknown resource name: {path!r}")
+            case _:
+                raise ValueError(f"unknown resource name: {path!r}")
 
         self.data[scope][type] = value
         if scope == "batch":
@@ -249,10 +258,10 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • test:timeoutx=R: Set a timeout multiplier for all tests [default: 1.0]\n\n
 • batch:count=N: Execute tests in N batches.\n\n
 • batch:length=T: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
-• batch:scheduler=S: Use scheduler 'S' to run the test batches.\n\n
+• batch:runner=S: Use runner 'S' to run the test batches.\n\n
 • batch:workers=N: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
-• batch:args=A: Any additional args 'A' are passed directly to the scheduler, for example,
-  batch:args=--account=ABC will pass --account=ABC to the scheduler
+• batch:runner_args=A: Any additional args 'A' are passed directly to the runner, for example,
+  batch:runner_args=--account=ABC will pass --account=ABC to the runner
 """ % {"r_form": _bold("scope:type=value"), "r_arg": _bold(f"{flag} resource")}
         return text
 
@@ -317,12 +326,12 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         elif match := re.search(r"^batch:(count|workers)[:=](\d+)$", arg):
             type, raw = match.groups()
             return (f"batch:{type}", int(raw))
-        elif match := re.search(r"^batch:(scheduler|type)[:=](\w+)$", arg):
+        elif match := re.search(r"^batch:(runner|scheduler|type)[:=](\w+)$", arg):
             raw = match.group(2)
-            return ("batch:scheduler", str(raw))
-        elif match := re.search(r"^batch:args[:=](.*)$", arg):
-            raw = strip_quotes(match.group(1))
-            return ("batch:args", shlex.split(raw))
+            return ("batch:runner", str(raw))
+        elif match := re.search(r"^batch:(args|runner_args)[:=](.*)$", arg):
+            raw = strip_quotes(match.group(2))
+            return ("batch:runner_args", shlex.split(raw))
         else:
             raise ValueError(f"invalid resource arg: {arg!r}")
 

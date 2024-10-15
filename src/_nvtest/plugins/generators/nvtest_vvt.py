@@ -75,7 +75,7 @@ class VVTTestFile(TestFile):
         kwds = dict(arg.options or {})
         if "rename" in kwds:
             kwds.pop("rename")
-            s = re.sub(",\s*", ",", arg.argument)
+            s = re.sub(r",\s*", ",", arg.argument)
             file_pairs = [_.split(",") for _ in s.split()]
             for file_pair in file_pairs:
                 if len(file_pair) != 2:
@@ -121,7 +121,7 @@ class VVTTestFile(TestFile):
         """# VVT: baseline ( OPTIONS ) [:=] --FLAG
         | baseline ( OPTIONS ) [:=] file1,file2 file3,file4 ...
         """
-        argument = re.sub(",\s*", ",", arg.argument)
+        argument = re.sub(r",\s*", ",", arg.argument)
         file_pairs = [_.split(",") for _ in argument.split()]
         for file_pair in file_pairs:
             if len(file_pair) == 1 and file_pair[0].startswith("--"):
@@ -174,7 +174,7 @@ def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict]:
 
     """
     names_spec, values_spec = arg.argument.split("=", 1)
-    values_spec = re.sub(",\s*", ",", values_spec)
+    values_spec = re.sub(r",\s*", ",", values_spec)
     names = [_.strip() for _ in names_spec.split(",") if _.split()]
     values = []
     for group in values_spec.split():
@@ -277,11 +277,11 @@ def find_vvt_lines(filename: Union[Path, str]) -> tuple[list[str], int]:
         if token.type == tokenize.ENCODING:
             continue
         elif token.type == tokenize.COMMENT:
-            match = re.search("^\s*#\s*VVT\s*:\s*:", token.line)
+            match = re.search(r"^\s*#\s*VVT\s*:\s*:", token.line)
             if match:
                 s.write(f" {token.line[match.end():].rstrip()}")
                 continue
-            match = re.search("^\s*#\s*VVT\s*:(?!(\s*:))", token.line)
+            match = re.search(r"^\s*#\s*VVT\s*:(?!(\s*:))", token.line)
             if match:
                 s.write(f"\n{token.line[match.end():].strip()}")
                 continue
@@ -416,10 +416,10 @@ def to_seconds(
     units["mo"] = units["mos"] = units["months"] = units["month"]
     units["y"] = units["yr"] = units["yrs"] = units["years"] = units["year"]
 
-    if re.search("^\d{1,2}:\d{1,2}:\d{1,2}(\.\d+)?$", arg):
+    if re.search(r"^\d{1,2}:\d{1,2}:\d{1,2}(\.\d+)?$", arg):
         hours, minutes, seconds = [float(_) for _ in arg.split(":")]
         return hours * units["hours"] + minutes * units["minutes"] + seconds * units["seconds"]
-    elif re.search("^\d{1,2}:\d{1,2}(\.\d+)?$", arg):
+    elif re.search(r"^\d{1,2}:\d{1,2}(\.\d+)?$", arg):
         minutes, seconds = [float(_) for _ in arg.split(":")]
         return minutes * units["minutes"] + seconds * units["seconds"]
 

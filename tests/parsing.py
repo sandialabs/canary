@@ -18,7 +18,7 @@ def test_batch_args():
             "batch:args='--a=b -c d'",
         ]
     )
-    assert args.rh["batch:args"] == [
+    assert args.rh["batch:runner_args"] == [
         "--account=XYZ123",
         "--licenses=pscratch",
         "--foo=bar",

@@ -2,15 +2,15 @@ import os
 import subprocess
 import time
 from datetime import datetime
-from io import StringIO
+from typing import IO
 from typing import Any
 from typing import Optional
-from typing import Union
 
 from _nvtest import config
-from _nvtest.resources import calculate_allocations
-from _nvtest.test.batch import BatchRunner
-from _nvtest.test.case import TestCase
+from _nvtest.resource import ResourceHandler
+from _nvtest.resource import calculate_allocations
+from _nvtest.runners import BatchRunner
+from _nvtest.test.batch import TestBatch
 from _nvtest.util import logging
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import getuser
@@ -22,78 +22,63 @@ from _nvtest.util.time import hhmmss
 class PBS(BatchRunner):
     """Setup and submit jobs to the PBS scheduler"""
 
+    scheduled = True
     shell = "/bin/sh"
     command_name = "qsub"
 
-    def __init__(
-        self,
-        cases: Union[list[TestCase], set[TestCase]],
-        batch_no: int,
-        nbatches: int,
-        lot_no: int = 1,
-    ) -> None:
+    def __init__(self, rh: ResourceHandler) -> None:
+        super().__init__(rh)
         cores_per_socket = config.get("machine:cores_per_socket")
         if cores_per_socket is None:
-            raise ValueError("PBS runner requires that 'machine:cores_per_socket' be defined")
-        super().__init__(cases, batch_no, nbatches, lot_no=lot_no)
+            raise ValueError("pbs runner requires that 'machine:cores_per_socket' be defined")
 
     @staticmethod
     def matches(name: Optional[str]) -> bool:
         return name is not None and name.lower() in ("pbs", PBS.command_name)
 
-    @property
-    def cpus(self) -> int:
-        return 1
-
-    @property
-    def gpus(self) -> int:
-        return 0
-
-    def write_submission_script(self, *args_in: str, **kwargs: Any) -> str:
+    def write_submission_script(self, batch: TestBatch, file: IO[Any]) -> None:
         """Write the pbs submission script"""
-        ns = calculate_allocations(self.max_cpus_required)
-        timeoutx = kwargs.get("timeoutx", 1.0)
-        qtime = self.qtime() * timeoutx
+        ns = calculate_allocations(batch.max_cpus_required)
+        qtime = self.qtime(batch) * self.timeoutx
 
-        workers = kwargs.get("workers", ns.cores_per_node)
         session_cpus = ns.nodes * ns.cores_per_node
 
         args = list(self.default_args)
-        args.extend(args_in)
+        args.extend(self.extra_args)
         args.append(f"-l nodes={ns.nodes}:ppn={ns.cores_per_node}")
         args.append(f"-l walltime={hhmmss(qtime * 1.25, threshold=0)}")
         args.append("-j oe")
-        args.append(f"-o {self.logfile()}")
-        args.append(f"-N {self.name}")
+        args.append(f"-o {batch.logfile()}")
+        args.append(f"-N {batch.name}")
 
-        fh = StringIO()
-        fh.write(f"#!{self.shell}\n")
+        file.write(f"#!{self.shell}\n")
         for arg in args:
-            fh.write(f"#PBS {arg}\n")
+            file.write(f"#PBS {arg}\n")
 
-        fh.write(f"# user: {getuser()}\n")
-        fh.write(f"# date: {datetime.now().strftime('%c')}\n")
-        fh.write(f"# batch {self.batch_no} of {self.nbatches}\n")
-        fh.write(f"# approximate runtime: {hhmmss(qtime)}\n")
-        fh.write("# test cases:\n")
-        for case in self.cases:
-            fh.write(f"# - {case.fullname}\n")
-        fh.write(f"# total: {len(self.cases)} test cases\n")
-        self.dump_variables(fh)
-        invocation = self.nvtest_invocation(workers=workers, cpus=session_cpus, timeoutx=timeoutx)
-        fh.write(f"(\n  {invocation}\n)\n")
-        f = self.submission_script_filename()
-        mkdirp(os.path.dirname(f))
-        with open(f, "w") as fp:
-            fp.write(fh.getvalue())
-        set_executable(f)
-        return f
+        file.write(f"# user: {getuser()}\n")
+        file.write(f"# date: {datetime.now().strftime('%c')}\n")
+        file.write(f"# batch {batch.batch_no} of {batch.nbatches}\n")
+        file.write(f"# approximate runtime: {hhmmss(qtime)}\n")
+        file.write("# test cases:\n")
+        for case in batch.cases:
+            file.write(f"# - {case.fullname}\n")
+        file.write(f"# total: {len(batch.cases)} test cases\n")
+        for var, val in batch.variables.items():
+            if val is None:
+                file.write(f"unset {var}\n")
+            else:
+                file.write(f"export {var}={val}\n")
+        workers = self.workers or ns.cores_per_node
+        invocation = self.nvtest_invocation(batch=batch, workers=workers, cpus=session_cpus)
+        file.write(f"(\n  {invocation}\n)\n")
 
-    def _run(self, *args_in: str, **kwargs: Any) -> None:
-        script = self.write_submission_script(*args_in, **kwargs)
-        if not os.path.exists(script):
-            raise ValueError("submission script not found, did you call setup()?")
-        args = [self.command, script]
+    def run_batch(self, batch: TestBatch) -> None:
+        script = batch.submission_script_filename()
+        mkdirp(os.path.dirname(script))
+        with open(script, "w") as fh:
+            self.write_submission_script(batch, fh)
+        set_executable(script)
+        args = [self.exe, script]
         p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         out, _ = p.communicate()
         result = str(out.decode("utf-8")).strip()
@@ -101,10 +86,10 @@ class PBS(BatchRunner):
         if len(parts) == 1 and parts[0]:
             jobid = parts[0]
         else:
-            logging.error(f"Failed to find jobid for batch {self.batch_no}/{self.nbatches}")
+            logging.error(f"Failed to find jobid for batch {batch.batch_no}/{batch.nbatches}")
             logging.log(
                 logging.ERROR,
-                f"    The following output was received from {self.command}:",
+                f"    The following output was received from {self.exe}:",
                 prefix=None,
             )
             for line in result.split("\n"):
@@ -118,8 +103,7 @@ class PBS(BatchRunner):
             while True:
                 state = self.poll(jobid)
                 if not running and state in ("R", "RUNNING"):
-                    if config.get("option:r") == "v":
-                        logging.emit(f"STARTING: Batch {self.batch_no} of {self.nbatches}\n")
+                    logging.debug(f"Starting batch {batch.batch_no} of {batch.nbatches}")
                     running = True
                 if state is None:
                     return

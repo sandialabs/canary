@@ -42,7 +42,7 @@ def machine_config() -> dict:
     nodename = uname.node
     sitename = nodename
     if "-login" in sitename:
-        login_no = re.search("\-login(?P<n>\d+).*", sitename)
+        login_no = re.search(r"-login(?P<n>\d+).*", sitename)
         if login_no:
             sitename = sitename.split("-login")[0] + login_no.group("n").zfill(2)
         else:

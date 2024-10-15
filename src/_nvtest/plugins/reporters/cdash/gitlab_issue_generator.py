@@ -117,7 +117,7 @@ def groupby_status_and_testname(tests):
     grouped = {}
     logging.info("Grouping failed tests by status and name")
     for test in tests:
-        if re.search("\[.*\]", test["name"]):
+        if re.search(r"\[.*\]", test["name"]):
             name = test["name"].split("[")[0]
         else:
             name = test["name"].split(".")[0]

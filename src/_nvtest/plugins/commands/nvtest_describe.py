@@ -22,6 +22,7 @@ class Describe(Command):
         parser.add_argument("testspec", help="Test file or test case spec")
 
     def execute(self, args: argparse.Namespace) -> int:
+        return self.describe_generator(args)
         try:
             return self.describe_generator(args)
         except Exception:

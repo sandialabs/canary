@@ -1,12 +1,12 @@
 from typing import Optional
 from typing import Union
 
-from ..error import diff_exit_status
-from ..error import fail_exit_status
-from ..error import skip_exit_status
-from ..error import timeout_exit_status
-from ..third_party.color import colorize
-from ..util import glyphs
+from .error import diff_exit_status
+from .error import fail_exit_status
+from .error import skip_exit_status
+from .error import timeout_exit_status
+from .third_party.color import colorize
+from .util import glyphs
 
 
 class Status:

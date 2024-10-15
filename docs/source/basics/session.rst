@@ -13,15 +13,15 @@ A test session consists of the following phases:
 :ref:`Discover<discover>`:
   Search ``path [path...]`` for test scripts.
 
-:ref:`Freeze<freeze>`:
-  "Freeze" test files into test cases based on :ref:`filtering<howto-filter>` criteria and
+:ref:`Lock<lock>`:
+  "Lock" test files into test cases based on :ref:`filtering<howto-filter>` criteria and
   :ref:`parameterizations<howto-parameterize>`.
 
 :ref:`Populate<populate>`:
   Create unique execution directories for each test case and :ref:`copy/link <howto-copy-and-link>` necessary resources into the execution directory.
 
 :ref:`Batch<batch>`:
-  For :ref:`batched<howto-run-batched>` sessions, group test cases into batches to run in a scheduler.
+  For :ref:`batched<howto-run-batched>` sessions, group test cases into batches to run in a batch runner.
 
 :ref:`Run<run>`:
   For each test, move into its execution directory and run the test script (after each dependency has completed, if necessary).
@@ -50,14 +50,14 @@ During discovery test files are collected:
    :extraargs: -rv -w --no-header
    :setup: rm -rf TestResults
 
-.. _freeze:
+.. _lock:
 
-Freeze
-......
+Lock
+....
 
-During the ``freeze`` stage, test files are :ref:`filtered <howto-filter>`, ``parameterize`` statements are expanded, and dependency links created:
+During the ``lock`` stage, test files are :ref:`filtered <howto-filter>`, ``parameterize`` statements are expanded, and dependency links created:
 
-.. command-output:: nvtest run --until=freeze -k centered_space .
+.. command-output:: nvtest run --until=lock -k centered_space .
    :cwd: /examples
    :extraargs: -rv -w --no-header
    :setup: rm -rf TestResults
@@ -88,7 +88,7 @@ The resultant test session directory, shown below, will be populated with test e
 Batch
 .....
 
-[Optional] Group test cases into batches to run in a scheduler.  The default batching scheme is to:
+[Optional] Group test cases into batches to run in a batch runner.  The default batching scheme is to:
 
 1. group cases by the number of compute nodes required to run; and
 2. partition each group into batches that complete in a set time (defined by the ``-l batch:length=T`` option).

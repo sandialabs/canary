@@ -4,7 +4,7 @@ import random
 import string
 
 import _nvtest.util.filesystem as fs
-from _nvtest.database import Database
+from _nvtest.session import Database
 
 
 def random_chars():

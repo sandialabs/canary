@@ -5,10 +5,7 @@ import json
 import math
 import os
 import re
-import signal
-import subprocess
 import sys
-import time
 from contextlib import contextmanager
 from copy import deepcopy
 from typing import IO
@@ -20,8 +17,9 @@ from typing import Union
 
 from .. import config
 from .. import plugin
-from ..error import diff_exit_status
+from ..abc import AbstractTestCase
 from ..paramset import ParameterSet
+from ..status import Status
 from ..third_party.color import colorize
 from ..util import cache
 from ..util import filesystem as fs
@@ -31,9 +29,6 @@ from ..util.executable import Executable
 from ..util.filesystem import copyfile
 from ..util.filesystem import mkdirp
 from ..util.hash import hashit
-from ..util.time import timestamp
-from .runner import Runner
-from .status import Status
 
 
 def stringify(arg: Any, float_fmt: Optional[str] = None) -> str:
@@ -48,7 +43,7 @@ def stringify(arg: Any, float_fmt: Optional[str] = None) -> str:
     return str(arg)
 
 
-class TestCase(Runner):
+class TestCase(AbstractTestCase):
     _dbfile = "testcase.lock"
 
     REGISTRY: set[Type["TestCase"]] = set()
@@ -131,7 +126,7 @@ class TestCase(Runner):
 
         self._launcher: Optional[str] = None
         self._preflags: Optional[list[str]] = None
-        self._command: Optional[str] = None
+        self._exe: Optional[str] = None
         self._postflags: Optional[list[str]] = None
 
         # Environment variables specific to this case
@@ -372,15 +367,26 @@ class TestCase(Runner):
         self._postflags = arg
 
     @property
-    def command(self) -> str:
-        if self._command is None:
-            self._command = os.path.basename(self.file)
-        assert self._command is not None
-        return self._command
+    def exe(self) -> str:
+        if self._exe is None:
+            self._exe = os.path.basename(self.file)
+        assert self._exe is not None
+        return self._exe
 
-    @command.setter
-    def command(self, arg: str) -> None:
-        self._command = arg
+    @exe.setter
+    def exe(self, arg: str) -> None:
+        self._exe = arg
+
+    def command(self, stage: str = "test") -> list[str]:
+        cmd: list[str] = []
+        if self.launcher:
+            cmd.append(self.launcher)
+            cmd.extend(self.preflags or [])
+        cmd.append(self.exe)
+        if stage == "analyze":
+            cmd.append("--execute-analysis-sections")
+        cmd.extend(self.postflags or [])
+        return cmd
 
     @property
     def variables(self) -> dict[str, str]:
@@ -454,6 +460,7 @@ class TestCase(Runner):
     @start.setter
     def start(self, arg: float) -> None:
         self._start = arg
+        self._finish = -1
 
     @property
     def finish(self) -> float:
@@ -755,7 +762,7 @@ class TestCase(Runner):
         file = self.dbfile
         mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
-            dump(self, fh)
+            self.dump(fh)
 
     def refresh(self) -> None:
         file = self.dbfile
@@ -850,10 +857,6 @@ class TestCase(Runner):
                         logging.emit(f"    Replacing {b} with {a}\n")
                         copyfile(src, dst)
 
-    def do_analyze(self) -> None:
-        args = ["--execute-analysis-sections"]
-        return self.run(*args, stage="analyze")
-
     def start_msg(self) -> str:
         id = colorize("@b{%s}" % self.id[:7])
         return "STARTING: {0} {1}".format(id, self.pretty_repr())
@@ -862,50 +865,19 @@ class TestCase(Runner):
         id = colorize("@b{%s}" % self.id[:7])
         return "FINISHED: {0} {1} {2}".format(id, self.pretty_repr(), self.status.cname)
 
-    def run(
-        self,
-        *args: str,
-        stage: str = "test",
-        timeoutx: float = 1.0,
-        **kwargs: Any,
-    ) -> None:
+    def prepare_for_launch(self, stage: str = "test") -> None:
         if os.getenv("NVTEST_RESETUP"):
             assert isinstance(self.exec_root, str)
             self.setup(self.exec_root)
         if self.dep_patterns:
             raise RuntimeError("Dependency patterns must be resolved before running")
-        try:
-            self.start = timestamp()
-            self.finish = -1
-            self.returncode = self.do_run(*args, stage=stage, timeoutx=timeoutx)
-            if self.xstatus == diff_exit_status:
-                if self.returncode != diff_exit_status:
-                    self._status.set("failed", f"expected {self.name} to diff")
-                else:
-                    self._status.set("xdiff")
-            elif self.xstatus != 0:
-                # Expected to fail
-                code = self.xstatus
-                if code > 0 and self.returncode != code:
-                    self._status.set("failed", f"expected {self.name} to exit with code={code}")
-                elif self.returncode == 0:
-                    self._status.set("failed", f"expected {self.name} to exit with code != 0")
-                else:
-                    self._status.set("xfail")
-            else:
-                self._status.set_from_code(self.returncode)
-        except KeyboardInterrupt:
-            self.returncode = 2
-            self._status.set("cancelled", "keyboard interrupt")
-            time.sleep(0.01)
-            raise
-        except BaseException:
-            self.returncode = 1
-            self._status.set("failed", "unknown failure")
-            time.sleep(0.01)
-            raise
-        finally:
-            self.finish = timestamp()
+        with fs.working_dir(self.exec_dir):
+            for hook in plugin.plugins():
+                hook.test_prepare(self, stage=stage)
+        self.save()
+
+    def wrap_up(self) -> None:
+        with fs.working_dir(self.exec_dir):
             self.cache_runtime()
             self.save()
             with open(self.logfile(), "w") as fh:
@@ -915,40 +887,6 @@ class TestCase(Runner):
                         fh.write(open(file).read())
             for hook in plugin.plugins():
                 hook.test_finish(self)
-        return
-
-    def do_run(self, *args: str, stage: str = "test", timeoutx: float = 1.0) -> int:
-        self._status.set("running")
-        self.save()
-        timeout = self.timeout * timeoutx
-        assert stage in ("test", "analyze")
-        with fs.working_dir(self.exec_dir):
-            for hook in plugin.plugins():
-                hook.test_prepare(self, stage=stage)
-            with logging.capture(self.logfile(stage), mode="w"), logging.timestamps():
-                cmd: list[str] = []
-                if self.launcher:
-                    cmd.append(self.launcher)
-                    cmd.extend(self.preflags or [])
-                cmd.append(self.command)
-                cmd.extend(self.postflags or [])
-                cmd.extend(args)
-                self.cmd_line = " ".join(cmd)
-                logging.info(f"Running {self.display_name}")
-                logging.info(f"Command line: {self.cmd_line}")
-                if timeoutx != 1.0:
-                    logging.info(f"Timeout multiplier: {timeoutx}")
-                with self.rc_environ():
-                    start = time.monotonic()
-                    proc = subprocess.Popen(cmd, start_new_session=True)
-                    while True:
-                        if proc.poll() is not None:
-                            break
-                        if timeout > 0 and time.monotonic() - start > timeout:
-                            os.kill(proc.pid, signal.SIGINT)
-                            return -2
-                        time.sleep(0.05)
-                    return proc.returncode
 
     def teardown(self) -> None: ...
 
@@ -1064,19 +1002,28 @@ class TestMultiCase(TestCase):
         self._postflags = arg
 
     @property
-    def command(self) -> str:
-        if self._command is None:
+    def exe(self) -> str:
+        if self._exe is None:
             if self.flag.startswith("-"):
-                self._command = os.path.basename(self.file)
-                return self._command
+                self._exe = os.path.basename(self.file)
             else:
-                self._command = self.flag
-        assert self._command is not None
-        return self._command
+                # flag is an executable file
+                self._exe = self.flag
+        assert self._exe is not None
+        return self._exe
 
-    @command.setter
-    def command(self, arg: str) -> None:
-        self._command = arg
+    @exe.setter
+    def exe(self, arg: str) -> None:
+        self._exe = arg
+
+    def command(self, stage: str = "test") -> list[str]:
+        cmd: list[str] = []
+        if self.launcher:
+            cmd.append(self.launcher)
+            cmd.extend(self.preflags or [])
+        cmd.append(self.exe)
+        cmd.extend(self.postflags or [])
+        return cmd
 
     @property
     def paramsets(self) -> list[ParameterSet]:
@@ -1088,9 +1035,6 @@ class TestMultiCase(TestCase):
         self._paramsets = arg
         if self._paramsets:
             assert isinstance(self._paramsets[0], ParameterSet)
-
-    def do_analyze(self) -> None:
-        return self.run(stage="analyze")
 
 
 def factory(type: str, **kwargs: Any) -> Union[TestCase, TestMultiCase]:

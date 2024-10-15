@@ -72,6 +72,8 @@ class Config:
                 if scope_data.get("variables"):
                     for var, val in scope_data["variables"].items():
                         os.environ[var] = val
+            level_name = self.get("config:log_level")
+            logging.set_level(logging.get_level(level_name))
         else:
             self.scopes = {
                 "defaults": {
@@ -81,7 +83,7 @@ class Config:
                         "log_level": "INFO",
                     },
                     "test": {"timeout": {"fast": 120.0, "long": 15 * 60.0, "default": 7.5 * 60.0}},
-                    "batch": {"length": 30 * 60, "scheduler": None, "scheduler_args": []},
+                    "batch": {"length": 30 * 60, "runner": None, "runner_args": []},
                     "machine": editable_machine_config,
                     "system": static_machine_config,
                     "variables": {},
@@ -144,10 +146,10 @@ class Config:
                     scope_data.setdefault("config", {})["no_cache"] = True
                 case ["batch", "length"]:
                     scope_data.setdefault("batch", {})["length"] = time_in_seconds(raw_value)
-                case ["batch", "scheduler"]:
-                    scope_data.setdefault("batch", {})["scheduler"] = raw_value.lower()
-                case ["batch", "scheduler_args"]:
-                    scope_data.setdefault("batch", {})["args"] = shlex.split(raw_value)
+                case ["batch", "runner"]:
+                    scope_data.setdefault("batch", {})["runner"] = raw_value.lower()
+                case ["batch", "runner_args"]:
+                    scope_data.setdefault("batch", {})["runner_args"] = shlex.split(raw_value)
                 case ["machine", key]:
                     scope_data.setdefault("machine", {})[key] = int(raw_value)
                 case ["test", keys]:
@@ -215,6 +217,7 @@ class Config:
         if args.debug:
             logging.set_level(logging.DEBUG)
             scope_data.setdefault("config", {})["debug"] = True
+            scope_data.setdefault("config", {})["log_level"] = "DEBUG"
         for var, val in args.env_mods.get("session", {}).items():
             os.environ[var] = val
             scope_data.setdefault("variables", {})[var] = val
@@ -635,6 +638,10 @@ def set_main_options(args: argparse.Namespace) -> None:
 
 def get(path: str, default: Optional[Any] = None, scope: Optional[str] = None) -> Any:
     return config.get(path, default=default, scope=scope)
+
+
+def getoption(path: str, default: Optional[Any] = None, scope: Optional[str] = None) -> Any:
+    return config.get(f"option:{path}", default=default, scope=scope)
 
 
 def set(path: str, value: Any, scope: Optional[str] = None) -> None:

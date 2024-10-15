@@ -8,10 +8,9 @@ from typing import TextIO
 
 from . import config
 from . import plugin
-from .resources import ResourceHandler
+from .abc import AbstractTestGenerator
+from .resource import ResourceHandler
 from .test.case import TestCase
-from .test.generator import TestGenerator
-from .test.generator import factory as generator_factory
 from .third_party.colify import colified
 from .third_party.color import colorize
 from .util import filesystem as fs
@@ -51,14 +50,14 @@ class Finder:
                     raise ValueError(f"{path} not found in {root}")
             self.roots[root].append(path)  # type: ignore
 
-    def discover(self) -> list[TestGenerator]:
-        tree: dict[str, set[TestGenerator]] = {}
+    def discover(self) -> list[AbstractTestGenerator]:
+        tree: dict[str, set[AbstractTestGenerator]] = {}
         if not self._ready:
             raise ValueError("Cannot call populate() before calling prepare()")
         for root, paths in self.roots.items():
             logging.debug(f"Searching {root} for test files")
             if os.path.isfile(root):
-                f = generator_factory(root)
+                f = AbstractTestGenerator.factory(root)
                 root = f.root
                 generators = tree.setdefault(root, set())
                 generators.add(f)
@@ -67,7 +66,7 @@ class Finder:
                 for path in paths:
                     p = os.path.join(root, path)
                     if os.path.isfile(p):
-                        generators.add(generator_factory(root, path))
+                        generators.add(AbstractTestGenerator.factory(root, path))
                     elif os.path.isdir(p):
                         generators.update(self.rfind(root, subdir=path))
                     else:
@@ -79,10 +78,10 @@ class Finder:
         n = sum([len(_) for _ in tree.values()])
         nr = len(tree)
         logging.debug(f"Found {n} test files in {nr} search roots")
-        files: list[TestGenerator] = [file for files in tree.values() for file in files]
+        files: list[AbstractTestGenerator] = [file for files in tree.values() for file in files]
         return files
 
-    def rfind(self, root: str, subdir: Optional[str] = None) -> list[TestGenerator]:
+    def rfind(self, root: str, subdir: Optional[str] = None) -> list[AbstractTestGenerator]:
         def skip_dir(dirname):
             if os.path.basename(dirname) in self.skip_dirs:
                 return True
@@ -102,14 +101,14 @@ class Finder:
                 [
                     (root, os.path.relpath(os.path.join(dirname, f), root))
                     for f in files
-                    if any([g.matches(f) for g in TestGenerator.REGISTRY])
+                    if any([g.matches(f) for g in AbstractTestGenerator.REGISTRY])
                 ]
             )
-        generators: list[TestGenerator]
+        generators: list[AbstractTestGenerator]
         if config.get("config:debug"):
-            generators = [generator_factory(*p) for p in paths]
+            generators = [AbstractTestGenerator.factory(*p) for p in paths]
         else:
-            generators = parallel.starmap(generator_factory, paths)
+            generators = parallel.starmap(AbstractTestGenerator.factory, paths)
 
         return generators
 
@@ -166,8 +165,8 @@ class Finder:
         logging.debug("Done validating test cases")
 
     @staticmethod
-    def freeze(
-        files: list[TestGenerator],
+    def lock(
+        files: list[AbstractTestGenerator],
         rh: Optional[ResourceHandler] = None,
         keyword_expr: Optional[str] = None,
         parameter_expr: Optional[str] = None,
@@ -197,9 +196,9 @@ class Finder:
         args = list(zip(files, repeat(kwds, len(files))))
         concrete_test_groups: list[list[TestCase]]
         if config.get("config:debug"):
-            concrete_test_groups = [freeze_abstract_file(*a) for a in args]
+            concrete_test_groups = [lock_abstract_file(*a) for a in args]
         else:
-            concrete_test_groups = parallel.starmap(freeze_abstract_file, args)
+            concrete_test_groups = parallel.starmap(lock_abstract_file, args)
         cases: list[TestCase] = [case for group in concrete_test_groups for case in group if case]
 
         # this sanity check should not be necessary
@@ -265,19 +264,19 @@ class Finder:
 
 
 def is_test_file(file: str) -> bool:
-    for generator in TestGenerator.REGISTRY:
+    for generator in AbstractTestGenerator.REGISTRY:
         if generator.matches(file):
             return True
     return False
 
 
-def freeze_abstract_file(file: TestGenerator, kwds: dict) -> list[TestCase]:
-    concrete_test_cases: list[TestCase] = file.freeze(**kwds)
+def lock_abstract_file(file: AbstractTestGenerator, kwds: dict) -> list[TestCase]:
+    concrete_test_cases: list[TestCase] = file.lock(**kwds)
     return concrete_test_cases
 
 
-def find(path: str) -> TestGenerator:
-    for gen_type in TestGenerator.REGISTRY:
+def find(path: str) -> AbstractTestGenerator:
+    for gen_type in AbstractTestGenerator.REGISTRY:
         if gen_type.matches(path):
             return gen_type(path)
     raise TypeError(f"No test generator for {path}")
