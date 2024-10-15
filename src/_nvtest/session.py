@@ -1,6 +1,5 @@
 """Setup and manage the test session"""
 
-import datetime
 import io
 import json
 import os
@@ -13,17 +12,20 @@ from concurrent.futures import Future
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
+from datetime import datetime
 from functools import partial
 from itertools import repeat
 from typing import IO
 from typing import Any
 from typing import Generator
 from typing import Optional
+from typing import Type
 from typing import Union
 
 from . import config
 from . import plugin
-from .database import Database
+from .abc import AbstractTestGenerator
+from .abc import AbstractTestRunner
 from .error import FailFast
 from .error import StopExecution
 from .finder import Finder
@@ -31,15 +33,17 @@ from .queues import BatchResourceQueue
 from .queues import Empty as EmptyQueue
 from .queues import ResourceQueue
 from .queues import factory as q_factory
-from .resources import ResourceHandler
-from .test.batch import BatchRunner
+from .resource import ResourceHandler
+from .status import Status
+from .test.batch import TestBatch
 from .test.case import TestCase
 from .test.case import TestMultiCase
 from .test.case import from_state as testcase_from_state
-from .test.generator import TestGenerator
-from .test.generator import from_state as testfile_from_state
-from .test.status import Status
 from .third_party import color
+from .third_party.lock import Lock
+from .third_party.lock import LockTransaction
+from .third_party.lock import ReadTransaction
+from .third_party.lock import WriteTransaction
 from .util import glyphs
 from .util import keyboard
 from .util import logging
@@ -69,7 +73,7 @@ class ExitCode:
         return compute_returncode(cases)
 
 
-class OutputLevel:
+class ProgressReporting:
     progress_bar = 0
     verbose = 1
 
@@ -77,7 +81,7 @@ class OutputLevel:
         self.level = max(0, min(level, 1))
 
     def __eq__(self, other) -> bool:
-        if isinstance(other, OutputLevel):
+        if isinstance(other, ProgressReporting):
             return self.level == other.level
         else:
             return self.level == other
@@ -124,7 +128,7 @@ class Session:
         os.environ["NVTEST_SESSION_CONFIG_DIR"] = self.config_dir
         self.mode = mode
         self.search_paths: dict[str, list[str]] = {}
-        self.generators: list[TestGenerator] = list()
+        self.generators: list[AbstractTestGenerator] = list()
         self.cases: list[TestCase] = list()
         self.db = Database(self.config_dir, mode=mode)
         if mode in "ra":
@@ -235,9 +239,9 @@ class Session:
         testfiles = [f.getstate() for f in self.generators]
         json.dump(testfiles, file, indent=2)
 
-    def load_testfiles(self, file: IO[Any]) -> list[TestGenerator]:
+    def load_testfiles(self, file: IO[Any]) -> list[AbstractTestGenerator]:
         logging.debug("Loading test case generators")
-        testfiles = [testfile_from_state(state) for state in json.load(file)]
+        testfiles = [AbstractTestGenerator.from_state(state) for state in json.load(file)]
         return testfiles
 
     def load(self) -> None:
@@ -349,7 +353,7 @@ class Session:
             self.dump_testfiles(record)
         logging.debug(f"Discovered {len(self.generators)} test files")
 
-    def freeze(
+    def lock(
         self,
         rh: Optional[ResourceHandler] = None,
         keyword_expr: Optional[str] = None,
@@ -358,8 +362,8 @@ class Session:
         owners: Optional[set[str]] = None,
         env_mods: Optional[dict[str, str]] = None,
     ) -> None:
-        """Freeze test files into concrete (parameterized) test cases"""
-        self.cases = Finder.freeze(
+        """Lock test files into concrete (parameterized) test cases"""
+        self.cases = Finder.lock(
             self.generators,
             rh=rh,
             keyword_expr=keyword_expr,
@@ -545,7 +549,7 @@ class Session:
         *,
         rh: Optional[ResourceHandler] = None,
         fail_fast: bool = False,
-        output: OutputLevel = OutputLevel(),
+        reporting: ProgressReporting = ProgressReporting(),
     ) -> int:
         """Run each test case in ``cases``.
 
@@ -554,7 +558,7 @@ class Session:
           rh: resource handler, usually set up by the ``nvtest run`` command.
           fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
             continuing running until all tests have been run.
-          output: level of verbosity
+          reporting: level of verbosity
 
         Returns:
           The session returncode (0 for success)
@@ -570,7 +574,9 @@ class Session:
                 try:
                     self.start = timestamp()
                     self.finish = -1.0
-                    self.process_queue(queue=queue, rh=rh, fail_fast=fail_fast, output=output)
+                    self.process_queue(
+                        queue=queue, rh=rh, fail_fast=fail_fast, reporting=reporting
+                    )
                 except ProcessPoolExecutorFailedToStart:
                     if int(os.getenv("NVTEST_LEVEL", "0")) > 1:
                         # This can happen when the ProcessPoolExecutor fails to obtain a lock.
@@ -595,7 +601,7 @@ class Session:
                     self.returncode = compute_returncode(queue.cases())
                     raise
                 else:
-                    if output == OutputLevel.progress_bar:
+                    if reporting == ProgressReporting.progress_bar:
                         queue.display_progress(self.start, last=True)
                     self.returncode = compute_returncode(queue.cases())
                 finally:
@@ -626,7 +632,7 @@ class Session:
         queue: ResourceQueue,
         rh: ResourceHandler,
         fail_fast: bool,
-        output: OutputLevel = OutputLevel(),
+        reporting: ProgressReporting = ProgressReporting(),
     ) -> None:
         """Process the test queue, asynchronously
 
@@ -635,27 +641,20 @@ class Session:
           rh: resource handler, usually set up by the ``nvtest run`` command.
           fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
             continuing running until all tests have been run.
-          output: level of verbosity
+          reporting: level of verbosity
 
         """
         futures: dict = {}
         duration = lambda: timestamp() - self.start
         timeout = rh["session:timeout"] or -1
+        runner = AbstractTestRunner.factory(rh)
         try:
             with ProcessPoolExecutor(max_workers=queue.workers) as ppe:
-                runner_args = []
-                runner_kwargs = dict(
-                    verbose=output == OutputLevel.verbose, timeoutx=rh["test:timeoutx"]
-                )
-                if rh["batch:batched"]:
-                    runner_args.extend(rh["batch:args"])
-                    if rh["batch:workers"]:
-                        runner_kwargs["workers"] = rh["batch:workers"]
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
                         logging.emit(queue.status())
-                    if output == OutputLevel.progress_bar:
+                    if reporting == ProgressReporting.progress_bar:
                         queue.display_progress(self.start)
                     if timeout >= 0.0 and duration() > timeout:
                         raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
@@ -668,7 +667,9 @@ class Session:
                         self.heartbeat(queue)
                     except EmptyQueue:
                         break
-                    future = ppe.submit(obj, *runner_args, **runner_kwargs)
+                    future = ppe.submit(
+                        runner, obj, verbose=reporting == ProgressReporting.verbose
+                    )
                     callback = partial(self.done_callback, iid, queue, fail_fast)
                     future.add_done_callback(callback)
                     futures[iid] = (obj, future)
@@ -690,7 +691,7 @@ class Session:
             return None
         if isinstance(queue, BatchResourceQueue):
             return None
-        hb: dict[str, Any] = {"date": datetime.datetime.now().strftime("%c")}
+        hb: dict[str, Any] = {"date": datetime.now().strftime("%c")}
         busy = queue.busy()
         hb["busy"] = [case.id for case in busy]
         hb["busy cpus"] = [cpu_id for case in busy for cpu_id in case.cpu_ids]
@@ -726,16 +727,20 @@ class Session:
         except BrokenProcessPool:
             # The future was probably killed by fail_fast or a keyboard interrupt
             return
+        except BrokenPipeError:
+            # something bad happened.  On some HPCs we have seen:
+            # BrokenPipeError: [Errno 108] Cannot send after transport endpoint shutdown
+            # Seems to be a filesystem issue, punt for now
+            return
 
         # The case (or batch) was run in a subprocess.  The object must be
         # refreshed so that the state in this main thread is up to date.
 
-        obj: Union[TestCase, BatchRunner] = queue.done(iid)
-        if not isinstance(obj, (BatchRunner, TestCase)):
-            logging.error(f"Expected TestCase or BatchRunner, got {obj.__class__.__name__}")
+        obj: Union[TestCase, TestBatch] = queue.done(iid)
+        if not isinstance(obj, (TestBatch, TestCase)):
+            logging.error(f"Expected ATC, got {obj.__class__.__name__}")
             return
         obj.refresh()
-
         if isinstance(obj, TestCase):
             with self.db.open("snapshots", "a") as record:
                 self.dump_snapshot(obj, record)
@@ -743,7 +748,7 @@ class Session:
                 code = compute_returncode([obj])
                 raise FailFast(str(obj), code)
         else:
-            assert isinstance(obj, BatchRunner)
+            assert isinstance(obj, TestBatch)
             if all(case.status == "retry" for case in obj):
                 queue.retry(iid)
                 return
@@ -943,6 +948,46 @@ class Session:
                     description = case.describe(include_logfile_path=show_logs)
                     string.write("%s %s\n" % (glyph, description))
         return string.getvalue()
+
+
+class Database:
+    """Manages the test session database
+
+    Args:
+        directory: Where to store database assets
+        mode: File mode
+
+    """
+
+    def __init__(self, directory: str, mode="a") -> None:
+        self.home = os.path.join(os.path.abspath(directory), "objects")
+        if mode in "ra":
+            if not os.path.exists(self.home):
+                raise FileNotFoundError(self.home)
+        elif mode == "w":
+            force_remove(self.home)
+        else:
+            raise ValueError(f"{mode!r}: unknown file mode")
+        self.lock = Lock(self.join_path("lock"))
+        if mode == "w":
+            with self.open("DB.TAG", "w") as fh:
+                fh.write(datetime.today().strftime("%c"))
+
+    def exists(self, name: str) -> bool:
+        return os.path.exists(self.join_path(name))
+
+    def join_path(self, name: str) -> str:
+        return os.path.join(self.home, name)
+
+    @contextmanager
+    def open(self, name: str, mode: str = "r") -> Generator[IO, None, None]:
+        path = self.join_path(name)
+        mkdirp(os.path.dirname(path))
+        transaction_type: Type[LockTransaction]
+        transaction_type = ReadTransaction if mode == "r" else WriteTransaction
+        with transaction_type(self.lock):
+            with open(path, mode) as fh:
+                yield fh
 
 
 def setup_individual_case(case, exec_root, copy_all_resources):

@@ -18,7 +18,7 @@ def boolean(arg):
 
 
 def ns2dict(arg: Union[Namespace, SimpleNamespace]) -> dict:
-    from ..resources import ResourceHandler
+    from ..resource import ResourceHandler
 
     value: dict[str, Any] = dict(vars(arg))
     for name, item in value.items():

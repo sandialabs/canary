@@ -1,19 +1,16 @@
-import abc
 import errno
 import os
-from typing import TYPE_CHECKING
+from abc import ABC
+from abc import abstractmethod
 from typing import Optional
 from typing import Type
 
-from ..resources import ResourceHandler
+from ..resource import ResourceHandler
 from ..test.case import TestCase
 
-if TYPE_CHECKING:
-    pass
 
-
-class TestGenerator(abc.ABC):
-    """The TestCaseGenerator is an abstract object representing a test file that
+class AbstractTestGenerator(ABC):
+    """The AbstractTestCaseGenerator is an abstract object representing a test file that
     can generate test cases
 
     Parameters
@@ -31,7 +28,7 @@ class TestGenerator(abc.ABC):
 
     """
 
-    REGISTRY: set[Type["TestGenerator"]] = set()
+    REGISTRY: set[Type["AbstractTestGenerator"]] = set()
 
     def __init_subclass__(cls, **kwargs):
         cls.REGISTRY.add(cls)
@@ -48,11 +45,11 @@ class TestGenerator(abc.ABC):
         self.name = os.path.splitext(os.path.basename(self.path))[0]
 
     @classmethod
-    @abc.abstractmethod
+    @abstractmethod
     def matches(cls, path: str) -> bool:
         pass
 
-    @abc.abstractmethod
+    @abstractmethod
     def describe(
         self,
         keyword_expr: Optional[str] = None,
@@ -61,8 +58,8 @@ class TestGenerator(abc.ABC):
     ) -> str:
         pass
 
-    @abc.abstractmethod
-    def freeze(
+    @abstractmethod
+    def lock(
         self,
         cpus: Optional[list[int]] = None,
         gpus: Optional[list[int]] = None,
@@ -84,15 +81,15 @@ class TestGenerator(abc.ABC):
         state["name"] = self.name
         return state
 
+    @staticmethod
+    def from_state(state: dict[str, str]) -> "AbstractTestGenerator":
+        generator = AbstractTestGenerator.factory(state["root"], state["path"])
+        return generator
 
-def from_state(state: dict[str, str]) -> TestGenerator:
-    generator = factory(state["root"], state["path"])
-    return generator
-
-
-def factory(root: str, path: Optional[str] = None) -> TestGenerator:
-    for gen_type in TestGenerator.REGISTRY:
-        if gen_type.matches(root if path is None else path):
-            return gen_type(root, path=path)
-    f = root if path is None else os.path.join(root, path)
-    raise TypeError(f"No test generator for {f}")
+    @staticmethod
+    def factory(root: str, path: Optional[str] = None) -> "AbstractTestGenerator":
+        for gen_type in AbstractTestGenerator.REGISTRY:
+            if gen_type.matches(root if path is None else path):
+                return gen_type(root, path=path)
+        f = root if path is None else os.path.join(root, path)
+        raise TypeError(f"No test generator for {f}")

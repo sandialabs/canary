@@ -17,7 +17,7 @@ nvtest.directives.parameterize('np', (1, 2, 3), when="options='baz'")
 nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """)
         file = pyt.TestFile(".", "test.pyt")
-        cases = file.freeze(
+        cases = file.lock(
             cpus=[0, 10],
             gpus=[0, 0],
             nodes=[0, 1],
@@ -34,7 +34,7 @@ nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
         # without the baz option, the `np` parameter will not be expanded so we will be left with
         # three test cases and one analyze.  The analyze will not be masked because the `np`
         # parameter is never expanded
-        cases = file.freeze(
+        cases = file.lock(
             cpus=[0, 10],
             gpus=[0, 0],
             nodes=[0, 1],
@@ -47,7 +47,7 @@ nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
         assert not cases[-1].masked
 
         # with np<3, some of the cases will be filtered
-        cases = file.freeze(
+        cases = file.lock(
             cpus=[0, 10],
             gpus=[0, 0],
             nodes=[0, 1],
@@ -79,7 +79,7 @@ def test_vvt_generator(tmpdir):
 # VVT: parameterize : a,b,c=1,11,111 2,22,222 3,33,333
 """)
         file = vvt.VVTTestFile(".", "test.vvt")
-        cases = file.freeze(
+        cases = file.lock(
             cpus=[0, 10],
             gpus=[0, 0],
             nodes=[0, 1],
@@ -94,7 +94,7 @@ def test_vvt_generator(tmpdir):
         # without the baz option, the `np` parameter will not be expanded so we will be left with
         # three test cases and one analyze.  The analyze will not be masked because the `np`
         # parameter is never expanded
-        cases = file.freeze(
+        cases = file.lock(
             cpus=[0, 10],
             gpus=[0, 0],
             nodes=[0, 1],
@@ -106,7 +106,7 @@ def test_vvt_generator(tmpdir):
         assert not cases[-1].masked
 
         # with np<3, some of the cases will be filtered
-        cases = file.freeze(
+        cases = file.lock(
             cpus=[0, 10],
             gpus=[0, 0],
             nodes=[0, 1],

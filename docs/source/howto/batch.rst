@@ -7,10 +7,10 @@ Tests can be run under a workload manager (scheduler) such as Slurm or PBS by ad
 
 .. code-block:: console
 
-  nvtest run [-l batch:(count=N|length=T)] -l batch:scheduler=SCHEDULER ...
-  nvtest run [-b (count=N|length=T)] -b scheduler=SCHEDULER ...
+  nvtest run [-l batch:(count=N|length=T)] -l batch:runner=RUNNER ...
+  nvtest run [-b (count=N|length=T)] -b runner=RUNNER ...
 
-When run in "batch" mode, ``nvtest`` will group tests into "batches" and submit each batch to ``SCHEDULER``.
+When run in "batch" mode, ``nvtest`` will group tests into "batches" and submit each batch to ``RUNNER``.
 
 .. note::
 
@@ -34,27 +34,27 @@ By default, tests are batched into groups based as follows:
 
    ``-l batch:count=N`` and ``-l batch:length=T`` are mutually exclusive.
 
-Batch scheduler
-................
+Batch runner
+............
 
-* ``-l batch:scheduler=S``: use scheduler ``S`` to run batches.
-* ``-l batch:args=S``: pass args ``S`` directly to the scheduler.  Eg, ``-l batch:args=--account=XYZ`` will pass ``--account=XYZ`` directly to the scheduler.
+* ``-l batch:runner=S``: use runner ``S`` to run batches.
+* ``-l batch:args=S``: pass args ``S`` directly to the runner.  Eg, ``-l batch:args=--account=XYZ`` will pass ``--account=XYZ`` directly to the runner.
 
-The following schedulers are supported:
+The following runners are supported:
 
 * shell (run batches in subprocess of the current shell)
 * `slurm workload manager <https://slurm.schedmd.com/overview.html>`_
 
 .. note::
 
-  The shell scheduler is not performant and its primary utility is running examples on machines which don't have an actual scheduler setup.
+  The shell runner is not performant and its primary utility is running examples on machines which don't have an actual batch runner setup.
 
 Batch concurrency
 .................
 
 Batch concurrency can be controlled by
 
-* ``-l session:workers=N``: Submit ``N`` concurrent batches to the scheduler at any one time.  The default is 5.
+* ``-l session:workers=N``: Submit ``N`` concurrent batches to the runner at any one time.  The default is 5.
 * ``-l batch:workers=N``: Execute the batch asynchronously using a pool of at most ``N`` workers.  By default, the maximum number of available workers is used.
 
 Examples
@@ -62,7 +62,7 @@ Examples
 
 * Run the nvtest example suite in 4 batches
 
-  .. command-output:: nvtest run -d TestResults.Batched -l batch:scheduler=shell -l batch:count=4 .
+  .. command-output:: nvtest run -d TestResults.Batched -l session:workers=1 -l batch:runner=shell -l batch:count=4 .
     :cwd: /examples
     :extraargs: -rv -w
     :returncode: 30
@@ -70,7 +70,7 @@ Examples
 
 * Run the nvtest example suite in 4 batches, running tests in serial in each batch
 
-  .. command-output:: nvtest run -d TestResults.Batched -l batch:scheduler=shell -l batch:count=4 -l batch:workers=1 .
+  .. command-output:: nvtest run -d TestResults.Batched -l session:workers=1 -l batch:runner=shell -l batch:count=4 -l batch:workers=1 .
     :cwd: /examples
     :extraargs: -rv -w
     :returncode: 30

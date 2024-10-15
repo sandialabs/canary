@@ -521,20 +521,20 @@ def urlescape(item):
 
 
 def find_build_type(configure, build):
-    m = re.search("-D\s?CMAKE_BUILD_TYPE=(?P<x>\w+)", configure["command"])
+    m = re.search(r"-D\s?CMAKE_BUILD_TYPE=(?P<x>\w+)", configure["command"])
     if m:
         return m.group("x")
-    m = re.search("-D\s?CMAKE_BUILD_TYPE:STRING=(?P<x>\w+)", configure["command"])
+    m = re.search(r"-D\s?CMAKE_BUILD_TYPE:STRING=(?P<x>\w+)", configure["command"])
     if m:
         return m.group("x")
-    m = re.search("build_type=(?P<x>\w+)", build["buildname"])
+    m = re.search(r"build_type=(?P<x>\w+)", build["buildname"])
     if m:
         return m.group("x")
     if " dbg " in build["buildname"]:
         return "Debug"
     if " opt " in build["buildname"]:
         return "Release"
-    m = re.search("AlegraNevada\/(?P<x>\w+)", build["buildname"])
+    m = re.search(r"AlegraNevada\/(?P<x>\w+)", build["buildname"])
     if m:
         return m.group("x")
     return "RelWithDebInfo"

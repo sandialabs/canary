@@ -9,15 +9,15 @@ from typing import Any
 from typing import Optional
 
 import nvtest
-from _nvtest.resources import ResourceHandler
+from _nvtest.abc import AbstractTestGenerator
+from _nvtest.resource import ResourceHandler
 from _nvtest.test.case import TestCase
-from _nvtest.test.generator import TestGenerator
 from _nvtest.util import graph
 from _nvtest.util import logging
 from _nvtest.util.filesystem import is_exe
 
 
-class CTestTestFile(TestGenerator):
+class CTestTestFile(AbstractTestGenerator):
     def __init__(self, root: str, path: Optional[str] = None) -> None:
         super().__init__(root, path=path)
 
@@ -40,7 +40,7 @@ class CTestTestFile(TestGenerator):
             return cmake
         return None
 
-    def freeze(
+    def lock(
         self,
         cpus: Optional[list[int]] = None,
         gpus: Optional[list[int]] = None,
@@ -73,7 +73,7 @@ class CTestTestFile(TestGenerator):
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")
         rh = rh or ResourceHandler()
-        cases = self.freeze(
+        cases = self.lock(
             cpus=rh["test:cpu_count"],
             gpus=rh["test:gpu_count"],
             nodes=rh["test:node_count"],
@@ -248,7 +248,7 @@ class CTestTestCase(TestCase):
             self.sources = {"link": [(ns.command, os.path.basename(ns.command))]}
             self.launcher = ns.launcher
             self.preflags = ns.preflags
-            self.command = ns.command
+            self.exe = ns.command
             self.postflags = ns.postflags
 
         if will_fail:

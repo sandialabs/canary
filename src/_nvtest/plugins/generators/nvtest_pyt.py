@@ -15,12 +15,12 @@ import _nvtest.config as config
 import _nvtest.when as m_when
 import nvtest
 from _nvtest import enums
+from _nvtest.abc import AbstractTestGenerator
 from _nvtest.error import diff_exit_status
 from _nvtest.paramset import ParameterSet
-from _nvtest.resources import ResourceHandler
+from _nvtest.resource import ResourceHandler
 from _nvtest.test.case import TestCase
 from _nvtest.test.case import TestMultiCase
-from _nvtest.test.generator import TestGenerator
 from _nvtest.third_party.color import colorize
 from _nvtest.third_party.monkeypatch import monkeypatch
 from _nvtest.util import graph
@@ -37,12 +37,15 @@ class FilterNamespace:
         expect: Optional[int] = None,
         result: Optional[str] = None,
         action: Optional[str] = None,
+        **kwargs: Any
     ):
         self.value: Any = value
         self.when = m_when.When.from_string(when)
         self.expect = expect
         self.result = result
         self.action = action
+        for key, val in kwargs.items():
+            setattr(self, key, val)
 
     def enabled(
         self,
@@ -56,7 +59,7 @@ class FilterNamespace:
         return result.value
 
 
-class TestFile(TestGenerator):
+class TestFile(AbstractTestGenerator):
     def __init__(self, root: str, path: Optional[str] = None) -> None:
         super().__init__(root, path=path)
         self.owners: list[str] = []
@@ -100,7 +103,7 @@ class TestFile(TestGenerator):
                         file.write(f" -> {dst}")
                     file.write("\n")
         rh = rh or ResourceHandler()
-        cases: list[TestCase] = self.freeze(
+        cases: list[TestCase] = self.lock(
             cpus=rh["test:cpu_count"],
             gpus=rh["test:gpu_count"],
             nodes=rh["test:node_count"],
@@ -111,7 +114,7 @@ class TestFile(TestGenerator):
         graph.print(cases, file=file)
         return file.getvalue()
 
-    def freeze(
+    def lock(
         self,
         cpus: Optional[list[int]] = None,
         gpus: Optional[list[int]] = None,
@@ -124,7 +127,7 @@ class TestFile(TestGenerator):
         env_mods: Optional[dict[str, str]] = None,
     ) -> list[TestCase]:
         try:
-            cases = self._freeze(
+            cases = self._lock(
                 cpus=cpus,
                 gpus=gpus,
                 nodes=nodes,
@@ -139,9 +142,9 @@ class TestFile(TestGenerator):
         except Exception as e:
             if config.get("config:debug"):
                 raise
-            raise ValueError(f"Failed to freeze {self.file}: {e}") from None
+            raise ValueError(f"Failed to lock {self.file}: {e}") from None
 
-    def _freeze(
+    def _lock(
         self,
         cpus: Optional[list[int]] = None,
         gpus: Optional[list[int]] = None,
@@ -559,8 +562,8 @@ class TestFile(TestGenerator):
         ns = FilterNamespace(arg, when=when, result=result, expect=expect)
         self._depends_on.append(ns)
 
-    def m_preload(self, arg: str, when: Optional[str] = None) -> None:
-        ns = FilterNamespace(arg, when=when)
+    def m_preload(self, arg: str, when: Optional[str] = None, source: bool = False) -> None:
+        ns = FilterNamespace(arg, when=when, source=source)
         self._preload = ns
 
     def m_parameterize(
@@ -820,8 +823,8 @@ class TestFile(TestGenerator):
     ) -> None:
         self.m_parameterize(names, values, when=when, type=type)
 
-    def f_preload(self, arg: str, *, when: Optional[str] = None):
-        self.m_preload(arg, when=when)
+    def f_preload(self, arg: str, *, when: Optional[str] = None, source: bool = False):
+        self.m_preload(arg, when=when, source=source)
 
     def f_set_attribute(self, *, when: Optional[str] = None, **attributes: Any) -> None:
         self.m_set_attribute(when=when, **attributes)

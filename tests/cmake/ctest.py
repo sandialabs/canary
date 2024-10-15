@@ -42,7 +42,7 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
 """
             )
         file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
-        cases = file.freeze()
+        cases = file.lock()
         assert len(cases) == 2
 
         case = cases[0]
@@ -81,7 +81,7 @@ def test_parse_ctesttestfile_1(tmpdir):
             cmake = Executable("cmake")
             cmake("..")
             file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
-            cases = file.freeze()
+            cases = file.lock()
             assert len(cases) == 1
             case = cases[0]
             assert case.cpus == 4

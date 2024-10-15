@@ -4,9 +4,10 @@ from typing import Optional
 
 from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
+from _nvtest.resource import ResourceHandler
+from _nvtest.runners import TestCaseRunner
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
-from _nvtest.util import logging
 
 from .common import filter_cases_by_path
 from .common import filter_cases_by_status
@@ -26,6 +27,8 @@ An "analyze" run only makes sense in the following conditions:
 1. The test has already been run; and
 2. The test has logic for handling ``--execute-analysis-sections`` on the command line.
 
+No attempt is made to determine whether the second condition is met.
+
 Note: this command must be run in a test session directory.
 """
 
@@ -39,7 +42,8 @@ Note: this command must be run in a test session directory.
             cases = filter_cases_by_path(session.cases, args.pathspec)
         else:
             cases = filter_cases_by_status(session.cases, ("failed", "diffed", "success"))
+        rh = ResourceHandler()
+        runner = TestCaseRunner(rh)
         for case in cases:
-            logging.info(f"Executing analysis section of {case.pretty_repr()}")
-            case.do_analyze()
+            runner.analyze(case)
         return 0

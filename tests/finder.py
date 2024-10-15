@@ -17,7 +17,7 @@ def test_skipif(tmpdir):
     assert workdir in finder.roots
     finder.prepare()
     files = finder.discover()
-    cases = finder.freeze(files)
+    cases = finder.lock(files)
     assert len(cases) == 2
     assert len([c for c in cases if not c.mask]) == 1
 
@@ -35,11 +35,11 @@ def test_keywords(tmpdir):
     assert workdir in finder.roots
     finder.prepare()
     files = finder.discover()
-    cases = finder.freeze(files, keyword_expr="a and i")
+    cases = finder.lock(files, keyword_expr="a and i")
     assert len([c for c in cases if not c.mask]) == 0
-    cases = finder.freeze(files, keyword_expr="a and e")
+    cases = finder.lock(files, keyword_expr="a and e")
     assert len([c for c in cases if not c.mask]) == 1
-    cases = finder.freeze(files, keyword_expr="a or i")
+    cases = finder.lock(files, keyword_expr="a or i")
     assert len([c for c in cases if not c.mask]) == 2
 
 
@@ -54,7 +54,7 @@ def test_parameterize_1(tmpdir):
     assert len(finder.roots) == 1
     finder.prepare()
     files = finder.discover()
-    cases = finder.freeze(files)
+    cases = finder.lock(files)
     assert len([c for c in cases if not c.mask]) == 3
     a, b = 0, 1
     for case in cases:
@@ -75,7 +75,7 @@ def test_parameterize_2(tmpdir):
     assert len(finder.roots) == 1
     finder.prepare()
     files = finder.discover()
-    cases = finder.freeze(files)
+    cases = finder.lock(files)
     assert len([c for c in cases if not c.mask]) == 9
     i = 0
     for a, b in [(0, 1), (2, 3), (4, 5)]:
@@ -96,9 +96,9 @@ def test_parameterize_3(tmpdir):
     assert workdir in finder.roots
     finder.prepare()
     files = finder.discover()
-    cases = finder.freeze(files, on_options=["xxx"])
+    cases = finder.lock(files, on_options=["xxx"])
     assert len([c for c in cases if not c.mask]) == 2
-    cases = finder.freeze(files)
+    cases = finder.lock(files)
     assert len([c for c in cases if not c.mask]) == 1
     assert cases[0].parameters == {}
 
@@ -114,10 +114,10 @@ def test_cpu_count(tmpdir):
     finder.add(workdir)
     finder.prepare()
     files = finder.discover()
-    cases = finder.freeze(files)
+    cases = finder.lock(files)
     assert len([c for c in cases if not c.mask]) == 4
     nvtest.config.set("machine:cpu_count", 2)
-    cases = finder.freeze(files)
+    cases = finder.lock(files)
     assert len([c for c in cases if not c.mask]) == 1
 
 
@@ -136,7 +136,7 @@ def test_dep_patterns(tmpdir):
     finder.add(workdir)
     finder.prepare()
     files = finder.discover()
-    cases = finder.freeze(files)
+    cases = finder.lock(files)
     assert len([c for c in cases if not c.mask]) == 4
     for case in cases:
         if case.name == "f":
@@ -157,7 +157,7 @@ def test_analyze(tmpdir):
     finder.add(workdir)
     finder.prepare()
     files = finder.discover()
-    cases = finder.freeze(files)
+    cases = finder.lock(files)
     print(cases)
     print(vars(cases[-1]))
     assert len([c for c in cases if not c.mask]) == 10
@@ -176,11 +176,11 @@ def test_enable(tmpdir):
     finder.add(workdir)
     finder.prepare()
     files = finder.discover()
-    cases = finder.freeze(files, on_options=["baz", "spam"])
+    cases = finder.lock(files, on_options=["baz", "spam"])
     assert len([c for c in cases if not c.mask]) == 1
-    cases = finder.freeze(files, on_options=["baz"])
+    cases = finder.lock(files, on_options=["baz"])
     assert len([c for c in cases if not c.mask]) == 0
-    cases = finder.freeze(files, on_options=["spam", "baz", "foo"])
+    cases = finder.lock(files, on_options=["spam", "baz", "foo"])
     assert len([c for c in cases if not c.mask]) == 1
 
 
@@ -198,5 +198,5 @@ def test_enable_names(tmpdir):
     finder.add(workdir)
     finder.prepare()
     files = finder.discover()
-    cases = finder.freeze(files)
+    cases = finder.lock(files)
     assert len([c for c in cases if not c.mask]) == 2

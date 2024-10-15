@@ -111,7 +111,7 @@ def format_message(
     message: str,
     *,
     end: str = "\n",
-    prefix: Optional[str] = "==> ",
+    prefix: Optional[str] = None,
     format: Optional[str] = None,
 ) -> str:
     if format == "center":
@@ -133,7 +133,7 @@ def log(
     message: str,
     *,
     file: TextIO = sys.stdout,
-    prefix: Optional[str] = "==> ",
+    prefix: Optional[str] = None,
     end: str = "\n",
     format: Optional[str] = None,
     ex: Optional[Any] = None,

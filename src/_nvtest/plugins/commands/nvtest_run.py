@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import sys
 import traceback
@@ -6,9 +7,9 @@ import traceback
 from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.error import StopExecution
-from _nvtest.resources import ResourceHandler
+from _nvtest.resource import ResourceHandler
 from _nvtest.session import ExitCode
-from _nvtest.session import OutputLevel
+from _nvtest.session import ProgressReporting
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.third_party.color import colorize
@@ -25,7 +26,7 @@ from .common import add_work_tree_arguments
 class Run(Command):
     @property
     def description(self) -> str:
-        return "Run the tests"
+        return "Find and run tests from a pathspec"
 
     def setup_parser(self, parser: "Parser"):
         parser.epilog = PathSpec.description()
@@ -53,19 +54,14 @@ class Run(Command):
         group.add_argument(
             "-r",
             choices=("b", "v"),
-            help=argparse.SUPPRESS,
-        )
-        group.add_argument(
-            "-v",
-            metavar="level",
-            choices=(0, 1),
-            default=1,
-            type=int,
-            help="Level of test execution verbosity.  If -v1 (default) report the start/finish/status "
-            "of each test case, if -v0, show only a status bar",
+            default="v",
+            metavar="char",
+            help="Test progress reporting as specified by char: "
+            "(v)verbose: show start/finish/status of each test case as it occurs; "
+            "(b)ar: show progress bar as tests progress. [default: v]",
         )
         parser.add_argument(
-            "-u", "--until", choices=("discover", "freeze", "populate"), help=argparse.SUPPRESS
+            "-u", "--until", choices=("discover", "lock", "populate"), help=argparse.SUPPRESS
         )
         parser.add_argument(
             "--fail-fast",
@@ -110,7 +106,7 @@ class Run(Command):
                     logging.info("done with test discovery")
                     return 0
             logging.emit(colorize("@*{generating} test cases from test files\n"))
-            session.freeze(
+            session.lock(
                 rh=args.rh,
                 keyword_expr=args.keyword_expr,
                 parameter_expr=args.parameter_expr,
@@ -123,7 +119,7 @@ class Run(Command):
                 s, S = "" if n == 1 else "s", "" if N == 1 else "s"
                 logging.info(colorize("@*{expanded} %d case%s from %d file%s" % (n, s, N, S)))
                 graph.print(cases, file=sys.stdout)
-                if args.until == "freeze":
+                if args.until == "lock":
                     logging.info("done freezing test cases")
                     return 0
             if not args.no_header:
@@ -144,7 +140,8 @@ class Run(Command):
             if not args.batched_invocation and session.db.exists("batches/1"):
                 # Reload batch info so that the tests can be rerun in the scheduler
                 args.rh = args.rh or ResourceHandler()
-                batch_cfg = session.db.load_json("batches/1/config")
+                with session.db.open("batches/1/config") as fh:
+                    batch_cfg = json.load(fh)
                 for var, val in batch_cfg.items():
                     if val is not None:
                         args.rh.set(f"batch:{var}", val)
@@ -154,17 +151,13 @@ class Run(Command):
             assert args.mode == "b"
             session = Session(args.work_tree, mode="a")
             cases = session.bfilter(lot_no=args.lot_no, batch_no=args.batch_no)
-        output = OutputLevel(level=args.v)
-        if args.r:
-            # old flag
-            logging.debug("prefer -v over -r")
-            level = OutputLevel.progress_bar if args.r == "b" else OutputLevel.verbose
-            output.level = level
+        level = ProgressReporting.progress_bar if args.r == "b" else ProgressReporting.verbose
+        reporting = ProgressReporting(level=level)
         try:
             session.exitstatus = session.run(
                 cases,
                 rh=args.rh,
-                output=output,
+                reporting=reporting,
                 fail_fast=args.fail_fast,
             )
         except KeyboardInterrupt:

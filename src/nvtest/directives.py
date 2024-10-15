@@ -906,7 +906,7 @@ def parameterize(
     """  # noqa: E501
 
 
-def preload(arg: str, *, when: Optional[str] = None) -> None:
+def preload(arg: str, *, when: Optional[str] = None, source: bool = False) -> None:
     """Load shell shell script before test execution
 
     Usage
@@ -923,7 +923,7 @@ def preload(arg: str, *, when: Optional[str] = None) -> None:
 
     .. code-block:: python
 
-       # VVT: preload ([source]) : arg
+       # VVT: preload (options=..., platforms=..., testname=...) : [source-script] script_name
 
     .. warning::
 

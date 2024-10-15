@@ -1,3 +1,4 @@
+import abc
 import io
 import threading
 from typing import Any
@@ -5,9 +6,9 @@ from typing import Optional
 from typing import Union
 
 from . import config
-from .resources import ResourceHandler
-from .test.batch import BatchRunner
-from .test.batch import factory as b_factory
+from .abc import AbstractTestRunner
+from .resource import ResourceHandler
+from .test.batch import TestBatch
 from .test.case import TestCase
 from .third_party import color
 from .third_party.rprobe import cpu_count
@@ -18,7 +19,7 @@ from .util.progress import progress
 from .util.time import timestamp
 
 
-class ResourceQueue:
+class ResourceQueue(abc.ABC):
     def __init__(
         self,
         *,
@@ -39,46 +40,46 @@ class ResourceQueue:
         self.cpu_count = len(self.cpu_ids)
         self.gpu_count = len(self.gpu_ids)
 
-    def iter_keys(self) -> list[int]:
-        raise NotImplementedError()
+    @abc.abstractmethod
+    def iter_keys(self) -> list[int]: ...
 
-    def done(self, obj_id: int) -> Any:
-        raise NotImplementedError
+    @abc.abstractmethod
+    def done(self, obj_id: int) -> Any: ...
 
-    def retry(self, obj_id: int) -> Any:
-        raise NotImplementedError
+    @abc.abstractmethod
+    def retry(self, obj_id: int) -> Any: ...
 
-    def cases(self) -> list[TestCase]:
-        raise NotImplementedError
+    @abc.abstractmethod
+    def cases(self) -> list[TestCase]: ...
 
-    def queued(self) -> list[Any]:
-        raise NotImplementedError
+    @abc.abstractmethod
+    def queued(self) -> list[Any]: ...
 
-    def busy(self) -> list[Any]:
-        raise NotImplementedError
+    @abc.abstractmethod
+    def busy(self) -> list[Any]: ...
 
-    def finished(self) -> list[Any]:
-        raise NotImplementedError
+    @abc.abstractmethod
+    def finished(self) -> list[Any]: ...
 
-    def notrun(self) -> list[Any]:
-        raise NotImplementedError
+    @abc.abstractmethod
+    def notrun(self) -> list[Any]: ...
 
     def empty(self) -> bool:
         return len(self.buffer) == 0
 
-    def skip(self, obj_id: int) -> None:
-        raise NotImplementedError
+    @abc.abstractmethod
+    def skip(self, obj_id: int) -> None: ...
 
-    def available_workers(self):
+    def available_workers(self) -> int:
         return self.workers - len(self._busy)
 
-    def available_cpus(self):
+    def available_cpus(self) -> int:
         return len(self.cpu_ids)
 
-    def available_gpus(self):
+    def available_gpus(self) -> int:
         return len(self.gpu_ids)
 
-    def available_resources(self):
+    def available_resources(self) -> tuple[int, int]:
         return (self.available_cpus(), self.available_gpus())
 
     def acquire_cpus(self, n: int) -> list[int]:
@@ -137,7 +138,7 @@ class ResourceQueue:
         for key in keys:
             self._notrun[key] = self.buffer.pop(key)
 
-    def get(self) -> Optional[tuple[int, Union[TestCase, BatchRunner]]]:
+    def get(self) -> Optional[tuple[int, Union[TestCase, TestBatch]]]:
         with self.lock:
             if self.available_workers() <= 0:
                 return None
@@ -212,6 +213,9 @@ class DirectResourceQueue(ResourceQueue):
     def iter_keys(self) -> list[int]:
         return sorted(self.buffer.keys(), key=lambda k: self.buffer[k].cpus)
 
+    def retry(self, obj_id: int) -> Any:
+        raise NotImplementedError
+
     def put(self, *objs: TestCase) -> None:
         for obj in objs:
             if obj.cpus > self.cpu_count:
@@ -258,8 +262,6 @@ class DirectResourceQueue(ResourceQueue):
 
 
 class BatchResourceQueue(ResourceQueue):
-    store = "batches"
-
     def __init__(self, rh: ResourceHandler, lock: threading.Lock) -> None:
         workers = int(rh["session:workers"])
         super().__init__(
@@ -269,10 +271,10 @@ class BatchResourceQueue(ResourceQueue):
             workers=5 if workers < 0 else workers,
         )
         self.rh = rh
-        scheduler = self.rh["batch:scheduler"]
-        if scheduler is None:
-            raise ValueError("BatchResourceQueue requires a scheduler")
-        self.scheduler: str = str(scheduler)
+        runner = self.rh["batch:runner"]
+        if runner is None:
+            raise ValueError("BatchResourceQueue requires a batch:runner")
+        self.tr = AbstractTestRunner.factory(rh)
         self.tmp_buffer: list[TestCase] = []
 
     def iter_keys(self) -> list[int]:
@@ -288,12 +290,12 @@ class BatchResourceQueue(ResourceQueue):
             length = float(self.rh["batch:length"] or default_length)  # 30 minute default
             partitions = partition_t(self.tmp_buffer, t=length)
         n = len(partitions)
-        batches = [
-            b_factory(p, i, n, lot_no, type=self.scheduler)
-            for i, p in enumerate(partitions, start=1)
-            if len(p)
-        ]
+        batches = [TestBatch(p, i, n, lot_no) for i, p in enumerate(partitions, start=1) if len(p)]
         for batch in batches:
+            if self.tr.scheduled:
+                # scheduled batches require 1 cpu to submit them
+                batch.cpus = 1
+                batch.gpus = 0
             super().put(batch)
 
     def put(self, *objs: TestCase) -> None:
@@ -314,7 +316,7 @@ class BatchResourceQueue(ResourceQueue):
                     if dep.id in finished:
                         case.dependencies[i] = finished[dep.id]
 
-    def done(self, obj_no: int) -> BatchRunner:
+    def done(self, obj_no: int) -> TestBatch:
         with self.lock:
             if obj_no not in self._busy:
                 raise RuntimeError(f"batch {obj_no} is not running")
@@ -357,16 +359,16 @@ class BatchResourceQueue(ResourceQueue):
         cases.extend([case for batch in self._notrun.values() for case in batch])
         return cases
 
-    def queued(self) -> list[BatchRunner]:
+    def queued(self) -> list[TestBatch]:
         return list(self.buffer.values())
 
-    def busy(self) -> list[BatchRunner]:
+    def busy(self) -> list[TestBatch]:
         return list(self._busy.values())
 
-    def finished(self) -> list[BatchRunner]:
+    def finished(self) -> list[TestBatch]:
         return list(self._finished.values())
 
-    def notrun(self) -> list[BatchRunner]:
+    def notrun(self) -> list[TestBatch]:
         return list(self._notrun.values())
 
 
@@ -392,9 +394,9 @@ def factory(rh: ResourceHandler, lock: threading.Lock) -> ResourceQueue:
 
     """
     queue: ResourceQueue
-    if rh["batch:scheduler"] is None:
+    if rh["batch:runner"] is None:
         if rh["batch:count"] is not None or rh["batch:length"] is not None:
-            raise ValueError("batched execution requires a scheduler")
+            raise ValueError("batched execution requires a batch:runner")
         queue = DirectResourceQueue(rh, lock)
     else:
         queue = BatchResourceQueue(rh, lock)

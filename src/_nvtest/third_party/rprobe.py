@@ -54,9 +54,9 @@ def read_proccpuinfo():
     """
     file = "/proc/cpuinfo"
     if os.path.exists(file):
-        proc = re.compile("processor\s*:")
-        sibs = re.compile("siblings\s*:")
-        cores = re.compile("cpu cores\s*:")
+        proc = re.compile(r"processor\s*:")
+        sibs = re.compile(r"siblings\s*:")
+        cores = re.compile(r"cpu cores\s*:")
         with open(file, "rt") as fp:
             num_sibs = 0
             num_cores = 0
