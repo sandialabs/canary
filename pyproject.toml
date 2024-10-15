@@ -20,8 +20,8 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 version_file = "src/_nvtest/_version.py"
-version_scheme = "guess-next-dev"
-local_scheme = "node-and-date"
+version_scheme = "python-simplified-semver"
+local_scheme = "no-local-version"
 
 [tool.mypy]
 exclude = [
