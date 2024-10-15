@@ -29,6 +29,10 @@ A test session consists of the following phases:
 Finish:
   Perform clean up actions, if any.
 
+.. image:: /dot/Flow.png
+   :align: center
+   :scale: 50 %
+
 Test session execution
 ----------------------
 
@@ -117,4 +121,4 @@ During test execution, ``nvtest`` navigates to each test directory and runs the 
 
 .. note::
 
-   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type=X`` option.  See :ref:`basics-resource` and :ref:`howto-resources`.
+   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type=X`` option (e.g. ``-l session:workers=N``, ``-l session:cpus=N``, etc.). See :ref:`basics-resource` and :ref:`howto-resources`.

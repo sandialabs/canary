@@ -1,0 +1,45 @@
+digraph G {
+
+bgcolor=transparent;
+overlap=compress;
+rankdir=TB;
+
+node[
+  fontname=Monaco,
+  penwidth=1,
+  fontsize=20,
+  margin=.1,
+  shape=box,
+]
+
+session [label="Session"]
+search [label="Search\nFind test generators"]
+lock [label="Lock\nExpand parameters and\ncreate concrete test cases"]
+setup [label="Setup\ncreate execution\ndirectories for test cases"]
+
+subgraph cluster_run {
+  label="            Run"
+  fontsize=25
+
+  batched [label="Batched?", fixedsize="true", width="3", height="1", shape="diamond", style="filled"]
+  batch_cases [label="Batch test cases\nusing tiling\nalgorithm"]
+
+  scheduled [label="Scheduled?", fixedsize="true", width="3", height="1", shape="diamond", style="filled"]
+  run_batched_sched    [label="Run batches\nasynchronously\nthrough scheduler"]
+  run_batched_no_sched [label="Run batches\nasynchronously"]
+
+  run_async [label="Run tests\nasynchronously"]
+
+  batched -> batch_cases [label="Yes"]
+  batch_cases -> scheduled
+  scheduled -> run_batched_sched [label="Yes"]
+
+  scheduled -> run_batched_no_sched [label="No"]
+
+  batched -> run_async [label="No"]
+}
+
+  session -> search -> lock -> setup -> batched
+
+
+}
