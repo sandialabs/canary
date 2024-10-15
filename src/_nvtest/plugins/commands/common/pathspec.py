@@ -164,10 +164,9 @@ The behavior %(run)s is context dependent.
 For %(new)s test sessions, the %(pathspec)s argument is scanned for test files to add
 to the session.  %(pathspec)s can be one (or more) of the following types:
 
-• directory name: the directory is recursively searched for test files ending in
-  '.vvt', '.pyt', or CTestTestfile.cmake;
-• '.vvt', '.pyt', or CTestTestfile.cmake file: specific test files; and
-• '.json' or '.yaml' file: file containing specific paths to tests and/or directories with the following schema:
+• directory name: the directory is recursively searched for recognized test file extensions;
+• specific test files; and
+• '.json' or '.yaml' file containing specific paths to tests and/or directories with the following schema:
 
   .. code-block:: yaml
 
