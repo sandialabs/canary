@@ -73,3 +73,17 @@ The number of resources made available to individual tests can be limited by pas
 * ``node_count``: ``[min:]max`` Compute nodes available per test.  Tests requiring less than ``min`` nodes (default: 1) and tests requiring more than ``max`` nodes are ignored.
 * ``timeout``: the time, in seconds, the test can run.  Tests requiring more than ``timeout`` seconds are ignored.  Also accepts GO's time format.
 * ``timeoutx``: apply this multiplier to the test's default timeout.
+
+CPU and GPU ID identification
+------------------------------
+
+When a test is executed by ``nvtest``, it first expands environment variables looking for the placeholders ``%(gpu_ids)s`` and ``%(cpu_ids)s``. It inserts the GPU and CPU IDs[1]_, respectively, into these environment variables. This allows tests to know which CPUs and GPUs it has been allocated.  For example, a test being run with the Cuda backend requires that the ``CUDA_VISIBLE_DEVICES`` variable be set to the GPUs available to a test.  One could add the following to their environment:
+
+.. code-block:: console
+
+    export CUDA_VISIBLE_DEVICES="%(gpu_ids)s"
+    nvtest run -c machine:gpu_count:4 ...
+
+When each test is launched, ``nvtest`` will replace ``%(gpu_ids)s`` with a comma separated list of the actual GPU IDs allocated to the test.
+
+.. [1] The GPU and CPU IDs are ``nvtest``'s internal IDs (number ``0..N-1``) and may not represent actual hardware IDs.
