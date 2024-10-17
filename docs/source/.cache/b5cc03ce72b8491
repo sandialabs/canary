@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "--- parameterize4 ------------\nFile: /opt/alegranevada/team/x/darwin/src/nvtest/examples/parameterize/parameterize4.pyt\nKeywords: \n6 test cases:\n\u251c\u2500\u2500 parameterize4[a=1,b=100000,np=4]\n\u251c\u2500\u2500 parameterize4[a=1,b=100000,np=8]\n\u251c\u2500\u2500 parameterize4[a=2,b=1e+06,np=4]\n\u251c\u2500\u2500 parameterize4[a=2,b=1e+06,np=8]\n\u251c\u2500\u2500 parameterize4[a=3,b=1e+07,np=4]\n\u2514\u2500\u2500 parameterize4[a=3,b=1e+07,np=8]"
+}

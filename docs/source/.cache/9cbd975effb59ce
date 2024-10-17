@@ -1,0 +1,4 @@
+{
+  "returncode": 4,
+  "output": "._     _|_  _   _ _|_ \n| | \\/  |_ (/_ _>  |_\nsearching for tests in xstatus\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting 99f5e4c xfail-fail\n==> Finished 99f5e4c xfail-fail FAIL\nShort test summary info\n\u2717 FAIL 99f5e4c xfail-fail started: 14:10:09, finished: 14:10:10, duration: 1.00s.\n\n\u26a1\u26a1 Session done -- 1 total, 1 fail in 00:00:01.00"
+}

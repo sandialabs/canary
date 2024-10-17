@@ -33,17 +33,14 @@ literal block while building the docs.
 .. moduleauthor::  Sebastian Wiesner  <lunaryorn@gmail.com>
 """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
+import hashlib
+import json
 import os
 import shlex
 import sys
 import tempfile
 from collections import defaultdict
 from collections import namedtuple
-from subprocess import PIPE
 from subprocess import STDOUT
 from subprocess import Popen
 
@@ -260,7 +257,7 @@ class Command(_Command):
         return repr(command)
 
 
-class ProgramOutputCache(defaultdict):
+class ProgramOutputCache:
     """
     Execute command and cache their output.
 
@@ -273,6 +270,25 @@ class ProgramOutputCache(defaultdict):
     invoked, and its result is cached.  Subsequent access to the same key
     returns the cached value.
     """
+
+    def __init__(self):
+        self.cache = {}
+
+    def get(self, command, f):
+
+        if command not in self.cache:
+            if os.path.exists(f):
+                with open(f) as fh:
+                    cache = json.load(fh)
+                returncode = cache["returncode"]
+                output = cache["output"]
+            else:
+                returncode, output = command.get_output()
+                os.makedirs(os.path.dirname(f), exist_ok=True)
+                with open(f, "w") as fh:
+                    json.dump({"returncode": returncode, "output": output}, fh, indent=2)
+            self.cache[command] = (returncode, output)
+        return self.cache[command]
 
     def __missing__(self, command):
         """
@@ -315,14 +331,16 @@ def run_programs(app, doctree):
     node_class = nodes.literal_block
 
     cache = app.env.programoutput_cache
-
+    cache_d = os.path.join(app.env.srcdir, ".cache")
     for node in doctree.traverse(program_output):
         command = Command.from_program_output_node(node)
+        sha = hashit(command.command)
+        f = os.path.join(cache_d, sha)
         try:
             if node["nocache"]:
                 returncode, output = command.get_output()
             else:
-                returncode, output = cache[command]
+                returncode, output = cache.get(command, f)
         except EnvironmentError as error:
             error_message = "Command {0} failed: {1}".format(command, error)
             error_node = doctree.reporter.error(error_message, base_node=node)
@@ -392,3 +410,10 @@ def setup(app):
     app.connect("doctree-read", run_programs)
     metadata = {"parallel_read_safe": True}
     return metadata
+
+
+def hashit(arg, length=15) :
+    if isinstance(arg, (list, tuple)):
+        arg = " ".join(arg)
+    obj = hashlib.md5(arg.encode("utf-8"))
+    return obj.hexdigest()[:length]

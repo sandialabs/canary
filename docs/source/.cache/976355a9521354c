@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "                     d8                      d8   \n888-~88e Y88b    / _d88__  e88~~8e   d88~\\ _d88__ \n888  888  Y88b  /   888   d888  88b C888    888   \n888  888   Y88b/    888   8888__888  Y88b   888   \n888  888    Y8/     888   Y888    ,   888D  888   \n888  888     Y      \"88_/  \"88___/  \\_88P   \"88_/\nsearching for tests in enable\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting 80ac6e0 enable\n==> Finished 80ac6e0 enable PASS\n\ud83d\udca5\ud83d\udca5 Session done -- 1 total, 1 pass in 00:00:00.00"
+}

@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": " __  _   _   _   _____   ___    __   _____  \n|  \\| | | \\ / | |_   _| | __| /' _/ |_   _| \n| | ' | `\\ V /'   | |   | _|  `._`.   | |   \n|_|\\__|   \\_/     |_|   |___| |___/   |_|\nsearching for tests in .\n==> collected 24 files from 1 root\ngenerating test cases from test files\n==> expanded 10 cases from 10 files\n\u2514\u2500\u2500 centered_space\n\u2502   \u251c\u2500\u2500 centered_space[a=0,b=0]\n\u2502   \u251c\u2500\u2500 centered_space[a=-10,b=0]\n\u2502   \u251c\u2500\u2500 centered_space[a=-5,b=0]\n\u2502   \u251c\u2500\u2500 centered_space[a=5,b=0]\n\u2502   \u251c\u2500\u2500 centered_space[a=10,b=0]\n\u2502   \u251c\u2500\u2500 centered_space[a=0,b=-2]\n\u2502   \u251c\u2500\u2500 centered_space[a=0,b=-1]\n\u2502   \u251c\u2500\u2500 centered_space[a=0,b=1]\n\u2502   \u2514\u2500\u2500 centered_space[a=0,b=2]\n==> done freezing test cases"
+}

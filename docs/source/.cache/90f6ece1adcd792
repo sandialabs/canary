@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "Starting 5840af8 execute_and_analyze[a=1]\nFinished 5840af8 execute_and_analyze[a=1] PASS\nStarting f51eb1b execute_and_analyze[a=2]\nFinished f51eb1b execute_and_analyze[a=2] PASS\nStarting a50c550 execute_and_analyze[a=3]\nFinished a50c550 execute_and_analyze[a=3] PASS\nStarting a1fc609 execute_and_analyze\nFinished a1fc609 execute_and_analyze PASS"
+}

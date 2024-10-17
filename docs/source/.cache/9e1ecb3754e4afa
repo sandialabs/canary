@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "                   #                       #    \n                   #                       #    \n # ###  ##   ##  #####    ####    #####  #####  \n ##   #  #   #     #     #    #  #         #    \n #    #   # #      #     ######   ####     #    \n #    #   # #      #     #            #    #    \n #    #    #        ###   ####   #####      ###\nsearching for tests in xstatus\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting 04a670b xdiff\n==> Finished 04a670b xdiff XDIFF\nShort test summary info\n\u2714 XDIFF 04a670b xdiff\n\n\u2728\u2728 Session done -- 1 total, 1 xdiff in 00:00:00.00"
+}
