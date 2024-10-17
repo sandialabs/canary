@@ -1,4 +1,5 @@
 stages:
+- code analysis
 - test
 - deploy
 
@@ -18,9 +19,9 @@ before_script:
 
 
 test-job:
+  stage: test
   tags:
   - cee.build
-  stage: test
   script:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - module load aue/cmake/3.27.7 > /dev/null 2>&1 || true
@@ -34,6 +35,9 @@ test-job:
     when: always
 
 lint-changed-files:
+  stage: code analysis
+  tags:
+  - cee.build
   script:
   - python3 -m pip install $STD_PIP_ARGS ruff
   - ruff --version
@@ -48,6 +52,9 @@ lint-changed-files:
       junit: ruff.xml
 
 format-changed-files:
+  stage: code analysis
+  tags:
+  - cee.build
   script:
   - python3 -m pip install $STD_PIP_ARGS ruff
   - ruff --version
@@ -57,15 +64,24 @@ format-changed-files:
   - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     when: always
 
-codequality:
+mypy:
+  stage: code analysis
+  tags:
+  - cee.build
   script:
   - python3 -m pip install $STD_PIP_ARGS mypy mypy-gitlab-code-quality
   - mypy ./src --no-error-summary > mypy-out.txt || true
   - mypy-gitlab-code-quality < mypy-out.txt > codequality.json
+  rules:
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    when: always
   artifacts:
     when: always
     reports:
       codequality: codequality.json
+  rules:
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    when: always
 
 pages:
   stage: deploy
