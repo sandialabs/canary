@@ -10,6 +10,13 @@ variables:
   PIP_TRUSTED_HOST: nexus.web.sandia.gov
   STD_PIP_ARGS: "--trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org"
 
+
+before_script:
+- $BASE_CEE_PYTHON3 -m venv venv
+- source venv/bin/activate
+- python3 --version
+
+
 test-job:
   tags:
   - cee.build
@@ -19,23 +26,52 @@ test-job:
   - module load aue/cmake/3.27.7 > /dev/null 2>&1 || true
   - module load aue/gcc/12.1.0 > /dev/null 2>&1 || true
   - module load aue/openmpi/4.1.4-gcc-12.1.0 > /dev/null 2>&1 || true
-  - $BASE_CEE_PYTHON3 -m venv venv
-  - python3 -m venv venv
-  - source venv/bin/activate
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - pytest ./tests
   - deactivate
   rules:
-  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     when: always
+
+lint-changed-files:
+  script:
+  - python3 -m pip install $STD_PIP_ARGS ruff
+  - ruff --version
+  - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
+  - ./bin/ci/ruff "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" check --output-format=junit --output-file=ruff.xml
+  rules:
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    when: always
+  artifacts:
+    when: always
+    reports:
+      junit: ruff.xml
+
+format-changed-files:
+  script:
+  - python3 -m pip install $STD_PIP_ARGS ruff
+  - ruff --version
+  - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
+  - ./bin/ci/ruff "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" format --check
+  rules:
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    when: always
+
+codequality:
+  script:
+  - python3 -m pip install $STD_PIP_ARGS mypy mypy-gitlab-code-quality
+  - mypy ./src --no-error-summary > mypy-out.txt || true
+  - mypy-gitlab-code-quality < mypy-out.txt > codequality.json
+  artifacts:
+    when: always
+    reports:
+      codequality: codequality.json
 
 pages:
   stage: deploy
   tags:
   - cee.build
   script:
-  - $BASE_CEE_PYTHON3 -m venv venv
-  - source ./venv/bin/activate
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - cd docs
   - make clean

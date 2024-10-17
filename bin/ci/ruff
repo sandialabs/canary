@@ -1,0 +1,64 @@
+#!/bin/bash
+
+set -eu
+set -x
+
+usage() {
+    echo "Usage:"
+    echo "  Check the entire codebase:"
+    echo "   $0"
+    echo "  Check Python files changed since REF"
+    echo "   $0 REF"
+    echo "  Pass additional options to ruff:"
+    echo "   $0 REF --output-format=junit"
+}
+
+realpath() {
+    [[ $1 = /* ]] && echo "$1" || echo "$PWD/${1#./}"
+}
+
+root="$(dirname $(realpath "$0"))/.."
+cd $root
+
+if [ "$#" -eq 0 ]; then
+    ruff check .
+    exit $?
+elif [ "$#" -lt 1 ]; then
+    echo "Unsupported usage" >&2
+    usage >&2
+    exit 2
+fi
+
+REF="$(git rev-parse "$1")"
+shift 1
+
+if [ "${1:-}" = "check" ] || [ "${1:-}" = "format" ]; then
+    RUFF_CMD="$1"
+    shift 1
+else
+    RUFF_CMD="check"
+fi
+
+changed_files=$(git diff --name-only "${REF}"...)
+uncommitted_files=$(git diff HEAD --name-only)
+untracked_files=$(git ls-files --others --exclude-standard)
+all_files="${changed_files}"$'\n'"${uncommitted_files}"$'\n'"${untracked_files}"
+
+# Remove the trailing newline (if any)
+all_files="${all_files%$'\n'}"
+
+files_to_check=""
+while IFS= read -r file; do
+    if [ -z "${file}" ] || [ ! -f "${file}" ]; then
+        continue
+    fi
+    if [[ "${file}" == *.py ]] || [[ "${file}" == *.pyt ]]; then
+        files_to_check="${files_to_check}${file}"$' '
+    fi
+done <<<"${all_files}"
+
+if [ -z "${files_to_check}" ]; then
+    exit 0
+fi
+
+echo "${files_to_check}" | xargs ruff "$RUFF_CMD" "$@"
