@@ -2,16 +2,19 @@ stages:
 - test
 - deploy
 
+variables:
+  BASE_CEE_PYTHON3=/usr/local/anaconda/3-2024.02/bin/python3
+
 test-job:
-  tags: [cee]
+  tags:
+  - cee.build
   stage: test
   script:
-  - module use /projects/alegranevada/modules/$SNLSYSTEM/$SNLCLUSTER
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - module load aue/cmake/3.27.7 > /dev/null 2>&1 || true
   - module load aue/gcc/12.1.0 > /dev/null 2>&1 || true
   - module load aue/openmpi/4.1.4-gcc-12.1.0 > /dev/null 2>&1 || true
-  - module load alegra-dev
+  - $BASE_CEE_PYTHON3 -m venv venv
   - python3 -m venv venv
   - source venv/bin/activate
   - python3 -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -e .[dev]
@@ -23,12 +26,11 @@ test-job:
 
 pages:
   stage: deploy
-  tags: [cee]
+  tags:
+  - cee.build
   script:
-  - module use /projects/alegranevada/modules/$SNLSYSTEM/$SNLCLUSTER
-  - module load alegra-dev
-  - python3 -m venv venv
-  - source venv/bin/activate
+  - $BASE_CEE_PYTHON3 -m venv venv
+  - source ./venv/bin/activate
   - python3 -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -e .[dev]
   - cd docs
   - make clean
@@ -44,9 +46,8 @@ pages:
   rules:
   - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     changes:
-    - src/_nvtest/directives/*.py
-    - src/_nvtest/commands/*.py
-    - src/_nvtest/test/testfile.py
+    - src/nvtest/directives.py
+    - src/_nvtest/plugins/commands/*.py
     - docs/*.rst
     - docs/*/*.rst
     - docs/**/*.rst
@@ -54,4 +55,6 @@ pages:
     - docs/source/conf.py
     - docs/source/dot/*.png
     - docs/source/images/*.png
+    when: always
+  - if: $BUILD_PAGES
     when: always
