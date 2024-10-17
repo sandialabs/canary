@@ -262,11 +262,10 @@ def autodoc_directives(dest):
 
 
 def autodoc_commands(dest):
-    import _nvtest.plugin
 
     mkdirp(dest)
     parser = make_argument_parser()
-    _nvtest.plugin.add_all_commands(parser)
+    parser.add_all_commands()
     writer = aw.ArgparseMultiRstWriter(parser.prog, dest)
     writer.write(parser)
 

@@ -38,7 +38,7 @@ class Config(Command):
             Session(os.getcwd(), mode="r")
         if args.subcommand == "show":
             text: str
-            if args.section == "plugins":
+            if args.section in ("plugins", "plugin"):
                 text = get_active_plugin_description()
                 do_pretty_print = False
             else:
@@ -80,7 +80,7 @@ def _get_plugin_info(p: Any) -> tuple[str, str, str]:
     if namespace == "_nvtest":
         namespace = "builtin"
     name = getattr(p, "name", p.__name__)
-    file = inspect.getfile(p)
+    file = getattr(p, "file", inspect.getfile(p))
     return (namespace, name, file)
 
 
@@ -102,10 +102,11 @@ def get_active_plugin_description() -> str:
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))
         table.append(row)
+    rows = sorted(table, key=lambda _: _[0])
     fp = io.StringIO()
     fp.write("{0:{1}s}  {2:{3}s}  File\n".format("Namespace", widths[0], "Name", widths[1]))
     fp.write("{0}  {1}  {2}\n".format("=" * widths[0], "=" * widths[1], "=" * widths[2]))
-    for row in table:
+    for row in rows:
         fp.write(
             "{0:{1}s}  {2:{3}s}  {4:{5}s}\n".format(
                 row[0], widths[0], row[1], widths[1], row[2], widths[2]

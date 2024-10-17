@@ -10,21 +10,25 @@ node[
   fontsize=20,
   margin=.1,
   shape=box,
+  ordering=out
 ]
 
 run [label="nvtest run [options] [pathspec ...]" shape="plaintext"]
 
 
-//subgraph cluster_session {
-
+plug_test_run [label="Plugins\ntest_prelaunch\ntest_finish" shape="octagon"]
+plug_test_run_b1 [label="Plugins\ntest_prelaunch\ntest_finish" shape="octagon"]
 init [label="Initialize\nCreate test session\ndirectory, database, etc."]
 search [label="Search\nFind test files and\ninstantiate TestGenerator\nobjects for each"]
 lock [label="Lock\nExpand parameters and\ncreate concrete test cases\nfrom each generator"]
 setup [label="Setup\ncreate execution\ndirectories for test cases\nand copy/link resources"]
+finish [label="Finish"]
+done [label="Done"]
 
-// subgraph cluster_run {
-//   label="            Run"
-//   fontsize=25
+plug_session_init [label="Plugin\nsession_initialize" shape="octagon"]
+plug_session_discovery [label="Plugin\nsession_discovery" shape="octagon"]
+plug_session_finish [label="Plugin\nsession_finish" shape="octagon"]
+plug_test_setup [label="Plugin\ntest_setup" shape="octagon"]
 
   queue [label="Put test cases in\nResourceQueue"]
   batch_queue [label="Put test cases in\nBatchResourceQueue"]
@@ -35,6 +39,7 @@ setup [label="Setup\ncreate execution\ndirectories for test cases\nand copy/link
 
   scheduled [label="Scheduled?", fixedsize="true", width="3", height="1", shape="diamond", style="filled"]
   run_batched_sched    [label="Run batches\nasynchronously\nthrough scheduler"]
+  run_async_b1 [label="Run tests in\nbatch asynchronously"]
 
   run_batched_no_sched [label="Run batches\nasynchronously"]
 
@@ -47,17 +52,36 @@ setup [label="Setup\ncreate execution\ndirectories for test cases\nand copy/link
   batch_queue -> batch_cases -> scheduled
   scheduled -> write_batch [label="Yes"]
   write_batch -> run_batched_sched
-  run_batched_sched -> nothing1 [style="invis"]
+  run_batched_sched -> run_async_b1 //nothing1 [style="invis"]
+  plug_test_run_b1 -> run_async_b1 [arrowhead="none"]
 
   scheduled -> run_batched_no_sched [label="No"]
-  run_batched_no_sched -> nothing2 [style="invis"]
+  run_batched_no_sched -> run_async_b1 //nothing2 [style="invis"]
 
   batched -> queue [label="No"]
   queue -> run_async
+  run_async -> plug_test_run [arrowhead="none"]
+  run_async -> finish
 
-// }
-//}
+  run -> init
+  init -> plug_session_init [arrowhead="none"]
+  init -> search
+  search -> plug_session_discovery [arrowhead="none"]
+  search -> lock -> setup
+  setup -> plug_test_setup [arrowhead="none"]
+  setup -> batched
 
-  run -> init -> search -> lock -> setup -> batched
+  run_async_b1 -> finish
+
+  finish -> plug_session_finish [arrowhead="none"]
+  finish -> done
+
+  {rank="same"; init; plug_session_init;}
+  {rank="same"; search; plug_session_discovery;}
+  {rank="same"; setup; plug_test_setup;}
+  {rank="same"; plug_test_run; run_async;}
+  {rank="same"; finish; plug_session_finish;}
+  {rank="same"; run_async_b1; plug_test_run_b1}
+  {rank="same"; run_batched_no_sched; run_batched_sched}
 
 }

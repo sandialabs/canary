@@ -536,8 +536,8 @@ def setup(case: "TestCase") -> None:
     write_vvtest_util(case)
 
 
-@nvtest.plugin.register(scope="test", stage="prepare")
-def prepare(case: "TestCase", stage: str = "test") -> None:
+@nvtest.plugin.register(scope="test", stage="prelaunch")
+def prelaunch(case: "TestCase", stage: str = "test") -> None:
     write_vvtest_util(case, stage=stage)
 
 

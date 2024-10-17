@@ -838,7 +838,7 @@ class TestCase(AbstractTestCase):
         logging.info(f"Rebaselining {self.pretty_repr()}")
         with fs.working_dir(self.exec_dir):
             for hook in plugin.plugins():
-                hook.test_prepare(self, stage="baseline")
+                hook.test_prelaunch(self, stage="baseline")
             for arg in self.baseline:
                 if isinstance(arg, str):
                     if os.path.exists(arg):
@@ -873,7 +873,7 @@ class TestCase(AbstractTestCase):
             raise RuntimeError("Dependency patterns must be resolved before running")
         with fs.working_dir(self.exec_dir):
             for hook in plugin.plugins():
-                hook.test_prepare(self, stage=stage)
+                hook.test_prelaunch(self, stage=stage)
         self.save()
 
     def wrap_up(self) -> None:

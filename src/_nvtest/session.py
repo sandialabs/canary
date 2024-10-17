@@ -136,7 +136,7 @@ class Session:
         else:
             self.initialize()
         for hook in plugin.plugins():
-            hook.session_setup(self)
+            hook.session_initialize(self)
         self.exitstatus = -1
         self.returncode = -1
         self.mode = mode
@@ -346,7 +346,7 @@ class Session:
         for root, paths in self.search_paths.items():
             finder.add(root, *paths, tolerant=True)
         for hook in plugin.plugins():
-            hook.session_discovery(self)
+            hook.session_discovery(finder)
         finder.prepare()
         self.generators = finder.discover()
         with self.db.open("files", "w") as record:

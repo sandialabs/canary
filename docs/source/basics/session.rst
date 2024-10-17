@@ -121,4 +121,4 @@ During test execution, ``nvtest`` navigates to each test directory and runs the 
 
 .. note::
 
-   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type=X`` option (e.g. ``-l session:workers=N``, ``-l session:cpus=N``, etc.). See :ref:`basics-resource` and :ref:`howto-resources`.
+   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type=X`` option (e.g. ``-l session:workers=N``, ``-l session:cpus=N``, etc.). See :ref:`basics-resource`.

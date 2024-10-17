@@ -1,6 +1,7 @@
 import functools
 import glob
 import importlib.resources as ir
+import inspect
 import json
 import os
 import sys
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from .abc import AbstractTestGenerator
     from .abc import AbstractTestRunner
     from .config.argparsing import Parser
+    from .finder import Finder
     from .session import Session
     from .test.case import TestCase
 
@@ -42,15 +44,15 @@ class PluginHook:
         """Call user plugin before arguments are parsed"""
 
     @staticmethod
-    def session_discovery(session: "Session") -> None:
-        """Call user plugin during the discovery stage, after search paths passed on the command
+    def session_initialize(session: "Session") -> None:
+        """Call user plugin during session initialization"""
+
+    @staticmethod
+    def session_discovery(finder: "Finder") -> None:
+        """Call user plugin during the discovery stage, before search paths passed on the command
         line are searched
 
         """
-
-    @staticmethod
-    def session_setup(session: "Session") -> None:
-        """Call user plugin at the end of the session setup stage"""
 
     @staticmethod
     def session_finish(session: "Session") -> None:
@@ -65,7 +67,7 @@ class PluginHook:
         """Call user plugin at the end of the test setup stage"""
 
     @staticmethod
-    def test_prepare(case: "TestCase", *, stage: Optional[str] = None) -> None:
+    def test_prelaunch(case: "TestCase", *, stage: Optional[str] = None) -> None:
         """Call user plugin immediately before running the test"""
 
     @staticmethod
@@ -99,16 +101,16 @@ class Manager:
                 method_name = "main_setup"
             case ["session", "discovery"]:
                 method_name = "session_discovery"
-            case ["session", "setup"]:
-                method_name = "session_setup"
+            case ["session", "initialize"]:
+                method_name = "session_initialize"
             case ["session", "finish"] | ["session", "teardown"]:
                 method_name = "session_finish"
             case ["test", "discovery"]:
                 method_name = "test_discovery"
             case ["test", "setup"]:
                 method_name = "test_setup"
-            case ["test", "prepare"]:
-                method_name = "test_prepare"
+            case ["test", "prelaunch"] | ["test", "prepare"]:
+                method_name = "test_prelaunch"
             case ["test", "finish"] | ["test", "teardown"]:
                 method_name = "test_finish"
             case _:
@@ -120,11 +122,12 @@ class Manager:
             method_name: staticmethod(func),
             "namespace": namespace,
             "name": f"{module}.{name}",
+            "file": inspect.getfile(func),
         }
         plugin_class_name = f"{module.replace('.', '_')}_{name}"
 
         # By simply creating the class, the plugin is registered with the base class
-        new_class(plugin_class_name, (PluginHook,), exec_body=lambda ns: ns.update(attributes))
+        t = new_class(plugin_class_name, (PluginHook,), exec_body=lambda ns: ns.update(attributes))
 
     def iterplugins(self) -> Generator[Type[PluginHook], None, None]:
         for hook in self.plugins:
