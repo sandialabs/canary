@@ -3,7 +3,12 @@ stages:
 - deploy
 
 variables:
+  GET_SOURCES_ATTEMPTS: 3
   BASE_CEE_PYTHON3: /usr/local/anaconda/3-2024.02/bin/python3
+  PIP_INDEX: https://nexus.web.sandia.gov/repository/pypi-proxy/pypi
+  PIP_INDEX_URL: https://nexus.web.sandia.gov/repository/pypi-proxy/simple
+  PIP_TRUSTED_HOST: nexus.web.sandia.gov
+  STD_PIP_ARGS: "--trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org"
 
 test-job:
   tags:
@@ -17,7 +22,7 @@ test-job:
   - $BASE_CEE_PYTHON3 -m venv venv
   - python3 -m venv venv
   - source venv/bin/activate
-  - python3 -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -e .[dev]
+  - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - pytest ./tests
   - deactivate
   rules:
@@ -31,7 +36,7 @@ pages:
   script:
   - $BASE_CEE_PYTHON3 -m venv venv
   - source ./venv/bin/activate
-  - python3 -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -e .[dev]
+  - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - cd docs
   - make clean
   - make html
