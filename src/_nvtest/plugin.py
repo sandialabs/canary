@@ -19,6 +19,9 @@ from .util.entry_points import get_entry_points
 from .util.singleton import Singleton
 
 if TYPE_CHECKING:
+    from .abc import AbstractTestGenerator
+    from .abc import AbstractTestRunner
+    from .abc import Command
     from .config.argparsing import Parser
     from .session import Session
     from .test.case import TestCase
@@ -112,8 +115,13 @@ class Manager:
             case _:
                 raise TypeError(err_msg)
 
-        attributes = {method_name: staticmethod(func)}
         module = func.__module__
+        namespace = module.split(".")[0]
+        attributes = {
+            method_name: staticmethod(func),
+            "namespace": namespace,
+            "name": f"{module}.{name}",
+        }
         plugin_class_name = f"{module.replace('.', '_')}_{name}"
 
         # By simply creating the class, the plugin is registered with the base class
@@ -173,6 +181,9 @@ class Manager:
         if entry_points:
             for entry_point in entry_points:
                 if entry_point.name in disable or entry_point.module in disable:
+                    logging.debug(f"Skipping disabled plugin {entry_point.name}")
+                    continue
+                if entry_point.module.split(".")[0] in disable:
                     logging.debug(f"Skipping disabled plugin {entry_point.name}")
                     continue
                 logging.debug(f"Loading the {entry_point.name} plugin from {entry_point.module}")
@@ -247,6 +258,37 @@ _manager = Singleton(factory)
 
 def plugins() -> Generator[Type[PluginHook], None, None]:
     return _manager.iterplugins()
+
+
+def generators() -> Generator[Type["AbstractTestGenerator"], None, None]:
+    from .abc import AbstractTestGenerator
+
+    for generator in AbstractTestGenerator.REGISTRY:
+        yield generator
+
+
+def runners() -> Generator[Type["AbstractTestRunner"], None, None]:
+    from .abc import AbstractTestRunner
+
+    for runner in AbstractTestRunner.REGISTRY:
+        yield runner
+
+
+def commands() -> Generator[Type["Command"], None, None]:
+    from .abc import Command
+
+    for command_class in Command.REGISTRY:
+        yield command_class
+
+
+def add_all_commands(parser: "Parser", add_help_override: bool = False) -> None:
+    for command_class in commands():
+        command = command_class()
+        parser.add_command(command, add_help_override=add_help_override)
+
+
+def command_names() -> list[str]:
+    return [c.cmd_name() for c in commands()]
 
 
 def register(*, scope: str, stage: str, **kwds: str):

@@ -37,7 +37,7 @@ class FilterNamespace:
         expect: Optional[int] = None,
         result: Optional[str] = None,
         action: Optional[str] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ):
         self.value: Any = value
         self.when = m_when.When.from_string(when)

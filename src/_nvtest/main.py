@@ -6,11 +6,9 @@ import sys
 import traceback
 from typing import Optional
 
-from . import command as cmd
 from . import config
 from . import plugin
-from .command import Command
-from .config.argparsing import Parser
+from .abc import Command
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
 from .util import logging
@@ -45,7 +43,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         for hook in plugin.plugins():
             hook.main_setup(parser)
 
-        cmd.add_all_commands(parser)
+        plugin.add_all_commands(parser)
         args = parser.parse_args(argv)
         command = parser.get_command(args.command)
         if command is None:
@@ -63,10 +61,12 @@ def main(argv: Optional[list[str]] = None) -> int:
 class NVTestCommand:
     def __init__(self, command_name: str, debug: bool = False) -> None:
         plugin.load_builtin_plugins()
-        command = cmd.get_command(command_name)
-        if command is None:
+        for command_class in plugin.commands():
+            if command_class.cmd_name() == command_name:
+                self.command = command_class()
+                break
+        else:
             raise ValueError(f"Unknown command {command_name!r}")
-        self.command = command
         self.debug = debug
         self.returncode = -1
 
@@ -144,7 +144,7 @@ def load_plugins(paths: list[str]) -> None:
     disable, dirs = [], []
     for path in paths:
         if path.startswith("no:"):
-            disable.append(path)
+            disable.append(path[3:])
         elif not os.path.exists(path):
             logging.warning(f"{path}: plugin directory not found")
         else:

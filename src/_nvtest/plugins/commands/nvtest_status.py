@@ -2,7 +2,7 @@ import argparse
 import os
 from typing import Optional
 
-from _nvtest.command import Command
+from _nvtest.abc import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
@@ -13,10 +13,6 @@ class Status(Command):
     @property
     def description(self) -> str:
         return "Print information about a test run"
-
-    @property
-    def aliases(self) -> list[str]:
-        return ["stat"]
 
     @property
     def epilog(self) -> Optional[str]:

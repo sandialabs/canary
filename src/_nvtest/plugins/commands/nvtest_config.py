@@ -1,8 +1,12 @@
 import argparse
+import inspect
+import io
 import os
+from typing import Any
 
 import _nvtest.config as _config
-from _nvtest.command import Command
+import _nvtest.plugin as plugin
+from _nvtest.abc import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
 
@@ -29,15 +33,21 @@ class Config(Command):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
+        do_pretty_print: bool = "NVTEST_MAKE_DOCS" in os.environ
         if Session.find_root(os.getcwd()):
             Session(os.getcwd(), mode="r")
         if args.subcommand == "show":
-            text = _config.describe(section=args.section)
+            text: str
+            if args.section == "plugins":
+                text = get_active_plugin_description()
+                do_pretty_print = False
+            else:
+                text = _config.describe(section=args.section)
             try:
-                if "NVTEST_MAKE_DOCS" in os.environ:
-                    print(text)
-                else:
+                if do_pretty_print:
                     pretty_print(text)
+                else:
+                    print(text)
             except ImportError:
                 print(text)
             return 0
@@ -63,3 +73,42 @@ def pretty_print(text: str):
     formatter = Formatter(bg="dark", style="monokai", linenos=True)
     formatted_text = highlight(text.strip(), lexer, formatter)
     print(formatted_text)
+
+
+def _get_plugin_info(p: Any) -> tuple[str, str, str]:
+    namespace = getattr(p, "namespace", p.__module__.split(".")[0])
+    if namespace == "_nvtest":
+        namespace = "builtin"
+    name = getattr(p, "name", p.__name__)
+    file = inspect.getfile(p)
+    return (namespace, name, file)
+
+
+def get_active_plugin_description():
+    table: list[tuple[str, str, str]] = []
+    widths = [len("Namespace"), len("Name"), 0]
+    for p in plugin.plugins():
+        row = _get_plugin_info(p)
+        for i, ri in enumerate(row):
+            widths[i] = max(widths[i], len(ri))
+        table.append(row)
+    for p in plugin.generators():
+        row = _get_plugin_info(p)
+        for i, ri in enumerate(row):
+            widths[i] = max(widths[i], len(ri))
+        table.append(row)
+    for p in plugin.runners():
+        row = _get_plugin_info(p)
+        for i, ri in enumerate(row):
+            widths[i] = max(widths[i], len(ri))
+        table.append(row)
+    fp = io.StringIO()
+    fp.write("{0:{1}s}  {2:{3}s}  File\n".format("Namespace", widths[0], "Name", widths[1]))
+    fp.write("{0}  {1}  {2}\n".format("=" * widths[0], "=" * widths[1], "=" * widths[2]))
+    for row in table:
+        fp.write(
+            "{0:{1}s}  {2:{3}s}  {4:{5}s}\n".format(
+                row[0], widths[0], row[1], widths[1], row[2], widths[2]
+            )
+        )
+    return fp.getvalue()

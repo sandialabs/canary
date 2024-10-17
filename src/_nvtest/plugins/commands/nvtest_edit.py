@@ -3,7 +3,7 @@ import os
 from typing import Optional
 
 import _nvtest.finder as finder
-from _nvtest.command import Command
+from _nvtest.abc import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
 from _nvtest.util import logging

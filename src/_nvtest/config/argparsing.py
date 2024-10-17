@@ -11,7 +11,7 @@ from typing import Sequence
 from typing import Union
 
 if TYPE_CHECKING:
-    from _nvtest.command import Command
+    from _nvtest.abc import Command
 
 import _nvtest._version
 
@@ -73,9 +73,9 @@ class Parser(argparse.ArgumentParser):
         return shlex.split(arg_line.split("#", 1)[0].strip())
 
     def preparse(self, args: Optional[list[str]] = None, namespace=None):
-        import _nvtest.command
+        import _nvtest.plugin
 
-        subcommands = _nvtest.command.command_names()
+        subcommands = list(_nvtest.plugin.command_names())
         argv: list[str] = sys.argv[1:] if args is None else args
         args = []
         for arg in argv:
@@ -106,7 +106,6 @@ class Parser(argparse.ArgumentParser):
             self.subparsers = self.add_subparsers(metavar="", dest="command")
         cmdname = command.cmd_name()
         kwds: dict[str, Any] = dict(
-            aliases=command.aliases,
             description=command.description,
             formatter_class=HelpFormatter,
         )
@@ -121,8 +120,7 @@ class Parser(argparse.ArgumentParser):
 
     def get_command(self, cmdname: str) -> Optional["Command"]:
         for name, command in self.__subcommand_objects.items():
-            candidates = [name] + command.aliases
-            if cmdname in candidates:
+            if cmdname == name:
                 return command
         return None
 

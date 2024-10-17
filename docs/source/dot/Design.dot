@@ -1,0 +1,63 @@
+digraph G {
+
+bgcolor=transparent;
+overlap=compress;
+rankdir=TB;
+
+node[
+  fontname=Monaco,
+  penwidth=1,
+  fontsize=20,
+  margin=.1,
+  shape=box,
+]
+
+run [label="nvtest run [options] [pathspec ...]" shape="plaintext"]
+
+
+//subgraph cluster_session {
+
+init [label="Initialize\nCreate test session\ndirectory, database, etc."]
+search [label="Search\nFind test files and\ninstantiate TestGenerator\nobjects for each"]
+lock [label="Lock\nExpand parameters and\ncreate concrete test cases\nfrom each generator"]
+setup [label="Setup\ncreate execution\ndirectories for test cases\nand copy/link resources"]
+
+// subgraph cluster_run {
+//   label="            Run"
+//   fontsize=25
+
+  queue [label="Put test cases in\nResourceQueue"]
+  batch_queue [label="Put test cases in\nBatchResourceQueue"]
+
+  batched [label="Batched?", fixedsize="true", width="3", height="1", shape="diamond", style="filled"]
+  batch_cases [label="Batch test cases\nusing tiling\nalgorithm"]
+  write_batch [label="Write batch\nsubmission scripts"]
+
+  scheduled [label="Scheduled?", fixedsize="true", width="3", height="1", shape="diamond", style="filled"]
+  run_batched_sched    [label="Run batches\nasynchronously\nthrough scheduler"]
+
+  run_batched_no_sched [label="Run batches\nasynchronously"]
+
+  run_async [label="Run tests\nasynchronously"]
+
+  nothing1 [style="invis" label="          "]
+  nothing2 [style="invis" label="          "]
+
+  batched -> batch_queue [label="Yes"]
+  batch_queue -> batch_cases -> scheduled
+  scheduled -> write_batch [label="Yes"]
+  write_batch -> run_batched_sched
+  run_batched_sched -> nothing1 [style="invis"]
+
+  scheduled -> run_batched_no_sched [label="No"]
+  run_batched_no_sched -> nothing2 [style="invis"]
+
+  batched -> queue [label="No"]
+  queue -> run_async
+
+// }
+//}
+
+  run -> init -> search -> lock -> setup -> batched
+
+}

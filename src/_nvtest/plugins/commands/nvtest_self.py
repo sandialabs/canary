@@ -9,7 +9,7 @@ import sys
 import types
 
 import nvtest.directives
-from _nvtest.command import Command
+from _nvtest.abc import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.config.argparsing import make_argument_parser
 from _nvtest.third_party import argparsewriter as aw
@@ -262,11 +262,11 @@ def autodoc_directives(dest):
 
 
 def autodoc_commands(dest):
-    import _nvtest.command
+    import _nvtest.plugin
 
     mkdirp(dest)
     parser = make_argument_parser()
-    _nvtest.command.add_all_commands(parser)
+    _nvtest.plugin.add_all_commands(parser)
     writer = aw.ArgparseMultiRstWriter(parser.prog, dest)
     writer.write(parser)
 
