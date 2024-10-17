@@ -64,6 +64,9 @@ class program_output(nodes.Element):
     pass
 
 
+g_fp = g_path = None
+
+
 def _container_wrapper(directive, literal_node, caption):
     container_node = nodes.container("", literal_block=True, classes=["literal-block-wrapper"])
     parsed = nodes.Element()
@@ -214,15 +217,17 @@ class Command(_Command):
             p.wait()
 
         command = self.command
-        fd, path = tempfile.mkstemp()
+        global g_fp, g_path
+        fd, g_path = tempfile.mkstemp()
+        g_fp = os.fdopen(fd, "w")
         proc = Popen(
             command,
             shell=self.shell,
-            stdout=os.fdopen(fd, "w"),
+            stdout=g_fp,
             stderr=open(os.devnull, "a") if self.hide_standard_error else STDOUT,
             cwd=self.working_directory,
         )
-        return proc, fd, path
+        return proc
 
     def get_output(self):
         """
@@ -232,16 +237,20 @@ class Command(_Command):
         integral return code of the process, ``output`` is the output as
         unicode string, with final trailing spaces and new lines stripped.
         """
+        global g_fp, g_path
         try:
-            process, _, path = self.execute()
+            process = self.execute()
             process.wait()
         except Exception:
-            print(open(path).read())
+            g_fp.close()
+            print(open(g_path).read())
             raise
         else:
-            output = open(path).read().rstrip()
+            g_fp.close()
+            output = open(g_path).read().rstrip()
         finally:
-            os.remove(path)
+            os.remove(g_path)
+            g_fp = g_path = None
 
         return process.returncode, output
 
