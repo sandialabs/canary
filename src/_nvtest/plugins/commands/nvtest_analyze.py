@@ -2,7 +2,7 @@ import argparse
 import os
 from typing import Optional
 
-from _nvtest.abc import Command
+from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.resource import ResourceHandler
 from _nvtest.runners import TestCaseRunner

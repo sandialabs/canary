@@ -9,7 +9,7 @@ import sys
 import types
 
 import nvtest.directives
-from _nvtest.abc import Command
+from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.config.argparsing import make_argument_parser
 from _nvtest.third_party import argparsewriter as aw

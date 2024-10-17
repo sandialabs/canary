@@ -8,7 +8,7 @@ from _nvtest._version import __version__
 from _nvtest._version import version
 from _nvtest._version import version_tuple
 from _nvtest.abc import AbstractTestGenerator
-from _nvtest.abc import Command
+from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.error import TestDiffed
 from _nvtest.error import TestFailed

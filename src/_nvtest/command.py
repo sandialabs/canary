@@ -1,10 +1,11 @@
 import argparse
 from abc import ABC
 from abc import abstractmethod
+from typing import Generator
 from typing import Optional
 from typing import Type
 
-from _nvtest.config.argparsing import Parser
+from .config.argparsing import Parser
 
 
 class Command(ABC):
@@ -34,3 +35,8 @@ class Command(ABC):
     @classmethod
     def cmd_name(cls) -> str:
         return cls.__name__.lower()
+
+
+def commands() -> Generator[Type[Command], None, None]:
+    for command_class in Command.REGISTRY:
+        yield command_class

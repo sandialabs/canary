@@ -21,7 +21,6 @@ from .util.singleton import Singleton
 if TYPE_CHECKING:
     from .abc import AbstractTestGenerator
     from .abc import AbstractTestRunner
-    from .abc import Command
     from .config.argparsing import Parser
     from .session import Session
     from .test.case import TestCase
@@ -272,23 +271,6 @@ def runners() -> Generator[Type["AbstractTestRunner"], None, None]:
 
     for runner in AbstractTestRunner.REGISTRY:
         yield runner
-
-
-def commands() -> Generator[Type["Command"], None, None]:
-    from .abc import Command
-
-    for command_class in Command.REGISTRY:
-        yield command_class
-
-
-def add_all_commands(parser: "Parser", add_help_override: bool = False) -> None:
-    for command_class in commands():
-        command = command_class()
-        parser.add_command(command, add_help_override=add_help_override)
-
-
-def command_names() -> list[str]:
-    return [c.cmd_name() for c in commands()]
 
 
 def register(*, scope: str, stage: str, **kwds: str):

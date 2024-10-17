@@ -2,6 +2,7 @@ import errno
 import os
 from abc import ABC
 from abc import abstractmethod
+from typing import Generator
 from typing import Optional
 from typing import Type
 
@@ -93,3 +94,8 @@ class AbstractTestGenerator(ABC):
                 return gen_type(root, path=path)
         f = root if path is None else os.path.join(root, path)
         raise TypeError(f"No test generator for {f}")
+
+
+def generators() -> Generator[Type[AbstractTestGenerator], None, None]:
+    for generator_class in AbstractTestGenerator.REGISTRY:
+        yield generator_class

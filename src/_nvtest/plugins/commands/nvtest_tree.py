@@ -2,7 +2,7 @@ import argparse
 import os
 import sys
 
-from _nvtest.abc import Command
+from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
 
 

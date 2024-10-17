@@ -6,6 +6,7 @@ import typing
 from abc import ABC
 from typing import Any
 from typing import Callable
+from typing import Generator
 from typing import Optional
 from typing import Type
 from typing import Union
@@ -190,3 +191,8 @@ def flag_from_name(name: str) -> str:
     if len(name) == 1:
         return f"-{name}"
     return f"--{name.replace('_', '-')}"
+
+
+def reporters() -> Generator[Type[Reporter], None, None]:
+    for reporter_class in Reporter.REGISTRY:
+        yield reporter_class

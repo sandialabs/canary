@@ -1,6 +1,6 @@
 import argparse
 
-from _nvtest.abc import Command
+from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.config.argparsing import make_argument_parser
 
@@ -16,9 +16,7 @@ class Help(Command):
         )
 
     def execute(self, args: argparse.Namespace) -> int:
-        from _nvtest.plugin import add_all_commands
-
         parser = make_argument_parser()
-        add_all_commands(parser, add_help_override=args.all)
+        parser.add_all_commands(add_help_override=args.all)
         parser.print_help()
         return 0

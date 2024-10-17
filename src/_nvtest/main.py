@@ -6,9 +6,9 @@ import sys
 import traceback
 from typing import Optional
 
+from . import command as cmd
 from . import config
 from . import plugin
-from .abc import Command
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
 from .util import logging
@@ -25,6 +25,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     """
     plugin.load_builtin_plugins()
     parser = make_argument_parser()
+    parser.add_all_commands()
 
     if "NVTEST_LEVEL" not in os.environ:
         os.environ["NVTEST_LEVEL"] = "0"
@@ -43,7 +44,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         for hook in plugin.plugins():
             hook.main_setup(parser)
 
-        plugin.add_all_commands(parser)
         args = parser.parse_args(argv)
         command = parser.get_command(args.command)
         if command is None:
@@ -61,7 +61,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 class NVTestCommand:
     def __init__(self, command_name: str, debug: bool = False) -> None:
         plugin.load_builtin_plugins()
-        for command_class in plugin.commands():
+        for command_class in cmd.commands():
             if command_class.cmd_name() == command_name:
                 self.command = command_class()
                 break
@@ -91,7 +91,7 @@ class NVTestCommand:
                 config.set("config:debug", save_debug)
 
 
-def invoke_command(command: Command, args: argparse.Namespace) -> int:
+def invoke_command(command: cmd.Command, args: argparse.Namespace) -> int:
     return command.execute(args)
 
 

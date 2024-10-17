@@ -1,9 +1,9 @@
 from argparse import Namespace
 from typing import Optional
 
-from _nvtest.abc import Command
+import _nvtest.reporter
+from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
-from _nvtest.reporter import Reporter
 
 
 class Report(Command):
@@ -17,12 +17,12 @@ class Report(Command):
 
     def setup_parser(self, parser: Parser) -> None:
         parent = parser.add_subparsers(dest="type", metavar="")
-        for cls in Reporter.REGISTRY:
+        for cls in _nvtest.reporter.reporters():
             p = parent.add_parser(cls.label().lower(), help=cls.description())
             cls.setup_parser(p)
 
     def execute(self, args: Namespace) -> int:
-        for cls in Reporter.REGISTRY:
+        for cls in _nvtest.reporter.reporters():
             if args.type == cls.label().lower():
                 reporter = cls()
                 reporter.execute(args)

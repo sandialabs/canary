@@ -6,7 +6,7 @@ from typing import Any
 
 import _nvtest.config as _config
 import _nvtest.plugin as plugin
-from _nvtest.abc import Command
+from _nvtest.command import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
 
@@ -84,21 +84,21 @@ def _get_plugin_info(p: Any) -> tuple[str, str, str]:
     return (namespace, name, file)
 
 
-def get_active_plugin_description():
+def get_active_plugin_description() -> str:
     table: list[tuple[str, str, str]] = []
     widths = [len("Namespace"), len("Name"), 0]
-    for p in plugin.plugins():
-        row = _get_plugin_info(p)
+    for hook in plugin.plugins():
+        row = _get_plugin_info(hook)
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))
         table.append(row)
-    for p in plugin.generators():
-        row = _get_plugin_info(p)
+    for gen_type in plugin.generators():
+        row = _get_plugin_info(gen_type)
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))
         table.append(row)
-    for p in plugin.runners():
-        row = _get_plugin_info(p)
+    for runner_type in plugin.runners():
+        row = _get_plugin_info(runner_type)
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))
         table.append(row)

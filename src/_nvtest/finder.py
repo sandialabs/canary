@@ -9,6 +9,7 @@ from typing import TextIO
 from . import config
 from . import plugin
 from .abc import AbstractTestGenerator
+from .abc.atg import generators as test_generators
 from .resource import ResourceHandler
 from .test.case import TestCase
 from .third_party.colify import colified
@@ -101,7 +102,7 @@ class Finder:
                 [
                     (root, os.path.relpath(os.path.join(dirname, f), root))
                     for f in files
-                    if any([g.matches(f) for g in AbstractTestGenerator.REGISTRY])
+                    if any([g.matches(f) for g in test_generators()])
                 ]
             )
         generators: list[AbstractTestGenerator]
@@ -264,7 +265,7 @@ class Finder:
 
 
 def is_test_file(file: str) -> bool:
-    for generator in AbstractTestGenerator.REGISTRY:
+    for generator in test_generators():
         if generator.matches(file):
             return True
     return False
@@ -276,7 +277,7 @@ def lock_abstract_file(file: AbstractTestGenerator, kwds: dict) -> list[TestCase
 
 
 def find(path: str) -> AbstractTestGenerator:
-    for gen_type in AbstractTestGenerator.REGISTRY:
+    for gen_type in test_generators():
         if gen_type.matches(path):
             return gen_type(path)
     raise TypeError(f"No test generator for {path}")
