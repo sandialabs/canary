@@ -1,0 +1,26 @@
+digraph G {
+
+bgcolor=transparent;
+overlap=compress;
+rankdir=TB;
+
+node[
+  fontname=Monaco,
+  penwidth=1,
+  fontsize=20,
+  margin=.1,
+  shape=box,
+  style="filled"
+]
+
+session [label="Session"]
+
+file [label="File"]
+case_1 [label="Case[a=1]"]
+case_2 [label="Case[a=4]"]
+
+session -> file [style=tapered, shape=rectangle]
+file -> case_1 [style=tapered, shape=rectangle]
+file -> case_2 [style=tapered, shape=rectangle]
+
+}

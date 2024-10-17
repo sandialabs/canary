@@ -63,7 +63,7 @@ Test files define one or more :ref:`test cases <basics-testcase>`.  In the simpl
 
 would expand into two test instances, one with the parameter ``a=1`` and one with ``a=4`` as shown.
 
-.. image:: /dot/TestFile.png
+.. image:: /dot/TestFile1.png
     :align: center
 
 Each test case would execute in its own directory and the test script should query for the value of ``a`` and adjust the test accordingly.  Test parameters and other test-specific and runtime-specific information are accessed from the ``nvtest.test.instance`` object which is accessible via ``nvtest.get_instance()``:
@@ -71,6 +71,11 @@ Each test case would execute in its own directory and the test script should que
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
     :lines: 2-8
+
+More generally, test files can define an arbitrary number of cases:
+
+.. image:: /dot/TestFile.png
+    :align: center
 
 A complete example
 ------------------
