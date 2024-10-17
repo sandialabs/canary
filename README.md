@@ -21,7 +21,7 @@ Python 3.10+
 `nvtest` is distributed as a python library and is most easily installed via `pip` (or other compatible tool):
 
 ```console
-python3 -m pip install "nvtest git+ssh://git@cee-gitlab.sandia.gov/alegra/tools/nvtest"
+python3 -m pip install "nvtest git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/nvtest"
 ```
 
 ### Developers
@@ -29,13 +29,13 @@ python3 -m pip install "nvtest git+ssh://git@cee-gitlab.sandia.gov/alegra/tools/
 For developers wanting to make modifications and/or contributions to `nvtest`, install in editable mode:
 
 ```console
-python3 -m pip install --editable git+ssh://git@cee-gitlab.sandia.gov/alegra/tools/nvtest#egg=nvtest
+python3 -m pip install --editable git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/nvtest#egg=nvtest
 ```
 
 which will leave a copy of `nvtest` in your Python distribution's `$prefix/src` directory.  Edits made to the source will be immediately visible by the Python interpreter.  Alternatively, the source can be cloned and then installed in editable mode:
 
 ```console
-git clone git@cee-gitlab.sandia.gov:alegra/tools/nvtest
+git clone git@cee-gitlab.sandia.gov:ascic-test-infra/nvtest
 cd nvtest
 python3 -m pip install --editable .[dev]
 ```
@@ -48,5 +48,5 @@ nvtest self check
 
 ## Documentation
 
-- [website](http://alegra.cee-gitlab.lan/tools/nvtest/)
+- [website](http://ascic-test-infra.cee-gitlab.lan/nvtest/)
 - [documentation source](./docs/source/index.rst)

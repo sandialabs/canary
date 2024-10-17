@@ -262,7 +262,6 @@ def autodoc_directives(dest):
 
 
 def autodoc_commands(dest):
-
     mkdirp(dest)
     parser = make_argument_parser()
     parser.add_all_commands()

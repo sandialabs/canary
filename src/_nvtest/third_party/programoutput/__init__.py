@@ -40,6 +40,7 @@ from __future__ import print_function
 import os
 import shlex
 import sys
+import tempfile
 from collections import defaultdict
 from collections import namedtuple
 from subprocess import PIPE
@@ -213,14 +214,15 @@ class Command(_Command):
             p.wait()
 
         command = self.command
-
-        return Popen(
+        fd, path = tempfile.mkstemp()
+        proc = Popen(
             command,
             shell=self.shell,
-            stdout=PIPE,
-            stderr=PIPE if self.hide_standard_error else STDOUT,
+            stdout=os.fdopen(fd, "w"),
+            stderr=open(os.devnull, "a") if self.hide_standard_error else STDOUT,
             cwd=self.working_directory,
         )
+        return proc, fd, path
 
     def get_output(self):
         """
@@ -230,8 +232,17 @@ class Command(_Command):
         integral return code of the process, ``output`` is the output as
         unicode string, with final trailing spaces and new lines stripped.
         """
-        process = self.execute()
-        output = process.communicate()[0].decode(sys.getfilesystemencoding(), "replace").rstrip()
+        try:
+            process, _, path = self.execute()
+            process.wait()
+        except Exception:
+            print(open(path).read())
+            raise
+        else:
+            output = open(path).read().rstrip()
+        finally:
+            os.remove(path)
+
         return process.returncode, output
 
     def __str__(self):
