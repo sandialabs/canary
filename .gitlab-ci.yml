@@ -3,7 +3,7 @@ stages:
 - deploy
 
 variables:
-  BASE_CEE_PYTHON3=/usr/local/anaconda/3-2024.02/bin/python3
+  BASE_CEE_PYTHON3: /usr/local/anaconda/3-2024.02/bin/python3
 
 test-job:
   tags:
