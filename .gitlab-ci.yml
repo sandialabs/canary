@@ -31,7 +31,7 @@ test-job:
   - pytest ./tests
   - deactivate
   rules:
-  - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == "merge_request" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     when: always
 
 lint-changed-files:
@@ -44,7 +44,7 @@ lint-changed-files:
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
   - ./bin/ci/ruff "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" check --output-format=junit --output-file=ruff.xml
   rules:
-  - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == "merge_request" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     when: always
   artifacts:
     when: always
@@ -61,7 +61,7 @@ format-changed-files:
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
   - ./bin/ci/ruff "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" format --check
   rules:
-  - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == "merge_request" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     when: always
 
 mypy:
@@ -73,14 +73,14 @@ mypy:
   - mypy ./src --no-error-summary > mypy-out.txt || true
   - mypy-gitlab-code-quality < mypy-out.txt > codequality.json
   rules:
-  - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == "merge_request" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     when: always
   artifacts:
     when: always
     reports:
       codequality: codequality.json
   rules:
-  - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == "merge_request" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     when: always
 
 pages:
