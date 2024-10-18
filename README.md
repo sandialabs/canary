@@ -24,7 +24,7 @@ Python 3.10+
 python3 -m pip install "nvtest git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/nvtest"
 ```
 
-### Developers
+## Developers
 
 For developers wanting to make modifications and/or contributions to `nvtest`, install in editable mode:
 
