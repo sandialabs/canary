@@ -45,11 +45,50 @@ Which is equivalent to
 
 .. raw:: html
 
-   <font size="+3"> Available test directives:</font>
+   <font size="+2"> Conditional directive activation </font>
+
+Most directives take the optional keyword argument ``when``, which is an expression that limits
+when the directive is activated.  For example, to restrict a directive to be activated only on
+``linux`` platforms, add the following:
+
+.. code-block:: python
+
+   import nvtest
+   nvtest.directives.directive_name(*args, when='platforms=linux')
+
+or, to restrict processing to ``linux`` platforms and when the user has defined the ``opt`` option
+(by passing ``-o opt`` on the command line), add the following:
+
+.. code-block:: python
+
+   import nvtest
+   nvtest.directives.directive_name(*args, when='platforms=linux options=opt')
+
+``when`` also accepts a ``dict``, so the previous example can be expressed equivalently as
+
+.. code-block:: python
+
+   import nvtest
+   nvtest.directives.directive_name(*args, when={"platforms": "linux", "options": "opt"})
+
+The ``when`` expression recognizes the following conditions:
+
+``testname``
+  Restrict processing of the directive to this test name
+``platforms``
+  Restrict processing of the directive to certain platform or platforms
+``options``
+  Restrict processing of the directive to command line -o options
+``parameters``
+  Restrict processing of the directive to certain parameter names and values
+
+.. raw:: html
+
+   <font size="+3"> Directives: </font>
 
 """  # noqa: E501
 
-# ---------------------------------------- NOTE ------------------------------------------------- #
+# --------------------------------------- NOTE -------------------------------------------------- #
 # This module has empty stubs for each directive.  When a test is loaded, it replaces             #
 # (monkeypatches) each method with its own so that side-effects of each directive are applied to  #
 # the particular test.                                                                            #
@@ -90,8 +129,8 @@ def analyze(
 
        #VVT: analyze (options=..., platforms=..., testname=...) : (flag|script)
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``when``: Restrict processing of the directive to this condition
     * ``flag``: Run the test script with the ``--FLAG`` option on the command
@@ -192,8 +231,8 @@ def baseline(
        #VVT: baseline (options=..., platforms=..., testname=...) : src,dst
        #VVT: baseline (options=..., platforms=..., testname=...) : flag
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``src``: The source file.
     * ``dst``: The destination file to replace with ``src``
@@ -252,8 +291,8 @@ def copy(
 
        #VVT: copy (rename, options=..., platforms=..., parameters=..., testname=...) : files ...
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``files``: File names to copy
     * ``src``: Source file to copy
@@ -331,8 +370,8 @@ def depends_on(
 
        #VVT: depends on (result=..., expect=..., options=..., platforms=..., testname=...) : arg
 
-    Parameters
-    ----------
+    Options
+    -------
     * ``arg``: The test that should run before this test.  Wildcards are allowed.
     * ``when``: Restrict processing of the directive to this condition
     * ``result``: Control whether or not this test runs based on the result of the
@@ -378,7 +417,7 @@ def depends_on(
            exec_dir = vvt.DEPDIRS[0]
            print(f"baz's results can be found in {exec_dir}")
 
-    ----------
+    -------
 
     Run ``spam`` regardless of ``baz``'s result:
 
@@ -407,7 +446,7 @@ def depends_on(
            exec_dir = vvt.DEPDIRS[0]
            print(f"baz's results can be found in {exec_dir}")
 
-    ----------
+    -------
 
     ``spam`` depends only on the serial ``baz`` test:
 
@@ -455,8 +494,8 @@ def gpus(*ngpus: int, when: Optional[WhenType] = None) -> None:
 
     ``.vvt``: NA
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``ngpus``: List of gpu counts
     * ``when``: Restrict processing of the directive to this condition
@@ -517,8 +556,8 @@ def enable(*args: bool, when: Optional[WhenType] = None) -> None:
 
        #VVT: enable (options=..., platforms=..., testname=...) : arg
 
-    Parameters
-    ----------
+    Options
+    -------
     * ``arg``: Optional (default: ``True``).  If ``True``, enable the test.  If ``False``, disable the test
     * ``when``: Restrict processing of the directive to this condition
 
@@ -607,8 +646,8 @@ def keywords(*args: str, when: Optional[WhenType] = None) -> None:
 
        #VVT: keywords (parameters=..., testname=...) : args...
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``args``: list of keywords
     * ``when``: Restrict processing of the directive to this condition
@@ -693,8 +732,8 @@ def link(
 
        #VVT: link (rename, options=..., platforms=..., parameters=..., testname=...) : files ...
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``files``: File names to link
     * ``src``: Source file to link
@@ -764,8 +803,8 @@ def owners(*args: str) -> None:
 
     NA
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``args``: The list of owners
 
@@ -802,8 +841,8 @@ def parameterize(
 
        #VVT: parametrize (options=...,platforms=...,testname=...) : argnames = argvalues
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``argnames``: A comma-separated string denoting one or more argument
       names, or a list/tuple of argument strings.
@@ -958,8 +997,8 @@ def cpus(*values: int, when: Optional[WhenType] = None) -> None:
 
     ``.vvt``: NA
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``nprocs``: List of processor counts
     * ``when``: Restrict processing of the directive to this condition
@@ -1018,8 +1057,8 @@ def nodes(*values: int, when: Optional[WhenType] = None) -> None:
 
     ``.vvt``: NA
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``nnodes``: List of node counts
     * ``when``: Restrict processing of the directive to this condition
@@ -1074,8 +1113,8 @@ def set_attribute(*, when: Optional[WhenType] = None, **attributes: Any) -> None
 
     ``.vvt``: NA
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``when``: Restrict processing of the directive to this condition
     * ``attributes``: ``attr:value`` pairs
@@ -1113,14 +1152,14 @@ def skipif(arg: bool, *, reason: str) -> None:
 
        #VVT: skipif : python_expression
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``arg``: If ``True``, the test will be skipped.
     * ``reason``: The reason the test is being skipped.
 
-    .vvt Parameters
-    ---------------
+    .vvt Options
+    ------------
 
     * ``python_expression``: String that is evaluated and cast to a ``bool``. If
       the result is ``True`` the test will be skipped.
@@ -1191,8 +1230,8 @@ def testname(arg: str) -> None:
 
        testname : arg
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``arg``: The alternative test name.
 
@@ -1272,8 +1311,8 @@ def timeout(arg: Union[str, float, int], *, when: Optional[WhenType] = None) -> 
 
        # VVT: timeout (options=..., platforms=..., parameters=..., testname=...) : arg
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``arg``: The time in seconds.  Natural language forms such as "20m", "1h
       20m", and HH:MM:SS such as "2:30:00" are also allowed and converted to
@@ -1305,8 +1344,8 @@ def xdiff(*, when: Optional[WhenType] = None) -> None:
        import nvtest
        nvtest.directives.xdiff(when=...)
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``when``: Restrict processing of the directive to this condition
 
@@ -1337,8 +1376,8 @@ def xfail(*, code: int = -1, when: Optional[WhenType] = None) -> None:
        import nvtest
        nvtest.directives.xfail(code=-1, when=...)
 
-    Parameters
-    ----------
+    Options
+    -------
 
     * ``code``: The expected return code.  ``-1`` considers any non-zero return code to be a pass.
     * ``when``: Restrict processing of the directive to this condition
