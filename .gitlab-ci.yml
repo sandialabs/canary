@@ -41,7 +41,7 @@ lint-changed-files:
   - python3 -m pip install $STD_PIP_ARGS ruff
   - ruff --version
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
-  - ./bin/ci/ruff "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" check --output-format=junit --output-file=ruff.xml
+  - ./bin/ci/ruff-wrapper --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" check --output-format=junit --output-file=ruff.xml
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
     when: always
@@ -58,7 +58,7 @@ format-changed-files:
   - python3 -m pip install $STD_PIP_ARGS ruff
   - ruff --version
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
-  - ./bin/ci/ruff "origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" format --check
+  - ./bin/ci/ruff-wrapper --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" format --check
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
     when: always
@@ -68,6 +68,7 @@ mypy:
   tags:
   - cee.build
   script:
+  - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - python3 -m pip install $STD_PIP_ARGS mypy mypy-gitlab-code-quality
   - mypy ./src --no-error-summary > mypy-out.txt || true
   - mypy-gitlab-code-quality < mypy-out.txt > codequality.json
