@@ -83,6 +83,7 @@ class TestFile(AbstractTestGenerator):
     def describe(
         self,
         keyword_expr: Optional[str] = None,
+        parameter_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         rh: Optional[ResourceHandler] = None,
     ) -> str:
@@ -111,6 +112,7 @@ class TestFile(AbstractTestGenerator):
             nodes=rh["test:node_count"],
             on_options=on_options,
             keyword_expr=keyword_expr,
+            parameter_expr=parameter_expr,
         )
         file.write(f"{len(cases)} test case{'' if len(cases) <= 1 else 's'}:\n")
         graph.print(cases, file=file)

@@ -51,6 +51,7 @@ class AbstractTestGenerator(ABC):
     def describe(
         self,
         keyword_expr: Optional[str] = None,
+        parameter_expr: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         rh: Optional[ResourceHandler] = None,
     ) -> str:

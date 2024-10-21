@@ -3,6 +3,7 @@ import multiprocessing
 import os
 import sys
 import traceback
+from multiprocessing.process import BaseProcess
 from typing import Any
 from typing import Callable
 from typing import Optional
@@ -164,3 +165,7 @@ def starmap(
             results = p.starmap(task_wrapper, args)
     raise_if_errors(*results, debug=debug)
     return results
+
+
+def parent_process() -> Optional[BaseProcess]:
+    return multiprocessing.parent_process()

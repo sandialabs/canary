@@ -1,12 +1,10 @@
 import fnmatch
 import os
 import sys
-from itertools import repeat
 from typing import Any
 from typing import Optional
 from typing import TextIO
 
-from . import config
 from . import plugin
 from .abc import AbstractTestGenerator
 from .abc.atg import generators as test_generators
@@ -17,7 +15,6 @@ from .third_party.color import colorize
 from .util import filesystem as fs
 from .util import graph
 from .util import logging
-from .util import parallel
 from .util.term import terminal_size
 from .util.time import hhmmss
 
@@ -54,7 +51,7 @@ class Finder:
     def discover(self) -> list[AbstractTestGenerator]:
         tree: dict[str, set[AbstractTestGenerator]] = {}
         if not self._ready:
-            raise ValueError("Cannot call populate() before calling prepare()")
+            raise ValueError("Cannot call discover() before calling prepare()")
         for root, paths in self.roots.items():
             logging.debug(f"Searching {root} for test files")
             if os.path.isfile(root):
@@ -105,12 +102,7 @@ class Finder:
                     if any([g.matches(f) for g in test_generators()])
                 ]
             )
-        generators: list[AbstractTestGenerator]
-        if config.get("config:debug"):
-            generators = [AbstractTestGenerator.factory(*p) for p in paths]
-        else:
-            generators = parallel.starmap(AbstractTestGenerator.factory, paths)
-
+        generators = [AbstractTestGenerator.factory(*p) for p in paths]
         return generators
 
     @property
@@ -194,12 +186,7 @@ class Finder:
             owners=owners,
             env_mods=env_mods,
         )
-        args = list(zip(files, repeat(kwds, len(files))))
-        concrete_test_groups: list[list[TestCase]]
-        if config.get("config:debug"):
-            concrete_test_groups = [lock_abstract_file(*a) for a in args]
-        else:
-            concrete_test_groups = parallel.starmap(lock_abstract_file, args)
+        concrete_test_groups = [file.lock(**kwds) for file in files]
         cases: list[TestCase] = [case for group in concrete_test_groups for case in group if case]
 
         # this sanity check should not be necessary
@@ -271,16 +258,8 @@ def is_test_file(file: str) -> bool:
     return False
 
 
-def lock_abstract_file(file: AbstractTestGenerator, kwds: dict) -> list[TestCase]:
-    concrete_test_cases: list[TestCase] = file.lock(**kwds)
-    return concrete_test_cases
-
-
 def find(path: str) -> AbstractTestGenerator:
-    for gen_type in test_generators():
-        if gen_type.matches(path):
-            return gen_type(path)
-    raise TypeError(f"No test generator for {path}")
+    return AbstractTestGenerator.factory(path)
 
 
 class FinderError(Exception):

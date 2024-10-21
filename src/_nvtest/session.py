@@ -897,6 +897,12 @@ class Session:
         file = os.path.join(self.config_dir, f"batches/{lot_no}/batch.{batch_no}-out.txt")
         return file
 
+    def is_test_case(self, spec: str) -> bool:
+        for case in self.cases:
+            if case.matches(spec):
+                return True
+        return False
+
     @staticmethod
     def overview(cases: list[TestCase]) -> str:
         """Return an overview of the test session"""
