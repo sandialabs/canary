@@ -8,3 +8,4 @@ Developers
 
    style
    contributing
+   design
