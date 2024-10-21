@@ -91,9 +91,9 @@ plug_test_setup [
     href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/util/partition.py?ref_type=heads#L53"
 
   ]
-  write_batch [
-    label="Write batch\nsubmission scripts",
-    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugins/runners/nvtest_slurm.py?ref_type=heads#L39"
+  run_batch [
+    label="Run batch",
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugins/runners/nvtest_slurm.py?ref_type=heads#L77"
   ]
 
   scheduled [
@@ -128,13 +128,13 @@ plug_test_setup [
 
   batched -> batch_queue [label="Yes"]
   batch_queue -> batch_cases -> scheduled
-  scheduled -> write_batch [label="Yes"]
-  write_batch -> run_batched_sched
-  run_batched_sched -> run_async_b1 //nothing1 [style="invis"]
+  scheduled -> run_batched_sched [label="Yes"]
+  run_batched_sched -> run_batch
+  run_batch -> run_async_b1 //nothing1 [style="invis"]
   plug_test_run_b1 -> run_async_b1 [arrowhead="none"]
 
   scheduled -> run_batched_no_sched [label="No"]
-  run_batched_no_sched -> run_async_b1 //nothing2 [style="invis"]
+  run_batched_no_sched -> run_batch
 
   batched -> queue [label="No"]
   queue -> run_async
