@@ -2,6 +2,7 @@
 
 ## Oct 2024
 
+- Move main repo to https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest
 - Move all plugins into `_nvtest/plugins`.  This includes commands, reporters, runners, etc.
 
 ## Sep 2024

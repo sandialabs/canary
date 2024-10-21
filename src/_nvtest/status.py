@@ -10,6 +10,8 @@ from .util import glyphs
 
 
 class Status:
+    """The status of a ``nvtest`` test case."""
+
     members = (
         "retry",
         "created",

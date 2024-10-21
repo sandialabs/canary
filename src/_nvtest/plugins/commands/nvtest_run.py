@@ -114,21 +114,20 @@ class Run(Command):
                 env_mods=args.env_mods.get("test") or {},
             )
             if args.until is not None:
-                cases = [case for case in session.cases if not case.mask]
-                n, N = len(cases), len([case.file for case in cases])
+                unmasked_cases = [case for case in session.cases if not case.mask]
+                n, N = len(unmasked_cases), len([case.file for case in unmasked_cases])
                 s, S = "" if n == 1 else "s", "" if N == 1 else "s"
                 logging.info(colorize("@*{expanded} %d case%s from %d file%s" % (n, s, N, S)))
-                graph.print(cases, file=sys.stdout)
+                graph.print(unmasked_cases, file=sys.stdout)
                 if args.until == "lock":
                     logging.info("done freezing test cases")
                     return 0
             if not args.no_header:
                 logging.emit(session.overview(session.cases))
-            session.populate(copy_all_resources=args.copy_all_resources)
+            cases = session.populate(copy_all_resources=args.copy_all_resources)
             if args.until == "populate":
                 logging.info("done populating worktree")
                 return 0
-            cases = [case for case in session.cases if case.status.satisfies(("pending", "ready"))]
         elif args.mode == "a":
             session = Session(args.work_tree, mode=args.mode)
             cases = session.filter(

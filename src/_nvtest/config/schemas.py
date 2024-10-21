@@ -14,6 +14,11 @@ def list_of_int(arg: Any) -> bool:
     return isinstance(arg, list) and all([isinstance(_, int) for _ in arg])
 
 
+optional_dict = Or(str, None)
+optional_int = Or(int, None)
+optional_str = Or(str, None)
+
+
 def vardict(arg: Any) -> bool:
     if arg is None:
         return True
@@ -63,7 +68,7 @@ test_schema = Schema(
 machine_schema = Schema(
     {
         "machine": {
-            Optional("node_count"): Or(int, None),
+            Optional("node_count"): optional_int,
             Optional("cores_per_socket"): int,
             Optional("sockets_per_node"): int,
             Optional("cpu_count"): int,
@@ -79,21 +84,21 @@ testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
 build_schema = Schema(
     {
         "build": {
-            Optional("project"): str,
-            Optional("type"): str,
-            Optional("date"): str,
-            Optional("build_directory"): str,
-            Optional("source_directory"): str,
+            Optional("project"): optional_str,
+            Optional("type"): optional_str,
+            Optional("date"): optional_str,
+            Optional("build_directory"): optional_str,
+            Optional("source_directory"): optional_str,
             Optional("compiler"): {
-                Optional("vendor"): str,
-                Optional("version"): str,
+                Optional("vendor"): optional_str,
+                Optional("version"): optional_str,
                 Optional("paths"): {
-                    Optional("cc"): str,
-                    Optional("cxx"): str,
-                    Optional("fc"): str,
+                    Optional("cc"): optional_str,
+                    Optional("cxx"): optional_str,
+                    Optional("fc"): optional_str,
                 },
             },
-            Optional("options"): dict,
+            Optional("options"): optional_dict,
         }
     }
 )

@@ -19,6 +19,14 @@ from .third_party.color import colorize
 
 
 class WhenResult:
+    """Simple class holding the value of the result of a :class:`~When` evaluation
+
+    Instances of this class contain two members: ``value`` and ``reason``.  ``value`` is ``True``
+    if the underlying :class:`~When` expression evaluated to ``True`` else ``False``.  If
+    ``value=False``, ``reason`` will contain the reason.
+
+    """
+
     __slots__ = ("value", "reason")
 
     def __init__(self, value: bool, reason: Union[str, None]):
@@ -27,6 +35,35 @@ class WhenResult:
 
 
 class When:
+    """Implements the ``when=`` logic that controls the conditions under which a directive is run
+
+    ``nvtest`` directives can be run depending on the options passed to ``nvtest`` on the command
+    line.  E.g., a test may be parameterized on ``a`` only if run linux:
+    ``nvtest.directives.parameterize('a', (1, 2, 3), when='platforms=linux')``.  This
+    ``parameterize`` instance will only be active on ``linux`` platforms.
+
+    Args:
+      options: expression defining options under which the directive will be activated, e.g.,
+        options='opt and baz'.  Options are typically passed on the command line.
+      parameters: expression defining parameterizations under which the directive will be
+        activated, e.g., ``parameters='np>1'``.
+      testname: expression defining the testname under which the directive will be activated, e.g.
+        testname='baz'.
+      platforms: expression defining the platforms under which the directive will be activated, e.g.
+        ``platform='linux'``.
+
+    Notes:
+
+    * The environment variable ``NVTEST_PLATFORMS`` can be set to alternative platform names to
+      activate directives requiring a specific platform
+
+    Examples:
+
+    >>> import nvtest
+    >>> nvtest.directives.parameterize('ngpu', (1, 4), when='platform=linux')
+
+    """
+
     def __init__(
         self,
         *,
@@ -41,6 +78,15 @@ class When:
         self.parameter_expr = parameters
         self.testname_expr = testname
         self.platform_expr = platforms
+
+    @staticmethod
+    def factory(input: Optional[Union[str, dict[str, str]]]) -> "When":
+        if isinstance(input, dict):
+            return When(**input)
+        elif input is None:
+            return When()
+        else:
+            return When.from_string(input)
 
     @classmethod
     def from_string(cls: "Type[When]", input: Optional[str]) -> "When":

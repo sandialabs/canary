@@ -275,7 +275,6 @@ class ProgramOutputCache:
         self.cache = {}
 
     def get(self, command, f):
-
         if command not in self.cache:
             if os.path.exists(f):
                 with open(f) as fh:
@@ -412,7 +411,7 @@ def setup(app):
     return metadata
 
 
-def hashit(arg, length=15) :
+def hashit(arg, length=15):
     if isinstance(arg, (list, tuple)):
         arg = " ".join(arg)
     obj = hashlib.md5(arg.encode("utf-8"))

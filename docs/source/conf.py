@@ -47,6 +47,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.autodoc',
     'sphinx.ext.mathjax',
+    'sphinx.ext.napoleon',
     '_nvtest.third_party.programoutput',
 ]
 

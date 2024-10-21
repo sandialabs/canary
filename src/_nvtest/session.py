@@ -88,15 +88,52 @@ class ProgressReporting:
 
 
 class Session:
-    """Open the test session and return a corresponding object. If the session cannot be opened, an
-    error is raised.
+    """Open the test session and return a corresponding object.
+
+    A test "session" is a folder on the filesystem containing assets required to run, analyze, and
+    report on a collection of tests.
 
     ``path`` is a path-like object giving the pathname (absolute or relative to the current working
     directory) of the directory to create the test session.
 
     ``mode`` is an optional string that specifies the mode in which the session is opened. It
-    defaults to 'r' which means open for reading. Other values are 'w' for writing (creating a new
-    session), and 'a' for appending to an existing session.
+    defaults to ``'r'`` meaning open for reading. Other values are ``'w'`` for writing (creating
+    a new session), and ``'a'`` for appending to an existing session.
+
+    If the session cannot be opened, an error is raised.
+
+    In the general case, the steps to creating and running a *new* test session are as follows:
+
+    * Create an instance of :class:`Session` with the root directory and ``mode='w'``.
+    * Add search paths to the session.
+    * Call :meth:`~Session.discover()` on the session to find test files in search paths.
+    * Call :meth:`~Session.lock()` to create test cases from files, filtering cases based on
+      criteria passed to ``lock``.
+    * Call :meth:`~Session.populate()` to create execution directories for each test case and
+      get the list of test cases ready to run
+    * Call :meth:`~Session.run(cases)` to run the test cases returned by
+      :meth:`~Session.populate`
+
+    The class is designed to support asynchronous processing of test cases so that test cases will
+    be run in such a way that maximizes throughput on a given machine.
+
+    .. rubric:: Batched mode
+
+    When running in batch mode, a session is setup and run as normal but when cases are run they
+    are first batched into groups and each *batch* is run asynchronously by submitting the batch
+    to a scheduler or sub-shell to be ran as follows:
+
+    * Create a test session, discover, lock, populate, and run as in the general case.
+    * The run step for batched mode differs from the general case by:
+      * putting test cases into batches with other cases requiring the same number of compute nodes;
+      * writing a submission (shell) script for the batch that requests the required number of compute nodes; and
+      * executing the submission script and waiting for the batch to complete.
+
+    Internally, the submission script calls ``nvtest`` recursively with instructions to run only
+    the cases in the batch.
+
+    Test cases within a batch are (by default) run asynchronously thereby allowing for massive
+    speed ups in testing times on HPC resources.
 
     """
 
@@ -159,6 +196,7 @@ class Session:
         return None
 
     def dump_attrs(self, file: IO[Any]) -> None:
+        """Dump this session attributes to ``file`` as ``json``"""
         attrs: dict[str, Any] = {}
         for var, value in vars(self).items():
             if var not in ("generators", "cases", "db"):
@@ -166,16 +204,19 @@ class Session:
         json.dump(attrs, file, indent=2)
 
     def load_attrs(self, file: IO[Any]) -> None:
+        """Load attributes, previously dumped by ``dump_attrs``, from ``file``"""
         attrs = json.load(file)
         for var, value in attrs.items():
             setattr(self, var, value)
 
     def dump_snapshots(self, file: IO[Any]) -> None:
+        """Dump a snapshot of for every case in this session to ``file``"""
         logging.debug("Dumping test case snapshots")
         for case in self.cases:
             self.dump_snapshot(case, file)
 
     def load_snapshots(self, file: IO[Any]) -> dict[str, dict]:
+        """Load snapshots for every case in this session"""
         logging.debug("Loading test case snapshots")
         snapshots: dict[str, dict] = {}
         for line in file:
@@ -184,6 +225,7 @@ class Session:
         return snapshots
 
     def dump_snapshot(self, case: TestCase, file: IO[Any]) -> None:
+        """Dump a snapshot of a single case ``case`` to ``file``"""
         snapshot = {
             "id": case.id,
             "start": case.start,
@@ -195,6 +237,7 @@ class Session:
         file.write(json.dumps(snapshot) + "\n")
 
     def dump_testcases(self, file: IO[Any]) -> None:
+        """Dump each case's state in this session to ``file`` in json format"""
         logging.debug("Dumping test cases")
         states: list[dict] = []
         for case in self.cases:
@@ -206,6 +249,9 @@ class Session:
         json.dump(states, file, indent=2)
 
     def load_testcases(self, file: IO[Any]) -> list[Union[TestCase, TestMultiCase]]:
+        """Load test cases previously dumpped by ``dump_testcases``.  Dependency resolution is also
+        performed
+        """
         logging.debug("Loading test cases")
         states = json.load(file)
         ts: TopologicalSorter = TopologicalSorter()
@@ -235,11 +281,13 @@ class Session:
         return list(cases.values())
 
     def dump_testfiles(self, file: IO[Any]) -> None:
+        """Dump each test file (test generator) in this session to ``file`` in json format"""
         logging.debug("Dumping test case generators")
         testfiles = [f.getstate() for f in self.generators]
         json.dump(testfiles, file, indent=2)
 
     def load_testfiles(self, file: IO[Any]) -> list[AbstractTestGenerator]:
+        """Load test files (test generators) previously dumped by ``dump_testfiles``"""
         logging.debug("Loading test case generators")
         testfiles = [AbstractTestGenerator.from_state(state) for state in json.load(file)]
         return testfiles
@@ -247,10 +295,10 @@ class Session:
     def load(self) -> None:
         """Load an existing test session:
 
-        - load test files and cases from the database;
-        - update test cases based on their latest snapshots;
-        - update each test case's dependencies; and
-        - set configuration values.
+        * load test files and cases from the database;
+        * update test cases based on their latest snapshots;
+        * update each test case's dependencies; and
+        * set configuration values.
 
         """
         logging.debug(f"Loading test session in {self.root}")
@@ -271,8 +319,8 @@ class Session:
     def initialize(self) -> None:
         """Initialize the the test session:
 
-        - create the session's config directory; and
-        - save local configuration values to the session configuration scope
+        * create the session's config directory; and
+        * save local configuration values to the session configuration scope
 
         """
         logging.debug(f"Initializing test session in {self.root}")
@@ -285,8 +333,7 @@ class Session:
         self.save(ini=True)
 
     def set_config_values(self):
-        """Save session configuration data, including copying local configuration data to the
-        session scope"""
+        """Set ``section`` configuration values"""
         config.set("session:root", self.root, scope="session")
         config.set("session:invocation_dir", config.invocation_dir, scope="session")
         config.set("session:start", config.invocation_dir, scope="session")
@@ -308,7 +355,7 @@ class Session:
                 config.set(f"{section}:{key}", value, scope="session")
 
     def save(self, ini: bool = False) -> None:
-        """Save session data, exlcuding data that is stored separately in the database"""
+        """Save session data, excluding data that is stored separately in the database"""
         with self.db.open("session", "w") as record:
             self.dump_attrs(record)
         if ini:
@@ -321,7 +368,14 @@ class Session:
                 json.dump(plugin.getstate(), record, indent=2)
 
     def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:
-        """Add ``path`` to this session's search paths"""
+        """Add paths to this session's search paths
+
+        ``search_paths`` is a list of file system folders that will be searched during the
+        :meth:`~Session.discover` phase.  If ``search_paths`` is a mapping, it maps a file system
+        folder name to tests within this folder, thereby short-circuiting the discovery phase.
+        This form is useful if you know which tests to run.
+
+        """
         if isinstance(search_paths, list):
             search_paths = {path: [] for path in search_paths}
         if self.generators:
@@ -362,7 +416,27 @@ class Session:
         owners: Optional[set[str]] = None,
         env_mods: Optional[dict[str, str]] = None,
     ) -> None:
-        """Lock test files into concrete (parameterized) test cases"""
+        """Lock test files into concrete (parameterized) test cases
+
+        Args:
+          rh: a :class:`ResourceHandler` instance with information about which machine resources
+            are available to this session.
+          keyword_expr: Used to filter tests by keyword.  E.g., if two test define the keywords
+            ``baz`` and ``spam``, respectively and ``keyword_expr = 'baz or spam'`` both tests will
+            be locked and marked as ready.  However, if a test defines only the keyword ``ham`` it
+            will be marked as "skipped by keyword expression".
+          parameter_expr: Used to filter tests by parameter.  E.g., if a test is parameterized by
+            ``a`` with values ``1``, ``2``, and ``3`` and you want to only run the case for ``a=1``
+            you can filter the other two cases with the parameter expression
+            ``parameter_expr='a=1'``.  Any test case not having ``a=1`` will be marked as "skipped by
+            parameter expression".
+          on_options: Used to filter tests by option.  In the typical case, options are added to
+            ``on_options`` by passing them on the command line, e.g., ``-o dbg`` would add ``dbg`` to
+            ``on_options``.  Tests can define filtering criteria based on what options are on.
+          owners: Used to filter tests by owner.
+          env_mods: Environment variables to be defined in a tests execution environment.
+
+        """
         self.cases = Finder.lock(
             self.generators,
             rh=rh,
@@ -381,12 +455,13 @@ class Session:
             self.dump_testcases(record)
         logging.debug(f"Collected {len(self.cases)} test cases from {len(self.generators)} files")
 
-    def populate(self, copy_all_resources: bool = False) -> None:
-        """Populate the work tree with test case assets"""
+    def populate(self, copy_all_resources: bool = False) -> list[TestCase]:
+        """Populate the work tree with test case assets and return the list of cases ready to run"""
         logging.debug("Populating test case directories")
         with self.rc_environ():
             with working_dir(self.root):
                 self.setup_testcases(copy_all_resources=copy_all_resources)
+        return [case for case in self.cases if case.status.satisfies(("pending", "ready"))]
 
     def setup_testcases(self, copy_all_resources: bool = False) -> None:
         """Setup the test cases and take a snapshot"""

@@ -87,6 +87,9 @@ class TestBatch(AbstractTestCase):
         if errors:
             raise ValueError("Stopping due to previous errors")
 
+    def command(self, stage: str = "test") -> list[str]:
+        raise NotImplementedError
+
     @property
     def cputime(self) -> float:
         return sum(case.cpus * min(case.runtime, 5.0) for case in self) * 1.5

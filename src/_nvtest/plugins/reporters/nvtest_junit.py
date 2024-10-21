@@ -75,9 +75,13 @@ class JunitDocument(xdom.Document):
     def create_testsuite_element(
         self, cases: list[TestCase], tagname: str = "testsuite", **attrs: str
     ) -> xdom.Element:
-        """
-        <testsuite tests="..." errors="..." skipped="..." failures="..." time="..." timestamp="...">
-        </testsuite>
+        """Create a testcase element with the following structure
+
+        .. code-block:: xml
+
+           <testsuite tests="..." errors="..." skipped="..." failures="..." time="..." timestamp="...">
+           </testsuite>
+
         """
         element = self.create_element(tagname)
         stats = gather_statistics(cases)
@@ -92,11 +96,15 @@ class JunitDocument(xdom.Document):
         return element
 
     def create_testcase_element(self, case: TestCase) -> xdom.Element:
-        """
-        <testcase name="..." classname="..." time="..." file="...">
-          <failure type="..." message="..."> </failure>
-          <system-out> ... </system-out>
-        </testcase>
+        """Create a testcase element with the following structure:
+
+        .. code-block: xml
+
+           <testcase name="..." classname="..." time="..." file="...">
+             <failure type="..." message="..."> </failure>
+             <system-out> ... </system-out>
+           </testcase>
+
         """
         testcase = self.create_element("testcase")
         testcase.setAttribute("name", case.display_name)

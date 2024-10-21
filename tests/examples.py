@@ -11,6 +11,8 @@ examples_dir = os.path.abspath(os.path.join(this_dir, "../examples"))
 
 if not os.path.exists(examples_dir):
     pytestmark = pytest.mark.skip
+if "NVTEST_RUN_EXAMPLES_TEST" not in os.environ:
+    pytestmark = pytest.mark.skip
 
 
 def nvtest(*args):

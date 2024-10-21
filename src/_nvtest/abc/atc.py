@@ -52,3 +52,6 @@ class AbstractTestCase(abc.ABC):
 
     @abc.abstractmethod
     def refresh(self) -> None: ...
+
+    @abc.abstractmethod
+    def command(self, stage: str = "test") -> list[str]: ...

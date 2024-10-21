@@ -1,3 +1,5 @@
+"""Misc. glyphs"""
+
 sparkles = "✨"
 mdash = "—"
 highvolt = "⚡"

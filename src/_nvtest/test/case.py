@@ -360,7 +360,9 @@ class TestCase(AbstractTestCase):
 
     @property
     def postflags(self) -> list[str]:
-        return self._postflags or []
+        if self._postflags is None:
+            self._postflags = []
+        return self._postflags
 
     @postflags.setter
     def postflags(self, arg: list[str]) -> None:
@@ -957,7 +959,7 @@ class TestMultiCase(TestCase):
         file_root: Optional[str] = None,
         file_path: Optional[str] = None,
         *,
-        flag: Optional[str] = None,
+        flag: str = "--analyze",
         paramsets: Optional[list[ParameterSet]] = None,
         family: Optional[str] = None,
         keywords: list[str] = [],
@@ -978,6 +980,20 @@ class TestMultiCase(TestCase):
             xstatus=xstatus,
             preload=preload,
         )
+        if flag.startswith("-"):
+            # for the analyze case, call back on the test file with ``flag`` on the command line
+            self.launcher = sys.executable
+            self.exe = os.path.basename(self.file)
+            self.postflags.append(flag)
+        else:
+            # flag is a script to run during analysis, check if it is going to be copied/linked
+            self.exe = flag
+            self.launcher = None
+            for action in ("link", "copy"):
+                if action in self.sources and flag in [_[0] for _ in self.sources[action]]:
+                    break
+            else:
+                sources.setdefault("link", []).append((flag, flag))
         self._flag = flag
         self._paramsets = paramsets
 
@@ -989,32 +1005,6 @@ class TestMultiCase(TestCase):
     @flag.setter
     def flag(self, arg: str) -> None:
         self._flag = arg
-
-    @property
-    def postflags(self) -> list[str]:
-        if self._postflags is None:
-            if self.flag.startswith("-"):
-                self._postflags = [self.flag]
-        return self._postflags or []
-
-    @postflags.setter
-    def postflags(self, arg: list[str]) -> None:
-        self._postflags = arg
-
-    @property
-    def exe(self) -> str:
-        if self._exe is None:
-            if self.flag.startswith("-"):
-                self._exe = os.path.basename(self.file)
-            else:
-                # flag is an executable file
-                self._exe = self.flag
-        assert self._exe is not None
-        return self._exe
-
-    @exe.setter
-    def exe(self, arg: str) -> None:
-        self._exe = arg
 
     def command(self, stage: str = "test") -> list[str]:
         cmd: list[str] = []

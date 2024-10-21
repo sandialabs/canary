@@ -27,20 +27,22 @@ from _nvtest.util import graph
 from _nvtest.util import logging
 from _nvtest.util.time import time_in_seconds
 
+WhenType = Union[str, dict[str, str]]
+
 
 class FilterNamespace:
     def __init__(
         self,
         value: Any,
         *,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
         expect: Optional[int] = None,
         result: Optional[str] = None,
         action: Optional[str] = None,
         **kwargs: Any,
     ):
         self.value: Any = value
-        self.when = m_when.When.from_string(when)
+        self.when = m_when.When.factory(when)
         self.expect = expect
         self.result = result
         self.action = action
@@ -537,15 +539,15 @@ class TestFile(AbstractTestGenerator):
 
     # -------------------------------------------------------------------------------- #
 
-    def m_keywords(self, *args: str, when: Optional[str] = None) -> None:
+    def m_keywords(self, *args: str, when: Optional[WhenType] = None) -> None:
         keyword_ns = FilterNamespace(tuple(args), when=when)
         self._keywords.append(keyword_ns)
 
-    def m_xfail(self, *, code: int = -1, when: Optional[str] = None) -> None:
+    def m_xfail(self, *, code: int = -1, when: Optional[WhenType] = None) -> None:
         ns = FilterNamespace(code, when=when)
         self._xstatus = ns
 
-    def m_xdiff(self, *, when: Optional[str] = None) -> None:
+    def m_xdiff(self, *, when: Optional[WhenType] = None) -> None:
         ns = FilterNamespace(diff_exit_status, when=when)
         self._xstatus = ns
 
@@ -555,14 +557,14 @@ class TestFile(AbstractTestGenerator):
     def m_depends_on(
         self,
         arg: str,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
         result: Optional[str] = None,
         expect: Optional[int] = None,
     ) -> None:
         ns = FilterNamespace(arg, when=when, result=result, expect=expect)
         self._depends_on.append(ns)
 
-    def m_preload(self, arg: str, when: Optional[str] = None, source: bool = False) -> None:
+    def m_preload(self, arg: str, when: Optional[WhenType] = None, source: bool = False) -> None:
         ns = FilterNamespace(arg, when=when, source=source)
         self._preload = ns
 
@@ -570,7 +572,7 @@ class TestFile(AbstractTestGenerator):
         self,
         argnames: Union[str, Sequence[str]],
         argvalues: list[Union[Sequence[Any], Any]],
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
         type: Optional[enums.enums] = None,
     ) -> None:
         type = type or enums.list_parameter_space
@@ -603,7 +605,7 @@ class TestFile(AbstractTestGenerator):
         ns = FilterNamespace(pset, when=when)
         self._paramsets.append(ns)
 
-    def m_set_attribute(self, when: Optional[str] = None, **kwargs: Any) -> None:
+    def m_set_attribute(self, when: Optional[WhenType] = None, **kwargs: Any) -> None:
         ns = FilterNamespace(kwargs, when=when)
         self._attributes.append(ns)
 
@@ -613,7 +615,7 @@ class TestFile(AbstractTestGenerator):
         *files: str,
         src: Optional[str] = None,
         dst: Optional[str] = None,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
     ) -> None:
         if src is not None:
             if files:
@@ -633,7 +635,7 @@ class TestFile(AbstractTestGenerator):
         *files: str,
         src: Optional[str] = None,
         dst: Optional[str] = None,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
     ) -> None:
         self.add_sources("copy", *files, src=src, dst=dst, when=when)
 
@@ -642,14 +644,14 @@ class TestFile(AbstractTestGenerator):
         *files: str,
         src: Optional[str] = None,
         dst: Optional[str] = None,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
     ) -> None:
         self.add_sources("link", *files, src=src, dst=dst, when=when)
 
     def m_sources(
         self,
         *files: str,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
     ) -> None:
         self.add_sources("sources", *files, when=when)
 
@@ -658,7 +660,7 @@ class TestFile(AbstractTestGenerator):
         *,
         flag: Optional[str] = None,
         script: Optional[str] = None,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
     ) -> None:
         if flag is not None and script is not None:
             raise ValueError(
@@ -677,7 +679,7 @@ class TestFile(AbstractTestGenerator):
     def m_timeout(
         self,
         arg: Union[str, float, int],
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
     ) -> None:
         "testname parameter parameters platform platforms option options"
         arg = time_in_seconds(arg)
@@ -691,7 +693,7 @@ class TestFile(AbstractTestGenerator):
     def m_enable(
         self,
         arg: bool,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
     ) -> None:
         ns = FilterNamespace(bool(arg), when=when)
         self._enable.append(ns)
@@ -700,7 +702,7 @@ class TestFile(AbstractTestGenerator):
         self,
         src: Optional[str] = None,
         dst: Optional[str] = None,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
         flag: Optional[str] = None,
     ) -> None:
         ns: FilterNamespace
@@ -755,7 +757,7 @@ class TestFile(AbstractTestGenerator):
     def f_analyze(
         self,
         *,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
         flag: Optional[str] = None,
         script: Optional[str] = None,
     ):
@@ -766,36 +768,36 @@ class TestFile(AbstractTestGenerator):
         *args: str,
         src: Optional[str] = None,
         dst: Optional[str] = None,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
     ):
         self.m_copy(*args, src=src, dst=dst, when=when)
 
     def f_depends_on(
         self,
         arg: str,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
         expect: Optional[int] = None,
         result: Optional[str] = None,
     ):
         self.m_depends_on(arg, when=when, result=result, expect=expect)
 
-    def f_gpus(self, *ngpus: int, when: Optional[str] = None) -> None:
+    def f_gpus(self, *ngpus: int, when: Optional[WhenType] = None) -> None:
         self.m_parameterize("ngpu", list(ngpus), when=when)
 
-    def f_cpus(self, *values: int, when: Optional[str] = None) -> None:
+    def f_cpus(self, *values: int, when: Optional[WhenType] = None) -> None:
         self.m_parameterize("np", list(values), when=when)
 
-    def f_processors(self, *values: int, when: Optional[str] = None) -> None:
+    def f_processors(self, *values: int, when: Optional[WhenType] = None) -> None:
         self.m_parameterize("np", list(values), when=when)
 
-    def f_nodes(self, *values: int, when: Optional[str] = None) -> None:
+    def f_nodes(self, *values: int, when: Optional[WhenType] = None) -> None:
         self.m_parameterize("nnode", list(values), when=when)
 
-    def f_enable(self, *args: bool, when: Optional[str] = None):
+    def f_enable(self, *args: bool, when: Optional[WhenType] = None):
         arg = True if not args else args[0]
         self.m_enable(arg, when=when)
 
-    def f_keywords(self, *args: str, when: Optional[str] = None) -> None:
+    def f_keywords(self, *args: str, when: Optional[WhenType] = None) -> None:
         self.m_keywords(*args, when=when)
 
     def f_link(
@@ -803,7 +805,7 @@ class TestFile(AbstractTestGenerator):
         *args: str,
         src: Optional[str] = None,
         dst: Optional[str] = None,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
     ):
         self.m_link(*args, src=src, dst=dst, when=when)
 
@@ -818,21 +820,21 @@ class TestFile(AbstractTestGenerator):
         names: Union[str, Sequence[str]],
         values: list[Union[Sequence[object], object]],
         *,
-        when: Optional[str] = None,
+        when: Optional[WhenType] = None,
         type: enums.enums = enums.list_parameter_space,
     ) -> None:
         self.m_parameterize(names, values, when=when, type=type)
 
-    def f_preload(self, arg: str, *, when: Optional[str] = None, source: bool = False):
+    def f_preload(self, arg: str, *, when: Optional[WhenType] = None, source: bool = False):
         self.m_preload(arg, when=when, source=source)
 
-    def f_set_attribute(self, *, when: Optional[str] = None, **attributes: Any) -> None:
+    def f_set_attribute(self, *, when: Optional[WhenType] = None, **attributes: Any) -> None:
         self.m_set_attribute(when=when, **attributes)
 
     def f_skipif(self, arg: bool, *, reason: str) -> None:
         self.m_skipif(arg, reason=reason)
 
-    def f_sources(self, *args: str, when: Optional[str] = None):
+    def f_sources(self, *args: str, when: Optional[WhenType] = None):
         self.m_sources(*args, when=when)
 
     def f_testname(self, arg: str) -> None:
@@ -840,20 +842,20 @@ class TestFile(AbstractTestGenerator):
 
     f_name = f_testname
 
-    def f_timeout(self, arg: Union[str, float, int], *, when: Optional[str] = None):
+    def f_timeout(self, arg: Union[str, float, int], *, when: Optional[WhenType] = None):
         self.m_timeout(arg, when=when)
 
-    def f_xdiff(self, *, when: Optional[str] = None):
+    def f_xdiff(self, *, when: Optional[WhenType] = None):
         self.m_xdiff(when=when)
 
-    def f_xfail(self, *, code: int = -1, when: Optional[str] = None):
+    def f_xfail(self, *, code: int = -1, when: Optional[WhenType] = None):
         self.m_xfail(code=code, when=when)
 
     def f_baseline(
         self,
-        arg1: Optional[str] = None,
-        arg2: Optional[str] = None,
-        when: Optional[str] = None,
+        src: Optional[str] = None,
+        dst: Optional[str] = None,
+        when: Optional[WhenType] = None,
         flag: Optional[str] = None,
     ) -> None:
-        self.m_baseline(arg1, arg2, when=when, flag=flag)
+        self.m_baseline(src, dst, when=when, flag=flag)
