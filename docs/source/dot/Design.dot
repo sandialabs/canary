@@ -13,37 +13,115 @@ node[
   ordering=out
 ]
 
-run [label="nvtest run [options] [pathspec ...]" shape="plaintext"]
+run [
+  label="nvtest run [options] [pathspec ...]",
+  shape="plaintext",
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugins/commands/nvtest_run.py?ref_type=heads"
+]
 
-
-plug_test_run [label="Plugins\ntest_prelaunch\ntest_finish" shape="octagon"]
-plug_test_run_b1 [label="Plugins\ntest_prelaunch\ntest_finish" shape="octagon"]
-init [label="Initialize\nCreate test session\ndirectory, database, etc."]
-search [label="Search\nFind test files and\ninstantiate TestGenerator\nobjects for each"]
-lock [label="Lock\nExpand parameters and\ncreate concrete test cases\nfrom each generator"]
-setup [label="Setup\ncreate execution\ndirectories for test cases\nand copy/link resources"]
+plug_test_run [
+  label="Plugins\ntest_prelaunch\ntest_finish",
+  shape="octagon",
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugin.py?ref_type=heads#L70"
+]
+plug_test_run_b1 [
+  label="Plugins\ntest_prelaunch\ntest_finish",
+  shape="octagon",
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugin.py?ref_type=heads#L70"
+]
+init [
+  label="Initialize\nCreate test session\ndirectory, database, etc.",
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads"
+]
+search [
+  label="Search\nFind test files and\ninstantiate TestGenerator\nobjects for each",
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/finder.py?ref_type=heads"
+]
+lock [
+  label="Lock\nExpand parameters and\ncreate concrete test cases\nfrom each generator",
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/finder.py?ref_type=heads#L161"
+]
+setup [
+  label="Setup\ncreate execution\ndirectories for test cases\nand copy/link resources",
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/test/case.py?ref_type=heads#L806"
+]
 finish [label="Finish"]
 done [label="Done"]
 
-plug_session_init [label="Plugin\nsession_initialize" shape="octagon"]
-plug_session_discovery [label="Plugin\nsession_discovery" shape="octagon"]
-plug_session_finish [label="Plugin\nsession_finish" shape="octagon"]
-plug_test_setup [label="Plugin\ntest_setup" shape="octagon"]
+plug_session_init [
+  label="Plugin\nsession_initialize",
+  shape="octagon",
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads#L175",
+]
+plug_session_discovery [
+  label="Plugin\nsession_discovery",
+  shape="octagon",
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads#L402",
+]
+plug_session_finish [
+  label="Plugin\nsession_finish",
+  shape="octagon"
+]
+plug_test_setup [
+  label="Plugin\ntest_setup",
+  shape="octagon",
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/test/case.py?ref_type=heads#L818"
+]
 
-  queue [label="Put test cases in\nResourceQueue"]
-  batch_queue [label="Put test cases in\nBatchResourceQueue"]
+  queue [
+    label="Put test cases in\nResourceQueue",
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/queues.py?ref_type=heads#L203"
+  ]
+  batch_queue [
+    label="Put test cases in\nBatchResourceQueue",
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/queues.py?ref_type=heads#L264"
+  ]
 
-  batched [label="Batched?", fixedsize="true", width="3", height="1", shape="diamond", style="filled"]
-  batch_cases [label="Batch test cases\nusing tiling\nalgorithm"]
-  write_batch [label="Write batch\nsubmission scripts"]
+  batched [
+    label="Batched?",
+    fixedsize="true",
+    width="3",
+    height="1",
+    shape="diamond",
+    style="filled",
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/test/batch.py?ref_type=heads"
+  ]
+  batch_cases [
+    label="Batch test cases\nusing tiling\nalgorithm",
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/util/partition.py?ref_type=heads#L53"
 
-  scheduled [label="Scheduled?", fixedsize="true", width="3", height="1", shape="diamond", style="filled"]
-  run_batched_sched    [label="Run batches\nasynchronously\nthrough scheduler"]
-  run_async_b1 [label="Run tests in\nbatch asynchronously"]
+  ]
+  write_batch [
+    label="Write batch\nsubmission scripts",
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugins/runners/nvtest_slurm.py?ref_type=heads#L39"
+  ]
 
-  run_batched_no_sched [label="Run batches\nasynchronously"]
+  scheduled [
+    label="Scheduled?",
+    fixedsize="true",
+    width="3",
+    height="1",
+    shape="diamond",
+    style="filled"
+  ]
+  run_batched_sched [
+    label="Run batches\nasynchronously\nthrough scheduler",
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/runners.py?ref_type=heads#L116"
+  ]
+  run_async_b1 [
+    label="Run tests in\nbatch asynchronously",
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/runners.py?ref_type=heads#L26"
+  ]
 
-  run_async [label="Run tests\nasynchronously"]
+  run_batched_no_sched [
+    label="Run batches\nasynchronously",
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/runners.py?ref_type=heads#L116"
+  ]
+
+  run_async [
+    label="Run tests\nasynchronously",
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/runners.py?ref_type=heads#L26"
+  ]
 
   nothing1 [style="invis" label="          "]
   nothing2 [style="invis" label="          "]
