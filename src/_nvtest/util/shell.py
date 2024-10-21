@@ -9,15 +9,11 @@ class Bash:
     def source_file(self, file: str) -> dict[str, str]:
         """Source the shell script `file` and return the state before/after
 
-        Parameters
-        ----------
-        file : str
-            The file to source
+        Args:
+          file: The file to source
 
-        Returns
-        -------
-        environ : dict
-            The environment resulting from source `file`
+        Returns:
+          environ: The environment resulting from source `file`
 
         """
         if not os.path.exists(file):

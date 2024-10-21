@@ -67,7 +67,7 @@ def raise_if_errors(*results, debug=False):
         *results: results from worker processes
         debug: if True show complete stacktraces
 
-    Raise:
+    Raises:
         RuntimeError: if ErrorFromWorker objects are in the results
     """
     errors = [x for x in results if isinstance(x, ErrorFromWorker)]
@@ -107,6 +107,7 @@ def num_processes(max_processes: Optional[int] = None, _cache: dict = {}) -> int
 
     Args:
         max_processes (int or None): maximum number of processes allowed
+
     """
     if max_processes in _cache:
         return _cache[max_processes]
@@ -118,20 +119,16 @@ def num_processes(max_processes: Optional[int] = None, _cache: dict = {}) -> int
 def map(func: Callable, args: list, processes: Optional[int] = None, debug: bool = False) -> Any:
     """Map a func to the list of arguments, return the list of results.
 
-    Parameters
-    ----------
-    func :
-        user defined task object
-    args :
-        list of arguments for the task
-    processes :
-        maximum number of processes allowed
-    debug :
-        if False, raise an exception containing just the error messages from
+    Args:
+      func: user defined task object
+      args: list of arguments for the task
+      processes: maximum number of processes allowed
+      debug: if False, raise an exception containing just the error messages from
         workers, if True an exception with complete stacktraces
 
     Raises:
-        RuntimeError: if any error occurred in the worker processes
+      RuntimeError: if any error occurred in the worker processes
+
     """
     task_wrapper = Task(func)
     if len(args) < multiprocess_threshold or sys.platform == "win32":
@@ -148,20 +145,16 @@ def starmap(
 ) -> Any:
     """Map a func to the list of arguments, return the list of results.
 
-    Parameters
-    ----------
-    func :
-        user defined task object
-    args :
-        list of arguments for the task
-    processes :
-        maximum number of processes allowed
-    debug :
-        if False, raise an exception containing just the error messages from
+    Args:
+      func: user defined task object
+      args: list of arguments for the task
+      processes: maximum number of processes allowed
+      debug: if False, raise an exception containing just the error messages from
         workers, if True an exception with complete stacktraces
 
     Raises:
-        RuntimeError: if any error occurred in the worker processes
+      RuntimeError: if any error occurred in the worker processes
+
     """
     task_wrapper = Task(func)
     if len(args) < multiprocess_threshold or sys.platform == "win32":

@@ -23,18 +23,12 @@ def cdash_summary(
 ):
     """Generate a summary of the project's CDash dashboard
 
-    Parameters
-    ----------
-    buildgroups : list of str
-        CDash build groups to pull from CDash. If None, pull all groups.
-    mailto : list of str
-        Email addresses to send the summary.
-    file : str
-        Filename to write the html summary
-    project : str
-        The CDash project
-    skip_sites : list of str
-        CDash sites to skip. If None, pull from all sites.
+    Args:
+      buildgroups (list[str]): CDash build groups to pull from CDash. If None, pull all groups.
+      mailto (list[str]): Email addresses to send the summary.
+      file (str): Filename to write the html summary
+      project (str): The CDash project
+      skip_sites (list[str]): CDash sites to skip. If None, pull from all sites.
 
     """
     logging.info("Generating the HTML summary")
@@ -83,17 +77,12 @@ def generate_cdash_html_summary(
 ) -> str:
     """Generates a CDash summary page
 
-    Parameters
-    ----------
-    groups : list of str
-        The build groups to include in the summary
-    skip_sites : list of str
-        Sites to skip
+    Args:
+      groups (list[str]): The build groups to include in the summary
+      skip_sites (list[str]): Sites to skip
 
-    Returns
-    -------
-    str
-        The rendered HTML summary
+    Returns:
+      The rendered HTML summary
 
     """
     date = datetime.date.today().strftime("%Y-%m-%d")

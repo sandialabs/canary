@@ -62,18 +62,13 @@ def which(
     If given multiple executables, returns the first one that is found.
     If no executables are found, returns None.
 
-    Parameters
-    ----------
-    args : (str)
-        One or more executables to search for
-    path : list or str
-        The path to search. Defaults to ``PATH`` required (bool): If set to
+    Args:
+      args: One or more executables to search for
+      path: The path to search. Defaults to ``PATH`` required (bool): If set to
         True, raise an error if executable not found
 
-    Returns
-    -------
-    exe : str
-        The first executable that is found in the path
+    Returns:
+      exe: The first executable that is found in the path
 
     """
     if path is not None:

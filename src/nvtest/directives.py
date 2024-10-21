@@ -129,8 +129,8 @@ def analyze(
 
        #VVT: analyze (options=..., platforms=..., testname=...) : (flag|script)
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``when``: Restrict processing of the directive to this condition
     * ``flag``: Run the test script with the ``--FLAG`` option on the command
@@ -231,8 +231,8 @@ def baseline(
        #VVT: baseline (options=..., platforms=..., testname=...) : src,dst
        #VVT: baseline (options=..., platforms=..., testname=...) : flag
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``src``: The source file.
     * ``dst``: The destination file to replace with ``src``
@@ -291,8 +291,8 @@ def copy(
 
        #VVT: copy (rename, options=..., platforms=..., parameters=..., testname=...) : files ...
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``files``: File names to copy
     * ``src``: Source file to copy
@@ -370,8 +370,9 @@ def depends_on(
 
        #VVT: depends on (result=..., expect=..., options=..., platforms=..., testname=...) : arg
 
-    Options
-    -------
+    Parameters
+    ----------
+
     * ``arg``: The test that should run before this test.  Wildcards are allowed.
     * ``when``: Restrict processing of the directive to this condition
     * ``result``: Control whether or not this test runs based on the result of the
@@ -494,8 +495,8 @@ def gpus(*ngpus: int, when: Optional[WhenType] = None) -> None:
 
     ``.vvt``: NA
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``ngpus``: List of gpu counts
     * ``when``: Restrict processing of the directive to this condition
@@ -556,8 +557,9 @@ def enable(*args: bool, when: Optional[WhenType] = None) -> None:
 
        #VVT: enable (options=..., platforms=..., testname=...) : arg
 
-    Options
-    -------
+    Parameters
+    ----------
+
     * ``arg``: Optional (default: ``True``).  If ``True``, enable the test.  If ``False``, disable the test
     * ``when``: Restrict processing of the directive to this condition
 
@@ -646,8 +648,8 @@ def keywords(*args: str, when: Optional[WhenType] = None) -> None:
 
        #VVT: keywords (parameters=..., testname=...) : args...
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``args``: list of keywords
     * ``when``: Restrict processing of the directive to this condition
@@ -732,8 +734,8 @@ def link(
 
        #VVT: link (rename, options=..., platforms=..., parameters=..., testname=...) : files ...
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``files``: File names to link
     * ``src``: Source file to link
@@ -803,8 +805,8 @@ def owners(*args: str) -> None:
 
     NA
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``args``: The list of owners
 
@@ -841,8 +843,8 @@ def parameterize(
 
        #VVT: parametrize (options=...,platforms=...,testname=...) : argnames = argvalues
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``argnames``: A comma-separated string denoting one or more argument
       names, or a list/tuple of argument strings.
@@ -997,8 +999,8 @@ def cpus(*values: int, when: Optional[WhenType] = None) -> None:
 
     ``.vvt``: NA
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``nprocs``: List of processor counts
     * ``when``: Restrict processing of the directive to this condition
@@ -1057,8 +1059,8 @@ def nodes(*values: int, when: Optional[WhenType] = None) -> None:
 
     ``.vvt``: NA
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``nnodes``: List of node counts
     * ``when``: Restrict processing of the directive to this condition
@@ -1113,8 +1115,8 @@ def set_attribute(*, when: Optional[WhenType] = None, **attributes: Any) -> None
 
     ``.vvt``: NA
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``when``: Restrict processing of the directive to this condition
     * ``attributes``: ``attr:value`` pairs
@@ -1152,14 +1154,14 @@ def skipif(arg: bool, *, reason: str) -> None:
 
        #VVT: skipif : python_expression
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``arg``: If ``True``, the test will be skipped.
     * ``reason``: The reason the test is being skipped.
 
-    .vvt Options
-    ------------
+    .vvt Parameters
+    ---------------
 
     * ``python_expression``: String that is evaluated and cast to a ``bool``. If
       the result is ``True`` the test will be skipped.
@@ -1230,8 +1232,8 @@ def testname(arg: str) -> None:
 
        testname : arg
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``arg``: The alternative test name.
 
@@ -1311,8 +1313,8 @@ def timeout(arg: Union[str, float, int], *, when: Optional[WhenType] = None) -> 
 
        # VVT: timeout (options=..., platforms=..., parameters=..., testname=...) : arg
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``arg``: The time in seconds.  Natural language forms such as "20m", "1h
       20m", and HH:MM:SS such as "2:30:00" are also allowed and converted to
@@ -1344,8 +1346,8 @@ def xdiff(*, when: Optional[WhenType] = None) -> None:
        import nvtest
        nvtest.directives.xdiff(when=...)
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``when``: Restrict processing of the directive to this condition
 
@@ -1376,8 +1378,8 @@ def xfail(*, code: int = -1, when: Optional[WhenType] = None) -> None:
        import nvtest
        nvtest.directives.xfail(code=-1, when=...)
 
-    Options
-    -------
+    Parameters
+    ----------
 
     * ``code``: The expected return code.  ``-1`` considers any non-zero return code to be a pass.
     * ``when``: Restrict processing of the directive to this condition

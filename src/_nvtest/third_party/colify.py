@@ -111,24 +111,16 @@ def colify(elts, **options):
     If elts is not a list of strings, each element is first conveted
     using ``str()``.
 
-    Parameters
-    ----------
-    output : stream
-        A file object to write to. Default is ``sys.stderr``
-    indent : int
-        Optionally indent all columns by some number of spaces
-    padding : int
-        Spaces between columns. Default is 2
-    width : int
-        Width of the output. Default is 80 if tty not detected
-    cols : int
-        Force number of columns. Default is to size to terminal, or
+    Keyword Arguments:
+      output : A file object to write to. Default is ``sys.stderr``
+      indent : Optionally indent all columns by some number of spaces
+      padding : Spaces between columns. Default is 2
+      width : Width of the output. Default is 80 if tty not detected
+      cols : Force number of columns. Default is to size to terminal, or
         single-column if no tty
-    tty : bool)
-        Whether to attempt to write to a tty. Default is to autodetect a tty.
+      tty : Whether to attempt to write to a tty. Default is to autodetect a tty.
         Set to False to force single-column output
-    method : str
-        Method to use to fit columns. Options are variable or uniform.
+      method : Method to use to fit columns. Options are variable or uniform.
         Variable-width columns are tighter, uniform columns are all the same
         width and fit less data on the screen
 

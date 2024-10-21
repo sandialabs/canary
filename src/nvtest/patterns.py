@@ -9,14 +9,10 @@ def identity(*args, **kwargs): ...
 class ExecuteAndAnalyze:
     """Run the execute/analyze/analyze group test pattern
 
-    Parameters
-    ----------
-    test_fn : callable
-        Function that executes the test
-    verify_fn : callable
-        Function that executes the parameterized test verification
-    analyze_fn : callable
-        Function that executes the group analysis
+    Args:
+      test_fn: Function that executes the test
+      verify_fn: Function that executes the parameterized test verification
+      analyze_fn: Function that executes the group analysis
 
     """
 

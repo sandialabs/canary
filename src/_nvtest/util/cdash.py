@@ -67,12 +67,9 @@ class server:
     def __init__(self, baseurl, project):
         """Upload the file ``filename`` to CDash
 
-        Parameters
-        ----------
-        baseurl : str
-            The base CDash URL
-        project : str
-            The CDash project name
+        Args:
+          baseurl (str): The base CDash URL
+          project (str): The CDash project name
 
         """
         self.baseurl = baseurl
@@ -88,16 +85,11 @@ class server:
     def upload(self, *, filename, sitename, buildname, buildstamp, mdf5=False):
         """Upload the file ``filename`` to CDash
 
-        Parameters
-        ----------
-        filename : str
-            The path to the file to upload
-        sitename : str
-            The CDash site name
-        buildname : str
-            The CDash build name
-        buildstamp : str
-            The CDash build stamp
+        Args:
+          filename (str): The path to the file to upload
+          sitename (str): The CDash site name
+          buildname (str): The CDash build name
+          buildstamp (str): The CDash build stamp
 
         """
         params = {
@@ -154,19 +146,13 @@ class server:
     def buildid(self, *, sitename, buildstamp, buildname):
         """Get the build ID for the CDash build
 
-        Parameters
-        ----------
-        sitename : str
-            The CDash site name
-        buildstamp : str
-            The CDash build stamp
-        buildname : str
-            The CDash build name
+        Args:
+          sitename (str): The CDash site name
+          buildstamp (str): The CDash build stamp
+          buildname (str): The CDash build name
 
-        Returns
-        -------
-        buildid : int or None
-            The integer build ID if found, else ``None``
+        Returns:
+          buildid: The integer build ID if found, else ``None``
 
         """
         params = {
@@ -200,14 +186,10 @@ class server:
     def builds(self, *, date=None, buildgroups=None, skip_sites=None):
         """Get all of the CDash builds on (optional) ``date``
 
-        Parameters
-        ----------
-        date : str
-            The build date formatted as YYYY-MM-DD
-        buildgroups : list of str
-            Build groups to pull down from CDash
-        skip_sites : list of str
-            List of sites to skip.  Can be a python regular expression to skip matching
+        Args:
+          date (str): The build date formatted as YYYY-MM-DD
+          buildgroups (list[str]): Build groups to pull down from CDash
+          skip_sites: List of sites to skip.  Can be a python regular expression to skip matching
             sites.  Eg, 'ascic10?' would match ascic101 but not ascic165.
 
         """
@@ -269,23 +251,15 @@ class server:
     ):
         """Get all failed tests from CDash server
 
-        Parameters
-        ----------
-        date : str
-            Get results from this date
-        buildgroups : list of str
-            List of build groups to retrieve.  Defaults to all
-        skip_missing : bool
-            Skip missing tests
-        skip_sites : list of str
-            Skip tests at these sites
-        skip_timeout : bool
-            Skip timed out tests
+        Args:
+          date (str): Get results from this date
+          buildgroups (list[str]): List of build groups to retrieve.  Defaults to all
+          skip_missing (bool): Skip missing tests
+          skip_sites (list[str]): Skip tests at these sites
+          skip_timeout (bool): Skip timed out tests
 
-        Returns
-        -------
-        failed : list
-            failed[n] is a dictionary describing the nth failed test
+        Returns:
+          failed: failed[n] is a dictionary describing the nth failed test
 
         """
         failed = []
@@ -315,23 +289,15 @@ class server:
     ):
         """Get all failed tests from CDash server
 
-        Parameters
-        ----------
-        date : str
-            Get results from this date
-        buildgroups : list of str
-            List of build groups to retrieve.  Defaults to all
-        skip_missing : bool
-            Skip missing tests
-        skip_sites : list of str
-            Skip tests at these sites
-        include_details : bool
-            Return details of each test (slow)
+        Args:
+          date (str): Get results from this date
+          buildgroups (list[str]): List of build groups to retrieve.  Defaults to all
+          skip_missing bool: Skip missing tests
+          skip_sites (list[str]): Skip tests at these sites
+          include_details (bool): Return details of each test (slow)
 
-        Returns
-        -------
-        tests : list
-            tests[n] is a dictionary describing the nth test
+        Returns:
+          tests (list): tests[n] is a dictionary describing the nth test
 
         """
         tests = []
@@ -354,19 +320,13 @@ class server:
     ):
         """Get failed tests from CDash
 
-        Parameters
-        ----------
-        fail_reason : {'Failed', 'Diffed', 'Timeout'}
-            The reason for the failure
-        skip_missing : bool
-            Skip missing tests
-        include_details : bool
-            Return details of each test (slow)
+        Args:
+          fail_reason (str): The reason for the failure
+          skip_missing (bool): Skip missing tests
+          include_details (bool): Return details of each test (slow)
 
-        Returns
-        -------
-        list
-            list[i] is a dictionary describing the ith failed test
+        Returns:
+          ``list`` of ``dict`` describing the ith failed test
 
         """
         filters = api_filters()

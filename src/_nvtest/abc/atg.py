@@ -14,15 +14,12 @@ class AbstractTestGenerator(ABC):
     """The AbstractTestCaseGenerator is an abstract object representing a test file that
     can generate test cases
 
-    Parameters
-    ----------
-    root : str
-        The base test directory, or file path if ``path`` is not given
-    path : str
-        The file path, relative to root
+    Args:
+      root: The base test directory, or file path if ``path`` is not given
+      path: The file path, relative to root
 
-    Notes
-    -----
+    Notes:
+
     The ``TestCaseGenerator`` represents of an abstract test object.  The
     ``TestCaseGenerator`` facilitates the creation and management of ``TestCase``\s
     based on a user-defined configuration.

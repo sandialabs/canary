@@ -13,13 +13,12 @@ class ParameterSet:
     is stored in a two-dimensional table given by ``values`` with associated column labels given by
     ``keys``.  The number of columns in ``values`` must equal the number of ``keys``.
 
-    Parameters
-    ----------
-    keys: names of parameters
-    values: table of values
+    Args:
+      keys: names of parameters
+      values: table of values
 
-    Notes
-    -----
+    Notes:
+
     The ``ParameterSet`` is most easily created through one of its class factory methods.
 
     """
@@ -57,18 +56,15 @@ class ParameterSet:
         """
         Create a ParamterSet
 
-        Parameters
-        ----------
-        argnames :
-          comma-separated string denoting one or more parameter names,
-          r a list/tuple of names
-        argvalues :
-          If only one ``argname`` was specified, ``argvalues`` is a list of values.
-          If ``N`` ``argnames`` were specified, ``argvalues`` is a 2D list of values
-          where each column are the values for its respective ``argname``.
+        Args:
+          argnames: comma-separated string denoting one or more parameter names,
+            r a list/tuple of names
+          argvalues: If only one ``argname`` was specified, ``argvalues`` is a list of values.
+            If ``N`` ``argnames`` were specified, ``argvalues`` is a 2D list of values
+            where each column are the values for its respective ``argname``.
 
-        Examples
-        --------
+        Examples:
+
         >>> p = ParameterSet.list_parameter_space(
         ... "a,b", [[1, 2], [3, 4]])
         >>> p.keys
@@ -117,18 +113,15 @@ class ParameterSet:
     ) -> "ParameterSet":
         """Generate parameters for a centered parameter study
 
-        Parameters
-        ----------
-        argnames:
-          Same arguments as for ``ParameterSpace.list_parameter_space``
-        argvalues :
-          2D list of values
-            argvalues[i, 0] is the initial value for the ith argname
-            argvalues[i, 1] is the steps size for the ith argname
-            argvalues[i, 2] is the number of steps for the ith argname
+        Args:
+          argnames: Same arguments as for ``ParameterSpace.list_parameter_space``
+          argvalues: 2D list of values
+            * argvalues[i, 0] is the initial value for the ith argname
+            * argvalues[i, 1] is the steps size for the ith argname
+            * argvalues[i, 2] is the number of steps for the ith argname
 
-        Notes
-        -----
+        Notes:
+
         The centered parameter space computes parameter sets along multiple
         coordinate-based vectors, one per parameter, centered about the initial
         values.

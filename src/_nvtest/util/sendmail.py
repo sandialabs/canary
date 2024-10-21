@@ -12,24 +12,18 @@ smtp_email_hosts = ["mailgate.sandia.gov", "mailgate2.sandia.gov"]
 def sendmail(sendaddr, recvaddrs, subject, content, *, subtype="plain", user=None):
     """Send an email to addresses in recvaddrs
 
-    Parameters
-    ----------
-    sendaddr : str
-        The sending address. If None, it will be set to the user name of this
+    Args:
+      sendaddr: The sending address. If None, it will be set to the user name of this
         process is user @ the current machine.
-    recvaddrs : list or str
-        Either a single email address (string), or list of email addresses.
-    subtype : str
-        subtype sent to MIMEText. Use "html" for sending content that
+      recvaddrs: Either a single email address (string), or list of email addresses.
+      subtype: subtype sent to MIMEText. Use "html" for sending content that
         contains html (but do not include <html><body> at the beginning and
         </body></html> at the end).
-    user : str
-        If sendaddr is None, user is the user name used in the sendaddr. If
+      user: If sendaddr is None, user is the user name used in the sendaddr. If
         None, user will be determined
 
-    Raises
-    ------
-    SendMailError if email could not be sent
+    Raises:
+      SendMailError: if email could not be sent
 
     """
     user = user or getuser()
