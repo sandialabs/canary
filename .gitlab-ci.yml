@@ -5,7 +5,6 @@ stages:
 
 variables:
   GET_SOURCES_ATTEMPTS: 3
-  BASE_CEE_PYTHON3: /usr/local/anaconda/3-2024.02/bin/python3
   PIP_INDEX: https://nexus.web.sandia.gov/repository/pypi-proxy/pypi
   PIP_INDEX_URL: https://nexus.web.sandia.gov/repository/pypi-proxy/simple
   PIP_TRUSTED_HOST: nexus.web.sandia.gov
@@ -13,7 +12,7 @@ variables:
 
 
 before_script:
-- $BASE_CEE_PYTHON3 -m venv venv
+- /usr/local/anaconda/3-2024.02/bin/python3 -m venv venv
 - source venv/bin/activate
 - python3 --version
 
@@ -80,10 +79,11 @@ mypy:
     reports:
       codequality: codequality.json
   rules:
-  - if: $CI_PIPELINE_SOURCE == "merge_request" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
     when: always
 
-pages:
+
+.pages:
   stage: deploy
   tags:
   - cee.build
@@ -97,9 +97,9 @@ pages:
   - rm -rf public
   - mv docs/build/html public
   - deactivate
-  artifacts:
-    paths:
-    - public
+
+pages:
+  extends: .pages
   rules:
   - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     changes:
@@ -114,4 +114,23 @@ pages:
     - docs/source/images/*.png
     when: always
   - if: $BUILD_PAGES
+    when: always
+  artifacts:
+    paths:
+    - public
+
+mr-pages:
+  extends: .pages
+  rules:
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+    changes:
+    - src/nvtest/directives.py
+    - src/_nvtest/plugins/commands/*.py
+    - docs/*.rst
+    - docs/*/*.rst
+    - docs/**/*.rst
+    - docs/Makefile
+    - docs/source/conf.py
+    - docs/source/dot/*.png
+    - docs/source/images/*.png
     when: always

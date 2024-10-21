@@ -62,10 +62,12 @@ from typing import Union
 
 from _nvtest import enums
 
+WhenType = Union[str, dict[str, str]]
+
 
 def analyze(
     *,
-    when: Optional[str] = None,
+    when: Optional[WhenType] = None,
     flag: Optional[str] = None,
     script: Optional[str] = None,
 ) -> None:
@@ -167,7 +169,7 @@ def baseline(
     *,
     src: Optional[str] = None,
     dst: Optional[str] = None,
-    when: Optional[str] = None,
+    when: Optional[WhenType] = None,
     flag: Optional[str] = None,
 ) -> None:
     """Rebaseline a test
@@ -226,7 +228,10 @@ def baseline(
 
 
 def copy(
-    *files: str, src: Optional[str] = None, dst: Optional[str] = None, when: Optional[str] = None
+    *files: str,
+    src: Optional[str] = None,
+    dst: Optional[str] = None,
+    when: Optional[WhenType] = None,
 ) -> None:
     """Copy files from the source directory into the execution directory.
 
@@ -303,7 +308,7 @@ def copy(
 
 def depends_on(
     arg: str,
-    when: Optional[str] = None,
+    when: Optional[WhenType] = None,
     expect: Optional[int] = None,
     result: Optional[str] = None,
 ) -> None:
@@ -434,7 +439,7 @@ def depends_on(
     """  # noqa: E501
 
 
-def gpus(*ngpus: int, when: Optional[str] = None) -> None:
+def gpus(*ngpus: int, when: Optional[WhenType] = None) -> None:
     """Run the test with this many gpus
 
     Usage
@@ -492,7 +497,7 @@ def gpus(*ngpus: int, when: Optional[str] = None) -> None:
 devices = gpus
 
 
-def enable(*args: bool, when: Optional[str] = None) -> None:
+def enable(*args: bool, when: Optional[WhenType] = None) -> None:
     """
     Explicitly mark a test to be enabled (or not)
 
@@ -582,7 +587,7 @@ def enable(*args: bool, when: Optional[str] = None) -> None:
     """  # noqa: E501
 
 
-def keywords(*args: str, when: Optional[str] = None) -> None:
+def keywords(*args: str, when: Optional[WhenType] = None) -> None:
     """Mark a test with keywords.  The main use of test keywords is to filter a
     set of tests, such as selecting which tests to run.
 
@@ -664,7 +669,10 @@ def keywords(*args: str, when: Optional[str] = None) -> None:
 
 
 def link(
-    *files: str, src: Optional[str] = None, dst: Optional[str] = None, when: Optional[str] = None
+    *files: str,
+    src: Optional[str] = None,
+    dst: Optional[str] = None,
+    when: Optional[WhenType] = None,
 ) -> None:
     """Link files from the source directory into the execution directory.
 
@@ -771,7 +779,7 @@ def parameterize(
     names: Union[str, Sequence[str]],
     values: Sequence[Union[Sequence[Any], Any]],
     *,
-    when: Optional[str] = None,
+    when: Optional[WhenType] = None,
     type: enums.enums = enums.list_parameter_space,
 ) -> None:
     """Add new invocations to the test using the list of argvalues for the given
@@ -906,7 +914,7 @@ def parameterize(
     """  # noqa: E501
 
 
-def preload(arg: str, *, when: Optional[str] = None, source: bool = False) -> None:
+def preload(arg: str, *, when: Optional[WhenType] = None, source: bool = False) -> None:
     """Load shell shell script before test execution
 
     Usage
@@ -934,7 +942,7 @@ def preload(arg: str, *, when: Optional[str] = None, source: bool = False) -> No
     """
 
 
-def cpus(*values: int, when: Optional[str] = None) -> None:
+def cpus(*values: int, when: Optional[WhenType] = None) -> None:
     """Run the test with this many processors
 
     Usage
@@ -994,7 +1002,7 @@ def cpus(*values: int, when: Optional[str] = None) -> None:
 processors = cpus
 
 
-def nodes(*values: int, when: Optional[str] = None) -> None:
+def nodes(*values: int, when: Optional[WhenType] = None) -> None:
     """Run the test with this many processors
 
     Usage
@@ -1051,7 +1059,7 @@ def nodes(*values: int, when: Optional[str] = None) -> None:
     """
 
 
-def set_attribute(*, when: Optional[str] = None, **attributes: Any) -> None:
+def set_attribute(*, when: Optional[WhenType] = None, **attributes: Any) -> None:
     """Set an attribute on the test
 
     Usage
@@ -1159,7 +1167,7 @@ def skipif(arg: bool, *, reason: str) -> None:
     """
 
 
-def sources(*args: str, when: Optional[str] = None) -> None:
+def sources(*args: str, when: Optional[WhenType] = None) -> None:
     pass
 
 
@@ -1245,7 +1253,7 @@ def testname(arg: str) -> None:
 name = testname
 
 
-def timeout(arg: Union[str, float, int], *, when: Optional[str] = None) -> None:
+def timeout(arg: Union[str, float, int], *, when: Optional[WhenType] = None) -> None:
     """Specify a timeout value for a test
 
     Usage
@@ -1284,7 +1292,7 @@ def timeout(arg: Union[str, float, int], *, when: Optional[str] = None) -> None:
     """
 
 
-def xdiff(*, when: Optional[str] = None) -> None:
+def xdiff(*, when: Optional[WhenType] = None) -> None:
     """The test is expected to diff.
 
     Usage
@@ -1314,7 +1322,7 @@ def xdiff(*, when: Optional[str] = None) -> None:
     """
 
 
-def xfail(*, code: int = -1, when: Optional[str] = None) -> None:
+def xfail(*, code: int = -1, when: Optional[WhenType] = None) -> None:
     """The test is expected to fail (return with a non-zero exit code).  If
     ``code > 0`` and the exit code is not ``code``, the test will be considered
     to have failed.

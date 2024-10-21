@@ -266,7 +266,7 @@ def make_when_expr(options):
 
 
 def find_vvt_lines(filename: Union[Path, str]) -> tuple[list[str], int]:
-    """Find all lines starting with #VVT: COMMAND, or continuations #VVT::"""
+    """Find all lines starting with ``#VVT: COMMAND``, or continuations ``#VVT::``"""
     tokens: Generator[tokenize.TokenInfo, None, None]
     if os.path.exists(filename):
         tokens = tokenize.tokenize(open(filename, "rb").readline)

@@ -401,6 +401,7 @@ class Config:
         scope_data = self.get_scope_data(scope)
         if section == "machine":
             self.validate_machine_config_and_fill_missing(update_data)
+        section_schemas[section].validate({section: update_data})
         scope_data[section] = update_data
 
     def validate_machine_config_and_fill_missing(self, data: dict) -> None:

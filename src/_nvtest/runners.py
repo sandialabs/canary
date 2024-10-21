@@ -24,6 +24,8 @@ from .util.time import timestamp
 
 
 class TestCaseRunner(AbstractTestRunner):
+    """The default runner for running a single :class:`~TestCase`"""
+
     def __init__(self, rh: ResourceHandler) -> None:
         self.timeoutx = rh["test:timeoutx"]
         super().__init__(rh)
@@ -115,7 +117,7 @@ class BatchRunner(AbstractTestRunner):
     """Run a batch of test cases
 
     The batch runner works by calling nvtest on itself and requesting the tests in the batch are
-    run as exclusive test cases
+    run as exclusive test cases.
 
     """
 

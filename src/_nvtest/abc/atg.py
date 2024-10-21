@@ -24,7 +24,7 @@ class AbstractTestGenerator(ABC):
     Notes
     -----
     The ``TestCaseGenerator`` represents of an abstract test object.  The
-    ``TestCaseGenerator`` facilitates the creation and management of ``TestCase``s
+    ``TestCaseGenerator`` facilitates the creation and management of ``TestCase``\s
     based on a user-defined configuration.
 
     """

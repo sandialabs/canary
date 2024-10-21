@@ -35,8 +35,7 @@ def groupby_dep(cases: list[TestCase]) -> list[set[TestCase]]:
                     break
             else:
                 unassigned.add(case)
-    if unassigned:
-        groups.append(unassigned)
+    groups.extend([{case} for case in unassigned])
     if len(cases) != sum([len(group) for group in groups]):
         raise ValueError("Incorrect partition lengths!")
     return groups

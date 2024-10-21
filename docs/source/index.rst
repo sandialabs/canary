@@ -28,6 +28,7 @@ nvtest
    howto/index
    commands/index
    directives/index
+   api-docs/index
 
 Indices and tables
 ==================

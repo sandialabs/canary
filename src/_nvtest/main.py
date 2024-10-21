@@ -70,7 +70,7 @@ class NVTestCommand:
         self.debug = debug
         self.returncode = -1
 
-    def __call__(self, *args_in: str, fail_on_error: bool = True) -> None:
+    def __call__(self, *args_in: str, fail_on_error: bool = True) -> int:
         try:
             save_debug: Optional[bool] = None
             if self.debug:
@@ -80,8 +80,8 @@ class NVTestCommand:
             parser.add_command(self.command)
             argv = [self.command.cmd_name()] + list(args_in)
             args = parser.parse_args(argv)
-            self.command.execute(args)
-            self.returncode = 0
+            rc = self.command.execute(args)
+            self.returncode = rc
         except Exception:
             if fail_on_error:
                 raise
@@ -89,6 +89,7 @@ class NVTestCommand:
         finally:
             if save_debug is not None:
                 config.set("config:debug", save_debug)
+        return self.returncode
 
 
 def invoke_command(command: cmd.Command, args: argparse.Namespace) -> int:
