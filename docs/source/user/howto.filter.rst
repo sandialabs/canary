@@ -3,7 +3,7 @@
 Filter and select tests
 =======================
 
-``nvtest`` can perform filtering actions to reduce the number of tests run in a session.  Described next are the three main ways to filter tests via the command line: by :ref:`keyword expression <filter-kwd>`, by :ref:`parameter expression <filter-parameters>`, and by `platform expression <filter-platform>`.
+``nvtest`` can perform filtering actions to reduce the number of tests run in a session.  Described next are the three main ways to filter tests via the command line: by :ref:`keyword expression <filter-kwd>`, by :ref:`parameter expression <filter-parameters>`, and by :ref:`platform expression <filter-platform>`.
 
 .. _filter-kwd:
 
