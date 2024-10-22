@@ -15,12 +15,12 @@ def ruff(command: str, *options: str) -> int:
 
 def find_changed_python_files(ref: str) -> list[str]:
     changed_python_files: list[str] = []
-    output = subprocess.getoutput(f"git diff --name-only {ref}")
+    output = subprocess.getoutput(f"git diff --name-status {ref}")
     for line in output.split("\n"):
         if not line.split():
             continue
-        filename = line.strip()
-        if filename.endswith((".py", ".pyt")):
+        status, filename = line.split()
+        if filename.endswith((".py", ".pyt")) and status != "D":
             changed_python_files.append(filename)
     return changed_python_files
 
