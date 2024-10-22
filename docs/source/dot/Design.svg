@@ -11,7 +11,7 @@
 <!-- run -->
 <g id="node1" class="node">
 <title>run</title>
-<g id="a_node1"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugins/commands/nvtest_run.py?ref_type=heads" xlink:title="nvtest run [options] [pathspec ...]">
+<g id="a_node1"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugins/commands/nvtest_run.py?ref_type=heads#L26" xlink:title="nvtest run [options] [pathspec ...]">
 <text text-anchor="middle" x="476.5" y="-1683.48" font-family="Monaco" font-size="20.00">nvtest run [options] [pathspec ...]</text>
 </a>
 </g>
@@ -19,7 +19,7 @@
 <!-- init -->
 <g id="node4" class="node">
 <title>init</title>
-<g id="a_node4"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads" xlink:title="Initialize\nCreate test session\ndirectory, database, etc.">
+<g id="a_node4"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads#L90" xlink:title="Initialize\nCreate test session\ndirectory, database, etc.">
 <polygon fill="none" stroke="black" points="634,-1629.09 319,-1629.09 319,-1549.09 634,-1549.09 634,-1629.09"/>
 <text text-anchor="middle" x="476.5" y="-1606.09" font-family="Monaco" font-size="20.00">Initialize</text>
 <text text-anchor="middle" x="476.5" y="-1584.09" font-family="Monaco" font-size="20.00">Create test session</text>

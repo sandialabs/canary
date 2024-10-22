@@ -49,6 +49,7 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.napoleon',
     '_nvtest.third_party.programoutput',
+    '_nvtest.third_party.imagesvg',
 ]
 
 # Add any paths that contain templates here, relative to this directory.

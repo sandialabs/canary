@@ -16,7 +16,7 @@ node[
 run [
   label="nvtest run [options] [pathspec ...]",
   shape="plaintext",
-  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugins/commands/nvtest_run.py?ref_type=heads"
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugins/commands/nvtest_run.py?ref_type=heads#L26"
 ]
 
 plug_test_run [
@@ -31,7 +31,7 @@ plug_test_run_b1 [
 ]
 init [
   label="Initialize\nCreate test session\ndirectory, database, etc.",
-  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads"
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads#L90"
 ]
 search [
   label="Search\nFind test files and\ninstantiate TestGenerator\nobjects for each",

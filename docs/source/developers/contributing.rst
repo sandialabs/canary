@@ -60,14 +60,14 @@ Suggesting Enhancements
 
 This section guides you through submitting an enhancement suggestion for nvtest, **including completely new features and minor improvements to existing functionality**. Following these guidelines will help maintainers and the community to understand your suggestion and find related suggestions.
 
-.. adminition:: Before Submitting an Enhancement
+.. rubric:: Before Submitting an Enhancement
 
 - Make sure that you are using the latest version.
 - Read the `documentation <http://ascic-test-infra.cee-gitlab.lan/nvtest/>`_  carefully and find out if the functionality is already covered, maybe by an individual configuration.
 - Perform a `search <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/>`_ to see if the enhancement has already been suggested. If it has, add a comment to the existing issue instead of opening a new one.
 - Find out whether your idea fits with the scope and aims of the project. It's up to you to make a strong case to convince the project's developers of the merits of this feature. Keep in mind that we want features that will be useful to the majority of our users and not just a small subset. If you're just targeting a minority of users, consider writing an add-on/plugin library.
 
-.. adonition:: How Do I Submit a Good Enhancement Suggestion?
+.. rubric:: How Do I Submit a Good Enhancement Suggestion?
 
 Enhancement suggestions are tracked as `GitLab issues <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/>`_.
 - Use a **clear and descriptive title** for the issue to identify the suggestion.
