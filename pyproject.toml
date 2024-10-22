@@ -30,6 +30,7 @@ exclude = [
     "src/_nvtest/third_party/monkeypatch.py",
     "src/_nvtest/third_party/cloudpickle.py",
     "src/_nvtest/third_party/docstring_parser/*",
+    "src/_nvtest/third_party/imagesvg/*",
 ]
 
 [[tool.mypy.overrides]]
