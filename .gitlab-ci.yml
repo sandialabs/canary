@@ -27,11 +27,19 @@ test-job:
   - module load aue/gcc/12.1.0 > /dev/null 2>&1 || true
   - module load aue/openmpi/4.1.4-gcc-12.1.0 > /dev/null 2>&1 || true
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
-  - pytest ./tests
-  - deactivate
+  - coverage run
+  - coverage report
+  - coverage xml
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
     when: always
+  coverage: '/TOTAL.*? (100(?:\.0+)?\%\|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    when: always
+    reports:
+      coverage_report:
+        path: coverage.xml
+        coverage_format: cobertura
 
 lint-changed-files:
   stage: code analysis
@@ -82,7 +90,6 @@ mypy:
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
     when: always
-
 
 .pages:
   stage: deploy

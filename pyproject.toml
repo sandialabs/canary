@@ -11,7 +11,7 @@ dependencies = []
 nvtest = "nvtest:console_main"
 
 [project.optional-dependencies]
-dev = ["ruff", "mypy", "pytest", "sphinx", "pydata-sphinx-theme", "sphinx_design"]
+dev = ["ruff", "mypy", "pytest", "sphinx", "pydata-sphinx-theme", "sphinx_design", "coverage"]
 requests = ["requests"]
 
 [build-system]
@@ -114,3 +114,23 @@ select = ["F", "I"]
 "src/_nvtest/abc/__init__.py" = ["F401"]
 "src/_nvtest/command/__init__.py" = ["F401"]
 "src/_nvtest/third_party/*.py" = ["F401", "F403", "F405"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = "mock"
+addopts = "-ra --durations=10"
+cache_dir = ".cache/pytest"
+python_files = "*.py"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[tool.coverage.run]
+branch = true
+omit = ["*/third_party/*"]
+source = ["_nvtest"]
+command_line = "-m pytest"
+
+[tool.coverage.html]
+directory = "html.cov"

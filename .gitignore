@@ -1,5 +1,8 @@
 my-env.sh
 junit.xml
+.coverage
+coverage.xml
+html.cov
 *.pyc
 .nvtest_cache
 .nvtest_cache/*
