@@ -12,7 +12,7 @@
 #
 import glob
 import os
-import shutil
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -33,10 +33,10 @@ copyright = '2024, National Technology & Engineering Solutions of Sandia, LLC (N
 author = 'National Technology & Engineering Solutions of Sandia, LLC (NTESS)'
 
 # The short X.Y version
-version = datetime.today().strftime("%Y.%m.%d")
+version = re.sub(r'\.dev.*$', r'', nvtest.__version__)
 
 # The full version, including alpha/beta/rc tags
-release = datetime.today().strftime("%Y.%m.%d")
+release = nvtest.__version__
 
 
 # -- General configuration ---------------------------------------------------
@@ -95,7 +95,7 @@ html_theme_options = {
     "gitlab_url": "https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest",
     "navbar_start": ["navbar-logo"],
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
-    "logo": {"text": f"nvtest {nvtest.version}"},
+    "logo": {"text": f"nvtest {version}"},
     "navbar_persistent": [],
     "secondary_sidebar_items": ["page-toc"],
 }
