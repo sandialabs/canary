@@ -1,5 +1,5 @@
-nvtest 0.1.0 Release Notes
-==========================
+nvtest 2024.10.22 Release Notes
+===============================
 
 .. contents::
 

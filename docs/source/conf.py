@@ -95,7 +95,7 @@ html_theme_options = {
     "gitlab_url": "https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest",
     "navbar_start": ["navbar-logo"],
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
-    "logo": {"text": f"nvtest ver. {nvtest.version}"},
+    "logo": {"text": f"nvtest {nvtest.version}"},
     "navbar_persistent": [],
     "secondary_sidebar_items": ["page-toc"],
 }
