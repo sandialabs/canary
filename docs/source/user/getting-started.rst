@@ -23,7 +23,7 @@ The test file ``first.pyt`` defines a function that adds two numbers and verifie
 .. literalinclude:: /examples/basic/first.pyt
    :language: python
 
-To run the test, navigate to the examples directory and run:
+To run the test, navigate to the examples directory and run ``nvtest run -k first ./basic`` which tells ``nvtest`` to run tests found in the path ``./basic`` and to filter tests to include only those tests with the keyword ``first``:
 
 .. command-output:: nvtest run -k first ./basic
     :cwd: /examples
