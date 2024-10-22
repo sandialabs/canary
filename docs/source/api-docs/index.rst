@@ -1,5 +1,5 @@
-nvtest API Documentation
-========================
+API reference
+=============
 
 All modules and packages live in the ``_nvtest`` namespace.
 

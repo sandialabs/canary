@@ -10,6 +10,7 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+import glob
 import os
 import shutil
 import subprocess
@@ -28,8 +29,8 @@ os.environ["NVTEST_MAKE_DOCS"] = "1"
 # -- Project information -----------------------------------------------------
 
 project = 'nvtest'
-copyright = '2024, Tim Fuller'
-author = 'Tim Fuller'
+copyright = '2024, National Technology & Engineering Solutions of Sandia, LLC (NTESS)'
+author = 'National Technology & Engineering Solutions of Sandia, LLC (NTESS)'
 
 # The short X.Y version
 version = datetime.today().strftime("%Y.%m.%d")
@@ -48,6 +49,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.mathjax',
     'sphinx.ext.napoleon',
+    'sphinx_design',
     '_nvtest.third_party.programoutput',
     '_nvtest.third_party.imagesvg',
 ]
@@ -75,7 +77,7 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+html_theme = 'pydata_sphinx_theme'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -83,8 +85,8 @@ html_theme = 'alabaster'
 html_static_path = []
 
 html_theme_options = {
-    "sidebar_collapse": True,
-    "show_relbars": True,
+    "navigation_depth": 4,
+    "show_toc_level": 1
 }
 
 # -- Extension configuration -------------------------------------------------
@@ -100,9 +102,11 @@ os.environ["COLIFY_SIZE"] = "25x120"
 os.environ["COLUMNS"] = "120"
 
 # Generate full package list if needed
-for subdir in ("directives",):
-	dir = os.path.join(docs_source_dir, subdir)
-	if os.path.exists(dir):
-		shutil.rmtree(dir)
-args = [sys.executable, "-m", "nvtest", "self", "autodoc", docs_source_dir]
+user_dir = os.path.join(docs_source_dir, "user")
+for section in ("directives", "commands"):
+    pat = os.path.join(user_dir, f"{section}*.rst")
+    files = glob.glob(pat)
+    for file in files:
+        os.remove(file)
+args = [sys.executable, "-m", "nvtest", "self", "autodoc", user_dir]
 subprocess.call(args)

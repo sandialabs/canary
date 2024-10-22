@@ -246,23 +246,22 @@ def autodoc_directives(dest):
         if isinstance(attr, types.FunctionType) and attr.__doc__ and attr not in all_directives:
             all_directives.append(attr)
     names = [fun.__name__ for fun in all_directives]
-    with open(os.path.join(dest, "index.rst"), "w") as fh:
+    with open(os.path.join(dest, "directives.rst"), "w") as fh:
         fh.write(".. _test-directives:\n\n")
         fh.write("Test Directives\n===============\n\n")
         fh.write(".. automodule:: nvtest.directives\n\n")
         fh.write(".. toctree::\n   :maxdepth: 1\n\n")
         for name in names:
-            fh.write(f"   {name}<{name}>\n")
+            fh.write(f"   {name}<directives.{name}>\n")
 
     for name in names:
-        with open(os.path.join(dest, f"{name}.rst"), "w") as fh:
+        with open(os.path.join(dest, f"directives.{name}.rst"), "w") as fh:
             fh.write(f".. _directive-{name.replace('_', '-')}:\n\n")
             fh.write(f"{name}\n{'=' * len(name)}\n\n")
             fh.write(f".. autofunction:: nvtest.directives.{name}\n")
 
 
 def autodoc_commands(dest):
-    mkdirp(dest)
     parser = make_argument_parser()
     parser.add_all_commands()
     writer = aw.ArgparseMultiRstWriter(parser.prog, dest)
@@ -273,6 +272,6 @@ def autodoc(args: argparse.Namespace) -> int:
     set_color_when("never")
     if not os.path.isdir(args.dest):
         mkdirp(args.dest)
-    autodoc_directives(os.path.join(args.dest, "directives"))
-    autodoc_commands(os.path.join(args.dest, "commands"))
+    autodoc_directives(args.dest)
+    autodoc_commands(args.dest)
     return 0

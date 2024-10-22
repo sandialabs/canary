@@ -11,7 +11,7 @@ dependencies = []
 nvtest = "nvtest:console_main"
 
 [project.optional-dependencies]
-dev = ["ruff", "mypy", "pytest", "sphinx"]
+dev = ["ruff", "mypy", "pytest", "sphinx", "pydata-sphinx-theme", "sphinx_design"]
 requests = ["requests"]
 
 [build-system]

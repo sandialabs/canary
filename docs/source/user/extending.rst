@@ -6,6 +6,6 @@ Extending nvtest
 .. toctree::
    :maxdepth: 1
 
-   plugins
-   report
-   command
+   extending.plugins
+   extending.report
+   extending.command

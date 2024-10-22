@@ -338,10 +338,9 @@ class ArgparseMultiRstWriter(ArgparseRstWriter):
             string.write(self.begin_subcommands(cmd.subcommands))
 
         if index:
-            string.write(".. rubric:: Subcommands\n")
-            string.write("\n.. toctree::\n   :maxdepth: 1\n\n")
+            string.write("\n.. toctree::\n   :caption: Subcommands\n   :maxdepth: 1\n\n")
             for _, prog in cmd.subcommands:
-                string.write(f"   {prog}<{prog}>\n")
+                string.write(f"   {prog}<commands.{prog}>\n")
 
         return string.getvalue()
 
@@ -365,13 +364,13 @@ class ArgparseMultiRstWriter(ArgparseRstWriter):
         if level is not None:
             return super()._write(parser, prog, level=level)
         cmd = self.parse(parser, prog)
-        with open(os.path.join(self.dest, "index.rst"), "w") as fh:
+        with open(os.path.join(self.dest, "commands.rst"), "w") as fh:
             fh.write(f".. _{prog}:\n\n")
             fh.write("Command Reference\n=================\n\n")
             fh.write(f'.. raw:: html\n\n   <font size="+3">{prog}</font>\n\n')
             fh.write(self.format(cmd, index=True))
         for subparser, prog in cmd.subcommands:
-            with open(os.path.join(self.dest, f"{prog}.rst"), "w") as self.out:
+            with open(os.path.join(self.dest, f"commands.{prog}.rst"), "w") as self.out:
                 super()._write(subparser, prog)
 
 
