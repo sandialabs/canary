@@ -30,53 +30,49 @@ nvtest
    .. grid-item-card::
       :text-align: center
 
-      Getting started
-      ^^^
+      :octicon:`paper-airplane;2em`
 
       .. button-ref:: user/getting-started
          :expand:
-         :color: secondary
+         :color: primary
          :click-parent:
 
-         To the getting started guide
+         Getting started
 
    .. grid-item-card::
       :text-align: center
 
-      User's guide
-      ^^^
+      :octicon:`book;2em`
 
       .. button-ref:: user/index
          :expand:
-         :color: secondary
+         :color: primary
          :click-parent:
 
-         To the user's guide
+         User's guide
 
    .. grid-item-card::
       :text-align: center
 
-      API reference
-      ^^^
+      :octicon:`file-code;2em`
 
       .. button-ref:: api-docs/index
          :expand:
-         :color: secondary
+         :color: primary
          :click-parent:
 
-         To the API reference
+         API reference
 
    .. grid-item-card::
       :text-align: center
 
-      Developer's guide
-      ^^^
+      :octicon:`code;2em`
 
       .. button-ref:: dev/index
          :expand:
-         :color: secondary
+         :color: primary
          :click-parent:
 
-         To the developer's guide
+         Developer's guide
 
 .. [#] ``.pyt`` scripts are written in python while ``.vvt`` scripts can be any executable recognized by the system, though scripts written in Python can take advantage of the full ``nvtest`` ecosystem.

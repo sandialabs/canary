@@ -33,7 +33,7 @@ class Config(Command):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
-        do_pretty_print: bool = "NVTEST_MAKE_DOCS" in os.environ
+        do_pretty_print: bool = "NVTEST_MAKE_DOCS" not in os.environ
         if Session.find_root(os.getcwd()):
             Session(os.getcwd(), mode="r")
         if args.subcommand == "show":

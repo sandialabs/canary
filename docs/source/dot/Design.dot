@@ -20,13 +20,17 @@ run [
 ]
 
 plug_test_run [
-  label="Plugins\ntest_prelaunch\ntest_finish",
-  shape="octagon",
+  label="Plugins:\ntest_prelaunch\ntest_finish",
+  shape="cds",
+  orientation=180,
+  fontsize=10,
   href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugin.py?ref_type=heads#L70"
 ]
 plug_test_run_b1 [
-  label="Plugins\ntest_prelaunch\ntest_finish",
-  shape="octagon",
+  label="Plugins:\ntest_prelaunch\ntest_finish",
+  shape="cds",
+  orientation=180,
+  fontsize=10,
   href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugin.py?ref_type=heads#L70"
 ]
 init [
@@ -49,22 +53,30 @@ finish [label="Finish"]
 done [label="Done"]
 
 plug_session_init [
-  label="Plugin\nsession_initialize",
-  shape="octagon",
+  label="Plugin:\nsession_initialize",
+  shape="cds",
+  orientation=180,
+  fontsize=10,
   href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads#L175",
 ]
 plug_session_discovery [
-  label="Plugin\nsession_discovery",
-  shape="octagon",
+  label="Plugin:\nsession_discovery",
+  shape="cds",
+  orientation=180,
+  fontsize=10,
   href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads#L402",
 ]
 plug_session_finish [
-  label="Plugin\nsession_finish",
-  shape="octagon"
+  label="Plugin:\nsession_finish",
+  shape="cds"
+  orientation=180,
+  fontsize=10,
 ]
 plug_test_setup [
-  label="Plugin\ntest_setup",
-  shape="octagon",
+  label="Plugin:\ntest_setup",
+  shape="cds",
+  orientation=180,
+  fontsize=10,
   href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/test/case.py?ref_type=heads#L818"
 ]
 
@@ -157,9 +169,9 @@ plug_test_setup [
   {rank="same"; init; plug_session_init;}
   {rank="same"; search; plug_session_discovery;}
   {rank="same"; setup; plug_test_setup;}
-  {rank="same"; plug_test_run; run_async;}
+  {rank="same"; batch_queue; queue;}
   {rank="same"; finish; plug_session_finish;}
-  {rank="same"; run_async_b1; plug_test_run_b1}
+  {rank="same"; /*plug_test_run_b1;*/ run_async_b1; run_async; plug_test_run}
   {rank="same"; run_batched_no_sched; run_batched_sched}
 
 }

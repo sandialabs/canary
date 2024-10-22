@@ -29,4 +29,4 @@ Line width:
 Docstrings
 ----------
 
-Docstrings should be written using the `Google docstring style <https://www.google.com/search?client=safari&rls=en&q=google+docstring+style&ie=UTF-8&oe=UTF-8>`_.  NumPy style docstrings are not supported.
+Docstrings should be written using the `Google docstring style <https://google.github.io/styleguide/pyguide.html>`_.  NumPy style docstrings are not supported.

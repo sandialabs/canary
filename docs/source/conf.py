@@ -110,3 +110,9 @@ for section in ("directives", "commands"):
         os.remove(file)
 args = [sys.executable, "-m", "nvtest", "self", "autodoc", user_dir]
 subprocess.call(args)
+
+if os.getenv("PROGRAM_OUTPUT_RESET_CACHE") is not None:
+    print("Resetting program output cache")
+    cache_dir = os.path.join(docs_source_dir, ".cache")
+    for file in os.listdir(cache_dir):
+        os.remove(os.path.join(cache_dir, file))
