@@ -1,0 +1,58 @@
+nvtest 0.1.0 Release Notes
+==========================
+
+.. contents::
+
+``nvtest`` 0.1.0 is the initial release of ``nvtest`` after about 1 year of development.
+
+Features
+--------
+
+Test file types
+~~~~~~~~~~~~~~~
+
+``nvtest`` recognizes ``.pyt``, ``.vvt``, and ``CTestTestFile.cmake`` test generators.  Other test file generators can be enabled via plugin.
+
+Asynchronous execution
+~~~~~~~~~~~~~~~~~~~~~~
+
+Test cases are run asynchronously using available resources.
+
+Batched execution
+~~~~~~~~~~~~~~~~~
+
+Test cases can be batched (a group of 1 or more tests) and submitted to a scheduler (``slurm``, ``lsf``, etc.)
+
+Hierarchical parallelism
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Batches are run asynchronously and test cases within a batch are *also* run asynchronously.
+
+Plugin system
+~~~~~~~~~~~~~
+
+Many components of ``nvtest`` are enabled via plugin.  The builtin plugins include:
+
+* commands;
+* test file generators; and
+* reporters.
+
+Users can create their own plugins in files prefixed by ``nvest_`` and they can be automatically loaded by ``nvtest``.
+
+Additionally, user plugins are called during different phases of test session execution.
+
+Integration with other tools
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``nvtest`` integrates with popular developer tools like :ref:`CMake <integrations-cmake>`, :ref:`CDash <integrations-cdash>`, and :ref:`GitLab <integrations-gitlab>`, streamlining the testing and continuous integration (CI) processes.
+
+Documentation
+~~~~~~~~~~~~~
+
+Extensive user documentation.  Developer documentation is in beginning stages.
+
+Authors
+-------
+
+* Tim Fuller
+* Dan Ibanez

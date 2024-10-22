@@ -17,11 +17,11 @@ import subprocess
 import sys
 from datetime import datetime
 
+import nvtest
+
 docs_source_dir = os.path.abspath(".")
-sys.path.insert(0, os.path.abspath(os.path.join(docs_source_dir, '../../src')))
 tests_dir = os.path.abspath(os.path.join(docs_source_dir, '../../tests'))
 assert os.path.exists(tests_dir)
-sys.path.insert(0, tests_dir)
 
 os.environ["NVTEST_MAKE_DOCS"] = "1"
 
@@ -84,9 +84,20 @@ html_theme = 'pydata_sphinx_theme'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = []
 
+html_sidebars = {
+    "index": ["search-button-field"],
+    "**": ["search-button-field", "sidebar-nav-bs"]
+}
+
 html_theme_options = {
     "navigation_depth": 4,
-    "show_toc_level": 1
+    "show_toc_level": 1,
+    "gitlab_url": "https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest",
+    "navbar_start": ["navbar-logo"],
+    "navbar_end": ["theme-switcher", "navbar-icon-links"],
+    "logo": {"text": f"nvtest ver. {nvtest.version}"},
+    "navbar_persistent": [],
+    "secondary_sidebar_items": ["page-toc"],
 }
 
 # -- Extension configuration -------------------------------------------------

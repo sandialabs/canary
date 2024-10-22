@@ -89,7 +89,7 @@ mypy:
   tags:
   - cee.build
   script:
-  - python3 -m pip install $STD_PIP_ARGS -e .[dev]
+  - python3 -m pip install $STD_PIP_ARGS .[dev]
   - cd docs
   - make clean
   - make html
