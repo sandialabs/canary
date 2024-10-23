@@ -14,7 +14,7 @@ def list_of_int(arg: Any) -> bool:
     return isinstance(arg, list) and all([isinstance(_, int) for _ in arg])
 
 
-optional_dict = Or(str, None)
+optional_dict = Or(dict, None)
 optional_int = Or(int, None)
 optional_str = Or(str, None)
 
