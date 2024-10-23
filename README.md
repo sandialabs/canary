@@ -44,8 +44,8 @@ cd nvtest
 python3 -m pip install --editable .[dev]
 ```
 
-To run `nvtest`'s internal tests, execute
+To format code and run `nvtest`'s internal tests, execute
 
 ```console
-nvtest self check
+./bin/pre-commit
 ```

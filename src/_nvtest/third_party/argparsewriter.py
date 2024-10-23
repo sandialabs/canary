@@ -339,7 +339,7 @@ class ArgparseMultiRstWriter(ArgparseRstWriter):
 
         if index:
             string.write("\n.. toctree::\n   :caption: Subcommands\n   :maxdepth: 1\n\n")
-            for _, prog in cmd.subcommands:
+            for _, prog in sorted(cmd.subcommands, key=lambda _: _[1]):
                 string.write(f"   {prog}<commands.{prog}>\n")
 
         return string.getvalue()
