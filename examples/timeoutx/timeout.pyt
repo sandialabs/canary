@@ -1,7 +1,7 @@
 import sys
 import time
-import nvtest
 
+import nvtest
 
 nvtest.directives.timeout(0.5)
 

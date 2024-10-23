@@ -4,7 +4,6 @@ import sys
 
 import nvtest
 
-
 nvtest.directives.execbase()
 nvtest.directives.parameterize("np", (1, 2))
 nvtest.directives.parameterize("a,b", [(1, 2), (2, 3), (4, 5)])

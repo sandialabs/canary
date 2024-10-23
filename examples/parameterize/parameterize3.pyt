@@ -1,4 +1,5 @@
 import sys
+
 import nvtest
 
 nvtest.directives.parameterize("a", (1, 4))
