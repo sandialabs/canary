@@ -60,12 +60,6 @@ class JunitDocument(xdom.Document):
         element.ownerDocument = self
         return element
 
-    def create_text_node(self, text: str) -> xdom.Text:
-        node = xdom.Text()
-        node.data = cleanup_text(text, escape=True)
-        node.ownerDocument = self
-        return node
-
     def create_cdata_node(self, text: str) -> xdom.Text:
         node = xdom.CDATASection()
         node.data = cleanup_text(text)
