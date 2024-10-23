@@ -3,7 +3,7 @@ nvtest 2024.10.22 Release Notes
 
 .. contents::
 
-``nvtest`` 0.1.0 is the initial release of ``nvtest`` after about 1 year of development.
+``nvtest`` 2024.10.22 is the initial release of ``nvtest`` after about 1 year of development.
 
 Features
 --------
