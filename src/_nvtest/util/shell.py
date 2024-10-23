@@ -6,7 +6,7 @@ from typing import Generator
 
 
 class Bash:
-    def source_file(self, file: str) -> dict[str, str]:
+    def source_rcfile(self, file: str) -> dict[str, str]:
         """Source the shell script `file` and return the state before/after
 
         Args:
@@ -37,11 +37,17 @@ class Bash:
         return environ
 
 
+def source_rcfile(file: str) -> None:
+    shell = Bash()
+    environ = shell.source_rcfile(file)
+    os.environ.update(environ)
+
+
 @contextmanager
 def source(file: str) -> Generator[None, None, None]:
     save_env = dict(os.environ)
     shell = Bash()
-    environ = shell.source_file(file)
+    environ = shell.source_rcfile(file)
     os.environ.update(environ)
     yield
     os.environ.clear()

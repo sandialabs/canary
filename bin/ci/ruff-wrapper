@@ -17,9 +17,10 @@ def find_changed_python_files(ref: str) -> list[str]:
     changed_python_files: list[str] = []
     output = subprocess.getoutput(f"git diff --name-status {ref}")
     for line in output.split("\n"):
-        if not line.split():
+        try:
+            status, filename = line.split()
+        except ValueError:
             continue
-        status, filename = line.split()
         if filename.endswith((".py", ".pyt")) and status != "D":
             changed_python_files.append(filename)
     return changed_python_files

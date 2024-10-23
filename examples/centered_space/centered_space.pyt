@@ -28,7 +28,7 @@ def analyze():
             data = json.load(fh)
             parameters.setdefault("a", []).append(data["a"])
             parameters.setdefault("b", []).append(data["b"])
-    assert parameters == {'a': [0, -10, -5, 5, 10, 0, 0, 0, 0], 'b': [0, 0, 0, 0, 0, -2, -1, 1, 2]}
+    assert parameters == {"a": [0, -10, -5, 5, 10, 0, 0, 0, 0], "b": [0, 0, 0, 0, 0, -2, -1, 1, 2]}
 
 
 if __name__ == "__main__":

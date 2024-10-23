@@ -191,6 +191,11 @@ class TestInstance:
         # compatibility with nvtest
         return self.multicase
 
+    @property
+    def base_case(self) -> bool:
+        # compatibility with nvtest
+        return self.multicase
+
     @classmethod
     def from_case(cls: Type["TestInstance"], case: TestCase) -> "TestInstance":
         dependencies: list[TestInstance] = []

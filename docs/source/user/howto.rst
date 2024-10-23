@@ -21,7 +21,6 @@ The how-to guides in the documentation were auto-generated using a set of exampl
    howto.run_from_file
    howto.batch
    howto.parameterize
-   howto.execute_and_analyze
    howto.analyze_only
    howto.copy_and_link
    howto.enable

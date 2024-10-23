@@ -1,6 +1,6 @@
 import sys
-import nvtest
 
+import nvtest
 
 nvtest.directives.keywords("fast")
 nvtest.directives.xfail(code=23)

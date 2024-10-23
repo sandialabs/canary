@@ -55,6 +55,14 @@ def _module(*args, environb: Optional[MutableMapping] = None) -> Optional[str]:
         return str(module_p.communicate()[0].decode())
 
 
+def load_module(module_name: str) -> None:
+    text = _module("show", module_name).split()  # type: ignore
+    for i, word in enumerate(text):
+        if word == "conflict":
+            _module("unload", text[i + 1])
+    _module("load", module_name)
+
+
 @contextmanager
 def load(module_name: str, use: Optional[str] = None) -> Generator[None, None, None]:
     save_environb = dict(os.environb)

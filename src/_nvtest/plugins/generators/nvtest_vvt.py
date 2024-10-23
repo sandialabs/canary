@@ -105,7 +105,7 @@ class VVTTestFile(TestFile):
         if arg.argument:
             key = "flag" if arg.argument.startswith("-") else "script"
             options[key] = arg.argument
-        self.m_analyze(when=arg.when, **options)
+        self.m_execbase(when=arg.when, **options)
 
     def f_TIMEOUT(self, arg: SimpleNamespace) -> None:
         """# VVT: timeout ( OPTIONS ) [:=] SECONDS"""

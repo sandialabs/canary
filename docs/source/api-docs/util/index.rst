@@ -18,7 +18,6 @@ Useful Python utilities.
    gitlab
    graph
    hash
-   json
    keyboard
    logging
    misc
@@ -29,7 +28,6 @@ Useful Python utilities.
    returncode
    scalar
    sendmail
-   serialization
    shell
    singleton
    string
