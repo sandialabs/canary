@@ -1,10 +1,12 @@
 import os
 import tempfile
-import pytest
 from types import SimpleNamespace
+
+import pytest
+
 from _nvtest.main import NVTestCommand
-from _nvtest.util.filesystem import working_dir
 from _nvtest.util.filesystem import force_remove
+from _nvtest.util.filesystem import working_dir
 
 
 @pytest.fixture(scope="module")
@@ -29,7 +31,7 @@ def test():
 if __name__ == "__main__":
     test()
 """
-             )
+            )
         run = NVTestCommand("run")
         run(".")
         ns = SimpleNamespace(tmp_path=d, results_path=os.path.join(d, "TestResults"))
