@@ -61,6 +61,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 class NVTestCommand:
     def __init__(self, command_name: str, debug: bool = False) -> None:
         plugin.load_builtin_plugins()
+        plugin.load_from_entry_points()
         for command_class in cmd.commands():
             if command_class.cmd_name() == command_name:
                 self.command = command_class()
