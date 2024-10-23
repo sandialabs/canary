@@ -1,8 +1,8 @@
 import os
 
+from _nvtest.main import NVTestCommand
 from _nvtest.util import shell
 from _nvtest.util.filesystem import working_dir
-from _nvtest.main import NVTestCommand
 
 
 def test_source_rcfile_1(tmpdir):
