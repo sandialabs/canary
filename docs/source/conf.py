@@ -115,12 +115,13 @@ os.environ["COLUMNS"] = "120"
 # Generate full package list if needed
 user_dir = os.path.join(docs_source_dir, "user")
 for section in ("directives", "commands"):
-    pat = os.path.join(user_dir, f"{section}*.rst")
+    pat = os.path.join(user_dir, f"{section}.*rst")
     files = glob.glob(pat)
     for file in files:
         os.remove(file)
-args = [sys.executable, "-m", "nvtest", "self", "autodoc", user_dir]
-subprocess.call(args)
+args = [sys.executable, "-m", "nvtest", "autodoc", "-d", user_dir]
+proc = subprocess.run(args)
+assert proc.returncode == 0
 
 if os.getenv("PROGRAM_OUTPUT_RESET_CACHE") is not None:
     print("Resetting program output cache")

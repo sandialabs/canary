@@ -1,0 +1,63 @@
+#!/bin/bash
+
+set -e
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+cd $SCRIPT_DIR/..
+
+echo "========================="
+echo "ruff: formatting examples"
+echo "========================="
+find examples -name "*.pyt" | xargs ruff format
+ruff format examples
+
+echo ""
+echo "======================"
+echo "ruff: formatting tests"
+echo "======================"
+ruff format tests
+
+echo ""
+echo "===================="
+echo "ruff: formatting src"
+echo "===================="
+ruff format src
+
+echo ""
+echo "======================="
+echo "ruff: checking examples"
+echo "======================="
+find examples -name "*.pyt" | xargs ruff check --fix
+ruff check --fix examples
+
+echo ""
+echo "===================="
+echo "ruff: checking tests"
+echo "===================="
+ruff check --fix tests
+
+echo ""
+echo "=================="
+echo "ruff: checking src"
+echo "=================="
+ruff check --fix src
+
+echo ""
+echo "================="
+echo "mpy: checking src"
+echo "================="
+mypy src
+
+echo ""
+echo "======================="
+echo "coverage: running tests"
+echo "======================="
+coverage run
+
+echo ""
+echo "==================================="
+echo "coverage: creating coverate reports"
+echo "==================================="
+coverage report
+coverage html

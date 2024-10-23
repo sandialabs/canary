@@ -7,6 +7,7 @@ Plugins defining builtin commands.
    :maxdepth: 1
 
    nvtest_analyze
+   nvtest_autodoc
    nvtest_config
    nvtest_describe
    nvtest_edit
@@ -17,6 +18,5 @@ Plugins defining builtin commands.
    nvtest_rebaseline
    nvtest_report
    nvtest_run
-   nvtest_self
    nvtest_status
    nvtest_tree

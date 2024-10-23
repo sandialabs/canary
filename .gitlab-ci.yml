@@ -49,7 +49,7 @@ lint-changed-files:
   - python3 -m pip install $STD_PIP_ARGS ruff
   - ruff --version
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
-  - ./bin/ci/ruff-wrapper --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" check --output-format=junit --output-file=ruff.xml
+  - ./bin/ci/ruff-check --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" --output-format=junit --output-file=ruff.xml
   - cat ruff.xml
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
@@ -67,7 +67,7 @@ format-changed-files:
   - python3 -m pip install $STD_PIP_ARGS ruff
   - ruff --version
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
-  - ./bin/ci/ruff-wrapper --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" format --check
+  - ./bin/ci/ruff-format --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" --check
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
     when: always
