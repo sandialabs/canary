@@ -29,6 +29,8 @@ from ..util.executable import Executable
 from ..util.filesystem import copyfile
 from ..util.filesystem import mkdirp
 from ..util.hash import hashit
+from ..util.module import load_module
+from ..util.shell import source_rcfile
 
 
 def stringify(arg: Any, float_fmt: Optional[str] = None) -> str:
@@ -65,6 +67,8 @@ class TestCase(AbstractTestCase):
         sources: Optional[dict[str, list[tuple[str, str]]]] = None,
         xstatus: Optional[int] = None,
         preload: Optional[str] = None,
+        modules: Optional[list[str]] = None,
+        rcfiles: Optional[list[str]] = None,
     ):
         super().__init__()
 
@@ -81,6 +85,8 @@ class TestCase(AbstractTestCase):
         self._sources: dict[str, list[tuple[str, str]]] = {}
         self._xstatus: int = 0
         self._preload: Optional[str] = None
+        self._modules: list[str] = []
+        self._rcfiles: list[str] = []
 
         if file_root is not None:
             self.file_root = file_root
@@ -102,6 +108,10 @@ class TestCase(AbstractTestCase):
             self.xstatus = xstatus
         if preload is not None:
             self.preload = preload
+        if modules is not None:
+            self.modules = modules
+        if rcfiles is not None:
+            self.rcfiles = rcfiles
 
         self._mask: Optional[str] = None
         self._name: Optional[str] = None
@@ -301,6 +311,22 @@ class TestCase(AbstractTestCase):
     @preload.setter
     def preload(self, arg: Optional[str]) -> None:
         self._preload = arg
+
+    @property
+    def modules(self) -> list[str]:
+        return self._modules
+
+    @modules.setter
+    def modules(self, arg: list[str]) -> None:
+        self._modules = arg
+
+    @property
+    def rcfiles(self) -> list[str]:
+        return self._rcfiles
+
+    @rcfiles.setter
+    def rcfiles(self, arg: list[str]) -> None:
+        self._rcfiles = arg
 
     @property
     def skipped(self) -> bool:
@@ -790,6 +816,10 @@ class TestCase(AbstractTestCase):
         for var, val in variables.items():
             os.environ[var] = val
         os.environ["PATH"] = f"{self.exec_dir}:{os.environ['PATH']}"
+        for module in self.modules:
+            load_module(module)
+        for rcfile in self.rcfiles:
+            source_rcfile(rcfile)
         yield
         os.environ.clear()
         os.environ.update(save_env)
@@ -959,7 +989,7 @@ class TestMultiCase(TestCase):
         file_root: Optional[str] = None,
         file_path: Optional[str] = None,
         *,
-        flag: str = "--analyze",
+        flag: str = "--base",
         paramsets: Optional[list[ParameterSet]] = None,
         family: Optional[str] = None,
         keywords: list[str] = [],
@@ -968,6 +998,8 @@ class TestMultiCase(TestCase):
         sources: dict[str, list[tuple[str, str]]] = {},
         xstatus: int = 0,
         preload: Optional[str] = None,
+        modules: Optional[list[str]] = None,
+        rcfiles: Optional[list[str]] = None,
     ):
         super().__init__(
             file_root=file_root,
@@ -979,9 +1011,11 @@ class TestMultiCase(TestCase):
             sources=sources,
             xstatus=xstatus,
             preload=preload,
+            modules=modules,
+            rcfiles=rcfiles,
         )
         if flag.startswith("-"):
-            # for the analyze case, call back on the test file with ``flag`` on the command line
+            # for the base case, call back on the test file with ``flag`` on the command line
             self.launcher = sys.executable
             self.exe = os.path.basename(self.file)
             self.postflags.append(flag)

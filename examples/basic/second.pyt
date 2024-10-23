@@ -1,6 +1,6 @@
 import sys
-import nvtest
 
+import nvtest
 
 nvtest.directives.keywords("basic", "second")
 nvtest.directives.link("add.py")

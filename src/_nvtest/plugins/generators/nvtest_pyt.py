@@ -70,11 +70,13 @@ class TestFile(AbstractTestGenerator):
         self._attributes: list[FilterNamespace] = []
         self._names: list[FilterNamespace] = []
         self._timeout: list[FilterNamespace] = []
-        self._analyze: list[FilterNamespace] = []
+        self._execbase: list[FilterNamespace] = []
         self._sources: list[FilterNamespace] = []
         self._baseline: list[FilterNamespace] = []
         self._enable: list[FilterNamespace] = []
         self._preload: Optional[FilterNamespace] = None
+        self._modules: list[FilterNamespace] = []
+        self._rcfiles: list[FilterNamespace] = []
         self._depends_on: list[FilterNamespace] = []
         self._skipif_reason: Optional[str] = None
         self._xstatus: Optional[FilterNamespace] = None
@@ -245,6 +247,7 @@ class TestFile(AbstractTestGenerator):
                     testname=name, on_options=on_options, parameters=parameters
                 )
 
+                modules = self.modules(testname=name, on_options=on_options, parameters=parameters)
                 case = TestCase(
                     self.root,
                     self.path,
@@ -260,10 +263,20 @@ class TestFile(AbstractTestGenerator):
                     preload=self.preload(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
+                    rcfiles=self.rcfiles(
+                        testname=name, on_options=on_options, parameters=parameters
+                    ),
+                    modules=[_[0] for _ in modules],
                 )
                 case.launcher = sys.executable
                 if env_mods:
                     case.add_default_env(**env_mods)
+                if any([_[1] is not None for _ in modules]):
+                    mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
+                    for _, use in modules:
+                        if use:
+                            mp.insert(0, use)
+                    case.add_default_env(MODULEPATH=":".join(mp))
                 if case_mask is not None:
                     case.mask = case_mask
                 elif timeout is not None and timeout > 0 and case.runtime > timeout:
@@ -277,17 +290,18 @@ class TestFile(AbstractTestGenerator):
 
                 cases.append(case)
 
-            analyze = self.analyze(testname=name, on_options=on_options)
-            if analyze:
+            execbase = self.execbase(testname=name, on_options=on_options)
+            if execbase:
                 # add previous cases as dependencies
-                mask_analyze_case: Optional[str] = None
+                mask_base_case: Optional[str] = None
                 if any(case.mask for case in cases):
-                    mask_analyze_case = colorize("deselected due to @*b{skipped dependencies}")
+                    mask_base_case = colorize("deselected due to @*b{skipped dependencies}")
+                modules = self.modules(testname=name, on_options=on_options)
                 parent = TestMultiCase(
                     self.root,
                     self.path,
                     paramsets=paramsets,
-                    flag=analyze,
+                    flag=execbase,
                     family=name,
                     keywords=self.keywords(testname=name),
                     timeout=timeout or self.timeout(testname=name),
@@ -295,12 +309,20 @@ class TestFile(AbstractTestGenerator):
                     sources=self.sources(testname=name),
                     xstatus=self.xstatus(testname=name, on_options=on_options),
                     preload=self.preload(testname=name, on_options=on_options),
+                    modules=[_[0] for _ in modules],
+                    rcfiles=self.rcfiles(testname=name, on_options=on_options),
                 )
                 parent.launcher = sys.executable
-                if mask_analyze_case is not None:
-                    parent.mask = mask_analyze_case
+                if mask_base_case is not None:
+                    parent.mask = mask_base_case
                 if env_mods:
                     parent.add_default_env(**env_mods)
+                if any([_[1] is not None for _ in modules]):
+                    mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
+                    for _, use in modules:
+                        if use:
+                            mp.insert(0, use)
+                    parent.add_default_env(MODULEPATH=":".join(mp))
                 for case in cases:
                     parent.add_dependency(case)
                 cases.append(parent)
@@ -377,6 +399,36 @@ class TestFile(AbstractTestGenerator):
                 return self._preload.value
         return None
 
+    def modules(
+        self,
+        testname: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        parameters: Optional[dict[str, Any]] = None,
+    ) -> list[tuple[str, Optional[str]]]:
+        modules: list[tuple[str, Optional[str]]] = []
+        for ns in self._modules:
+            result = ns.when.evaluate(
+                testname=testname, parameters=parameters, on_options=on_options
+            )
+            if result.value:
+                modules.append((ns.value, getattr(ns, "use", None)))  # type: ignore
+        return modules
+
+    def rcfiles(
+        self,
+        testname: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        parameters: Optional[dict[str, Any]] = None,
+    ) -> list[str]:
+        rcfiles: list[str] = []
+        for ns in self._rcfiles:
+            result = ns.when.evaluate(
+                testname=testname, parameters=parameters, on_options=on_options
+            )
+            if result.value:
+                rcfiles.append(ns.value)
+        return rcfiles
+
     def paramsets(
         self, testname: Optional[str] = None, on_options: Optional[list[str]] = None
     ) -> list[ParameterSet]:
@@ -410,10 +462,10 @@ class TestFile(AbstractTestGenerator):
             names.append(self.name)
         return names
 
-    def analyze(
+    def execbase(
         self, testname: Optional[str] = None, on_options: Optional[list[str]] = None
     ) -> str:
-        for ns in self._analyze:
+        for ns in self._execbase:
             result = ns.when.evaluate(testname=testname, on_options=on_options)
             if not result.value:
                 continue
@@ -570,6 +622,16 @@ class TestFile(AbstractTestGenerator):
         ns = FilterNamespace(arg, when=when, source=source)
         self._preload = ns
 
+    def m_module(
+        self, arg: str, when: Optional[WhenType] = None, use: Optional[str] = None
+    ) -> None:
+        ns = FilterNamespace(arg, when=when, use=use)
+        self._modules.append(ns)
+
+    def m_rcfile(self, arg: str, when: Optional[WhenType] = None) -> None:
+        ns = FilterNamespace(arg, when=when)
+        self._rcfiles.append(ns)
+
     def m_parameterize(
         self,
         argnames: Union[str, Sequence[str]],
@@ -657,7 +719,7 @@ class TestFile(AbstractTestGenerator):
     ) -> None:
         self.add_sources("sources", *files, when=when)
 
-    def m_analyze(
+    def m_execbase(
         self,
         *,
         flag: Optional[str] = None,
@@ -666,14 +728,14 @@ class TestFile(AbstractTestGenerator):
     ) -> None:
         if flag is not None and script is not None:
             raise ValueError(
-                "TestFile.analyze: 'script' and 'flag' keyword arguments are mutually exclusive"
+                "TestFile.execbase: 'script' and 'flag' keyword arguments are mutually exclusive"
             )
         if script is not None:
             string = script
         else:
-            string = flag or "--analyze"
+            string = flag or "--base"
         ns = FilterNamespace(string, when=when)
-        self._analyze.append(ns)
+        self._execbase.append(ns)
 
     def m_name(self, arg: str) -> None:
         self._names.append(FilterNamespace(arg))
@@ -756,6 +818,15 @@ class TestFile(AbstractTestGenerator):
             return True
         return False
 
+    def f_execbase(
+        self,
+        *,
+        when: Optional[WhenType] = None,
+        flag: Optional[str] = None,
+        script: Optional[str] = None,
+    ):
+        self.m_execbase(when=when, flag=flag, script=script)
+
     def f_analyze(
         self,
         *,
@@ -763,7 +834,10 @@ class TestFile(AbstractTestGenerator):
         flag: Optional[str] = None,
         script: Optional[str] = None,
     ):
-        self.m_analyze(when=when, flag=flag, script=script)
+        # vvtest compatibility
+        if script is None and flag is None:
+            flag = "--analyze"
+        self.m_execbase(when=when, flag=flag, script=script)
 
     def f_copy(
         self,
@@ -829,6 +903,14 @@ class TestFile(AbstractTestGenerator):
 
     def f_preload(self, arg: str, *, when: Optional[WhenType] = None, source: bool = False):
         self.m_preload(arg, when=when, source=source)
+
+    def f_load_module(
+        self, arg: str, *, when: Optional[WhenType] = None, use: Optional[str] = None
+    ):
+        self.m_module(arg, when=when, use=use)
+
+    def f_source(self, arg: str, *, when: Optional[WhenType] = None):
+        self.m_rcfile(arg, when=when)
 
     def f_set_attribute(self, *, when: Optional[WhenType] = None, **attributes: Any) -> None:
         self.m_set_attribute(when=when, **attributes)

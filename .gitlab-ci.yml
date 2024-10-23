@@ -50,6 +50,7 @@ lint-changed-files:
   - ruff --version
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
   - ./bin/ci/ruff-wrapper --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" check --output-format=junit --output-file=ruff.xml
+  - cat ruff.xml
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
     when: always

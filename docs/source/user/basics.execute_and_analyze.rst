@@ -1,11 +1,20 @@
-.. _howto-execute-and-analyze:
+.. _basics-execute-and-analyze:
 
-Write an execute and analyze test
-=================================
+The execute and analyze pattern
+===============================
 
-An execute/analyze test is one that uses parameters to expand into multiple test instances, followed by a final test instance that analyzes the results.  The analyze test only runs after all the parameter tests are finished.
+The "execute and analyze" pattern is a collection of :ref:`test cases <basics-testcase>` consisting of
 
-The addition of the ``nvtest.directives.analyze`` directive marks a test as an execute/analyze test and will create a separate test for performing the analysis.
+* a :ref:`test file's <basics-testfile>` parameterized instantiations; and
+* the test file's base, unparameterized, case.
+
+The base case runs only after all of the parameterized test cases are finished.
+
+The "execute and analyze" pattern is enabled by adding ``nvtest.directives.execbase`` to the test file's directives.
+
+.. note::
+
+    In ``vvtest``, the name of this directive is ``analyze``
 
 Consider the following test file ``examples/execute_and_analyze/execute_and_analyze.pyt``
 
@@ -18,7 +27,7 @@ The dependency graph for this test is
 .. command-output:: nvtest describe execute_and_analyze/execute_and_analyze.pyt
     :cwd: /examples
 
-As can be seen, the test ``execute_and_analyze`` depends on ``execute_and_analyze[a=1]``, ``execute_and_analyze[a=2]``, and ``execute_and_analyze[a=3]``.  When the test is run, these "children" tests are run first and then ``execute_and_analyze``:
+As can be seen, the base case ``execute_and_analyze`` depends on ``execute_and_analyze[a=1]``, ``execute_and_analyze[a=2]``, and ``execute_and_analyze[a=3]``.  When the test is run, these "children" tests are run first and then the base case:
 
 .. command-output:: nvtest run -d TestResults.ExecuteAndAnalyze ./execute_and_analyze
     :cwd: /examples
@@ -27,37 +36,37 @@ As can be seen, the test ``execute_and_analyze`` depends on ``execute_and_analyz
 The full example
 ----------------
 
-Define separate functions for the "test" and "verification" portions of the test, as defined in the ``test`` and ``verify_parameterized_test`` functions below.
+Define separate functions for the "test" and "analyze" portions of the test, as defined in the ``test`` and ``analyze_parameterized_test`` functions below.
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :lines: 9-22
     :language: python
 
-``verify_parameterized_test`` is intended to be called for each child test.
+``analyze_parameterized_test`` is intended to be called for each child test.
 
-During the final analysis phase, the children tests are made available in the ``nvtest.test.instance.dependencies`` attribute as shown in the ``analyze`` function below:
+In the final base case, the children tests are made available in the ``nvtest.test.instance.dependencies`` attribute as shown in the ``analyze_base_case`` function below:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
-    :lines: 25-30
+    :lines: 24-30
     :language: python
 
 Finally, the ``ExecuteAndAnalyze`` object is used to set up the test to broker which functions are called during different phases of the test:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
-    :lines: 33-42
+    :lines: 33-36
     :language: python
 
 Accessing dependency parameters
 -------------------------------
 
-Dependency parameters can be accessed directly from the analysis test instance's ``dependencies``, eg,
+Dependency parameters can be accessed directly from the base test instance's ``dependencies``, eg,
 
 .. code-block:: python
 
     self = nvtest.get_instance()
     self.dependencies[0].parameters
 
-or, in the analyze test instance's ``parameters`` attribute.  Consider the following test:
+or, in the base test instance's ``parameters`` attribute.  Consider the following test:
 
 .. literalinclude:: /examples/analyze_only/analyze_only.pyt
     :lines: 8-10
@@ -66,7 +75,7 @@ or, in the analyze test instance's ``parameters`` attribute.  Consider the follo
 The parameters ``np``, ``a``, and ``b`` of each dependency can be accessed directly:
 
 .. literalinclude:: /examples/analyze_only/analyze_only.pyt
-    :lines: 31-33
+    :lines: 30-32
     :language: python
 
 The ordering of the parameters is guaranteed to be the same as the ordering the ``dependencies``.  Eg, ``self.dependencies[i].parameters.a == self.parameters.a[i]``.
@@ -74,5 +83,5 @@ The ordering of the parameters is guaranteed to be the same as the ordering the 
 Additionally, a full table of dependency parameters is accessible via key entry into the ``parameters`` attribute, where the key is a tuple containing each individual parameter name, eg:
 
 .. literalinclude:: /examples/analyze_only/analyze_only.pyt
-    :lines: 34-36
+    :lines: 33-40
     :language: python

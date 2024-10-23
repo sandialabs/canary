@@ -43,8 +43,8 @@ The test instance object defines the following attributes and methods:
 ``gpu_ids: list[int]``:
   List of GPUs reserved for this job [1]_.
 
-``analyze: bool``:
-  Whether this job is an :ref:`analyze <directive-analyze>` job, or not.
+``base_case: bool``:
+  Whether this job is a :ref:`base <directive-execbase>` job, or not.
 
 ``family: str``:
   The test case family is the basename of ``test_path``
