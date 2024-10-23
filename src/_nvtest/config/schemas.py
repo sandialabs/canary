@@ -96,11 +96,15 @@ build_schema = Schema(
                     Optional("cc"): optional_str,
                     Optional("cxx"): optional_str,
                     Optional("fc"): optional_str,
+                    Optional("mpicc"): optional_str,
+                    Optional("mpicxx"): optional_str,
+                    Optional("mpifc"): optional_str,
                 },
             },
             Optional("options"): optional_dict,
         }
-    }
+    },
+    ignore_extra_keys=True,
 )
 
 any_schema = Schema({}, ignore_extra_keys=True)
