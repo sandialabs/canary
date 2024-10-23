@@ -1103,6 +1103,77 @@ def nodes(*values: int, when: Optional[WhenType] = None) -> None:
     """
 
 
+def load_module(name: str, *, use: Optional[str] = None, when: Optional[WhenType] = None) -> None:
+    """Load a module before a test is executed.
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code:: python
+
+       import nvtest
+       nvtest.directives.load_module(name, when=..., use=...)
+
+    ``.vvt``: NA
+
+    Parameters
+    ----------
+
+    * ``name``: The name of the module
+    * ``use``: Add this directory to ``MODULEPATH``
+    * ``when``: Restrict processing of the directive to this condition
+
+    Examples
+    --------
+
+    .. code:: python
+
+       import sys
+       import nvtest
+       nvtest.directives.load_module("gcc")
+
+    will load the ``gcc`` module before the test is executed.
+
+    """
+
+
+def source(name: str, *, when: Optional[WhenType] = None) -> None:
+    """Source a shell rc file before a test is executed.
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code:: python
+
+       import nvtest
+       nvtest.directives.source(name, when=...)
+
+    ``.vvt``: NA
+
+    Parameters
+    ----------
+
+    * ``name``: The name of the rc file
+    * ``when``: Restrict processing of the directive to this condition
+
+    Examples
+    --------
+
+    .. code:: python
+
+       import sys
+       import nvtest
+       nvtest.directives.source("setup-env.sh")
+
+    will source the ``setup-env.sh`` file before the test is executed.
+
+    """
+
+
 def set_attribute(*, when: Optional[WhenType] = None, **attributes: Any) -> None:
     """Set an attribute on the test
 

@@ -75,6 +75,8 @@ class TestFile(AbstractTestGenerator):
         self._baseline: list[FilterNamespace] = []
         self._enable: list[FilterNamespace] = []
         self._preload: Optional[FilterNamespace] = None
+        self._modules: list[FilterNamespace] = []
+        self._rcfiles: list[FilterNamespace] = []
         self._depends_on: list[FilterNamespace] = []
         self._skipif_reason: Optional[str] = None
         self._xstatus: Optional[FilterNamespace] = None
@@ -245,6 +247,7 @@ class TestFile(AbstractTestGenerator):
                     testname=name, on_options=on_options, parameters=parameters
                 )
 
+                modules = self.modules(testname=name, on_options=on_options, parameters=parameters)
                 case = TestCase(
                     self.root,
                     self.path,
@@ -260,10 +263,20 @@ class TestFile(AbstractTestGenerator):
                     preload=self.preload(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
+                    rcfiles=self.rcfiles(
+                        testname=name, on_options=on_options, parameters=parameters
+                    ),
+                    modules=[_[0] for _ in modules],
                 )
                 case.launcher = sys.executable
                 if env_mods:
                     case.add_default_env(**env_mods)
+                if any([_[1] is not None for _ in modules]):
+                    mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
+                    for _, use in modules:
+                        if use:
+                            mp.insert(0, use)
+                    case.add_default_env(MODULEPATH=":".join(mp))
                 if case_mask is not None:
                     case.mask = case_mask
                 elif timeout is not None and timeout > 0 and case.runtime > timeout:
@@ -283,6 +296,7 @@ class TestFile(AbstractTestGenerator):
                 mask_base_case: Optional[str] = None
                 if any(case.mask for case in cases):
                     mask_base_case = colorize("deselected due to @*b{skipped dependencies}")
+                modules = self.modules(testname=name, on_options=on_options)
                 parent = TestMultiCase(
                     self.root,
                     self.path,
@@ -295,12 +309,20 @@ class TestFile(AbstractTestGenerator):
                     sources=self.sources(testname=name),
                     xstatus=self.xstatus(testname=name, on_options=on_options),
                     preload=self.preload(testname=name, on_options=on_options),
+                    modules=[_[0] for _ in modules],
+                    rcfiles=self.rcfiles(testname=name, on_options=on_options),
                 )
                 parent.launcher = sys.executable
                 if mask_base_case is not None:
                     parent.mask = mask_base_case
                 if env_mods:
                     parent.add_default_env(**env_mods)
+                if any([_[1] is not None for _ in modules]):
+                    mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
+                    for _, use in modules:
+                        if use:
+                            mp.insert(0, use)
+                    parent.add_default_env(MODULEPATH=":".join(mp))
                 for case in cases:
                     parent.add_dependency(case)
                 cases.append(parent)
@@ -376,6 +398,36 @@ class TestFile(AbstractTestGenerator):
             if result.value:
                 return self._preload.value
         return None
+
+    def modules(
+        self,
+        testname: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        parameters: Optional[dict[str, Any]] = None,
+    ) -> list[tuple[str, Optional[str]]]:
+        modules: list[tuple[str, Optional[str]]] = []
+        for ns in self._modules:
+            result = ns.when.evaluate(
+                testname=testname, parameters=parameters, on_options=on_options
+            )
+            if result.value:
+                modules.append((ns.value, getattr(ns, "use", None)))  # type: ignore
+        return modules
+
+    def rcfiles(
+        self,
+        testname: Optional[str] = None,
+        on_options: Optional[list[str]] = None,
+        parameters: Optional[dict[str, Any]] = None,
+    ) -> list[str]:
+        rcfiles: list[str] = []
+        for ns in self._rcfiles:
+            result = ns.when.evaluate(
+                testname=testname, parameters=parameters, on_options=on_options
+            )
+            if result.value:
+                rcfiles.append(ns.value)
+        return rcfiles
 
     def paramsets(
         self, testname: Optional[str] = None, on_options: Optional[list[str]] = None
@@ -569,6 +621,16 @@ class TestFile(AbstractTestGenerator):
     def m_preload(self, arg: str, when: Optional[WhenType] = None, source: bool = False) -> None:
         ns = FilterNamespace(arg, when=when, source=source)
         self._preload = ns
+
+    def m_module(
+        self, arg: str, when: Optional[WhenType] = None, use: Optional[str] = None
+    ) -> None:
+        ns = FilterNamespace(arg, when=when, use=use)
+        self._modules.append(ns)
+
+    def m_rcfile(self, arg: str, when: Optional[WhenType] = None) -> None:
+        ns = FilterNamespace(arg, when=when)
+        self._rcfiles.append(ns)
 
     def m_parameterize(
         self,
@@ -841,6 +903,14 @@ class TestFile(AbstractTestGenerator):
 
     def f_preload(self, arg: str, *, when: Optional[WhenType] = None, source: bool = False):
         self.m_preload(arg, when=when, source=source)
+
+    def f_load_module(
+        self, arg: str, *, when: Optional[WhenType] = None, use: Optional[str] = None
+    ):
+        self.m_module(arg, when=when, use=use)
+
+    def f_source(self, arg: str, *, when: Optional[WhenType] = None):
+        self.m_rcfile(arg, when=when)
 
     def f_set_attribute(self, *, when: Optional[WhenType] = None, **attributes: Any) -> None:
         self.m_set_attribute(when=when, **attributes)
