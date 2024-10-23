@@ -3,7 +3,8 @@ import time
 import nvtest
 
 
-nvtest.directives.timeout(.5)
+nvtest.directives.timeout(0.5)
+
 
 def test() -> int:
     time.sleep(1)

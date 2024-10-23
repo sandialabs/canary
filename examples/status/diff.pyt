@@ -4,6 +4,7 @@ import nvtest
 
 nvtest.directives.keywords("fast")
 
+
 def test():
     raise nvtest.TestDiffed()
 

@@ -104,7 +104,7 @@ from _nvtest import enums
 WhenType = Union[str, dict[str, str]]
 
 
-def analyze(
+def execbase(
     *,
     when: Optional[WhenType] = None,
     flag: Optional[str] = None,
@@ -121,7 +121,7 @@ def analyze(
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.analyze(*, flag=None, script=None, when=...)
+       nvtest.directives.execbase(*, flag=None, script=None, when=...)
 
     ``.vvt``:
 
@@ -150,7 +150,7 @@ def analyze(
     References
     ----------
 
-    * :ref:`Writing an execute/analyze test <howto-execute-and-analyze>`
+    * :ref:`Writing an execute/analyze test <basics-execute-and-analyze>`
 
     Examples
     --------
@@ -158,7 +158,7 @@ def analyze(
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.analyze(flag="--analyze", when="platforms='not darwin'")
+       nvtest.directives.execbase(flag="--base", when="platforms='not darwin'")
        nvtest.directives.parameterize("a,b", [(1, 2), (3, 4)])
 
     .. code-block:: python
@@ -180,28 +180,31 @@ def analyze(
        import sys
 
        import nvtest
-       nvtest.directives.analyze(flag="--analyze", when="platforms='not darwin'")
+       nvtest.directives.execbase(flag="--base", when="platforms='not darwin'")
        nvtest.directives.parameterize("a,b", [(1, 2), (3, 4)])
 
 
        def test() -> int:
            ...
 
-       def analyze() -> int:
+       def base() -> int:
            ...
 
        def main() -> int:
            parser = argparse.ArgumentParser()
-           parser.add_argument("--analyze", action="store_true")
+           parser.add_argument("--base", action="store_true")
            args = parser.parse_args()
            if args.analyze:
-               return analyze()
+               return base()
            return test()
 
 
        if __name__ == "__main__":
            sys.exit(main())
     """
+
+
+analyze = execbase
 
 
 def baseline(
@@ -255,7 +258,7 @@ def baseline(
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.analyze("file.exo", "file.base_exo", when="platforms='not darwin'")
+       nvtest.directives.baseline("file.exo", "file.base_exo", when="platforms='not darwin'")
 
     .. code-block:: python
 

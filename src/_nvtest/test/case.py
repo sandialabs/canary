@@ -959,7 +959,7 @@ class TestMultiCase(TestCase):
         file_root: Optional[str] = None,
         file_path: Optional[str] = None,
         *,
-        flag: str = "--analyze",
+        flag: str = "--base",
         paramsets: Optional[list[ParameterSet]] = None,
         family: Optional[str] = None,
         keywords: list[str] = [],
@@ -981,7 +981,7 @@ class TestMultiCase(TestCase):
             preload=preload,
         )
         if flag.startswith("-"):
-            # for the analyze case, call back on the test file with ``flag`` on the command line
+            # for the base case, call back on the test file with ``flag`` on the command line
             self.launcher = sys.executable
             self.exe = os.path.basename(self.file)
             self.postflags.append(flag)

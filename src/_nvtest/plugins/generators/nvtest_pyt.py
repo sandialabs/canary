@@ -70,7 +70,7 @@ class TestFile(AbstractTestGenerator):
         self._attributes: list[FilterNamespace] = []
         self._names: list[FilterNamespace] = []
         self._timeout: list[FilterNamespace] = []
-        self._analyze: list[FilterNamespace] = []
+        self._execbase: list[FilterNamespace] = []
         self._sources: list[FilterNamespace] = []
         self._baseline: list[FilterNamespace] = []
         self._enable: list[FilterNamespace] = []
@@ -277,17 +277,17 @@ class TestFile(AbstractTestGenerator):
 
                 cases.append(case)
 
-            analyze = self.analyze(testname=name, on_options=on_options)
-            if analyze:
+            execbase = self.execbase(testname=name, on_options=on_options)
+            if execbase:
                 # add previous cases as dependencies
-                mask_analyze_case: Optional[str] = None
+                mask_base_case: Optional[str] = None
                 if any(case.mask for case in cases):
-                    mask_analyze_case = colorize("deselected due to @*b{skipped dependencies}")
+                    mask_base_case = colorize("deselected due to @*b{skipped dependencies}")
                 parent = TestMultiCase(
                     self.root,
                     self.path,
                     paramsets=paramsets,
-                    flag=analyze,
+                    flag=execbase,
                     family=name,
                     keywords=self.keywords(testname=name),
                     timeout=timeout or self.timeout(testname=name),
@@ -297,8 +297,8 @@ class TestFile(AbstractTestGenerator):
                     preload=self.preload(testname=name, on_options=on_options),
                 )
                 parent.launcher = sys.executable
-                if mask_analyze_case is not None:
-                    parent.mask = mask_analyze_case
+                if mask_base_case is not None:
+                    parent.mask = mask_base_case
                 if env_mods:
                     parent.add_default_env(**env_mods)
                 for case in cases:
@@ -410,10 +410,10 @@ class TestFile(AbstractTestGenerator):
             names.append(self.name)
         return names
 
-    def analyze(
+    def execbase(
         self, testname: Optional[str] = None, on_options: Optional[list[str]] = None
     ) -> str:
-        for ns in self._analyze:
+        for ns in self._execbase:
             result = ns.when.evaluate(testname=testname, on_options=on_options)
             if not result.value:
                 continue
@@ -657,7 +657,7 @@ class TestFile(AbstractTestGenerator):
     ) -> None:
         self.add_sources("sources", *files, when=when)
 
-    def m_analyze(
+    def m_execbase(
         self,
         *,
         flag: Optional[str] = None,
@@ -666,14 +666,14 @@ class TestFile(AbstractTestGenerator):
     ) -> None:
         if flag is not None and script is not None:
             raise ValueError(
-                "TestFile.analyze: 'script' and 'flag' keyword arguments are mutually exclusive"
+                "TestFile.execbase: 'script' and 'flag' keyword arguments are mutually exclusive"
             )
         if script is not None:
             string = script
         else:
-            string = flag or "--analyze"
+            string = flag or "--base"
         ns = FilterNamespace(string, when=when)
-        self._analyze.append(ns)
+        self._execbase.append(ns)
 
     def m_name(self, arg: str) -> None:
         self._names.append(FilterNamespace(arg))
@@ -756,6 +756,15 @@ class TestFile(AbstractTestGenerator):
             return True
         return False
 
+    def f_execbase(
+        self,
+        *,
+        when: Optional[WhenType] = None,
+        flag: Optional[str] = None,
+        script: Optional[str] = None,
+    ):
+        self.m_execbase(when=when, flag=flag, script=script)
+
     def f_analyze(
         self,
         *,
@@ -763,7 +772,10 @@ class TestFile(AbstractTestGenerator):
         flag: Optional[str] = None,
         script: Optional[str] = None,
     ):
-        self.m_analyze(when=when, flag=flag, script=script)
+        # vvtest compatibility
+        if script is None and flag is None:
+            flag = "--analyze"
+        self.m_execbase(when=when, flag=flag, script=script)
 
     def f_copy(
         self,
