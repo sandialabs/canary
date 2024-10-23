@@ -7,7 +7,7 @@ A test case is a concrete instantiation of a :ref:`test file <basics-testfile>` 
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
-    :lines: 2-4
+    :lines: 4-6
 
 would expand into two test instances with names
 
@@ -21,7 +21,7 @@ During a test session, ``nvtest`` creates a :ref:`unique test execution director
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
-    :lines: 2-8
+    :lines: 8-10
 
 The test instance object defines the following attributes and methods:
 

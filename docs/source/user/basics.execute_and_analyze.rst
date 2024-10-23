@@ -16,11 +16,11 @@ The "execute and analyze" pattern is enabled by adding ``nvtest.directives.execb
 
     In ``vvtest``, the name of this directive is ``analyze``
 
-Consider the following test file ``examples/execute_and_analyze/execute_and_analyze.pyt``
+Consider the directives section of the test file ``examples/execute_and_analyze/execute_and_analyze.pyt``:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :language: python
-    :lines: 1-6
+    :lines: 1-7
 
 The dependency graph for this test is
 
@@ -33,33 +33,39 @@ As can be seen, the base case ``execute_and_analyze`` depends on ``execute_and_a
     :cwd: /examples
     :extraargs: -rv -w
 
-The full example
-----------------
+Test execution phases
+---------------------
 
-Define separate functions for the "test" and "analyze" portions of the test, as defined in the ``test`` and ``analyze_parameterized_test`` functions below.
+To take advantage of the execute and analyze pattern, a test should define separate functions for the "test", "analyze", and "base" phases of test execution. For example, a test might define separate ``test`` and ``analyze_parameterized_test`` functions as below:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
-    :lines: 9-22
+    :lines: 10-22
     :language: python
 
-``analyze_parameterized_test`` is intended to be called for each child test.
+The functions ``test`` and ``analyze_parameterized_test`` are intended to be called for each child test in the test and analyze phases, respectively.
 
-In the final base case, the children tests are made available in the ``nvtest.test.instance.dependencies`` attribute as shown in the ``analyze_base_case`` function below:
+For the final base case (in which the children tests are made available in the ``nvtest.test.instance.dependencies`` attribute) a test might define a function similar to ``analyze_base_case``:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
-    :lines: 24-30
+    :lines: 25-31
     :language: python
 
 Finally, the ``ExecuteAndAnalyze`` object is used to set up the test to broker which functions are called during different phases of the test:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
-    :lines: 33-36
+    :lines: 34-38
+    :language: python
+
+The full example
+----------------
+
+.. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :language: python
 
 Accessing dependency parameters
 -------------------------------
 
-Dependency parameters can be accessed directly from the base test instance's ``dependencies``, eg,
+Dependency parameters can be accessed directly from the base test instance's ``dependencies``, e.g.,
 
 .. code-block:: python
 
@@ -69,19 +75,19 @@ Dependency parameters can be accessed directly from the base test instance's ``d
 or, in the base test instance's ``parameters`` attribute.  Consider the following test:
 
 .. literalinclude:: /examples/analyze_only/analyze_only.pyt
-    :lines: 8-10
+    :lines: 7-9
     :language: python
 
 The parameters ``np``, ``a``, and ``b`` of each dependency can be accessed directly:
 
 .. literalinclude:: /examples/analyze_only/analyze_only.pyt
-    :lines: 30-32
+    :lines: 29-31
     :language: python
 
-The ordering of the parameters is guaranteed to be the same as the ordering the ``dependencies``.  Eg, ``self.dependencies[i].parameters.a == self.parameters.a[i]``.
+The ordering of the parameters is guaranteed to be the same as the ordering the ``dependencies``.  E.g., ``self.dependencies[i].parameters.a == self.parameters.a[i]``.
 
-Additionally, a full table of dependency parameters is accessible via key entry into the ``parameters`` attribute, where the key is a tuple containing each individual parameter name, eg:
+Additionally, a full table of dependency parameters is accessible via key entry into the ``parameters`` attribute, where the key is a tuple containing each individual parameter name, e.g.:
 
 .. literalinclude:: /examples/analyze_only/analyze_only.pyt
-    :lines: 33-40
+    :lines: 32-39
     :language: python
