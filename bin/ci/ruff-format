@@ -8,8 +8,7 @@ import sys
 def main():
     parser = argparse.ArgumentParser(description="Format files that have changed between HEAD and REF")
     parser.add_argument("--ref", required=True, help="Check python files changed since REF")
-    parser.add_argument("remainder", nargs=argparse.REMAINDER, help="Pass args to ruff")
-    ns = parser.parse_args()
+    ns, unknown_args = parser.parse_known_args()
 
     changed_python_files: list[str] = []
     diff = subprocess.getoutput(f"git diff --name-status {ns.ref}")
@@ -27,7 +26,7 @@ def main():
     print(f"Changed python files:\n- {s}")
 
     args = ["ruff", "format"]
-    args.extend(ns.remainder or [])
+    args.extend(unknown_args or [])
     args.extend(changed_python_files)
     proc = subprocess.run(args)
     return proc.returncode

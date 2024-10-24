@@ -1,5 +1,6 @@
 import functools
 import glob
+import importlib
 import importlib.resources as ir
 import inspect
 import json
@@ -20,10 +21,11 @@ from .util.entry_points import get_entry_points
 from .util.singleton import Singleton
 
 if TYPE_CHECKING:
-    from .abc import AbstractTestGenerator
-    from .abc import AbstractTestRunner
+    from .command.base import Command
     from .config.argparsing import Parser
     from .finder import Finder
+    from .generator import AbstractTestGenerator
+    from .hpc_scheduler import HPCScheduler
     from .session import Session
     from .test.case import TestCase
 
@@ -78,17 +80,8 @@ class PluginHook:
 class Manager:
     def __init__(self) -> None:
         self.files: set[str] = set()
-        self.builtins_loaded: bool = False
         self.entry_points_loaded: bool = False
         self.disabled_entry_points: list[str] = []
-
-    @property
-    def plugins(self) -> set[Type[PluginHook]]:
-        if not self.builtins_loaded:
-            self.load_builtins()
-        if not self.entry_points_loaded:
-            self.load_from_entry_points()
-        return PluginHook.REGISTRY
 
     def register(self, func: Callable, *, scope: str, stage: str) -> None:
         name = func.__name__
@@ -130,13 +123,14 @@ class Manager:
         t = new_class(plugin_class_name, (PluginHook,), exec_body=lambda ns: ns.update(attributes))
 
     def iterplugins(self) -> Generator[Type[PluginHook], None, None]:
-        for hook in self.plugins:
+        if not self.entry_points_loaded:
+            self.load_from_entry_points()
+        for hook in PluginHook.REGISTRY:
             yield hook
 
     def getstate(self) -> dict[str, Any]:
         state: dict[str, Any] = {
             "files": list(self.files),
-            "builtins_loaded": self.builtins_loaded,
             "entry_points_loaded": self.entry_points_loaded,
             "disabled_entry_points": self.disabled_entry_points,
         }
@@ -145,22 +139,13 @@ class Manager:
     def setstate(self, state: dict[str, Any]) -> None:
         for file in state["files"]:
             self.load_from_file(file)
-        # we don't need to load the builtins since they were done above with the files
-        self.builtins_loaded = state["builtins_loaded"]
         if state["entry_points_loaded"]:
             self.load_from_entry_points(disable=state["disabled_entry_points"])
 
     def load_builtins(self) -> None:
-        if self.builtins_loaded:
-            return
-        path = ir.files("_nvtest").joinpath("plugins")  # type: ignore
-        logging.debug(f"Loading builtin plugins from {path}")
-        if path.exists():  # type: ignore
-            with ir.as_file(path) as p:
-                for file in p.rglob("nvtest_*.py"):
-                    logging.debug(f"Loading {file.name} builtin plugin")
-                    self.load_from_file(file)
-        self.builtins_loaded = True
+        for resource in ir.files("_nvtest.plugins").iterdir():
+            if resource.name.startswith("nvtest_"):
+                importlib.import_module(f".{resource.name}", "_nvtest.plugins")
 
     def load_from_directory(self, path: str) -> None:
         for file in glob.glob(os.path.join(path, "nvtest_*.py")):
@@ -193,6 +178,27 @@ class Manager:
         self.entry_points_loaded = True
         self.disabled_entry_points.clear()
         self.disabled_entry_points.extend(disable)
+
+    @staticmethod
+    def generators() -> Generator[Type["AbstractTestGenerator"], None, None]:
+        from .generator import AbstractTestGenerator
+
+        for generator_class in AbstractTestGenerator.REGISTRY:
+            yield generator_class
+
+    @staticmethod
+    def schedulers() -> Generator[Type["HPCScheduler"], None, None]:
+        from .hpc_scheduler import HPCScheduler
+
+        for scheduler_class in HPCScheduler.REGISTRY:
+            yield scheduler_class
+
+    @staticmethod
+    def commands() -> Generator[Type["Command"], None, None]:
+        from .command.base import Command
+
+        for command_class in Command.REGISTRY:
+            yield command_class
 
 
 def load_module_from_file(name: str, path: Union[Path, str]):
@@ -242,6 +248,8 @@ def load_module_from_file(name: str, path: Union[Path, str]):
 
 
 def factory() -> Manager:
+    manager = Manager()
+    manager.load_builtins()
     if os.getenv("NVTEST_LEVEL") == "0" and "NVTEST_SESSION_DIR" in os.environ:
         # Setting up test cases and several other operations are done in a
         # multiprocessing Pool so we reload the configuration that existed when that pool
@@ -249,10 +257,8 @@ def factory() -> Manager:
         file = os.path.join(os.environ["NVTEST_SESSION_DIR"], ".nvtest/objects/plugin")
         if os.path.exists(file):
             state = json.load(open(file))
-            mgr = Manager()
-            mgr.setstate(state)
-            return mgr
-    return Manager()
+            manager.setstate(state)
+    return manager
 
 
 _manager = Singleton(factory)
@@ -263,17 +269,15 @@ def plugins() -> Generator[Type[PluginHook], None, None]:
 
 
 def generators() -> Generator[Type["AbstractTestGenerator"], None, None]:
-    from .abc import AbstractTestGenerator
-
-    for generator in AbstractTestGenerator.REGISTRY:
-        yield generator
+    return _manager.generators()
 
 
-def runners() -> Generator[Type["AbstractTestRunner"], None, None]:
-    from .abc import AbstractTestRunner
+def schedulers() -> Generator[Type["HPCScheduler"], None, None]:
+    return _manager.schedulers()
 
-    for runner in AbstractTestRunner.REGISTRY:
-        yield runner
+
+def commands() -> Generator[Type["Command"], None, None]:
+    return _manager.commands()
 
 
 def register(*, scope: str, stage: str, **kwds: str):
@@ -289,10 +293,6 @@ def register(*, scope: str, stage: str, **kwds: str):
         return wrapper
 
     return decorator
-
-
-def load_builtin_plugins() -> None:
-    _manager.load_builtins()
 
 
 def load_from_entry_points(disable: Optional[list[str]] = None) -> None:

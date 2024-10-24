@@ -7,12 +7,12 @@ from _nvtest import enums
 from _nvtest._version import __version__
 from _nvtest._version import version
 from _nvtest._version import version_tuple
-from _nvtest.abc import AbstractTestGenerator
-from _nvtest.command import Command
+from _nvtest.command.base import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.error import TestDiffed
 from _nvtest.error import TestFailed
 from _nvtest.error import TestSkipped
+from _nvtest.generator import AbstractTestGenerator
 from _nvtest.main import console_main
 from _nvtest.reporter import Reporter
 from _nvtest.session import Session

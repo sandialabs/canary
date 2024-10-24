@@ -11,7 +11,7 @@ from typing import Sequence
 from typing import Union
 
 if TYPE_CHECKING:
-    from _nvtest.command import Command
+    from _nvtest.command.base import Command
 
 import _nvtest._version
 
@@ -149,9 +149,9 @@ class Parser(argparse.ArgumentParser):
         group.add_argument(*args, **kwargs)
 
     def add_all_commands(self, add_help_override: bool = False) -> None:
-        from _nvtest.command import commands
+        import _nvtest.plugin as plugin
 
-        for command_class in commands():
+        for command_class in plugin.commands():
             command = command_class()
             self.add_command(command, add_help_override=add_help_override)
 

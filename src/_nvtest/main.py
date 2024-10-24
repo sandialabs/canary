@@ -4,14 +4,17 @@ import shlex
 import signal
 import sys
 import traceback
+from typing import TYPE_CHECKING
 from typing import Optional
 
-from . import command as cmd
 from . import config
 from . import plugin
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
 from .util import logging
+
+if TYPE_CHECKING:
+    from .command.base import Command
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -23,7 +26,6 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     :returns: An exit code.
     """
-    plugin.load_builtin_plugins()
     parser = make_argument_parser()
     parser.add_all_commands()
 
@@ -60,9 +62,8 @@ def main(argv: Optional[list[str]] = None) -> int:
 
 class NVTestCommand:
     def __init__(self, command_name: str, debug: bool = False) -> None:
-        plugin.load_builtin_plugins()
         plugin.load_from_entry_points()
-        for command_class in cmd.commands():
+        for command_class in plugin.commands():
             if command_class.cmd_name() == command_name:
                 self.command = command_class()
                 break
@@ -93,7 +94,7 @@ class NVTestCommand:
         return self.returncode
 
 
-def invoke_command(command: cmd.Command, args: argparse.Namespace) -> int:
+def invoke_command(command: "Command", args: argparse.Namespace) -> int:
     return command.execute(args)
 
 

@@ -57,7 +57,7 @@ To run only ``centered_space/centered_space.pyt`` and ``parameterize/parameteriz
 
 and pass it to ``nvtest run``:
 
-.. command-output:: nvtest run tests.json
+.. command-output:: nvtest run -f tests.json
     :cwd: /examples
     :extraargs: -rv -w
     :setup: rm -rf TestResults

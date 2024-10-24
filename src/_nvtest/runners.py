@@ -1,38 +1,59 @@
+import abc
 import io
 import os
 import signal
 import subprocess
 import time
-from typing import IO
 from typing import Any
 from typing import Optional
 
 from . import config
-from .abc import AbstractTestCase
-from .abc import AbstractTestRunner
+from . import plugin
+from .atc import AbstractTestCase
 from .error import diff_exit_status
+from .hpc_scheduler import HPCScheduler
 from .resource import ResourceHandler
 from .status import Status
 from .test.batch import TestBatch
 from .test.case import TestCase
 from .third_party.color import colorize
 from .util import logging
-from .util.filesystem import which
 from .util.filesystem import working_dir
 from .util.time import hhmmss
 from .util.time import timestamp
+
+
+class AbstractTestRunner:
+    scheduled = False
+
+    def __init__(self, rh: ResourceHandler) -> None:
+        self.rh = rh
+
+    def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
+        prefix = colorize("@*b{==>} ")
+        if not config.getoption("progress_bar"):
+            logging.emit("%s%s\n" % (prefix, self.start_msg(case)))
+        self.run(case)
+        if not config.getoption("progress_bar"):
+            logging.emit("%s%s\n" % (prefix, self.end_msg(case)))
+        return None
+
+    @abc.abstractmethod
+    def run(self, case: AbstractTestCase, stage: str = "test") -> None: ...
+
+    @abc.abstractmethod
+    def start_msg(self, case: AbstractTestCase) -> str: ...
+
+    @abc.abstractmethod
+    def end_msg(self, case: AbstractTestCase) -> str: ...
 
 
 class TestCaseRunner(AbstractTestRunner):
     """The default runner for running a single :class:`~TestCase`"""
 
     def __init__(self, rh: ResourceHandler) -> None:
-        self.timeoutx = rh["test:timeoutx"]
         super().__init__(rh)
-
-    @staticmethod
-    def matches(name: Optional[str]) -> bool:
-        return name in ("direct", None)
+        self.timeoutx = self.rh["test:timeoutx"]
 
     def run(self, case: "AbstractTestCase", stage: str = "test") -> None:
         assert isinstance(case, TestCase)
@@ -126,29 +147,21 @@ class BatchRunner(AbstractTestRunner):
 
     def __init__(self, rh: ResourceHandler) -> None:
         super().__init__(rh)
-        self.extra_args = rh["batch:runner_args"] or []
-        # this is the number of workers for the launched batch
-        self.workers: Optional[int] = rh["batch:workers"]
-        self.timeoutx: float = rh["test:timeoutx"] or 1.0
-        self.default_args = self.read_default_args_from_config()
-        command = which(self.command_name)
-        if command is None:
-            raise ValueError(f"{self.command_name} not found on PATH")
-        self.exe: str = command
-
-    def read_default_args_from_config(self) -> list[str]:
-        default_args = config.get("batch:runner_args")
-        return list(default_args or [])
-
-    def write_submission_script(self, batch: TestBatch, file: IO[Any]) -> None:
-        raise NotImplementedError
+        scheduler_name = self.rh["batch:scheduler"]
+        self.scheduler: HPCScheduler
+        for scheduler_type in plugin.schedulers():
+            if scheduler_type.matches(scheduler_name):
+                self.scheduler = scheduler_type(self.rh)
+                break
+        else:
+            raise ValueError(f"No matching scheduler for {scheduler_name}")
 
     def run(self, batch: AbstractTestCase, stage: str = "test") -> None:
         assert isinstance(batch, TestBatch)
         try:
             logging.debug(f"Running batch {batch.batch_no}")
             start = time.monotonic()
-            self.run_batch(batch)
+            self.scheduler.submit_and_wait(batch)
         finally:
             batch.total_duration = time.monotonic() - start
             batch.refresh()
@@ -160,9 +173,6 @@ class BatchRunner(AbstractTestRunner):
                     case.status.set("cancelled", "batch cancelled")
                     case.save()
         return
-
-    def run_batch(self, batch: TestBatch) -> None:
-        raise NotImplementedError
 
     def start_msg(self, batch: AbstractTestCase) -> str:
         assert isinstance(batch, TestBatch)
@@ -191,46 +201,11 @@ class BatchRunner(AbstractTestRunner):
         s.write(")")
         return s.getvalue()
 
-    def qtime(self, batch: TestBatch, minutes: bool = False) -> float:
-        if len(batch.cases) == 1:
-            return batch.cases[0].timeout
-        total_runtime = batch.runtime
-        if total_runtime < 100.0:
-            total_runtime = 300.0
-        elif total_runtime < 300.0:
-            total_runtime = 600.0
-        elif total_runtime < 600.0:
-            total_runtime = 1200.0
-        elif total_runtime < 1800.0:
-            total_runtime = 2400.0
-        elif total_runtime < 3600.0:
-            total_runtime = 5000.0
-        else:
-            total_runtime *= 1.1
-        if not minutes:
-            return total_runtime
-        qtime_in_minutes = total_runtime // 60
-        if total_runtime % 60 > 0:
-            qtime_in_minutes += 1
-        return qtime_in_minutes
 
-    def nvtest_invocation(
-        self, *, batch: TestBatch, workers: Optional[int] = None, cpus: Optional[int] = None
-    ) -> str:
-        fp = io.StringIO()
-        fp.write("nvtest ")
-        if config.get("config:debug"):
-            fp.write("-d ")
-        fp.write(f"-C {batch.root} run -rv ")
-        if config.get("option:fail_fast"):
-            fp.write("--fail-fast ")
-        if workers is not None:
-            fp.write(f"-l session:workers={workers} ")
-        if cpus is None:
-            cpu_ids = ",".join(str(_) for _ in batch.cpu_ids)
-            fp.write(f"-l session:cpu_ids={cpu_ids} ")
-        else:
-            fp.write(f"-l session:cpu_count={cpus} ")
-        fp.write(f"-l test:timeoutx={self.timeoutx} ")
-        fp.write(f"^{batch.lot_no}:{batch.batch_no}")
-        return fp.getvalue()
+def factory(rh: ResourceHandler) -> "AbstractTestRunner":
+    runner: "AbstractTestRunner"
+    if rh["batch:scheduler"] is None:
+        runner = TestCaseRunner(rh)
+    else:
+        runner = BatchRunner(rh)
+    return runner

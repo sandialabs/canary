@@ -1,4 +1,4 @@
 {
   "returncode": 4,
-  "output": "|\\| \\/ ~|~ [- _\\~ ~|~\nsearching for tests in xstatus\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting 99f5e4c xfail-fail\n==> Finished 99f5e4c xfail-fail FAIL\nShort test summary info\n\u2717 FAIL 99f5e4c xfail-fail\n\n\u2728\u2728 Session done -- 1 total, 1 fail in 00:00:00.00"
+  "output": " )\\  )\\       .-.  .-,.-.,-.  )\\.---.    )\\.--.  .-,.-.,-. \n(  \\, /   ,'  /  ) ) ,, ,. ( (   ,-._(  (   ._.' ) ,, ,. ( \n ) \\ (   (  ) | (  \\( |(  )/  \\  '-,     `-.`.   \\( |(  )/ \n( ( \\ \\   ) './ /     ) \\      ) ,-`    ,_ (  \\     ) \\    \n `.)/  ) (  ,  (      \\ (     (  ``-.  (  '.)  )    \\ (    \n    '.(   )/..'        )/      )..-.(   '._,_.'      )/\nsearching for tests in xstatus\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting 99f5e4c xfail-fail\n==> Finished 99f5e4c xfail-fail FAIL\nShort test summary info\n\u2717 FAIL 99f5e4c xfail-fail\n\n\u26a1\u26a1 Session done -- 1 total, 1 fail in 00:00:00.00"
 }

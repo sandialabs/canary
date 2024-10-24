@@ -1,4 +1,4 @@
-from _nvtest.plugins.generators.nvtest_vvt import to_seconds
+from _nvtest.plugins.nvtest_vvt.generator import to_seconds
 from _nvtest.util.time import pretty_seconds
 from _nvtest.util.time import time_in_seconds
 

@@ -2,7 +2,7 @@ import os
 from typing import Optional
 from typing import Union
 
-from ..abc import AbstractTestCase
+from ..atc import AbstractTestCase
 from ..resource import calculate_allocations
 from ..status import Status
 from ..util import logging
@@ -38,8 +38,10 @@ class TestBatch(AbstractTestCase):
         first = next(iter(cases))
         self.root = self.exec_dir = first.exec_root
         self.total_duration: float = -1
-        self.max_cpus_required = self._cpus = max([case.cpus for case in self.cases])
-        self.max_gpus_required = self._gpus = max([case.gpus for case in self.cases])
+        self._submit_cpus = 1
+        self._submit_gpus = 0
+        self.max_cpus_required = max([case.cpus for case in self.cases])
+        self.max_gpus_required = max([case.gpus for case in self.cases])
         self._runtime: float
         if len(self.cases) == 1:
             self._runtime = self.cases[0].runtime
@@ -69,8 +71,8 @@ class TestBatch(AbstractTestCase):
             "NVTEST_NBATCHES": str(self.nbatches),
             "NVTEST_LEVEL": "1",
             "NVTEST_DISABLE_KB": "1",
-            "NVTEST_BATCH_RUNNER": None,
-            "NVTEST_BATCH_RUNNER_ARGS": None,
+            "NVTEST_BATCH_SCHEDULER": None,
+            "NVTEST_BATCH_SCHEDULER_ARGS": None,
             "NVTEST_BATCH_LENGTH": None,
         }
 
@@ -104,15 +106,11 @@ class TestBatch(AbstractTestCase):
 
     @property
     def cpus(self) -> int:
-        return self._cpus
-
-    @cpus.setter
-    def cpus(self, arg: int) -> None:
-        self._cpus = arg
+        return self._submit_cpus
 
     @property
     def gpus(self) -> int:
-        return self._gpus
+        return self._submit_gpus
 
     @gpus.setter
     def gpus(self, arg: int) -> None:

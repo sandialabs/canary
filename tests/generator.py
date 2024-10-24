@@ -1,5 +1,5 @@
-import _nvtest.plugins.generators.nvtest_pyt as pyt
-import _nvtest.plugins.generators.nvtest_vvt as vvt
+import _nvtest.plugins.nvtest_pyt.generator as pyt
+import _nvtest.plugins.nvtest_vvt.generator as vvt
 import _nvtest.test.case as tc
 from _nvtest.util.filesystem import working_dir
 
@@ -16,7 +16,7 @@ nvtest.directives.keywords('test', 'unit')
 nvtest.directives.parameterize('np', (1, 2, 3), when="options='baz'")
 nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """)
-        file = pyt.TestFile(".", "test.pyt")
+        file = pyt.PYTTestFile(".", "test.pyt")
         cases = file.lock(
             cpus=[0, 10],
             gpus=[0, 0],

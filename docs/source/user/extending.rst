@@ -9,3 +9,4 @@ Extending nvtest
    extending.plugins
    extending.report
    extending.command
+   extending.generator

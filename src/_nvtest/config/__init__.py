@@ -83,7 +83,7 @@ class Config:
                         "log_level": "INFO",
                     },
                     "test": {"timeout": {"fast": 120.0, "long": 15 * 60.0, "default": 7.5 * 60.0}},
-                    "batch": {"length": 30 * 60, "runner": None, "runner_args": []},
+                    "batch": {"length": 30 * 60, "scheduler": None, "scheduler_args": []},
                     "machine": editable_machine_config,
                     "system": static_machine_config,
                     "variables": {},
@@ -146,10 +146,10 @@ class Config:
                     scope_data.setdefault("config", {})["no_cache"] = True
                 case ["batch", "length"]:
                     scope_data.setdefault("batch", {})["length"] = time_in_seconds(raw_value)
-                case ["batch", "runner"]:
-                    scope_data.setdefault("batch", {})["runner"] = raw_value.lower()
-                case ["batch", "runner_args"]:
-                    scope_data.setdefault("batch", {})["runner_args"] = shlex.split(raw_value)
+                case ["batch", "scheduler"]:
+                    scope_data.setdefault("batch", {})["scheduler"] = raw_value.lower()
+                case ["batch", "scheduler_args"]:
+                    scope_data.setdefault("batch", {})["scheduler_args"] = shlex.split(raw_value)
                 case ["machine", key]:
                     scope_data.setdefault("machine", {})[key] = int(raw_value)
                 case ["test", keys]:

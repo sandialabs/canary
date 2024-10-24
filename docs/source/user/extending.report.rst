@@ -1,9 +1,9 @@
 .. _extending-report:
 
-Write custom reports
+User defined reports
 ====================
 
-``nvtest`` can write output in a number of formats: ``JSON``, ``HTML``, ``Markdown``, among others (see :ref:`nvtest-report` for additional formats).  Custom report formats can be created by subclassing ``nvtest.Reporter`` and defining the ``create`` method.  For example, the following will write a custom plain text report.
+``nvtest`` can write output in a number of formats: ``JSON``, ``HTML``, ``Markdown``, among others (see :ref:`nvtest-report` for additional formats).  User defined report formats can be created by subclassing ``nvtest.Reporter`` and defining the ``create`` method.  For example, the following will write a custom plain text report.
 
 .. code-block:: python
 

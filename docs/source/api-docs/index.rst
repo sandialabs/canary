@@ -3,36 +3,28 @@ API reference
 
 All modules and packages live in the ``_nvtest`` namespace.
 
-Modules
--------
-
 .. toctree::
    :maxdepth: 1
 
-   command
+   atc
+   command/index
+   config/index
    enums
    error
    expression
    finder
+   generator
+   hpc_scheduler
    main
    paramset
    plugin
+   plugins/index
    queues
    reporter
    resource
    runners
    session
    status
-   when
-
-Packages
---------
-
-.. toctree::
-   :maxdepth: 1
-
-   abc/index
-   config/index
-   plugins/index
    test/index
    util/index
+   when

@@ -1,11 +1,22 @@
 plugins
 =======
 
-``nvtest`` plugins package.
+``nvtest`` builtin plugins
+
+-------------
 
 .. toctree::
    :maxdepth: 1
 
-   commands/index
-   generators/index
-   reporters/index
+   nvtest_ctest
+   nvtest_flux
+   nvtest_gitlab
+   nvtest_html
+   nvtest_json
+   nvtest_junit
+   nvtest_markdown
+   nvtest_pbs
+   nvtest_pyt
+   nvtest_slurm
+   nvtest_subshell
+   nvtest_vvt

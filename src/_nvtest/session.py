@@ -24,16 +24,16 @@ from typing import Union
 
 from . import config
 from . import plugin
-from .abc import AbstractTestGenerator
-from .abc import AbstractTestRunner
 from .error import FailFast
 from .error import StopExecution
 from .finder import Finder
+from .generator import AbstractTestGenerator
 from .queues import BatchResourceQueue
 from .queues import Empty as EmptyQueue
 from .queues import ResourceQueue
 from .queues import factory as q_factory
 from .resource import ResourceHandler
+from .runners import factory as r_factory
 from .status import Status
 from .test.batch import TestBatch
 from .test.case import TestCase
@@ -722,7 +722,7 @@ class Session:
         futures: dict = {}
         duration = lambda: timestamp() - self.start
         timeout = rh["session:timeout"] or -1
-        runner = AbstractTestRunner.factory(rh)
+        runner = r_factory(rh)
         try:
             with ProcessPoolExecutor(max_workers=queue.workers) as ppe:
                 while True:

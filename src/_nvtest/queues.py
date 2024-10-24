@@ -6,7 +6,6 @@ from typing import Optional
 from typing import Union
 
 from . import config
-from .abc import AbstractTestRunner
 from .resource import ResourceHandler
 from .test.batch import TestBatch
 from .test.case import TestCase
@@ -118,9 +117,9 @@ class ResourceQueue(abc.ABC):
     def qsize(self):
         return len(self.buffer)
 
-    def put(self, *objs: Any) -> None:
-        for obj in objs:
-            self.buffer[len(self.buffer)] = obj
+    def put(self, *cases: Any) -> None:
+        for case in cases:
+            self.buffer[len(self.buffer)] = case
 
     def prepare(self, **kwds: Any) -> None:
         pass
@@ -216,14 +215,14 @@ class DirectResourceQueue(ResourceQueue):
     def retry(self, obj_id: int) -> Any:
         raise NotImplementedError
 
-    def put(self, *objs: TestCase) -> None:
-        for obj in objs:
-            if obj.cpus > self.cpu_count:
+    def put(self, *cases: Any) -> None:
+        for case in cases:
+            if case.cpus > self.cpu_count:
                 raise ValueError(
-                    f"{obj!r}: required cpus ({obj.cpus}) "
+                    f"{case!r}: required cpus ({case.cpus}) "
                     f"exceeds max cpu count ({self.cpu_count})"
                 )
-            super().put(obj)
+            super().put(case)
 
     def skip(self, obj_no: int) -> None:
         self._finished[obj_no] = self.buffer.pop(obj_no)
@@ -271,10 +270,8 @@ class BatchResourceQueue(ResourceQueue):
             workers=5 if workers < 0 else workers,
         )
         self.rh = rh
-        runner = self.rh["batch:runner"]
-        if runner is None:
-            raise ValueError("BatchResourceQueue requires a batch:runner")
-        self.tr = AbstractTestRunner.factory(rh)
+        if self.rh["batch:scheduler"] is None:
+            raise ValueError("BatchResourceQueue requires a batch:scheduler")
         self.tmp_buffer: list[TestCase] = []
 
     def iter_keys(self) -> list[int]:
@@ -292,20 +289,16 @@ class BatchResourceQueue(ResourceQueue):
         n = len(partitions)
         batches = [TestBatch(p, i, n, lot_no) for i, p in enumerate(partitions, start=1) if len(p)]
         for batch in batches:
-            if self.tr.scheduled:
-                # scheduled batches require 1 cpu to submit them
-                batch.cpus = 1
-                batch.gpus = 0
             super().put(batch)
 
-    def put(self, *objs: TestCase) -> None:
-        for obj in objs:
-            if obj.cpus > self.cpu_count:
+    def put(self, *cases: Any) -> None:
+        for case in cases:
+            if case.cpus > self.cpu_count:
                 raise ValueError(
-                    f"{obj!r}: required cpus ({obj.cpus}) "
+                    f"{case!r}: required cpus ({case.cpus}) "
                     f"exceeds max cpu count ({self.cpu_count})"
                 )
-            self.tmp_buffer.append(obj)
+            self.tmp_buffer.append(case)
 
     def skip(self, obj_no: int) -> None:
         self._finished[obj_no] = self.buffer.pop(obj_no)
@@ -394,9 +387,9 @@ def factory(rh: ResourceHandler, lock: threading.Lock) -> ResourceQueue:
 
     """
     queue: ResourceQueue
-    if rh["batch:runner"] is None:
+    if rh["batch:scheduler"] is None:
         if rh["batch:count"] is not None or rh["batch:length"] is not None:
-            raise ValueError("batched execution requires a batch:runner")
+            raise ValueError("batched execution requires a batch:scheduler")
         queue = DirectResourceQueue(rh, lock)
     else:
         queue = BatchResourceQueue(rh, lock)

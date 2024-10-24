@@ -1,4 +1,4 @@
 {
   "returncode": 0,
-  "output": " #### ##  ### ###  #######  #######   #####   ####### \n #### ##  ### ###    ###    ####     ### ###    ###   \n #######  ### ###    ###    ######    ###       ###   \n #######  ### ###    ###    ####        ###     ###   \n ### ###   #####     ###    ####     ### ###    ###   \n ### ###    ###      ###    #######   #####     ###\nsearching for tests in copy_and_link\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting be563b6 copy_and_link\n==> Finished be563b6 copy_and_link PASS\n\u2728\u2728 Session done -- 1 total, 1 pass in 00:00:01.00"
+  "output": " _, _ _,_ ___ __,  _, ___\n |\\ | | /  |  |_  (_   | \n | \\| |/   |  |   , )  | \n ~  ~ ~    ~  ~~~  ~   ~\nsearching for tests in copy_and_link\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting be563b6 copy_and_link\n==> Finished be563b6 copy_and_link PASS\n\u26a1\u26a1 Session done -- 1 total, 1 pass in 00:00:01.00"
 }

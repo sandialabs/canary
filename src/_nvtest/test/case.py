@@ -17,7 +17,7 @@ from typing import Union
 
 from .. import config
 from .. import plugin
-from ..abc import AbstractTestCase
+from ..atc import AbstractTestCase
 from ..paramset import ParameterSet
 from ..status import Status
 from ..third_party.color import colorize

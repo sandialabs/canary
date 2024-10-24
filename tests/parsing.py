@@ -3,7 +3,7 @@ import os
 
 
 def test_batch_args():
-    import _nvtest.plugins.commands.common as common
+    import _nvtest.command.common as common
 
     parser = argparse.ArgumentParser()
     common.add_resource_arguments(parser)
@@ -19,7 +19,7 @@ def test_batch_args():
             "batch:args='--a=b -c d'",
         ]
     )
-    assert args.rh["batch:runner_args"] == [
+    assert args.rh["batch:scheduler_args"] == [
         "--account=XYZ123",
         "--licenses=pscratch",
         "--foo=bar",

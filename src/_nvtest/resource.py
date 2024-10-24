@@ -40,8 +40,8 @@ class ResourceHandler:
             "batch": {
                 "length": None,
                 "count": None,
-                "runner": None,
-                "runner_args": [],
+                "scheduler": None,
+                "scheduler_args": [],
                 "workers": None,
                 "batched": False,
             },
@@ -202,7 +202,7 @@ class ResourceHandler:
                 if self.data["batch"]["length"] is not None:
                     raise ValueError("batch count and length are mutually exclusive")
 
-            case ("batch", "runner"):
+            case ("batch", "scheduler"):
                 pass
 
             case ("batch", "workers"):
@@ -211,7 +211,7 @@ class ResourceHandler:
                 elif value > config.get("machine:cpu_count"):
                     raise ValueError("batch worker request exceeds machine cpu count")
 
-            case ("batch", "runner_args"):
+            case ("batch", "scheduler_args"):
                 if isinstance(value, str):
                     value = shlex.split(strip_quotes(value))
                 value = self.data[scope][type] + list(value)
@@ -258,10 +258,10 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • test:timeoutx=R: Set a timeout multiplier for all tests [default: 1.0]\n\n
 • batch:count=N: Execute tests in N batches.\n\n
 • batch:length=T: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
-• batch:runner=S: Use runner 'S' to run the test batches.\n\n
+• batch:scheduler=S: Submit test batches to scheduler 'S'.\n\n
 • batch:workers=N: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
-• batch:runner_args=A: Any additional args 'A' are passed directly to the runner, for example,
-  batch:runner_args=--account=ABC will pass --account=ABC to the runner
+• batch:scheduler_args=A: Any additional args 'A' are passed directly to the scheduler,
+  for example, batch:scheduler_args=--account=ABC will pass --account=ABC to the scheduler
 """ % {"r_form": _bold("scope:type=value"), "r_arg": _bold(f"{flag} resource")}
         return text
 
@@ -328,10 +328,10 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             return (f"batch:{type}", int(raw))
         elif match := re.search(r"^batch:(runner|scheduler|type)[:=](\w+)$", arg):
             raw = match.group(2)
-            return ("batch:runner", str(raw))
-        elif match := re.search(r"^batch:(args|runner_args)[:=](.*)$", arg):
+            return ("batch:scheduler", str(raw))
+        elif match := re.search(r"^batch:(args|runner_args|scheduler_args)[:=](.*)$", arg):
             raw = strip_quotes(match.group(2))
-            return ("batch:runner_args", shlex.split(raw))
+            return ("batch:scheduler_args", shlex.split(raw))
         else:
             raise ValueError(f"invalid resource arg: {arg!r}")
 

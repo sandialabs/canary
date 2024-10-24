@@ -1,9 +1,9 @@
 .. _extending-command:
 
-Defining custom commands
-========================
+User defined commands
+=====================
 
-Custom commands can be created by subclassing ``nvtest.Command``.  For example, the following will create a custom command that emails a plain text test report:
+Custom commands can be created by subclassing :class:`~_nvtest.command.Command`.  For example, the following will create a custom command that emails a plain text test report:
 
 .. code-block:: python
 

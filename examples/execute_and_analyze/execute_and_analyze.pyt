@@ -25,7 +25,7 @@ def analyze_parameterized_test():
 def analyze_base_case():
     # Analyze the collective
     self = nvtest.test.instance
-    assert len(self.dependences) == 3
+    assert len(self.dependencies) == 3
     for dep in self.dependencies:
         f = os.path.join(dep.exec_dir, f"{dep.parameters.a}.txt")
         assert os.path.exists(f)

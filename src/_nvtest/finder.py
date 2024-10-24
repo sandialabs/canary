@@ -6,8 +6,7 @@ from typing import Optional
 from typing import TextIO
 
 from . import plugin
-from .abc import AbstractTestGenerator
-from .abc.atg import generators as test_generators
+from .generator import AbstractTestGenerator
 from .resource import ResourceHandler
 from .test.case import TestCase
 from .third_party.colify import colified
@@ -99,7 +98,7 @@ class Finder:
                 [
                     (root, os.path.relpath(os.path.join(dirname, f), root))
                     for f in files
-                    if any([g.matches(f) for g in test_generators()])
+                    if any([g.matches(f) for g in plugin.generators()])
                 ]
             )
         generators = [AbstractTestGenerator.factory(*p) for p in paths]
@@ -252,7 +251,7 @@ class Finder:
 
 
 def is_test_file(file: str) -> bool:
-    for generator in test_generators():
+    for generator in plugin.generators():
         if generator.matches(file):
             return True
     return False
