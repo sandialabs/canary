@@ -196,7 +196,7 @@ and then
    cd BUILD_DIR
    cmake [OPTIONS] $SOURCE_DIR
    make
-   make vvtest
+   make nvtest
    make install
 
 .. _cdash-write-config:

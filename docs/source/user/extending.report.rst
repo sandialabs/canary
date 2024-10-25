@@ -30,7 +30,7 @@ By subclassing ``nvtest.Reporter``, the ``nvtest report txt`` command line inter
 .. code-block:: console
 
    $ nvtest report txt -h
-   usage: nvtest report json [-h]  ...
+   usage: nvtest report txt [-h]  ...
 
    positional arguments:
 
