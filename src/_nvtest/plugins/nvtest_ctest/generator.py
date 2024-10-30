@@ -210,7 +210,7 @@ def parse_cmcmdline(cmdline: str) -> list[str]:
 def split_vars(string: str) -> dict[str, str]:
     vars: dict[str, str] = {}
     for kv in cmsplit(string):
-        k, v = kv.split("=")
+        k, v = kv.split("=", 1)
         vars[k] = v
     return vars
 
