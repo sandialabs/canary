@@ -506,6 +506,11 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "test") -> dict:
     attrs["file_dir"] = case.file_dir
     attrs["file_path"] = case.file_path
 
+    attrs["RESOURCE_np"] = case.cpus
+    attrs["RESOURCE_IDS_np"] = case.cpu_ids
+    attrs["RESOURCE_ndevice"] = case.gpus
+    attrs["RESOURCE_IDS_ndevice"] = case.gpu_ids
+
     return attrs
 
 
