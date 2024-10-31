@@ -69,11 +69,8 @@ machine_schema = Schema(
     {
         "machine": {
             Optional("node_count"): optional_int,
-            Optional("cores_per_socket"): int,
-            Optional("sockets_per_node"): int,
-            Optional("cpu_count"): int,
-            Optional("gpu_count"): int,
-            Optional("gpus_per_socket"): int,
+            Optional("cpus_per_node"): int,
+            Optional("gpus_per_node"): int,
         },
     }
 )

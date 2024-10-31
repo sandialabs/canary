@@ -54,11 +54,8 @@ Set machine settings.
 .. code-block:: ini
 
    [machine]
-   cores_per_socket = N  # (int) default determined from system probe
-   sockets_per_node = N  # (int) default: 1
-   gpus_per_socket = N  # (int)
-   cpu_count = N  # (int) default determined from system probe
-   gpu_count = N  # (int) default determined from system probe
+   cpus_per_node = N  # (int) default determined from system probe
+   gpus_per_node = N  # (int) default is 0
    node_count = N  # (int) default determined from system probe
 
 build

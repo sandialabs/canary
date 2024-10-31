@@ -3,7 +3,6 @@ import configparser
 import copy
 import json
 import os
-import shlex
 import sys
 from string import Template
 from typing import Any
@@ -61,10 +60,6 @@ class Config:
     fb = f"config.{sys.implementation.cache_tag}.p"
 
     def __init__(self, state: Optional[dict] = None) -> None:
-        static_machine_config = machine.machine_config()
-        editable_machine_config = {
-            key: static_machine_config.pop(key) for key in machine.editable_properties
-        }
         self.scopes: dict
         if state is not None:
             self.scopes = state["scopes"]
@@ -83,9 +78,9 @@ class Config:
                         "log_level": "INFO",
                     },
                     "test": {"timeout": {"fast": 120.0, "long": 15 * 60.0, "default": 7.5 * 60.0}},
-                    "batch": {"length": 30 * 60, "scheduler": None, "scheduler_args": []},
-                    "machine": editable_machine_config,
-                    "system": static_machine_config,
+                    "batch": {"length": 30 * 60},
+                    "machine": machine.machine_config(),
+                    "system": machine.system_config(),
                     "variables": {},
                     "python": {
                         "executable": sys.executable,
@@ -146,10 +141,6 @@ class Config:
                     scope_data.setdefault("config", {})["no_cache"] = True
                 case ["batch", "length"]:
                     scope_data.setdefault("batch", {})["length"] = time_in_seconds(raw_value)
-                case ["batch", "scheduler"]:
-                    scope_data.setdefault("batch", {})["scheduler"] = raw_value.lower()
-                case ["batch", "scheduler_args"]:
-                    scope_data.setdefault("batch", {})["scheduler_args"] = shlex.split(raw_value)
                 case ["machine", key]:
                     scope_data.setdefault("machine", {})[key] = int(raw_value)
                 case ["test", keys]:
@@ -405,29 +396,14 @@ class Config:
         scope_data[section] = update_data
 
     def validate_machine_config_and_fill_missing(self, data: dict) -> None:
-        defaults = self.get_config("machine")
-        node_count = data.get("node_count") or defaults["node_count"]
-        sockets_per_node = data.get("sockets_per_node") or defaults["sockets_per_node"]
+        if "node_count" in data and data["node_count"] < 1:
+            raise ValueError(f"node_count must be at least one ({data['node_count']} < 1)")
 
-        if "cpu_count" in data:
-            if "cores_per_socket" not in data:
-                data["cores_per_socket"] = int(data["cpu_count"] / node_count / sockets_per_node)
-            elif node_count == 1:
-                data["cores_per_socket"] = data["cpu_count"]
-            if data["cpu_count"] != data["cores_per_socket"] * sockets_per_node * node_count:
-                raise ValueError("cpu_count != cores_per_socket*sockets_per_node*node_count")
-        elif "cores_per_socket" in data:
-            data["cpu_count"] = data["cores_per_socket"] * sockets_per_node * node_count
+        if "cpus_per_node" in data and data["cpus_per_node"] < 1:
+            raise ValueError(f"cpus_per_node must be at least one ({data['cpus_per_node']} < 0)")
 
-        if "gpu_count" in data:
-            if "gpus_per_socket" not in data:
-                data["gpus_per_socket"] = int(data["gpu_count"] / node_count / sockets_per_node)
-            elif node_count == 1:
-                data["gpus_per_socket"] = data["gpu_count"]
-            if data["gpu_count"] != data["gpus_per_socket"] * sockets_per_node * node_count:
-                raise ValueError("gpu_count != gpus_per_socket*sockets_per_node*node_count")
-        elif "gpus_per_socket" in data:
-            data["gpu_count"] = data["gpus_per_socket"] * sockets_per_node * node_count
+        if "gpus_per_node" in data and data["gpus_per_node"] < 0:
+            raise ValueError(f"gpus_per_node must be positive ({data['gpus_per_node']} < 0)")
 
     def describe(self, section: Optional[str] = None) -> str:
         if section is not None:

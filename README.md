@@ -28,12 +28,20 @@ Python 3.10+
 python3 -m pip install "nvtest git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/nvtest"
 ```
 
+To also download and install an HPC scheduler interface install as:
+
+```console
+python3 -m pip install "nvtest[SCHEDULER] @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/nvtest"
+```
+
+where `SCHEDULER` is `slurm`, `pbs`, `flux`, or any comma-separated combination of the three.
+
 ## Developers
 
 For developers wanting to make modifications and/or contributions to `nvtest`, install in editable mode:
 
 ```console
-python3 -m pip install --editable git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/nvtest#egg=nvtest
+python3 -m pip install -e git+https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest@hpc-scheduler#egg=nvtest[flux,pbs,slurm]
 ```
 
 which will leave a copy of `nvtest` in your Python distribution's `$prefix/src` directory.  Edits made to the source will be immediately visible by the Python interpreter.  Alternatively, the source can be cloned and then installed in editable mode:
@@ -41,7 +49,7 @@ which will leave a copy of `nvtest` in your Python distribution's `$prefix/src` 
 ```console
 git clone git@cee-gitlab.sandia.gov:ascic-test-infra/nvtest
 cd nvtest
-python3 -m pip install --editable .[dev]
+python3 -m pip install --editable .[dev,pbs,flux,slurm]
 ```
 
 To format code and run `nvtest`'s internal tests, execute

@@ -2,24 +2,14 @@ import os
 import platform
 import re
 import sys
+from typing import Any
 
-from ..third_party import rprobe
-from ..util.executable import Executable
-from ..util.filesystem import which
+from ..util.rprobe import cpu_count
 from . import linux
 from . import macos
 
-editable_properties = (
-    "cpu_count",
-    "node_count",
-    "cores_per_socket",
-    "sockets_per_node",
-    "gpu_count",
-    "gpus_per_socket",
-)
 
-
-def machine_config() -> dict:
+def system_config() -> dict:
     """Return machine specific configuration data"""
     if sys.platform == "darwin":
         info = macos.sys_info()
@@ -47,7 +37,6 @@ def machine_config() -> dict:
             sitename = sitename.split("-login")[0] + login_no.group("n").zfill(2)
         else:
             sitename = sitename.replace("-login", "")
-    ns = read_machine_info()
     config = dict(
         node=nodename,
         arch=uname.machine,
@@ -55,62 +44,10 @@ def machine_config() -> dict:
         host=sitename,
         name=os.getenv("SNLCLUSTER", uname.node),
         platform=uname.system,
-        cores_per_socket=ns["cores_per_socket"],
-        sockets_per_node=ns["sockets_per_node"],
-        cpu_count=ns["cpu_count"],
-        node_count=ns["node_count"],
-        gpu_count=0,
-        gpus_per_socket=0,
         os=os_config,
     )
     return config
 
 
-def read_machine_info() -> dict:
-    info = dict(
-        node_count=1,
-        cores_per_socket=rprobe.cpu_count(),
-        sockets_per_node=1,
-        cpu_count=rprobe.cpu_count(),
-    )
-    if which("sinfo"):
-        info.update(read_sinfo())
-    return info
-
-
-def read_sinfo() -> dict:
-    path = which("sinfo")
-    assert path is not None
-    sinfo = Executable(path)
-    opts = [
-        "%X",  # Number of sockets per node
-        "%Y",  # Number of cores per socket
-        "%Z",  # Number of threads per core
-        "%c",  # Number of CPUs per node
-        "%D",  # Number of nodes
-    ]
-    format = " ".join(opts)
-    result = sinfo("-o", format, fail_on_error=False, output=str)
-    for line in result.get_output().split("\n"):
-        parts = line.split()
-        if not parts:
-            continue
-        elif parts and parts[0].startswith("SOCKETS"):
-            continue
-        spn, cps, _, cpn, nc = [integer(_) for _ in parts]
-        break
-    else:
-        raise ValueError("Unable to read sinfo")
-    info = {
-        "sockets_per_node": spn,
-        "cores_per_socket": cps,
-        "cpu_count": spn * cps * nc,
-        "node_count": nc,
-    }
-    return info
-
-
-def integer(arg: str) -> int:
-    if arg.endswith("+"):
-        return int(arg[:-1])
-    return int(arg)
+def machine_config() -> dict[str, Any]:
+    return dict(node_count=1, gpus_per_node=0, cpus_per_node=cpu_count())

@@ -4,6 +4,7 @@ import os
 
 def test_batch_args():
     import _nvtest.command.common as common
+    import _nvtest.main as _main
 
     parser = argparse.ArgumentParser()
     common.add_resource_arguments(parser)
@@ -19,6 +20,7 @@ def test_batch_args():
             "batch:args='--a=b -c d'",
         ]
     )
+    _main.setup_resource_handler(args)
     assert args.rh["batch:scheduler_args"] == [
         "--account=XYZ123",
         "--licenses=pscratch",
@@ -42,9 +44,9 @@ def test_config_args():
             "-c",
             "config:debug:true",
             "-c",
-            "machine:cpu_count:8",
+            "machine:cpus_per_node:8",
             "-c",
-            "machine:gpu_count:4",
+            "machine:gpus_per_node:4",
             "-e",
             "SPAM=EGGS",
         ]
@@ -55,8 +57,8 @@ def test_config_args():
         print(config.scopes["command_line"])
         cls = config.scopes["command_line"]
         assert cls["config"]["debug"] is True
-        assert cls["machine"]["cpu_count"] == 8
-        assert cls["machine"]["gpu_count"] == 4
+        assert cls["machine"]["cpus_per_node"] == 8
+        assert cls["machine"]["gpus_per_node"] == 4
         assert cls["variables"]["SPAM"] == "EGGS"
         assert os.environ["SPAM"] == "EGGS"
     finally:

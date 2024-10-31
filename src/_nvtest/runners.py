@@ -1,5 +1,6 @@
 import abc
 import io
+import math
 import os
 import signal
 import subprocess
@@ -8,16 +9,16 @@ from typing import Any
 from typing import Optional
 
 from . import config
-from . import plugin
 from .atc import AbstractTestCase
 from .error import diff_exit_status
-from .hpc_scheduler import HPCScheduler
 from .resource import ResourceHandler
 from .status import Status
 from .test.batch import TestBatch
 from .test.case import TestCase
 from .third_party.color import colorize
 from .util import logging
+from .util.filesystem import mkdirp
+from .util.filesystem import set_executable
 from .util.filesystem import working_dir
 from .util.time import hhmmss
 from .util.time import timestamp
@@ -28,6 +29,7 @@ class AbstractTestRunner:
 
     def __init__(self, rh: ResourceHandler) -> None:
         self.rh = rh
+        self.timeoutx = self.rh["test:timeoutx"]
 
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
         prefix = colorize("@*b{==>} ")
@@ -53,7 +55,6 @@ class TestCaseRunner(AbstractTestRunner):
 
     def __init__(self, rh: ResourceHandler) -> None:
         super().__init__(rh)
-        self.timeoutx = self.rh["test:timeoutx"]
 
     def run(self, case: "AbstractTestCase", stage: str = "test") -> None:
         assert isinstance(case, TestCase)
@@ -63,7 +64,7 @@ class TestCaseRunner(AbstractTestRunner):
             case.status.set("running")
             case.prepare_for_launch(stage=stage)
             timeout = case.timeout * self.timeoutx
-            with working_dir(case.exec_dir):
+            with working_dir(case.working_directory):
                 with logging.capture(case.logfile(stage), mode="w"), logging.timestamps():
                     cmd = case.command(stage=stage)
                     case.cmd_line = " ".join(cmd)
@@ -146,28 +147,57 @@ class BatchRunner(AbstractTestRunner):
     command_name = "batch-runner"
 
     def __init__(self, rh: ResourceHandler) -> None:
+        import hpc_connect
+
         super().__init__(rh)
-        scheduler_name = self.rh["batch:scheduler"]
-        self.scheduler: HPCScheduler
-        for scheduler_type in plugin.schedulers():
-            if scheduler_type.matches(scheduler_name):
-                self.scheduler = scheduler_type(self.rh)
-                break
-        else:
-            raise ValueError(f"No matching scheduler for {scheduler_name}")
+
+        # by this point, hpc_connect should have already be set up
+        if hpc_connect.backend._scheduler is None:  # type: ignore
+            hpc_connect.set(scheduler=self.rh["batch:scheduler"])  # type: ignore
+        self.scheduler = hpc_connect.scheduler  # type: ignore
+        if self.rh["batch:scheduler_args"]:
+            args = self.rh["batch:scheduler_args"]
+            self.scheduler.add_default_args(*args)
 
     def run(self, batch: AbstractTestCase, stage: str = "test") -> None:
+        import hpc_connect
+
         assert isinstance(batch, TestBatch)
         try:
             logging.debug(f"Running batch {batch.batch_no}")
             start = time.monotonic()
-            self.scheduler.submit_and_wait(batch)
+            node_count = math.ceil(batch.max_cpus_required / self.scheduler.config.cpus_per_node)
+            nvtest_invocation = self.nvtest_invocation(batch, node_count=node_count)
+            scriptname = batch.submission_script_filename()
+            mkdirp(os.path.dirname(scriptname))
+            with open(scriptname, "w") as fh:
+                self.scheduler.write_submission_script(
+                    [nvtest_invocation],
+                    fh,
+                    tasks=batch.max_cpus_required,
+                    nodes=node_count,
+                    job_name=batch.name,
+                    output=batch.logfile(),
+                    error=batch.logfile(),
+                    qtime=self.qtime(batch) * self.timeoutx,
+                    variables=batch.variables,
+                )
+            set_executable(scriptname)
+            if config.get("config:debug"):
+                logging.debug(f"Submitting batch {batch.batch_no} of {batch.nbatches}")
+            self.scheduler.submit_and_wait(scriptname, job_name=batch.name)
+        except hpc_connect.HPCSubmissionFailedError:
+            logging.error(f"Failed to submit {batch.name}!")
+            for case in batch.cases:
+                if case.status.value in ("ready", "pending"):
+                    case.status.set("not_run", "batch submission failed")
+                    case.save()
         finally:
             batch.total_duration = time.monotonic() - start
             batch.refresh()
             for case in batch.cases:
                 if case.status == "ready":
-                    case.status.set("failed", "case failed to start")
+                    case.status.set("not_run", "case failed to start")
                     case.save()
                 elif case.status == "running":
                     case.status.set("cancelled", "batch cancelled")
@@ -200,6 +230,45 @@ class BatchRunner(AbstractTestRunner):
                 s.write(f", queued: {hhmmss(time_in_queue, threshold=0)}")
         s.write(")")
         return s.getvalue()
+
+    def nvtest_invocation(self, batch: TestBatch, node_count: Optional[int] = None) -> str:
+        """Write the nvtest invocation used to run this batch."""
+        fp = io.StringIO()
+        fp.write("nvtest ")
+        if config.get("config:debug"):
+            fp.write("-d ")
+        fp.write(f"-C {batch.root} run -rv ")
+        if config.get("option:fail_fast"):
+            fp.write("--fail-fast ")
+        if config.get("option:plugin_dirs"):
+            for p in config.get("option:plugin_dirs"):
+                fp.write(f"-p {p} ")
+        if workers := self.rh["batch:workers"]:
+            fp.write(f"-l session:workers={workers} ")
+        if node_count is None:
+            node_count = math.ceil(batch.max_cpus_required / self.scheduler.config.cpus_per_node)
+        fp.write(f"-l session:cpu_count={node_count * self.scheduler.config.cpus_per_node} ")
+        fp.write(f"-l test:timeoutx={self.timeoutx} ")
+        fp.write(f"^{batch.lot_no}:{batch.batch_no}")
+        return fp.getvalue()
+
+    def qtime(self, batch: TestBatch) -> float:
+        if len(batch.cases) == 1:
+            return batch.cases[0].timeout
+        total_runtime = batch.runtime
+        if total_runtime < 100.0:
+            total_runtime = 300.0
+        elif total_runtime < 300.0:
+            total_runtime = 600.0
+        elif total_runtime < 600.0:
+            total_runtime = 1200.0
+        elif total_runtime < 1800.0:
+            total_runtime = 2400.0
+        elif total_runtime < 3600.0:
+            total_runtime = 5000.0
+        else:
+            total_runtime *= 1.1
+        return total_runtime
 
 
 def factory(rh: ResourceHandler) -> "AbstractTestRunner":

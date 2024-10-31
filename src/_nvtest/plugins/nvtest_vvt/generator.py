@@ -26,10 +26,7 @@ from _nvtest.util import string
 
 class VVTTestFile(PYTTestFile):
     def load(self) -> None:
-        try:
-            args, _ = p_VVT(self.file)
-        except ParseError as e:
-            raise ValueError(f"Failed to parse {self.file} at command {e.args[0]}") from None
+        args, _ = p_VVT(self.file)
         for arg in args:
             if arg.command == "keywords":
                 self.f_KEYWORDS(arg)
@@ -54,7 +51,7 @@ class VVTTestFile(PYTTestFile):
             elif arg.command == "depends_on":
                 self.f_DEPENDS_ON(arg)
             else:
-                raise ValueError(f"Unknown command: {arg.command} at {arg.line_no}:{arg.line}")
+                raise VVTParseError(f"Unknown command: {arg.command}", arg)
 
     @classmethod
     def matches(cls, path: str) -> bool:
@@ -78,7 +75,10 @@ class VVTTestFile(PYTTestFile):
             file_pairs = [_.split(",") for _ in s.split()]
             for file_pair in file_pairs:
                 if len(file_pair) != 2:
-                    raise ValueError("rename option requires src,dst file pairs")
+                    raise VVTParseError(
+                        f"invalid rename option: {arg.line!r}.  rename requires src,dst file pairs",
+                        arg,
+                    )
                 fun(src=file_pair[0], dst=file_pair[1], when=arg.when, **kwds)  # type: ignore
         else:
             files = arg.argument.split()
@@ -108,12 +108,15 @@ class VVTTestFile(PYTTestFile):
 
     def f_TIMEOUT(self, arg: SimpleNamespace) -> None:
         """# VVT: timeout ( OPTIONS ) [:=] SECONDS"""
-        seconds = to_seconds(arg.argument)
+        try:
+            seconds = to_seconds(arg.argument)
+        except InvalidTimeFormat:
+            raise VVTParseError(f"invalid time format: {arg.line!r}", arg) from None
         self.m_timeout(seconds, when=arg.when)
 
     def f_SKIPIF(self, arg: SimpleNamespace) -> None:
         """# VVT: skipif ( reason=STRING ) [:=] BOOL_EXPR"""
-        skip, reason = p_SKIPIF(arg.argument, reason=arg.options.get("reason"))
+        skip, reason = p_SKIPIF(arg)
         self.m_skipif(skip, reason=reason)
 
     def f_BASELINE(self, arg: SimpleNamespace) -> None:
@@ -126,7 +129,7 @@ class VVTTestFile(PYTTestFile):
             if len(file_pair) == 1 and file_pair[0].startswith("--"):
                 self.m_baseline(when=arg.when, flag=file_pair[0], **arg.options)
             elif len(file_pair) != 2:
-                raise ValueError(f"{self.file}: invalid baseline command at {arg.line!r}")
+                raise VVTParseError(f"invalid baseline command: {arg.line!r}", arg)
             else:
                 self.m_baseline(file_pair[0], file_pair[1], when=arg.when, **arg.options)
 
@@ -173,13 +176,13 @@ def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict]:
 
     """
     names_spec, values_spec = arg.argument.split("=", 1)
-    values_spec = re.sub(r",\s*", ",", values_spec)
+    values_spec = re.sub(r"\s*,\s*", ",", values_spec)
     names = [_.strip() for _ in names_spec.split(",") if _.split()]
     values = []
     for group in values_spec.split():
         row = [loads(_) for _ in group.split(",") if _.split()]
         if len(row) != len(names):
-            raise ParseError(f"invalid parameterize command at {arg.line_no}:{arg.line!r}")
+            raise VVTParseError(f"invalid parameterize command: {arg.line!r}", arg)
         values.append(row)
     kwds = dict(arg.options)
     for key in ("autotype", "int", "float", "str"):
@@ -188,10 +191,11 @@ def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict]:
     return names, values, kwds
 
 
-def p_LINE(line: str) -> Optional[SimpleNamespace]:
+def p_LINE(file: Union[Path, str], line: str) -> Optional[SimpleNamespace]:
     """COMMAND ( OPTIONS ) [:=] ARGS"""
     if not line.split():
         return None
+    filename = str(file if os.path.exists(file) else "<string>")
     tokens = string.get_tokens(line)
     cmd_stack = []
     for token in tokens:
@@ -216,8 +220,9 @@ def p_LINE(line: str) -> Optional[SimpleNamespace]:
                 level += 1
             option_tokens.append(token)
         else:
-            raise ParseError(f"Failed to find end of options in {line}")
-        options.update(p_OPTIONS(option_tokens))
+            msg = "failed to find end of options in {0} at line {1} of {2}"
+            raise ParseError(msg.format(line, token.start[0], filename))
+        options.update(p_OPTIONS(filename, option_tokens))
         token = next(tokens)
     when = make_when_expr(options)
 
@@ -225,11 +230,13 @@ def p_LINE(line: str) -> Optional[SimpleNamespace]:
     args = None
     if token.type != tokenize.NEWLINE:
         if token.type != tokenize.OP and token.string not in (EQUAL, COLON):
-            raise ParseError(f"Could not determine start of arguments in {line}")
+            msg = "failed to determine start of arguments in {0} at line {1} of {2}"
+            raise ParseError(msg.format(line, token.start[0], filename))
         end = token.end[-1]
         args = line[end:].strip()
 
     return SimpleNamespace(
+        file=filename,
         command=command,
         when=when,
         options=options,
@@ -244,7 +251,7 @@ def p_VVT(filename: Union[Path, str]) -> tuple[list[SimpleNamespace], int]:
     commands: list[SimpleNamespace] = []
     lines, line_no = find_vvt_lines(filename)
     for line in lines:
-        ns = p_LINE(line)
+        ns = p_LINE(filename, line)
         if ns:
             commands.append(ns)
     return commands, line_no
@@ -290,13 +297,13 @@ def find_vvt_lines(filename: Union[Path, str]) -> tuple[list[str], int]:
     return lines, token.start[0]
 
 
-def p_OPTION(tokens: list[tokenize.TokenInfo]) -> tuple[str, object]:
+def p_OPTION(filename: str, tokens: list[tokenize.TokenInfo]) -> tuple[str, object]:
     """OPTION : NAME [true]
     | NAME EQUAL VALUE
     """
     token = tokens[0]
     if token.type != tokenize.NAME:
-        raise ParseError(token)
+        raise ParseError(f"Error parsing token {token!r} in {filename}")
     name = token.string
     if len(tokens) == 1:
         return name, True
@@ -304,7 +311,7 @@ def p_OPTION(tokens: list[tokenize.TokenInfo]) -> tuple[str, object]:
     if token.type == tokenize.NEWLINE:
         return name, True
     if (token.type, token.string) != (tokenize.OP, EQUAL):
-        raise ParseError(token)
+        raise ParseError(f"Error parsing token {token!r} in {filename}")
     value = ""
     for token in tokens[2:]:
         if token.type == tokenize.NEWLINE:
@@ -313,18 +320,18 @@ def p_OPTION(tokens: list[tokenize.TokenInfo]) -> tuple[str, object]:
     return name, string.strip_quotes(value.strip())
 
 
-def p_OPTIONS(tokens: list[tokenize.TokenInfo]) -> dict[str, object]:
+def p_OPTIONS(filename: str, tokens: list[tokenize.TokenInfo]) -> dict[str, object]:
     """OPTIONS : OPTION COMMA OPTION ..."""
     u_options: list[tuple[str, object]] = []
     opt_tokens: list[tokenize.TokenInfo] = []
     for token in tokens:
         if (token.type, token.string) == (tokenize.OP, COMMA):
-            u_options.append(p_OPTION(opt_tokens))
+            u_options.append(p_OPTION(filename, opt_tokens))
             opt_tokens = []
         else:
             opt_tokens.append(token)
     if opt_tokens:
-        u_options.append(p_OPTION(opt_tokens))
+        u_options.append(p_OPTION(filename, opt_tokens))
     options = dict(u_options)
     for name in ("option", "platform", "parameter"):
         if name in options:
@@ -375,13 +382,14 @@ def evaluate_boolean_expression(expression: str) -> Union[bool, None]:
 
 
 @cached
-def p_SKIPIF(expression: str, **options: dict[str, str]) -> tuple[bool, str]:
+def p_SKIPIF(arg: SimpleNamespace) -> tuple[bool, str]:
+    expression = arg.argument
+    reason = str(arg.options.get("reason") or "")
     skip = evaluate_boolean_expression(expression)
     if skip is None:
-        raise ValueError(f"failed to evaluate the expression {expression!r}")
+        raise VVTParseError(f"failed to evaluate the expression {expression!r}", arg)
     if not skip:
         return False, ""
-    reason = str(options.get("reason") or "")
     if not reason:
         reason = colorize("deselected due to @*b{skipif=%s} evaluating to @*g{True}" % expression)
     return True, reason
@@ -452,7 +460,7 @@ def to_seconds(
             raise InvalidTimeFormat(arg)
     seconds = sum(stack)
     if seconds < 0 and not negatives:
-        raise ValueError(f"negative seconds from {arg!r}")
+        raise InvalidTimeFormat(f"negative seconds from {arg!r}")
     if round:
         return int(seconds)
     return seconds
@@ -555,6 +563,12 @@ def write_execute_log(case: "TestCase") -> None:
 
 class ParseError(Exception):
     pass
+
+
+class VVTParseError(Exception):
+    def __init__(self, err, arg):
+        message = f"{arg.file}:{arg.line_no}:\nerror: {err}"
+        super().__init__(message)
 
 
 class InvalidTimeFormat(Exception):

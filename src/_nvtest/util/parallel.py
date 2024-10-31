@@ -8,7 +8,7 @@ from typing import Any
 from typing import Callable
 from typing import Optional
 
-from ..third_party.rprobe import cpu_count
+from ..util.rprobe import cpu_count
 
 multiprocess_threshold = 100
 default_cpu_count = 8

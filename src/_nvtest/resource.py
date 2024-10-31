@@ -1,8 +1,6 @@
 import argparse
-import math
 import re
 import shlex
-from types import SimpleNamespace
 from typing import Any
 from typing import Optional
 
@@ -15,9 +13,11 @@ from .util.time import time_in_seconds
 
 class ResourceHandler:
     def __init__(self) -> None:
-        cpu_count = config.get("machine:cpu_count")
-        gpu_count = config.get("machine:gpu_count")
         node_count = config.get("machine:node_count")
+        cpus_per_node = config.get("machine:cpus_per_node")
+        gpus_per_node = config.get("machine:gpus_per_node")
+        cpu_count = cpus_per_node * node_count
+        gpu_count = gpus_per_node * node_count
         self.data: dict[str, Any] = {
             "session": {
                 "cpu_count": cpu_count,
@@ -72,13 +72,18 @@ class ResourceHandler:
         scope, type = path.split(":")
 
         # --- session resources
+        node_count = config.get("machine:node_count")
+        cpus_per_node = config.get("machine:cpus_per_node")
+        gpus_per_node = config.get("machine:gpus_per_node")
+        cpu_count = node_count * cpus_per_node
+        gpu_count = node_count * gpus_per_node
         match (scope, type):
             case ("session", "cpu_count"):
                 if not isinstance(value, int):
                     raise ValueError("session cpu count must be an integer")
                 if value <= 0:
                     raise ValueError(f"session:cpu_count = {value} <= 0")
-                elif value > config.get("machine:cpu_count"):
+                elif value > cpu_count:
                     raise ValueError("session cpu request exceeds machine cpu count")
                 if self.data["session"]["meta"].get("cpu_ids"):
                     raise ValueError(
@@ -96,7 +101,7 @@ class ResourceHandler:
                     )
                 if len(value) == 0:
                     raise ValueError("len(session:cpu_ids) = 0")
-                elif len(value) > config.get("machine:cpu_count"):
+                elif len(value) > cpu_count:
                     raise ValueError("number of session cpu ids exceeds machine cpu count")
                 self.data["session"]["meta"]["cpu_ids"] = 1
                 self.data["session"]["cpu_count"] = len(value)
@@ -106,7 +111,7 @@ class ResourceHandler:
                     raise ValueError("session gpu count must be an integer")
                 if value < 0:
                     raise ValueError(f"session:gpu_count = {value} < 0")
-                elif value > config.get("machine:gpu_count"):
+                elif value > gpu_count:
                     raise ValueError("session gpu request exceeds machine gpu count")
                 if self.data["session"]["meta"].get("gpu_ids"):
                     raise ValueError(
@@ -124,7 +129,7 @@ class ResourceHandler:
                     )
                 if len(value) == 0:
                     raise ValueError("len(session:gpu_ids) = 0")
-                elif len(value) > config.get("machine:gpu_count"):
+                elif len(value) > gpu_count:
                     raise ValueError("number of session gpu ids exceeds machine gpu count")
                 self.data["session"]["meta"]["gpu_ids"] = 1
                 self.data["session"]["gpu_count"] = len(value)
@@ -132,7 +137,7 @@ class ResourceHandler:
             case ("session", "workers"):
                 if value < 0:
                     raise ValueError(f"session:workers = {value} < 0")
-                elif value > config.get("machine:cpu_count"):
+                elif value > cpu_count:
                     raise ValueError("session worker request exceeds machine cpu count")
 
             case ("session", "timeout"):
@@ -143,36 +148,44 @@ class ResourceHandler:
                 if isinstance(value, int):
                     value = [0, value]
                 min_cpus, max_cpus = value
+                if max_cpus is None:
+                    max_cpus = self.data["session"]["cpu_count"]
                 if min_cpus > max_cpus:
                     raise ValueError("test min cpus > test max cpus")
                 elif min_cpus < 1:
                     raise ValueError(f"test:min_cpus = {min_cpus} < 1")
                 elif max_cpus < 1:
                     raise ValueError(f"test:max_cpus = {max_cpus} < 1")
-                elif max_cpus > config.get("machine:cpu_count"):
+                elif max_cpus > cpu_count:
                     raise ValueError("test max cpu request exceeds machine cpu count")
                 elif self["session:cpu_count"] > 1 and max_cpus > self["session:cpu_count"]:
                     raise ValueError("test cpu request exceeds session cpu limit")
+                value = [min_cpus, max_cpus]
 
             case ("test", "gpu_count"):
                 if isinstance(value, int):
                     value = [0, value]
                 min_gpus, max_gpus = value
+                if max_gpus is None:
+                    max_gpus = self.data["session"]["gpu_count"]
                 if min_gpus > max_gpus:
                     raise ValueError("test min gpus > test max gpus")
                 elif min_gpus < 0:
                     raise ValueError(f"test:min_gpus = {min_gpus} < 0")
                 elif max_gpus < 0:
                     raise ValueError(f"test:max_gpus = {max_gpus} < 0")
-                elif max_gpus > config.get("machine:gpu_count"):
+                elif max_gpus > gpu_count:
                     raise ValueError("test max gpu request exceeds machine gpu count")
                 elif self["session:gpu_count"] > 0 and max_gpus > self["session:gpu_count"]:
                     raise ValueError("test gpu request exceeds session gpu limit")
+                value = [min_gpus, max_gpus]
 
             case ("test", "node_count"):
                 if isinstance(value, int):
                     value = [0, value]
                 min_nodes, max_nodes = value
+                if max_nodes is None:
+                    max_nodes = self.data["session"]["cpu_count"]
                 if min_nodes > max_nodes:
                     raise ValueError("test min nodes > test max nodes")
                 elif min_nodes < 1:
@@ -181,6 +194,7 @@ class ResourceHandler:
                     raise ValueError(f"test:max_nodes = {max_nodes} < 1")
                 elif max_nodes > config.get("machine:node_count"):
                     raise ValueError("test max node request exceeds machine node count")
+                value = [min_nodes, max_nodes]
 
             case ("test", "timeout"):
                 pass
@@ -208,7 +222,7 @@ class ResourceHandler:
             case ("batch", "workers"):
                 if value < 0:
                     raise ValueError(f"batch:workers = {value} < 0")
-                elif value > config.get("machine:cpu_count"):
+                elif value > cpu_count:
                     raise ValueError("batch worker request exceeds machine cpu count")
 
             case ("batch", "scheduler_args"):
@@ -229,12 +243,12 @@ class ResourceHandler:
 
 class ResourceSetter(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
-        rh = getattr(args, self.dest, None) or ResourceHandler()
+        rh = getattr(args, self.dest, None) or []
         if option_string == "-b":
             if not values.startswith("batch:"):
                 values = f"batch:{values}"
         key, value = ResourceSetter.parse(values)
-        rh.set(key, value)
+        rh.append((key, value))
         if key.startswith("batch:"):
             setattr(args, "batched_invocation", True)
         setattr(args, self.dest, rh)
@@ -289,7 +303,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             return ("test:gpu_count", [1, int(raw)])
         elif match := re.search(r"^test:(gpu_count|gpus|devices)[:=](\d+):$", arg):
             raw = match.group(2)
-            return ("test:gpu_count", [int(raw), config.get("machine:gpu_count")])
+            return ("test:gpu_count", [int(raw), None])
         elif match := re.search(r"^test:(gpu_count|gpus|devices)[:=](\d+):(\d+)$", arg):
             _, a, b = match.groups()
             return ("test:gpu_count", [int(a), int(b)])
@@ -298,7 +312,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             return ("test:cpu_count", [1, int(raw)])
         elif match := re.search(r"^test:(cpu_count|cpus|cores|processors)[:=](\d+):$", arg):
             raw = match.group(2)
-            return ("test:cpu_count", [int(raw), config.get("machine:cpu_count")])
+            return ("test:cpu_count", [int(raw), None])
         elif match := re.search(r"^test:(cpu_count|cpus|cores|processors)[:=](\d+):(\d+)$", arg):
             _, a, b = match.groups()
             return ("test:cpu_count", [int(a), int(b)])
@@ -307,7 +321,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             return ("test:node_count", [1, int(raw)])
         elif match := re.search(r"^test:(node_count|nodes)[:=](\d+):$", arg):
             raw = match.group(2)
-            return ("test:node_count", [int(raw), config.get("machine:node_count")])
+            return ("test:node_count", [int(raw), None])
         elif match := re.search(r"^test:(node_count|nodes)[:=](\d+):(\d+)$", arg):
             _, a, b = match.groups()
             return ("test:node_count", [int(a), int(b)])
@@ -336,21 +350,26 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             raise ValueError(f"invalid resource arg: {arg!r}")
 
 
-def calculate_allocations(tasks: int) -> SimpleNamespace:
-    """Performs basic resource calculations"""
-    cores_per_socket = config.get("machine:cores_per_socket")
-    sockets_per_node = config.get("machine:sockets_per_node") or 1
-    cores_per_node = cores_per_socket * sockets_per_node
-    tasks_per_node = min(tasks, cores_per_node)
-    nodes = int(math.ceil(tasks / cores_per_node))
-    ns = SimpleNamespace(
-        cores_per_node=cores_per_node,
-        sockets_per_node=sockets_per_node,
-        nodes=nodes,
-        tasks_per_node=tasks_per_node,
-        cpus_per_task=1,
-    )
-    return ns
+def setup_resource_handler(args: argparse.Namespace) -> None:
+    """Set the resource handler
+
+    There is a chicken/egg type problem when running nvtest:
+
+    - nvtest uses hpc_connect to read machine information from the scheduler interface
+    - nvtest needs machine information to do user-input validation and setup
+    - but, hpc_connect cannot be initialized/setup until the user input is parsed to determine
+      what scheduler is used.
+
+    The solution is to store user inputs a ``ResourceSetter`` instance, which does not validate
+    the user input.  The ``ResourceSetter`` is queried for the batch scheduler type which is used
+    to initialize hpc_connect.  After hpc_connect is initialized, the ``ResourceHandler`` can be
+    created from the ``ResourceSetter``.
+
+    """
+    args.rh = ResourceHandler()
+    if resource_setter := getattr(args, "resource_setter", None):
+        for path, value in resource_setter:
+            args.rh.set(path, value)
 
 
 def _bold(arg: str) -> str:

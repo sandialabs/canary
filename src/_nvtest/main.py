@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import shlex
 import signal
@@ -7,10 +8,14 @@ import traceback
 from typing import TYPE_CHECKING
 from typing import Optional
 
+import hpc_connect
+
 from . import config
 from . import plugin
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
+from .resource import setup_resource_handler
+from .session import Session
 from .util import logging
 
 if TYPE_CHECKING:
@@ -47,6 +52,10 @@ def main(argv: Optional[list[str]] = None) -> int:
             hook.main_setup(parser)
 
         args = parser.parse_args(argv)
+
+        setup_hpc_connect(args)
+        setup_resource_handler(args)
+
         command = parser.get_command(args.command)
         if command is None:
             parser.print_help()
@@ -82,6 +91,8 @@ class NVTestCommand:
             parser.add_command(self.command)
             argv = [self.command.cmd_name()] + list(args_in)
             args = parser.parse_args(argv)
+            setup_hpc_connect(args)
+            setup_resource_handler(args)
             rc = self.command.execute(args)
             self.returncode = rc
         except Exception:
@@ -92,6 +103,35 @@ class NVTestCommand:
             if save_debug is not None:
                 config.set("config:debug", save_debug)
         return self.returncode
+
+
+def setup_hpc_connect(args: argparse.Namespace) -> None:
+    """Set the hpc_connect library"""
+    has_scheduler = False
+    if resource_setter := getattr(args, "resource_setter", None):
+        for path, value in resource_setter:
+            if path == "batch:scheduler":
+                hpc_connect.set(scheduler=value)  # type: ignore
+                has_scheduler = True
+                break
+    elif root := Session.find_root(os.getcwd()):
+        # check if previous invocation was batched
+        f = os.path.join(root, "objects/batches/1/config")
+        if os.path.exists(f):
+            with open(f) as fh:
+                cfg = json.load(fh)
+            for var, val in cfg.items():
+                if var == "scheduler":
+                    hpc_connect.set(scheduler=val)  # type: ignore
+                    has_scheduler = True
+                    break
+    if has_scheduler:
+        cfg = {
+            "node_count": hpc_connect.scheduler.config.node_count,  # type: ignore
+            "cpus_per_node": hpc_connect.scheduler.config.cpus_per_node,  # type: ignore
+            "gpus_per_node": hpc_connect.scheduler.config.gpus_per_node,  # type: ignore
+        }
+        config.config.update_config("machine", cfg, scope="command_line")
 
 
 def invoke_command(command: "Command", args: argparse.Namespace) -> int:

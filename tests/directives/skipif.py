@@ -10,7 +10,8 @@ from _nvtest.util.filesystem import working_dir
 def test_skipif(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         with open("f1.pyt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import os
 import sys
 import nvtest
@@ -19,7 +20,8 @@ def test():
     pass
 if __name__ == '__main__':
     sys.exit(test())
-""")
+"""
+            )
         run = NVTestCommand("run")
         rc = run("-w", ".")
         assert os.listdir("TestResults") == [".nvtest", "f1"]

@@ -7,7 +7,7 @@ Use yaml path syntax to set any of the above variables.  For example,
 
 .. code-block:: console
 
-   nvtest -c machine:cpu_count:20 -c config:log_level:DEBUG SUBCOMMAND [OPTIONS] ARGUMENTS
+   nvtest -c machine:cpus_per_node:20 -c config:log_level:DEBUG SUBCOMMAND [OPTIONS] ARGUMENTS
 
 To set environment variables do
 
