@@ -10,7 +10,8 @@ from _nvtest.util.filesystem import working_dir
 def test_enable(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         with open("f1.pyt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import sys
 import nvtest
 nvtest.directives.enable(when='options=baz')
@@ -18,7 +19,8 @@ def test():
     pass
 if __name__ == '__main__':
     sys.exit(test())
-""")
+"""
+            )
         run = NVTestCommand("run")
         with pytest.raises(StopExecution):
             # Error raised due to empty test session

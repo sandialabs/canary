@@ -8,7 +8,7 @@ from typing import Optional
 
 from _nvtest import config
 from _nvtest._version import version as nvtest_version
-from _nvtest.config.machine import machine_config
+from _nvtest.config.machine import system_config
 from _nvtest.reporter import TestData
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
@@ -138,7 +138,7 @@ class CDashXMLReporter:
         if self.meta is None:
             self.meta = {}
             host = os.uname().nodename
-            machine = machine_config()
+            machine = system_config()
             os_release = machine["os"]["release"]
             os_name = machine["platform"]
             os_version = machine["os"]["fullversion"]

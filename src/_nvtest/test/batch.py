@@ -2,8 +2,8 @@ import os
 from typing import Optional
 from typing import Union
 
+from .. import config
 from ..atc import AbstractTestCase
-from ..resource import calculate_allocations
 from ..status import Status
 from ..util import logging
 from ..util import partition
@@ -46,8 +46,9 @@ class TestBatch(AbstractTestCase):
         if len(self.cases) == 1:
             self._runtime = self.cases[0].runtime
         else:
-            ns = calculate_allocations(self.max_cpus_required)
-            grid = partition.tile(self.cases, ns.cores_per_node * ns.nodes)
+            cpus_per_node = config.get("machine:cpus_per_node")
+            node_count = config.get("machine:node_count")
+            grid = partition.tile(self.cases, cpus_per_node * node_count)
             self._runtime = sum([max(case.runtime for case in row) for row in grid])
         self._status: Status
         for case in self.cases:

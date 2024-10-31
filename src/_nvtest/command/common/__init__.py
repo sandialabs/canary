@@ -12,14 +12,12 @@ __all__ = [
 ]
 
 
-from _nvtest.resource import ResourceSetter
-
 from .pathspec import PathSpec
 from .pathspec import setdefault
 
 if TYPE_CHECKING:
-    from _nvtest.config.argparsing import Parser
-    from _nvtest.test.case import TestCase
+    from ...config.argparsing import Parser
+    from ...test.case import TestCase
 
 
 def add_mark_arguments(parser: "Parser") -> None:
@@ -69,12 +67,14 @@ def add_work_tree_arguments(parser: "Parser") -> None:
 
 
 def add_resource_arguments(parser: "Parser") -> None:
+    from ...config.argparsing import ResourceSetter
+
     group = parser.add_argument_group("resource control")
     group.add_argument(
         "-l",
         action=ResourceSetter,
         metavar="resource",
-        dest="rh",
+        dest="resource_setter",
         default=None,
         help=ResourceSetter.help_page("-l"),
     )
@@ -84,7 +84,7 @@ def add_resource_arguments(parser: "Parser") -> None:
         "-b",
         action=ResourceSetter,
         metavar="resource",
-        dest="rh",
+        dest="resource_setter",
         default=None,
         help=argparse.SUPPRESS,
     )

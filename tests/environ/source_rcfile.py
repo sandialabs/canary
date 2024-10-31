@@ -10,7 +10,8 @@ def test_source_rcfile_1(tmpdir):
         with open("file.sh", "w") as fh:
             fh.write("export BAZ=SPAM\n")
         with open("file.pyt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import nvtest
 import os
 import sys
@@ -20,7 +21,8 @@ def test():
     assert os.getenv("BAZ") == "SPAM", os.getenv("BAZ")
 if __name__ == "__main__":
     sys.exit(test())
-""")
+"""
+            )
         run = NVTestCommand("run")
         rc = run(".")
         if rc != 0:
@@ -33,7 +35,8 @@ def test_source_rcfile_2(tmpdir):
         with open("file.sh", "w") as fh:
             fh.write("export BAZ=SPAM\n")
         with open("file.pyt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import nvtest
 import os
 import sys
@@ -43,7 +46,8 @@ def test():
         assert os.getenv("BAZ") == "SPAM", os.getenv("BAZ")
 if __name__ == "__main__":
     sys.exit(test())
-""")
+"""
+            )
         run = NVTestCommand("run")
         rc = run(".")
         if rc != 0:

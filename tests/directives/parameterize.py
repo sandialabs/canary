@@ -7,7 +7,8 @@ from _nvtest.util.filesystem import working_dir
 def test_parameterize(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         with open("f.pyt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import sys
 import nvtest
 nvtest.directives.parameterize('a,b,c', [(1, 2, 3), (4, 5, 6)])
@@ -17,7 +18,8 @@ def test():
     assert self.parameters[('a', 'b', 'c')] == (a, a + 1, a + 2)
 if __name__ == '__main__':
     sys.exit(test())
-""")
+"""
+            )
         run = NVTestCommand("run")
         rc = run("-w", ".")
         if rc != 0:
@@ -29,7 +31,8 @@ if __name__ == '__main__':
 def test_parameterize_prod(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         with open("f.pyt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import sys
 import nvtest
 nvtest.directives.analyze()
@@ -70,7 +73,8 @@ if __name__ == '__main__':
     else:
         rc = test()
     sys.exit(rc)
-""")
+"""
+            )
         run = NVTestCommand("run")
         rc = run("-w", ".")
         for file in glob.glob("TestResults/**/nvtest-out.txt"):

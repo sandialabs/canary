@@ -3,12 +3,12 @@ import os
 from typing import Optional
 
 from _nvtest.config.argparsing import Parser
-from _nvtest.resource import ResourceHandler
 from _nvtest.runners import TestCaseRunner
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 
 from .base import Command
+from .common import add_resource_arguments
 from .common import filter_cases_by_path
 from .common import filter_cases_by_status
 
@@ -33,6 +33,7 @@ Note: this command must be run in a test session directory.
 """
 
     def setup_parser(self, parser: Parser):
+        add_resource_arguments(parser)
         parser.add_argument("pathspec", nargs="?", help="Limit analyis to tests in this path")
 
     def execute(self, args: argparse.Namespace) -> int:
@@ -42,8 +43,7 @@ Note: this command must be run in a test session directory.
             cases = filter_cases_by_path(session.cases, args.pathspec)
         else:
             cases = filter_cases_by_status(session.cases, ("failed", "diffed", "success"))
-        rh = ResourceHandler()
-        runner = TestCaseRunner(rh)
+        runner = TestCaseRunner(args.rh)
         for case in cases:
             runner.analyze(case)
         return 0

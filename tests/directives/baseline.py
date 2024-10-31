@@ -9,7 +9,8 @@ def test_baseline(tmpdir):
         with open("a.txt", "w") as fh:
             fh.write("null")
         with open("f.pyt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import sys
 import nvtest
 nvtest.directives.parameterize('a', (1, 2))
@@ -20,7 +21,8 @@ def test():
         fh.write(f'a={self.parameters.a}')
 if __name__ == '__main__':
     sys.exit(test())
-""")
+"""
+            )
         run = NVTestCommand("run")
         rc = run("-w", ".")
         if rc != 0:
@@ -39,7 +41,8 @@ def test_baseline_flag(tmpdir):
         with open("a.txt", "w") as fh:
             fh.write("null")
         with open("f.pyt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import os
 import sys
 import nvtest
@@ -61,7 +64,8 @@ if __name__ == '__main__':
     else:
         rc = test()
     sys.exit(rc)
-""")
+"""
+            )
         run = NVTestCommand("run")
         rc = run("-w", ".")
         if rc != 0:

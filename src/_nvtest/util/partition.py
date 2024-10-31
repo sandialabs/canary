@@ -57,9 +57,7 @@ def partition_t(
     to ``t``
 
     """
-    sockets_per_node = config.get("machine:sockets_per_node")
-    cores_per_socket = config.get("machine:cores_per_socket")
-    cores_per_node = sockets_per_node * cores_per_socket
+    cpus_per_node: int = config.get("machine:cpus_per_node")
 
     partitions: list[list[TestCase]] = []
 
@@ -74,12 +72,12 @@ def partition_t(
         # group tests requiring the same number of nodes and attempt to create
         # partitions with equal runtimes
         for case in ready:
-            c_nodes = math.ceil(case.cpus / cores_per_node)
+            c_nodes = math.ceil(case.cpus / cpus_per_node)
             groups.setdefault(c_nodes, []).append(case)
         for g_nodes, group in groups.items():
             g_runtime = 0.0
             g_partition: list[TestCase] = []
-            grid = tile(group, g_nodes * cores_per_node)
+            grid = tile(group, g_nodes * cpus_per_node)
             assert sum(len(row) for row in grid) == len(group)
             grid_runtime = max(sum([max(c.runtime for c in row) for row in grid]), 5.0)
             target_partition_time = grid_runtime / math.ceil(grid_runtime / t)

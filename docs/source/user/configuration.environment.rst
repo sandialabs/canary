@@ -7,7 +7,6 @@ Configuration settings can be set via environment variable by naming the variabl
 
 .. code-block:: console
 
-   export NVTEST_MACHINE_CPU_COUNT=20
    export NVTEST_LOG_LEVEL=DEBUG
 
 .. note::

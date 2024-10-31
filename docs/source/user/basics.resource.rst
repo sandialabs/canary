@@ -13,18 +13,11 @@ Setting available machine resources
 
 The following machine resources can be set in the :ref:`global or local configuration file<configuration>` or from the command line using the ``-c machine:<resource>:<value>`` flag:
 
-* ``cpu_count``: the number of CPUs available to this test session
-* ``gpu_count``: the number of GPUs available to this test session
+* ``cpus_per_node``: the number of CPUs per node available to this test session
+* ``gpus_per_node``: the number of GPUs per node available to this test session
 * ``node_count``: the number of compute modes available to this test session
 
 Finer-grained control over machine resources can be set via the following variables:
-
-* ``node_count``: the number of compute nodes on the compute cluster
-* ``sockets_per_node``: the number of sockets on each compute node
-* ``cores_per_socket``: the number of CPU cores on each socket
-* ``gpus_per_socket``: the number of GPUs on each socket
-
-If the latter variables are defined, then ``cpu_count`` is set equal to ``node_count * sockets_per_node * cores_per_socket`` and  ``gpu_count = node_count * sockets_per_node * gpus_per_socket``.
 
 By default, ``nvtest`` performs a system probe [1]_ to determine appropriate values for each machine configuration variable.
 
@@ -97,27 +90,27 @@ Examples
 
       $ cat ./nvtest.cfg
       [machine]
-      cpu_count = 32
+      cpus_per_node = 32
 
 * Run tests on a machine having 32 processors and 4 gpus:
 
   .. code-block:: console
 
-      nvtest -c machine:cpu_count:32 -c machine:gpu_count:4 run ...
+      nvtest -c machine:cpus_per_node:32 -c machine:gpus_per_node:4 run ...
 
 
 * Limit the number of processors used by the test session to 12
 
   .. code-block:: console
 
-      nvtest -c machine:cpu_count:32 -c machine:gpu_count:4 run -l session:cpu_count:12 ...
+      nvtest -c machine:cpus_per_node:32 -c machine:gpus_per_node:4 run -l session:cpu_count:12 ...
 
 * Set ``CUDA_VISIBLE_DEVICES`` to the GPUs available to a test:
 
   .. code-block:: console
 
       export CUDA_VISIBLE_DEVICES="%(gpu_ids)s"
-      nvtest -c machine:gpu_count:4 run ...
+      nvtest -c machine:gpus_per_node:4 run ...
 
   When each test is launched, ``nvtest`` will replace ``%(gpu_ids)s`` with a comma separated list of the actual GPU IDs allocated to the test.
 

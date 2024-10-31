@@ -157,6 +157,10 @@ class TestCase(AbstractTestCase):
         return self.display_name
 
     @property
+    def working_directory(self) -> str:
+        return self.exec_dir
+
+    @property
     def dbfile(self) -> str:
         file = os.path.join(self.exec_dir, self._dbfile)
         return file
@@ -541,10 +545,9 @@ class TestCase(AbstractTestCase):
         if "nnode" in self.parameters:
             return int(self.parameters["nnode"])  # type: ignore
         else:
-            cores_per_socket = config.get("machine:cores_per_socket")
-            sockets_per_node = config.get("machine:sockets_per_node") or 1
-            cores_per_node = cores_per_socket * sockets_per_node
-            return int(math.ceil(self.cpus / cores_per_node))
+            cpus_per_node = config.get("machine:cpus_per_node")
+            nodes = math.ceil(self.cpus / cpus_per_node)
+            return nodes
 
     @property
     def gpus(self) -> int:
@@ -815,7 +818,7 @@ class TestCase(AbstractTestCase):
             variables[key] = value % vars
         for var, val in variables.items():
             os.environ[var] = val
-        os.environ["PATH"] = f"{self.exec_dir}:{os.environ['PATH']}"
+        os.environ["PATH"] = f"{self.working_directory}:{os.environ['PATH']}"
         for module in self.modules:
             load_module(module)
         for rcfile in self.rcfiles:
@@ -940,6 +943,9 @@ class TestCase(AbstractTestCase):
         state: dict[str, Any] = {"type": self.__class__.__name__}
         properties = state.setdefault("properties", {})
         for attr, value in self.__dict__.items():
+            if attr.startswith("__"):
+                # skip *really* private variables
+                continue
             private = attr.startswith("_")
             name = attr[1:] if private else attr
             if name == "dependencies":

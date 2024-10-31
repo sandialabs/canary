@@ -109,14 +109,14 @@ def test_cpu_count(tmpdir):
         with open("a.pyt", "w") as fh:
             fh.write("import nvtest\n")
             fh.write("nvtest.directives.parameterize('np', [1, 4, 8, 32])\n")
-    nvtest.config.set("machine:cpu_count", 40)
+    nvtest.config.set("machine:cpus_per_node", 40)
     finder = Finder()
     finder.add(workdir)
     finder.prepare()
     files = finder.discover()
     cases = finder.lock(files)
     assert len([c for c in cases if not c.mask]) == 4
-    nvtest.config.set("machine:cpu_count", 2)
+    nvtest.config.set("machine:cpus_per_node", 2)
     cases = finder.lock(files)
     assert len([c for c in cases if not c.mask]) == 1
 

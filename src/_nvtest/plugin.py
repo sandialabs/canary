@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from .config.argparsing import Parser
     from .finder import Finder
     from .generator import AbstractTestGenerator
-    from .hpc_scheduler import HPCScheduler
     from .session import Session
     from .test.case import TestCase
 
@@ -94,7 +93,7 @@ class Manager:
                 method_name = "main_setup"
             case ["session", "discovery"]:
                 method_name = "session_discovery"
-            case ["session", "initialize"]:
+            case ["session", "initialize"] | ["session", "setup"]:
                 method_name = "session_initialize"
             case ["session", "finish"] | ["session", "teardown"]:
                 method_name = "session_finish"
@@ -187,13 +186,6 @@ class Manager:
             yield generator_class
 
     @staticmethod
-    def schedulers() -> Generator[Type["HPCScheduler"], None, None]:
-        from .hpc_scheduler import HPCScheduler
-
-        for scheduler_class in HPCScheduler.REGISTRY:
-            yield scheduler_class
-
-    @staticmethod
     def commands() -> Generator[Type["Command"], None, None]:
         from .command.base import Command
 
@@ -270,10 +262,6 @@ def plugins() -> Generator[Type[PluginHook], None, None]:
 
 def generators() -> Generator[Type["AbstractTestGenerator"], None, None]:
     return _manager.generators()
-
-
-def schedulers() -> Generator[Type["HPCScheduler"], None, None]:
-    return _manager.schedulers()
 
 
 def commands() -> Generator[Type["Command"], None, None]:

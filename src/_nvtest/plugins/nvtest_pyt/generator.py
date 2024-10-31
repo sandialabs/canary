@@ -82,6 +82,9 @@ class PYTTestFile(AbstractTestGenerator):
         self._xstatus: Optional[FilterNamespace] = None
         self.load()
 
+    def __repr__(self) -> str:
+        return self.file
+
     def describe(
         self,
         keyword_expr: Optional[str] = None,
@@ -162,12 +165,14 @@ class PYTTestFile(AbstractTestGenerator):
         owners: Optional[set[str]] = None,
         env_mods: Optional[dict[str, str]] = None,
     ) -> list[TestCase]:
-        cores_per_socket = config.get("machine:cores_per_socket")
-        sockets_per_node = config.get("machine:sockets_per_node") or 1
-        cores_per_node = cores_per_socket * sockets_per_node
-        min_cpus, max_cpus = cpus or (0, config.get("machine:cpu_count"))
-        min_gpus, max_gpus = gpus or (0, config.get("machine:gpu_count"))
-        min_nodes, max_nodes = nodes or (0, config.get("machine:node_count"))
+        cpus_per_node: int = config.get("machine:cpus_per_node")
+        gpus_per_node: int = config.get("machine:gpus_per_node")
+        node_count: int = config.get("machine:node_count")
+        cpu_count = node_count * cpus_per_node
+        gpu_count = node_count * gpus_per_node
+        min_cpus, max_cpus = cpus or (0, cpu_count)
+        min_gpus, max_gpus = gpus or (0, gpu_count)
+        min_nodes, max_nodes = nodes or (0, node_count)
         owners = set(owners or [])
         testcases: list[TestCase] = []
         names = ", ".join(self.names())
@@ -202,7 +207,7 @@ class PYTTestFile(AbstractTestGenerator):
                         f"{self.name}: expected np={np} to be an int, not {class_name}"
                     )
 
-                nc = int(math.ceil(np / cores_per_node))
+                nc = int(math.ceil(np / cpus_per_node))
                 if case_mask is None and nc > max_nodes:
                     s = "deselected due to @*b{requiring more nodes than max node count}"
                     case_mask = colorize(s)

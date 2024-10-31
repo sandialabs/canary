@@ -10,7 +10,8 @@ from _nvtest.util.filesystem import working_dir
 def test_analyze(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         with open("f.pyt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import sys
 import nvtest
 nvtest.directives.parameterize('a', (0, 1))
@@ -34,7 +35,8 @@ if __name__ == '__main__':
     else:
         rc = test()
     sys.exit(rc)
-""")
+"""
+            )
         run = NVTestCommand("run")
         rc = run("-w", ".")
         if rc != 0:
@@ -46,7 +48,8 @@ if __name__ == '__main__':
 def test_analyze_alt_flag(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         with open("f.pyt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import sys
 import nvtest
 nvtest.directives.parameterize('a', [0])
@@ -70,7 +73,8 @@ if __name__ == '__main__':
     else:
         rc = test()
     sys.exit(rc)
-""")
+"""
+            )
         run = NVTestCommand("run")
         rc = run("-w", ".")
         if rc != 0:
@@ -82,7 +86,8 @@ if __name__ == '__main__':
 def test_analyze_script(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         with open("f.pyt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import sys
 import nvtest
 nvtest.directives.parameterize('a', [0])
@@ -98,7 +103,8 @@ def test():
 if __name__ == '__main__':
     rc = test()
     sys.exit(rc)
-""")
+"""
+            )
         with open("baz.py", "w") as fh:
             fh.write(f"#!{sys.executable}\nimport sys\nsys.exit(0)")
         set_executable("baz.py")

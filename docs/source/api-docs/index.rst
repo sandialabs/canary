@@ -14,7 +14,7 @@ All modules and packages live in the ``_nvtest`` namespace.
    expression
    finder
    generator
-   hpc_scheduler
+   hpc_connect/index
    main
    paramset
    plugin

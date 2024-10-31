@@ -10,11 +10,11 @@ from .resource import ResourceHandler
 from .test.batch import TestBatch
 from .test.case import TestCase
 from .third_party import color
-from .third_party.rprobe import cpu_count
 from .util import logging
 from .util.partition import partition_n
 from .util.partition import partition_t
 from .util.progress import progress
+from .util.rprobe import cpu_count
 from .util.time import timestamp
 
 

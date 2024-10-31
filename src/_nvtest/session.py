@@ -160,9 +160,6 @@ class Session:
             self.root = root
         self.config_dir = os.path.join(self.root, ".nvtest")
         self.log_dir = os.path.join(self.config_dir, "logs")
-        os.environ.setdefault("NVTEST_LEVEL", "0")
-        os.environ["NVTEST_SESSION_DIR"] = self.root
-        os.environ["NVTEST_SESSION_CONFIG_DIR"] = self.config_dir
         self.mode = mode
         self.search_paths: dict[str, list[str]] = {}
         self.generators: list[AbstractTestGenerator] = list()
@@ -179,6 +176,10 @@ class Session:
         self.mode = mode
         self.start = -1.0
         self.finish = -1.0
+
+        os.environ.setdefault("NVTEST_LEVEL", "0")
+        os.environ["NVTEST_SESSION_DIR"] = self.root
+        os.environ["NVTEST_SESSION_CONFIG_DIR"] = self.config_dir
 
     @staticmethod
     def find_root(path: str):
@@ -337,18 +338,7 @@ class Session:
         config.set("session:root", self.root, scope="session")
         config.set("session:invocation_dir", config.invocation_dir, scope="session")
         config.set("session:start", config.invocation_dir, scope="session")
-        attrs = (
-            "sockets_per_node",
-            "cores_per_socket",
-            "cpu_count",
-            "gpus_per_socket",
-            "gpu_count",
-        )
-        for attr in attrs:
-            value = config.get(f"machine:{attr}", scope="local")
-            if value is not None:
-                config.set(f"machine:{attr}", value, scope="session")
-        for section in ("build", "config", "machine", "option", "variables"):
+        for section in ("build", "config", "option", "variables"):
             # transfer options to the session scope and save it for future sessions
             data = config.get(section, scope="local") or {}
             for key, value in data.items():
@@ -367,7 +357,7 @@ class Session:
             with self.db.open("plugin", "w") as record:
                 json.dump(plugin.getstate(), record, indent=2)
 
-    def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str]]) -> None:
+    def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str], str]) -> None:
         """Add paths to this session's search paths
 
         ``search_paths`` is a list of file system folders that will be searched during the
@@ -376,6 +366,8 @@ class Session:
         This form is useful if you know which tests to run.
 
         """
+        if isinstance(search_paths, str):
+            search_paths = {search_paths: []}
         if isinstance(search_paths, list):
             search_paths = {path: [] for path in search_paths}
         if self.generators:

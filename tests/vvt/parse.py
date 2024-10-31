@@ -26,3 +26,15 @@ def test_parse_autotype():
     assert commands[0].command == "parameterize"
     assert "%".join(commands[0].argument.split()) == "np,n%=%1,2%3,4%5,6"
     assert commands[0].options == {"autotype": True}
+
+
+def test_parse_parameterize_1():
+    s = """\
+#!/usr/bin/env python3
+# VVT: parameterize: np, mesh_factor = 1 , 1.0    1 , 0.5    1 , 0.25
+"""
+    args, _ = vvtest.p_VVT(s)
+    assert args[0].command == "parameterize"
+    names, values, kwds = vvtest.p_PARAMETERIZE(args[0])
+    assert names == ["np", "mesh_factor"]
+    assert values == [[1, 1.0], [1, 0.5], [1, 0.25]]

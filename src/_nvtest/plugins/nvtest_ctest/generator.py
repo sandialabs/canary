@@ -241,13 +241,13 @@ class CTestTestCase(TestCase):
         )
 
         self._resource_groups: Optional[list[str]] = None
+        self._working_directory = working_directory or self.file_dir
 
         if args is not None:
-            directory = os.path.join(self.file_root, os.path.dirname(self.file_path))
-            with nvtest.filesystem.working_dir(directory):
+            with nvtest.filesystem.working_dir(self.file_dir):
                 ns = parse_test_args(args)
 
-            self.sources = {"link": [(ns.command, os.path.basename(ns.command))]}
+            self.sources = {}
             self.launcher = ns.launcher
             self.preflags = ns.preflags
             self.exe = ns.command
@@ -273,6 +273,20 @@ class CTestTestCase(TestCase):
             self.resource_groups = resource_groups
 
     @property
+    def working_directory(self) -> str:
+        return self._working_directory
+
+    @working_directory.setter
+    def working_directory(self, arg: str) -> None:
+        self._working_directory = arg
+
+    def setup(self, exec_root: str, copy_all_resources: bool = False) -> None:
+        super().setup(exec_root, copy_all_resources=copy_all_resources)
+        with nvtest.filesystem.working_dir(self.exec_dir):
+            with open("ctest-command.txt", "w") as fh:
+                fh.write(" ".join(self.command()))
+
+    @property
     def resource_groups(self) -> list[str]:
         return self._resource_groups or []
 
@@ -293,9 +307,6 @@ class CTestTestCase(TestCase):
                     gpus = self.parameters.setdefault("ngpu", 0)
                     gpus += int(group[5:]) * n
                     self.parameters["ngpu"] = gpus
-
-    def run(self, *args, **kwargs):
-        return super().run(*args, **kwargs)
 
 
 class CMakeCache(dict):
