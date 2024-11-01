@@ -41,7 +41,7 @@ where `SCHEDULER` is `slurm`, `pbs`, `flux`, or any comma-separated combination 
 For developers wanting to make modifications and/or contributions to `nvtest`, install in editable mode:
 
 ```console
-python3 -m pip install -e git+https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest@hpc-scheduler#egg=nvtest[flux,pbs,slurm]
+python3 -m pip install -e git+https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest#egg=nvtest[flux,pbs,slurm]
 ```
 
 which will leave a copy of `nvtest` in your Python distribution's `$prefix/src` directory.  Edits made to the source will be immediately visible by the Python interpreter.  Alternatively, the source can be cloned and then installed in editable mode:
