@@ -34,7 +34,11 @@ To also download and install an HPC scheduler interface install as:
 python3 -m pip install "nvtest[SCHEDULER] @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/nvtest"
 ```
 
-where `SCHEDULER` is `slurm`, `pbs`, `flux`, or any comma-separated combination of the three.
+where `SCHEDULER` is `slurm`, `pbs`, `flux`, or any comma-separated combination of the three, e.g.
+
+```console
+python3 -m pip install "nvtest[slurm,pbs,flux] @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/nvtest"
+```
 
 ## Developers
 
