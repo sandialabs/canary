@@ -365,9 +365,10 @@ def cached(func):
     cache = {}
 
     @wraps(func)
-    def inner(expression, *args, **kwargs):
+    def inner(arg, *args, **kwargs):
+        expression = arg.argument
         if expression not in cache:
-            cache[expression] = func(expression, *args, **kwargs)
+            cache[expression] = func(arg, *args, **kwargs)
         return cache[expression]
 
     return inner
