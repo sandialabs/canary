@@ -505,8 +505,10 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "test") -> dict:
                     table.append(row[0])
                 else:
                     table.append(list(row))
-        attrs["DEPDIRS"] = [dep.exec_dir for dep in case.dependencies]
-        attrs["DEPDIRMAP"] = {}  # FIXME
+
+    # DEPDIRS and DEPDIRMAP should always exist.
+    attrs["DEPDIRS"] = [dep.exec_dir for dep in getattr(case, "dependencies", [])]
+    attrs["DEPDIRMAP"] = {}  # FIXME
 
     attrs["exec_dir"] = case.exec_dir
     attrs["exec_root"] = case.exec_root
