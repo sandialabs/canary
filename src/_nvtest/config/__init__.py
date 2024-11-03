@@ -298,6 +298,9 @@ class Config:
             value = value[key]
         return value
 
+    def pop(self, path: str, scope: Optional[str] = None) -> Any:
+        pass
+
     def set(self, path: str, value: Any, scope: Optional[str] = None) -> None:
         """Convenience function for setting single config values
 
@@ -623,6 +626,10 @@ def getoption(path: str, default: Optional[Any] = None, scope: Optional[str] = N
 
 def set(path: str, value: Any, scope: Optional[str] = None) -> None:
     return config.set(path, value, scope=scope)
+
+
+def pop(path: str, scope: Optional[str] = None) -> Any:
+    return config.pop(path, scope=scope)
 
 
 def describe(section: Optional[str] = None) -> str:

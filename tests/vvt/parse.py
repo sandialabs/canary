@@ -8,7 +8,7 @@ def test_parse_parameterize():
 # VVT: parameterize : np,n = 1,2 3,4 5,6
 # VVT: : 7,8
 """
-    commands, _ = vvtest.p_VVT(s)
+    commands = list(vvtest.p_VVT(s))
     assert commands[0].command == "parameterize"
     assert "%".join(commands[0].argument.split()) == "np,n%=%1,2%3,4%5,6%7,8"
     names, values, kwds = vvtest.p_PARAMETERIZE(commands[0])
@@ -22,7 +22,7 @@ def test_parse_autotype():
 #!/usr/bin/env python3
 # VVT: parameterize (autotype) : np,n = 1,2 3,4 5,6
 """
-    commands, _ = vvtest.p_VVT(s)
+    commands = list(vvtest.p_VVT(s))
     assert commands[0].command == "parameterize"
     assert "%".join(commands[0].argument.split()) == "np,n%=%1,2%3,4%5,6"
     assert commands[0].options == {"autotype": True}
@@ -33,7 +33,7 @@ def test_parse_parameterize_1():
 #!/usr/bin/env python3
 # VVT: parameterize: np, mesh_factor = 1 , 1.0    1 , 0.5    1 , 0.25
 """
-    args, _ = vvtest.p_VVT(s)
+    args = list(vvtest.p_VVT(s))
     assert args[0].command == "parameterize"
     names, values, kwds = vvtest.p_PARAMETERIZE(args[0])
     assert names == ["np", "mesh_factor"]

@@ -13,6 +13,7 @@ from typing import Generator
 from typing import Optional
 from typing import Union
 
+import _nvtest.when as m_when
 import nvtest
 from _nvtest import config
 from _nvtest.enums import list_parameter_space
@@ -20,37 +21,44 @@ from _nvtest.plugins.nvtest_pyt.generator import PYTTestFile
 from _nvtest.test.case import TestCase
 from _nvtest.test.case import TestMultiCase
 from _nvtest.third_party.color import colorize
+from _nvtest.util import logging
 from _nvtest.util import scalar
 from _nvtest.util import string
 
 
 class VVTTestFile(PYTTestFile):
-    def load(self) -> None:
-        for arg in p_VVT_generator(self.file):
-            if arg.command == "keywords":
-                self.f_KEYWORDS(arg)
-            elif arg.command in ("copy", "link", "sources"):
-                self.f_SOURCES(arg)
-            elif arg.command == "preload":
-                self.f_PRELOAD(arg)
-            elif arg.command == "parameterize":
-                self.f_PARAMETERIZE(arg)
-            elif arg.command == "analyze":
-                self.f_ANALYZE(arg)
-            elif arg.command in ("name", "testname"):
-                self.f_NAME(arg)
-            elif arg.command == "timeout":
-                self.f_TIMEOUT(arg)
-            elif arg.command == "skipif":
-                self.f_SKIPIF(arg)
-            elif arg.command == "baseline":
-                self.f_BASELINE(arg)
-            elif arg.command == "enable":
-                self.f_ENABLE(arg)
-            elif arg.command == "depends_on":
-                self.f_DEPENDS_ON(arg)
-            else:
-                raise VVTParseError(f"Unknown command: {arg.command}", arg)
+    def load(self, file: Optional[str] = None) -> None:
+        file = file or self.file
+        for arg in p_VVT(file):
+            match arg.command:
+                case "keywords":
+                    self.f_KEYWORDS(arg)
+                case "copy" | "link" | "sources":
+                    self.f_SOURCES(arg)
+                case "preload":
+                    self.f_PRELOAD(arg)
+                case "parameterize":
+                    self.f_PARAMETERIZE(arg)
+                case "analyze":
+                    self.f_ANALYZE(arg)
+                case "name" | "testname":
+                    self.f_NAME(arg)
+                case "timeout":
+                    self.f_TIMEOUT(arg)
+                case "skipif":
+                    self.f_SKIPIF(arg)
+                case "baseline":
+                    self.f_BASELINE(arg)
+                case "enable":
+                    self.f_ENABLE(arg)
+                case "depends_on":
+                    self.f_DEPENDS_ON(arg)
+                case "include" | "insert directive file":
+                    raise VVTParseError(
+                        f"{arg.command}: include file should have already been included!", arg
+                    )
+                case _:
+                    raise VVTParseError(f"Unknown command: {arg.command}", arg)
 
     @classmethod
     def matches(cls, path: str) -> bool:
@@ -245,18 +253,27 @@ def p_LINE(file: Union[Path, str], line: str) -> Optional[SimpleNamespace]:
     )
 
 
-def p_VVT_generator(filename: Union[Path, str]) -> Generator[SimpleNamespace, None, None]:
+def p_VVT(filename: Union[Path, str]) -> Generator[SimpleNamespace, None, None]:
     """# VVT: COMMAND ( OPTIONS ) [:=] ARGS"""
     lines, line_no = find_vvt_lines(filename)
     for line in lines:
         ns = p_LINE(filename, line)
-        if ns:
-            if ns.command in ["include", "insert directive file"]:
-                # TODO: `when` and `options` need to be propagated from `ns`
-                #       to whatever is yielded from this included file.
-                yield from p_VVT_generator(ns.argument)
-            else:
-                yield ns
+        if ns and ns.command in ("include", "insert directive file"):
+            inc_file = ns.argument.strip()
+            if not os.path.exists(inc_file) and not os.path.isabs(inc_file):
+                inc_file = os.path.join(os.path.dirname(filename), inc_file)
+                if not os.path.exists(inc_file):
+                    raise VVTParseError(f"include file does not exist: {ns.argument()!r}", ns)
+            when = m_when.When.factory(ns.when)
+            result = when.evaluate(on_options=config.getoption("on_options"))
+            if not result.value:
+                logging.debug(
+                    f"{filename}: Skipping inclusion of {inc_file} due to:\n{result.reason}"
+                )
+                return
+            yield from p_VVT(inc_file)
+        elif ns:
+            yield ns
 
 
 def make_when_expr(options):
@@ -279,6 +296,7 @@ def find_vvt_lines(filename: Union[Path, str]) -> tuple[list[str], int]:
     if os.path.exists(filename):
         tokens = tokenize.tokenize(open(filename, "rb").readline)
     else:
+        # assume ``filename`` is a string containing directives
         tokens = string.get_tokens(filename)
     s = io.StringIO()
     for token in tokens:
