@@ -26,8 +26,7 @@ from _nvtest.util import string
 
 class VVTTestFile(PYTTestFile):
     def load(self) -> None:
-        args, _ = p_VVT(self.file)
-        for arg in args:
+        for arg in p_VVT_generator(self.file):
             if arg.command == "keywords":
                 self.f_KEYWORDS(arg)
             elif arg.command in ("copy", "link", "sources"):
@@ -246,15 +245,18 @@ def p_LINE(file: Union[Path, str], line: str) -> Optional[SimpleNamespace]:
     )
 
 
-def p_VVT(filename: Union[Path, str]) -> tuple[list[SimpleNamespace], int]:
+def p_VVT_generator(filename: Union[Path, str]) -> Generator[SimpleNamespace, None, None]:
     """# VVT: COMMAND ( OPTIONS ) [:=] ARGS"""
-    commands: list[SimpleNamespace] = []
     lines, line_no = find_vvt_lines(filename)
     for line in lines:
         ns = p_LINE(filename, line)
         if ns:
-            commands.append(ns)
-    return commands, line_no
+            if ns.command in ["include", "insert directive file"]:
+                # TODO: `when` and `options` need to be propagated from `ns`
+                #       to whatever is yielded from this included file.
+                yield from p_VVT_generator(ns.argument)
+            else:
+                yield ns
 
 
 def make_when_expr(options):
@@ -505,8 +507,10 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "test") -> dict:
                     table.append(row[0])
                 else:
                     table.append(list(row))
-        attrs["DEPDIRS"] = [dep.exec_dir for dep in case.dependencies]
-        attrs["DEPDIRMAP"] = {}  # FIXME
+
+    # DEPDIRS and DEPDIRMAP should always exist.
+    attrs["DEPDIRS"] = [dep.exec_dir for dep in getattr(case, "dependencies", [])]
+    attrs["DEPDIRMAP"] = {}  # FIXME
 
     attrs["exec_dir"] = case.exec_dir
     attrs["exec_root"] = case.exec_root
