@@ -262,8 +262,8 @@ def p_VVT(filename: Union[Path, str]) -> Generator[SimpleNamespace, None, None]:
             inc_file = ns.argument.strip()
             if not os.path.exists(inc_file) and not os.path.isabs(inc_file):
                 inc_file = os.path.join(os.path.dirname(filename), inc_file)
-                if not os.path.exists(inc_file):
-                    raise VVTParseError(f"include file does not exist: {ns.argument()!r}", ns)
+            if not os.path.exists(inc_file):
+                raise VVTParseError(f"include file does not exist: {ns.argument()!r}", ns)
             when = m_when.When.factory(ns.when)
             result = when.evaluate(on_options=config.getoption("on_options"))
             if not result.value:

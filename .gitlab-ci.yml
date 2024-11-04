@@ -17,7 +17,7 @@ before_script:
 - python3 --version
 
 
-test-job:
+unit-test:
   stage: test
   tags:
   - cee.build
@@ -25,7 +25,23 @@ test-job:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - module load aue/cmake/3.27.7 > /dev/null 2>&1 || true
   - module load aue/gcc/12.1.0 > /dev/null 2>&1 || true
-  - module load aue/openmpi/4.1.4-gcc-12.1.0 > /dev/null 2>&1 || true
+  - module load aue/openmpi/4.1.6-gcc-12.1.0 > /dev/null 2>&1 || true
+  - python3 -m pip install $STD_PIP_ARGS -e .[dev,slurm,pbs,flux]
+  - pytest tests
+  rules:
+  - if: $RUN_UNIT_TESTS
+    when: always
+
+
+coverage-test:
+  stage: test
+  tags:
+  - cee.build
+  script:
+  - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
+  - module load aue/cmake/3.27.7 > /dev/null 2>&1 || true
+  - module load aue/gcc/12.1.0 > /dev/null 2>&1 || true
+  - module load aue/openmpi/4.1.6-gcc-12.1.0 > /dev/null 2>&1 || true
   - python3 -m pip install $STD_PIP_ARGS -e .[dev,slurm,pbs,flux]
   - coverage run
   - coverage report
@@ -40,6 +56,7 @@ test-job:
       coverage_report:
         path: coverage.xml
         coverage_format: cobertura
+
 
 lint-changed-files:
   stage: code analysis
@@ -59,6 +76,7 @@ lint-changed-files:
     reports:
       junit: ruff.xml
 
+
 format-changed-files:
   stage: code analysis
   tags:
@@ -71,6 +89,7 @@ format-changed-files:
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
     when: always
+
 
 mypy:
   stage: code analysis
@@ -92,6 +111,7 @@ mypy:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
     when: always
 
+
 .pages:
   stage: deploy
   tags:
@@ -106,6 +126,7 @@ mypy:
   - rm -rf public
   - mv docs/build/html public
   - deactivate
+
 
 pages:
   extends: .pages
@@ -127,6 +148,7 @@ pages:
   artifacts:
     paths:
     - public
+
 
 mr-pages:
   extends: .pages

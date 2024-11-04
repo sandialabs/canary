@@ -631,6 +631,51 @@ def enable(*args: bool, when: Optional[WhenType] = None) -> None:
     """  # noqa: E501
 
 
+def include(file: str, *, when: Optional[WhenType] = None) -> None:
+    """Include the contents of ``file`` at the point where the directive appears.
+
+    Usage
+    -----
+
+    ``.pyt``: NA
+
+    ``.vvt``:
+
+    .. code-block:: python
+
+       #VVT: include (options=..., platforms=...) : file
+       #VVT: insert directive file (options=..., platforms=...) : file
+
+    Parameters
+    ----------
+
+    * ``file``: The file to include
+    * ``when``: Restrict processing of the directive to this condition
+
+    The ``when`` expression is limited to the following conditions:
+
+    * ``platforms``: Restrict processing of the directive to certain platform or platforms
+    * ``options``: Restrict processing of the directive to command line ``-o`` options
+
+    Notes
+    -----
+
+    * ``include``\ d files can ``include`` other files
+    * If ``file`` is a relative path, it is assumed relative to the file ``includ``\ing it
+    * The alias ``insert directive file`` is also recognized
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+       # VVT: include : file.txt
+
+    will include directives from ``file.txt`` into the current test.
+
+    """
+
+
 def keywords(*args: str, when: Optional[WhenType] = None) -> None:
     """Mark a test with keywords.  The main use of test keywords is to filter a
     set of tests, such as selecting which tests to run.
