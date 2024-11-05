@@ -15,7 +15,6 @@ _test-cache
 __pycache__
 .nvtest
 .mypy_cache
-vvt
 partition.p.*
 nvtest.cfg
 scripts/sbatch
