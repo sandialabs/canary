@@ -248,10 +248,6 @@ class PYTTestFile(AbstractTestGenerator):
                     match = m_when.when(f"parameters={parameter_expr!r}", parameters=parameters)
                     if not match:
                         case_mask = colorize("deselected due to @*b{parameter expression}")
-                attributes = self.attributes(
-                    testname=name, on_options=on_options, parameters=parameters
-                )
-
                 modules = self.modules(testname=name, on_options=on_options, parameters=parameters)
                 case = TestCase(
                     self.root,
@@ -286,6 +282,9 @@ class PYTTestFile(AbstractTestGenerator):
                     case.mask = case_mask
                 elif timeout is not None and timeout > 0 and case.runtime > timeout:
                     case.mask = "runtime exceeds time limit"
+                attributes = self.attributes(
+                    testname=name, on_options=on_options, parameters=parameters
+                )
                 for attr, value in attributes.items():
                     case.set_attribute(attr, value)
 
