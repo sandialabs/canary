@@ -38,3 +38,40 @@ def test_parse_parameterize_1():
     names, values, kwds = vvtest.p_PARAMETERIZE(args[0])
     assert names == ["np", "mesh_factor"]
     assert values == [[1, 1.0], [1, 0.5], [1, 0.25]]
+
+
+def test_csplit():
+    assert vvtest.csplit("1 , 1.0    1 , 0.5    1 , 0.25") == [[1, 1.0], [1, 0.5], [1, 0.25]]
+    assert vvtest.csplit("1 , baz    1 , 'foo'    5.0 , 0.25") == [
+        [1, "baz"],
+        [1, "foo"],
+        [5.0, 0.25],
+    ]
+    assert vvtest.csplit("spam , baz    \"eggs\" , 'foo'    wubble , 0.25") == [
+        ["spam", "baz"],
+        ["eggs", "foo"],
+        ["wubble", 0.25],
+    ]
+
+
+def test_parse_copy_rename():
+    s = """\
+#!/usr/bin/env python3
+# VVT: copy (rename) : foo, baz  spam   ,ham
+"""
+    commands = list(vvtest.p_VVT(s))
+    assert commands[0].command == "copy"
+    assert "rename" in commands[0].options
+    file_pairs = vvtest.csplit(commands[0].argument)
+    assert file_pairs == [["foo", "baz"], ["spam", "ham"]]
+
+
+def test_parse_baseline():
+    s = """\
+#!/usr/bin/env python3
+# VVT: baseline : foo, baz  spam   ,ham
+"""
+    commands = list(vvtest.p_VVT(s))
+    assert commands[0].command == "baseline"
+    file_pairs = vvtest.csplit(commands[0].argument)
+    assert file_pairs == [["foo", "baz"], ["spam", "ham"]]

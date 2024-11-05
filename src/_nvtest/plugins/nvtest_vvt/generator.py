@@ -9,6 +9,7 @@ import typing
 from functools import wraps
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from typing import Generator
 from typing import Optional
 from typing import Union
@@ -78,8 +79,7 @@ class VVTTestFile(PYTTestFile):
         kwds = dict(arg.options or {})
         if "rename" in kwds:
             kwds.pop("rename")
-            s = re.sub(r",\s*", ",", arg.argument)
-            file_pairs = [_.split(",") for _ in s.split()]
+            file_pairs = csplit(arg.argument)
             for file_pair in file_pairs:
                 if len(file_pair) != 2:
                     raise VVTParseError(
@@ -130,8 +130,7 @@ class VVTTestFile(PYTTestFile):
         """# VVT: baseline ( OPTIONS ) [:=] --FLAG
         | baseline ( OPTIONS ) [:=] file1,file2 file3,file4 ...
         """
-        argument = re.sub(r",\s*", ",", arg.argument)
-        file_pairs = [_.split(",") for _ in argument.split()]
+        file_pairs = csplit(arg.argument)
         for file_pair in file_pairs:
             if len(file_pair) == 1 and file_pair[0].startswith("--"):
                 self.m_baseline(when=arg.when, flag=file_pair[0], **arg.options)
@@ -163,6 +162,44 @@ class VVTTestFile(PYTTestFile):
         self.m_depends_on(arg.argument.strip(), when=arg.when, **arg.options)
 
 
+def csplit(text: str) -> list[Any]:
+    """Split on the pairing pattern.
+
+    a,b,c  d,e,f -> [[a, b, c], [d, e, f]]
+    """
+
+    def loadtoken(token: tokenize.TokenInfo) -> Union[int, float, str]:
+        if token.type == tokenize.NUMBER:
+            try:
+                return int(token.string)
+            except ValueError:
+                return float(token.string)
+        else:
+            return string.strip_quotes(token.string)
+
+    tokens = string.get_tokens(text)
+    stack: list[list[tokenize.TokenInfo]] = []
+    inner: list[tokenize.TokenInfo] = []
+    while True:
+        try:
+            token = next(tokens)
+        except StopIteration:
+            break
+        if token.type in (tokenize.ENDMARKER,):
+            stack.append(inner)
+            break
+        if token.type in (tokenize.NEWLINE, tokenize.ENCODING, tokenize.INDENT, tokenize.DEDENT):
+            continue
+        if token.type == tokenize.OP and token.string == ",":
+            inner.append(next(tokens))
+        else:
+            if inner:
+                stack.append(inner)
+            inner = [token]
+    result = [[loadtoken(token) for token in inner] for inner in stack]
+    return result
+
+
 non_code_token_nums = [
     getattr(tokenize, _)
     for _ in ("NL", "NEWLINE", "INDENT", "DEDENT", "ENCODING", "STRING", "COMMENT")
@@ -183,12 +220,12 @@ def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict]:
 
     """
     names_spec, values_spec = arg.argument.split("=", 1)
-    values_spec = re.sub(r"\s*,\s*", ",", values_spec)
     names = [_.strip() for _ in names_spec.split(",") if _.split()]
     values = []
-    for group in values_spec.split():
-        row = [loads(_) for _ in group.split(",") if _.split()]
+    for row in csplit(values_spec):
+        #    row = [loads(_) for _ in group.split(",") if _.split()]
         if len(row) != len(names):
+            print(row, names)
             raise VVTParseError(f"invalid parameterize command: {arg.line!r}", arg)
         values.append(row)
     kwds = dict(arg.options)

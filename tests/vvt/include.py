@@ -1,6 +1,7 @@
 import sys
-import nvtest
+
 import _nvtest.plugins.nvtest_vvt.generator as vvtest
+import nvtest
 from _nvtest.enums import list_parameter_space
 
 
