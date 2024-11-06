@@ -75,3 +75,16 @@ def test_parse_baseline():
     assert commands[0].command == "baseline"
     file_pairs = vvtest.csplit(commands[0].argument)
     assert file_pairs == [["foo", "baz"], ["spam", "ham"]]
+
+
+def test_parse_link_rename():
+    s = """\
+#!/usr/bin/env python3
+# VVT : link (rename) : 3DTmWave.g,3DTmWave.pregen.g
+"""
+    commands = list(vvtest.p_VVT(s))
+    assert commands[0].command == "link"
+    assert "rename" in commands[0].options
+    file_pairs = vvtest.csplit(commands[0].argument)
+    print(file_pairs)
+    assert file_pairs == [["3DTmWave.g", "3DTmWave.pregen.g"]]

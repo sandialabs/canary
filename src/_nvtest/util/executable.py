@@ -14,6 +14,20 @@ from . import logging
 
 
 class Executable:
+    """Create a callable object for the executable ``name``
+
+    Args:
+      name: The path to an executable which is run when called.  If ``name`` is not an absolute or
+        relative path on the filesystem, the path to the executable is looked for on ``PATH``.
+
+    Examples:
+
+      >>> ls = Executable("ls")
+      >>> result = ls("-la", stdout=os.devnull)
+      >>> result.returncode
+      0
+
+    """
     def __init__(self, name: Union[str, Path]) -> None:
         self.file = Executable.find(name)
         self.default_args: list[str] = []
@@ -22,6 +36,7 @@ class Executable:
 
     @staticmethod
     def find(name: Union[str, Path]) -> Path:
+        """Find the path to the command ``name``"""
         if is_executable(name):
             return Path(name).absolute()
         paths = [Path(p) for p in os.getenv("PATH", "").split(os.pathsep) if p.split()]
@@ -91,25 +106,25 @@ class Executable:
         """Run this executable in a subprocess.
 
         Args:
-            *args_in: Command-line arguments to the executable to run
+          *args_in: Command-line arguments to the executable to run
 
         Keyword Args:
-            env: The environment to run the executable with
-            fail_on_error: Raise an exception if the subprocess returns an error. Default is True.
-                The return code is available as ``exe.returncode``
-            expected_returncode: Expected returncode.  If ``expected_returncode < 0``, this process
-                will not raise an exception even if ``fail_on_error`` is set to ``True``
-            stdout: Where to send stdout
-            stderr: Where to send stderr
-            output: Alias for stdout
-            error: Alias for stderr
-            verbose: Write the command line to ``output``
+          env: The environment to run the executable with
+          fail_on_error: Raise an exception if the subprocess returns an error. Default is True.
+            The return code is available as ``exe.returncode``
+          expected_returncode: Expected returncode.  If ``expected_returncode < 0``, this process
+            will not raise an exception even if ``fail_on_error`` is set to ``True``
+          stdout: Where to send stdout
+          stderr: Where to send stderr
+          output: Alias for stdout
+          error: Alias for stderr
+          verbose: Write the command line to ``output``
 
         Returns:
-            result: A Result dataclass with the following members:
-                result.cmd: The command line
-                result.returncode: Exit code from subprocess
-                result.out, result.err: See discussion below
+          result: A Result dataclass with the following members:
+            result.cmd: The command line
+            result.returncode: Exit code from subprocess
+            result.out, result.err: See discussion below
 
         Accepted values for stdout and stderr:
 

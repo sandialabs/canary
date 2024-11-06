@@ -41,3 +41,4 @@ nvtest user's guide
 
    commands
    directives
+   util

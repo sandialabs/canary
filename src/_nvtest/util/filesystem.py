@@ -148,6 +148,7 @@ def synctree(
 
 
 def force_remove(file_or_dir: str) -> None:
+    """Remove ``file_or_dir`` forcefully"""
     try:
         remove(file_or_dir)
     except Exception:
@@ -155,7 +156,8 @@ def force_remove(file_or_dir: str) -> None:
 
 
 def force_copy(src: str, dst: str, echo: Callable = lambda x: None) -> None:
-    echo(f"link {src} -> {dst}\n")
+    """Forcefully copy ``src`` to ``dst``"""
+    echo(f"copy {src} -> {dst}\n")
     if os.path.isfile(src):
         remove(dst)
         copyfile(src, dst)
@@ -167,7 +169,7 @@ def force_copy(src: str, dst: str, echo: Callable = lambda x: None) -> None:
 
 
 def remove(file_or_dir: Union[pathlib.Path, str]) -> None:
-    """Removes file or directory `file_or_dir`"""
+    """Removes file or directory ``file_or_dir``"""
     path = pathlib.Path(file_or_dir)
     if path.is_symlink():
         os.remove(path)
@@ -226,11 +228,25 @@ def gettempdir(user: bool = False, suffix: Optional[str] = None) -> str:
 
 @contextmanager
 def tmpdir(remove: bool = True, suffix: Optional[str] = None) -> Generator[str, None, None]:
+    """Create a temporary directory and remove it when the context is exited
+
+    Keyword Args:
+      remove: remove the temporary directory when the context is exited
+      suffix: added to the end of the directory name
+
+    Examples:
+
+      >>> with tmpdir():
+      ...    # do work in temporary directory
+
+    """
     dirname = gettempdir(user=True, suffix=suffix)
-    mkdirp(dirname)
-    yield dirname
-    if remove:
-        rmtree2(dirname)
+    try:
+        mkdirp(dirname)
+        yield dirname
+    finally:
+        if remove:
+            rmtree2(dirname)
 
 
 def gethome() -> str:
@@ -239,6 +255,10 @@ def gethome() -> str:
 
 
 def filesize(filename: str, *, units: Optional[str] = None) -> int:
+    """Return ``filename``\ 's size.  If ``units`` is ``None``, the size in bytes is returned.
+    Valid ``units`` are ``kilobytes``, ``megabytes``, and ``gigabytes``.
+
+    """
     size_in_bytes = os.path.getsize(filename)
     if units == "kilobytes":
         return int(size_in_bytes / 1024)
@@ -251,6 +271,7 @@ def filesize(filename: str, *, units: Optional[str] = None) -> int:
 
 
 def git_revision(path: str) -> str:
+    """Get the git revision at ``path``.  Equivalent to ``git -C path rev-parse HEAD``"""
     from .executable import Executable
 
     f = which("git", required=True)
@@ -262,6 +283,7 @@ def git_revision(path: str) -> str:
 
 
 def file_age_in_days(file: str) -> float:
+    """Return the ``file``\ 's age in days"""
     now = datetime.datetime.now(datetime.timezone.utc)
     mtime = datetime.datetime.fromtimestamp(os.path.getmtime(file), datetime.timezone.utc)
     delta = now - mtime
@@ -269,6 +291,7 @@ def file_age_in_days(file: str) -> float:
 
 
 def sortby_mtime(files: list[str]) -> list[str]:
+    """Sort the list of ``files`` by ``mtime``."""
     return sorted(files, key=os.path.getmtime)
 
 
@@ -292,6 +315,8 @@ def touchp(path: str) -> None:
 
 @contextmanager
 def working_dir(dirname: str, create: bool = False) -> Generator[None, None, None]:
+    """Context manager that changes the working directory to ``dirname`` and returns to the calling
+    directory when the context is exited"""
     if create:
         mkdirp(dirname)
 
@@ -325,6 +350,7 @@ def mkdirp(*paths: str, mode: Optional[int] = None) -> None:
 
 
 def set_executable(path: str) -> None:
+    """Set executable bits on ``path``"""
     mode = os.stat(path).st_mode
     if mode & stat.S_IRUSR:
         mode |= stat.S_IXUSR
@@ -341,6 +367,7 @@ def is_exe(path: str) -> bool:
 
 
 def force_symlink(src: str, dest: str, echo: Callable = lambda x: None) -> None:
+    """Forcefully create a symbolic link from ``src`` to ``dest``"""
     echo(f"link {src} -> {dest}\n")
     try:
         os.symlink(src, dest)
@@ -355,10 +382,12 @@ def accessible(file_name: str) -> bool:
 
 
 def readable(file_name: str) -> bool:
+    """True if we have read access to the file."""
     return os.access(file_name, os.R_OK)
 
 
 def writeable(file_name: str) -> bool:
+    """True if we have write access to the file."""
     return os.access(file_name, os.W_OK)
 
 
@@ -385,6 +414,7 @@ def chmod_x(entry: str, perms: int) -> None:
 
 
 def samepath(path1: str, path2: str) -> bool:
+    """Does ``path1`` point to the same path as ``path2``?"""
     return os.path.normpath(path1) == os.path.normpath(path2)
 
 

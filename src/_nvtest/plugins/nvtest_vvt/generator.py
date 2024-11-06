@@ -167,37 +167,9 @@ def csplit(text: str) -> list[Any]:
 
     a,b,c  d,e,f -> [[a, b, c], [d, e, f]]
     """
-
-    def loadtoken(token: tokenize.TokenInfo) -> Union[int, float, str]:
-        if token.type == tokenize.NUMBER:
-            try:
-                return int(token.string)
-            except ValueError:
-                return float(token.string)
-        else:
-            return string.strip_quotes(token.string)
-
-    tokens = string.get_tokens(text)
-    stack: list[list[tokenize.TokenInfo]] = []
-    inner: list[tokenize.TokenInfo] = []
-    while True:
-        try:
-            token = next(tokens)
-        except StopIteration:
-            break
-        if token.type in (tokenize.ENDMARKER,):
-            stack.append(inner)
-            break
-        if token.type in (tokenize.NEWLINE, tokenize.ENCODING, tokenize.INDENT, tokenize.DEDENT):
-            continue
-        if token.type == tokenize.OP and token.string == ",":
-            inner.append(next(tokens))
-        else:
-            if inner:
-                stack.append(inner)
-            inner = [token]
-    result = [[loadtoken(token) for token in inner] for inner in stack]
-    return result
+    # first remove any space around ``,`` so that we can split on white space
+    text = re.sub(r"\s*,\s*", ",", text)
+    return [[loads(_.strip()) for _ in group.split(",")] for group in text.split()]
 
 
 non_code_token_nums = [
@@ -223,7 +195,6 @@ def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict]:
     names = [_.strip() for _ in names_spec.split(",") if _.split()]
     values = []
     for row in csplit(values_spec):
-        #    row = [loads(_) for _ in group.split(",") if _.split()]
         if len(row) != len(names):
             print(row, names)
             raise VVTParseError(f"invalid parameterize command: {arg.line!r}", arg)
@@ -402,6 +373,7 @@ def importable(module_name: str) -> bool:
 
 def loads(arg: str) -> Union[int, float, str]:
     x: Union[scalar.Integer, scalar.Float, scalar.String]
+    arg = string.strip_quotes(arg)
     try:
         x = scalar.Integer(arg)
     except ValueError:
