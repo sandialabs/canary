@@ -34,22 +34,16 @@ nvtest.directives.parameterize(
     [1],
     when="testname='run_cubit or run_seacas or run_sceptre or run_cable or plot_cable'",
 )
-nvtest.directives.parameterize(
-    "mesh_level", [1, 2, 3], when="testname=run_cable_pregen"
-)
+nvtest.directives.parameterize("mesh_level", [1, 2, 3], when="testname=run_cable_pregen")
 nvtest.directives.link("../../preload")
 nvtest.directives.name("create_inputs")
-nvtest.directives.preload(
-    "preload/empire_env.sh", source=True, when="testname=create_inputs"
-)
+nvtest.directives.preload("source-script preload/empire_env.sh", when="testname=create_inputs")
 nvtest.directives.link("spectra", "cables", when="testname=create_inputs")
 nvtest.directives.timeout(300, when="testname=create_inputs")
 nvtest.directives.keywords("cce", when="testname=create_inputs")
 nvtest.directives.parameterize("np", [1], when="testname=create_inputs")
 nvtest.directives.name("run_cepxs")
-nvtest.directives.preload(
-    "preload/sceptre_env.sh", source=True, when="testname=run_cepxs"
-)
+nvtest.directives.preload("source-script preload/sceptre_env.sh", when="testname=run_cepxs")
 nvtest.directives.depends_on(
     "create_inputs.*cable=${cable}*.spectrum=${spectrum}",
     when="testname=run_cepxs",
@@ -61,9 +55,7 @@ nvtest.directives.keywords("cce", "cepxs", when="testname=run_cepxs")
 nvtest.directives.parameterize("np", [1], when="testname=run_cepxs")
 nvtest.directives.name("run_cubit")
 nvtest.directives.link("cables", when="testname=run_cubit")
-nvtest.directives.preload(
-    "preload/empire_env.sh", source=True, when="testname=run_cubit"
-)
+nvtest.directives.preload("source-script preload/empire_env.sh", when="testname=run_cubit")
 nvtest.directives.timeout(300, when="testname=run_cubit")
 nvtest.directives.keywords("cce", "cubit", when="testname=run_cubit")
 nvtest.directives.parameterize("np", [1], when="testname=run_cubit")
@@ -74,18 +66,12 @@ nvtest.directives.depends_on(
     expect=1,
     result="pass",
 )
-nvtest.directives.preload(
-    "preload/empire_env.sh", source=True, when="testname=run_seacas"
-)
+nvtest.directives.preload("source-script preload/empire_env.sh", when="testname=run_seacas")
 nvtest.directives.timeout(300, when="testname=run_seacas")
 nvtest.directives.keywords("cce", "seacas", when="testname=run_seacas")
 nvtest.directives.parameterize("np", [1], when="testname=run_seacas")
-nvtest.directives.parameterize(
-    "target_np", [72], when="testname=run_seacas platforms='not TLCC2'"
-)
-nvtest.directives.parameterize(
-    "target_np", [64], when="testname=run_seacas platforms=TLCC2"
-)
+nvtest.directives.parameterize("target_np", [72], when="testname=run_seacas platforms='not TLCC2'")
+nvtest.directives.parameterize("target_np", [64], when="testname=run_seacas platforms=TLCC2")
 nvtest.directives.name("run_sceptre")
 nvtest.directives.depends_on(
     "create_inputs.*cable=${cable}.*spectrum=${spectrum}",
@@ -105,14 +91,10 @@ nvtest.directives.depends_on(
     expect=1,
     result="pass",
 )
-nvtest.directives.preload(
-    "preload/sceptre_env.sh", source=True, when="testname=run_sceptre"
-)
+nvtest.directives.preload("source-script preload/sceptre_env.sh", when="testname=run_sceptre")
 nvtest.directives.timeout(10800, when="testname=run_sceptre")
 nvtest.directives.keywords("cce", "sceptre", when="testname=run_sceptre")
-nvtest.directives.parameterize(
-    "np", [72], when="testname=run_sceptre platforms='not TLCC2'"
-)
+nvtest.directives.parameterize("np", [72], when="testname=run_sceptre platforms='not TLCC2'")
 nvtest.directives.parameterize("np", [64], when="testname=run_sceptre platforms=TLCC2")
 nvtest.directives.name("run_cable")
 nvtest.directives.name("run_cable_pregen")
@@ -128,9 +110,7 @@ nvtest.directives.depends_on(
     expect=1,
     result="pass",
 )
-nvtest.directives.preload(
-    "preload/empire_env.sh", source=True, when="testname='run_cable*'"
-)
+nvtest.directives.preload("source-script preload/empire_env.sh", when="testname='run_cable*'")
 nvtest.directives.keywords("cce", when="testname='run_cable*'")
 nvtest.directives.timeout(900, when="testname='run_cable*'")
 nvtest.directives.link("cables", "spectra", "experiments", when="testname='run_cable*'")
@@ -144,9 +124,7 @@ nvtest.directives.depends_on(
     expect=3,
     result="pass",
 )
-nvtest.directives.preload(
-    "preload/empire_env.sh", source=True, when="testname=sver_pregen"
-)
+nvtest.directives.preload("source-script preload/empire_env.sh", when="testname=sver_pregen")
 nvtest.directives.keywords(
     "empire",
     "empire-cable",
@@ -157,9 +135,7 @@ nvtest.directives.keywords(
     when="testname='sver_pregen*'",
 )
 nvtest.directives.parameterize("np", [1], when="testname=sver_pregen options='not gpu'")
-nvtest.directives.parameterize(
-    "np,ndevice", [[1, 1]], when="testname=sver_pregen options=gpu"
-)
+nvtest.directives.parameterize("np,ndevice", [[1, 1]], when="testname=sver_pregen options=gpu")
 sys.dont_write_bytecode = True
 
 if __name__ == "__main__":

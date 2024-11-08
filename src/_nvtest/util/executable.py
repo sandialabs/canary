@@ -28,6 +28,7 @@ class Executable:
       0
 
     """
+
     def __init__(self, name: Union[str, Path]) -> None:
         self.file = Executable.find(name)
         self.default_args: list[str] = []

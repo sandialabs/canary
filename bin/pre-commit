@@ -16,6 +16,7 @@ echo ""
 echo "======================"
 echo "ruff: formatting tests"
 echo "======================"
+find tests -name "*.pyt" | xargs ruff format
 ruff format tests
 
 echo ""
@@ -35,6 +36,7 @@ echo ""
 echo "===================="
 echo "ruff: checking tests"
 echo "===================="
+find tests -name "*.pyt" | xargs ruff check --fix
 ruff check --fix tests
 
 echo ""
