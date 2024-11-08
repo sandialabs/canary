@@ -1,5 +1,9 @@
 # CHANGE LOG
 
+## Nov 2024
+
+- Support vvtest dynamic dependency and parameter generation
+
 ## Oct 2024
 
 - Move main repo to https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest
