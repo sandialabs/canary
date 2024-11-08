@@ -659,6 +659,9 @@ def setup(case: "TestCase") -> None:
 @nvtest.plugin.register(scope="test", stage="prelaunch")
 def prelaunch(case: "TestCase", stage: str = "test") -> None:
     write_vvtest_util(case, stage=stage)
+    # symlink the test file before test is run for tests needing it
+    f = os.path.join(case.exec_dir, "execute.log")
+    nvtest.filesystem.force_symlink(case.logfile(stage), f)
 
 
 @nvtest.plugin.register(scope="test", stage="finish")

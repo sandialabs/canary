@@ -9,7 +9,7 @@ def test():
     x = param_map[vvt.np]
     basename = os.path.basename(vvt.exec_path)
     assert os.path.basename(vvt.exec_path).endswith(f"np={vvt.np}.x={x}")
-    assert vvt.x == float(x)
+    assert vvt.x == x
 
 
 if __name__ == "__main__":
