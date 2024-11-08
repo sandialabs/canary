@@ -2,6 +2,10 @@
 These classes are used when reading vvtest .vvt files so that a 'string'
 property can be added and later used to create test case execution directories"""
 
+from typing import Union
+
+from .string import strip_quotes
+
 
 class Float(float):
     @property
@@ -31,3 +35,24 @@ class String(str):
     @string.setter
     def string(self, arg: str) -> None:
         self._string = arg
+
+
+def cast(arg: str, type: str) -> Union[Integer, Float, String]:
+    assert type in ("autotype", "str", "float", "int")
+    x: Union[Integer, Float, String]
+    if type == "str":
+        x = String(strip_quotes(arg))
+    elif type == "int":
+        x = Integer(float(arg))
+    elif type == "float":
+        x = Float(arg)
+    else:
+        try:
+            x = Integer(arg)
+        except ValueError:
+            try:
+                x = Float(arg)
+            except ValueError:
+                x = String(arg)
+    x.string = arg
+    return x

@@ -3,10 +3,12 @@ import io
 import json
 import os
 import re
+import shlex
 import sys
 import tokenize
 import typing
 from functools import wraps
+from itertools import repeat
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -25,6 +27,8 @@ from _nvtest.third_party.color import colorize
 from _nvtest.util import logging
 from _nvtest.util import scalar
 from _nvtest.util import string
+from _nvtest.util.executable import Executable
+from _nvtest.util.filesystem import working_dir
 
 
 class VVTTestFile(PYTTestFile):
@@ -54,7 +58,7 @@ class VVTTestFile(PYTTestFile):
                     self.f_ENABLE(arg)
                 case "depends_on":
                     self.f_DEPENDS_ON(arg)
-                case "include" | "insert directive file":
+                case "include" | "insert_directive_file":
                     raise VVTParseError(
                         f"{arg.command}: include file should have already been included!", arg
                     )
@@ -89,18 +93,30 @@ class VVTTestFile(PYTTestFile):
                 fun(src=file_pair[0], dst=file_pair[1], when=arg.when, **kwds)  # type: ignore
         else:
             files = arg.argument.split()
-            fun(*files, when=arg.when, **arg.options)  # type: ignore
+            fun(*files, when=arg.when, **kwds)  # type: ignore
 
     def f_PRELOAD(self, arg: SimpleNamespace) -> None:
         assert arg.command == "preload"
-        parts = arg.argument.split()
-        if parts[0] == "source-script":
-            arg.argument = parts[1]
-            arg.options["source"] = True
-        self.m_preload(arg.argument, when=arg.when, **arg.options)  # type: ignore
+        options = dict(arg.options)
+        self.m_preload(arg.argument, when=arg.when, **options)  # type: ignore
 
     def f_PARAMETERIZE(self, arg: SimpleNamespace) -> None:
-        names, values, kwds = p_PARAMETERIZE(arg)
+        names, values, kwds, deps = p_PARAMETERIZE(arg)
+        if deps:
+            # construct a dependency for each case in values
+            assert len(deps) == len(values)
+            for i, dep in enumerate(deps):
+                if dep is None:
+                    continue
+                # when expression ensures that dependencies added below are assigned to the ith
+                # test case
+                if isinstance(dep, str):
+                    self.m_depends_on(dep, when=arg.when)
+                else:
+                    assert isinstance(dep, dict)
+                    for dep_name, dep_params in dep.items():
+                        p = ".".join(f"{k}={dep_params[k]}" for k in sorted(dep_params))
+                        self.m_depends_on(f"{dep_name}.{p}", when=arg.when)
         self.m_parameterize(list(names), values, when=arg.when, **kwds)
 
     def f_ANALYZE(self, arg: SimpleNamespace) -> None:
@@ -131,13 +147,14 @@ class VVTTestFile(PYTTestFile):
         | baseline ( OPTIONS ) [:=] file1,file2 file3,file4 ...
         """
         file_pairs = csplit(arg.argument)
+        options = dict(arg.options)
         for file_pair in file_pairs:
             if len(file_pair) == 1 and file_pair[0].startswith("--"):
-                self.m_baseline(when=arg.when, flag=file_pair[0], **arg.options)
+                self.m_baseline(when=arg.when, flag=file_pair[0], **options)
             elif len(file_pair) != 2:
                 raise VVTParseError(f"invalid baseline command: {arg.line!r}", arg)
             else:
-                self.m_baseline(file_pair[0], file_pair[1], when=arg.when, **arg.options)
+                self.m_baseline(file_pair[0], file_pair[1], when=arg.when, **options)
 
     def f_ENABLE(self, arg: SimpleNamespace) -> None:
         """# VVT: enable ( OPTIONS ) [:=] BOOL"""
@@ -147,9 +164,10 @@ class VVTTestFile(PYTTestFile):
             arg.argument = False
         elif arg.argument is None:
             arg.argument = True
-        # if arg.options.get("platforms") == "":
-        #    arg.options["platforms"] = "__"
-        self.m_enable(arg.argument, when=arg.when, **arg.options)
+        options = dict(arg.options)
+        # if options.get("platforms") == "":
+        #    options["platforms"] = "__"
+        self.m_enable(arg.argument, when=arg.when, **options)
 
     def f_NAME(self, arg: SimpleNamespace) -> None:
         """# VVT: name ( OPTIONS ) [:=] NAME"""
@@ -157,19 +175,36 @@ class VVTTestFile(PYTTestFile):
 
     def f_DEPENDS_ON(self, arg: SimpleNamespace) -> None:
         """# VVT: depends on ( OPTIONS ) [:=] STRING"""
-        if "expect" in arg.options:
-            arg.options["expect"] = int(arg.options["expect"])
-        self.m_depends_on(arg.argument.strip(), when=arg.when, **arg.options)
+        options = dict(arg.options)
+        if "expect" in options:
+            options["expect"] = int(options["expect"])
+        self.m_depends_on(arg.argument.strip(), when=arg.when, **options)
 
 
 def csplit(text: str) -> list[Any]:
     """Split on the pairing pattern.
 
-    a,b,c  d,e,f -> [[a, b, c], [d, e, f]]
+    .. code-block:: console
+
+       a,b,c  d,e,f -> [[a, b, c], [d, e, f]]
+
+    also:
+
+    .. code-block:: console
+
+       a , b,   c  d   ,e  ,  f -> [[a, b, c], [d, e, f]]
+
+    The following will not split properly without more complicated code:
+
+    .. code-block:: console
+
+       a , "b , 0",   c  d   ,e  ,  f !-> [[a, 'b , 0', c], [d, e, f]]
+
     """
     # first remove any space around ``,`` so that we can split on white space
-    text = re.sub(r"\s*,\s*", ",", text)
-    return [[loads(_.strip()) for _ in group.split(",")] for group in text.split()]
+    s = re.sub(r"\s*,\s*", ",", text)
+    groups = s.split()
+    return [[string.strip_quotes(entry.strip()) for entry in group.split(",")] for group in groups]
 
 
 non_code_token_nums = [
@@ -184,26 +219,72 @@ COLON = ":"
 EQUAL = "="
 
 
-def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict]:
+def p_GEN_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, Optional[list]]:
+    """# VVT: parameterize ( OPTIONS,generator ) [:=] script [--options]"""
+    script, *opts = shlex.split(arg.argument)
+    if script in ("python", "python3"):
+        script = sys.executable
+    with working_dir("." if arg.file == "<string>" else os.path.dirname(arg.file)):
+        exe = Executable(script)
+        result = exe(*opts, stdout=str)
+    output = [json.loads(_.strip()) for _ in result.get_output().splitlines() if _.split()]
+    names = list(output[0][0].keys())
+    values = []
+    for params in output[0]:
+        values.append([params[name] for name in names])
+    kwds: dict[str, Any] = {}
+    kwds["type"] = list_parameter_space
+    for opt, value in arg.options:
+        if opt in ("autotype", "int", "float", "str"):
+            logging.warning(f"skipping parameter type {opt!r} -- type deduced by json generation")
+        else:
+            kwds[opt] = value
+    assert kwds.pop("generator", None) is not None
+    deps: Optional[list] = None
+    if len(output) == 2:
+        deps = output[1]
+        assert isinstance(deps, list)
+        if len(deps) != len(values):
+            raise VVTParseError("number of deps must equal number of parameterizations", arg)
+    return names, values, kwds, deps
+
+
+def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, Optional[list]]:
     """# VVT: parameterize ( OPTIONS ) [:=] names_spec = values_spec
 
     names_spec: name1,name2,...
     values_spec: val1_1,val2_1,... val1_2,val2_2,... ...
 
     """
+    if "generator" in [opt[0] for opt in arg.options]:
+        return p_GEN_PARAMETERIZE(arg)
+
     names_spec, values_spec = arg.argument.split("=", 1)
     names = [_.strip() for _ in names_spec.split(",") if _.split()]
+    types: list[str] = []
+    kwds: dict[str, Any] = {}
+    kwds["type"] = list_parameter_space
+    for opt, value in arg.options:
+        if opt in ("autotype", "int", "float", "str"):
+            assert value is True
+            types.append(opt)
+        else:
+            kwds[opt] = value
+    if not types:
+        types = list(repeat("str", len(names)))
+    elif len(types) == 1:
+        types = list(repeat(types[0], len(names)))
+    elif len(types) != len(names):
+        raise VVTParseError(f"incorrect number of parameter types: {arg.line!r}", arg)
+    for i, name in enumerate(names):
+        if name in ("np", "ngpu", "ndevice", "nnode"):
+            types[i] = "int"
     values = []
     for row in csplit(values_spec):
         if len(row) != len(names):
-            print(row, names)
             raise VVTParseError(f"invalid parameterize command: {arg.line!r}", arg)
-        values.append(row)
-    kwds = dict(arg.options)
-    for key in ("autotype", "int", "float", "str"):
-        kwds.pop(key, None)
-    kwds["type"] = list_parameter_space
-    return names, values, kwds
+        values.append([scalar.cast(row[i], type) for i, type in enumerate(types)])
+    return names, values, kwds, None
 
 
 def p_LINE(file: Union[Path, str], line: str) -> Optional[SimpleNamespace]:
@@ -222,7 +303,8 @@ def p_LINE(file: Union[Path, str], line: str) -> Optional[SimpleNamespace]:
     command = "_".join(cmd_stack)
 
     # Look for option block and parse it
-    options = {}
+    options = []
+    filter_opts = {}
     if (token.type, token.string) == (tokenize.OP, LPAREN):
         # Entering an option block, look for closing paren and parse everything in between
         level, option_tokens = 1, []
@@ -237,9 +319,15 @@ def p_LINE(file: Union[Path, str], line: str) -> Optional[SimpleNamespace]:
         else:
             msg = "failed to find end of options in {0} at line {1} of {2}"
             raise ParseError(msg.format(line, token.start[0], filename))
-        options.update(p_OPTIONS(filename, option_tokens))
+        f_opts = p_OPTIONS(filename, option_tokens)
+        for opt, val in f_opts:
+            if opt in ("testname", "parameters", "options", "platforms"):
+                filter_opts[opt] = val
+            else:
+                options.append((opt, val))
         token = next(tokens)
-    when = make_when_expr(options)
+
+    when = make_when_expr(filter_opts)
 
     # Everything left over is the args
     args = None
@@ -266,7 +354,7 @@ def p_VVT(filename: Union[Path, str]) -> Generator[SimpleNamespace, None, None]:
     lines, line_no = find_vvt_lines(filename)
     for line in lines:
         ns = p_LINE(filename, line)
-        if ns and ns.command in ("include", "insert directive file"):
+        if ns and ns.command in ("include", "insert_directive_file"):
             inc_file = ns.argument.strip()
             if not os.path.exists(inc_file) and not os.path.isabs(inc_file):
                 inc_file = os.path.join(os.path.dirname(filename), inc_file)
@@ -284,12 +372,11 @@ def p_VVT(filename: Union[Path, str]) -> Generator[SimpleNamespace, None, None]:
             yield ns
 
 
-def make_when_expr(options):
+def make_when_expr(options: dict) -> str:
     when_expr = io.StringIO()
     wildcards = "*?=><!"
-    for key in list(options.keys()):
+    for key, value in options.items():
         if key in ("testname", "parameters", "options", "platforms"):
-            value = options.pop(key)
             when_expr.write(f"{key}=")
             if len(value.split()) > 1 or any([_ in value for _ in wildcards]):
                 when_expr.write(f"{value!r} ")
@@ -325,19 +412,25 @@ def find_vvt_lines(filename: Union[Path, str]) -> tuple[list[str], int]:
     return lines, token.start[0]
 
 
-def p_OPTION(filename: str, tokens: list[tokenize.TokenInfo]) -> tuple[str, object]:
+def p_OPTION(filename: str, tokens: list[tokenize.TokenInfo]) -> tuple[str, Any]:
     """OPTION : NAME [true]
     | NAME EQUAL VALUE
     """
+
+    def swap_alias(alias):
+        if alias in ("option", "platform", "parameter"):
+            return alias + "s"
+        return alias
+
     token = tokens[0]
     if token.type != tokenize.NAME:
         raise ParseError(f"Error parsing token {token!r} in {filename}")
     name = token.string
     if len(tokens) == 1:
-        return name, True
+        return swap_alias(name), True
     token = tokens[1]
     if token.type == tokenize.NEWLINE:
-        return name, True
+        return swap_alias(name), True
     if (token.type, token.string) != (tokenize.OP, EQUAL):
         raise ParseError(f"Error parsing token {token!r} in {filename}")
     value = ""
@@ -345,25 +438,21 @@ def p_OPTION(filename: str, tokens: list[tokenize.TokenInfo]) -> tuple[str, obje
         if token.type == tokenize.NEWLINE:
             break
         value += f" {token.string}"
-    return name, string.strip_quotes(value.strip())
+    return swap_alias(name), string.strip_quotes(value.strip())
 
 
-def p_OPTIONS(filename: str, tokens: list[tokenize.TokenInfo]) -> dict[str, object]:
+def p_OPTIONS(filename: str, tokens: list[tokenize.TokenInfo]) -> list[tuple[str, Any]]:
     """OPTIONS : OPTION COMMA OPTION ..."""
-    u_options: list[tuple[str, object]] = []
+    options: list[tuple[str, Any]] = []
     opt_tokens: list[tokenize.TokenInfo] = []
     for token in tokens:
         if (token.type, token.string) == (tokenize.OP, COMMA):
-            u_options.append(p_OPTION(filename, opt_tokens))
+            options.append(p_OPTION(filename, opt_tokens))
             opt_tokens = []
         else:
             opt_tokens.append(token)
     if opt_tokens:
-        u_options.append(p_OPTION(filename, opt_tokens))
-    options = dict(u_options)
-    for name in ("option", "platform", "parameter"):
-        if name in options:
-            options[f"{name}s"] = options.pop(name)
+        options.append(p_OPTION(filename, opt_tokens))
     return options
 
 
@@ -371,21 +460,7 @@ def importable(module_name: str) -> bool:
     return importlib.util.find_spec(module_name) is not None
 
 
-def loads(arg: str) -> Union[int, float, str]:
-    x: Union[scalar.Integer, scalar.Float, scalar.String]
-    arg = string.strip_quotes(arg)
-    try:
-        x = scalar.Integer(arg)
-    except ValueError:
-        try:
-            x = scalar.Float(arg)
-        except ValueError:
-            x = scalar.String(arg)
-    x.string = arg
-    return x
-
-
-def safe_eval(expression: str) -> object:
+def safe_eval(expression: str) -> Any:
     globals = {"os": os, "sys": sys, "importable": importable}
     return eval(expression, globals, {})
 
@@ -414,7 +489,8 @@ def evaluate_boolean_expression(expression: str) -> Union[bool, None]:
 @cached
 def p_SKIPIF(arg: SimpleNamespace) -> tuple[bool, str]:
     expression = arg.argument
-    reason = str(arg.options.get("reason") or "")
+    options = dict(arg.options)
+    reason = str(options.get("reason") or "")
     skip = evaluate_boolean_expression(expression)
     if skip is None:
         raise VVTParseError(f"failed to evaluate the expression {expression!r}", arg)

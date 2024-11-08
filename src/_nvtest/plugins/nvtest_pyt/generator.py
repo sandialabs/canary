@@ -622,8 +622,8 @@ class PYTTestFile(AbstractTestGenerator):
         ns = FilterNamespace(arg, when=when, result=result, expect=expect)
         self._depends_on.append(ns)
 
-    def m_preload(self, arg: str, when: Optional[WhenType] = None, source: bool = False) -> None:
-        ns = FilterNamespace(arg, when=when, source=source)
+    def m_preload(self, arg: str, when: Optional[WhenType] = None) -> None:
+        ns = FilterNamespace(arg, when=when)
         self._preload = ns
 
     def m_module(
@@ -660,7 +660,7 @@ class PYTTestFile(AbstractTestGenerator):
                 file=self.file,
             )
         for row in pset:
-            for key, value in row:
+            for i, (key, value) in enumerate(row):
                 if key in ("np", "ngpu", "ndevice", "nnode"):
                     if not isinstance(value, int):
                         raise ValueError(
@@ -911,8 +911,8 @@ class PYTTestFile(AbstractTestGenerator):
     ) -> None:
         self.m_parameterize(names, values, when=when, type=type)
 
-    def f_preload(self, arg: str, *, when: Optional[WhenType] = None, source: bool = False):
-        self.m_preload(arg, when=when, source=source)
+    def f_preload(self, arg: str, *, when: Optional[WhenType] = None):
+        self.m_preload(arg, when=when)
 
     def f_load_module(
         self, arg: str, *, when: Optional[WhenType] = None, use: Optional[str] = None
