@@ -146,9 +146,22 @@ class Manager:
             if resource.name.startswith("nvtest_"):
                 importlib.import_module(f".{resource.name}", "_nvtest.plugins")
 
-    def load_from_directory(self, path: str) -> None:
-        for file in glob.glob(os.path.join(path, "nvtest_*.py")):
-            self.load_from_file(file)
+    def load_from_env(self) -> None:
+        if "NVTEST_PLUGINS" in os.environ:
+            for path in os.environ["NVTEST_PLUGINS"].split(":"):
+                if os.path.exists(path):
+                    self.load_from_path(path)
+                else;
+                    logging.warning(f"{path}: plugin path not found")
+
+    def load_from_path(self, path: str) -> None:
+        if os.path.isfile(path):
+            self.load_from_file(path)
+        elif os.path.isdir(path):
+            for file in glob.glob(os.path.join(path, "nvtest_*.py")):
+                self.load_from_file(file)
+        else:
+            raise ValueError(f"No such file or directory: {path!r}")
 
     def load_from_file(self, file: Union[Path, str]) -> None:
         file = Path(file)
@@ -288,9 +301,9 @@ def load_from_entry_points(disable: Optional[list[str]] = None) -> None:
     _manager.load_from_entry_points(disable=disable)
 
 
-def load_from_directory(path: str) -> None:
+def load_from_path(path: str) -> None:
     logging.debug(f"Loading plugins from {path}")
-    _manager.load_from_directory(path)
+    _manager.load_from_path(path)
 
 
 def getstate() -> dict[str, Any]:

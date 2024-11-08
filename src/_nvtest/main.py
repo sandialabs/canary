@@ -195,7 +195,7 @@ def load_plugins(paths: list[str]) -> None:
     plugin.load_from_entry_points(disable=disable)
     for dir in dirs:
         path = os.path.abspath(dir)
-        plugin.load_from_directory(path)
+        plugin.load_from_path(path)
 
 
 def console_main() -> int:
