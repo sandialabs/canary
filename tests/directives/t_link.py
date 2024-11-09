@@ -58,6 +58,7 @@ import os
 import sys
 import nvtest
 nvtest.directives.parameterize('a', ('baz', 'foo'))
+nvtest.directives.parameterize('b', (1, 2))
 nvtest.directives.link('foo.txt', when={'parameters': 'a=foo'})
 nvtest.directives.link('baz.txt', when='parameters="a=baz"')
 def test():
@@ -72,10 +73,10 @@ if __name__ == '__main__':
             )
         python = Executable(sys.executable)
         python("-m", "nvtest", "run", "-w", ".", fail_on_error=False)
-        assert os.path.exists(os.path.join(tmpdir, "TestResults/a.a=baz/baz.txt"))
-        assert not os.path.exists(os.path.join(tmpdir, "TestResults/a.a=baz/foo.txt"))
-        assert os.path.exists(os.path.join(tmpdir, "TestResults/a.a=foo/foo.txt"))
-        assert not os.path.exists(os.path.join(tmpdir, "TestResults/a.a=foo/baz.txt"))
+        assert os.path.exists(os.path.join(tmpdir, "TestResults/a.a=baz.b=1/baz.txt"))
+        assert not os.path.exists(os.path.join(tmpdir, "TestResults/a.a=baz.b=1/foo.txt"))
+        assert os.path.exists(os.path.join(tmpdir, "TestResults/a.a=foo.b=1/foo.txt"))
+        assert not os.path.exists(os.path.join(tmpdir, "TestResults/a.a=foo.b=1/baz.txt"))
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")
             raise ValueError(f"test failed. files in exec_dir: {files}")
