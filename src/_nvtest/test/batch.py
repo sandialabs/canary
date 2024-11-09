@@ -1,6 +1,6 @@
 import os
 from typing import Optional
-from typing import Union
+from typing import Sequence
 
 from .. import config
 from ..atc import AbstractTestCase
@@ -23,7 +23,7 @@ class TestBatch(AbstractTestCase):
 
     def __init__(
         self,
-        cases: Union[list[TestCase], set[TestCase]],
+        cases: Sequence[TestCase],
         batch_no: int,
         nbatches: int,
         lot_no: int = 1,
@@ -77,7 +77,7 @@ class TestBatch(AbstractTestCase):
             "NVTEST_BATCH_LENGTH": None,
         }
 
-    def validate(self, cases: Union[list[TestCase], set[TestCase]]):
+    def validate(self, cases: Sequence[TestCase]):
         errors = 0
         for case in cases:
             if case.mask:
@@ -131,7 +131,7 @@ class TestBatch(AbstractTestCase):
         return self._status
 
     @status.setter
-    def status(self, arg: Union[Status, dict[str, str]]) -> None:
+    def status(self, arg: Status | dict[str, str]) -> None:
         if isinstance(arg, Status):
             self._status.set(arg.value, details=arg.details)
         else:

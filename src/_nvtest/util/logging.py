@@ -11,7 +11,6 @@ from typing import Any
 from typing import Generator
 from typing import Optional
 from typing import TextIO
-from typing import Union
 
 from ..third_party.color import cescape
 from ..third_party.color import clen
@@ -255,7 +254,7 @@ def fileno(file_or_fd):
     return file_or_fd.fileno()
 
 
-def streamify(arg: Union[TextIO, str], mode: str) -> tuple[IO[Any], bool]:
+def streamify(arg: TextIO | str, mode: str) -> tuple[IO[Any], bool]:
     if isinstance(arg, str):
         return open(arg, mode), True
     else:
@@ -264,7 +263,7 @@ def streamify(arg: Union[TextIO, str], mode: str) -> tuple[IO[Any], bool]:
 
 @contextmanager
 def redirect_stdout(
-    to: Union[str, IO[Any]] = os.devnull, stdout: Optional[TextIO] = None
+    to: str | IO[Any] = os.devnull, stdout: Optional[TextIO] = None
 ) -> Generator[TextIO, None, None]:
     stdout = stdout or sys.stdout
     stdout_fd = fileno(stdout)
@@ -287,7 +286,7 @@ def merged_stderr_stdout():  # $ exec 2>&1
 
 
 @contextmanager
-def capture(file_like: Union[str, TextIO], mode: str = "w") -> Generator[None, None, None]:
+def capture(file_like: str | TextIO, mode: str = "w") -> Generator[None, None, None]:
     if file_like is None:
         yield
     else:

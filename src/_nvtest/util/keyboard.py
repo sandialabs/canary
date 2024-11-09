@@ -4,7 +4,6 @@ import os
 import sys
 import termios
 from typing import Optional
-from typing import Union
 
 DISABLE_KEYBOARD_QUERY: Optional[bool] = None
 
@@ -43,7 +42,7 @@ def key_mapping(char: str) -> str:
     return mapping.get(key, chr(key))
 
 
-def _get_key() -> Union[None, str]:
+def _get_key() -> str | None:
     fd = sys.stdin.fileno()
     oldterm = termios.tcgetattr(fd)
     newattr = termios.tcgetattr(fd)
@@ -62,7 +61,7 @@ def _get_key() -> Union[None, str]:
     return None if not char else key_mapping(char)
 
 
-def get_key() -> Union[None, str]:
+def get_key() -> str | None:
     if disable_keyboard_query():
         return None
     try:

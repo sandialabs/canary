@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Optional
 from typing import Sequence
-from typing import Union
 
 from ..third_party.color import colorize
 from ..util.string import ilist
@@ -173,7 +172,7 @@ class EnvironmentModification(argparse.Action):
         self,
         parser: argparse.ArgumentParser,
         namespace: argparse.Namespace,
-        option: Union[str, Sequence[Any], None],
+        option: str | Sequence[Any] | None,
         option_str: Optional[str] = None,
     ):
         assert isinstance(option, str)

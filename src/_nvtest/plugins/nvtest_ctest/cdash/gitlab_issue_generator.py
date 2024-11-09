@@ -3,7 +3,6 @@ import io
 import os
 import re
 from typing import Optional
-from typing import Union
 
 from _nvtest.util import cdash
 from _nvtest.util import gitlab
@@ -17,7 +16,7 @@ def create_issues_from_failed_tests(
     cdash_project: Optional[str] = None,
     gitlab_url: Optional[str] = None,
     gitlab_api_url: Optional[str] = None,
-    gitlab_project_id: Optional[Union[int, str]] = None,
+    gitlab_project_id: Optional[int | str] = None,
     date: Optional[str] = None,
     filtergroups: Optional[list[str]] = None,
     skip_sites: Optional[list[str]] = None,

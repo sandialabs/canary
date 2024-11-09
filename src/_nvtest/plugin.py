@@ -14,7 +14,6 @@ from typing import Callable
 from typing import Generator
 from typing import Optional
 from typing import Type
-from typing import Union
 
 from .util import logging
 from .util.entry_points import get_entry_points
@@ -163,7 +162,7 @@ class Manager:
         else:
             raise ValueError(f"No such file or directory: {path!r}")
 
-    def load_from_file(self, file: Union[Path, str]) -> None:
+    def load_from_file(self, file: Path | str) -> None:
         file = Path(file)
         if str(file.resolve()) in self.files:
             return
@@ -206,7 +205,7 @@ class Manager:
             yield command_class
 
 
-def load_module_from_file(name: str, path: Union[Path, str]):
+def load_module_from_file(name: str, path: Path | str):
     """Loads a python module from the path of the corresponding file.
 
     If the module is already in ``sys.modules`` it will be returned as

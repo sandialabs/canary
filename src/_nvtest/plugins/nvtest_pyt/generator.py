@@ -9,7 +9,6 @@ from types import ModuleType
 from typing import Any
 from typing import Optional
 from typing import Sequence
-from typing import Union
 
 import _nvtest.config as config
 import _nvtest.when as m_when
@@ -27,7 +26,7 @@ from _nvtest.util import graph
 from _nvtest.util import logging
 from _nvtest.util.time import time_in_seconds
 
-WhenType = Union[str, dict[str, str]]
+WhenType = str | dict[str, str]
 
 
 class FilterNamespace:
@@ -481,7 +480,7 @@ class PYTTestFile(AbstractTestGenerator):
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameters: Optional[dict[str, Any]] = None,
-    ) -> Union[float, None]:
+    ) -> Optional[float]:
         for ns in self._timeout:
             result = ns.when.evaluate(
                 testname=testname, on_options=on_options, parameters=parameters
@@ -495,7 +494,7 @@ class PYTTestFile(AbstractTestGenerator):
         self,
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
-    ) -> tuple[bool, Union[str, None]]:
+    ) -> tuple[bool, Optional[str]]:
         for ns in self._enable:
             result = ns.when.evaluate(testname=testname, on_options=on_options)
             if ns.value is True and not result.value:
@@ -510,8 +509,8 @@ class PYTTestFile(AbstractTestGenerator):
         testname: Optional[str] = None,
         on_options: Optional[list[str]] = None,
         parameters: Optional[dict[str, Any]] = None,
-    ) -> list[Union[str, tuple[str, str]]]:
-        baseline: list[Union[str, tuple[str, str]]] = []
+    ) -> list[str | tuple[str, str]]:
+        baseline: list[str | tuple[str, str]] = []
         kwds = dict(parameters) if parameters else {}
         if testname:
             kwds["name"] = testname
@@ -638,8 +637,8 @@ class PYTTestFile(AbstractTestGenerator):
 
     def m_parameterize(
         self,
-        argnames: Union[str, Sequence[str]],
-        argvalues: list[Union[Sequence[Any], Any]],
+        argnames: str | Sequence[str],
+        argvalues: list[Sequence[Any] | Any],
         when: Optional[WhenType] = None,
         type: Optional[enums.enums] = None,
     ) -> None:
@@ -746,7 +745,7 @@ class PYTTestFile(AbstractTestGenerator):
 
     def m_timeout(
         self,
-        arg: Union[str, float, int],
+        arg: str | float | int,
         when: Optional[WhenType] = None,
     ) -> None:
         "testname parameter parameters platform platforms option options"
@@ -903,8 +902,8 @@ class PYTTestFile(AbstractTestGenerator):
 
     def f_parameterize(
         self,
-        names: Union[str, Sequence[str]],
-        values: list[Union[Sequence[object], object]],
+        names: str | Sequence[str],
+        values: list[Sequence[Any] | Any],
         *,
         when: Optional[WhenType] = None,
         type: enums.enums = enums.list_parameter_space,
@@ -936,7 +935,7 @@ class PYTTestFile(AbstractTestGenerator):
 
     f_name = f_testname
 
-    def f_timeout(self, arg: Union[str, float, int], *, when: Optional[WhenType] = None):
+    def f_timeout(self, arg: str | float | int, *, when: Optional[WhenType] = None):
         self.m_timeout(arg, when=when)
 
     def f_xdiff(self, *, when: Optional[WhenType] = None):

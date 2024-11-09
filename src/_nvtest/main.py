@@ -7,6 +7,7 @@ import sys
 import traceback
 from typing import TYPE_CHECKING
 from typing import Optional
+from typing import Sequence
 
 import hpc_connect
 
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from .command.base import Command
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: Optional[Sequence[str]] = None) -> int:
     """Perform an in-process test run.
 
     :param args:
@@ -31,42 +32,48 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     :returns: An exit code.
     """
-    parser = make_argument_parser()
-    parser.add_all_commands()
-
     if "NVTEST_LEVEL" not in os.environ:
         os.environ["NVTEST_LEVEL"] = "0"
 
-    argv = argv or sys.argv[1:]
-
-    try:
-        pre = parser.preparse(argv)
-        os.chdir(pre.C or config.invocation_dir)
-        config.set_main_options(pre)
-        if pre.echo:
-            a = [os.path.join(sys.prefix, "bin/nvtest")] + [_ for _ in argv if _ != "--echo"]
-            logging.emit(shlex.join(a) + "\n")
-
-        load_plugins(pre.plugin_dirs or [])
-        for hook in plugin.plugins():
-            hook.main_setup(parser)
-
+    with NVTestMain(argv) as m:
+        parser = make_argument_parser()
+        parser.add_all_commands()
         args = parser.parse_args(argv)
-
+        if args.echo:
+            a = [os.path.join(sys.prefix, "bin/nvtest")] + [_ for _ in m.argv if _ != "--echo"]
+            logging.emit(shlex.join(a) + "\n")
         setup_hpc_connect(args)
         setup_resource_handler(args)
-
         command = parser.get_command(args.command)
         if command is None:
             parser.print_help()
             return -1
-
         if args.nvtest_profile:
             return invoke_profiled_command(command, args)
         else:
             return invoke_command(command, args)
-    finally:
-        os.chdir(config.invocation_dir)
+
+
+class NVTestMain:
+    """Set up and teardown this nvtest session"""
+
+    def __init__(self, argv: Optional[Sequence[str]] = None) -> None:
+        self.argv: Sequence[str] = argv or sys.argv[1:]
+        self.invocation_dir = self.working_dir = os.getcwd()
+
+    def __enter__(self) -> "NVTestMain":
+        parser = make_argument_parser()
+        parser.add_all_commands()
+        args = parser.preparse(self.argv)
+        config.set_main_options(args)
+        if args.C:
+            self.working_dir = args.C
+        os.chdir(self.working_dir)
+        load_plugins(args.plugin_dirs or [])
+        return self
+
+    def __exit__(self, ex_type, ex_value, ex_traceback):
+        os.chdir(self.invocation_dir)
 
 
 class NVTestCommand:

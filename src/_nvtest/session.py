@@ -20,7 +20,6 @@ from typing import Any
 from typing import Generator
 from typing import Optional
 from typing import Type
-from typing import Union
 
 from . import config
 from . import plugin
@@ -249,7 +248,7 @@ class Session:
             states.append(state)
         json.dump(states, file, indent=2)
 
-    def load_testcases(self, file: IO[Any]) -> list[Union[TestCase, TestMultiCase]]:
+    def load_testcases(self, file: IO[Any]) -> list[TestCase | TestMultiCase]:
         """Load test cases previously dumpped by ``dump_testcases``.  Dependency resolution is also
         performed
         """
@@ -357,7 +356,7 @@ class Session:
             with self.db.open("plugin", "w") as record:
                 json.dump(plugin.getstate(), record, indent=2)
 
-    def add_search_paths(self, search_paths: Union[dict[str, list[str]], list[str], str]) -> None:
+    def add_search_paths(self, search_paths: dict[str, list[str]] | list[str] | str) -> None:
         """Add paths to this session's search paths
 
         ``search_paths`` is a list of file system folders that will be searched during the
@@ -803,7 +802,7 @@ class Session:
         # The case (or batch) was run in a subprocess.  The object must be
         # refreshed so that the state in this main thread is up to date.
 
-        obj: Union[TestCase, TestBatch] = queue.done(iid)
+        obj: TestCase | TestBatch = queue.done(iid)
         if not isinstance(obj, (TestBatch, TestCase)):
             logging.error(f"Expected ATC, got {obj.__class__.__name__}")
             return

@@ -4,7 +4,6 @@ from typing import Any
 from typing import Callable
 from typing import Optional
 from typing import Sequence
-from typing import Union
 
 
 def boolean(arg):
@@ -17,7 +16,7 @@ def boolean(arg):
     return bool(arg)
 
 
-def ns2dict(arg: Union[Namespace, SimpleNamespace]) -> dict:
+def ns2dict(arg: Namespace | SimpleNamespace) -> dict:
     from ..resource import ResourceHandler
 
     value: dict[str, Any] = dict(vars(arg))

@@ -8,7 +8,6 @@ from string import Template
 from typing import Any
 from typing import Optional
 from typing import TextIO
-from typing import Union
 
 from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
@@ -52,6 +51,7 @@ read_only_sections = ("python",)
 valid_scopes = ("defaults", "global", "local", "session", "environment", "command_line")
 
 invocation_dir = os.getcwd()
+work_dir = invocation_dir
 
 
 class Config:
@@ -197,6 +197,9 @@ class Config:
         return fd
 
     def set_main_options(self, args: argparse.Namespace) -> None:
+        global work_dir
+        if args.C:
+            work_dir = args.C
         scope_data = self.scopes.setdefault("command_line", {})
         logging.set_level(logging.INFO)
         if args.q or args.v:
@@ -233,13 +236,13 @@ class Config:
         if section not in section_schemas:
             raise ValueError(f"{section!r} is not a valid configuration section")
 
-    def validate_scope_name(self, scope: Union[str, None]) -> None:
+    def validate_scope_name(self, scope: str | None) -> None:
         if scope is None:
             return
         if scope not in self.scopes and scope not in valid_scopes:
             raise ValueError(f"{scope!r} is not a valid configuration scope")
 
-    def get_scope_data(self, scope: Union[str, None]) -> dict:
+    def get_scope_data(self, scope: str | None) -> dict:
         if scope is None:
             scope = self.highest_precedence_scope()
             return self.scopes[scope]

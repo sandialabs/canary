@@ -1,5 +1,4 @@
 from typing import Optional
-from typing import Union
 
 from .error import diff_exit_status
 from .error import fail_exit_status
@@ -47,7 +46,7 @@ class Status:
 
     def __init__(self, arg: str = "created", details: Optional[str] = None) -> None:
         self.value: str
-        self.details: Union[None, str]
+        self.details: Optional[str]
         self.set(arg, details)
 
     def __str__(self):
@@ -79,7 +78,7 @@ class Status:
     def pending(self) -> bool:
         return self.value == "pending"
 
-    def satisfies(self, arg: Union[str, tuple[str, ...]]) -> bool:
+    def satisfies(self, arg: str | tuple[str, ...]) -> bool:
         if isinstance(arg, str):
             arg = (arg,)
         return self.value in arg

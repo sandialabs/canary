@@ -5,7 +5,6 @@ from typing import Any
 from typing import Optional
 from typing import Sequence
 from typing import Type
-from typing import Union
 
 
 class ParameterSet:
@@ -49,8 +48,8 @@ class ParameterSet:
     @classmethod
     def list_parameter_space(
         cls: Type["ParameterSet"],
-        argnames: Union[str, Sequence[str]],
-        argvalues: list[Union[Sequence[Any], Any]],
+        argnames: str | Sequence[str],
+        argvalues: list[Sequence[Any] | Any],
         file: Optional[str] = None,
     ) -> "ParameterSet":
         """
@@ -107,8 +106,8 @@ class ParameterSet:
     @classmethod
     def centered_parameter_space(
         cls: Type["ParameterSet"],
-        argnames: Union[str, Sequence[str]],
-        argvalues: list[Union[Sequence[Any], Any]],
+        argnames: str | Sequence[str],
+        argvalues: list[Sequence[Any] | Any],
         file: Optional[str] = None,
     ) -> "ParameterSet":
         """Generate parameters for a centered parameter study
@@ -202,8 +201,8 @@ class ParameterSet:
     @classmethod
     def random_parameter_space(
         cls: Type["ParameterSet"],
-        argnames: Union[str, Sequence[str]],
-        argvalues: list[Union[Sequence[Any], Any]],
+        argnames: str | Sequence[str],
+        argvalues: list[Sequence[Any] | Any],
         file: Optional[str] = None,
     ) -> "ParameterSet":
         """Generate random parameter space"""

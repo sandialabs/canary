@@ -14,7 +14,6 @@ from typing import Any
 from typing import Callable
 from typing import Generator
 from typing import Optional
-from typing import Union
 
 from . import logging
 
@@ -54,7 +53,7 @@ def is_hidden(path: str) -> bool:
 
 def which(
     *args: str,
-    path: Optional[Union[str, list[str], tuple[str, ...]]] = None,
+    path: Optional[str | list[str] | tuple[str, ...]] = None,
     required: bool = False,
 ) -> Optional[str]:
     """Finds an executable in the path like command-line which.
@@ -114,7 +113,7 @@ def movefile(src: str, dst: str) -> None:
 def synctree(
     src: str,
     dst: str,
-    ignore: Optional[Union[str, list, tuple]] = None,
+    ignore: Optional[str | list | tuple] = None,
     delete: bool = False,
     verbose: bool = False,
     **kwargs: Any,
@@ -168,7 +167,7 @@ def force_copy(src: str, dst: str, echo: Callable = lambda x: None) -> None:
         raise ValueError(f"force_copy: file not found: {src}")
 
 
-def remove(file_or_dir: Union[pathlib.Path, str]) -> None:
+def remove(file_or_dir: pathlib.Path | str) -> None:
     """Removes file or directory ``file_or_dir``"""
     path = pathlib.Path(file_or_dir)
     if path.is_symlink():
@@ -179,7 +178,7 @@ def remove(file_or_dir: Union[pathlib.Path, str]) -> None:
         os.remove(path)
 
 
-def rmtree2(path: Union[pathlib.Path, str], n: int = 5) -> None:
+def rmtree2(path: pathlib.Path | str, n: int = 5) -> None:
     """Wrapper around shutil.rmtree to make it more robust when used on NFS
     mounted file systems."""
     ok = False

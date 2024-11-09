@@ -14,7 +14,6 @@ from types import SimpleNamespace
 from typing import Any
 from typing import Generator
 from typing import Optional
-from typing import Union
 
 import _nvtest.when as m_when
 import nvtest
@@ -287,7 +286,7 @@ def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, Optional[lis
     return names, values, kwds, None
 
 
-def p_LINE(file: Union[Path, str], line: str) -> Optional[SimpleNamespace]:
+def p_LINE(file: Path | str, line: str) -> Optional[SimpleNamespace]:
     """COMMAND ( OPTIONS ) [:=] ARGS"""
     if not line.split():
         return None
@@ -349,7 +348,7 @@ def p_LINE(file: Union[Path, str], line: str) -> Optional[SimpleNamespace]:
     )
 
 
-def p_VVT(filename: Union[Path, str]) -> Generator[SimpleNamespace, None, None]:
+def p_VVT(filename: Path | str) -> Generator[SimpleNamespace, None, None]:
     """# VVT: COMMAND ( OPTIONS ) [:=] ARGS"""
     lines, line_no = find_vvt_lines(filename)
     for line in lines:
@@ -385,7 +384,7 @@ def make_when_expr(options: dict) -> str:
     return when_expr.getvalue().strip()
 
 
-def find_vvt_lines(filename: Union[Path, str]) -> tuple[list[str], int]:
+def find_vvt_lines(filename: Path | str) -> tuple[list[str], int]:
     """Find all lines starting with ``#VVT: COMMAND``, or continuations ``#VVT::``"""
     tokens: Generator[tokenize.TokenInfo, None, None]
     if os.path.exists(filename):
@@ -478,7 +477,7 @@ def cached(func):
     return inner
 
 
-def evaluate_boolean_expression(expression: str) -> Union[bool, None]:
+def evaluate_boolean_expression(expression: str) -> Optional[bool]:
     try:
         result = safe_eval(expression)
     except Exception:
@@ -510,8 +509,8 @@ def unique(sequence: list[str]) -> list[str]:
 
 
 def to_seconds(
-    arg: Union[str, int, float], round: bool = False, negatives: bool = False
-) -> Union[int, float]:
+    arg: str | int | float, round: bool = False, negatives: bool = False
+) -> int | float:
     if isinstance(arg, (int, float)):
         return arg
     units = {

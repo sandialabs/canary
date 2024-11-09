@@ -2,8 +2,6 @@
 These classes are used when reading vvtest .vvt files so that a 'string'
 property can be added and later used to create test case execution directories"""
 
-from typing import Union
-
 from .string import strip_quotes
 
 
@@ -37,9 +35,9 @@ class String(str):
         self._string = arg
 
 
-def cast(arg: str, type: str) -> Union[Integer, Float, String]:
+def cast(arg: str, type: str) -> Integer | Float | String:
     assert type in ("autotype", "str", "float", "int")
-    x: Union[Integer, Float, String]
+    x: Integer | Float | String
     if type == "str":
         x = String(strip_quotes(arg))
     elif type == "int":

@@ -97,11 +97,10 @@ The ``when`` expression recognizes the following conditions:
 from typing import Any
 from typing import Optional
 from typing import Sequence
-from typing import Union
 
 from _nvtest import enums
 
-WhenType = Union[str, dict[str, str]]
+WhenType = str | dict[str, str]
 
 
 def execbase(
@@ -865,8 +864,8 @@ owner = owners
 
 
 def parameterize(
-    names: Union[str, Sequence[str]],
-    values: Sequence[Union[Sequence[Any], Any]],
+    names: str | Sequence[str],
+    values: Sequence[Sequence[Any] | Any],
     *,
     when: Optional[WhenType] = None,
     type: enums.enums = enums.list_parameter_space,
@@ -1413,7 +1412,7 @@ def testname(arg: str) -> None:
 name = testname
 
 
-def timeout(arg: Union[str, float, int], *, when: Optional[WhenType] = None) -> None:
+def timeout(arg: str | float | int, *, when: Optional[WhenType] = None) -> None:
     """Specify a timeout value for a test
 
     Usage

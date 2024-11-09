@@ -13,7 +13,6 @@ from typing import Any
 from typing import Generator
 from typing import Optional
 from typing import Type
-from typing import Union
 
 from .. import config
 from .. import plugin
@@ -63,7 +62,7 @@ class TestCase(AbstractTestCase):
         keywords: Optional[list[str]] = None,
         parameters: Optional[dict[str, Any]] = None,
         timeout: Optional[float] = None,
-        baseline: Optional[list[Union[str, tuple[str, str]]]] = None,
+        baseline: Optional[list[str | tuple[str, str]]] = None,
         sources: Optional[dict[str, list[tuple[str, str]]]] = None,
         xstatus: Optional[int] = None,
         preload: Optional[str] = None,
@@ -81,7 +80,7 @@ class TestCase(AbstractTestCase):
         self._keywords: list[str] = []
         self._parameters: dict[str, Any] = {}
         self._timeout: Optional[float] = None
-        self._baseline: list[Union[str, tuple[str, str]]] = []
+        self._baseline: list[str | tuple[str, str]] = []
         self._sources: dict[str, list[tuple[str, str]]] = {}
         self._xstatus: int = 0
         self._preload: Optional[str] = None
@@ -285,11 +284,11 @@ class TestCase(AbstractTestCase):
         self._timeout = arg
 
     @property
-    def baseline(self) -> list[Union[str, tuple[str, str]]]:
+    def baseline(self) -> list[str | tuple[str, str]]:
         return self._baseline
 
     @baseline.setter
-    def baseline(self, arg: list[Union[str, tuple[str, str]]]) -> None:
+    def baseline(self, arg: list[str | tuple[str, str]]) -> None:
         self._baseline = list(arg)
 
     @property
@@ -356,7 +355,7 @@ class TestCase(AbstractTestCase):
         return self._status
 
     @status.setter
-    def status(self, arg: Union[Status, dict[str, str]]) -> None:
+    def status(self, arg: Status | dict[str, str]) -> None:
         if isinstance(arg, Status):
             self._status.set(arg.value, details=arg.details)
         elif isinstance(arg, dict):
@@ -559,11 +558,11 @@ class TestCase(AbstractTestCase):
             return 0
 
     @property
-    def cputime(self) -> Union[float, int]:
+    def cputime(self) -> float | int:
         return self.runtime * self.cpus
 
     @property
-    def runtime(self) -> Union[float, int]:
+    def runtime(self) -> float | int:
         if self._runtimes[0] is None:
             return self.timeout
         return self._runtimes[0]
@@ -761,7 +760,7 @@ class TestCase(AbstractTestCase):
     def copy(self) -> "TestCase":
         return deepcopy(self)
 
-    def add_dependency(self, *cases: Union["TestCase", str]) -> None:
+    def add_dependency(self, *cases: "TestCase | str") -> None:
         for case in cases:
             if isinstance(case, TestCase):
                 self.dependencies.append(case)
@@ -925,7 +924,7 @@ class TestCase(AbstractTestCase):
 
     def teardown(self) -> None: ...
 
-    def dump(self, fname: Union[str, IO[Any]]) -> None:
+    def dump(self, fname: str | IO[Any]) -> None:
         file: IO[Any]
         own_fh = False
         if isinstance(fname, str):
@@ -1000,7 +999,7 @@ class TestMultiCase(TestCase):
         family: Optional[str] = None,
         keywords: list[str] = [],
         timeout: Optional[float] = None,
-        baseline: list[Union[str, tuple[str, str]]] = [],
+        baseline: list[str | tuple[str, str]] = [],
         sources: dict[str, list[tuple[str, str]]] = {},
         xstatus: int = 0,
         preload: Optional[str] = None,
@@ -1067,10 +1066,10 @@ class TestMultiCase(TestCase):
             assert isinstance(self._paramsets[0], ParameterSet)
 
 
-def factory(type: str, **kwargs: Any) -> Union[TestCase, TestMultiCase]:
+def factory(type: str, **kwargs: Any) -> TestCase | TestMultiCase:
     """The reverse of getstate - return a test case from a dictionary"""
 
-    case: Union[TestCase, TestMultiCase]
+    case: TestCase | TestMultiCase
     if type == "TestCase":
         case = TestCase()
     else:
@@ -1083,16 +1082,16 @@ def factory(type: str, **kwargs: Any) -> Union[TestCase, TestMultiCase]:
     return case
 
 
-def getstate(case: Union[TestCase, TestMultiCase]) -> dict[str, Any]:
+def getstate(case: TestCase | TestMultiCase) -> dict[str, Any]:
     """Return a serializable dictionary from which the test case can be later loaded"""
     return case.getstate()
 
 
-def dump(case: Union[TestCase, TestMultiCase], fname: Union[str, IO[Any]]) -> None:
+def dump(case: TestCase | TestMultiCase, fname: str | IO[Any]) -> None:
     case.dump(fname)
 
 
-def from_state(state: dict[str, Any]) -> Union[TestCase, TestMultiCase]:
+def from_state(state: dict[str, Any]) -> TestCase | TestMultiCase:
     case = factory(state.pop("type"))
     case.setstate(state)
     return case

@@ -5,15 +5,14 @@ from typing import Any
 from typing import Generator
 from typing import Optional
 from typing import Type
-from typing import Union
 
 from ..status import Status
 from .case import TestCase
 from .case import TestMultiCase
 from .case import from_state as testcase_from_state
 
-key_type = Union[tuple[str, ...], str]
-index_type = Union[tuple[int, ...], int]
+key_type = tuple[str, ...] | str
+index_type = tuple[int, ...] | int
 
 
 class Parameters:
@@ -171,9 +170,9 @@ class TestInstance:
     family: str
     keywords: list[str]
     parameters: Parameters
-    timeout: Union[None, float, int]
-    runtime: Union[None, float, int]
-    baseline: list[Union[str, tuple[str, str]]]
+    timeout: float | int | None
+    runtime: float | int | None
+    baseline: list[str | tuple[str, str]]
     sources: dict[str, list[tuple[str, str]]]
     exec_root: str
     exec_dir: str

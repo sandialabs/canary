@@ -9,7 +9,6 @@ from typing import Callable
 from typing import Generator
 from typing import Optional
 from typing import Type
-from typing import Union
 
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
@@ -177,7 +176,7 @@ class Reporter(ABC):
         return args, kwargs
 
 
-def get_annotation_type(annotation) -> Optional[Union[float, int, bool]]:
+def get_annotation_type(annotation) -> Optional[float | int | bool]:
     if annotation in (float, int, bool):
         return annotation
     elif typing.get_origin(annotation) is typing.Union:

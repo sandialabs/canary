@@ -7,10 +7,10 @@ import time
 from pathlib import Path
 from typing import Optional
 from typing import TextIO
-from typing import Type
-from typing import Union
 
 from . import logging
+
+IOType = type[str] | TextIO | Path | str
 
 
 class Executable:
@@ -29,14 +29,14 @@ class Executable:
 
     """
 
-    def __init__(self, name: Union[str, Path]) -> None:
+    def __init__(self, name: str | Path) -> None:
         self.file = Executable.find(name)
         self.default_args: list[str] = []
         self.default_env: dict[str, str] = {}
         self.returncode: int = -1
 
     @staticmethod
-    def find(name: Union[str, Path]) -> Path:
+    def find(name: str | Path) -> Path:
         """Find the path to the command ``name``"""
         if is_executable(name):
             return Path(name).absolute()
@@ -94,10 +94,10 @@ class Executable:
     def __call__(
         self,
         *args_in: str,
-        stdout: Optional[Union[Type, TextIO, Path, str]] = None,
-        stderr: Optional[Union[Type, TextIO, Path, str]] = None,
-        output: Optional[Union[Type, TextIO, Path, str]] = None,
-        error: Optional[Union[Type, TextIO, Path, str]] = None,
+        stdout: Optional[IOType] = None,
+        stderr: Optional[IOType] = None,
+        output: Optional[IOType] = None,
+        error: Optional[IOType] = None,
         env: Optional[dict[str, str]] = None,
         expected_returncode: int = 0,
         fail_on_error: bool = True,
@@ -212,15 +212,15 @@ class Executable:
         return f"<exe: {self.command}>"
 
 
-def is_executable(path: Union[str, Path]) -> bool:
+def is_executable(path: str | Path) -> bool:
     f = Path(path)
     return f.exists() and os.access(f, os.X_OK)
 
 
 class _StreamHandler:
-    def __init__(self, fp: Optional[Union[Type, TextIO, str, Path]]) -> None:
+    def __init__(self, fp: Optional[IOType]) -> None:
         self.name: str
-        self.stream: Union[TextIO, tempfile._TemporaryFileWrapper, None] = None
+        self.stream: Optional[TextIO | tempfile._TemporaryFileWrapper] = None
         self.owned: bool = False
         self.temporary: bool = False
         self.value: Optional[str] = None

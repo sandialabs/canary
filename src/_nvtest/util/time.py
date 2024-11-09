@@ -5,7 +5,6 @@ from datetime import timedelta
 from datetime import timezone
 from typing import Callable
 from typing import Optional
-from typing import Union
 
 
 def strftimestamp(timestamp: float, fmt: str = "%b %d %H:%M") -> str:
@@ -18,7 +17,7 @@ def timestamp(local: bool = True) -> float:
     return time.mktime(time.localtime()) if local else time.time()
 
 
-def time_in_seconds(arg: Union[int, float, str]) -> float:
+def time_in_seconds(arg: int | float | str) -> float:
     if isinstance(arg, (float, int)):
         return float(arg)
     duration = Duration.from_str(arg)
@@ -35,7 +34,7 @@ def hhmmss(seconds: Optional[float], threshold: float = 2.0) -> str:
     return datetime.strftime(utc, "%H:%M:%S")
 
 
-def pretty_seconds_formatter(seconds: Union[int, float]) -> Callable:
+def pretty_seconds_formatter(seconds: int | float) -> Callable:
     multiplier: float
     unit: str
     if seconds >= 1:
@@ -49,7 +48,7 @@ def pretty_seconds_formatter(seconds: Union[int, float]) -> Callable:
     return lambda s: "%.3f%s" % (multiplier * s, unit)
 
 
-def pretty_seconds(seconds: Union[str, int, float]) -> str:
+def pretty_seconds(seconds: str | int | float) -> str:
     """Seconds to string with appropriate units
 
     Arguments:

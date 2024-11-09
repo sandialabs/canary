@@ -4,7 +4,6 @@ import os
 import sys
 from getpass import getuser
 from typing import Optional
-from typing import Union
 
 from _nvtest.util import cdash
 from _nvtest.util import logging
@@ -136,7 +135,7 @@ def _get_build_data(
 
 
 def _html_summary(url, project, buildgroups) -> str:
-    def _link(url: str, php: str, tgt: Union[int, str], *filters: str) -> str:
+    def _link(url: str, php: str, tgt: int | str, *filters: str) -> str:
         link = '<a href="{0}/{1}?{2}">{3}</a>'.format(url, php, "&".join(filters), tgt)
         return link
 
