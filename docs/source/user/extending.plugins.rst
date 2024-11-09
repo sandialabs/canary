@@ -11,7 +11,7 @@ Plugin discovery
 ``nvtest`` loads plugin modules in the following order:
 
 * Builtin plugins.
-* Local plugins specified by the ``-p PATH`` command line option.  ```PATH`` can be a python file or directory.  If ``PATH`` is a directory, all files named ``nvtest_*.py`` in ``PATH`` will be loaded.
+* Local plugins specified by the ``-p PATH`` command line option.  ``PATH`` can be a python file or directory.  If ``PATH`` is a directory, all files named ``nvtest_*.py`` in ``PATH`` will be loaded.
 * Plugins registered through `setuptools entry points <https://docs.pytest.org/en/7.1.x/how-to/writing_plugins.html#setuptools-entry-points>`_ ``nvtest`` looks up the ``nvtest.plugin`` entrypoint to discover its plugins.  Make your plugin available by defining it in your ``pyproject.toml``:
 
   .. code-block:: toml
