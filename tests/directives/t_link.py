@@ -45,3 +45,33 @@ def test_link_rename(tmpdir):
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")
             raise ValueError(f"test failed. files in exec_dir: {files}")
+
+
+def test_link_when(tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        touch("foo.txt")
+        touch("baz.txt")
+        with open("a.pyt", "w") as fh:
+            fh.write(
+                """\
+import os
+import sys
+import nvtest
+nvtest.directives.parameterize('a', ('baz', 'foo'))
+nvtest.directives.link('foo.txt', when={'parameters': 'a=foo'})
+nvtest.directives.link('baz.txt', when='parameters="a=baz"')
+def test():
+    self = nvtest.get_instance()
+    should_exist = 'foo.txt' if self.parameters.a == 'foo' else 'baz.txt'
+    should_not_exist = 'foo.txt' if self.parameters.a == 'baz' else 'baz.txt'
+    assert os.path.islink(should_exist)
+    assert not os.path.islink(should_not_exist)
+if __name__ == '__main__':
+    sys.exit(test())
+"""
+            )
+        python = Executable(sys.executable)
+        python("-m", "nvtest", "run", "-w", ".", fail_on_error=False)
+        if python.returncode != 0:
+            files = os.listdir("./TestResults/a")
+            raise ValueError(f"test failed. files in exec_dir: {files}")
