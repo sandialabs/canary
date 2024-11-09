@@ -72,6 +72,10 @@ if __name__ == '__main__':
             )
         python = Executable(sys.executable)
         python("-m", "nvtest", "run", "-w", ".", fail_on_error=False)
+        assert os.path.exists(os.path.join(tmpdir, "TestResults/a.a=baz/baz.txt"))
+        assert not os.path.exists(os.path.join(tmpdir, "TestResults/a.a=baz/foo.txt"))
+        assert os.path.exists(os.path.join(tmpdir, "TestResults/a.a=foo/foo.txt"))
+        assert not os.path.exists(os.path.join(tmpdir, "TestResults/a.a=foo/baz.txt"))
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")
             raise ValueError(f"test failed. files in exec_dir: {files}")
