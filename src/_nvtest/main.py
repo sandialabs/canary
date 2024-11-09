@@ -38,7 +38,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     with NVTestMain(argv) as m:
         parser = make_argument_parser()
         parser.add_all_commands()
-        args = parser.parse_args(argv)
+        args = parser.parse_args(m.argv)
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/nvtest")] + [_ for _ in m.argv if _ != "--echo"]
             logging.emit(shlex.join(a) + "\n")
