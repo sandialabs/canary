@@ -385,7 +385,7 @@ class Session:
             logging.warning("one or more search paths does not exist")
         self.save()
 
-    def discover(self) -> None:
+    def discover(self, pedantic: bool = True) -> None:
         """Walk each path in the session's search path and collect test files"""
         finder = Finder()
         for root, paths in self.search_paths.items():
@@ -393,7 +393,7 @@ class Session:
         for hook in plugin.plugins():
             hook.session_discovery(finder)
         finder.prepare()
-        self.generators = finder.discover()
+        self.generators = finder.discover(pedantic=pedantic)
         with self.db.open("files", "w") as record:
             self.dump_testfiles(record)
         logging.debug(f"Discovered {len(self.generators)} test files")

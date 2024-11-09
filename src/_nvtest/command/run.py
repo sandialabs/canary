@@ -70,6 +70,13 @@ class Run(Command):
             help="Stop after first failed test [default: %(default)s]",
         )
         parser.add_argument(
+            "-P",
+            choices=("permissive", "pedantic"),
+            default="pedantic",
+            help="If pedantic (default), stop if file parsing errors occur, "
+            "else ignore parsing errors",
+        )
+        parser.add_argument(
             "--copy-all-resources",
             action="store_true",
             help="Do not link resources to the test directory, only copy [default: %(default)s]",
@@ -88,7 +95,7 @@ class Run(Command):
             session.add_search_paths(args.paths)
             s = ", ".join(os.path.relpath(p, os.getcwd()) for p in session.search_paths)
             logging.emit(colorize("@*{searching} for tests in %s\n" % s))
-            session.discover()
+            session.discover(pedantic=args.P == "pedantic")
             if args.until is not None:
                 generators = session.generators
                 roots = set()

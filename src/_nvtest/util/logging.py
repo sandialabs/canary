@@ -143,7 +143,7 @@ def log(
     if ex is not None:
         exc, tb = ex.__class__, ex.__traceback__
         lines = [_.rstrip("\n") for _ in traceback.format_exception(exc, ex, tb)]
-        emit("\n".join(lines), file=sys.stderr)
+        emit("\n".join(lines) + "\n", file=sys.stderr)
 
 
 def emit(message: str, *, file: TextIO = sys.stdout) -> None:
@@ -168,6 +168,10 @@ def warning(message: str, *, file: TextIO = sys.stderr, end="\n") -> None:
 
 
 def error(message: str, *, file: TextIO = sys.stderr, end="\n", ex: Optional[Any] = None) -> None:
+    log(ERROR, message, file=file, prefix="@*r{==>} Error: ", end=end, ex=ex)
+
+
+def exception(message: str, ex: Exception, *, file: TextIO = sys.stderr, end="\n") -> None:
     log(ERROR, message, file=file, prefix="@*r{==>} Error: ", end=end, ex=ex)
 
 

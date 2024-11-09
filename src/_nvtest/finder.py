@@ -47,38 +47,59 @@ class Finder:
                     raise ValueError(f"{path} not found in {root}")
             self.roots[root].append(path)  # type: ignore
 
-    def discover(self) -> list[AbstractTestGenerator]:
+    def discover(self, pedantic: bool = True) -> list[AbstractTestGenerator]:
         tree: dict[str, set[AbstractTestGenerator]] = {}
         if not self._ready:
             raise ValueError("Cannot call discover() before calling prepare()")
+        errors = 0
         for root, paths in self.roots.items():
             logging.debug(f"Searching {root} for test files")
             if os.path.isfile(root):
-                f = AbstractTestGenerator.factory(root)
-                root = f.root
-                generators = tree.setdefault(root, set())
-                generators.add(f)
+                try:
+                    f = AbstractTestGenerator.factory(root)
+                except Exception as e:
+                    errors += 1
+                    logging.exception(f"Failed to parse {root}", e)
+                else:
+                    root = f.root
+                    generators = tree.setdefault(root, set())
+                    generators.add(f)
             elif paths is not None:
                 generators = tree.setdefault(root, set())
                 for path in paths:
                     p = os.path.join(root, path)
                     if os.path.isfile(p):
-                        generators.add(AbstractTestGenerator.factory(root, path))
+                        try:
+                            f = AbstractTestGenerator.factory(root, path)
+                        except Exception as e:
+                            errors += 1
+                            logging.exception(f"Failed to parse {root}/{path}", e)
+                        else:
+                            generators.add(f)
                     elif os.path.isdir(p):
-                        generators.update(self.rfind(root, subdir=path))
+                        p_generators, p_errors = self.rfind(root, subdir=path)
+                        generators.update(p_generators)
+                        errors += p_errors
                     else:
-                        raise FileNotFoundError(path)
+                        errors += 1
+                        logging.error(f"No such file: {path}")
             else:
                 generators = tree.setdefault(root, set())
-                generators.update(self.rfind(root))
+                p_generators, p_errors = self.rfind(root)
+                generators.update(p_generators)
+                errors += p_errors
             logging.debug(f"Found {len(generators)} test files in {root}")
         n = sum([len(_) for _ in tree.values()])
         nr = len(tree)
+        if pedantic and errors:
+            raise ValueError("Stopping due to previous parsing errors")
         logging.debug(f"Found {n} test files in {nr} search roots")
         files: list[AbstractTestGenerator] = [file for files in tree.values() for file in files]
         return files
 
-    def rfind(self, root: str, subdir: Optional[str] = None) -> list[AbstractTestGenerator]:
+    def rfind(
+        self, root: str, subdir: Optional[str] = None
+    ) -> tuple[list[AbstractTestGenerator], int]:
         def skip_dir(dirname):
             if os.path.basename(dirname) in self.skip_dirs:
                 return True
@@ -101,8 +122,17 @@ class Finder:
                     if any([g.matches(f) for g in plugin.generators()])
                 ]
             )
-        generators = [AbstractTestGenerator.factory(*p) for p in paths]
-        return generators
+        errors = 0
+        generators: list[AbstractTestGenerator] = []
+        for p in paths:
+            try:
+                generator = AbstractTestGenerator.factory(*p)
+            except Exception as e:
+                errors += 1
+                logging.exception(f"Failed to parse {p[0]}/{p[1]}", e)
+            else:
+                generators.append(generator)
+        return generators, errors
 
     @property
     def search_paths(self) -> list[str]:
