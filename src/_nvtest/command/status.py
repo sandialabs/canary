@@ -4,7 +4,6 @@ from typing import Optional
 
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
-from _nvtest.test.case import TestCase
 from _nvtest.util import logging
 
 from .base import Command
@@ -63,60 +62,13 @@ class Status(Command):
 
     def execute(self, args: "argparse.Namespace") -> int:
         session = Session(os.getcwd(), mode="r")
-        cases = session.cases
-        if args.pathspec:
-            if TestCase.spec_like(args.pathspec):
-                cases = [c for c in cases if c.matches(args.pathspec)]
-                args.show_all = True
-            else:
-                pathspec = os.path.abspath(args.pathspec)
-                if pathspec != session.root:
-                    cases = [c for c in cases if c.exec_dir.startswith(pathspec)]
         rc: str
         if not args.report_chars:
             rc = "dftns"
         else:
             rc = "".join(args.report_chars)
-        cases_to_show: list[TestCase]
-        if "A" in rc:
-            if "x" in rc:
-                cases_to_show = cases
-            else:
-                cases_to_show = [c for c in cases if not c.mask]
-        elif "a" in rc:
-            if "x" in rc:
-                cases_to_show = [c for c in cases if c.status != "success"]
-            else:
-                cases_to_show = [c for c in cases if not c.mask and c.status != "success"]
-        else:
-            cases_to_show = []
-            for case in cases:
-                if case.mask:
-                    if "x" in rc:
-                        cases_to_show.append(case)
-                elif "s" in rc and case.status == "skipped":
-                    cases_to_show.append(case)
-                elif "p" in rc and case.status.value in ("success", "xdiff", "xfail"):
-                    cases_to_show.append(case)
-                elif "f" in rc and case.status == "failed":
-                    cases_to_show.append(case)
-                elif "d" in rc and case.status == "diffed":
-                    cases_to_show.append(case)
-                elif "t" in rc and case.status == "timeout":
-                    cases_to_show.append(case)
-                elif "n" in rc and case.status.value in (
-                    "ready",
-                    "created",
-                    "pending",
-                    "cancelled",
-                    "not_run",
-                ):
-                    cases_to_show.append(case)
-        if cases_to_show:
-            logging.emit(
-                session.status(cases_to_show, show_logs=args.show_logs, sortby=args.sort_by)
-            )
-        if args.durations:
-            logging.emit(session.durations(cases_to_show, int(args.durations)))
-        logging.emit(session.footer(cases_to_show, title="Summary"))
+        report = session.report(
+            rc, show_logs=args.show_logs, sortby=args.sort_by, durations=args.durations
+        )
+        logging.emit(report)
         return 0

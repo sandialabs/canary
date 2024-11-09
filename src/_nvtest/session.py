@@ -1002,7 +1002,7 @@ class Session:
     @staticmethod
     def status(cases: list[TestCase], show_logs: bool = False, sortby: str = "duration") -> str:
         """Return a string describing the status of each test (grouped by status)"""
-        string = io.StringIO()
+        file = io.StringIO()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
             if case.mask:
@@ -1012,14 +1012,75 @@ class Session:
         if "masked" in totals:
             for case in sort_cases_by(totals["masked"], field=sortby):
                 description = case.describe(include_logfile_path=show_logs)
-                string.write("%s %s\n" % (glyphs.masked, description))
+                file.write("%s %s\n" % (glyphs.masked, description))
         for member in Status.members:
             if member in totals:
                 for case in sort_cases_by(totals[member], field=sortby):
                     glyph = Status.glyph(case.status.value)
                     description = case.describe(include_logfile_path=show_logs)
-                    string.write("%s %s\n" % (glyph, description))
-        return string.getvalue()
+                    file.write("%s %s\n" % (glyph, description))
+        return file.getvalue()
+
+    def report(
+        self,
+        report_chars: str,
+        show_logs: bool = False,
+        sortby: str = "durations",
+        durations: Optional[int] = None,
+        pathspec: Optional[str] = None,
+    ) -> str:
+        cases: list[TestCase] = self.cases
+        cases_to_show: list[TestCase]
+        rc = set(report_chars)
+        if pathspec is not None:
+            if TestCase.spec_like(pathspec):
+                cases = [c for c in cases if c.matches(pathspec)]
+                rc.add("A")
+            else:
+                pathspec = os.path.abspath(pathspec)
+                if pathspec != self.root:
+                    cases = [c for c in cases if c.exec_dir.startswith(pathspec)]
+        if "A" in rc:
+            if "x" in rc:
+                cases_to_show = cases
+            else:
+                cases_to_show = [c for c in cases if not c.mask]
+        elif "a" in rc:
+            if "x" in rc:
+                cases_to_show = [c for c in cases if c.status != "success"]
+            else:
+                cases_to_show = [c for c in cases if not c.mask and c.status != "success"]
+        else:
+            cases_to_show = []
+            for case in cases:
+                if case.mask:
+                    if "x" in rc:
+                        cases_to_show.append(case)
+                elif "s" in rc and case.status == "skipped":
+                    cases_to_show.append(case)
+                elif "p" in rc and case.status.value in ("success", "xdiff", "xfail"):
+                    cases_to_show.append(case)
+                elif "f" in rc and case.status == "failed":
+                    cases_to_show.append(case)
+                elif "d" in rc and case.status == "diffed":
+                    cases_to_show.append(case)
+                elif "t" in rc and case.status == "timeout":
+                    cases_to_show.append(case)
+                elif "n" in rc and case.status.value in (
+                    "ready",
+                    "created",
+                    "pending",
+                    "cancelled",
+                    "not_run",
+                ):
+                    cases_to_show.append(case)
+        file = io.StringIO()
+        if cases_to_show:
+            file.write(self.status(cases_to_show, show_logs=show_logs, sortby=sortby) + "\n")
+        if durations:
+            file.write(self.durations(cases_to_show, int(durations)) + "\n")
+        file.write(self.footer([c for c in self.cases if not c.mask], title="Summary") + "\n")
+        return file.getvalue()
 
 
 class Database:
