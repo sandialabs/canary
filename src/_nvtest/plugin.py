@@ -151,7 +151,7 @@ class Manager:
             for path in os.environ["NVTEST_PLUGINS"].split(":"):
                 if os.path.exists(path):
                     self.load_from_path(path)
-                else;
+                else:
                     logging.warning(f"{path}: plugin path not found")
 
     def load_from_path(self, path: str) -> None:
