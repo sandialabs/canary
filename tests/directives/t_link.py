@@ -1,3 +1,4 @@
+import glob
 import os
 import sys
 
@@ -59,24 +60,37 @@ import sys
 import nvtest
 nvtest.directives.parameterize('a', ('baz', 'foo'))
 nvtest.directives.parameterize('b', (1, 2))
-nvtest.directives.link('foo.txt', when={'parameters': 'a=foo'})
-nvtest.directives.link('baz.txt', when='parameters="a=baz"')
+nvtest.directives.link('foo.txt', when={'parameters': 'a=foo and b=1'})
+nvtest.directives.link('baz.txt', when='parameters="a=baz and b=1"')
+nvtest.directives.link(src='foo.txt', dst='foo-b2.txt', when={'parameters': 'a=foo and b=2'})
+nvtest.directives.link(src='baz.txt', dst='baz-b2.txt', when='parameters="a=baz and b=2"')
 def test():
     self = nvtest.get_instance()
-    should_exist = 'foo.txt' if self.parameters.a == 'foo' else 'baz.txt'
-    should_not_exist = 'foo.txt' if self.parameters.a == 'baz' else 'baz.txt'
-    assert os.path.islink(should_exist)
-    assert not os.path.islink(should_not_exist)
+    if self.parameters[('a', 'b')] == ('foo', 1):
+        assert os.path.islink('foo.txt')
+    elif self.parameters[('a', 'b')] == ('baz', 1):
+        assert os.path.islink('baz.txt')
+    elif self.parameters[('a', 'b')] == ('foo', 2):
+        assert os.path.islink('foo-b2.txt')
+    elif self.parameters[('a', 'b')] == ('baz', 2):
+        assert os.path.islink('baz-b2.txt')
 if __name__ == '__main__':
     sys.exit(test())
 """
             )
+
+        def txtfiles(d):
+            basename = os.path.basename
+            files = glob.glob(os.path.join(tmpdir, d, "*.txt"))
+            return sorted([basename(f) for f in files if not basename(f).startswith("nvtest-")])
+
         python = Executable(sys.executable)
         python("-m", "nvtest", "run", "-w", ".", fail_on_error=False)
-        assert os.path.exists(os.path.join(tmpdir, "TestResults/a.a=baz.b=1/baz.txt"))
-        assert not os.path.exists(os.path.join(tmpdir, "TestResults/a.a=baz.b=1/foo.txt"))
-        assert os.path.exists(os.path.join(tmpdir, "TestResults/a.a=foo.b=1/foo.txt"))
-        assert not os.path.exists(os.path.join(tmpdir, "TestResults/a.a=foo.b=1/baz.txt"))
+        assert txtfiles("TestResults/a.a=foo.b=1") == ["foo.txt"]
+        assert txtfiles("TestResults/a.a=foo.b=2") == ["foo-b2.txt"]
+        assert txtfiles("TestResults/a.a=baz.b=1") == ["baz.txt"]
+        assert txtfiles("TestResults/a.a=baz.b=2") == ["baz-b2.txt"]
+
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")
             raise ValueError(f"test failed. files in exec_dir: {files}")

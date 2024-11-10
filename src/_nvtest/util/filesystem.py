@@ -118,7 +118,7 @@ def synctree(
     verbose: bool = False,
     **kwargs: Any,
 ):
-    """Wrapper around rsync"""
+    """Sync source directory ``src`` with destination directory ``dst``"""
     from .executable import Executable
 
     f = which("rsync", required=True)

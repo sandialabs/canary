@@ -652,11 +652,15 @@ def write_vvtest_util(case: "TestCase", stage: str = "test") -> None:
 
 @nvtest.plugin.register(scope="test", stage="setup")
 def setup(case: "TestCase") -> None:
+    if not case.file_path.endswith(".vvt"):
+        return
     write_vvtest_util(case)
 
 
 @nvtest.plugin.register(scope="test", stage="prelaunch")
 def prelaunch(case: "TestCase", stage: str = "test") -> None:
+    if not case.file_path.endswith(".vvt"):
+        return
     write_vvtest_util(case, stage=stage)
     # symlink the test file before test is run for tests needing it
     f = os.path.join(case.exec_dir, "execute.log")
