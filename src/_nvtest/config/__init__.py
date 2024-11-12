@@ -6,7 +6,6 @@ import os
 import sys
 from string import Template
 from typing import Any
-from typing import Optional
 from typing import TextIO
 
 from ..third_party.schema import Schema
@@ -59,7 +58,7 @@ class Config:
 
     fb = f"config.{sys.implementation.cache_tag}.p"
 
-    def __init__(self, state: Optional[dict] = None) -> None:
+    def __init__(self, state: dict | None = None) -> None:
         self.scopes: dict
         if state is not None:
             self.scopes = state["scopes"]
@@ -97,7 +96,7 @@ class Config:
                 self.load_config(file, "local")
             self.load_config_from_env()
 
-    def config_file(self, scope) -> Optional[str]:
+    def config_file(self, scope) -> str | None:
         if scope == "global":
             if "NVTEST_GLOBAL_CONFIG" in os.environ:
                 return os.environ["NVTEST_GLOBAL_CONFIG"]
@@ -219,7 +218,7 @@ class Config:
             self.add(path, scope="command_line")
         self.scopes["command_line"]["option"] = ns2dict(args)
 
-    def merge(self, skip_scopes: Optional[list[str]] = None) -> dict:
+    def merge(self, skip_scopes: list[str] | None = None) -> dict:
         scopes = list(self.scopes.keys())
         merged = dict(self.scopes[scopes.pop(0)])
         for scope in scopes:
@@ -253,7 +252,7 @@ class Config:
         else:
             raise ValueError(f"{scope!r} is not a valid configuration scope")
 
-    def get_config(self, section: str, scope: Optional[str] = None) -> dict:
+    def get_config(self, section: str, scope: str | None = None) -> dict:
         """Get configuration settings for a section.
 
         If ``scope`` is ``None`` or not provided, return the merged contents
@@ -275,7 +274,7 @@ class Config:
             merged = _merge(merged, {section: data})
         return {} if section not in merged else merged[section]
 
-    def get(self, path: str, default: Optional[Any] = None, scope: Optional[str] = None) -> Any:
+    def get(self, path: str, default: Any | None = None, scope: str | None = None) -> Any:
         """Get a config section or a single value from one.
 
         Accepts a path syntax that allows us to grab nested config map
@@ -301,10 +300,10 @@ class Config:
             value = value[key]
         return value
 
-    def pop(self, path: str, scope: Optional[str] = None) -> Any:
+    def pop(self, path: str, scope: str | None = None) -> Any:
         pass
 
-    def set(self, path: str, value: Any, scope: Optional[str] = None) -> None:
+    def set(self, path: str, value: Any, scope: str | None = None) -> None:
         """Convenience function for setting single config values
 
         Accepts the path syntax described in ``get()``.
@@ -339,7 +338,7 @@ class Config:
         data[parts[0]] = value
         self.update_config(section, section_data, scope=scope)
 
-    def add(self, fullpath: str, scope: Optional[str] = None) -> None:
+    def add(self, fullpath: str, scope: str | None = None) -> None:
         """Add the given configuration to the specified config scope."""
 
         components = parse_config_path(fullpath)
@@ -411,7 +410,7 @@ class Config:
         if "gpus_per_node" in data and data["gpus_per_node"] < 0:
             raise ValueError(f"gpus_per_node must be positive ({data['gpus_per_node']} < 0)")
 
-    def describe(self, section: Optional[str] = None) -> str:
+    def describe(self, section: str | None = None) -> str:
         if section is not None:
             merged = {section: self.get_config(section)}
         else:
@@ -567,7 +566,7 @@ class ConfigSchemaError(Exception):
         super().__init__(msg)
 
 
-def find_session_root() -> Optional[str]:
+def find_session_root() -> str | None:
     path = os.getcwd()
     tagfile = "SESSION.TAG"
     while True:
@@ -611,7 +610,7 @@ def save(fh: TextIO, *, scope: str) -> None:
     return config.save(fh, scope=scope)
 
 
-def config_file(scope: str) -> Optional[str]:
+def config_file(scope: str) -> str | None:
     return config.config_file(scope)
 
 
@@ -619,27 +618,27 @@ def set_main_options(args: argparse.Namespace) -> None:
     return config.set_main_options(args)
 
 
-def get(path: str, default: Optional[Any] = None, scope: Optional[str] = None) -> Any:
+def get(path: str, default: Any | None = None, scope: str | None = None) -> Any:
     return config.get(path, default=default, scope=scope)
 
 
-def getoption(path: str, default: Optional[Any] = None, scope: Optional[str] = None) -> Any:
+def getoption(path: str, default: Any | None = None, scope: str | None = None) -> Any:
     return config.get(f"option:{path}", default=default, scope=scope)
 
 
-def set(path: str, value: Any, scope: Optional[str] = None) -> None:
+def set(path: str, value: Any, scope: str | None = None) -> None:
     return config.set(path, value, scope=scope)
 
 
-def pop(path: str, scope: Optional[str] = None) -> Any:
+def pop(path: str, scope: str | None = None) -> Any:
     return config.pop(path, scope=scope)
 
 
-def describe(section: Optional[str] = None) -> str:
+def describe(section: str | None = None) -> str:
     return config.describe(section=section)
 
 
-def add(fullpath: str, scope: Optional[str] = None) -> None:
+def add(fullpath: str, scope: str | None = None) -> None:
     config.add(fullpath, scope=scope)
 
 

@@ -9,7 +9,6 @@ from string import Template
 from typing import AbstractSet
 from typing import Any
 from typing import Iterator
-from typing import Optional
 from typing import Type
 
 from .expression import Expression
@@ -28,7 +27,7 @@ class WhenResult:
 
     __slots__ = ("value", "reason")
 
-    def __init__(self, value: bool, reason: Optional[str]):
+    def __init__(self, value: bool, reason: str | None):
         self.value = value
         self.reason = reason
 
@@ -66,11 +65,11 @@ class When:
     def __init__(
         self,
         *,
-        options: Optional[str] = None,
-        keywords: Optional[str] = None,
-        parameters: Optional[str] = None,
-        testname: Optional[str] = None,
-        platforms: Optional[str] = None,
+        options: str | None = None,
+        keywords: str | None = None,
+        parameters: str | None = None,
+        testname: str | None = None,
+        platforms: str | None = None,
     ):
         self.option_expr = options
         self.keyword_expr = keywords
@@ -79,7 +78,7 @@ class When:
         self.platform_expr = platforms
 
     @staticmethod
-    def factory(input: Optional[str | dict[str, str]]) -> "When":
+    def factory(input: str | dict[str, str] | None) -> "When":
         if isinstance(input, dict):
             return When(**input)
         elif input is None:
@@ -88,7 +87,7 @@ class When:
             return When.from_string(input)
 
     @classmethod
-    def from_string(cls: "Type[When]", input: Optional[str]) -> "When":
+    def from_string(cls: "Type[When]", input: str | None) -> "When":
         """Parse expression, such as
 
         ``when="options='not dbg' keywords='fast and regression'"``
@@ -157,7 +156,7 @@ class When:
         _when_cache[input] = self
         return self
 
-    def evaluate_platform_expression(self, **kwds: str) -> Optional[str]:
+    def evaluate_platform_expression(self, **kwds: str) -> str | None:
         assert self.platform_expr is not None
         string = safe_substitute(self.platform_expr, **kwds)
         string = remove_surrounding_quotes(string)
@@ -169,9 +168,7 @@ class When:
             return reason
         return None
 
-    def evaluate_testname_expression(
-        self, testname_arg: Optional[str], **kwds: str
-    ) -> Optional[str]:
+    def evaluate_testname_expression(self, testname_arg: str | None, **kwds: str) -> str | None:
         assert self.testname_expr is not None
         if testname_arg is None:
             fmt = "@*{{testname={0}}} evaluated to @*r{{False}} for testname=None"
@@ -186,9 +183,7 @@ class When:
             return reason
         return None
 
-    def evaluate_option_expression(
-        self, options_arg: Optional[list[str]], **kwds: str
-    ) -> Optional[str]:
+    def evaluate_option_expression(self, options_arg: list[str] | None, **kwds: str) -> str | None:
         assert self.option_expr is not None
         if options_arg is None:
             fmt = "@*{{options={0}}} evaluated to @*r{{False}} for options=None"
@@ -204,8 +199,8 @@ class When:
         return None
 
     def evaluate_keyword_expression(
-        self, keywords_arg: Optional[list[str]], **kwds: str
-    ) -> Optional[str]:
+        self, keywords_arg: list[str] | None, **kwds: str
+    ) -> str | None:
         assert self.keyword_expr is not None
         if keywords_arg is None:
             fmt = "@*{{keywords={0}}} evaluated to @*r{{False}} for keywords=None"
@@ -221,8 +216,8 @@ class When:
         return None
 
     def evaluate_parameter_expression(
-        self, parameters_arg: Optional[dict[str, Any]], **kwds: str
-    ) -> Optional[str]:
+        self, parameters_arg: dict[str, Any] | None, **kwds: str
+    ) -> str | None:
         assert self.parameter_expr is not None
         if parameters_arg is None:
             fmt = "@*{{parameters={0}}} evaluated to @*r{{False}} for parameters=None"
@@ -240,10 +235,10 @@ class When:
     def evaluate(
         self,
         *,
-        testname: Optional[str] = None,
-        keywords: Optional[list[str]] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
+        testname: str | None = None,
+        keywords: list[str] | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> WhenResult:
         kwds: dict[str, Any] = {}
         if testname is not None:
@@ -281,7 +276,7 @@ class When:
         return WhenResult(True, None)
 
 
-_when_cache: dict[Optional[str], When] = {}
+_when_cache: dict[str | None, When] = {}
 
 
 @dataclasses.dataclass
@@ -375,10 +370,10 @@ def remove_surrounding_quotes(arg: str) -> str:
 
 def when(
     input: str | bool | dict,
-    keywords: Optional[list[str]] = None,
-    parameters: Optional[dict[str, Any]] = None,
-    testname: Optional[str] = None,
-    on_options: Optional[list[str]] = None,
+    keywords: list[str] | None = None,
+    parameters: dict[str, Any] | None = None,
+    testname: str | None = None,
+    on_options: list[str] | None = None,
 ) -> bool:
     if isinstance(input, bool):
         return input

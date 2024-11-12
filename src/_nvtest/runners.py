@@ -6,7 +6,6 @@ import signal
 import subprocess
 import time
 from typing import Any
-from typing import Optional
 
 from . import config
 from .atc import AbstractTestCase
@@ -217,7 +216,7 @@ class BatchRunner(AbstractTestRunner):
         fmt = "@%s{%d %s}"
         colors = Status.colors
         st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
-        duration: Optional[float] = batch.total_duration if batch.total_duration > 0 else None
+        duration: float | None = batch.total_duration if batch.total_duration > 0 else None
         s = io.StringIO()
         s.write(f"Finished batch {batch.batch_no} of {batch.nbatches}, {st_stat} ")
         s.write(f"(time: {hhmmss(duration, threshold=0)}")
@@ -231,7 +230,7 @@ class BatchRunner(AbstractTestRunner):
         s.write(")")
         return s.getvalue()
 
-    def nvtest_invocation(self, batch: TestBatch, node_count: Optional[int] = None) -> str:
+    def nvtest_invocation(self, batch: TestBatch, node_count: int | None = None) -> str:
         """Write the nvtest invocation used to run this batch."""
         fp = io.StringIO()
         fp.write("nvtest ")

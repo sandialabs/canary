@@ -6,7 +6,6 @@ import signal
 import sys
 import traceback
 from typing import TYPE_CHECKING
-from typing import Optional
 from typing import Sequence
 
 import hpc_connect
@@ -23,7 +22,7 @@ if TYPE_CHECKING:
     from .command.base import Command
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """Perform an in-process test run.
 
     :param args:
@@ -57,7 +56,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 class NVTestMain:
     """Set up and teardown this nvtest session"""
 
-    def __init__(self, argv: Optional[Sequence[str]] = None) -> None:
+    def __init__(self, argv: Sequence[str] | None = None) -> None:
         self.argv: Sequence[str] = argv or sys.argv[1:]
         self.invocation_dir = self.working_dir = os.getcwd()
 
@@ -90,7 +89,7 @@ class NVTestCommand:
 
     def __call__(self, *args_in: str, fail_on_error: bool = True) -> int:
         try:
-            save_debug: Optional[bool] = None
+            save_debug: bool | None = None
             if self.debug:
                 save_debug = config.get("config:debug")
                 config.set("config:debug", True)

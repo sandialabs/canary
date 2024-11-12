@@ -6,7 +6,6 @@ import sys
 import textwrap as textwrap
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Optional
 from typing import Sequence
 
 from ..third_party.color import colorize
@@ -75,7 +74,7 @@ class Parser(argparse.ArgumentParser):
     def convert_arg_line_to_args(self, arg_line: str) -> list[str]:
         return shlex.split(arg_line.split("#", 1)[0].strip())
 
-    def preparse(self, args: Optional[list[str]] = None, namespace=None):
+    def preparse(self, args: list[str] | None = None, namespace=None):
         subcommands = list(self.__subcommand_objects.keys())
         argv: list[str] = sys.argv[1:] if args is None else args
         args = []
@@ -119,7 +118,7 @@ class Parser(argparse.ArgumentParser):
         command.setup_parser(subparser)  # type: ignore
         self.__subcommand_objects[cmdname] = command
 
-    def get_command(self, cmdname: str) -> Optional["Command"]:
+    def get_command(self, cmdname: str) -> "Command | None":
         for name, command in self.__subcommand_objects.items():
             if cmdname == name:
                 return command
@@ -173,7 +172,7 @@ class EnvironmentModification(argparse.Action):
         parser: argparse.ArgumentParser,
         namespace: argparse.Namespace,
         option: str | Sequence[Any] | None,
-        option_str: Optional[str] = None,
+        option_str: str | None = None,
     ):
         assert isinstance(option, str)
         try:

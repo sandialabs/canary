@@ -3,7 +3,6 @@ import io
 import os
 import sys
 from getpass import getuser
-from typing import Optional
 
 from _nvtest.util import cdash
 from _nvtest.util import logging
@@ -13,12 +12,12 @@ from _nvtest.util.sendmail import sendmail
 
 def cdash_summary(
     *,
-    url: Optional[str] = None,
-    project: Optional[str] = None,
-    buildgroups: Optional[list[str]] = None,
-    mailto: Optional[list[str]] = None,
-    file: Optional[str] = None,
-    skip_sites: Optional[list[str]] = None,
+    url: str | None = None,
+    project: str | None = None,
+    buildgroups: list[str] | None = None,
+    mailto: list[str] | None = None,
+    file: str | None = None,
+    skip_sites: list[str] | None = None,
 ):
     """Generate a summary of the project's CDash dashboard
 
@@ -71,8 +70,8 @@ def generate_cdash_html_summary(
     url: str,
     project: str,
     *,
-    groups: Optional[list[str]] = None,
-    skip_sites: Optional[list[str]] = None,
+    groups: list[str] | None = None,
+    skip_sites: list[str] | None = None,
 ) -> str:
     """Generates a CDash summary page
 
@@ -103,8 +102,8 @@ def _get_build_data(
     url: str,
     project: str,
     date: str,
-    buildgroups: Optional[list[str]] = None,
-    skip_sites: Optional[list[str]] = None,
+    buildgroups: list[str] | None = None,
+    skip_sites: list[str] | None = None,
 ) -> list[dict]:
     """Categorize failed tests as diffed, failed, and timedout.  CDash does
     not distinguish diffed, failed, and timed out tests.  But, a test can

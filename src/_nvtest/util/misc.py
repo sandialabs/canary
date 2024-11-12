@@ -2,7 +2,6 @@ from argparse import Namespace
 from types import SimpleNamespace
 from typing import Any
 from typing import Callable
-from typing import Optional
 from typing import Sequence
 
 
@@ -45,7 +44,7 @@ def digits(x: int) -> int:
         n *= 10
 
 
-def plural(n: int, singular: str, plural: Optional[str] = None, show_n: bool = True) -> str:
+def plural(n: int, singular: str, plural: str | None = None, show_n: bool = True) -> str:
     """Pluralize <singular> word by adding an s if n != 1.
 
     Arguments:

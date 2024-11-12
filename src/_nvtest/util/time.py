@@ -4,7 +4,6 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import Callable
-from typing import Optional
 
 
 def strftimestamp(timestamp: float, fmt: str = "%b %d %H:%M") -> str:
@@ -24,7 +23,7 @@ def time_in_seconds(arg: int | float | str) -> float:
     return duration.total_seconds()
 
 
-def hhmmss(seconds: Optional[float], threshold: float = 2.0) -> str:
+def hhmmss(seconds: float | None, threshold: float = 2.0) -> str:
     if seconds is None:
         return "--:--:--"
     t = datetime.fromtimestamp(seconds)

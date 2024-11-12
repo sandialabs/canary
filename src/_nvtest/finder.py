@@ -2,7 +2,6 @@ import fnmatch
 import os
 import sys
 from typing import Any
-from typing import Optional
 from typing import TextIO
 
 from . import plugin
@@ -23,7 +22,7 @@ class Finder:
     version_info = (1, 0, 3)
 
     def __init__(self) -> None:
-        self.roots: dict[str, Optional[list[str]]] = {}
+        self.roots: dict[str, list[str] | None] = {}
         self._ready = False
 
     def prepare(self):
@@ -98,7 +97,7 @@ class Finder:
         return files
 
     def rfind(
-        self, root: str, subdir: Optional[str] = None
+        self, root: str, subdir: str | None = None
     ) -> tuple[list[AbstractTestGenerator], int]:
         def skip_dir(dirname):
             if os.path.basename(dirname) in self.skip_dirs:
@@ -189,12 +188,12 @@ class Finder:
     @staticmethod
     def lock(
         files: list[AbstractTestGenerator],
-        rh: Optional[ResourceHandler] = None,
-        keyword_expr: Optional[str] = None,
-        parameter_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        owners: Optional[set[str]] = None,
-        env_mods: Optional[dict[str, str]] = None,
+        rh: ResourceHandler | None = None,
+        keyword_expr: str | None = None,
+        parameter_expr: str | None = None,
+        on_options: list[str] | None = None,
+        owners: set[str] | None = None,
+        env_mods: dict[str, str] | None = None,
     ) -> list[TestCase]:
         o = ",".join(on_options or [])
         logging.debug(

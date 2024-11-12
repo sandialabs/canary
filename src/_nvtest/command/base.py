@@ -2,7 +2,6 @@ import argparse
 from abc import ABC
 from abc import abstractmethod
 from typing import Generator
-from typing import Optional
 from typing import Type
 
 from _nvtest.config.argparsing import Parser
@@ -54,7 +53,7 @@ class Command(ABC):
         return True
 
     @property
-    def epilog(self) -> Optional[str]:
+    def epilog(self) -> str | None:
         return None
 
     def setup_parser(self, parser: Parser) -> None:

@@ -4,7 +4,6 @@ import os
 import time
 import xml.dom.minidom as xdom
 from graphlib import TopologicalSorter
-from typing import Optional
 
 from _nvtest import config
 from _nvtest._version import version as nvtest_version
@@ -21,7 +20,7 @@ from _nvtest.util.time import timestamp
 
 
 class CDashXMLReporter:
-    def __init__(self, session: Optional[Session] = None, dest: Optional[str] = None) -> None:
+    def __init__(self, session: Session | None = None, dest: str | None = None) -> None:
         self.data = TestData()
         if session:
             cases_to_run: list["TestCase"] = [c for c in session.cases if not c.mask]
@@ -32,7 +31,7 @@ class CDashXMLReporter:
         self.xml_files: list[str] = []
 
     @classmethod
-    def from_json(cls, file: str, dest: Optional[str] = None) -> "CDashXMLReporter":
+    def from_json(cls, file: str, dest: str | None = None) -> "CDashXMLReporter":
         """Create an xml report from a json report"""
         dest = dest or os.path.join(os.path.dirname(file), "xml")
         self = cls(dest=dest)
@@ -61,10 +60,10 @@ class CDashXMLReporter:
     def create(
         self,
         buildname: str,
-        site: Optional[str] = None,
-        track: Optional[str] = None,
-        buildstamp: Optional[str] = None,
-        generator: Optional[str] = None,
+        site: str | None = None,
+        track: str | None = None,
+        buildstamp: str | None = None,
+        generator: str | None = None,
     ) -> None:
         """Collect information and create reports"""
         self.meta = None
@@ -83,7 +82,7 @@ class CDashXMLReporter:
         self.write_notes_xml()
 
     @staticmethod
-    def read_site_info(file, namespace: Optional[argparse.Namespace] = None) -> argparse.Namespace:
+    def read_site_info(file, namespace: argparse.Namespace | None = None) -> argparse.Namespace:
         with open(file) as fh:
             doc = xdom.parse(fh)
         if namespace is None:
@@ -111,7 +110,7 @@ class CDashXMLReporter:
         return buildstamp
 
     @staticmethod
-    def post(url: str, project: str, *files: str) -> Optional[str]:
+    def post(url: str, project: str, *files: str) -> str | None:
         if not files:
             raise ValueError("No files to post")
         server = cdash.server(url, project)

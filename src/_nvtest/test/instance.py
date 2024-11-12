@@ -3,7 +3,6 @@ import json
 import os
 from typing import Any
 from typing import Generator
-from typing import Optional
 from typing import Type
 
 from ..status import Status
@@ -71,7 +70,7 @@ class Parameters:
                 return False
         return True
 
-    def multi_index(self, arg: key_type) -> Optional[index_type]:
+    def multi_index(self, arg: key_type) -> index_type | None:
         keys: tuple[str, ...]
         if isinstance(arg, str):
             if arg in self._keys:
@@ -97,7 +96,7 @@ class Parameters:
     def values(self) -> list[Any]:
         return list(self._values)
 
-    def get(self, key: str, default: Optional[Any] = None) -> Optional[Any]:
+    def get(self, key: str, default: Any | None = None) -> Any | None:
         try:
             return self[key]
         except KeyError:
@@ -180,7 +179,7 @@ class TestInstance:
     start: float
     finish: float
     id: str
-    cmd_line: Optional[str]
+    cmd_line: str | None
     returncode: int
     variables: dict[str, str]
     dependencies: list["TestInstance"]
@@ -252,7 +251,7 @@ class TestInstance:
         return len(self.gpu_ids)
 
     @classmethod
-    def load(cls: Type["TestInstance"], arg_path: Optional[str] = None) -> "TestInstance":
+    def load(cls: Type["TestInstance"], arg_path: str | None = None) -> "TestInstance":
         dbf = TestCase._dbfile
         if arg_path is None:
             arg_path = dbf
@@ -263,7 +262,7 @@ class TestInstance:
             case = testcase_from_state(state)
         return TestInstance.from_case(case)
 
-    def get_dependency(self, **params: Any) -> "Optional[TestInstance]":
+    def get_dependency(self, **params: Any) -> "TestInstance | None":
         for dep in self.dependencies:
             if dep.parameters == params:
                 return dep

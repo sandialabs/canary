@@ -2,7 +2,6 @@ import errno
 import os
 from abc import ABC
 from abc import abstractmethod
-from typing import Optional
 from typing import Type
 
 from .resource import ResourceHandler
@@ -40,24 +39,24 @@ class AbstractTestGenerator(ABC):
 
            def describe(
                self,
-               keyword_expr: Optional[str] = None,
-               parameter_expr: Optional[str] = None,
-               on_options: Optional[list[str]] = None,
-               rh: Optional[ResourceHandler] = None,
+               keyword_expr: str | None = None,
+               parameter_expr: str | None = None,
+               on_options: list[str] | None = None,
+               rh: ResourceHandler | None = None,
            ) -> str:
                ...
 
            def lock(
                self,
-               cpus: Optional[list[int]] = None,
-               gpus: Optional[list[int]] = None,
-               nodes: Optional[list[int]] = None,
-               keyword_expr: Optional[str] = None,
-               on_options: Optional[list[str]] = None,
-               parameter_expr: Optional[str] = None,
-               timeout: Optional[float] = None,
-               owners: Optional[set[str]] = None,
-               env_mods: Optional[dict[str, str]] = None,
+               cpus: list[int] | None = None,
+               gpus: list[int] | None = None,
+               nodes: list[int] | None = None,
+               keyword_expr: str | None = None,
+               on_options: list[str] | None = None,
+               parameter_expr: str | None = None,
+               timeout: float | None = None,
+               owners: set[str] | None = None,
+               env_mods: dict[str, str] | None = None,
            ) -> list[nvtest.TestCase]:
                ...
 
@@ -69,7 +68,7 @@ class AbstractTestGenerator(ABC):
         cls.REGISTRY.add(cls)
         return super().__init_subclass__(**kwargs)
 
-    def __init__(self, root: str, path: Optional[str] = None) -> None:
+    def __init__(self, root: str, path: str | None = None) -> None:
         if path is None:
             root, path = os.path.split(root)
         self.root = os.path.abspath(root)
@@ -87,25 +86,25 @@ class AbstractTestGenerator(ABC):
     @abstractmethod
     def describe(
         self,
-        keyword_expr: Optional[str] = None,
-        parameter_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        rh: Optional[ResourceHandler] = None,
+        keyword_expr: str | None = None,
+        parameter_expr: str | None = None,
+        on_options: list[str] | None = None,
+        rh: ResourceHandler | None = None,
     ) -> str:
         """Return a description of the test"""
 
     @abstractmethod
     def lock(
         self,
-        cpus: Optional[list[int]] = None,
-        gpus: Optional[list[int]] = None,
-        nodes: Optional[list[int]] = None,
-        keyword_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameter_expr: Optional[str] = None,
-        timeout: Optional[float] = None,
-        owners: Optional[set[str]] = None,
-        env_mods: Optional[dict[str, str]] = None,
+        cpus: list[int] | None = None,
+        gpus: list[int] | None = None,
+        nodes: list[int] | None = None,
+        keyword_expr: str | None = None,
+        on_options: list[str] | None = None,
+        parameter_expr: str | None = None,
+        timeout: float | None = None,
+        owners: set[str] | None = None,
+        env_mods: dict[str, str] | None = None,
     ) -> list[TestCase]:
         """Expand parameters and instantiate concrete test cases
 
@@ -146,7 +145,7 @@ class AbstractTestGenerator(ABC):
         return generator
 
     @staticmethod
-    def factory(root: str, path: Optional[str] = None) -> "AbstractTestGenerator":
+    def factory(root: str, path: str | None = None) -> "AbstractTestGenerator":
         for gen_type in AbstractTestGenerator.REGISTRY:
             if gen_type.matches(root if path is None else path):
                 return gen_type(root, path=path)

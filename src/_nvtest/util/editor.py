@@ -15,7 +15,6 @@ import os
 import shlex
 from types import SimpleNamespace
 from typing import Callable
-from typing import Optional
 
 import _nvtest.config as config
 from _nvtest.util import logging
@@ -25,7 +24,7 @@ from _nvtest.util.filesystem import which
 _default_editors = ["vim", "vi", "emacs", "nano", "notepad", "code"]
 
 
-def _find_exe_from_env_var(var: str) -> Optional[SimpleNamespace]:
+def _find_exe_from_env_var(var: str) -> SimpleNamespace | None:
     """Find an executable from an environment variable.
 
     Args:

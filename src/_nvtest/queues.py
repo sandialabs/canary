@@ -2,7 +2,6 @@ import abc
 import io
 import threading
 from typing import Any
-from typing import Optional
 
 from . import config
 from .resource import ResourceHandler
@@ -136,7 +135,7 @@ class ResourceQueue(abc.ABC):
         for key in keys:
             self._notrun[key] = self.buffer.pop(key)
 
-    def get(self) -> Optional[tuple[int, TestCase | TestBatch]]:
+    def get(self) -> tuple[int, TestCase | TestBatch] | None:
         with self.lock:
             if self.available_workers() <= 0:
                 return None

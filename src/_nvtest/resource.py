@@ -2,7 +2,6 @@ import argparse
 import re
 import shlex
 from typing import Any
-from typing import Optional
 
 from . import config
 from .third_party.color import colorize
@@ -51,7 +50,7 @@ class ResourceHandler:
         scope, type = path.split(":")
         return self.data[scope][type]
 
-    def get(self, path: str, default: Optional[Any] = None) -> Optional[Any]:
+    def get(self, path: str, default: Any | None = None) -> Any | None:
         scope, type = path.split(":")
         if scope not in self.data:
             raise ValueError(f"{scope!r} is not a valid ResourceHandler scope")

@@ -1,5 +1,3 @@
-from typing import Optional
-
 from .error import diff_exit_status
 from .error import fail_exit_status
 from .error import skip_exit_status
@@ -44,9 +42,9 @@ class Status:
         "not_run": "R",
     }
 
-    def __init__(self, arg: str = "created", details: Optional[str] = None) -> None:
+    def __init__(self, arg: str = "created", details: str | None = None) -> None:
         self.value: str
-        self.details: Optional[str]
+        self.details: str | None
         self.set(arg, details)
 
     def __str__(self):
@@ -149,7 +147,7 @@ class Status:
             return f"{self.value}:{self.details}"
         return self.value
 
-    def set(self, arg: str, details: Optional[str] = None) -> None:
+    def set(self, arg: str, details: str | None = None) -> None:
         if arg not in self.members:
             raise ValueError(f"{arg} is not a valid status")
         if arg in ("skipped",):

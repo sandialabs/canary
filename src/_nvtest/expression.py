@@ -10,7 +10,6 @@ from typing import Callable
 from typing import Iterator
 from typing import Mapping
 from typing import NoReturn
-from typing import Optional
 from typing import Sequence
 
 __all__ = [
@@ -92,7 +91,7 @@ class Scanner:
                     )
         yield Token(TokenType.EOF, "", pos)
 
-    def accept(self, type: TokenType, *, reject: bool = False) -> Optional[Token]:
+    def accept(self, type: TokenType, *, reject: bool = False) -> Token | None:
         if self.current.type is type:
             token = self.current
             if token.type is not TokenType.EOF:

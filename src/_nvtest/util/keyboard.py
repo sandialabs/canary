@@ -3,9 +3,8 @@ import fcntl
 import os
 import sys
 import termios
-from typing import Optional
 
-DISABLE_KEYBOARD_QUERY: Optional[bool] = None
+DISABLE_KEYBOARD_QUERY: bool | None = None
 
 
 def disable_keyboard_query() -> bool:

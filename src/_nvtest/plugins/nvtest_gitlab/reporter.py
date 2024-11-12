@@ -1,7 +1,6 @@
 import io
 import os
 import re
-from typing import Optional
 
 from _nvtest.reporter import Reporter
 from _nvtest.test.case import TestCase
@@ -18,7 +17,7 @@ class GitLabReporter(Reporter):
     def description(cls) -> str:
         return "Create GitLab merge request reports"
 
-    def create(self, cdash_url: Optional[str] = None, access_token: Optional[str] = None) -> None:  # type: ignore
+    def create(self, cdash_url: str | None = None, access_token: str | None = None) -> None:  # type: ignore
         """Create a merge request report and post it to the active merge request
 
         Args:
@@ -37,7 +36,7 @@ class GitLabReporter(Reporter):
 
 
 class MergeRequest:
-    def __init__(self, access_token: Optional[str] = None):
+    def __init__(self, access_token: str | None = None):
         if "GITLAB_CI" not in os.environ:
             raise MissingCIVariable("GITLAB_CI")
         if access_token is None:
@@ -66,7 +65,7 @@ class MergeRequest:
     def report_failed(
         self,
         failed_cases: dict[str, list[TestCase]],
-        cdash_build_url: Optional[str] = None,
+        cdash_build_url: str | None = None,
     ):
         fp = io.StringIO()
         job = re.sub(":(build|test|report)", "", self.job_name)
@@ -91,7 +90,7 @@ class MergeRequest:
             fp.write(f"See the [CDash entry]({cdash_build_url}) for details.\n\n")
         self.add_note(fp.getvalue())
 
-    def report_success(self, cdash_build_url: Optional[str] = None):
+    def report_success(self, cdash_build_url: str | None = None):
         fp = io.StringIO()
         job = re.sub(":(build|test|report)", "", self.job_name)
         fp.write(f"Merge request pipeline `{job}` finished successfully\n\n")

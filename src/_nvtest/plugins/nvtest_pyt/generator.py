@@ -7,7 +7,6 @@ import sys
 from string import Template
 from types import ModuleType
 from typing import Any
-from typing import Optional
 from typing import Sequence
 
 import _nvtest.config as config
@@ -34,10 +33,10 @@ class FilterNamespace:
         self,
         value: Any,
         *,
-        when: Optional[WhenType] = None,
-        expect: Optional[int] = None,
-        result: Optional[str] = None,
-        action: Optional[str] = None,
+        when: WhenType | None = None,
+        expect: int | None = None,
+        result: str | None = None,
+        action: str | None = None,
         **kwargs: Any,
     ):
         self.value: Any = value
@@ -50,9 +49,9 @@ class FilterNamespace:
 
     def enabled(
         self,
-        testname: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> bool:
         result = self.when.evaluate(
             testname=testname, on_options=on_options, parameters=parameters
@@ -61,7 +60,7 @@ class FilterNamespace:
 
 
 class PYTTestFile(AbstractTestGenerator):
-    def __init__(self, root: str, path: Optional[str] = None) -> None:
+    def __init__(self, root: str, path: str | None = None) -> None:
         super().__init__(root, path=path)
         self.owners: list[str] = []
         self._keywords: list[FilterNamespace] = []
@@ -73,12 +72,12 @@ class PYTTestFile(AbstractTestGenerator):
         self._sources: list[FilterNamespace] = []
         self._baseline: list[FilterNamespace] = []
         self._enable: list[FilterNamespace] = []
-        self._preload: Optional[FilterNamespace] = None
+        self._preload: FilterNamespace | None = None
         self._modules: list[FilterNamespace] = []
         self._rcfiles: list[FilterNamespace] = []
         self._depends_on: list[FilterNamespace] = []
-        self._skipif_reason: Optional[str] = None
-        self._xstatus: Optional[FilterNamespace] = None
+        self._skipif_reason: str | None = None
+        self._xstatus: FilterNamespace | None = None
         self.load()
 
     def __repr__(self) -> str:
@@ -86,10 +85,10 @@ class PYTTestFile(AbstractTestGenerator):
 
     def describe(
         self,
-        keyword_expr: Optional[str] = None,
-        parameter_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        rh: Optional[ResourceHandler] = None,
+        keyword_expr: str | None = None,
+        parameter_expr: str | None = None,
+        on_options: list[str] | None = None,
+        rh: ResourceHandler | None = None,
     ) -> str:
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
@@ -124,15 +123,15 @@ class PYTTestFile(AbstractTestGenerator):
 
     def lock(
         self,
-        cpus: Optional[list[int]] = None,
-        gpus: Optional[list[int]] = None,
-        nodes: Optional[list[int]] = None,
-        keyword_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameter_expr: Optional[str] = None,
-        timeout: Optional[float] = None,
-        owners: Optional[set[str]] = None,
-        env_mods: Optional[dict[str, str]] = None,
+        cpus: list[int] | None = None,
+        gpus: list[int] | None = None,
+        nodes: list[int] | None = None,
+        keyword_expr: str | None = None,
+        on_options: list[str] | None = None,
+        parameter_expr: str | None = None,
+        timeout: float | None = None,
+        owners: set[str] | None = None,
+        env_mods: dict[str, str] | None = None,
     ) -> list[TestCase]:
         try:
             cases = self._lock(
@@ -154,15 +153,15 @@ class PYTTestFile(AbstractTestGenerator):
 
     def _lock(
         self,
-        cpus: Optional[list[int]] = None,
-        gpus: Optional[list[int]] = None,
-        nodes: Optional[list[int]] = None,
-        keyword_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameter_expr: Optional[str] = None,
-        timeout: Optional[float] = None,
-        owners: Optional[set[str]] = None,
-        env_mods: Optional[dict[str, str]] = None,
+        cpus: list[int] | None = None,
+        gpus: list[int] | None = None,
+        nodes: list[int] | None = None,
+        keyword_expr: str | None = None,
+        on_options: list[str] | None = None,
+        parameter_expr: str | None = None,
+        timeout: float | None = None,
+        owners: set[str] | None = None,
+        env_mods: dict[str, str] | None = None,
     ) -> list[TestCase]:
         cpus_per_node: int = config.get("machine:cpus_per_node")
         gpus_per_node: int = config.get("machine:gpus_per_node")
@@ -187,7 +186,7 @@ class PYTTestFile(AbstractTestGenerator):
             cases: list[TestCase] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
-                case_mask: Optional[str] = test_mask
+                case_mask: str | None = test_mask
                 keywords = self.keywords(testname=name, parameters=parameters)
                 if case_mask is None and keyword_expr is not None:
                     kwds = {kw for kw in keywords}
@@ -296,7 +295,7 @@ class PYTTestFile(AbstractTestGenerator):
             execbase = self.execbase(testname=name, on_options=on_options)
             if execbase:
                 # add previous cases as dependencies
-                mask_base_case: Optional[str] = None
+                mask_base_case: str | None = None
                 if any(case.mask for case in cases):
                     mask_base_case = colorize("deselected due to @*b{skipped dependencies}")
                 modules = self.modules(testname=name, on_options=on_options)
@@ -354,7 +353,7 @@ class PYTTestFile(AbstractTestGenerator):
     # -------------------------------------------------------------------------------- #
 
     @property
-    def skipif_reason(self) -> Optional[str]:
+    def skipif_reason(self) -> str | None:
         return self._skipif_reason
 
     @skipif_reason.setter
@@ -363,8 +362,8 @@ class PYTTestFile(AbstractTestGenerator):
 
     def keywords(
         self,
-        testname: Optional[str] = None,
-        parameters: Optional[dict[str, Any]] = None,
+        testname: str | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> list[str]:
         keywords: set[str] = set()
         for ns in self._keywords:
@@ -376,9 +375,9 @@ class PYTTestFile(AbstractTestGenerator):
 
     def xstatus(
         self,
-        testname: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> int:
         if self._xstatus is not None:
             result = self._xstatus.when.evaluate(
@@ -390,10 +389,10 @@ class PYTTestFile(AbstractTestGenerator):
 
     def preload(
         self,
-        testname: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
-    ) -> Optional[str]:
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
+    ) -> str | None:
         if self._preload is not None:
             result = self._preload.when.evaluate(
                 testname=testname, parameters=parameters, on_options=on_options
@@ -404,11 +403,11 @@ class PYTTestFile(AbstractTestGenerator):
 
     def modules(
         self,
-        testname: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
-    ) -> list[tuple[str, Optional[str]]]:
-        modules: list[tuple[str, Optional[str]]] = []
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
+    ) -> list[tuple[str, str | None]]:
+        modules: list[tuple[str, str | None]] = []
         for ns in self._modules:
             result = ns.when.evaluate(
                 testname=testname, parameters=parameters, on_options=on_options
@@ -419,9 +418,9 @@ class PYTTestFile(AbstractTestGenerator):
 
     def rcfiles(
         self,
-        testname: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> list[str]:
         rcfiles: list[str] = []
         for ns in self._rcfiles:
@@ -433,7 +432,7 @@ class PYTTestFile(AbstractTestGenerator):
         return rcfiles
 
     def paramsets(
-        self, testname: Optional[str] = None, on_options: Optional[list[str]] = None
+        self, testname: str | None = None, on_options: list[str] | None = None
     ) -> list[ParameterSet]:
         paramsets: list[ParameterSet] = []
         for ns in self._paramsets:
@@ -445,9 +444,9 @@ class PYTTestFile(AbstractTestGenerator):
 
     def attributes(
         self,
-        testname: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         attributes: dict[str, Any] = {}
         for ns in self._attributes:
@@ -465,9 +464,7 @@ class PYTTestFile(AbstractTestGenerator):
             names.append(self.name)
         return names
 
-    def execbase(
-        self, testname: Optional[str] = None, on_options: Optional[list[str]] = None
-    ) -> str:
+    def execbase(self, testname: str | None = None, on_options: list[str] | None = None) -> str:
         for ns in self._execbase:
             result = ns.when.evaluate(testname=testname, on_options=on_options)
             if not result.value:
@@ -477,10 +474,10 @@ class PYTTestFile(AbstractTestGenerator):
 
     def timeout(
         self,
-        testname: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
-    ) -> Optional[float]:
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
+    ) -> float | None:
         for ns in self._timeout:
             result = ns.when.evaluate(
                 testname=testname, on_options=on_options, parameters=parameters
@@ -492,9 +489,9 @@ class PYTTestFile(AbstractTestGenerator):
 
     def enable(
         self,
-        testname: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-    ) -> tuple[bool, Optional[str]]:
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+    ) -> tuple[bool, str | None]:
         for ns in self._enable:
             result = ns.when.evaluate(testname=testname, on_options=on_options)
             if ns.value is True and not result.value:
@@ -506,9 +503,9 @@ class PYTTestFile(AbstractTestGenerator):
 
     def baseline(
         self,
-        testname: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> list[str | tuple[str, str]]:
         baseline: list[str | tuple[str, str]] = []
         kwds = dict(parameters) if parameters else {}
@@ -536,9 +533,9 @@ class PYTTestFile(AbstractTestGenerator):
 
     def sources(
         self,
-        testname: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> dict[str, list[tuple[str, str]]]:
         kwds = dict(parameters) if parameters else {}
         if testname:
@@ -568,9 +565,9 @@ class PYTTestFile(AbstractTestGenerator):
 
     def depends_on(
         self,
-        testname: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> list[str]:
         kwds = dict(parameters) if parameters else {}
         if testname:
@@ -596,15 +593,15 @@ class PYTTestFile(AbstractTestGenerator):
 
     # -------------------------------------------------------------------------------- #
 
-    def m_keywords(self, *args: str, when: Optional[WhenType] = None) -> None:
+    def m_keywords(self, *args: str, when: WhenType | None = None) -> None:
         keyword_ns = FilterNamespace(tuple(args), when=when)
         self._keywords.append(keyword_ns)
 
-    def m_xfail(self, *, code: int = -1, when: Optional[WhenType] = None) -> None:
+    def m_xfail(self, *, code: int = -1, when: WhenType | None = None) -> None:
         ns = FilterNamespace(code, when=when)
         self._xstatus = ns
 
-    def m_xdiff(self, *, when: Optional[WhenType] = None) -> None:
+    def m_xdiff(self, *, when: WhenType | None = None) -> None:
         ns = FilterNamespace(diff_exit_status, when=when)
         self._xstatus = ns
 
@@ -614,24 +611,22 @@ class PYTTestFile(AbstractTestGenerator):
     def m_depends_on(
         self,
         arg: str,
-        when: Optional[WhenType] = None,
-        result: Optional[str] = None,
-        expect: Optional[int] = None,
+        when: WhenType | None = None,
+        result: str | None = None,
+        expect: int | None = None,
     ) -> None:
         ns = FilterNamespace(arg, when=when, result=result, expect=expect)
         self._depends_on.append(ns)
 
-    def m_preload(self, arg: str, when: Optional[WhenType] = None) -> None:
+    def m_preload(self, arg: str, when: WhenType | None = None) -> None:
         ns = FilterNamespace(arg, when=when)
         self._preload = ns
 
-    def m_module(
-        self, arg: str, when: Optional[WhenType] = None, use: Optional[str] = None
-    ) -> None:
+    def m_module(self, arg: str, when: WhenType | None = None, use: str | None = None) -> None:
         ns = FilterNamespace(arg, when=when, use=use)
         self._modules.append(ns)
 
-    def m_rcfile(self, arg: str, when: Optional[WhenType] = None) -> None:
+    def m_rcfile(self, arg: str, when: WhenType | None = None) -> None:
         ns = FilterNamespace(arg, when=when)
         self._rcfiles.append(ns)
 
@@ -639,8 +634,8 @@ class PYTTestFile(AbstractTestGenerator):
         self,
         argnames: str | Sequence[str],
         argvalues: list[Sequence[Any] | Any],
-        when: Optional[WhenType] = None,
-        type: Optional[enums.enums] = None,
+        when: WhenType | None = None,
+        type: enums.enums | None = None,
     ) -> None:
         type = type or enums.list_parameter_space
         if not isinstance(type, enums.enums):
@@ -672,7 +667,7 @@ class PYTTestFile(AbstractTestGenerator):
         ns = FilterNamespace(pset, when=when)
         self._paramsets.append(ns)
 
-    def m_set_attribute(self, when: Optional[WhenType] = None, **kwargs: Any) -> None:
+    def m_set_attribute(self, when: WhenType | None = None, **kwargs: Any) -> None:
         ns = FilterNamespace(kwargs, when=when)
         self._attributes.append(ns)
 
@@ -680,9 +675,9 @@ class PYTTestFile(AbstractTestGenerator):
         self,
         action: str,
         *files: str,
-        src: Optional[str] = None,
-        dst: Optional[str] = None,
-        when: Optional[WhenType] = None,
+        src: str | None = None,
+        dst: str | None = None,
+        when: WhenType | None = None,
     ) -> None:
         if src is not None:
             if files:
@@ -700,34 +695,34 @@ class PYTTestFile(AbstractTestGenerator):
     def m_copy(
         self,
         *files: str,
-        src: Optional[str] = None,
-        dst: Optional[str] = None,
-        when: Optional[WhenType] = None,
+        src: str | None = None,
+        dst: str | None = None,
+        when: WhenType | None = None,
     ) -> None:
         self.add_sources("copy", *files, src=src, dst=dst, when=when)
 
     def m_link(
         self,
         *files: str,
-        src: Optional[str] = None,
-        dst: Optional[str] = None,
-        when: Optional[WhenType] = None,
+        src: str | None = None,
+        dst: str | None = None,
+        when: WhenType | None = None,
     ) -> None:
         self.add_sources("link", *files, src=src, dst=dst, when=when)
 
     def m_sources(
         self,
         *files: str,
-        when: Optional[WhenType] = None,
+        when: WhenType | None = None,
     ) -> None:
         self.add_sources("sources", *files, when=when)
 
     def m_execbase(
         self,
         *,
-        flag: Optional[str] = None,
-        script: Optional[str] = None,
-        when: Optional[WhenType] = None,
+        flag: str | None = None,
+        script: str | None = None,
+        when: WhenType | None = None,
     ) -> None:
         if flag is not None and script is not None:
             raise ValueError(
@@ -746,7 +741,7 @@ class PYTTestFile(AbstractTestGenerator):
     def m_timeout(
         self,
         arg: str | float | int,
-        when: Optional[WhenType] = None,
+        when: WhenType | None = None,
     ) -> None:
         "testname parameter parameters platform platforms option options"
         arg = time_in_seconds(arg)
@@ -760,17 +755,17 @@ class PYTTestFile(AbstractTestGenerator):
     def m_enable(
         self,
         arg: bool,
-        when: Optional[WhenType] = None,
+        when: WhenType | None = None,
     ) -> None:
         ns = FilterNamespace(bool(arg), when=when)
         self._enable.append(ns)
 
     def m_baseline(
         self,
-        src: Optional[str] = None,
-        dst: Optional[str] = None,
-        when: Optional[WhenType] = None,
-        flag: Optional[str] = None,
+        src: str | None = None,
+        dst: str | None = None,
+        when: WhenType | None = None,
+        flag: str | None = None,
     ) -> None:
         ns: FilterNamespace
         if (src is not None) or (dst is not None):
@@ -830,18 +825,18 @@ class PYTTestFile(AbstractTestGenerator):
     def f_execbase(
         self,
         *,
-        when: Optional[WhenType] = None,
-        flag: Optional[str] = None,
-        script: Optional[str] = None,
+        when: WhenType | None = None,
+        flag: str | None = None,
+        script: str | None = None,
     ):
         self.m_execbase(when=when, flag=flag, script=script)
 
     def f_analyze(
         self,
         *,
-        when: Optional[WhenType] = None,
-        flag: Optional[str] = None,
-        script: Optional[str] = None,
+        when: WhenType | None = None,
+        flag: str | None = None,
+        script: str | None = None,
     ):
         # vvtest compatibility
         if script is None and flag is None:
@@ -851,46 +846,46 @@ class PYTTestFile(AbstractTestGenerator):
     def f_copy(
         self,
         *args: str,
-        src: Optional[str] = None,
-        dst: Optional[str] = None,
-        when: Optional[WhenType] = None,
+        src: str | None = None,
+        dst: str | None = None,
+        when: WhenType | None = None,
     ):
         self.m_copy(*args, src=src, dst=dst, when=when)
 
     def f_depends_on(
         self,
         arg: str,
-        when: Optional[WhenType] = None,
-        expect: Optional[int] = None,
-        result: Optional[str] = None,
+        when: WhenType | None = None,
+        expect: int | None = None,
+        result: str | None = None,
     ):
         self.m_depends_on(arg, when=when, result=result, expect=expect)
 
-    def f_gpus(self, *ngpus: int, when: Optional[WhenType] = None) -> None:
+    def f_gpus(self, *ngpus: int, when: WhenType | None = None) -> None:
         self.m_parameterize("ngpu", list(ngpus), when=when)
 
-    def f_cpus(self, *values: int, when: Optional[WhenType] = None) -> None:
+    def f_cpus(self, *values: int, when: WhenType | None = None) -> None:
         self.m_parameterize("np", list(values), when=when)
 
-    def f_processors(self, *values: int, when: Optional[WhenType] = None) -> None:
+    def f_processors(self, *values: int, when: WhenType | None = None) -> None:
         self.m_parameterize("np", list(values), when=when)
 
-    def f_nodes(self, *values: int, when: Optional[WhenType] = None) -> None:
+    def f_nodes(self, *values: int, when: WhenType | None = None) -> None:
         self.m_parameterize("nnode", list(values), when=when)
 
-    def f_enable(self, *args: bool, when: Optional[WhenType] = None):
+    def f_enable(self, *args: bool, when: WhenType | None = None):
         arg = True if not args else args[0]
         self.m_enable(arg, when=when)
 
-    def f_keywords(self, *args: str, when: Optional[WhenType] = None) -> None:
+    def f_keywords(self, *args: str, when: WhenType | None = None) -> None:
         self.m_keywords(*args, when=when)
 
     def f_link(
         self,
         *args: str,
-        src: Optional[str] = None,
-        dst: Optional[str] = None,
-        when: Optional[WhenType] = None,
+        src: str | None = None,
+        dst: str | None = None,
+        when: WhenType | None = None,
     ):
         self.m_link(*args, src=src, dst=dst, when=when)
 
@@ -905,29 +900,27 @@ class PYTTestFile(AbstractTestGenerator):
         names: str | Sequence[str],
         values: list[Sequence[Any] | Any],
         *,
-        when: Optional[WhenType] = None,
+        when: WhenType | None = None,
         type: enums.enums = enums.list_parameter_space,
     ) -> None:
         self.m_parameterize(names, values, when=when, type=type)
 
-    def f_preload(self, arg: str, *, when: Optional[WhenType] = None):
+    def f_preload(self, arg: str, *, when: WhenType | None = None):
         self.m_preload(arg, when=when)
 
-    def f_load_module(
-        self, arg: str, *, when: Optional[WhenType] = None, use: Optional[str] = None
-    ):
+    def f_load_module(self, arg: str, *, when: WhenType | None = None, use: str | None = None):
         self.m_module(arg, when=when, use=use)
 
-    def f_source(self, arg: str, *, when: Optional[WhenType] = None):
+    def f_source(self, arg: str, *, when: WhenType | None = None):
         self.m_rcfile(arg, when=when)
 
-    def f_set_attribute(self, *, when: Optional[WhenType] = None, **attributes: Any) -> None:
+    def f_set_attribute(self, *, when: WhenType | None = None, **attributes: Any) -> None:
         self.m_set_attribute(when=when, **attributes)
 
     def f_skipif(self, arg: bool, *, reason: str) -> None:
         self.m_skipif(arg, reason=reason)
 
-    def f_sources(self, *args: str, when: Optional[WhenType] = None):
+    def f_sources(self, *args: str, when: WhenType | None = None):
         self.m_sources(*args, when=when)
 
     def f_testname(self, arg: str) -> None:
@@ -935,20 +928,20 @@ class PYTTestFile(AbstractTestGenerator):
 
     f_name = f_testname
 
-    def f_timeout(self, arg: str | float | int, *, when: Optional[WhenType] = None):
+    def f_timeout(self, arg: str | float | int, *, when: WhenType | None = None):
         self.m_timeout(arg, when=when)
 
-    def f_xdiff(self, *, when: Optional[WhenType] = None):
+    def f_xdiff(self, *, when: WhenType | None = None):
         self.m_xdiff(when=when)
 
-    def f_xfail(self, *, code: int = -1, when: Optional[WhenType] = None):
+    def f_xfail(self, *, code: int = -1, when: WhenType | None = None):
         self.m_xfail(code=code, when=when)
 
     def f_baseline(
         self,
-        src: Optional[str] = None,
-        dst: Optional[str] = None,
-        when: Optional[WhenType] = None,
-        flag: Optional[str] = None,
+        src: str | None = None,
+        dst: str | None = None,
+        when: WhenType | None = None,
+        flag: str | None = None,
     ) -> None:
         self.m_baseline(src, dst, when=when, flag=flag)

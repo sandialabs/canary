@@ -7,7 +7,6 @@ from abc import ABC
 from typing import Any
 from typing import Callable
 from typing import Generator
-from typing import Optional
 from typing import Type
 
 from _nvtest.config.argparsing import Parser
@@ -61,9 +60,9 @@ class Reporter(ABC):
         Reporter.REGISTRY.add(cls)
         return super().__init_subclass__(**kwargs)
 
-    def __init__(self, session: Optional["Session"] = None) -> None:
-        self._data: Optional[TestData] = None
-        self._session: Optional[Session] = session
+    def __init__(self, session: "Session | None" = None) -> None:
+        self._data: TestData | None = None
+        self._session: Session | None = session
 
     @property
     def data(self) -> TestData:
@@ -132,7 +131,7 @@ class Reporter(ABC):
         method_flags: list[dict[str, Any]] = []
         signature = inspect.signature(method)
         docstring = docstring_parser.parse(method.__doc__ or "")
-        descriptions: dict[str, Optional[str]] = {}
+        descriptions: dict[str, str | None] = {}
         for p in docstring.params:
             descriptions[p.arg_name] = p.description
         for param in signature.parameters.values():
@@ -176,7 +175,7 @@ class Reporter(ABC):
         return args, kwargs
 
 
-def get_annotation_type(annotation) -> Optional[float | int | bool]:
+def get_annotation_type(annotation) -> float | int | bool | None:
     if annotation in (float, int, bool):
         return annotation
     elif typing.get_origin(annotation) is typing.Union:
