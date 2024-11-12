@@ -11,10 +11,11 @@ nvtest user's guide
    getting-started
 
 .. toctree::
-   :caption: Basics
-   :maxdepth: 1
+   :caption: Basics and usage
+   :maxdepth: 2
 
    basics
+   usage
 
 .. toctree::
    :caption: Configuration

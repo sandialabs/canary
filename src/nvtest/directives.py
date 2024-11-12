@@ -149,7 +149,7 @@ def execbase(
     References
     ----------
 
-    * :ref:`Writing an execute/analyze test <basics-execute-and-analyze>`
+    * :ref:`Writing an execute/analyze test <usage-execute-and-analyze>`
 
     Examples
     --------
@@ -939,7 +939,7 @@ def parameterize(
     References
     ----------
 
-    * :ref:`Parameterizing Tests <basics-parameterize>`
+    * :ref:`Parameterizing Tests <usage-parameterize>`
 
     Examples
     --------
@@ -1042,7 +1042,7 @@ def preload(arg: str, *, when: Optional[WhenType] = None, source: bool = False) 
     .. warning::
 
        The ``preload`` currently has no effect.  Use ``nvtest.shell.source`` instead,
-       see :ref:`howto-environ`.
+       see :ref:`usage-rcfiles`.
 
 
     """

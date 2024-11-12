@@ -1,4 +1,4 @@
-.. _howto-enable:
+.. _usage-enable:
 
 Enable/disable tests
 ====================

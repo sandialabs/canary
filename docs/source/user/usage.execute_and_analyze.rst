@@ -1,4 +1,4 @@
-.. _basics-execute-and-analyze:
+.. _usage-execute-and-analyze:
 
 The execute and analyze pattern
 ===============================
@@ -95,7 +95,7 @@ Additionally, a full table of dependency parameters is accessible via key entry 
 Run only the analysis section of a test
 ---------------------------------------
 
-After a test is run, the analysis sections can be run with the :ref:`nvtest analyze<nvtest-analyze>` command.  Consider the test introduced in :ref:`basics-execute-and-analyze`, repeated here for convenience:
+After a test is run, the analysis sections can be run with the :ref:`nvtest analyze<nvtest-analyze>` command.  Consider the test introduced in :ref:`usage-execute-and-analyze`, repeated here for convenience:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :language: python

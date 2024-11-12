@@ -1,4 +1,4 @@
-.. _howto-log-files:
+.. _usage-log-files:
 
 Inspect log files
 =================

@@ -1,9 +1,9 @@
-.. _howto-finding:
+.. _usage-finding:
 
 Find and list test files
 ========================
 
-``nvtest find`` finds tests in a search path and prints basic information about each test:
+``nvtest find`` finds tests in a search path and prints basic information about each test.
 
 
 Basic usage

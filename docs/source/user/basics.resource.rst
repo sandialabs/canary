@@ -49,7 +49,7 @@ Setting the number of workers
 
 If the number of workers is not given, it will receive a default value based on the following:
 
-* 5 for :ref:`batched <howto-run-batched>` test sessions,
+* 5 for :ref:`batched <usage-run-batched>` test sessions,
 * the number of processors on the machine, otherwise.
 
 Setting resources available to individual tests

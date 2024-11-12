@@ -1,7 +1,7 @@
-.. _basics-parameterize:
+.. _usage-parameterize:
 
-Parameterizing tests
-====================
+Parameterize tests
+==================
 
 A single test file can generate many test cases, each having different parameters, using the :ref:`parameterize <directive-parameterize>` directive.  The test file uses the parameter name[s] and value[s] to run variations of the test.  For example, the test script
 
@@ -47,8 +47,3 @@ np and ngpu parameters
 ----------------------
 
 The ``np`` and ``ngpu`` parameters are interpreted by ``nvtest`` to be the number of processors and gpus, respectively, needed by the test case.  For compatiblity with ``vvtest``, ``ndevice`` is interpreted the same as ``ngpu``.
-
-vvt parameter types
--------------------
-
-In ``.vvt`` file types, parameters are read in by a json reader.  In general, numbers are parsed as numbers and anything that can't be cast to a number is left as a string.

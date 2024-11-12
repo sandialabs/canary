@@ -34,7 +34,7 @@ A test is considered to have successfully completed if its exit code is ``0``.  
 
 .. note::
 
-   This test uses an optional :ref:`keyword directive<directive-keywords>` to aid in identifying the test and is is used to :ref:`filter tests<basics-filter>` (``-k first`` on the command line).
+   This test uses an optional :ref:`keyword directive<directive-keywords>` to aid in identifying the test and is is used to :ref:`filter tests<usage-filter>` (``-k first`` on the command line).
 
 Test execution was conducted within a "test session" -- a folder created to run the tests "out of source".  The default name of the test session is ``TestResults``.  Details of the session can be obtained by navigating to it and executing :ref:`nvtest status<nvtest-status>`:
 

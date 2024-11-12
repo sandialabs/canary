@@ -1,4 +1,4 @@
-.. _howto-rerun:
+.. _usage-rerun:
 
 Rerun tests
 ===========
@@ -30,12 +30,12 @@ Optionally, a ``PATH`` argument can be passed to the ``nvtest run`` invocation, 
 Filter tests based on previous status
 -------------------------------------
 
-In rerun mode, the previous test status is included implicitly as a test keyword which allows :ref:`filtering <basics-filter>` based on previous statuses.
+In rerun mode, the previous test status is included implicitly as a test keyword which allows :ref:`filtering <usage-filter>` based on previous statuses.
 
 Batch considerations
 --------------------
 
-When a test session is created in :ref:`batched mode <howto-run-batched>`, the batch arguments from the test session invocation are inherited in future reruns.
+When a test session is created in :ref:`batched mode <usage-run-batched>`, the batch arguments from the test session invocation are inherited in future reruns.
 
 Examples
 --------

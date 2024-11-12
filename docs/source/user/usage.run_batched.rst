@@ -1,4 +1,4 @@
-.. _howto-run-batched:
+.. _usage-run-batched:
 
 Run tests in a scheduler
 ========================

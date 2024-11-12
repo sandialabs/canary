@@ -1,4 +1,4 @@
-.. _howto-xstatus:
+.. _usage-xstatus:
 
 Mark a test expected to diff or fail
 ====================================

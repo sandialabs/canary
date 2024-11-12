@@ -3,7 +3,7 @@
 The test case
 =============
 
-A test case is a concrete instantiation of a :ref:`test file <basics-testfile>` with a unique set of parameters.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a test file defines :ref:`parameters<basics-parameterize>` that expand to define multiple test cases whose names are a combination of the test name (default: ``basename testfile``) and parameter ``name=value`` pairs.  For example, the test file ``parameterize1.pyt``:
+A test case is a concrete instantiation of a :ref:`test file <basics-testfile>` with a unique set of parameters.  In the simplest case, a test file defines a single test case whose name is the basename of the test file.  In more complex cases, a test file defines :ref:`parameters<usage-parameterize>` that expand to define multiple test cases whose names are a combination of the test name (default: ``basename testfile``) and parameter ``name=value`` pairs.  For example, the test file ``parameterize1.pyt``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python

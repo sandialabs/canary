@@ -1,16 +1,16 @@
-.. _howto-report:
+.. _usage-report:
 
 Generate reports
 ================
 
 Several report formats are available:
 
-* :ref:`Junit<howto-junit>`
-* :ref:`Markdown<howto-md>`
-* :ref:`HTML<howto-html>`
-* :ref:`CDash XML<howto-cdash>`
+* :ref:`Junit<usage-junit>`
+* :ref:`Markdown<usage-md>`
+* :ref:`HTML<usage-html>`
+* :ref:`CDash XML<usage-cdash>`
 
-.. _howto-junit:
+.. _usage-junit:
 
 Junit
 -----
@@ -27,7 +27,7 @@ A junit report of a test session can be generated after the session has complete
 .. literalinclude:: /examples/TestResults.junit/junit.xml
     :language: xml
 
-.. _howto-md:
+.. _usage-md:
 
 Markdown
 --------
@@ -44,7 +44,7 @@ A markdown report of a test session can be generated after the session has compl
 .. literalinclude:: /examples/TestResults.Markdown/Results.md
     :language: markdown
 
-.. _howto-html:
+.. _usage-html:
 
 HTML
 ----
@@ -62,7 +62,7 @@ A HTML report of a test session can be generated after the session has completed
 .. literalinclude:: /examples/TestResults.HTML/Results.html
     :language: html
 
-.. _howto-cdash:
+.. _usage-cdash:
 
 CDash XML
 ---------

@@ -1,4 +1,4 @@
-.. _howto-location:
+.. _usage-location:
 
 Find locations of test assets
 =============================
