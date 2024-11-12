@@ -300,3 +300,10 @@ if __name__ == "__main__":
                 assert "baz.a=A.b=B.np=12" in dep_names
             else:
                 assert 0, f"Unknown case {case.name}"
+
+
+def test_make_table():
+    table = vvtest.make_table("a.0,'b,0',c, 1-0   e ,2.0  ,    6.5,       a.b-foo-baz")
+    assert table == [["a.0", "'b,0'", "c", "1-0"], ["e", "2.0", "6.5", "a.b-foo-baz"]], table
+    table = vvtest.make_table("1,2 3,4 5,6 7,8")
+    assert table == [["1", "2"], ["3", "4"], ["5", "6"], ["7", "8"]]

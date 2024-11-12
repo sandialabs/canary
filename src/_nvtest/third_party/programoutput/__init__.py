@@ -34,6 +34,7 @@ literal block while building the docs.
 """
 
 import hashlib
+import io
 import json
 import os
 import shlex
@@ -165,6 +166,12 @@ class Command(_Command):
         # that we can present *exactly* what we run to the user.
         command = cls.__normalize_command(command, shell)
         return _Command.__new__(cls, command, shell, hide_standard_error, working_directory, setup)
+
+    def id(self) -> str:
+        f = io.StringIO()
+        for item in self:
+            f.write(str(item))
+        return hashit(f.getvalue())
 
     @staticmethod
     def __normalize_command(command, shell):
@@ -333,8 +340,7 @@ def run_programs(app, doctree):
     cache_d = os.path.join(app.env.srcdir, ".cache")
     for node in doctree.traverse(program_output):
         command = Command.from_program_output_node(node)
-        sha = hashit(command.command)
-        f = os.path.join(cache_d, sha)
+        f = os.path.join(cache_d, command.id())
         try:
             if node["nocache"]:
                 returncode, output = command.get_output()

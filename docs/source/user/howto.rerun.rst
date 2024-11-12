@@ -30,7 +30,7 @@ Optionally, a ``PATH`` argument can be passed to the ``nvtest run`` invocation, 
 Filter tests based on previous status
 -------------------------------------
 
-In rerun mode, the previous test status is included implicitly as a test keyword which allows :ref:`filtering <howto-filter>` based on previous statuses.
+In rerun mode, the previous test status is included implicitly as a test keyword which allows :ref:`filtering <basics-filter>` based on previous statuses.
 
 Batch considerations
 --------------------

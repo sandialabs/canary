@@ -1,4 +1,0 @@
-{
-  "returncode": 7,
-  "output": " ##   ##  ##   ##  #######    #####    ####   ####### \n ###  ##  ##   ##    ##      ##       ##  ##    ##    \n #### ##  ##   ##    ##     ##       ##         ##    \n #######  ##   ##    ##     ######    #####     ##    \n ## ####  ##  ##     ##     ##            ##    ##    \n ##  ###   ## ##     ##     ##       ##   ##    ##    \n ##   ##    ###      ##     #######   #####     ##\nsearching for tests in enable\ngenerating test cases from test files\n==> Error: No tests to run"
-}

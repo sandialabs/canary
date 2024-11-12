@@ -14,11 +14,11 @@ A test session consists of the following phases:
   Search ``path [path...]`` for test scripts.
 
 :ref:`Lock<lock>`:
-  "Lock" test files into test cases based on :ref:`filtering<howto-filter>` criteria and
-  :ref:`parameterizations<howto-parameterize>`.
+  "Lock" test files into test cases based on :ref:`filtering<basics-filter>` criteria and
+  :ref:`parameterizations<basics-parameterize>`.
 
 :ref:`Populate<populate>`:
-  Create unique execution directories for each test case and :ref:`copy/link <howto-copy-and-link>` necessary resources into the execution directory.
+  Create unique execution directories for each test case and :ref:`copy/link <basics-copy-and-link>` necessary resources into the execution directory.
 
 :ref:`Batch<batch>`:
   For :ref:`batched<howto-run-batched>` sessions, group test cases into batches to run in a batch runner.
@@ -59,7 +59,7 @@ During discovery test files are collected:
 Lock
 ....
 
-During the ``lock`` stage, test files are :ref:`filtered <howto-filter>`, ``parameterize`` statements are expanded, and dependency links created:
+During the ``lock`` stage, test files are :ref:`filtered <basics-filter>`, ``parameterize`` statements are expanded, and dependency links created:
 
 .. command-output:: nvtest run --until=lock -k centered_space .
    :cwd: /examples

@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": " #    #   #    #    #####   ######    ####     #####  \n ##   #   #    #      #     #        #    #      #    \n # #  #   #    #      #     #        #           #    \n #  # #    #  #       #     ####      ####       #    \n #   ##    #  #       #     #             #      #    \n #    #     ##        #     #        #    #      #    \n #    #     ##        #     ######    ####       #\nsearching for tests in enable\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting 80ac6e0 enable\n==> Finished 80ac6e0 enable PASS\n\u2728\u2728 Session done -- 1 total, 1 pass in 00:00:00.00"
+}

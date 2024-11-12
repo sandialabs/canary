@@ -16,16 +16,9 @@ The how-to guides in the documentation were auto-generated using a set of exampl
    :maxdepth: 1
 
    howto.finding
-   howto.basic
    howto.rerun
-   howto.run_from_file
    howto.batch
-   howto.parameterize
-   howto.analyze_only
-   howto.copy_and_link
    howto.enable
-   howto.status
-   howto.filter
    howto.log
    howto.location
    howto.xstatus

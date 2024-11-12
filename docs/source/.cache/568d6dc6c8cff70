@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": " ##   #  ##   ##   ######   ######    ####    ######  \n#### ##  ##   ##  ######   ####      ### ##  ######   \n#######  ##   ##     ##    ###       ##         ##    \n## ####  ##   ##     ##     # ##      ####      ##    \n##  ###  ### ###     ##     ##           ##     ##    \n##   ##   #####      ##     ###     ### ###     ##    \n #   #     ##         #      #####   #####       #\ncollected 57 tests from 24 files\nselected 56 tests from 23 files\nskipping 1 test cases\n\u2022 1 deselected due to options=enable evaluated to False for options=[]\n-- /opt/alegranevada/team/x/darwin/src/nvtest/examples ------------------------------------------------------------------------------------------------------------------------------------------------\n  basic  centered_space  fast  first  second"
+}

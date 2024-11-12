@@ -14,7 +14,7 @@ For example to move to the test execution directory, simply:
 
     cd $(nvtest location /ID)
 
-where ``ID`` is the test ID that is printed by :ref:`nvtest status<howto-status>`.
+where ``ID`` is the test ID that is printed by :ref:`nvtest status<basics-status>`.
 
 .. note::
 

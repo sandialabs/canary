@@ -344,6 +344,24 @@ def copy(
 
        #VVT: copy (rename) : file1.txt,file1_copy.txt file2.txt,file2_copy.txt
 
+    ----
+
+    Copy files ``spam.txt`` and ``eggs.txt`` from the source directory to the
+    execution directory if the parameter ``breakfast=spam`` or ``breakfast=eggs``, respectively
+
+    .. code-block:: python
+
+       import nvtest
+       nvtest.directives.parameterize("breakfast", ("spam", "eggs"))
+       nvtest.directives.copy("spam.txt", when={"parameters": "breakfast=spam"})
+       nvtest.directives.copy("eggs.txt", when={"parameters": "breakfast=eggs"})
+
+    .. code-block:: python
+
+       #VVT: parameterize : breakfast = spam eggs
+       #VVT: copy (parameters='breakfast=spam') : spam.txt
+       #VVT: copy (parameters='breakfast=eggs') : eggs.txt
+
     """  # noqa: E501
 
 
@@ -921,7 +939,7 @@ def parameterize(
     References
     ----------
 
-    * :ref:`Parameterizing Tests <howto-parameterize>`
+    * :ref:`Parameterizing Tests <basics-parameterize>`
 
     Examples
     --------
@@ -959,7 +977,7 @@ def parameterize(
     .. code-block:: python
 
        # test1
-       nvtest.directives.parameterize("a,b", ((1, 2), (3, 4), (5, 6)])
+       nvtest.directives.parameterize("a,b", ((1, 2), (3, 4), (5, 6)))
 
     ``test1.vvt``:
 

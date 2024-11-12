@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "                     d8                      d8   \n888-~88e Y88b    / _d88__  e88~~8e   d88~\\ _d88__ \n888  888  Y88b  /   888   d888  88b C888    888   \n888  888   Y88b/    888   8888__888  Y88b   888   \n888  888    Y8/     888   Y888    ,   888D  888   \n888  888     Y      \"88_/  \"88___/  \\_88P   \"88_/\nsearching for tests in xstatus\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting 04a670b xdiff\n==> Finished 04a670b xdiff XDIFF\nShort test summary info\n\u2714 XDIFF 04a670b xdiff\n\n\ud83d\udca5\ud83d\udca5 Session done -- 1 total, 1 xdiff in 00:00:00.00"
+}

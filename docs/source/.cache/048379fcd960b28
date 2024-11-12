@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": " _  _  _  _  ____  ____  ___  ____ \n( \\( )( \\/ )(_  _)( ___)/ __)(_  _)\n )  (  \\  /   )(   )__) \\__ \\  )(  \n(_)\\_)  \\/   (__) (____)(___/ (__)\nsearching for tests in basic\ngenerating test cases from test files\ncollected 2 tests from 2 files\nselected 2 tests from 2 files\n==> Starting 8fa07b3 second\n==> Starting 63f2de8 first\n==> Finished 63f2de8 first PASS\n==> Finished 8fa07b3 second PASS\n\u2728\u2728 Session done -- 2 total, 2 pass in 00:00:01.00"
-}

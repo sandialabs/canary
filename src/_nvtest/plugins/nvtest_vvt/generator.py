@@ -1,3 +1,4 @@
+import dataclasses
 import importlib
 import io
 import json
@@ -12,6 +13,7 @@ from itertools import repeat
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from typing import ClassVar
 from typing import Generator
 from typing import Optional
 
@@ -82,7 +84,7 @@ class VVTTestFile(PYTTestFile):
         kwds = dict(arg.options or {})
         if "rename" in kwds:
             kwds.pop("rename")
-            file_pairs = csplit(arg.argument)
+            file_pairs = make_table(arg.argument)
             for file_pair in file_pairs:
                 if len(file_pair) != 2:
                     raise VVTParseError(
@@ -145,7 +147,7 @@ class VVTTestFile(PYTTestFile):
         """# VVT: baseline ( OPTIONS ) [:=] --FLAG
         | baseline ( OPTIONS ) [:=] file1,file2 file3,file4 ...
         """
-        file_pairs = csplit(arg.argument)
+        file_pairs = make_table(arg.argument)
         options = dict(arg.options)
         for file_pair in file_pairs:
             if len(file_pair) == 1 and file_pair[0].startswith("--"):
@@ -181,29 +183,102 @@ class VVTTestFile(PYTTestFile):
 
 
 def csplit(text: str) -> list[Any]:
-    """Split on the pairing pattern.
+    # first remove any space around ``,`` so that we can split on white space
+    s = re.sub(r"\s*,\s*", ",", text)
+    groups = s.split()
+    return [[string.strip_quotes(entry.strip()) for entry in group.split(",")] for group in groups]
+
+
+@dataclasses.dataclass
+class TableToken:
+    line: str
+    string: str
+    type: str
+    NC: ClassVar[str] = "==NC=="
+    NR: ClassVar[str] = "==NR=="
+    WORD: ClassVar[str] = "==WORD=="
+
+
+def popnext(arg: list[str]) -> str:
+    single_quote = "'"
+    double_quote = '"'
+    word = arg.pop(0)
+    if word in (single_quote, double_quote):
+        while True:
+            try:
+                word += arg.pop(0)
+            except StopIteration:
+                raise SyntaxError(f"{word!r}: no matching {word[0]} found")
+            if word[0] == word[-1]:
+                break
+    return word
+
+
+def tokenize_table_text(table_text: str) -> Generator[TableToken, None, None]:
+    """Split text into a table.  Each row begins with a space and columns within the row are
+    separated by a comma.
 
     .. code-block:: console
 
        a,b,c  d,e,f -> [[a, b, c], [d, e, f]]
 
-    also:
+    The splitting is complicated by accomodating spaces around the comma:
 
     .. code-block:: console
 
        a , b,   c  d   ,e  ,  f -> [[a, b, c], [d, e, f]]
 
-    The following will not split properly without more complicated code:
+    The following will also split properly:
 
     .. code-block:: console
 
        a , "b , 0",   c  d   ,e  ,  f !-> [[a, 'b , 0', c], [d, e, f]]
 
     """
-    # first remove any space around ``,`` so that we can split on white space
-    s = re.sub(r"\s*,\s*", ",", text)
-    groups = s.split()
-    return [[string.strip_quotes(entry.strip()) for entry in group.split(",")] for group in groups]
+    chars: list[str] = list(table_text.strip())
+    prev: str = ""
+    word: str = ""
+    while True:
+        try:
+            char = popnext(chars)
+        except IndexError:
+            yield TableToken(table_text, word, TableToken.WORD)
+            return
+        if char == COMMA:
+            yield TableToken(table_text, word, TableToken.WORD)
+            yield TableToken(table_text, char, TableToken.NC)
+            prev, word = TableToken.NC, ""
+        elif char == SPACE:
+            # compress spaces
+            while char == SPACE:
+                char = popnext(chars)
+            if prev == TableToken.NC:
+                prev, word = "", char
+            elif char != COMMA:
+                yield TableToken(table_text, word, TableToken.WORD)
+                yield TableToken(table_text, SPACE, TableToken.NR)
+                prev, word = TableToken.NR, char
+            else:
+                yield TableToken(table_text, word, TableToken.WORD)
+                yield TableToken(table_text, ",", TableToken.NC)
+                prev, word = TableToken.NC, ""
+        else:
+            word += char
+            prev = ""
+
+
+def make_table(text: str) -> list[list[str]]:
+    table: list[list[str]] = []
+    row: list[str] = []
+    for token in tokenize_table_text(text):
+        if token.type == TableToken.NR:
+            table.append(row)
+            row = []
+        elif token.type == TableToken.WORD:
+            row.append(token.string)
+    if row:
+        table.append(row)
+    return table
 
 
 non_code_token_nums = [
@@ -216,6 +291,7 @@ RPAREN = ")"
 COMMA = ","
 COLON = ":"
 EQUAL = "="
+SPACE = " "
 
 
 def p_GEN_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, Optional[list]]:
@@ -279,7 +355,8 @@ def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, Optional[lis
         if name in ("np", "ngpu", "ndevice", "nnode"):
             types[i] = "int"
     values = []
-    for row in csplit(values_spec):
+    table = make_table(values_spec)
+    for row in table:
         if len(row) != len(names):
             raise VVTParseError(f"invalid parameterize command: {arg.line!r}", arg)
         values.append([scalar.cast(row[i], type) for i, type in enumerate(types)])

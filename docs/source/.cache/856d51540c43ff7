@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": " ##  ##   ##  ##   ######   ######    ####    ######  \n ### ##   ##  ##     ##     ##       ##  ##     ##    \n ######   ##  ##     ##     ##       ##         ##    \n ######   ##  ##     ##     ####      ####      ##    \n ## ###   ##  ##     ##     ##           ##     ##    \n ##  ##     ###      ##     ##       ##  ##     ##    \n ##  ##     ##       ##     ######    ####      ##\nsearching for tests in basic\ngenerating test cases from test files\ncollected 2 tests from 2 files\nselected 1 test from 1 file\nskipping 1 test cases\n\u2022 1 deselected by keyword expression\n==> Starting 8fa07b3 second\n==> Finished 8fa07b3 second PASS\n\ud83d\udca5\ud83d\udca5 Session done -- 1 total, 1 pass in 00:00:00.00"
-}

@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "\u2717 SKIPPED ae490dc skip started: 22:11:10, finished: 22:11:11, duration: 1.00s.\n\u2717 DIFF 72687c5 diff started: 22:11:09, finished: 22:11:10, duration: 1.00s.\n\u2717 FAIL d4a9b9c fail started: 22:11:09, finished: 22:11:10, duration: 1.00s.\n\u2717 FAIL 27e30ad xdiff-fail started: 22:11:09, finished: 22:11:10, duration: 1.00s.\n\u2717 FAIL 97b2dc6 xfail-fail started: 22:11:09, finished: 22:11:10, duration: 1.00s.\n\u2717 TIMEOUT 4ae5647 timeout\n\u2717 TIMEOUT ca79c93 timeout\n\n\u2728\u2728 Summary -- 56 total, 46 pass, 2 xfail, 1 xdiff, 1 skipped, 1 diff, 3 fail, 2 timeout in 00:00:03"
+}

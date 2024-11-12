@@ -34,14 +34,14 @@ A test is considered to have successfully completed if its exit code is ``0``.  
 
 .. note::
 
-   This test uses optional an :ref:`keywords directive<directive-keywords>` to aid in identifying the test and is is used to :ref:`filter tests<howto-filter>` (``-k first`` on the command line).
+   This test uses an optional :ref:`keyword directive<directive-keywords>` to aid in identifying the test and is is used to :ref:`filter tests<basics-filter>` (``-k first`` on the command line).
 
 Test execution was conducted within a "test session" -- a folder created to run the tests "out of source".  The default name of the test session is ``TestResults``.  Details of the session can be obtained by navigating to it and executing :ref:`nvtest status<nvtest-status>`:
 
 .. command-output:: nvtest status
     :cwd: /examples/TestResults
 
-By default, only failed tests appear in the output, which is why the output above is empty.  To see the results of the session, including passed tests, pass ``-rA``:
+By default, only failed tests appear in the output, which is why the output above shows only a summary of completed tests.  To see the results of each test in the session, including passed tests, pass ``-rA``:
 
 .. command-output:: nvtest status -rA
     :cwd: /examples/TestResults

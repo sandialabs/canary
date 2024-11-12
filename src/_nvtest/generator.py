@@ -128,7 +128,7 @@ class AbstractTestGenerator(ABC):
 
         Notes:
 
-          For further discussion on filtering tests see :ref:`howto-filter`.
+          For further discussion on filtering tests see :ref:`basics-filter`.
 
         """
 

@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "/opt/alegranevada/team/x/darwin/src/nvtest/examples/TestResults/second/nvtest-out.txt:\n==> [2024-11-11-22:15:17.522323] Preparing test: second\n==> [2024-11-11-22:15:17.522571] Directory: /opt/alegranevada/team/x/darwin/src/nvtest/examples/TestResults/second\n==> [2024-11-11-22:15:17.522589] Cleaning work directory...\n==> [2024-11-11-22:15:17.522604] Linking and copying working files...\n==> [2024-11-11-22:15:17.522655] link ../../basic/second.pyt -> second.pyt\n\n==> [2024-11-11-22:15:17.523107] link ../../basic/add.py -> /opt/alegranevada/team/x/darwin/src/nvtest/examples/TestResults/second/add.py\n\n==> [2024-11-11-22:15:17.804268] Running second\n==> [2024-11-11-22:15:17.804346] Command line: /opt/alegranevada/team/x/darwin/bin/python3 second.pyt\nVerifying that 2 + 3 = 5\nTest passed!"
+}

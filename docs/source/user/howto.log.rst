@@ -16,7 +16,7 @@ The output of each test is logged to ``<path>/nvtest-out.txt`` and can be viewed
 
     nvtest log /ID
 
-where ``ID`` is the test ID that is printed by :ref:`nvtest status<howto-status>`.
+where ``ID`` is the test ID that is printed by :ref:`nvtest status<basics-status>`.
 
 Batch logs
 ----------
