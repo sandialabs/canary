@@ -9,7 +9,6 @@ from io import StringIO
 from typing import IO
 from typing import Any
 from typing import Generator
-from typing import Optional
 from typing import TextIO
 
 from ..third_party.color import cescape
@@ -72,7 +71,7 @@ def set_format(format: str) -> None:
     FORMAT = format
 
 
-def get_level(name: Optional[str] = None) -> int:
+def get_level(name: str | None = None) -> int:
     if name is None:
         return LEVEL
     if name == "TRACE":
@@ -110,8 +109,8 @@ def format_message(
     message: str,
     *,
     end: str = "\n",
-    prefix: Optional[str] = None,
-    format: Optional[str] = None,
+    prefix: str | None = None,
+    format: str | None = None,
 ) -> str:
     if format == "center":
         _, width = terminal_size()
@@ -132,10 +131,10 @@ def log(
     message: str,
     *,
     file: TextIO = sys.stdout,
-    prefix: Optional[str] = None,
+    prefix: str | None = None,
     end: str = "\n",
-    format: Optional[str] = None,
-    ex: Optional[Any] = None,
+    format: str | None = None,
+    ex: Any | None = None,
 ) -> None:
     if level >= LEVEL:
         text = format_message(message, end=end, prefix=prefix, format=format)
@@ -167,7 +166,7 @@ def warning(message: str, *, file: TextIO = sys.stderr, end="\n") -> None:
     log(WARNING, message, file=file, prefix="@*Y{==>} Warning: ", end=end)
 
 
-def error(message: str, *, file: TextIO = sys.stderr, end="\n", ex: Optional[Any] = None) -> None:
+def error(message: str, *, file: TextIO = sys.stderr, end="\n", ex: Any | None = None) -> None:
     log(ERROR, message, file=file, prefix="@*r{==>} Error: ", end=end, ex=ex)
 
 
@@ -175,7 +174,7 @@ def exception(message: str, ex: Exception, *, file: TextIO = sys.stderr, end="\n
     log(ERROR, message, file=file, prefix="@*r{==>} Error: ", end=end, ex=ex)
 
 
-def fatal(message: str, *, file: TextIO = sys.stderr, end="\n", ex: Optional[Any] = None) -> None:
+def fatal(message: str, *, file: TextIO = sys.stderr, end="\n", ex: Any | None = None) -> None:
     log(FATAL, message, file=file, prefix="@*r{==>} Fatal: ", end=end, ex=ex)
 
 
@@ -183,8 +182,8 @@ def progress_bar(
     total: int,
     complete: int,
     elapsed: float,
-    average: Optional[float] = None,
-    width: Optional[int] = None,
+    average: float | None = None,
+    width: int | None = None,
     level: int = ALWAYS,
 ) -> None:
     """Display test session progress
@@ -223,7 +222,7 @@ def progress_bar(
 
 
 def hline(
-    label: Optional[str] = None,
+    label: str | None = None,
     char: str = "-",
     max_width: int = 64,
     file: TextIO = sys.stdout,
@@ -267,7 +266,7 @@ def streamify(arg: TextIO | str, mode: str) -> tuple[IO[Any], bool]:
 
 @contextmanager
 def redirect_stdout(
-    to: str | IO[Any] = os.devnull, stdout: Optional[TextIO] = None
+    to: str | IO[Any] = os.devnull, stdout: TextIO | None = None
 ) -> Generator[TextIO, None, None]:
     stdout = stdout or sys.stdout
     stdout_fd = fileno(stdout)

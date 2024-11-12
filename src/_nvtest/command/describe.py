@@ -1,6 +1,5 @@
 import argparse
 import os
-from typing import Optional
 
 import _nvtest.finder as finder
 from _nvtest.config.argparsing import Parser
@@ -57,10 +56,10 @@ class Describe(Command):
     @staticmethod
     def describe_folder(
         path: str,
-        keyword_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameter_expr: Optional[str] = None,
-        rh: Optional[ResourceHandler] = None,
+        keyword_expr: str | None = None,
+        on_options: list[str] | None = None,
+        parameter_expr: str | None = None,
+        rh: ResourceHandler | None = None,
     ) -> int:
         f = finder.Finder()
         f.add(path)
@@ -80,10 +79,10 @@ class Describe(Command):
     @staticmethod
     def describe_generator(
         file: AbstractTestGenerator,
-        keyword_expr: Optional[str] = None,
-        parameter_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        rh: Optional[ResourceHandler] = None,
+        keyword_expr: str | None = None,
+        parameter_expr: str | None = None,
+        on_options: list[str] | None = None,
+        rh: ResourceHandler | None = None,
     ) -> int:
         description = file.describe(
             keyword_expr=keyword_expr, on_options=on_options, rh=rh, parameter_expr=parameter_expr

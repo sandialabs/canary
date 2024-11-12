@@ -13,7 +13,6 @@ from contextlib import contextmanager
 from typing import Any
 from typing import Callable
 from typing import Generator
-from typing import Optional
 
 from . import logging
 
@@ -53,9 +52,9 @@ def is_hidden(path: str) -> bool:
 
 def which(
     *args: str,
-    path: Optional[str | list[str] | tuple[str, ...]] = None,
+    path: str | list[str] | tuple[str, ...] | None = None,
     required: bool = False,
-) -> Optional[str]:
+) -> str | None:
     """Finds an executable in the path like command-line which.
 
     If given multiple executables, returns the first one that is found.
@@ -113,7 +112,7 @@ def movefile(src: str, dst: str) -> None:
 def synctree(
     src: str,
     dst: str,
-    ignore: Optional[str | list | tuple] = None,
+    ignore: str | list | tuple | None = None,
     delete: bool = False,
     verbose: bool = False,
     **kwargs: Any,
@@ -214,7 +213,7 @@ def gethost() -> str:
 getnode = gethost
 
 
-def gettempdir(user: bool = False, suffix: Optional[str] = None) -> str:
+def gettempdir(user: bool = False, suffix: str | None = None) -> str:
     """Get the name of the system's preferred temporary directory. If `user`
     is given, postfix the directory with the user name"""
     tempdir = tempfile.gettempdir()
@@ -226,7 +225,7 @@ def gettempdir(user: bool = False, suffix: Optional[str] = None) -> str:
 
 
 @contextmanager
-def tmpdir(remove: bool = True, suffix: Optional[str] = None) -> Generator[str, None, None]:
+def tmpdir(remove: bool = True, suffix: str | None = None) -> Generator[str, None, None]:
     """Create a temporary directory and remove it when the context is exited
 
     Keyword Args:
@@ -253,7 +252,7 @@ def gethome() -> str:
     return os.path.expanduser("~")
 
 
-def filesize(filename: str, *, units: Optional[str] = None) -> int:
+def filesize(filename: str, *, units: str | None = None) -> int:
     """Return ``filename``\ 's size.  If ``units`` is ``None``, the size in bytes is returned.
     Valid ``units`` are ``kilobytes``, ``megabytes``, and ``gigabytes``.
 
@@ -325,7 +324,7 @@ def working_dir(dirname: str, create: bool = False) -> Generator[None, None, Non
     os.chdir(orig_dir)
 
 
-def mkdirp(*paths: str, mode: Optional[int] = None) -> None:
+def mkdirp(*paths: str, mode: int | None = None) -> None:
     """Creates a directory, as well as parent directories if needed.
 
     Arguments:

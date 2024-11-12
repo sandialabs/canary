@@ -11,7 +11,6 @@ from copy import deepcopy
 from typing import IO
 from typing import Any
 from typing import Generator
-from typing import Optional
 from typing import Type
 
 from .. import config
@@ -32,7 +31,7 @@ from ..util.module import load_module
 from ..util.shell import source_rcfile
 
 
-def stringify(arg: Any, float_fmt: Optional[str] = None) -> str:
+def stringify(arg: Any, float_fmt: str | None = None) -> str:
     if isinstance(arg, float) and float_fmt is not None:
         return float_fmt % arg
     if hasattr(arg, "string"):
@@ -55,19 +54,19 @@ class TestCase(AbstractTestCase):
 
     def __init__(
         self,
-        file_root: Optional[str] = None,
-        file_path: Optional[str] = None,
+        file_root: str | None = None,
+        file_path: str | None = None,
         *,
-        family: Optional[str] = None,
-        keywords: Optional[list[str]] = None,
-        parameters: Optional[dict[str, Any]] = None,
-        timeout: Optional[float] = None,
-        baseline: Optional[list[str | tuple[str, str]]] = None,
-        sources: Optional[dict[str, list[tuple[str, str]]]] = None,
-        xstatus: Optional[int] = None,
-        preload: Optional[str] = None,
-        modules: Optional[list[str]] = None,
-        rcfiles: Optional[list[str]] = None,
+        family: str | None = None,
+        keywords: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
+        timeout: float | None = None,
+        baseline: list[str | tuple[str, str]] | None = None,
+        sources: dict[str, list[tuple[str, str]]] | None = None,
+        xstatus: int | None = None,
+        preload: str | None = None,
+        modules: list[str] | None = None,
+        rcfiles: list[str] | None = None,
     ):
         super().__init__()
 
@@ -75,15 +74,15 @@ class TestCase(AbstractTestCase):
         # initialize all attributes as private and employ getters/setters
         self._file_root: str = ""
         self._file_path: str = ""
-        self._url: Optional[str] = None
+        self._url: str | None = None
         self._family: str = ""
         self._keywords: list[str] = []
         self._parameters: dict[str, Any] = {}
-        self._timeout: Optional[float] = None
+        self._timeout: float | None = None
         self._baseline: list[str | tuple[str, str]] = []
         self._sources: dict[str, list[tuple[str, str]]] = {}
         self._xstatus: int = 0
-        self._preload: Optional[str] = None
+        self._preload: str | None = None
         self._modules: list[str] = []
         self._rcfiles: list[str] = []
 
@@ -112,14 +111,14 @@ class TestCase(AbstractTestCase):
         if rcfiles is not None:
             self.rcfiles = rcfiles
 
-        self._mask: Optional[str] = None
-        self._name: Optional[str] = None
-        self._display_name: Optional[str] = None
-        self._classname: Optional[str] = None
-        self._id: Optional[str] = None
+        self._mask: str | None = None
+        self._name: str | None = None
+        self._display_name: str | None = None
+        self._classname: str | None = None
+        self._id: str | None = None
         self._status: Status = Status()
-        self._cmd_line: Optional[str] = None
-        self._exec_root: Optional[str] = None
+        self._cmd_line: str | None = None
+        self._exec_root: str | None = None
 
         # The process running the test case
         self._start: float = -1.0
@@ -131,12 +130,12 @@ class TestCase(AbstractTestCase):
         self._dependencies: list["TestCase"] = []
 
         # mean, min, max runtimes
-        self._runtimes: list[Optional[float]] = [None, None, None]
+        self._runtimes: list[float | None] = [None, None, None]
 
-        self._launcher: Optional[str] = None
-        self._preflags: Optional[list[str]] = None
-        self._exe: Optional[str] = None
-        self._postflags: Optional[list[str]] = None
+        self._launcher: str | None = None
+        self._preflags: list[str] | None = None
+        self._exe: str | None = None
+        self._postflags: list[str] | None = None
 
         # Environment variables specific to this case
         self._variables: dict[str, str] = {}
@@ -193,11 +192,11 @@ class TestCase(AbstractTestCase):
         return os.path.dirname(self.file)
 
     @property
-    def exec_root(self) -> Optional[str]:
+    def exec_root(self) -> str | None:
         return self._exec_root
 
     @exec_root.setter
-    def exec_root(self, arg: Optional[str]) -> None:
+    def exec_root(self, arg: str | None) -> None:
         if arg is not None:
             assert os.path.exists(arg)
             self._exec_root = arg
@@ -263,13 +262,13 @@ class TestCase(AbstractTestCase):
         self._dependencies = arg
 
     @property
-    def runtimes(self) -> list[Optional[float]]:
+    def runtimes(self) -> list[float | None]:
         if self._runtimes[0] is None:
             self.load_runtimes()
         return self._runtimes
 
     @runtimes.setter
-    def runtimes(self, arg: list[Optional[float]]) -> None:
+    def runtimes(self, arg: list[float | None]) -> None:
         self._runtimes = arg
 
     @property
@@ -308,11 +307,11 @@ class TestCase(AbstractTestCase):
         self._xstatus = arg
 
     @property
-    def preload(self) -> Optional[str]:
+    def preload(self) -> str | None:
         return self._preload
 
     @preload.setter
-    def preload(self, arg: Optional[str]) -> None:
+    def preload(self, arg: str | None) -> None:
         self._preload = arg
 
     @property
@@ -364,7 +363,7 @@ class TestCase(AbstractTestCase):
             raise ValueError(arg)
 
     @property
-    def url(self) -> Optional[str]:
+    def url(self) -> str | None:
         return self._url
 
     @url.setter
@@ -372,11 +371,11 @@ class TestCase(AbstractTestCase):
         self._url = arg
 
     @property
-    def launcher(self) -> Optional[str]:
+    def launcher(self) -> str | None:
         return self._launcher
 
     @launcher.setter
-    def launcher(self, arg: Optional[str]) -> None:
+    def launcher(self, arg: str | None) -> None:
         self._launcher = arg
 
     @property
@@ -432,7 +431,7 @@ class TestCase(AbstractTestCase):
         return True if self._mask else False
 
     @property
-    def mask(self) -> Optional[str]:
+    def mask(self) -> str | None:
         return self._mask
 
     @mask.setter
@@ -477,7 +476,7 @@ class TestCase(AbstractTestCase):
         self._classname = arg
 
     @property
-    def cmd_line(self) -> Optional[str]:
+    def cmd_line(self) -> str | None:
         return self._cmd_line
 
     @cmd_line.setter
@@ -576,7 +575,7 @@ class TestCase(AbstractTestCase):
             path.insert(0, path.pop(path.index(self.exec_dir)))
         return os.pathsep.join(path)
 
-    def logfile(self, stage: Optional[str] = None) -> str:
+    def logfile(self, stage: str | None = None) -> str:
         if stage is None:
             return os.path.join(self.exec_dir, "nvtest-out.txt")
         return os.path.join(self.exec_dir, f"nvtest-{stage}-out.txt")
@@ -991,20 +990,20 @@ class TestCase(AbstractTestCase):
 class TestMultiCase(TestCase):
     def __init__(
         self,
-        file_root: Optional[str] = None,
-        file_path: Optional[str] = None,
+        file_root: str | None = None,
+        file_path: str | None = None,
         *,
         flag: str = "--base",
-        paramsets: Optional[list[ParameterSet]] = None,
-        family: Optional[str] = None,
+        paramsets: list[ParameterSet] | None = None,
+        family: str | None = None,
         keywords: list[str] = [],
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
         baseline: list[str | tuple[str, str]] = [],
         sources: dict[str, list[tuple[str, str]]] = {},
         xstatus: int = 0,
-        preload: Optional[str] = None,
-        modules: Optional[list[str]] = None,
-        rcfiles: Optional[list[str]] = None,
+        preload: str | None = None,
+        modules: list[str] | None = None,
+        rcfiles: list[str] | None = None,
     ):
         super().__init__(
             file_root=file_root,

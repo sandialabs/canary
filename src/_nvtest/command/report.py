@@ -1,5 +1,4 @@
 from argparse import Namespace
-from typing import Optional
 
 import _nvtest.reporter
 from _nvtest.config.argparsing import Parser
@@ -13,7 +12,7 @@ class Report(Command):
         return "Create and post test reports"
 
     @property
-    def epilog(self) -> Optional[str]:
+    def epilog(self) -> str | None:
         return "Note: this command must be run from inside of a test session directory."
 
     def setup_parser(self, parser: Parser) -> None:

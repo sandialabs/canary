@@ -1,6 +1,5 @@
 import argparse
 from typing import Callable
-from typing import Optional
 
 
 def identity(*args, **kwargs): ...
@@ -51,10 +50,10 @@ class ExecuteAndAnalyze:
         )
         return parser
 
-    def __call__(self, args: Optional[argparse.Namespace] = None) -> None:
+    def __call__(self, args: argparse.Namespace | None = None) -> None:
         return self.execute()
 
-    def execute(self, args: Optional[argparse.Namespace] = None) -> None:
+    def execute(self, args: argparse.Namespace | None = None) -> None:
         if args is None:
             parser = self.make_parser()
             args, _ = parser.parse_known_args()

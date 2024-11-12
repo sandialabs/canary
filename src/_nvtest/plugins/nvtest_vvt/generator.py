@@ -15,7 +15,6 @@ from types import SimpleNamespace
 from typing import Any
 from typing import ClassVar
 from typing import Generator
-from typing import Optional
 
 import _nvtest.when as m_when
 import nvtest
@@ -33,7 +32,7 @@ from _nvtest.util.filesystem import working_dir
 
 
 class VVTTestFile(PYTTestFile):
-    def load(self, file: Optional[str] = None) -> None:
+    def load(self, file: str | None = None) -> None:
         file = file or self.file
         for arg in p_VVT(file):
             match arg.command:
@@ -294,7 +293,7 @@ EQUAL = "="
 SPACE = " "
 
 
-def p_GEN_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, Optional[list]]:
+def p_GEN_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, list | None]:
     """# VVT: parameterize ( OPTIONS,generator ) [:=] script [--options]"""
     script, *opts = shlex.split(arg.argument)
     if script in ("python", "python3"):
@@ -315,7 +314,7 @@ def p_GEN_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, Optional
         else:
             kwds[opt] = value
     assert kwds.pop("generator", None) is not None
-    deps: Optional[list] = None
+    deps: list | None = None
     if len(output) == 2:
         deps = output[1]
         assert isinstance(deps, list)
@@ -324,7 +323,7 @@ def p_GEN_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, Optional
     return names, values, kwds, deps
 
 
-def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, Optional[list]]:
+def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, list | None]:
     """# VVT: parameterize ( OPTIONS ) [:=] names_spec = values_spec
 
     names_spec: name1,name2,...
@@ -363,7 +362,7 @@ def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, Optional[lis
     return names, values, kwds, None
 
 
-def p_LINE(file: Path | str, line: str) -> Optional[SimpleNamespace]:
+def p_LINE(file: Path | str, line: str) -> SimpleNamespace | None:
     """COMMAND ( OPTIONS ) [:=] ARGS"""
     if not line.split():
         return None
@@ -554,7 +553,7 @@ def cached(func):
     return inner
 
 
-def evaluate_boolean_expression(expression: str) -> Optional[bool]:
+def evaluate_boolean_expression(expression: str) -> bool | None:
     try:
         result = safe_eval(expression)
     except Exception:

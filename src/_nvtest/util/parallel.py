@@ -6,7 +6,6 @@ import traceback
 from multiprocessing.process import BaseProcess
 from typing import Any
 from typing import Callable
-from typing import Optional
 
 from ..util.rprobe import cpu_count
 
@@ -98,7 +97,7 @@ def pool(*args, **kwargs):
         p.join()
 
 
-def num_processes(max_processes: Optional[int] = None, _cache: dict = {}) -> int:
+def num_processes(max_processes: int | None = None, _cache: dict = {}) -> int:
     """Return the number of processes in a pool.
 
     Currently the function return the minimum between the maximum number
@@ -117,7 +116,7 @@ def num_processes(max_processes: Optional[int] = None, _cache: dict = {}) -> int
     return n
 
 
-def map(func: Callable, args: list, processes: Optional[int] = None, debug: bool = False) -> Any:
+def map(func: Callable, args: list, processes: int | None = None, debug: bool = False) -> Any:
     """Map a func to the list of arguments, return the list of results.
 
     Args:
@@ -141,9 +140,7 @@ def map(func: Callable, args: list, processes: Optional[int] = None, debug: bool
     return results
 
 
-def starmap(
-    func: Callable, args: list, processes: Optional[int] = None, debug: bool = False
-) -> Any:
+def starmap(func: Callable, args: list, processes: int | None = None, debug: bool = False) -> Any:
     """Map a func to the list of arguments, return the list of results.
 
     Args:
@@ -167,5 +164,5 @@ def starmap(
     return results
 
 
-def parent_process() -> Optional[BaseProcess]:
+def parent_process() -> BaseProcess | None:
     return multiprocessing.parent_process()

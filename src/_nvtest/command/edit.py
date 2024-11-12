@@ -1,6 +1,5 @@
 import argparse
 import os
-from typing import Optional
 
 import _nvtest.finder as finder
 from _nvtest.config.argparsing import Parser
@@ -28,7 +27,7 @@ class Edit(Command):
         return 0
 
 
-def find_file(testspec: str) -> Optional[str]:
+def find_file(testspec: str) -> str | None:
     try:
         generator = finder.find(testspec)
         return generator.file

@@ -1,5 +1,4 @@
 import argparse
-from typing import Optional
 
 import _nvtest.plugin as plugin
 from _nvtest import config
@@ -37,7 +36,7 @@ def make_std_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def get_instance() -> Optional[TestInstance]:
+def get_instance() -> TestInstance | None:
     try:
         return TestInstance.load()
     except FileNotFoundError:

@@ -1,6 +1,5 @@
 import argparse
 import os
-from typing import Optional
 
 from _nvtest.config.argparsing import Parser
 from _nvtest.runners import TestCaseRunner
@@ -20,7 +19,7 @@ class Analyze(Command):
     ``--execute-analysis-sections`` to their command line"
 
     @property
-    def epilog(self) -> Optional[str]:
+    def epilog(self) -> str | None:
         return """\
 An "analyze" run only makes sense in the following conditions:
 

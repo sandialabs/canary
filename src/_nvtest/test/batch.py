@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 from typing import Sequence
 
 from .. import config
@@ -65,7 +64,7 @@ class TestBatch(AbstractTestCase):
         return len(self.cases)
 
     @property
-    def variables(self) -> dict[str, Optional[str]]:
+    def variables(self) -> dict[str, str | None]:
         return {
             "NVTEST_LOT_NO": str(self.lot_no),
             "NVTEST_BATCH_NO": str(self.batch_no),

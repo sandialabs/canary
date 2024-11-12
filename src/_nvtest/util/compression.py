@@ -3,7 +3,6 @@ import io
 import json
 import os
 import zlib
-from typing import Optional
 
 
 def serialize(obj: object) -> str:
@@ -28,7 +27,7 @@ def expand64(raw: str) -> str:
     return s.decode("utf-8")
 
 
-def compress_str(text: str, kb_to_keep: Optional[int] = None) -> str:
+def compress_str(text: str, kb_to_keep: int | None = None) -> str:
     if kb_to_keep is not None:
         kb = 1024
         bytes_to_keep = kb_to_keep * kb
@@ -39,7 +38,7 @@ def compress_str(text: str, kb_to_keep: Optional[int] = None) -> str:
     return compress64(text)
 
 
-def compress_file(file: str, kb_to_keep: Optional[int] = None) -> str:
+def compress_file(file: str, kb_to_keep: int | None = None) -> str:
     if not os.path.exists(file):
         txt = f"File {file!r} not found!"
     else:

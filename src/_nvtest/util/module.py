@@ -5,13 +5,12 @@ import subprocess
 from contextlib import contextmanager
 from typing import Generator
 from typing import MutableMapping
-from typing import Optional
 
 # awk script alternative to posix `env -0`
 awk_cmd = r"""awk 'BEGIN{for(name in ENVIRON) printf("%s=%s%c", name, ENVIRON[name], 0)}'"""
 
 
-def _module(*args, environb: Optional[MutableMapping] = None) -> Optional[str]:
+def _module(*args, environb: MutableMapping | None = None) -> str | None:
     module_cmd = f"module {' '.join(args)}"
     environb = environb or os.environb
 
@@ -64,7 +63,7 @@ def load_module(module_name: str) -> None:
 
 
 @contextmanager
-def load(module_name: str, use: Optional[str] = None) -> Generator[None, None, None]:
+def load(module_name: str, use: str | None = None) -> Generator[None, None, None]:
     save_environb = dict(os.environb)
     if use is not None:
         existing_modulepath = os.getenv("MODULEPATH", "")

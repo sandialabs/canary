@@ -5,7 +5,6 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
 from typing import TextIO
 
 from . import logging
@@ -94,11 +93,11 @@ class Executable:
     def __call__(
         self,
         *args_in: str,
-        stdout: Optional[IOType] = None,
-        stderr: Optional[IOType] = None,
-        output: Optional[IOType] = None,
-        error: Optional[IOType] = None,
-        env: Optional[dict[str, str]] = None,
+        stdout: IOType | None = None,
+        stderr: IOType | None = None,
+        output: IOType | None = None,
+        error: IOType | None = None,
+        env: dict[str, str] | None = None,
         expected_returncode: int = 0,
         fail_on_error: bool = True,
         timeout: float = -1.0,
@@ -218,12 +217,12 @@ def is_executable(path: str | Path) -> bool:
 
 
 class _StreamHandler:
-    def __init__(self, fp: Optional[IOType]) -> None:
+    def __init__(self, fp: IOType | None) -> None:
         self.name: str
-        self.stream: Optional[TextIO | tempfile._TemporaryFileWrapper] = None
+        self.stream: TextIO | tempfile._TemporaryFileWrapper | None = None
         self.owned: bool = False
         self.temporary: bool = False
-        self.value: Optional[str] = None
+        self.value: str | None = None
         if fp is None:
             self.name = "<None>"
         elif hasattr(fp, "fileno"):
@@ -252,7 +251,7 @@ class _StreamHandler:
         if self.owned:
             self.stream.close()
 
-    def getvalue(self) -> Optional[str]:
+    def getvalue(self) -> str | None:
         return self.value
 
 
@@ -260,8 +259,8 @@ class _StreamHandler:
 class Result:
     cmd: str
     returncode: int = -1
-    out: Optional[str] = None
-    err: Optional[str] = None
+    out: str | None = None
+    err: str | None = None
 
     def get_output(self) -> str:
         if self.out is None:

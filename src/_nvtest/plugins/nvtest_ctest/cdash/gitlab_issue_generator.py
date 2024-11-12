@@ -2,7 +2,6 @@ import datetime
 import io
 import os
 import re
-from typing import Optional
 
 from _nvtest.util import cdash
 from _nvtest.util import gitlab
@@ -11,15 +10,15 @@ from _nvtest.util import logging
 
 def create_issues_from_failed_tests(
     *,
-    access_token: Optional[str] = None,
-    cdash_url: Optional[str] = None,
-    cdash_project: Optional[str] = None,
-    gitlab_url: Optional[str] = None,
-    gitlab_api_url: Optional[str] = None,
-    gitlab_project_id: Optional[int | str] = None,
-    date: Optional[str] = None,
-    filtergroups: Optional[list[str]] = None,
-    skip_sites: Optional[list[str]] = None,
+    access_token: str | None = None,
+    cdash_url: str | None = None,
+    cdash_project: str | None = None,
+    gitlab_url: str | None = None,
+    gitlab_api_url: str | None = None,
+    gitlab_project_id: int | str | None = None,
+    date: str | None = None,
+    filtergroups: list[str] | None = None,
+    skip_sites: list[str] | None = None,
     dont_close_missing: bool = False,
 ) -> None:
     """Create issues on GitLab from failing tests on CDash

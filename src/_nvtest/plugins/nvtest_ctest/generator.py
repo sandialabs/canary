@@ -7,7 +7,6 @@ import os
 import re
 import subprocess
 from typing import Any
-from typing import Optional
 
 import _nvtest.config as config
 import _nvtest.when as m_when
@@ -22,7 +21,7 @@ from _nvtest.util.filesystem import is_exe
 
 
 class CTestTestFile(AbstractTestGenerator):
-    def __init__(self, root: str, path: Optional[str] = None) -> None:
+    def __init__(self, root: str, path: str | None = None) -> None:
         super().__init__(root, path=path)
         self.owners: list[str] = []
 
@@ -47,15 +46,15 @@ class CTestTestFile(AbstractTestGenerator):
 
     def lock(
         self,
-        cpus: Optional[list[int]] = None,
-        gpus: Optional[list[int]] = None,
-        nodes: Optional[list[int]] = None,
-        keyword_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameter_expr: Optional[str] = None,
-        timeout: Optional[float] = None,
-        owners: Optional[set[str]] = None,
-        env_mods: Optional[dict[str, str]] = None,
+        cpus: list[int] | None = None,
+        gpus: list[int] | None = None,
+        nodes: list[int] | None = None,
+        keyword_expr: str | None = None,
+        on_options: list[str] | None = None,
+        parameter_expr: str | None = None,
+        timeout: float | None = None,
+        owners: set[str] | None = None,
+        env_mods: dict[str, str] | None = None,
     ) -> list[TestCase]:
         cpus_per_node: int = config.get("machine:cpus_per_node")
         gpus_per_node: int = config.get("machine:gpus_per_node")
@@ -73,7 +72,7 @@ class CTestTestFile(AbstractTestGenerator):
         cases: list[TestCase] = []
         for family, td in tests.items():
             case = CTestTestCase(file_root=self.root, file_path=self.path, family=family, **td)
-            case_mask: Optional[str] = None
+            case_mask: str | None = None
             if owners and not owners.intersection(self.owners):
                 case_mask = colorize("deselected by @*b{owner expression}")
             if case_mask is None and keyword_expr is not None:
@@ -126,10 +125,10 @@ class CTestTestFile(AbstractTestGenerator):
 
     def describe(
         self,
-        keyword_expr: Optional[str] = None,
-        parameter_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        rh: Optional[ResourceHandler] = None,
+        keyword_expr: str | None = None,
+        parameter_expr: str | None = None,
+        on_options: list[str] | None = None,
+        rh: ResourceHandler | None = None,
     ) -> str:
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
@@ -280,17 +279,17 @@ class CTestTestCase(TestCase):
     def __init__(
         self,
         *,
-        file_root: Optional[str] = None,
-        file_path: Optional[str] = None,
-        family: Optional[str] = None,
-        args: Optional[list[str]] = None,
-        working_directory: Optional[str] = None,
-        will_fail: Optional[bool] = None,
-        timeout: Optional[float] = None,
-        environment: Optional[dict[str, str]] = None,
-        labels: Optional[list[str]] = None,
-        processors: Optional[int] = None,
-        resource_groups: Optional[list[str]] = None,
+        file_root: str | None = None,
+        file_path: str | None = None,
+        family: str | None = None,
+        args: list[str] | None = None,
+        working_directory: str | None = None,
+        will_fail: bool | None = None,
+        timeout: float | None = None,
+        environment: dict[str, str] | None = None,
+        labels: list[str] | None = None,
+        processors: int | None = None,
+        resource_groups: list[str] | None = None,
         **kwds,
     ) -> None:
         super().__init__(
@@ -301,7 +300,7 @@ class CTestTestCase(TestCase):
             timeout=timeout or 10.0,
         )
 
-        self._resource_groups: Optional[list[str]] = None
+        self._resource_groups: list[str] | None = None
         self._working_directory = working_directory or self.file_dir
 
         if args is not None:
@@ -390,7 +389,7 @@ class CMakeCache(dict):
 cmake_caches: dict[str, CMakeCache] = {}
 
 
-def find_cmake_cache(directory: str) -> Optional[CMakeCache]:
+def find_cmake_cache(directory: str) -> CMakeCache | None:
     if directory == os.path.sep:
         return None
     if directory in cmake_caches:
@@ -402,7 +401,7 @@ def find_cmake_cache(directory: str) -> Optional[CMakeCache]:
     return find_cmake_cache(os.path.dirname(directory))
 
 
-def find_build_type(directory: str) -> Optional[str]:
+def find_build_type(directory: str) -> str | None:
     cache = find_cmake_cache(directory)
     return None if cache is None else cache["build_type"]["value"]
 

@@ -2,7 +2,6 @@ import itertools
 import random
 from io import StringIO
 from typing import Any
-from typing import Optional
 from typing import Sequence
 from typing import Type
 
@@ -50,7 +49,7 @@ class ParameterSet:
         cls: Type["ParameterSet"],
         argnames: str | Sequence[str],
         argvalues: list[Sequence[Any] | Any],
-        file: Optional[str] = None,
+        file: str | None = None,
     ) -> "ParameterSet":
         """
         Create a ParamterSet
@@ -108,7 +107,7 @@ class ParameterSet:
         cls: Type["ParameterSet"],
         argnames: str | Sequence[str],
         argvalues: list[Sequence[Any] | Any],
-        file: Optional[str] = None,
+        file: str | None = None,
     ) -> "ParameterSet":
         """Generate parameters for a centered parameter study
 
@@ -203,7 +202,7 @@ class ParameterSet:
         cls: Type["ParameterSet"],
         argnames: str | Sequence[str],
         argvalues: list[Sequence[Any] | Any],
-        file: Optional[str] = None,
+        file: str | None = None,
     ) -> "ParameterSet":
         """Generate random parameter space"""
         names: list[str] = []

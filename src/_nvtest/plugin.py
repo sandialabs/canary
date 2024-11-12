@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
 from typing import Generator
-from typing import Optional
 from typing import Type
 
 from .util import logging
@@ -67,7 +66,7 @@ class PluginHook:
         """Call user plugin at the end of the test setup stage"""
 
     @staticmethod
-    def test_prelaunch(case: "TestCase", *, stage: Optional[str] = None) -> None:
+    def test_prelaunch(case: "TestCase", *, stage: str | None = None) -> None:
         """Call user plugin immediately before running the test"""
 
     @staticmethod
@@ -171,7 +170,7 @@ class Manager:
         self.files.add(str(file.resolve()))
         load_module_from_file(name, file)
 
-    def load_from_entry_points(self, disable: Optional[list[str]] = None):
+    def load_from_entry_points(self, disable: list[str] | None = None):
         disable = disable or []
         if self.entry_points_loaded:
             return
@@ -295,7 +294,7 @@ def register(*, scope: str, stage: str, **kwds: str):
     return decorator
 
 
-def load_from_entry_points(disable: Optional[list[str]] = None) -> None:
+def load_from_entry_points(disable: list[str] | None = None) -> None:
     logging.debug("Loading plugins from entry points")
     _manager.load_from_entry_points(disable=disable)
 

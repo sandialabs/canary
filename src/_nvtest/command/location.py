@@ -1,6 +1,5 @@
 import argparse
 import os
-from typing import Optional
 
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
@@ -15,7 +14,7 @@ class Location(Command):
         return "Print locations of test files and directories"
 
     @property
-    def epilog(self) -> Optional[str]:
+    def epilog(self) -> str | None:
         return """\
 If no options are give, -x is assumed.
 

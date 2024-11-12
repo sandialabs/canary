@@ -1,6 +1,5 @@
 import argparse
 import os
-from typing import Optional
 
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
@@ -15,7 +14,7 @@ class Status(Command):
         return "Print information about a test run"
 
     @property
-    def epilog(self) -> Optional[str]:
+    def epilog(self) -> str | None:
         return "Note: this command must be run from inside of a test session directory."
 
     def setup_parser(self, parser: Parser):

@@ -18,7 +18,6 @@ from itertools import repeat
 from typing import IO
 from typing import Any
 from typing import Generator
-from typing import Optional
 from typing import Type
 
 from . import config
@@ -400,12 +399,12 @@ class Session:
 
     def lock(
         self,
-        rh: Optional[ResourceHandler] = None,
-        keyword_expr: Optional[str] = None,
-        parameter_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        owners: Optional[set[str]] = None,
-        env_mods: Optional[dict[str, str]] = None,
+        rh: ResourceHandler | None = None,
+        keyword_expr: str | None = None,
+        parameter_expr: str | None = None,
+        on_options: list[str] | None = None,
+        owners: set[str] | None = None,
+        env_mods: dict[str, str] | None = None,
     ) -> None:
         """Lock test files into concrete (parameterized) test cases
 
@@ -489,11 +488,11 @@ class Session:
 
     def filter(
         self,
-        keyword_expr: Optional[str] = None,
-        parameter_expr: Optional[str] = None,
-        start: Optional[str] = None,
-        rh: Optional[ResourceHandler] = None,
-        case_specs: Optional[list[str]] = None,
+        keyword_expr: str | None = None,
+        parameter_expr: str | None = None,
+        start: str | None = None,
+        rh: ResourceHandler | None = None,
+        case_specs: list[str] | None = None,
     ) -> list[TestCase]:
         """Filter test cases (mask test cases that don't meet a specific criteria)
 
@@ -613,7 +612,7 @@ class Session:
         self,
         cases: list[TestCase],
         *,
-        rh: Optional[ResourceHandler] = None,
+        rh: ResourceHandler | None = None,
         fail_fast: bool = False,
         reporting: ProgressReporting = ProgressReporting(),
     ) -> int:
@@ -881,7 +880,7 @@ class Session:
                 json.dump(rh.data["batch"], record, indent=2)
         return queue
 
-    def blogfile(self, batch_no: int, lot_no: Optional[int]) -> str:
+    def blogfile(self, batch_no: int, lot_no: int | None) -> str:
         """Get the path of the batch log file"""
         if lot_no is None:
             lot_no = len(os.listdir(os.path.join(self.config_dir, "batches")))  # use latest
@@ -1026,8 +1025,8 @@ class Session:
         report_chars: str,
         show_logs: bool = False,
         sortby: str = "durations",
-        durations: Optional[int] = None,
-        pathspec: Optional[str] = None,
+        durations: int | None = None,
+        pathspec: str | None = None,
     ) -> str:
         cases: list[TestCase] = self.cases
         cases_to_show: list[TestCase]
