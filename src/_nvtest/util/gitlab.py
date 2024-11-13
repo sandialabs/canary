@@ -44,6 +44,7 @@ class repo:
         self.project_id = project_id or os.getenv("CI_PROJECT_ID")
         self.api_url = api_url or os.getenv("CI_API_V4_URL")
         self._issues = {}
+        self._commits = None
         self._merge_requests = {}
 
     def __repr__(self):
@@ -336,6 +337,29 @@ class repo:
                 page += 1
             self._issues[state] = issues
         return self._issues[state]
+
+    @api_access_required
+    def commits(self):
+        """Get issues for this project"""
+        if self._commits is None:
+            self._commits = []
+            header = {"PRIVATE-TOKEN": self.access_token}
+            page = 1
+            while True:
+                base_url = self.build_api_url(
+                    path=f"projects/{self.project_id}/repository/commits"
+                )
+                params = {"page": str(page), "per_page": "100"}
+                params = urlencode(params)
+                url = f"{base_url}?{params}"
+                logging.debug(url)
+                request = Request(url=url, headers=header)
+                payload = json.load(urlopen(request))
+                if not payload:
+                    break
+                self._commits.extend(payload)
+                page += 1
+        return self._commits
 
     @api_access_required
     def merge_requests(self, state=None):
