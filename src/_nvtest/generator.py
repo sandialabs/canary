@@ -4,7 +4,6 @@ from abc import ABC
 from abc import abstractmethod
 from typing import Type
 
-from .resource import ResourceHandler
 from .test.case import TestCase
 
 
@@ -37,27 +36,10 @@ class AbstractTestGenerator(ABC):
            def matches(cls, path: str) -> bool:
                ...
 
-           def describe(
-               self,
-               keyword_expr: str | None = None,
-               parameter_expr: str | None = None,
-               on_options: list[str] | None = None,
-               rh: ResourceHandler | None = None,
-           ) -> str:
+           def describe(self, on_options: list[str] | None = None) -> str:
                ...
 
-           def lock(
-               self,
-               cpus: list[int] | None = None,
-               gpus: list[int] | None = None,
-               nodes: list[int] | None = None,
-               keyword_expr: str | None = None,
-               on_options: list[str] | None = None,
-               parameter_expr: str | None = None,
-               timeout: float | None = None,
-               owners: set[str] | None = None,
-               env_mods: dict[str, str] | None = None,
-           ) -> list[nvtest.TestCase]:
+           def lock(self, on_options: list[str] | None = None) -> list[nvtest.TestCase]:
                ...
 
     """
@@ -84,28 +66,11 @@ class AbstractTestGenerator(ABC):
         """Is the file at ``path`` a test file?"""
 
     @abstractmethod
-    def describe(
-        self,
-        keyword_expr: str | None = None,
-        parameter_expr: str | None = None,
-        on_options: list[str] | None = None,
-        rh: ResourceHandler | None = None,
-    ) -> str:
+    def describe(self, on_options: list[str] | None = None) -> str:
         """Return a description of the test"""
 
     @abstractmethod
-    def lock(
-        self,
-        cpus: list[int] | None = None,
-        gpus: list[int] | None = None,
-        nodes: list[int] | None = None,
-        keyword_expr: str | None = None,
-        on_options: list[str] | None = None,
-        parameter_expr: str | None = None,
-        timeout: float | None = None,
-        owners: set[str] | None = None,
-        env_mods: dict[str, str] | None = None,
-    ) -> list[TestCase]:
+    def lock(self, on_options: list[str] | None = None) -> list[TestCase]:
         """Expand parameters and instantiate concrete test cases
 
         Args:
@@ -123,7 +88,6 @@ class AbstractTestGenerator(ABC):
             not matching ``parameter_expr`` should be masked.
           timeout: User specified global timeout.
           owners: Test cases not owned by one of ``owners`` should be masked.
-          env_mods: Environment variables to add to each test case's environment.
 
         Notes:
 

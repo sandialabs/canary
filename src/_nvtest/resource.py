@@ -50,6 +50,9 @@ class ResourceHandler:
         scope, type = path.split(":")
         return self.data[scope][type]
 
+    def __setitem__(self, path: str, value: Any) -> None:
+        self.set(path, value)
+
     def get(self, path: str, default: Any | None = None) -> Any | None:
         scope, type = path.split(":")
         if scope not in self.data:

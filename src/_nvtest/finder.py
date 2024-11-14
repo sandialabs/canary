@@ -1,10 +1,13 @@
 import fnmatch
+import math
 import os
 import sys
 from typing import Any
 from typing import TextIO
 
+from . import config
 from . import plugin
+from . import when
 from .generator import AbstractTestGenerator
 from .resource import ResourceHandler
 from .test.case import TestCase
@@ -186,7 +189,7 @@ class Finder:
         logging.debug("Done validating test cases")
 
     @staticmethod
-    def lock(
+    def lock_and_filter(
         files: list[AbstractTestGenerator],
         rh: ResourceHandler | None = None,
         keyword_expr: str | None = None,
@@ -203,25 +206,21 @@ class Finder:
             f"    parameters={parameter_expr}"
         )
         rh = rh or ResourceHandler()
-        kwds = dict(
-            cpus=rh["test:cpu_count"],
-            gpus=rh["test:gpu_count"],
-            nodes=rh["test:node_count"],
-            keyword_expr=keyword_expr,
-            timeout=rh["test:timeout"],
-            parameter_expr=parameter_expr,
-            on_options=on_options,
-            owners=owners,
-            env_mods=env_mods,
-        )
-        concrete_test_groups = [file.lock(**kwds) for file in files]
+        concrete_test_groups = [f.lock(on_options=on_options) for f in files]
         cases: list[TestCase] = [case for group in concrete_test_groups for case in group if case]
 
         # this sanity check should not be necessary
         if any(case.status.value != "created" for case in cases if not case.mask):
             raise ValueError("One or more test cases is not in created state")
 
+        if env_mods:
+            for case in cases:
+                case.add_default_env(**env_mods)
+
         Finder.resolve_dependencies(cases)
+        Finder.filter(
+            cases, rh=rh, keyword_expr=keyword_expr, parameter_expr=parameter_expr, owners=owners
+        )
         Finder.check_for_skipped_dependencies(cases)
 
         for p in plugin.plugins():
@@ -230,6 +229,86 @@ class Finder:
 
         logging.debug("Done creating test cases")
         return cases
+
+    @staticmethod
+    def filter(
+        cases: list[TestCase],
+        rh: ResourceHandler | None = None,
+        keyword_expr: str | None = None,
+        parameter_expr: str | None = None,
+        owners: set[str] | None = None,
+    ) -> None:
+        rh = rh or ResourceHandler()
+        cpus = rh["test:cpu_count"]
+        gpus = rh["test:gpu_count"]
+        nodes = rh["test:node_count"]
+        timeout = rh["test:timeout"]
+
+        cpus_per_node: int = config.get("machine:cpus_per_node")
+        gpus_per_node: int = config.get("machine:gpus_per_node")
+        node_count: int = config.get("machine:node_count")
+        cpu_count = node_count * cpus_per_node
+        gpu_count = node_count * gpus_per_node
+        min_cpus, max_cpus = cpus or (0, cpu_count)
+        min_gpus, max_gpus = gpus or (0, gpu_count)
+        min_nodes, max_nodes = nodes or (0, node_count)
+
+        owners = set(owners or [])
+        for case in cases:
+            if case.mask is None and owners:
+                if not owners.intersection(case.owners):
+                    print(owners, case.owners)
+                    case.mask = colorize("deselected by @*b{owner expression}")
+
+            if case.mask is None and keyword_expr is not None:
+                kwds = set(case.keywords)
+                kwds.update(case.implicit_keywords)
+                kwds.add(case.name)
+                kwds.update(case.parameters.keys())
+                match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
+                if not match:
+                    logging.debug(f"Skipping {case}::{case.name}")
+                    case.mask = colorize("deselected by @*b{keyword expression}")
+
+            np = case.processors
+            nc = int(math.ceil(np / cpus_per_node))
+            if case.mask is None and nc > max_nodes:
+                s = "deselected due to @*b{requiring more nodes than max node count}"
+                case.mask = colorize(s)
+
+            if case.mask is None and nc < min_nodes:
+                s = "deselected due to @*b{requiring fewer nodes than min node count}"
+                case.mask = colorize(s)
+
+            if case.mask is None and np > max_cpus:
+                s = "deselected due to @*b{requiring more cpus than max cpu count}"
+                case.mask = colorize(s)
+
+            if case.mask is None and np < min_cpus:
+                s = "deselected due to @*b{requiring fewer cpus than min cpu count}"
+                case.mask = colorize(s)
+
+            nd = case.gpus
+            if case.mask is None and nd and nd > max_gpus:
+                s = "deselected due to @*b{requiring more gpus than max gpu count}"
+                case.mask = colorize(s)
+            if case.mask is None and nd and nd < min_gpus:
+                s = "deselected due to @*b{requiring fewer gpus than min gpu count}"
+                case.mask = colorize(s)
+
+            if case.mask is None and ("TDD" in case.keywords or "tdd" in case.keywords):
+                case.mask = colorize("deselected due to @*b{TDD keyword}")
+
+            if case.mask is None and parameter_expr:
+                match = when.when(f"parameters={parameter_expr!r}", parameters=case.parameters)
+                if not match:
+                    case.mask = colorize("deselected due to @*b{parameter expression}")
+
+            if timeout is not None and timeout > 0 and case.runtime > timeout:
+                case.mask = "runtime exceeds time limit"
+
+            if case.mask is None and any(dep.mask for dep in case.dependencies):
+                case.mask = colorize("deselected due to @*b{skipped dependencies}")
 
     @staticmethod
     def pprint_paths(cases: list[TestCase], file: TextIO = sys.stdout) -> None:

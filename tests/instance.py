@@ -20,7 +20,7 @@ def test_instance_deps(tmpdir):
     assert len(finder.roots) == 1
     finder.prepare()
     files = finder.discover()
-    cases = finder.lock(files)
+    cases = finder.lock_and_filter(files)
     assert len([c for c in cases if not c.mask]) == 7
     exec_root = os.path.join(workdir, "tests")
     mkdirp(exec_root)

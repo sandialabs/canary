@@ -427,7 +427,7 @@ class Session:
           env_mods: Environment variables to be defined in a tests execution environment.
 
         """
-        self.cases = Finder.lock(
+        self.cases = Finder.lock_and_filter(
             self.generators,
             rh=rh,
             keyword_expr=keyword_expr,

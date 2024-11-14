@@ -39,7 +39,7 @@ class Find(Command):
             finder.add(root, *paths, tolerant=True)
         finder.prepare()
         generators = finder.discover()
-        cases = Finder.lock(
+        cases = finder.lock_and_filter(
             generators,
             rh=args.rh,
             keyword_expr=args.keyword_expr,

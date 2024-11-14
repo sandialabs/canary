@@ -275,7 +275,7 @@ if __name__ == "__main__":
         finder.add(".")
         finder.prepare()
         files = finder.discover()
-        cases = finder.lock(files)
+        cases = finder.lock_and_filter(files)
         _nvtest.config.set("config:debug", dbg)
         assert len(cases) == 6
         assert cases[0].name == "create_inputs.a=A.b=B.np=1"

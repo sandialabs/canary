@@ -36,13 +36,7 @@ class Describe(Command):
             )
         if finder.is_test_file(args.testspec):
             file = finder.find(args.testspec)
-            return self.describe_generator(
-                file,
-                keyword_expr=args.keyword_expr,
-                on_options=args.on_options,
-                rh=args.rh,
-                parameter_expr=args.parameter_expr,
-            )
+            return self.describe_generator(file, on_options=args.on_options)
         # could be a test case in the test session?
         with logging.level(logging.WARNING):
             session = Session(os.getcwd(), mode="r")
@@ -66,27 +60,16 @@ class Describe(Command):
         f.prepare()
         files = f.discover()
         for file in sorted(files, key=lambda f: f.file):
-            Describe.describe_generator(
-                file,
-                keyword_expr=keyword_expr,
-                parameter_expr=parameter_expr,
-                on_options=on_options,
-                rh=rh,
-            )
+            Describe.describe_generator(file, on_options=on_options)
             print()
         return 0
 
     @staticmethod
     def describe_generator(
         file: AbstractTestGenerator,
-        keyword_expr: str | None = None,
-        parameter_expr: str | None = None,
         on_options: list[str] | None = None,
-        rh: ResourceHandler | None = None,
     ) -> int:
-        description = file.describe(
-            keyword_expr=keyword_expr, on_options=on_options, rh=rh, parameter_expr=parameter_expr
-        )
+        description = file.describe(on_options=on_options)
         print(description.rstrip())
         return 0
 

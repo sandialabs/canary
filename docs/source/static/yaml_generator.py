@@ -1,4 +1,5 @@
 import io
+import os
 from itertools import product
 from string import Template
 from typing import IO
@@ -8,7 +9,6 @@ from typing import Optional
 import yaml
 
 import nvtest
-from _nvtest.resource import ResourceHandler
 from _nvtest.util import graph
 from _nvtest.util.filesystem import set_executable
 from _nvtest.util.filesystem import working_dir
@@ -22,7 +22,7 @@ class YAMLTestFile(nvtest.AbstractTestGenerator):
     @classmethod
     def matches(cls, path: str) -> bool:
         """Is ``path`` a YAMLTestFile?"""
-        return path.endswith((".yml", ".yaml"))
+        return os.path.basename(path).startswith("test_") and path.endswith((".yml", ".yaml"))
 
     def load(self, file: IO[Any]) -> None:
         """Load the file.  A file may contain more than one test spec
@@ -51,18 +51,7 @@ class YAMLTestFile(nvtest.AbstractTestGenerator):
         self.parameters = details.get("parameters", {})
         self.script = details.get("script", [])
 
-    def lock(
-        self,
-        cpus: Optional[list[int]] = None,
-        gpus: Optional[list[int]] = None,
-        nodes: Optional[list[int]] = None,
-        keyword_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameter_expr: Optional[str] = None,
-        timeout: Optional[float] = None,
-        owners: Optional[set[str]] = None,
-        env_mods: Optional[dict[str, str]] = None,
-    ) -> list[nvtest.TestCase]:
+    def lock(self, on_options: Optional[list[str]] = None) -> list[nvtest.TestCase]:
         """Take the cartesian product of parameters and from each combination create a test case."""
         kwds = dict(
             file_root=self.root,
@@ -83,22 +72,8 @@ class YAMLTestFile(nvtest.AbstractTestGenerator):
             cases.append(case)
         return cases  # type: ignore
 
-    def describe(
-        self,
-        keyword_expr: Optional[str] = None,
-        on_options: Optional[list[str]] = None,
-        parameter_expr: Optional[str] = None,
-        rh: Optional[ResourceHandler] = None,
-    ) -> str:
-        rh = rh or ResourceHandler()
-        cases = self.lock(
-            cpus=rh["test:cpu_count"],
-            gpus=rh["test:gpu_count"],
-            nodes=rh["test:node_count"],
-            on_options=on_options,
-            keyword_expr=keyword_expr,
-            parameter_expr=parameter_expr,
-        )
+    def describe(self, on_options: Optional[list[str]] = None) -> str:
+        cases = self.lock(on_options=on_options)
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")

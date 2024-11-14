@@ -42,11 +42,11 @@ Example implementation
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python
-    :lines: 1-111
+    :lines: 1-88
 
 
 The ``YAMLTestFile.lock()`` returns a list of ``YAMLTestCase`` test cases, defined below:
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python
-    :lines: 113-
+    :lines: 89-
