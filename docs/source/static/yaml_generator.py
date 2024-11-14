@@ -6,8 +6,9 @@ from typing import IO
 from typing import Any
 from typing import Optional
 
-import nvtest
 import yaml
+
+import nvtest
 from _nvtest.util import graph
 from _nvtest.util.filesystem import set_executable
 from _nvtest.util.filesystem import working_dir
