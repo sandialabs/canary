@@ -67,6 +67,7 @@ class TestCase(AbstractTestCase):
         preload: str | None = None,
         modules: list[str] | None = None,
         rcfiles: list[str] | None = None,
+        owners: list[str] | None = None,
     ):
         super().__init__()
 
@@ -76,6 +77,7 @@ class TestCase(AbstractTestCase):
         self._file_path: str = ""
         self._url: str | None = None
         self._family: str = ""
+        self._owners: list[str] = []
         self._keywords: list[str] = []
         self._parameters: dict[str, Any] = {}
         self._timeout: float | None = None
@@ -92,6 +94,8 @@ class TestCase(AbstractTestCase):
             self.file_path = file_path
         if family is not None:
             self.family = family
+        if owners is not None:
+            self.owners = owners
         if keywords is not None:
             self.keywords = keywords
         if parameters is not None:
@@ -225,6 +229,14 @@ class TestCase(AbstractTestCase):
         self._family = arg
 
     @property
+    def owners(self) -> list[str]:
+        return self._owners
+
+    @owners.setter
+    def owners(self, arg: list[str]) -> None:
+        self._owners = list(arg)
+
+    @property
     def keywords(self) -> list[str]:
         return self._keywords
 
@@ -244,6 +256,18 @@ class TestCase(AbstractTestCase):
     @parameters.setter
     def parameters(self, arg: dict[str, Any]) -> None:
         self._parameters = dict(arg)
+        np = self._parameters.get("np") or 1
+        if not isinstance(np, int):
+            class_name = np.__class__.__name__
+            raise ValueError(f"{self.family}: expected np={np} to be an int, not {class_name}")
+        for key in ("ngpu", "ndevice"):
+            if key in self._parameters:
+                nd = self._parameters[key]
+                if not isinstance(nd, int) and nd is not None:
+                    class_name = nd.__class__.__name__
+                    raise ValueError(
+                        f"{self.family}: expected {key}={nd} " f"to be an int, not {class_name}"
+                    )
 
     @property
     def dep_patterns(self) -> list[str]:
@@ -1004,6 +1028,7 @@ class TestMultiCase(TestCase):
         preload: str | None = None,
         modules: list[str] | None = None,
         rcfiles: list[str] | None = None,
+        owners: list[str] | None = None,
     ):
         super().__init__(
             file_root=file_root,
@@ -1017,6 +1042,7 @@ class TestMultiCase(TestCase):
             preload=preload,
             modules=modules,
             rcfiles=rcfiles,
+            owners=owners,
         )
         if flag.startswith("-"):
             # for the base case, call back on the test file with ``flag`` on the command line

@@ -2,19 +2,14 @@ import argparse
 import importlib.resources as ir
 import io
 import json
-import math
 import os
 import re
 import subprocess
 from typing import Any
 
-import _nvtest.config as config
-import _nvtest.when as m_when
 import nvtest
 from _nvtest.generator import AbstractTestGenerator
-from _nvtest.resource import ResourceHandler
 from _nvtest.test.case import TestCase
-from _nvtest.third_party.color import colorize
 from _nvtest.util import graph
 from _nvtest.util import logging
 from _nvtest.util.filesystem import is_exe
@@ -44,26 +39,7 @@ class CTestTestFile(AbstractTestGenerator):
             return cmake
         return None
 
-    def lock(
-        self,
-        cpus: list[int] | None = None,
-        gpus: list[int] | None = None,
-        nodes: list[int] | None = None,
-        keyword_expr: str | None = None,
-        on_options: list[str] | None = None,
-        parameter_expr: str | None = None,
-        timeout: float | None = None,
-        owners: set[str] | None = None,
-        env_mods: dict[str, str] | None = None,
-    ) -> list[TestCase]:
-        cpus_per_node: int = config.get("machine:cpus_per_node")
-        gpus_per_node: int = config.get("machine:gpus_per_node")
-        node_count: int = config.get("machine:node_count")
-        cpu_count = node_count * cpus_per_node
-        gpu_count = node_count * gpus_per_node
-        min_cpus, max_cpus = cpus or (0, cpu_count)
-        min_gpus, max_gpus = gpus or (0, gpu_count)
-        min_nodes, max_nodes = nodes or (0, node_count)
+    def lock(self, on_options: list[str] | None = None) -> list[TestCase]:
         cmake = self.find_cmake()
         if cmake is None:
             logging.warning("cmake not found, test cases cannot be generated")
@@ -72,76 +48,14 @@ class CTestTestFile(AbstractTestGenerator):
         cases: list[TestCase] = []
         for family, td in tests.items():
             case = CTestTestCase(file_root=self.root, file_path=self.path, family=family, **td)
-            case_mask: str | None = None
-            if owners and not owners.intersection(self.owners):
-                case_mask = colorize("deselected by @*b{owner expression}")
-            if case_mask is None and keyword_expr is not None:
-                kwds = {kw for kw in case.keywords}
-                kwds.update(case.implicit_keywords)
-                kwds.update({"ready"})
-                match = m_when.when({"keywords": keyword_expr}, keywords=list(kwds))
-                if not match:
-                    logging.debug(f"Skipping {self}::{family}")
-                    case_mask = colorize("deselected by @*b{keyword expression}")
-            np = case.processors or 1
-            if not isinstance(np, int):
-                class_name = np.__class__.__name__
-                raise ValueError(f"{self.name}: expected np={np} to be an int, not {class_name}")
-            nc = int(math.ceil(np / cpus_per_node))
-            if case_mask is None and nc > max_nodes:
-                s = "deselected due to @*b{requiring more nodes than max node count}"
-                case_mask = colorize(s)
-            if case_mask is None and nc < min_nodes:
-                s = "deselected due to @*b{requiring fewer nodes than min node count}"
-                case_mask = colorize(s)
-            if case_mask is None and np > max_cpus:
-                s = "deselected due to @*b{requiring more cpus than max cpu count}"
-                case_mask = colorize(s)
-            if case_mask is None and np < min_cpus:
-                s = "deselected due to @*b{requiring fewer cpus than min cpu count}"
-                case_mask = colorize(s)
-
-            if "ngpu" in case.parameters:
-                nd = case.parameters["ngpu"]
-                if not isinstance(nd, int) and nd is not None:
-                    class_name = nd.__class__.__name__
-                    raise ValueError(
-                        f"{self.name}: expected ngpu={nd} " f"to be an int, not {class_name}"
-                    )
-                if case_mask is None and nd and nd > max_gpus:
-                    s = "deselected due to @*b{requiring more gpus than max gpu count}"
-                    case_mask = colorize(s)
-                if case_mask is None and nd and nd < min_gpus:
-                    s = "deselected due to @*b{requiring fewer gpus than min gpu count}"
-                    case_mask = colorize(s)
-            if env_mods:
-                case.add_default_env(**env_mods)
-            if case_mask is not None:
-                case.mask = case_mask
-            elif timeout is not None and timeout > 0 and case.runtime > timeout:
-                case.mask = "runtime exceeds time limit"
             cases.append(case)
         return cases  # type: ignore
 
-    def describe(
-        self,
-        keyword_expr: str | None = None,
-        parameter_expr: str | None = None,
-        on_options: list[str] | None = None,
-        rh: ResourceHandler | None = None,
-    ) -> str:
+    def describe(self, on_options: list[str] | None = None) -> str:
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")
-        rh = rh or ResourceHandler()
-        cases = self.lock(
-            cpus=rh["test:cpu_count"],
-            gpus=rh["test:gpu_count"],
-            nodes=rh["test:node_count"],
-            on_options=on_options,
-            keyword_expr=keyword_expr,
-            parameter_expr=parameter_expr,
-        )
+        cases = self.lock(on_options=on_options)
         file.write(f"{len(cases)} test cases:\n")
         graph.print(cases, file=file)
         return file.getvalue()

@@ -1,7 +1,6 @@
 import fnmatch
 import glob
 import io
-import math
 import os
 import sys
 from string import Template
@@ -16,7 +15,6 @@ from _nvtest import enums
 from _nvtest.error import diff_exit_status
 from _nvtest.generator import AbstractTestGenerator
 from _nvtest.paramset import ParameterSet
-from _nvtest.resource import ResourceHandler
 from _nvtest.test.case import TestCase
 from _nvtest.test.case import TestMultiCase
 from _nvtest.third_party.color import colorize
@@ -83,13 +81,7 @@ class PYTTestFile(AbstractTestGenerator):
     def __repr__(self) -> str:
         return self.file
 
-    def describe(
-        self,
-        keyword_expr: str | None = None,
-        parameter_expr: str | None = None,
-        on_options: list[str] | None = None,
-        rh: ResourceHandler | None = None,
-    ) -> str:
+    def describe(self, on_options: list[str] | None = None) -> str:
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")
@@ -108,144 +100,36 @@ class PYTTestFile(AbstractTestGenerator):
                     if dst and dst != os.path.basename(src):
                         file.write(f" -> {dst}")
                     file.write("\n")
-        rh = rh or ResourceHandler()
-        cases: list[TestCase] = self.lock(
-            cpus=rh["test:cpu_count"],
-            gpus=rh["test:gpu_count"],
-            nodes=rh["test:node_count"],
-            on_options=on_options,
-            keyword_expr=keyword_expr,
-            parameter_expr=parameter_expr,
-        )
+        cases: list[TestCase] = self.lock(on_options=on_options)
         file.write(f"{len(cases)} test case{'' if len(cases) <= 1 else 's'}:\n")
         graph.print(cases, file=file)
         return file.getvalue()
 
-    def lock(
-        self,
-        cpus: list[int] | None = None,
-        gpus: list[int] | None = None,
-        nodes: list[int] | None = None,
-        keyword_expr: str | None = None,
-        on_options: list[str] | None = None,
-        parameter_expr: str | None = None,
-        timeout: float | None = None,
-        owners: set[str] | None = None,
-        env_mods: dict[str, str] | None = None,
-    ) -> list[TestCase]:
+    def lock(self, on_options: list[str] | None = None) -> list[TestCase]:
         try:
-            cases = self._lock(
-                cpus=cpus,
-                gpus=gpus,
-                nodes=nodes,
-                keyword_expr=keyword_expr,
-                on_options=on_options,
-                timeout=timeout,
-                parameter_expr=parameter_expr,
-                owners=owners,
-                env_mods=env_mods,
-            )
+            cases = self._lock(on_options=on_options)
             return cases
         except Exception as e:
             if config.get("config:debug"):
                 raise
             raise ValueError(f"Failed to lock {self.file}: {e}") from None
 
-    def _lock(
-        self,
-        cpus: list[int] | None = None,
-        gpus: list[int] | None = None,
-        nodes: list[int] | None = None,
-        keyword_expr: str | None = None,
-        on_options: list[str] | None = None,
-        parameter_expr: str | None = None,
-        timeout: float | None = None,
-        owners: set[str] | None = None,
-        env_mods: dict[str, str] | None = None,
-    ) -> list[TestCase]:
-        cpus_per_node: int = config.get("machine:cpus_per_node")
-        gpus_per_node: int = config.get("machine:gpus_per_node")
-        node_count: int = config.get("machine:node_count")
-        cpu_count = node_count * cpus_per_node
-        gpu_count = node_count * gpus_per_node
-        min_cpus, max_cpus = cpus or (0, cpu_count)
-        min_gpus, max_gpus = gpus or (0, gpu_count)
-        min_nodes, max_nodes = nodes or (0, node_count)
-        owners = set(owners or [])
+    def _lock(self, on_options: list[str] | None = None) -> list[TestCase]:
         testcases: list[TestCase] = []
+
         names = ", ".join(self.names())
         logging.debug(f"Generating test cases for {self} using the following test names: {names}")
         for name in self.names():
             test_mask = self.skipif_reason
-            if owners and not owners.intersection(self.owners):
-                test_mask = colorize("deselected by @*b{owner expression}")
             enabled, reason = self.enable(testname=name, on_options=on_options)
             if not enabled and test_mask is None:
                 test_mask = f"deselected due to {reason}"
                 logging.debug(f"{self}::{name} has been disabled")
+
             cases: list[TestCase] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
-                case_mask: str | None = test_mask
                 keywords = self.keywords(testname=name, parameters=parameters)
-                if case_mask is None and keyword_expr is not None:
-                    kwds = {kw for kw in keywords}
-                    kwds.add(name)
-                    kwds.update(parameters.keys())
-                    kwds.update({"ready"})
-                    match = m_when.when({"keywords": keyword_expr}, keywords=list(kwds))
-                    if not match:
-                        logging.debug(f"Skipping {self}::{name}")
-                        case_mask = colorize("deselected by @*b{keyword expression}")
-
-                np = parameters.get("np") or 1
-                if not isinstance(np, int):
-                    class_name = np.__class__.__name__
-                    raise ValueError(
-                        f"{self.name}: expected np={np} to be an int, not {class_name}"
-                    )
-
-                nc = int(math.ceil(np / cpus_per_node))
-                if case_mask is None and nc > max_nodes:
-                    s = "deselected due to @*b{requiring more nodes than max node count}"
-                    case_mask = colorize(s)
-
-                if case_mask is None and nc < min_nodes:
-                    s = "deselected due to @*b{requiring fewer nodes than min node count}"
-                    case_mask = colorize(s)
-
-                if case_mask is None and np > max_cpus:
-                    s = "deselected due to @*b{requiring more cpus than max cpu count}"
-                    case_mask = colorize(s)
-
-                if case_mask is None and np < min_cpus:
-                    s = "deselected due to @*b{requiring fewer cpus than min cpu count}"
-                    case_mask = colorize(s)
-
-                for key in ("ngpu", "ndevice"):
-                    # ndevice provides backward compatibility with vvtest
-                    if key not in parameters:
-                        continue
-                    nd = parameters[key]
-                    if not isinstance(nd, int) and nd is not None:
-                        class_name = nd.__class__.__name__
-                        raise ValueError(
-                            f"{self.name}: expected {key}={nd} " f"to be an int, not {class_name}"
-                        )
-                    if case_mask is None and nd and nd > max_gpus:
-                        s = "deselected due to @*b{requiring more gpus than max gpu count}"
-                        case_mask = colorize(s)
-                    if case_mask is None and nd and nd < min_gpus:
-                        s = "deselected due to @*b{requiring fewer gpus than min gpu count}"
-                        case_mask = colorize(s)
-                    break
-
-                if case_mask is None and ("TDD" in keywords or "tdd" in keywords):
-                    case_mask = colorize("deselected due to @*b{TDD keyword}")
-                if case_mask is None and parameter_expr:
-                    match = m_when.when(f"parameters={parameter_expr!r}", parameters=parameters)
-                    if not match:
-                        case_mask = colorize("deselected due to @*b{parameter expression}")
                 modules = self.modules(testname=name, on_options=on_options, parameters=parameters)
                 case = TestCase(
                     self.root,
@@ -253,7 +137,7 @@ class PYTTestFile(AbstractTestGenerator):
                     family=name,
                     keywords=keywords,
                     parameters=parameters,
-                    timeout=timeout or self.timeout(testname=name, parameters=parameters),
+                    timeout=self.timeout(testname=name, parameters=parameters),
                     baseline=self.baseline(testname=name, parameters=parameters),
                     sources=self.sources(testname=name, parameters=parameters),
                     xstatus=self.xstatus(
@@ -266,38 +150,30 @@ class PYTTestFile(AbstractTestGenerator):
                         testname=name, on_options=on_options, parameters=parameters
                     ),
                     modules=[_[0] for _ in modules],
+                    owners=self.owners,
                 )
                 case.launcher = sys.executable
-                if env_mods:
-                    case.add_default_env(**env_mods)
+                if test_mask is not None:
+                    case.mask = test_mask
                 if any([_[1] is not None for _ in modules]):
                     mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
                     for _, use in modules:
                         if use:
                             mp.insert(0, use)
                     case.add_default_env(MODULEPATH=":".join(mp))
-                if case_mask is not None:
-                    case.mask = case_mask
-                elif timeout is not None and timeout > 0 and case.runtime > timeout:
-                    case.mask = "runtime exceeds time limit"
                 attributes = self.attributes(
                     testname=name, on_options=on_options, parameters=parameters
                 )
                 for attr, value in attributes.items():
                     case.set_attribute(attr, value)
-
                 dependencies = self.depends_on(testname=name, parameters=parameters)
                 if dependencies:
                     case.add_dependency(*dependencies)
-
                 cases.append(case)
 
             execbase = self.execbase(testname=name, on_options=on_options)
             if execbase:
                 # add previous cases as dependencies
-                mask_base_case: str | None = None
-                if any(case.mask for case in cases):
-                    mask_base_case = colorize("deselected due to @*b{skipped dependencies}")
                 modules = self.modules(testname=name, on_options=on_options)
                 parent = TestMultiCase(
                     self.root,
@@ -306,19 +182,18 @@ class PYTTestFile(AbstractTestGenerator):
                     flag=execbase,
                     family=name,
                     keywords=self.keywords(testname=name),
-                    timeout=timeout or self.timeout(testname=name),
+                    timeout=self.timeout(testname=name),
                     baseline=self.baseline(testname=name),
                     sources=self.sources(testname=name),
                     xstatus=self.xstatus(testname=name, on_options=on_options),
                     preload=self.preload(testname=name, on_options=on_options),
                     modules=[_[0] for _ in modules],
                     rcfiles=self.rcfiles(testname=name, on_options=on_options),
+                    owners=self.owners,
                 )
                 parent.launcher = sys.executable
-                if mask_base_case is not None:
-                    parent.mask = mask_base_case
-                if env_mods:
-                    parent.add_default_env(**env_mods)
+                if test_mask is not None:
+                    case.mask = test_mask
                 if any([_[1] is not None for _ in modules]):
                     mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
                     for _, use in modules:
