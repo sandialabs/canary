@@ -1,22 +1,19 @@
-import fnmatch
 import io
 import os
+from itertools import product
 from string import Template
 from typing import IO
 from typing import Any
 from typing import Optional
-from itertools import product
 
-import yaml
 import nvtest
-from _nvtest.resource import ResourceHandler
+import yaml
 from _nvtest.util import graph
 from _nvtest.util.filesystem import set_executable
 from _nvtest.util.filesystem import working_dir
 
 
 class YAMLTestFile(nvtest.AbstractTestGenerator):
-
     def __init__(self, root: str, path: Optional[str] = None) -> None:
         super().__init__(root, path=path)
         self.load(open(self.file))
@@ -54,8 +51,7 @@ class YAMLTestFile(nvtest.AbstractTestGenerator):
         self.script = details.get("script", [])
 
     def lock(self, on_options: Optional[list[str]] = None) -> list[nvtest.TestCase]:
-        """Take the cartesian product of parameters and from each combination create a test case.
-        """
+        """Take the cartesian product of parameters and from each combination create a test case."""
         kwds = dict(
             file_root=self.root,
             file_path=self.path,
