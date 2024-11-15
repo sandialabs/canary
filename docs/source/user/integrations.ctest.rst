@@ -17,7 +17,7 @@ Supported CTest properties
 The following `CTest properties <https://cmake.org/cmake/help/git-master/manual/cmake-properties.7.html#properties-on-tests>`_ are supported by ``nvtest``.
 
 * `ATTACHED_FILES <https://cmake.org/cmake/help/git-master/prop_test/ATTACHED_FILES.html>`_
-* `ATTCHED_FILES_ON_FAIL <https://cmake.org/cmake/help/git-master/prop_test/ATTACHED_FILES_ON_FAIL.html>`_
+* `ATTACHED_FILES_ON_FAIL <https://cmake.org/cmake/help/git-master/prop_test/ATTACHED_FILES_ON_FAIL.html>`_
 * `DEPENDS <https://cmake.org/cmake/help/git-master/prop_test/DEPENDS.html>`_
 * `DISABLED <https://cmake.org/cmake/help/git-master/prop_test/DISABLED.html>`_
 * `ENVIRONMENT <https://cmake.org/cmake/help/git-master/prop_test/ENVIRONMENT.html>`_
