@@ -68,6 +68,8 @@ class TestCase(AbstractTestCase):
         modules: list[str] | None = None,
         rcfiles: list[str] | None = None,
         owners: list[str] | None = None,
+        artifacts: list[dict[str, str]] | None = None,
+        exclusive: bool = False,
     ):
         super().__init__()
 
@@ -77,7 +79,6 @@ class TestCase(AbstractTestCase):
         self._file_path: str = ""
         self._url: str | None = None
         self._family: str = ""
-        self._owners: list[str] = []
         self._keywords: list[str] = []
         self._parameters: dict[str, Any] = {}
         self._timeout: float | None = None
@@ -87,6 +88,9 @@ class TestCase(AbstractTestCase):
         self._preload: str | None = None
         self._modules: list[str] = []
         self._rcfiles: list[str] = []
+        self._owners: list[str] = []
+        self._artifacts: list[dict[str, str]] = []
+        self._exclusive: bool = exclusive
 
         if file_root is not None:
             self.file_root = file_root
@@ -114,6 +118,8 @@ class TestCase(AbstractTestCase):
             self.modules = modules
         if rcfiles is not None:
             self.rcfiles = rcfiles
+        if artifacts is not None:
+            self.artifacts = artifacts
 
         self._mask: str | None = None
         self._name: str | None = None
@@ -353,6 +359,22 @@ class TestCase(AbstractTestCase):
     @rcfiles.setter
     def rcfiles(self, arg: list[str]) -> None:
         self._rcfiles = arg
+
+    @property
+    def artifacts(self) -> list[dict[str, str]]:
+        return self._artifacts
+
+    @artifacts.setter
+    def artifacts(self, arg: list[dict[str, str]]) -> None:
+        self._artifacts = arg
+
+    @property
+    def exclusive(self) -> bool:
+        return self._exclusive
+
+    @exclusive.setter
+    def exclusive(self, arg: bool) -> None:
+        self._exclusive = arg
 
     @property
     def skipped(self) -> bool:
@@ -1031,6 +1053,8 @@ class TestMultiCase(TestCase):
         modules: list[str] | None = None,
         rcfiles: list[str] | None = None,
         owners: list[str] | None = None,
+        artifacts: list[dict[str, str]] | None = None,
+        exclusive: bool = False,
     ):
         super().__init__(
             file_root=file_root,
@@ -1045,6 +1069,8 @@ class TestMultiCase(TestCase):
             modules=modules,
             rcfiles=rcfiles,
             owners=owners,
+            artifacts=artifacts,
+            exclusive=exclusive,
         )
         if flag.startswith("-"):
             # for the base case, call back on the test file with ``flag`` on the command line

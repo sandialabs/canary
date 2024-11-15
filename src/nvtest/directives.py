@@ -102,14 +102,10 @@ from _nvtest import enums
 WhenType = str | dict[str, str]
 
 
-def execbase(
-    *,
-    when: WhenType | None = None,
-    flag: str | None = None,
-    script: str | None = None,
-) -> None:
-    """Create a test instance that depends on all parameterized test instances
-    and run it after they have completed.
+def artifact(file: str, *, when: WhenType | None = None, upon: str = "always") -> None:
+    """Save ``file`` as an artifact.  This directive is not used by the test directly.  Reporters
+    can save a test's artifacts at their destination.  For instance, the artifacts may submitted to
+    CDash as part of the test submission.
 
     Usage
     -----
@@ -119,22 +115,18 @@ def execbase(
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.execbase(*, flag=None, script=None, when=...)
+       nvtest.directives.artifact(file, *, when=..., upon=...)
 
-    ``.vvt``:
-
-    .. code-block:: python
-
-       #VVT: analyze (options=..., platforms=..., testname=...) : (flag|script)
+    ``.vvt``: ``NA``
 
     Parameters
     ----------
 
     * ``when``: Restrict processing of the directive to this condition
-    * ``flag``: Run the test script with the ``--FLAG`` option on the command
-      line.  ``flag`` should start with a hyphen (``-``).  The script should
-      parse this value and perform the appropriate analysis.
-    * ``script``: Run ``script`` during the analysis phase (instead of the test file).
+    * ``upon``: Define when to save the artifact, based on the status of the job.
+      * ``success``: Save artifacts only when the job succeeds.
+      * ``failure``: Save artifacts only when the job fails or diffs.
+      * ``always``: Always save artifacts (except when jobs time out).
 
     The ``when`` expression is limited to the following conditions:
 
@@ -145,64 +137,14 @@ def execbase(
     * ``parameters``: Restrict processing of the directive to certain parameter
       names and values
 
-    References
-    ----------
-
-    * :ref:`Writing an execute/analyze test <usage-execute-and-analyze>`
-
     Examples
     --------
 
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.execbase(flag="--base", when="platforms='not darwin'")
-       nvtest.directives.parameterize("a,b", [(1, 2), (3, 4)])
-
-    .. code-block:: python
-
-       # VVT: analyze (platforms="not darwin") : --analyze
-       # VVT: parameterize : a,b = 1,2 3,4
-
-    will run an analysis job after jobs ``[a=1,b=3]`` and ``[a=2,b=4]`` have run
-    to completion.  The ``nvtest.test.instance`` and ``vvtest_util`` modules
-    will contain information regarding the previously run jobs so that a
-    collective analysis can be performed.
-
-    For either file type, the script must query the command line arguments to
-    determine the type of test to run:
-
-    .. code-block:: python
-
-       import argparse
-       import sys
-
-       import nvtest
-       nvtest.directives.execbase(flag="--base", when="platforms='not darwin'")
-       nvtest.directives.parameterize("a,b", [(1, 2), (3, 4)])
-
-
-       def test() -> int:
-           ...
-
-       def base() -> int:
-           ...
-
-       def main() -> int:
-           parser = argparse.ArgumentParser()
-           parser.add_argument("--base", action="store_true")
-           args = parser.parse_args()
-           if args.analyze:
-               return base()
-           return test()
-
-
-       if __name__ == "__main__":
-           sys.exit(main())
+       nvtest.directives.artifacts("file.txt", when="platforms='not darwin'", upon="success")
     """
-
-
-analyze = execbase
 
 
 def baseline(
@@ -498,6 +440,148 @@ def depends_on(
     """  # noqa: E501
 
 
+def exclusive(*, when: WhenType | None = None) -> None:
+    """Do not run this test in parallel with any other test.
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code-block:: python
+
+       import nvtest
+       nvtest.directives.exclusive(*, when=...)
+
+    ``.vvt``: ``NA``
+
+    Parameters
+    ----------
+
+    * ``when``: Restrict processing of the directive to this condition
+
+    The ``when`` expression is limited to the following conditions:
+
+    * ``testname``: Restrict processing of the directive to this test name
+    * ``platforms``: Restrict processing of the directive to certain platform or
+      platforms
+    * ``options``: Restrict processing of the directive to command line ``-o`` options
+    * ``parameters``: Restrict processing of the directive to certain parameter
+      names and values
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+       import nvtest
+       nvtest.directives.exclusive(when="platforms='not darwin'")
+    """
+
+
+def execbase(
+    *,
+    when: WhenType | None = None,
+    flag: str | None = None,
+    script: str | None = None,
+) -> None:
+    """Create a test instance that depends on all parameterized test instances
+    and run it after they have completed.
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code-block:: python
+
+       import nvtest
+       nvtest.directives.execbase(*, flag=None, script=None, when=...)
+
+    ``.vvt``:
+
+    .. code-block:: python
+
+       #VVT: analyze (options=..., platforms=..., testname=...) : (flag|script)
+
+    Parameters
+    ----------
+
+    * ``when``: Restrict processing of the directive to this condition
+    * ``flag``: Run the test script with the ``--FLAG`` option on the command
+      line.  ``flag`` should start with a hyphen (``-``).  The script should
+      parse this value and perform the appropriate analysis.
+    * ``script``: Run ``script`` during the analysis phase (instead of the test file).
+
+    The ``when`` expression is limited to the following conditions:
+
+    * ``testname``: Restrict processing of the directive to this test name
+    * ``platforms``: Restrict processing of the directive to certain platform or
+      platforms
+    * ``options``: Restrict processing of the directive to command line ``-o`` options
+    * ``parameters``: Restrict processing of the directive to certain parameter
+      names and values
+
+    References
+    ----------
+
+    * :ref:`Writing an execute/analyze test <usage-execute-and-analyze>`
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+       import nvtest
+       nvtest.directives.execbase(flag="--base", when="platforms='not darwin'")
+       nvtest.directives.parameterize("a,b", [(1, 2), (3, 4)])
+
+    .. code-block:: python
+
+       # VVT: analyze (platforms="not darwin") : --analyze
+       # VVT: parameterize : a,b = 1,2 3,4
+
+    will run an analysis job after jobs ``[a=1,b=3]`` and ``[a=2,b=4]`` have run
+    to completion.  The ``nvtest.test.instance`` and ``vvtest_util`` modules
+    will contain information regarding the previously run jobs so that a
+    collective analysis can be performed.
+
+    For either file type, the script must query the command line arguments to
+    determine the type of test to run:
+
+    .. code-block:: python
+
+       import argparse
+       import sys
+
+       import nvtest
+       nvtest.directives.execbase(flag="--base", when="platforms='not darwin'")
+       nvtest.directives.parameterize("a,b", [(1, 2), (3, 4)])
+
+
+       def test() -> int:
+           ...
+
+       def base() -> int:
+           ...
+
+       def main() -> int:
+           parser = argparse.ArgumentParser()
+           parser.add_argument("--base", action="store_true")
+           args = parser.parse_args()
+           if args.analyze:
+               return base()
+           return test()
+
+
+       if __name__ == "__main__":
+           sys.exit(main())
+    """
+
+
+analyze = execbase
+
+
 def gpus(*ngpus: int, when: WhenType | None = None) -> None:
     """Run the test with this many gpus
 
@@ -512,7 +596,7 @@ def gpus(*ngpus: int, when: WhenType | None = None) -> None:
        nvtest.directives.gpus(*ngpus, when=...)
 
 
-    ``.vvt``: NA
+    ``.vvt``: ``NA``
 
     Parameters
     ----------
@@ -653,7 +737,7 @@ def include(file: str, *, when: WhenType | None = None) -> None:
     Usage
     -----
 
-    ``.pyt``: NA
+    ``.pyt``: ``NA``
 
     ``.vvt``:
 
@@ -865,9 +949,7 @@ def owners(*args: str) -> None:
        import nvtest
        nvtest.directives.owners("name1", "name2", ...)
 
-    ``.vvt``:
-
-    NA
+    ``.vvt``: ``NA``
 
     Parameters
     ----------
@@ -1061,7 +1143,7 @@ def cpus(*values: int, when: WhenType | None = None) -> None:
        nvtest.directives.cpus(*nprocs, when=...)
 
 
-    ``.vvt``: NA
+    ``.vvt``: ``NA``
 
     Parameters
     ----------
@@ -1121,7 +1203,7 @@ def nodes(*values: int, when: WhenType | None = None) -> None:
        nvtest.directives.nodes(*nnode, when=...)
 
 
-    ``.vvt``: NA
+    ``.vvt``: ``NA``
 
     Parameters
     ----------
@@ -1177,7 +1259,7 @@ def load_module(name: str, *, use: str | None = None, when: WhenType | None = No
        import nvtest
        nvtest.directives.load_module(name, when=..., use=...)
 
-    ``.vvt``: NA
+    ``.vvt``: ``NA``
 
     Parameters
     ----------
@@ -1213,7 +1295,7 @@ def source(name: str, *, when: WhenType | None = None) -> None:
        import nvtest
        nvtest.directives.source(name, when=...)
 
-    ``.vvt``: NA
+    ``.vvt``: ``NA``
 
     Parameters
     ----------
@@ -1248,7 +1330,7 @@ def set_attribute(*, when: WhenType | None = None, **attributes: Any) -> None:
        import nvtest
        nvtest.directives.set_attribute(*, when=..., **attributes)
 
-    ``.vvt``: NA
+    ``.vvt``: ``NA``
 
     Parameters
     ----------

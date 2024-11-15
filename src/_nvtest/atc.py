@@ -15,8 +15,13 @@ class AbstractTestCase(abc.ABC):
         return self._cpu_ids
 
     def assign_cpu_ids(self, arg: list[int]) -> None:
-        assert len(arg) == self.cpus
+        if not self.exclusive:
+            assert len(arg) == self.cpus
         self._cpu_ids = list(arg)
+
+    @property
+    def exclusive(self) -> bool:
+        return True
 
     @property
     def gpu_ids(self) -> list[int]:

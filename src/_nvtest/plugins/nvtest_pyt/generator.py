@@ -73,8 +73,10 @@ class PYTTestFile(AbstractTestGenerator):
         self._preload: FilterNamespace | None = None
         self._modules: list[FilterNamespace] = []
         self._rcfiles: list[FilterNamespace] = []
+        self._artifacts: list[FilterNamespace] = []
         self._depends_on: list[FilterNamespace] = []
         self._skipif_reason: str | None = None
+        self._exclusive: FilterNamespace | None = None
         self._xstatus: FilterNamespace | None = None
         self.load()
 
@@ -151,6 +153,12 @@ class PYTTestFile(AbstractTestGenerator):
                     ),
                     modules=[_[0] for _ in modules],
                     owners=self.owners,
+                    artifacts=self.artifacts(
+                        testname=name, on_options=on_options, parameters=parameters
+                    ),
+                    exclusive=self.exclusive(
+                        testname=name, on_options=on_options, parameters=parameters
+                    ),
                 )
                 case.launcher = sys.executable
                 if test_mask is not None:
@@ -190,6 +198,12 @@ class PYTTestFile(AbstractTestGenerator):
                     modules=[_[0] for _ in modules],
                     rcfiles=self.rcfiles(testname=name, on_options=on_options),
                     owners=self.owners,
+                    artifacts=self.artifacts(
+                        testname=name, on_options=on_options, parameters=parameters
+                    ),
+                    exclusive=self.exclusive(
+                        testname=name, on_options=on_options, parameters=parameters
+                    ),
                 )
                 parent.launcher = sys.executable
                 if test_mask is not None:
@@ -305,6 +319,35 @@ class PYTTestFile(AbstractTestGenerator):
             if result.value:
                 rcfiles.append(ns.value)
         return rcfiles
+
+    def artifacts(
+        self,
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
+    ) -> list[dict[str, str]]:
+        artifacts: list[dict[str, str]] = []
+        for ns in self._artifacts:
+            result = ns.when.evaluate(
+                testname=testname, parameters=parameters, on_options=on_options
+            )
+            if result.value:
+                artifacts.append({"file": ns.value, "when": getattr(ns, "upon", "always")})
+        return artifacts
+
+    def exclusive(
+        self,
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
+    ) -> bool:
+        if self._exclusive is not None:
+            result = self._exclusive.when.evaluate(
+                testname=testname, parameters=parameters, on_options=on_options
+            )
+            if result.value:
+                return True
+        return False
 
     def paramsets(
         self, testname: str | None = None, on_options: list[str] | None = None
@@ -504,6 +547,14 @@ class PYTTestFile(AbstractTestGenerator):
     def m_rcfile(self, arg: str, when: WhenType | None = None) -> None:
         ns = FilterNamespace(arg, when=when)
         self._rcfiles.append(ns)
+
+    def m_artifact(self, file: str, when: WhenType | None = None, upon: str = "always") -> None:
+        ns = FilterNamespace(file, when=when, upon=upon)
+        self._artifacts.append(ns)
+
+    def m_exclusive(self, when: WhenType | None = None) -> None:
+        ns = FilterNamespace(True, when=when)
+        self._exclusive = ns
 
     def m_parameterize(
         self,
@@ -780,14 +831,24 @@ class PYTTestFile(AbstractTestGenerator):
     ) -> None:
         self.m_parameterize(names, values, when=when, type=type)
 
-    def f_preload(self, arg: str, *, when: WhenType | None = None):
+    def f_preload(self, arg: str, *, when: WhenType | None = None) -> None:
         self.m_preload(arg, when=when)
 
-    def f_load_module(self, arg: str, *, when: WhenType | None = None, use: str | None = None):
+    def f_load_module(
+        self, arg: str, *, when: WhenType | None = None, use: str | None = None
+    ) -> None:
         self.m_module(arg, when=when, use=use)
 
     def f_source(self, arg: str, *, when: WhenType | None = None):
         self.m_rcfile(arg, when=when)
+
+    def f_artifact(self, file: str, *, when: WhenType | None = None, upon: str = "always") -> None:
+        if upon not in ("always", "success", "failure"):
+            raise ValueError("upon: invalid value, choose from 'always', 'success', 'failure'")
+        self.m_artifact(file, when=when, upon=upon)
+
+    def f_exclusive(self, *, when: WhenType | None = None) -> None:
+        self.m_exclusive(when=when)
 
     def f_set_attribute(self, *, when: WhenType | None = None, **attributes: Any) -> None:
         self.m_set_attribute(when=when, **attributes)
