@@ -138,10 +138,54 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
         rh = ResourceHandler()
         file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
         [case] = file.lock()
-        print(case.command())
         runner = xTestCaseRunner(rh)
         mkdirp("./foo")
         case.setup(exec_root=f"{os.getcwd()}/foo")
         runner.run(case)
         assert case.status == "success"
         assert case.returncode == 1
+
+
+@pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
+def test_fixtures(tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        with open("CTestTestfile.cmake", "w") as fh:
+            fh.write(
+                """\
+add_test(setup_foo "ls" "/")
+add_test(setup_bar "ls" "/")
+add_test(cleanup_foo "ls" "/")
+add_test(cleanup_bar "ls" "/")
+add_test(test_foo "ls" "/")
+add_test(test_bar "ls" "/")
+add_test(test_both "ls" "/")
+add_test(oddball "ls" "/")
+set_tests_properties(setup_foo PROPERTIES FIXTURES_REQUIRED Oddball)
+set_tests_properties(test_foo PROPERTIES FIXTURES_REQUIRED Foo)
+set_tests_properties(test_bar PROPERTIES FIXTURES_REQUIRED Bar)
+set_tests_properties(test_both PROPERTIES FIXTURES_REQUIRED "Foo;Bar")
+set_tests_properties(oddball PROPERTIES FIXTURES_SETUP Oddball)
+set_tests_properties(setup_foo PROPERTIES FIXTURES_SETUP Foo)
+set_tests_properties(setup_bar PROPERTIES FIXTURES_SETUP Bar)
+set_tests_properties(cleanup_foo PROPERTIES FIXTURES_CLEANUP Foo)
+set_tests_properties(cleanup_bar PROPERTIES FIXTURES_CLEANUP Bar)
+"""
+            )
+        file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
+        cases = file.lock()
+        assert len(cases) == 8
+        case_map = {case.name: case for case in cases}
+        assert len(case_map["oddball"].dependencies) == 0
+        assert len(case_map["setup_foo"].dependencies) == 0
+        assert len(case_map["setup_bar"].dependencies) == 0
+        assert case_map["cleanup_bar"].dependencies == [
+            case_map["test_bar"],
+            case_map["test_both"],
+        ]
+        assert case_map["cleanup_foo"].dependencies == [
+            case_map["test_foo"],
+            case_map["test_both"],
+        ]
+        assert case_map["test_bar"].dependencies == [case_map["setup_bar"]]
+        assert case_map["test_foo"].dependencies == [case_map["setup_foo"]]
+        assert case_map["test_both"].dependencies == [case_map["setup_foo"], case_map["setup_bar"]]

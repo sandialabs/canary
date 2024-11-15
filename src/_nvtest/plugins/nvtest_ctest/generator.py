@@ -33,10 +33,11 @@ class CTestTestFile(AbstractTestGenerator):
             logging.warning("cmake not found, test cases cannot be generated")
             return []
         tests = self.parse()
-        cases: list[TestCase] = []
+        cases: list[CTestTestCase] = []
         for family, td in tests.items():
             case = CTestTestCase(file_root=self.root, file_path=self.path, family=family, **td)
             cases.append(case)
+        self.resolve_fixtures(cases)
         return cases  # type: ignore
 
     def describe(self, on_options: list[str] | None = None) -> str:
@@ -52,6 +53,24 @@ class CTestTestFile(AbstractTestGenerator):
         build_type = find_build_type(os.path.dirname(self.file))
         tests = parse(self.file, CTEST_CONFIGURATION_TYPE=build_type)
         return tests
+
+    def resolve_fixtures(self, cases: list["CTestTestCase"]) -> None:
+        setup_fixtures: dict[str, CTestTestCase] = {}
+        cleanup_fixtures: dict[str, CTestTestCase] = {}
+        for case in cases:
+            if "setup" in case.fixtures:
+                for fixture_name in case.fixtures["setup"]:
+                    setup_fixtures[fixture_name] = case
+            if "cleanup" in case.fixtures:
+                for fixture_name in case.fixtures["cleanup"]:
+                    cleanup_fixtures[fixture_name] = case
+        for case in cases:
+            if "required" in case.fixtures:
+                for fixture_name in case.fixtures["required"]:
+                    if fixture_name in setup_fixtures:
+                        case.add_dependency(setup_fixtures[fixture_name])
+                    if fixture_name in cleanup_fixtures:
+                        cleanup_fixtures[fixture_name].add_dependency(case)
 
 
 class CTestTestCase(TestCase):
@@ -136,11 +155,27 @@ class CTestTestCase(TestCase):
         if disabled:
             self.mask = f"Explicitly disabled in {self.file}"
 
+        if attached_files is not None:
+            self.artifacts.extend([{"file": f, "when": "always"} for f in attached_files])
+
+        if attached_files_on_fail is not None:
+            self.artifacts.extend([{"file": f, "when": "failure"} for f in attached_files_on_fail])
+
+        if run_serial is True:
+            self.exclusive = True
+
         self.environment_modification = environment_modification
         self.pass_regular_expression = pass_regular_expression
         self.fail_regular_expression = fail_regular_expression
         self.skip_regular_expression = skip_regular_expression
         self.skip_return_code = skip_return_code
+        self.fixtures: dict[str, list[str]] = {}
+        if fixtures_cleanup:
+            self.fixtures["cleanup"] = fixtures_cleanup
+        if fixtures_required:
+            self.fixtures["required"] = fixtures_required
+        if fixtures_setup:
+            self.fixtures["setup"] = fixtures_setup
 
         def unsupported_ctest_option(option: str) -> str:
             file = io.StringIO()
@@ -148,30 +183,18 @@ class CTestTestCase(TestCase):
             file.write("contact the nvtest developers to implement this property")
             return file.getvalue()
 
-        if attached_files is not None:
-            logging.warning(unsupported_ctest_option("attached_files"))
-        if attached_files_on_fail is not None:
-            logging.warning(unsupported_ctest_option("attached_files_on_fail"))
         if cost is not None:
             logging.warning(unsupported_ctest_option("cost"))
-        if fixtures_cleanup is not None:
-            logging.warning(unsupported_ctest_option("fixtures_cleanup"))
-        if fixtures_required is not None:
-            logging.warning(unsupported_ctest_option("fixtures_required"))
-        if fixtures_setup is not None:
-            logging.warning(unsupported_ctest_option("fixtures_setup"))
         if generated_resource_spec_file is not None:
             logging.warning(unsupported_ctest_option("generated_resource_spec_file"))
         if measurement is not None:
             logging.warning(unsupported_ctest_option("measurement"))
-        if processor_affinity is not None:
+        if processor_affinity:
             logging.warning(unsupported_ctest_option("processor_affinity"))
         if required_files is not None:
             logging.warning(unsupported_ctest_option("required_files"))
         if resource_lock is not None:
             logging.warning(unsupported_ctest_option("resource_lock"))
-        if run_serial is not None:
-            logging.warning(unsupported_ctest_option("run_serial"))
         if timeout_after_match is not None:
             logging.warning(unsupported_ctest_option("timeout_after_match"))
         if timeout_signal_grace_period is not None:
