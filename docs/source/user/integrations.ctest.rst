@@ -19,7 +19,7 @@ The following `CTest properties <https://cmake.org/cmake/help/git-master/manual/
 * `ATTACHED_FILES <https://cmake.org/cmake/help/git-master/prop_test/ATTACHED_FILES.html>`_
 * `ATTCHED_FILES_ON_FAIL <https://cmake.org/cmake/help/git-master/prop_test/ATTACHED_FILES_ON_FAIL.html>`_
 * `DEPENDS <https://cmake.org/cmake/help/git-master/prop_test/DEPENDS.html>`_
-* `DIABLED <https://cmake.org/cmake/help/git-master/prop_test/DISABLED.html>`_
+* `DISABLED <https://cmake.org/cmake/help/git-master/prop_test/DISABLED.html>`_
 * `ENVIRONMENT <https://cmake.org/cmake/help/git-master/prop_test/ENVIRONMENT.html>`_
 * `ENVIRONMENT_MODIFICATION <https://cmake.org/cmake/help/git-master/prop_test/ENVIRONMENT_MODIFICATION.html>`_
 * `FAIL_REGULAR_EXPRESSION <https://cmake.org/cmake/help/git-master/prop_test/FAIL_REGULAR_EXPRESSION.html>`_
@@ -55,3 +55,16 @@ The following `CTest properties <https://cmake.org/cmake/help/git-master/manual/
 .. note::
 
     Contact the ``nvtest`` developers if you require any one of these properties to run your test suite.
+
+Differences in behavior from CTest
+----------------------------------
+
+DEPENDS
+~~~~~~~
+
+The CTest `DEPENDS <https://cmake.org/cmake/help/git-master/prop_test/DEPENDS.html>`_ property sets the execution order, but "the results of those tests are not considered, the dependency relationship is purely for order of execution".  In ``nvtest``, the results of the tests are considered.  See :ref:`directive-depends-on`.
+
+RESOURCE_GROUPS
+~~~~~~~~~~~~~~~
+
+``nvtest`` does not currently read in a `CTest resource specification file <https://cmake.org/cmake/help/latest/manual/ctest.1.html#resource-specification-file>`_ and only recognizes the ``gpus`` `resource group <https://cmake.org/cmake/help/git-master/prop_test/RESOURCE_GROUPS.html>`_.  Eg, ``set_tests_properties(name PROPERTIES RESOURCE_GROUPS N:gpus,n)``
