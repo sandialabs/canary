@@ -10,3 +10,48 @@ In addition to :ref:`CMake integration<integrations-cmake>`, ``nvtest`` can run 
     $ nvtest run CMAKE_BINARY_DIR
 
 ``nvtest`` will read the CTest instructions for each test added by ``add_test`` and run the test.
+
+Supported CTest properties
+--------------------------
+
+The following `CTest properties <https://cmake.org/cmake/help/git-master/manual/cmake-properties.7.html#properties-on-tests>`_ are supported by ``nvtest``.
+
+* `ATTACHED_FILES <https://cmake.org/cmake/help/git-master/prop_test/ATTACHED_FILES.html>`_
+* `ATTCHED_FILES_ON_FAIL <https://cmake.org/cmake/help/git-master/prop_test/ATTACHED_FILES_ON_FAIL.html>`_
+* `DEPENDS <https://cmake.org/cmake/help/git-master/prop_test/DEPENDS.html>`_
+* `DIABLED <https://cmake.org/cmake/help/git-master/prop_test/DISABLED.html>`_
+* `ENVIRONMENT <https://cmake.org/cmake/help/git-master/prop_test/ENVIRONMENT.html>`_
+* `ENVIRONMENT_MODIFICATION <https://cmake.org/cmake/help/git-master/prop_test/ENVIRONMENT_MODIFICATION.html>`_
+* `FAIL_REGULAR_EXPRESSION <https://cmake.org/cmake/help/git-master/prop_test/FAIL_REGULAR_EXPRESSION.html>`_
+* `FIXTURES_CLEANUP <https://cmake.org/cmake/help/git-master/prop_test/FIXTURES_CLEANUP.html>`_
+* `FIXTURES_REQUIRED <https://cmake.org/cmake/help/git-master/prop_test/FIXTURES_REQUIRED.html>`_
+* `FIXTURES_SETUP <https://cmake.org/cmake/help/git-master/prop_test/FIXTURES_SETUP.html>`_
+* `LABELS <https://cmake.org/cmake/help/git-master/prop_test/LABELS.html>`_
+* `PASS_REGULAR_EXPRESSION <https://cmake.org/cmake/help/git-master/prop_test/PASS_REGULAR_EXPRESSION.html>`_
+* `PROCESSORS <https://cmake.org/cmake/help/git-master/prop_test/PROCESSORS.html>`_
+* `RESOURCE_GROUPS <https://cmake.org/cmake/help/git-master/prop_test/RESOURCE_GROUPS.html>`_
+* `RUN_SERIAL <https://cmake.org/cmake/help/git-master/prop_test/RUN_SERIAL.html>`_
+* `SKIP_REGULAR_EXPRESSION <https://cmake.org/cmake/help/git-master/prop_test/SKIP_REGULAR_EXPRESSION.html>`_
+* `SKIP_RETURN_CODE <https://cmake.org/cmake/help/git-master/prop_test/SKIP_RETURN_CODE.html>`_
+* `TIMEOUT <https://cmake.org/cmake/help/git-master/prop_test/TIMEOUT.html>`_
+* `WILL_FAIL <https://cmake.org/cmake/help/git-master/prop_test/WILL_FAIL.html>`_
+* `WORKING_DIRECTORY <https://cmake.org/cmake/help/git-master/prop_test/WORKING_DIRECTORY.html>`_
+
+Unsupported CTest properties
+----------------------------
+
+The following `CTest properties <https://cmake.org/cmake/help/git-master/manual/cmake-properties.7.html#properties-on-tests>`_ are **not** supported by ``nvtest``.
+
+* `COST <https://cmake.org/cmake/help/git-master/prop_test/COST.html>`_
+* `GENERATED_RESOURCE_SPEC_FILE <https://cmake.org/cmake/help/git-master/prop_test/GENERATED_RESOURCE_SPEC_FILE.html>`_
+* `MEASUREMENT <https://cmake.org/cmake/help/git-master/prop_test/MEASUREMENT.html>`_
+* `PROCESSOR_AFFINITY <https://cmake.org/cmake/help/git-master/prop_test/PROCESSOR_AFFINITY.html>`_
+* `REQUIRED_FILES <https://cmake.org/cmake/help/git-master/prop_test/REQUIRED_FILES.html>`_
+* `RESOURCE_LOCK <https://cmake.org/cmake/help/git-master/prop_test/RESOURCE_LOCK.html>`_
+* `TIMEOUT_AFTER_MATCH <https://cmake.org/cmake/help/git-master/prop_test/TIMEOUT_AFTER_MATCH.html>`_
+* `TIMEOUT_SIGNAL_GRACE_PERIOD <https://cmake.org/cmake/help/git-master/prop_test/TIMEOUT_SIGNAL_GRACE_PERIOD.html>`_
+* `TIMEOUT_SIGNAL_NAME <https://cmake.org/cmake/help/git-master/prop_test/TIMEOUT_SIGNAL_NAME.html>`_
+
+.. note::
+
+    Contact the ``nvtest`` developers if you require any one of these properties to run your test suite.
