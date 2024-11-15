@@ -64,16 +64,19 @@ class TestCaseRunner(AbstractTestRunner):
             case.prepare_for_launch(stage=stage)
             timeout = case.timeout * self.timeoutx
             with working_dir(case.working_directory):
-                with logging.capture(case.logfile(stage), mode="w"), logging.timestamps():
+                with open(case.logfile(stage), "w") as fh:
                     cmd = case.command(stage=stage)
                     case.cmd_line = " ".join(cmd)
-                    logging.info(f"Running {case.display_name}")
-                    logging.info(f"Command line: {case.cmd_line}")
+                    fh.write(f"==> Running {case.display_name}\n")
+                    fh.write(f"==> Command line: {case.cmd_line}\n")
                     if self.timeoutx != 1.0:
-                        logging.info(f"Timeout multiplier: {self.timeoutx}")
+                        fh.write(f"==> Timeout multiplier: {self.timeoutx}\n")
+                    fh.flush()
                     with case.rc_environ():
                         tic = time.monotonic()
-                        proc = subprocess.Popen(cmd, start_new_session=True)
+                        proc = subprocess.Popen(
+                            cmd, start_new_session=True, stdout=fh, stderr=subprocess.STDOUT
+                        )
                         while True:
                             if proc.poll() is not None:
                                 break

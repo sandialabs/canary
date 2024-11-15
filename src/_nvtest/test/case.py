@@ -838,16 +838,18 @@ class TestCase(AbstractTestCase):
         vars["gpu_ids"] = variables["NVTEST_GPU_IDS"] = ",".join(map(str, self.gpu_ids))
         for key, value in self.variables.items():
             variables[key] = value % vars
-        for var, val in variables.items():
-            os.environ[var] = val
+        for var, value in variables.items():
+            os.environ[var] = value
         os.environ["PATH"] = f"{self.working_directory}:{os.environ['PATH']}"
-        for module in self.modules:
-            load_module(module)
-        for rcfile in self.rcfiles:
-            source_rcfile(rcfile)
-        yield
-        os.environ.clear()
-        os.environ.update(save_env)
+        try:
+            for module in self.modules:
+                load_module(module)
+            for rcfile in self.rcfiles:
+                source_rcfile(rcfile)
+            yield
+        finally:
+            os.environ.clear()
+            os.environ.update(save_env)
 
     def output(self, compress: bool = False) -> str:
         if not self.status.complete():

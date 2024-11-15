@@ -1,26 +1,17 @@
 import os
+import subprocess
 
 import pytest
 
 from _nvtest.plugins.nvtest_ctest.generator import CTestTestFile
-from _nvtest.plugins.nvtest_ctest.generator import parse_np
+from _nvtest.resource import ResourceHandler
+from _nvtest.runners import TestCaseRunner as xTestCaseRunner
 from _nvtest.util.executable import Executable
+from _nvtest.util.filesystem import mkdirp
 from _nvtest.util.filesystem import set_executable
 from _nvtest.util.filesystem import touchp
 from _nvtest.util.filesystem import which
 from _nvtest.util.filesystem import working_dir
-
-
-def test_parse_np():
-    assert parse_np(["-n", "97"]) == 97
-    assert parse_np(["-np", "23"]) == 23
-    assert parse_np(["-c", "54"]) == 54
-    assert parse_np(["--np", "82"]) == 82
-    assert parse_np(["-n765"]) == 765
-    assert parse_np(["-np512"]) == 512
-    assert parse_np(["-c404"]) == 404
-    assert parse_np(["--np=45"]) == 45
-    assert parse_np(["--some-arg=4", "--other=foo"]) == 1
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -87,3 +78,71 @@ def test_parse_ctesttestfile_1(tmpdir):
             assert case.cpus == 4
             assert "foo" in case.keywords
             assert "baz" in case.keywords
+
+
+@pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
+def test_fail_regular_expression(tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        with open("CTestTestfile.cmake", "w") as fh:
+            fh.write(
+                """\
+add_test(test1 "echo" "This test should fail")
+set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test should fail$")
+"""
+            )
+        rh = ResourceHandler()
+        file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
+        [case] = file.lock()
+        runner = xTestCaseRunner(rh)
+        mkdirp("./foo")
+        case.setup(exec_root=f"{os.getcwd()}/foo")
+        runner.run(case)
+        assert case.returncode == 0
+        assert case.status == "failed"
+
+
+@pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
+def test_skip_regular_expression(tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        with open("script.sh", "w") as fh:
+            fh.write("#!/usr/bin/env bash\necho 'This test should be skipped'\nexit 1")
+        set_executable("script.sh")
+        with open("CTestTestfile.cmake", "w") as fh:
+            fh.write(
+                """\
+add_test(test1 "./script.sh")
+set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test should be skipped$")
+"""
+            )
+        rh = ResourceHandler()
+        file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
+        [case] = file.lock()
+        runner = xTestCaseRunner(rh)
+        mkdirp("./foo")
+        case.setup(exec_root=f"{os.getcwd()}/foo")
+        runner.run(case)
+
+
+@pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
+def test_pass_regular_expression(tmpdir):
+    with working_dir(tmpdir.strpath, create=True):
+        with open("script.sh", "w") as fh:
+            fh.write("#!/usr/bin/env bash\necho 'This test should pass'\nexit 1")
+        set_executable("script.sh")
+        with open("CTestTestfile.cmake", "w") as fh:
+            fh.write(
+                """\
+add_test(test1 "./script.sh")
+set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test should pass$")
+"""
+            )
+        rh = ResourceHandler()
+        file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
+        [case] = file.lock()
+        print(case.command())
+        runner = xTestCaseRunner(rh)
+        mkdirp("./foo")
+        case.setup(exec_root=f"{os.getcwd()}/foo")
+        runner.run(case)
+        assert case.status == "success"
+        assert case.returncode == 1
