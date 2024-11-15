@@ -205,7 +205,7 @@ macro(set_tests_properties NAME)
     set(arg "${p_TIMEOUT_SIGNAL_GRACE_PERIOD}")
     string(APPEND output ", \"timeout_signal_grace_period\": ${p_TIMEOUT_SIGNAL_GRACE_PERIOD}")
   else()
-    string(APPEND output ", \"timeout_signal_grace_period\": 1.0")
+    string(APPEND output ", \"timeout_signal_grace_period\": null")
   endif()
 
   if (p_TIMEOUT_SIGNAL_NAME)

@@ -142,6 +142,43 @@ class CTestTestCase(TestCase):
         self.skip_regular_expression = skip_regular_expression
         self.skip_return_code = skip_return_code
 
+        def unsupported_ctest_option(option: str) -> str:
+            file = io.StringIO()
+            file.write(f"The ctest test property {option.upper()!r} is currently not supported, ")
+            file.write("contact the nvtest developers to implement this property")
+            return file.getvalue()
+
+        if attached_files is not None:
+            logging.warning(unsupported_ctest_option("attached_files"))
+        if attached_files_on_fail is not None:
+            logging.warning(unsupported_ctest_option("attached_files_on_fail"))
+        if cost is not None:
+            logging.warning(unsupported_ctest_option("cost"))
+        if fixtures_cleanup is not None:
+            logging.warning(unsupported_ctest_option("fixtures_cleanup"))
+        if fixtures_required is not None:
+            logging.warning(unsupported_ctest_option("fixtures_required"))
+        if fixtures_setup is not None:
+            logging.warning(unsupported_ctest_option("fixtures_setup"))
+        if generated_resource_spec_file is not None:
+            logging.warning(unsupported_ctest_option("generated_resource_spec_file"))
+        if measurement is not None:
+            logging.warning(unsupported_ctest_option("measurement"))
+        if processor_affinity is not None:
+            logging.warning(unsupported_ctest_option("processor_affinity"))
+        if required_files is not None:
+            logging.warning(unsupported_ctest_option("required_files"))
+        if resource_lock is not None:
+            logging.warning(unsupported_ctest_option("resource_lock"))
+        if run_serial is not None:
+            logging.warning(unsupported_ctest_option("run_serial"))
+        if timeout_after_match is not None:
+            logging.warning(unsupported_ctest_option("timeout_after_match"))
+        if timeout_signal_grace_period is not None:
+            logging.warning(unsupported_ctest_option("timeout_signal_grace_period"))
+        if timeout_signal_name is not None:
+            logging.warning(unsupported_ctest_option("timeout_signal_name"))
+
     @property
     def implicit_keywords(self) -> list[str]:
         kwds = super().implicit_keywords
