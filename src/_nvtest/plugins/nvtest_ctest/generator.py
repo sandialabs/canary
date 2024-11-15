@@ -32,7 +32,7 @@ class CTestTestFile(AbstractTestGenerator):
         if cmake is None:
             logging.warning("cmake not found, test cases cannot be generated")
             return []
-        tests = self.parse()
+        tests = self.load()
         cases: list[CTestTestCase] = []
         for family, td in tests.items():
             case = CTestTestCase(file_root=self.root, file_path=self.path, family=family, **td)
@@ -49,9 +49,13 @@ class CTestTestFile(AbstractTestGenerator):
         graph.print(cases, file=file)
         return file.getvalue()
 
-    def parse(self) -> dict:
+    def load(self) -> dict:
+        kwds: dict[str, str] = {}
         build_type = find_build_type(os.path.dirname(self.file))
-        tests = parse(self.file, CTEST_CONFIGURATION_TYPE=build_type)
+        if build_type is not None:
+            kwds["CTEST_CONFIGURATION_TYPE"] = build_type
+        tests = load(self.file, **kwds)
+        transform(tests)
         return tests
 
     def resolve_fixtures(self, cases: list["CTestTestCase"]) -> None:
@@ -80,7 +84,7 @@ class CTestTestCase(TestCase):
         file_root: str | None = None,
         file_path: str | None = None,
         family: str | None = None,
-        args: list[str] | None = None,
+        command: list[str] | None = None,
         attached_files: list[str] | None = None,
         attached_files_on_fail: list[str] | None = None,
         cost: float | None = None,
@@ -99,7 +103,7 @@ class CTestTestCase(TestCase):
         processor_affinity: bool = False,
         processors: int | None = None,
         required_files: list[str] | None = None,
-        resource_groups: list[str] | None = None,
+        resource_groups: dict[str, int] | None = None,
         resource_lock: list[str] | None = None,
         run_serial: bool = False,
         skip_regular_expression: list[str] | None = None,
@@ -121,12 +125,12 @@ class CTestTestCase(TestCase):
             timeout=timeout or 10.0,
         )
 
-        self._resource_groups: list[str] | None = None
+        self._resource_groups: dict[str, int] | None = None
         self._working_directory = working_directory or self.file_dir
 
-        if args is not None:
+        if command is not None:
             with nvtest.filesystem.working_dir(self.file_dir):
-                ns = parse_test_args(args)
+                ns = parse_test_args(command)
 
             self.sources = {}
             self.launcher = ns.launcher
@@ -151,6 +155,8 @@ class CTestTestCase(TestCase):
 
         if resource_groups is not None:
             self.resource_groups = resource_groups
+            if "gpus" in self.resource_groups:
+                self.parameters["ngpu"] = self.resource_groups["gpus"]
 
         if disabled:
             self.mask = f"Explicitly disabled in {self.file}"
@@ -305,26 +311,12 @@ class CTestTestCase(TestCase):
                     return
 
     @property
-    def resource_groups(self) -> list[str]:
-        return self._resource_groups or []
+    def resource_groups(self) -> dict[str, int]:
+        return self._resource_groups or {}
 
     @resource_groups.setter
-    def resource_groups(self, arg: list[str]) -> None:
+    def resource_groups(self, arg: dict[str, int]) -> None:
         self._resource_groups = arg
-        self.read_resource_groups()
-
-    def read_resource_groups(self) -> None:
-        for rg in self.resource_groups:
-            groups = rg.split(",")
-            n = 1
-            if match := re.search(r"[0-9]+", groups[0]):
-                n = int(match.group(0))
-                groups = groups[1:]
-            for group in groups:
-                if group.startswith("gpus:"):
-                    gpus = self.parameters.setdefault("ngpu", 0)
-                    gpus += int(group[5:]) * n
-                    self.parameters["ngpu"] = gpus
 
 
 class CMakeCache(dict):
@@ -401,7 +393,7 @@ def parse_np(args: list[str]) -> int:
     return 1
 
 
-def parse(file, **defs) -> dict[str, Any]:
+def load(file, **defs: str) -> dict[str, Any]:
     parser = ir.files("_nvtest").joinpath("plugins/nvtest_ctest/parser.cmake")
     tests: dict[str, Any] = {}
     with nvtest.filesystem.working_dir(os.path.dirname(file)):
@@ -410,20 +402,58 @@ def parse(file, **defs) -> dict[str, Any]:
         for key, val in defs.items():
             args.append(f"-D{key}={val}")
         args.append(f"-P{parser}")
-        p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        p = subprocess.Popen(args, stdout=subprocess.PIPE)
         p.wait()
-        out, err = p.communicate()
+        out, _ = p.communicate()
         lines = [l.strip() for l in out.decode("utf-8").split("\n") if l.split()]
-        lines.extend([l.strip() for l in err.decode("utf-8").split("\n") if l.split()])
         for line in lines:
-            fd = json.loads(line)
-            if "test" in fd:
-                td = tests.setdefault(fd["test"].pop("name"), {})
-                td["args"] = fd["test"].get("args", [])
+            try:
+                fd = json.loads(line)
+            except json.JSONDecodeError:
+                logging.error(f"Failed to parse line {line!r} of {file}")
+                raise
+            assert "name" in fd
+            if "command" in fd:
+                td = tests.setdefault(fd["name"], {})
+                td["command"] = fd["command"]
             elif "properties" in fd:
-                td = tests.setdefault(fd["properties"].pop("name"), {})
-                td.update(fd["properties"])
+                td = tests.setdefault(fd["name"], {})
+                td["properties"] = fd["properties"]
+            else:
+                raise ValueError("Expected 'command' or 'properties' group")
+    for test in tests.values():
+        if "properties" not in test:
+            test["properties"] = [
+                {"name": "WORKING_DIRECTORY", "value": os.path.dirname(os.path.realpath(file))}
+            ]
     return tests
+
+
+def transform(tests: dict[str, Any]) -> None:
+    """Transform the tests loaded from CMake into a form understood by nvtest
+
+    ``tests`` is of the form
+
+    ``{NAME: {'command': [...], 'properties': [{'name': ..., 'value': ...}, ...]}, ...}``
+
+    and is transformed in place to the form:
+
+    ``{NAME: {'command': [...], 'prop_name': prop_value, ...}, ...}``
+
+    """
+    for name, data in tests.items():
+        transformed = {"command": data["command"]}
+        for prop in data["properties"]:
+            prop_name, prop_value = prop["name"], prop["value"]
+            if prop_name == "ENVIRONMENT":
+                prop_value = parse_environment(prop_value)
+            elif prop_name == "ENVIRONMENT_MODIFICATION":
+                prop_value = parse_environment_modification(prop_value)
+            elif prop_name == "RESOURCE_GROUPS":
+                prop_value = parse_resource_groups(prop_value)
+            transformed[prop_name.lower()] = prop_value
+        tests[name] = transformed
+    return
 
 
 def find_cmake():
@@ -447,3 +477,37 @@ def file_contains(file, pattern) -> bool:
             if re.search(pattern, line):
                 return True
     return False
+
+
+def parse_resource_groups(resource_groups: list[dict[str, list]]) -> dict[str, int]:
+    groups: dict[str, int] = {}
+    for rg in resource_groups:
+        for requirement in rg["requirements"]:
+            type, slots = requirement[".type"], requirement["slots"]
+            groups[type] = groups.setdefault(type, 0) + slots
+    return groups
+
+
+def parse_environment(environment: list[str]) -> dict[str, str]:
+    """Convert the CTest ENVIRONMENT list[str] to dict[str, str]:
+
+    ["name=value", ..., "name=value"] -> {"name": "value", ...}
+    """
+    env: dict[str, str] = {}
+    for item in environment:
+        key, value = item.split("=", 1)
+        env[key] = value
+    return env
+
+
+def parse_environment_modification(environment_modification: list[str]) -> list[dict[str, str]]:
+    """Convert the CTest ENVIRONMENT_MODIFICATION list[str] to list[dict]:
+
+    ["name=op:value", ..., "name=op:value"] -> [{"name": "name", "op": "op", "value": "value", ...}]
+    """
+    envmod: list[dict[str, str]] = []
+    for item in environment_modification:
+        if match := re.search("([^=]+)=([a-z_]+):(.*)", item):
+            name, op, value = match.group(1), match.group(2), match.group(3)
+            envmod.append({"name": name, "op": op, "value": value})
+    return envmod
