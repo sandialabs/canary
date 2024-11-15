@@ -22,7 +22,7 @@ nvtest
 
 **Python**: Test files are written in `Python <python.org>`_, giving developers access to the full Python ecosystem.
 
-**Integration**: ``nvtest`` :ref:`integrates<integrations>` with popular developer tools like :ref:`CMake <integrations-cmake>`, :ref:`CDash <integrations-cdash>`, and :ref:`GitLab <integrations-gitlab>`, streamlining the testing and continuous integration (CI) processes.
+**Integration**: ``nvtest`` :ref:`integrates<integrations>` with popular developer tools like :ref:`CMake <integrations-cmake>`, :ref:`CDash <integrations-cdash>`, :ref:`CTest <integrations-ctest>`, and :ref:`GitLab <integrations-gitlab>`, streamlining the testing and continuous integration (CI) processes.
 
 **Extensibility**: ``nvtest`` can be extended through :ref:`user plugins <extending>`, allowing developers to customize their test sessions according to their specific needs.
 

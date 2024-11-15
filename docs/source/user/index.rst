@@ -24,10 +24,15 @@ nvtest user's guide
    configuration
 
 .. toctree::
-   :caption: Extending and integrating with other applications
+   :caption: Extending nvtest through plugins
    :maxdepth: 1
 
    extending
+
+.. toctree::
+   :caption: Integrating with other applications
+   :maxdepth: 1
+
    integrations
 
 .. toctree::
