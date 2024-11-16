@@ -66,11 +66,15 @@ class PluginHook:
         """Call user plugin at the end of the test setup stage"""
 
     @staticmethod
-    def test_prelaunch(case: "TestCase", *, stage: str | None = None) -> None:
+    def test_before_run(case: "TestCase", *, stage: str | None = None) -> None:
         """Call user plugin immediately before running the test"""
 
     @staticmethod
-    def test_finish(case: "TestCase") -> None:
+    def test_after_launch(case: "TestCase") -> None:
+        """Call user plugin immediately after the test is launched"""
+
+    @staticmethod
+    def test_after_run(case: "TestCase") -> None:
         """Call user plugin after the test has ran"""
 
 
@@ -99,10 +103,12 @@ class Manager:
                 method_name = "test_discovery"
             case ["test", "setup"]:
                 method_name = "test_setup"
-            case ["test", "prelaunch"] | ["test", "prepare"]:
-                method_name = "test_prelaunch"
-            case ["test", "finish"] | ["test", "teardown"]:
-                method_name = "test_finish"
+            case ["test", "before_run"] | ["test", "prepare"] | ["test", "prelaunch"]:
+                method_name = "test_before_run"
+            case ["test", "after_launch"]:
+                method_name = "test_after_launch"
+            case ["test", "after_run"] | ["test", "finish"] | ["test", "teardown"]:
+                method_name = "test_after_run"
             case _:
                 raise TypeError(err_msg)
 

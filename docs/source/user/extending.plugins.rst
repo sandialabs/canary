@@ -31,34 +31,37 @@ Plugins are registered with ``nvtest`` by the ``nvtest.plugin.register`` decorat
 
 The possible combinations of ``scope`` and ``stage`` are:
 
-+--------------+---------------+-------------------------------------------------------------------+
-| scope        | stage         | Description                                                       |
-+==============+===============+===================================================================+
-|``main``      | ``setup``     | Called before argument parsing with a single argument:            |
-|              |               | ``parser: nvtest.Parser``.  Use this plugin to register           |
-|              |               | additional command line options with ``nvtest``                   |
-+--------------+---------------+-------------------------------------------------------------------+
-| ``session``  | ``discovery`` | Called before a session's search paths are searched for test      |
-|              |               | files.  Called with a single argument: ``session: Session``       |
-|              +---------------+-------------------------------------------------------------------+
-|              | ``setup``     | Called during session setup and before test case setup with a     |
-|              |               | single argument: ``session: Session``                             |
-|              +---------------+-------------------------------------------------------------------+
-|              | ``finish``    | Called after session completion with a single argument:           |
-|              |               | ``session: Session``                                              |
-+--------------+---------------+-------------------------------------------------------------------+
-| ``test``     | ``discovery`` | Called after a test has been created but not yet setup.  Called   |
-|              |               | with a single argument: ``case: TestCase``                        |
-|              +---------------+-------------------------------------------------------------------+
-|              | ``setup``     | Called after a test has been setup with a single argument:        |
-|              |               | ``case: TestCase``                                                |
-|              +---------------+-------------------------------------------------------------------+
-|              | ``prepare``   | Called immediately before a test is run with a single argument:   |
-|              |               | ``case: TestCase``                                                |
-|              +---------------+-------------------------------------------------------------------+
-|              | ``finish``    | Called after a test has completed with a single argument:         |
-|              |               | ``case: TestCase``                                                |
-+--------------+---------------+-------------------------------------------------------------------+
++--------------+------------------+-------------------------------------------------------------------+
+| scope        | stage            | Description                                                       |
++==============+==================+===================================================================+
+|``main``      | ``setup``        | Called before argument parsing with a single argument:            |
+|              |                  | ``parser: nvtest.Parser``.  Use this plugin to register           |
+|              |                  | additional command line options with ``nvtest``                   |
++--------------+------------------+-------------------------------------------------------------------+
+| ``session``  | ``discovery``    | Called before a session's search paths are searched for test      |
+|              |                  | files.  Called with a single argument: ``session: Session``       |
+|              +------------------+-------------------------------------------------------------------+
+|              | ``setup``        | Called during session setup and before test case setup with a     |
+|              |                  | single argument: ``session: Session``                             |
+|              +------------------+-------------------------------------------------------------------+
+|              | ``after_run``    | Called after session completion with a single argument:           |
+|              |                  | ``session: Session``                                              |
++--------------+------------------+-------------------------------------------------------------------+
+| ``test``     | ``discovery``    | Called after a test has been created but not yet setup.  Called   |
+|              |                  | with a single argument: ``case: TestCase``                        |
+|              +------------------+-------------------------------------------------------------------+
+|              | ``setup``        | Called after a test has been setup with a single argument:        |
+|              |                  | ``case: TestCase``                                                |
+|              +------------------+-------------------------------------------------------------------+
+|              | ``before_run``   | Called immediately before a test is run with a single argument:   |
+|              |                  | ``case: TestCase``                                                |
+|              +------------------+-------------------------------------------------------------------+
+|              | ``after_launch`` | Called immediately after a test is launched with a single         |
+|              |                  | argument: ``case: TestCase``                                      |
+|              +------------------+-------------------------------------------------------------------+
+|              | ``after_run``    | Called after a test has completed with a single argument:         |
+|              |                  | ``case: TestCase``                                                |
++--------------+------------------+-------------------------------------------------------------------+
 
 Alternatively, a plugin can be created by subclassing the ``nvtest.plugin.PluginHook`` class and overriding one or more of its methods.  The following methods are overrideable:
 
@@ -96,11 +99,15 @@ Alternatively, a plugin can be created by subclassing the ``nvtest.plugin.Plugin
             """Call user plugin at the end of the test setup stage"""
 
         @staticmethod
-        def test_prelaunch(case: "TestCase", *, stage: Optional[str] = None) -> None:
+        def test_before_run(case: "TestCase", *, stage: str | None = None) -> None:
             """Call user plugin immediately before running the test"""
 
         @staticmethod
-        def test_finish(case: "TestCase") -> None:
+        def test_after_launch(case: "TestCase") -> None:
+            """Call user plugin immediately after the test is launched"""
+
+        @staticmethod
+        def test_after_run(case: "TestCase") -> None:
             """Call user plugin after the test has ran"""
 
 

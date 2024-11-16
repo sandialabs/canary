@@ -15,6 +15,7 @@ nvtest = "nvtest:console_main"
 [project.optional-dependencies]
 requests = ["requests"]
 dev = ["ruff", "mypy", "pytest", "sphinx", "pydata-sphinx-theme", "sphinx_design", "coverage"]
+psutil = ["psutil"]
 flux = [
   "hpcc-flux @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/plugins/hpcc-flux"
 ]
@@ -94,6 +95,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "pkg_resources.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "psutil"
 ignore_missing_imports = true
 
 # check-wheel-contents is executed by the build-and-inspect-python-package action.

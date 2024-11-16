@@ -14,6 +14,7 @@ from . import describe
 from . import edit
 from . import find
 from . import help
+from . import info
 from . import location
 from . import log
 from . import rebaseline

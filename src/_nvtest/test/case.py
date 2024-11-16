@@ -150,6 +150,8 @@ class TestCase(AbstractTestCase):
         # Environment variables specific to this case
         self._variables: dict[str, str] = {}
 
+        self._measurements: dict[str, Any] = {}
+
     def __hash__(self) -> int:
         return hash(self.id)
 
@@ -473,6 +475,14 @@ class TestCase(AbstractTestCase):
         self._variables = dict(arg)
 
     @property
+    def measurements(self) -> dict[str, Any]:
+        return self._measurements
+
+    @measurements.setter
+    def measurements(self, arg: dict[str, Any]) -> None:
+        self._measurements = dict(arg)
+
+    @property
     def masked(self) -> bool:
         return True if self._mask else False
 
@@ -726,6 +736,9 @@ class TestCase(AbstractTestCase):
         if kwds:
             self.variables.update(kwds)
 
+    def add_measurement(self, **kwds: Any) -> None:
+        self.measurements.update(kwds)
+
     def update(self, **attrs: Any) -> None:
         """Restore values from a snapshot"""
         for name, value in attrs.items():
@@ -845,8 +858,9 @@ class TestCase(AbstractTestCase):
             raise FileNotFoundError(file)
         with open(file, "r") as fh:
             state = json.load(fh)
+        keep = ("start", "finish", "returncode", "exec_root", "status", "measurements")
         for name, value in state["properties"].items():
-            if name in ("start", "finish", "returncode", "exec_root", "status"):
+            if name in keep:
                 setattr(self, name, value)
         for dep in self.dependencies:
             dep.refresh()
@@ -919,7 +933,7 @@ class TestCase(AbstractTestCase):
         logging.info(f"Rebaselining {self.pretty_repr()}")
         with fs.working_dir(self.exec_dir):
             for hook in plugin.plugins():
-                hook.test_prelaunch(self, stage="baseline")
+                hook.test_before_run(self, stage="baseline")
             for arg in self.baseline:
                 if isinstance(arg, str):
                     if os.path.exists(arg):
@@ -954,7 +968,7 @@ class TestCase(AbstractTestCase):
             raise RuntimeError("Dependency patterns must be resolved before running")
         with fs.working_dir(self.exec_dir):
             for hook in plugin.plugins():
-                hook.test_prelaunch(self, stage=stage)
+                hook.test_before_run(self, stage=stage)
         self.save()
 
     def wrap_up(self) -> None:
@@ -966,8 +980,6 @@ class TestCase(AbstractTestCase):
                     file = self.logfile(stage)
                     if os.path.exists(file):
                         fh.write(open(file).read())
-            for hook in plugin.plugins():
-                hook.test_finish(self)
 
     def teardown(self) -> None: ...
 

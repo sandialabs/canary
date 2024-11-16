@@ -733,7 +733,7 @@ def setup(case: "TestCase") -> None:
     write_vvtest_util(case)
 
 
-@nvtest.plugin.register(scope="test", stage="prelaunch")
+@nvtest.plugin.register(scope="test", stage="before_run")
 def prelaunch(case: "TestCase", stage: str = "test") -> None:
     if not case.file_path.endswith(".vvt"):
         return

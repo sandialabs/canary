@@ -5,9 +5,18 @@ import os
 import signal
 import subprocess
 import time
+from types import ModuleType
 from typing import Any
 
+psutil: ModuleType | None
+try:
+    import psutil  # type: ignore
+except ImportError:
+    psutil = None
+
+
 from . import config
+from . import plugin
 from .atc import AbstractTestCase
 from .error import diff_exit_status
 from .resource import ResourceHandler
@@ -59,6 +68,7 @@ class TestCaseRunner(AbstractTestRunner):
         assert isinstance(case, TestCase)
         assert stage in ("test", "analyze")
         try:
+            metrics: dict[str, Any] | None = None
             case.start = timestamp()
             case.status.set("running")
             case.prepare_for_launch(stage=stage)
@@ -77,9 +87,9 @@ class TestCaseRunner(AbstractTestRunner):
                         proc = subprocess.Popen(
                             cmd, start_new_session=True, stdout=fh, stderr=subprocess.STDOUT
                         )
-                        while True:
-                            if proc.poll() is not None:
-                                break
+                        metrics = self.get_process_metrics(proc.pid)
+                        while proc.poll() is None:
+                            self.get_process_metrics(proc.pid, metrics=metrics)
                             toc = time.monotonic()
                             if timeout > 0 and toc - tic > timeout:
                                 os.kill(proc.pid, signal.SIGINT)
@@ -117,7 +127,11 @@ class TestCaseRunner(AbstractTestRunner):
             else:
                 case.status.set_from_code(case.returncode)
         finally:
+            if metrics is not None:
+                case.add_measurement(**metrics)
             case.finish = timestamp()
+            for hook in plugin.plugins():
+                hook.test_after_run(case)
             case.wrap_up()
         return
 
@@ -135,6 +149,65 @@ class TestCaseRunner(AbstractTestRunner):
         assert isinstance(case, TestCase)
         id = colorize("@b{%s}" % case.id[:7])
         return "Finished {0} {1} {2}".format(id, case.pretty_repr(), case.status.cname)
+
+    def get_process_metrics(
+        self, pid: int, metrics: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
+        # Collect process information
+        if psutil is None:
+            return None
+        metrics = metrics or {}
+        try:
+            valid_names = set(psutil._as_dict_attrnames)
+            skip_names = {
+                "cmdline",
+                "net_connections",
+                "cwd",
+                "environ",
+                "exe",
+                "gids",
+                "ionice",
+                "memory_full_info",
+                "name",
+                "nice",
+                "pid",
+                "ppid",
+                "status",
+                "terminal",
+                "uids",
+                "username",
+            }
+            names = valid_names - skip_names
+            proc = psutil.Process(pid)
+            new_metrics = proc.as_dict(names)
+        except psutil.NoSuchProcess:
+            logging.debug(f"Process with PID {proc.pid} does not exist.")
+        except psutil.AccessDenied:
+            logging.debug(f"Access denied to process with PID {proc.pid}.")
+        except psutil.ZombieProcess:
+            logging.debug(f"Process with PID {proc.pid} is a Zombie process.")
+        else:
+            for name, metric in new_metrics.items():
+                if name == "open_files":
+                    files = metrics.setdefault("open_files", [])
+                    for f in metric:
+                        if f[0] not in files:
+                            files.append(f[0])
+                elif name == "cpu_times":
+                    metrics["cpu_times"] = {"user": metric.user, "system": metric.system}
+                elif name in ("num_threads", "cpu_percent", "num_fds", "memory_percent"):
+                    n = metrics.setdefault(name, 0)
+                    metrics[name] = max(n, metric)
+                elif name == "memory_info":
+                    for key, val in metric._asdict().items():
+                        n = metrics.setdefault(name, {}).setdefault(key, 0)
+                        metrics[name][key] = max(n, val)
+                elif hasattr(metric, "_asdict"):
+                    metrics[name] = dict(metric._asdict())
+                else:
+                    metrics[name] = metric
+        finally:
+            return metrics
 
 
 class BatchRunner(AbstractTestRunner):
