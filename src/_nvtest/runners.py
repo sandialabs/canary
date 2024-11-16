@@ -67,6 +67,7 @@ class TestCaseRunner(AbstractTestRunner):
     def run(self, case: "AbstractTestCase", stage: str = "test") -> None:
         assert isinstance(case, TestCase)
         assert stage in ("test", "analyze")
+        measure: bool = not config.getoption("run:dont_measure")
         try:
             metrics: dict[str, Any] | None = None
             case.start = timestamp()
@@ -87,9 +88,11 @@ class TestCaseRunner(AbstractTestRunner):
                         proc = subprocess.Popen(
                             cmd, start_new_session=True, stdout=fh, stderr=subprocess.STDOUT
                         )
-                        metrics = self.get_process_metrics(proc.pid)
+                        if measure:
+                            metrics = self.get_process_metrics(proc.pid)
                         while proc.poll() is None:
-                            self.get_process_metrics(proc.pid, metrics=metrics)
+                            if measure:
+                                self.get_process_metrics(proc.pid, metrics=metrics)
                             toc = time.monotonic()
                             if timeout > 0 and toc - tic > timeout:
                                 os.kill(proc.pid, signal.SIGINT)
@@ -312,12 +315,17 @@ class BatchRunner(AbstractTestRunner):
         fp.write("nvtest ")
         if config.get("config:debug"):
             fp.write("-d ")
-        fp.write(f"-C {batch.root} run -rv ")
-        if config.get("option:fail_fast"):
-            fp.write("--fail-fast ")
-        if config.get("option:plugin_dirs"):
-            for p in config.get("option:plugin_dirs"):
+        if config.getoption("plugin_dirs"):
+            for p in config.getoption("plugin_dirs"):
                 fp.write(f"-p {p} ")
+        fp.write(f"-C {batch.root} run -rv ")
+        if config.getoption("run:fail_fast"):
+            fp.write("--fail-fast ")
+        if config.getoption("run:dont_measure"):
+            fp.write("--dont-measure ")
+        if p := config.getoption("run:P"):
+            if p != "pedantic":
+                fp.write(f"-P{p} ")
         if workers := self.rh["batch:workers"]:
             fp.write(f"-l session:workers={workers} ")
         if node_count is None:

@@ -41,6 +41,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/nvtest")] + [_ for _ in m.argv if _ != "--echo"]
             logging.emit(shlex.join(a) + "\n")
+        config.set_command_options(args.command, args)
         setup_hpc_connect(args)
         setup_resource_handler(args)
         command = parser.get_command(args.command)

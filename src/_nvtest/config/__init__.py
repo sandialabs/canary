@@ -199,7 +199,7 @@ class Config:
         global work_dir
         if args.C:
             work_dir = args.C
-        scope_data = self.scopes.setdefault("command_line", {})
+        scope_data: dict = self.scopes.setdefault("command_line", {})
         logging.set_level(logging.INFO)
         if args.q or args.v:
             i = min(max(2 - args.q + args.v, 0), 4)
@@ -216,7 +216,20 @@ class Config:
             scope_data.setdefault("variables", {})[var] = val
         for path in args.config_mods:
             self.add(path, scope="command_line")
-        self.scopes["command_line"]["option"] = ns2dict(args)
+        option_data: dict = scope_data.setdefault("option", {})
+        option_data["main"] = ns2dict(args)
+
+    def set_command_options(self, command_name: str, args: argparse.Namespace) -> None:
+        scope_data: dict = self.scopes.setdefault("command_line", {})
+        option_data: dict = scope_data.setdefault("option", {})
+        main_option_data: dict = option_data.get("main", {})
+        options = ns2dict(args)
+        options.pop("command", None)
+        options.pop("resource_setter", None)
+        for key, val in main_option_data.items():
+            if key in options and options[key] == val:
+                options.pop(key, None)
+        option_data[command_name] = options
 
     def merge(self, skip_scopes: list[str] | None = None) -> dict:
         scopes = list(self.scopes.keys())
@@ -618,12 +631,18 @@ def set_main_options(args: argparse.Namespace) -> None:
     return config.set_main_options(args)
 
 
+def set_command_options(command_name: str, args: argparse.Namespace) -> None:
+    return config.set_command_options(command_name, args)
+
+
 def get(path: str, default: Any | None = None, scope: str | None = None) -> Any:
     return config.get(path, default=default, scope=scope)
 
 
-def getoption(path: str, default: Any | None = None, scope: str | None = None) -> Any:
-    return config.get(f"option:{path}", default=default, scope=scope)
+def getoption(option: str, default: Any | None = None, scope: str | None = None) -> Any:
+    if ":" not in option:
+        option = f"main:{option}"
+    return config.get(f"option:{option}", default=default, scope=scope)
 
 
 def set(path: str, value: Any, scope: str | None = None) -> None:

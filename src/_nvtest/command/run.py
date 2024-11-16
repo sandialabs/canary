@@ -79,7 +79,14 @@ class Run(Command):
         parser.add_argument(
             "--copy-all-resources",
             action="store_true",
+            default=False,
             help="Do not link resources to the test directory, only copy [default: %(default)s]",
+        )
+        parser.add_argument(
+            "--dont-measure",
+            default=False,
+            action="store_true",
+            help="Do not collect a test's process information [default: %(default)s]",
         )
         add_resource_arguments(parser)
         PathSpec.setup_parser(parser)
