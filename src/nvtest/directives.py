@@ -968,6 +968,7 @@ def parameterize(
     *,
     when: WhenType | None = None,
     type: enums.enums = enums.list_parameter_space,
+    samples: int = 10,
 ) -> None:
     """Add new invocations to the test using the list of argvalues for the given
     argnames.
@@ -1000,6 +1001,8 @@ def parameterize(
       ``argname``.
     * ``when``: Restrict processing of the directive to this condition
     * ``type``: (``.pyt`` only) Generate parameters using this type
+    * ``samples``: (``.pyt`` only) Generate this many random elements
+      (applicable only if ``type=nvtest.random_parameter_space``)
 
     The ``when`` expression is limited to the following conditions:
 

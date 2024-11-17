@@ -1,7 +1,7 @@
 .. _usage-log-files:
 
-Inspect log files
-=================
+Inspecting log files
+====================
 
 Use :ref:`nvtest log<nvtest-log>` to view logs of test cases and batches:
 

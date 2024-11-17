@@ -1,7 +1,7 @@
 .. _usage-report:
 
-Generate reports
-================
+Generating reports
+==================
 
 Several report formats are available:
 

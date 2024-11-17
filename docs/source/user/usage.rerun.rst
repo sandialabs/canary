@@ -1,7 +1,7 @@
 .. _usage-rerun:
 
-Rerun tests
-===========
+Rerunning tests
+===============
 
 Navigate to the test results directory and execute :ref:`nvtest run<nvtest-run>` to rerun tests:
 

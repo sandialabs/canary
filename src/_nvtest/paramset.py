@@ -202,6 +202,7 @@ class ParameterSet:
         cls: Type["ParameterSet"],
         argnames: str | Sequence[str],
         argvalues: list[Sequence[Any] | Any],
+        samples: int = 10,
         file: str | None = None,
     ) -> "ParameterSet":
         """Generate random parameter space"""
@@ -221,10 +222,10 @@ class ParameterSet:
         random_values: list[list[float]] = []
         for i, item in enumerate(argvalues):
             try:
-                initial_value, final_value, samples = item
+                initial_value, final_value = item
             except ValueError:
                 raise ValueError(
-                    f"{file}: parameterize({argnames}, ...): " f"expected len(argvalues[{i}]) == 3"
+                    f"{file}: parameterize({argnames}, ...): " f"expected len(argvalues[{i}]) == 2"
                 ) from None
             random_values.append(random_range(initial_value, final_value, int(samples)))
         values = transpose(random_values)

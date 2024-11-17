@@ -562,6 +562,7 @@ class PYTTestFile(AbstractTestGenerator):
         argvalues: list[Sequence[Any] | Any],
         when: WhenType | None = None,
         type: enums.enums | None = None,
+        samples: int = 10,
     ) -> None:
         type = type or enums.list_parameter_space
         if not isinstance(type, enums.enums):
@@ -572,7 +573,7 @@ class PYTTestFile(AbstractTestGenerator):
         if type is enums.centered_parameter_space:
             pset = ParameterSet.centered_parameter_space(argnames, argvalues, file=self.file)
         elif type is enums.random_parameter_space:
-            pset = ParameterSet.random_parameter_space(argnames, argvalues, file=self.file)
+            pset = ParameterSet.random_parameter_space(argnames, argvalues, samples=samples, file=self.file)
         else:
             pset = ParameterSet.list_parameter_space(
                 argnames,
@@ -828,8 +829,9 @@ class PYTTestFile(AbstractTestGenerator):
         *,
         when: WhenType | None = None,
         type: enums.enums = enums.list_parameter_space,
+        samples: int = 10,
     ) -> None:
-        self.m_parameterize(names, values, when=when, type=type)
+        self.m_parameterize(names, values, when=when, type=type, samples=samples)
 
     def f_preload(self, arg: str, *, when: WhenType | None = None) -> None:
         self.m_preload(arg, when=when)

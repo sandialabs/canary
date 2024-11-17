@@ -1,7 +1,7 @@
 .. _usage-finding:
 
-Find and list test files
-========================
+Finding and listing test files
+==============================
 
 ``nvtest find`` finds tests in a search path and prints basic information about each test.
 

@@ -19,27 +19,21 @@ nvtest user's guide
 
 .. toctree::
    :caption: Configuration
-   :maxdepth: 1
+   :maxdepth: 2
 
    configuration
 
 .. toctree::
    :caption: Extending nvtest through plugins
-   :maxdepth: 1
+   :maxdepth: 2
 
    extending
 
 .. toctree::
    :caption: Integrating with other applications
-   :maxdepth: 1
+   :maxdepth: 2
 
    integrations
-
-.. toctree::
-   :caption: How to guides
-   :maxdepth: 1
-
-   howto
 
 .. toctree::
    :caption: Commands and directives

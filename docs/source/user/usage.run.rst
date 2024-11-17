@@ -1,7 +1,7 @@
 .. _usage-run-basic:
 
-Run tests
-=========
+Running tests
+=============
 
 Use :ref:`nvtest run<nvtest-run>` to run tests.
 

@@ -36,7 +36,7 @@ Finish:
 Test session execution
 ----------------------
 
-We will use an example to demonstrate each phase of the testing process.  Consider the test file ``centered_space/test.py`` (described in more detail in :ref:`howto-centered-parameter-space`):
+We will use an example to demonstrate each phase of the testing process.  Consider the test file ``centered_space/test.py`` (described in more detail in :ref:`centered-parameter-space`):
 
 .. literalinclude:: /examples/centered_space/centered_space.pyt
    :language: python

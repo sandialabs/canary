@@ -7,7 +7,7 @@ import nvtest
 nvtest.directives.analyze()
 nvtest.directives.keywords("centered_space")
 nvtest.directives.parameterize(
-    "a,b", [(0, 5, 2), (0, 1, 2)], type=nvtest.enums.centered_parameter_space
+    "a,b", [(0, 5, 2), (0, 1, 2)], type=nvtest.centered_parameter_space
 )
 
 

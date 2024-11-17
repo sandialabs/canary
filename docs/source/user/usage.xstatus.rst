@@ -1,7 +1,7 @@
 .. _usage-xstatus:
 
-Mark a test expected to diff or fail
-====================================
+Marking a test expected to diff or fail
+=======================================
 
 The :ref:`xdiff<directive-xdiff>` and :ref:`xfail<directive-xfail>` directives can mark tests that you expect to diff or fail, respectively.  For example, the following test is expected to :ref:`diff <stat-diffed>`:
 

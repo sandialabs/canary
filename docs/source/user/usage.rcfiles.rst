@@ -1,7 +1,7 @@
 .. _usage-rcfiles:
 
-Source rc scripts during test execution
-=======================================
+Sourcing rc scripts during test execution
+=========================================
 
 Some tests require a modified environment.  When the required environment modifications are contained in rc files, ``nvtest`` can source the files prior to test execution.  There are two ways to modify the environment by sourcing an rc file:
 

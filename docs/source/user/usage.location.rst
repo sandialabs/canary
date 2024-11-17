@@ -1,7 +1,7 @@
 .. _usage-location:
 
-Find locations of test assets
-=============================
+Finding locations of test assets
+================================
 
 It is often useful to know the location a test's execution directory.  The :ref:`nvtest location<nvtest-location>` command can display the locations of test assets:
 

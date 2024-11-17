@@ -1,7 +1,7 @@
 .. _usage-status:
 
-Get the status of a test session
-================================
+Getting the status of a test session
+====================================
 
 After running a test session, the ``status`` subcommand can show the status of the test session
 

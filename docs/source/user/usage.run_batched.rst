@@ -1,7 +1,7 @@
 .. _usage-run-batched:
 
-Run tests in a scheduler
-========================
+Running tests in a scheduler
+============================
 
 Tests can be run under a workload manager (scheduler) such as Slurm or PBS by adding the following options to :ref:`nvtest run<nvtest-run>`:
 

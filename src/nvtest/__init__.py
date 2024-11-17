@@ -1,13 +1,16 @@
 import argparse
 
+import _nvtest.config as config
+import _nvtest.enums as enums
 import _nvtest.plugin as plugin
-from _nvtest import config
-from _nvtest import enums
 from _nvtest._version import __version__
 from _nvtest._version import version
 from _nvtest._version import version_tuple
 from _nvtest.command.base import Command
 from _nvtest.config.argparsing import Parser
+from _nvtest.enums import list_parameter_space
+from _nvtest.enums import centered_parameter_space
+from _nvtest.enums import random_parameter_space
 from _nvtest.error import TestDiffed
 from _nvtest.error import TestFailed
 from _nvtest.error import TestSkipped

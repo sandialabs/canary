@@ -1,7 +1,7 @@
 .. _usage-modules:
 
-Load modules in your test environment
-=====================================
+Loading modules in your test environment
+========================================
 
 Some tests require a modified environment.  When the required environment modifications are contained in module, ``nvtest`` can load the module prior to test execution.  There are two ways to modify the environment by loading a module:
 
