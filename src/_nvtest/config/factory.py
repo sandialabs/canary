@@ -206,12 +206,15 @@ class System:
 @dataclasses.dataclass
 class Compiler:
     vendor: str | None = None
+    version: str | None = None
     cc: str | None = None
     cxx: str | None = None
     fc: str | None = None
+    f77: str | None = None
     mpicc: str | None = None
     mpicxx: str | None = None
     mpifc: str | None = None
+    mpif77: str | None = None
 
 
 @dataclasses.dataclass
