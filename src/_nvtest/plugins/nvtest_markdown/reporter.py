@@ -30,7 +30,7 @@ class MarkdownReporter(Reporter):
                 self.generate_case_file(case, fh)
         with open(self.index, "w") as fh:
             self.generate_index(fh)
-        f = os.path.relpath(self.index, config.get("session:invocation_dir"))
+        f = os.path.relpath(self.index, config.invocation_dir)
         logging.info(f"Markdown report written to {f}")
 
     def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
@@ -63,8 +63,8 @@ class MarkdownReporter(Reporter):
             else:
                 group = case.status.name.title()
             totals.setdefault(group, []).append(case)
-        fh.write(f"| {config.get('system:host')} ")
-        fh.write(f"| {config.get('build:project')} ")
+        fh.write(f"| {config.system.host} ")
+        fh.write(f"| {config.build.project} ")
         for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass"):
             if group not in totals:
                 fh.write("| 0 ")

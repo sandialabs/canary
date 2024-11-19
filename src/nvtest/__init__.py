@@ -8,8 +8,8 @@ from _nvtest._version import version
 from _nvtest._version import version_tuple
 from _nvtest.command.base import Command
 from _nvtest.config.argparsing import Parser
-from _nvtest.enums import list_parameter_space
 from _nvtest.enums import centered_parameter_space
+from _nvtest.enums import list_parameter_space
 from _nvtest.enums import random_parameter_space
 from _nvtest.error import TestDiffed
 from _nvtest.error import TestFailed

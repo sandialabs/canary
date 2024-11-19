@@ -16,14 +16,10 @@ def boolean(arg):
 
 
 def ns2dict(arg: Namespace | SimpleNamespace) -> dict:
-    from ..resource import ResourceHandler
-
     value: dict[str, Any] = dict(vars(arg))
     for name, item in value.items():
         if isinstance(item, (SimpleNamespace, Namespace)):
             value[name] = ns2dict(item)
-        elif isinstance(item, ResourceHandler):
-            value[name] = item.data
     return value
 
 

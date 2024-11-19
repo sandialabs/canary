@@ -1,7 +1,6 @@
 import os
 import sys
 
-import _nvtest.config
 import _nvtest.plugins.nvtest_vvt.generator as vvtest
 import _nvtest.util.filesystem as fs
 from _nvtest.enums import list_parameter_space
@@ -269,14 +268,11 @@ if __name__ == "__main__":
             fh.write("else:\n    assert 0\n")
         fs.set_executable("vvtest_param_generator.py")
     with fs.working_dir(tmpdir.strpath):
-        dbg = _nvtest.config.get("config:debug")
-        _nvtest.config.set("config:debug", True)
         finder = Finder()
         finder.add(".")
         finder.prepare()
         files = finder.discover()
         cases = finder.lock_and_filter(files)
-        _nvtest.config.set("config:debug", dbg)
         assert len(cases) == 6
         assert cases[0].name == "create_inputs.a=A.b=B.np=1"
         for case in cases[1:]:

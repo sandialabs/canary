@@ -11,14 +11,13 @@ from typing import Sequence
 from ..third_party.color import colorize
 from ..util.string import ilist
 from ..util.string import strip_quotes
+from ..util.term import terminal_size
 from ..util.time import time_in_seconds
 
 if TYPE_CHECKING:
     from ..command.base import Command
 
 import _nvtest._version
-
-from ..util.term import terminal_size
 
 stat_names = pstats.Stats.sort_arg_dict_default
 

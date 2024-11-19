@@ -1,12 +1,10 @@
 import argparse
-import json
 import os
 import sys
 import traceback
 
 from _nvtest.config.argparsing import Parser
 from _nvtest.error import StopExecution
-from _nvtest.resource import ResourceHandler
 from _nvtest.session import ExitCode
 from _nvtest.session import ProgressReporting
 from _nvtest.session import Session
@@ -116,7 +114,6 @@ class Run(Command):
                     return 0
             logging.emit(colorize("@*{generating} test cases from test files\n"))
             session.lock(
-                rh=args.rh,
                 keyword_expr=args.keyword_expr,
                 parameter_expr=args.parameter_expr,
                 on_options=args.on_options,
@@ -143,16 +140,7 @@ class Run(Command):
                 start=args.start,
                 keyword_expr=args.keyword_expr,
                 parameter_expr=args.parameter_expr,
-                rh=args.rh,
             )
-            if not args.batched_invocation and session.db.exists("batches/1"):
-                # Reload batch info so that the tests can be rerun in the scheduler
-                args.rh = args.rh or ResourceHandler()
-                with session.db.open("batches/1/config") as fh:
-                    batch_cfg = json.load(fh)
-                for var, val in batch_cfg.items():
-                    if val is not None:
-                        args.rh.set(f"batch:{var}", val)
             if not args.no_header:
                 logging.emit(session.overview(cases))
         else:
@@ -162,12 +150,7 @@ class Run(Command):
         level = ProgressReporting.progress_bar if args.r == "b" else ProgressReporting.verbose
         reporting = ProgressReporting(level=level)
         try:
-            session.exitstatus = session.run(
-                cases,
-                rh=args.rh,
-                reporting=reporting,
-                fail_fast=args.fail_fast,
-            )
+            session.exitstatus = session.run(cases, reporting=reporting, fail_fast=args.fail_fast)
         except KeyboardInterrupt:
             session.exitstatus = ExitCode.INTERRUPTED
         except StopExecution as e:

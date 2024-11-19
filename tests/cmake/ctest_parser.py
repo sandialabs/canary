@@ -244,7 +244,8 @@ def test_parse_ctesttestfile_will_fail(loadtestfile):
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
 def test_parse_ctesttestfile_working_directory(loadtestfile):
     test = loadtestfile["working_directory"]
-    assert find_property(test["properties"], "WORKING_DIRECTORY") == "."
+    wd = os.path.dirname(__file__)
+    assert find_property(test["properties"], "WORKING_DIRECTORY") == wd
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")

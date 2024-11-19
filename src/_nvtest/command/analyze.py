@@ -42,7 +42,7 @@ Note: this command must be run in a test session directory.
             cases = filter_cases_by_path(session.cases, args.pathspec)
         else:
             cases = filter_cases_by_status(session.cases, ("failed", "diffed", "success"))
-        runner = TestCaseRunner(args.rh)
+        runner = TestCaseRunner()
         for case in cases:
             runner.analyze(case)
         return 0

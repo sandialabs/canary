@@ -12,6 +12,7 @@ from concurrent.futures import Future
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
+from dataclasses import asdict
 from datetime import datetime
 from functools import partial
 from itertools import repeat
@@ -30,7 +31,6 @@ from .queues import BatchResourceQueue
 from .queues import Empty as EmptyQueue
 from .queues import ResourceQueue
 from .queues import factory as q_factory
-from .resource import ResourceHandler
 from .runners import factory as r_factory
 from .status import Status
 from .test.batch import TestBatch
@@ -301,8 +301,11 @@ class Session:
 
         """
         logging.debug(f"Loading test session in {self.root}")
-        with open(os.path.join(self.config_dir, "config")) as fh:
-            config.load(fh)
+        if config.session.work_tree != self.root:
+            raise RuntimeError(
+                f"Configuration failed to load correctly, expected "
+                f"config.session.work_tree={self.root!r} but got {config.session.work_tree}"
+            )
 
         with self.db.open("files", "r") as record:
             self.generators = self.load_testfiles(record)
@@ -333,25 +336,16 @@ class Session:
 
     def set_config_values(self):
         """Set ``section`` configuration values"""
-        config.set("session:root", self.root, scope="session")
-        config.set("session:invocation_dir", config.invocation_dir, scope="session")
-        config.set("session:start", config.invocation_dir, scope="session")
-        for section in ("build", "config", "option", "variables"):
-            # transfer options to the session scope and save it for future sessions
-            data = config.get(section, scope="local") or {}
-            for key, value in data.items():
-                config.set(f"{section}:{key}", value, scope="session")
+        config.session.work_tree = self.root
 
     def save(self, ini: bool = False) -> None:
         """Save session data, excluding data that is stored separately in the database"""
         with self.db.open("session", "w") as record:
             self.dump_attrs(record)
         if ini:
-            with self.db.open("options", "w") as record:
-                json.dump(config.get("option"), record, indent=2)
             file = os.path.join(self.config_dir, "config")
             with open(file, "w") as fh:
-                config.dump(fh)
+                config.snapshot(fh)
             with self.db.open("plugin", "w") as record:
                 json.dump(plugin.getstate(), record, indent=2)
 
@@ -399,7 +393,6 @@ class Session:
 
     def lock(
         self,
-        rh: ResourceHandler | None = None,
         keyword_expr: str | None = None,
         parameter_expr: str | None = None,
         on_options: list[str] | None = None,
@@ -409,8 +402,6 @@ class Session:
         """Lock test files into concrete (parameterized) test cases
 
         Args:
-          rh: a :class:`ResourceHandler` instance with information about which machine resources
-            are available to this session.
           keyword_expr: Used to filter tests by keyword.  E.g., if two test define the keywords
             ``baz`` and ``spam``, respectively and ``keyword_expr = 'baz or spam'`` both tests will
             be locked and marked as ready.  However, if a test defines only the keyword ``ham`` it
@@ -429,7 +420,6 @@ class Session:
         """
         self.cases = Finder.lock_and_filter(
             self.generators,
-            rh=rh,
             keyword_expr=keyword_expr,
             parameter_expr=parameter_expr,
             on_options=on_options,
@@ -465,7 +455,7 @@ class Session:
         while ts.is_active():
             group = ts.get_ready()
             args = zip(group, repeat(self.root), repeat(copy_all_resources))
-            if config.get("config:debug"):
+            if config.debug:
                 for a in args:
                     setup_individual_case(*a)
             else:
@@ -491,7 +481,6 @@ class Session:
         keyword_expr: str | None = None,
         parameter_expr: str | None = None,
         start: str | None = None,
-        rh: ResourceHandler | None = None,
         case_specs: list[str] | None = None,
     ) -> list[TestCase]:
         """Filter test cases (mask test cases that don't meet a specific criteria)
@@ -500,14 +489,12 @@ class Session:
           keyword_expr: Include those tests matching this keyword expression
           parameter_expr: Include those tests matching this parameter expression
           start: The starting directory the python session was invoked in
-          rh: resource handler
           case_specs: Include those tests matching these specs
 
         Returns:
           A list of test cases
 
         """
-        rh = rh or ResourceHandler()
         explicit_start_path = start is not None
         if start is None:
             start = self.root
@@ -527,12 +514,12 @@ class Session:
                 else:
                     case.mask = color.colorize("deselected by @*b{testspec expression}")
                 continue
-            if rh["test:cpu_count"][1] and case.cpus > rh["test:cpu_count"][1]:
-                n = rh["test:cpu_count"][1]
+            if config.test.cpu_count[1] and case.cpus > config.test.cpu_count[1]:
+                n = config.test.cpu_count[1]
                 case.mask = f"test requires more than {n} cpus"
                 continue
-            if rh["test:gpu_count"][1] and case.gpus > rh["test:gpu_count"][1]:
-                n = rh["test:gpu_count"][1]
+            if config.test.gpu_count[1] and case.gpus > config.test.gpu_count[1]:
+                n = config.test.gpu_count[1]
                 case.mask = f"test requires more than {n} gpus"
                 continue
             when_expr: dict[str, str] = {}
@@ -612,7 +599,6 @@ class Session:
         self,
         cases: list[TestCase],
         *,
-        rh: ResourceHandler | None = None,
         fail_fast: bool = False,
         reporting: ProgressReporting = ProgressReporting(),
     ) -> int:
@@ -620,7 +606,6 @@ class Session:
 
         Args:
           cases: test cases to run
-          rh: resource handler, usually set up by the ``nvtest run`` command.
           fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
             continuing running until all tests have been run.
           reporting: level of verbosity
@@ -631,17 +616,14 @@ class Session:
         """
         if not cases:
             raise ValueError("There are no cases to run in this session")
-        rh = rh or ResourceHandler()
-        queue = self.setup_queue(cases, rh)
+        queue = self.setup_queue(cases)
         with self.rc_environ():
             with working_dir(self.root):
                 cleanup_queue = True
                 try:
                     self.start = timestamp()
                     self.finish = -1.0
-                    self.process_queue(
-                        queue=queue, rh=rh, fail_fast=fail_fast, reporting=reporting
-                    )
+                    self.process_queue(queue=queue, fail_fast=fail_fast, reporting=reporting)
                 except ProcessPoolExecutorFailedToStart:
                     if int(os.getenv("NVTEST_LEVEL", "0")) > 1:
                         # This can happen when the ProcessPoolExecutor fails to obtain a lock.
@@ -682,8 +664,7 @@ class Session:
     def rc_environ(self) -> Generator[None, None, None]:
         """Set the runtime environment"""
         save_env = os.environ.copy()
-        variables = config.get("variables") or {}
-        for var, val in variables.items():
+        for var, val in config.variables.items():
             os.environ[var] = val
         level = logging.get_level()
         os.environ["NVTEST_LOG_LEVEL"] = logging.get_level_name(level)
@@ -695,7 +676,6 @@ class Session:
         self,
         *,
         queue: ResourceQueue,
-        rh: ResourceHandler,
         fail_fast: bool,
         reporting: ProgressReporting = ProgressReporting(),
     ) -> None:
@@ -703,7 +683,6 @@ class Session:
 
         Args:
           queue: the test queue to process
-          rh: resource handler, usually set up by the ``nvtest run`` command.
           fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
             continuing running until all tests have been run.
           reporting: level of verbosity
@@ -711,8 +690,8 @@ class Session:
         """
         futures: dict = {}
         duration = lambda: timestamp() - self.start
-        timeout = rh["session:timeout"] or -1
-        runner = r_factory(rh)
+        timeout = config.session.timeout or -1
+        runner = r_factory()
         try:
             with ProcessPoolExecutor(max_workers=queue.workers) as ppe:
                 while True:
@@ -752,7 +731,7 @@ class Session:
         currently busy
 
         """
-        if not config.get("config:debug"):
+        if not config.debug:
             return None
         if isinstance(queue, BatchResourceQueue):
             return None
@@ -831,7 +810,7 @@ class Session:
                 elif case.status == "ready":
                     case.status.set("skipped", "test skipped for unknown reasons")
                 elif case.status != snapshots[case.id]["status"]["value"]:
-                    if config.get("config:debug"):
+                    if config.debug:
                         fs = case.status.value
                         ss = snapshots[case.id]["status"]["value"]
                         logging.warning(
@@ -843,16 +822,15 @@ class Session:
                 code = compute_returncode(obj.cases)
                 raise FailFast(str(obj), code)
 
-    def setup_queue(self, cases: list[TestCase], rh: ResourceHandler) -> ResourceQueue:
+    def setup_queue(self, cases: list[TestCase]) -> ResourceQueue:
         """Setup the test queue
 
         Args:
           cases: the test cases to run
-          rh: resource handler
 
         """
         kwds: dict[str, Any] = {}
-        queue: ResourceQueue = q_factory(rh, global_session_lock)
+        queue: ResourceQueue = q_factory(global_session_lock)
         if isinstance(queue, BatchResourceQueue):
             batch_stage = os.path.join(self.config_dir, "batches")
             mkdirp(batch_stage)
@@ -877,7 +855,7 @@ class Session:
             with self.db.open(f"batches/{lot_no}/index", "w") as record:
                 json.dump(batches, record, indent=2)
             with self.db.open(f"batches/{lot_no}/config", "w") as record:
-                json.dump(rh.data["batch"], record, indent=2)
+                json.dump(asdict(config.batch), record, indent=2)
         return queue
 
     def blogfile(self, batch_no: int, lot_no: int | None) -> str:
@@ -994,7 +972,8 @@ class Session:
         kwds = {"t": glyphs.turtle, "N": N}
         string.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
         for case in sorted_cases:
-            string.write("  %6.2f     %s\n" % (case.duration, case.pretty_repr()))
+            id = color.colorize("@*b{%s}" % case.id[:7])
+            string.write("  %6.2f   %s    %s\n" % (case.duration, id, case.pretty_repr()))
         string.write("\n")
         return string.getvalue()
 

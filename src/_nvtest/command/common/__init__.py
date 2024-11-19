@@ -66,7 +66,7 @@ def add_work_tree_arguments(parser: "Parser") -> None:
 
 
 def add_resource_arguments(parser: "Parser") -> None:
-    from ...config.argparsing import ResourceSetter
+    from .resource import ResourceSetter
 
     group = parser.add_argument_group("resource control")
     group.add_argument(

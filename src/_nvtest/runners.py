@@ -19,7 +19,6 @@ from . import config
 from . import plugin
 from .atc import AbstractTestCase
 from .error import diff_exit_status
-from .resource import ResourceHandler
 from .status import Status
 from .test.batch import TestBatch
 from .test.case import TestCase
@@ -35,16 +34,16 @@ from .util.time import timestamp
 class AbstractTestRunner:
     scheduled = False
 
-    def __init__(self, rh: ResourceHandler) -> None:
-        self.rh = rh
-        self.timeoutx = self.rh["test:timeoutx"]
+    def __init__(self) -> None:
+        self.timeoutx = config.test.timeoutx
 
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
         prefix = colorize("@*b{==>} ")
-        if not config.getoption("progress_bar"):
+        progress_bar: bool = getattr(config.options, "progress_bar", False)
+        if not progress_bar:
             logging.emit("%s%s\n" % (prefix, self.start_msg(case)))
         self.run(case)
-        if not config.getoption("progress_bar"):
+        if not progress_bar:
             logging.emit("%s%s\n" % (prefix, self.end_msg(case)))
         return None
 
@@ -61,13 +60,13 @@ class AbstractTestRunner:
 class TestCaseRunner(AbstractTestRunner):
     """The default runner for running a single :class:`~TestCase`"""
 
-    def __init__(self, rh: ResourceHandler) -> None:
-        super().__init__(rh)
+    def __init__(self) -> None:
+        super().__init__()
 
     def run(self, case: "AbstractTestCase", stage: str = "test") -> None:
         assert isinstance(case, TestCase)
         assert stage in ("test", "analyze")
-        measure: bool = not config.getoption("run:dont_measure")
+        measure: bool = not getattr(config.options, "dont_measure", False)
         try:
             metrics: dict[str, Any] | None = None
             case.start = timestamp()
@@ -224,18 +223,17 @@ class BatchRunner(AbstractTestRunner):
     shell = "/bin/sh"
     command_name = "batch-runner"
 
-    def __init__(self, rh: ResourceHandler) -> None:
+    def __init__(self) -> None:
         import hpc_connect
 
-        super().__init__(rh)
+        super().__init__()
 
         # by this point, hpc_connect should have already be set up
         if hpc_connect.backend._scheduler is None:  # type: ignore
-            hpc_connect.set(scheduler=self.rh["batch:scheduler"])  # type: ignore
+            hpc_connect.set(scheduler=config.batch.scheduler)  # type: ignore
         self.scheduler = hpc_connect.scheduler  # type: ignore
-        if self.rh["batch:scheduler_args"]:
-            args = self.rh["batch:scheduler_args"]
-            self.scheduler.add_default_args(*args)
+        if config.batch.scheduler_args:
+            self.scheduler.add_default_args(*config.batch.scheduler_args)
 
     def run(self, batch: AbstractTestCase, stage: str = "test") -> None:
         import hpc_connect
@@ -248,6 +246,10 @@ class BatchRunner(AbstractTestRunner):
             nvtest_invocation = self.nvtest_invocation(batch, node_count=node_count)
             scriptname = batch.submission_script_filename()
             mkdirp(os.path.dirname(scriptname))
+            variables = dict(batch.variables)
+            variables["NVTEST_LEVEL"] = "1"
+            variables["NVTEST_DISABLE_KB"] = "1"
+            variables["NVTEST_BATCH_SCHEDULER"] = "null"  # guard against infinite batch recursion
             with open(scriptname, "w") as fh:
                 self.scheduler.write_submission_script(
                     [nvtest_invocation],
@@ -258,10 +260,10 @@ class BatchRunner(AbstractTestRunner):
                     output=batch.logfile(),
                     error=batch.logfile(),
                     qtime=self.qtime(batch) * self.timeoutx,
-                    variables=batch.variables,
+                    variables=variables,
                 )
             set_executable(scriptname)
-            if config.get("config:debug"):
+            if config.debug:
                 logging.debug(f"Submitting batch {batch.batch_no} of {batch.nbatches}")
             self.scheduler.submit_and_wait(scriptname, job_name=batch.name)
         except hpc_connect.HPCSubmissionFailedError:
@@ -313,25 +315,26 @@ class BatchRunner(AbstractTestRunner):
         """Write the nvtest invocation used to run this batch."""
         fp = io.StringIO()
         fp.write("nvtest ")
-        if config.get("config:debug"):
+        if config.debug:
             fp.write("-d ")
-        if config.getoption("plugin_dirs"):
-            for p in config.getoption("plugin_dirs"):
+        if getattr(config.options, "plugin_dirs", None):
+            for p in config.options.plugin_dirs:
                 fp.write(f"-p {p} ")
         fp.write(f"-C {batch.root} run -rv ")
-        if config.getoption("run:fail_fast"):
+        if getattr(config.options, "fail_fast", False):
             fp.write("--fail-fast ")
-        if config.getoption("run:dont_measure"):
+        if getattr(config.options, "dont_measure", False):
             fp.write("--dont-measure ")
-        if p := config.getoption("run:P"):
+        if p := getattr(config.options, "P", None):
             if p != "pedantic":
                 fp.write(f"-P{p} ")
-        if workers := self.rh["batch:workers"]:
+        if workers := config.batch.workers:
             fp.write(f"-l session:workers={workers} ")
         if node_count is None:
             node_count = math.ceil(batch.max_cpus_required / self.scheduler.config.cpus_per_node)
         fp.write(f"-l session:cpu_count={node_count * self.scheduler.config.cpus_per_node} ")
         fp.write(f"-l test:timeoutx={self.timeoutx} ")
+        fp.write("-l batch:scheduler=null ")  # guard against infinite batch recursion
         fp.write(f"^{batch.lot_no}:{batch.batch_no}")
         return fp.getvalue()
 
@@ -354,10 +357,10 @@ class BatchRunner(AbstractTestRunner):
         return total_runtime
 
 
-def factory(rh: ResourceHandler) -> "AbstractTestRunner":
+def factory() -> "AbstractTestRunner":
     runner: "AbstractTestRunner"
-    if rh["batch:scheduler"] is None:
-        runner = TestCaseRunner(rh)
+    if config.batch.scheduler is None:
+        runner = TestCaseRunner()
     else:
-        runner = BatchRunner(rh)
+        runner = BatchRunner()
     return runner

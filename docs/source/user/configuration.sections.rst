@@ -3,6 +3,8 @@
 Configuration sections
 ======================
 
+``nvtest`` recognizes a
+
 config
 ------
 
@@ -12,7 +14,7 @@ Set general configuration settings.
 
    [config]
    debug = false  # (bool)
-   log_level = INFO  # (str)
+   log_level = "INFO"  # (str)
 
 batch
 -----
@@ -31,7 +33,7 @@ Set test timeouts.
 
 .. code-block:: ini
 
-   [test:timeout]
+   [test.timeout]
    fast = T  # (number or str) default: 30s
    long = T  # (number or str) default: 10m
    default = T  # (number or str) default: 5m
@@ -74,14 +76,12 @@ Set build settings.
    type = ... # str
    date = ... # str
 
-   [build:compiler]
+   [build.compiler]
    vendor = ... # str
    version = ... # str
-
-   [build:compiler:paths]
    cc = ... # str
    cxx = ... # str
    fc = ... # str
 
-   [build:options]
+   [build.options]
    opt = ... # str

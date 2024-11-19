@@ -3,7 +3,6 @@ import os
 import pytest
 
 from _nvtest.plugins.nvtest_ctest.generator import CTestTestFile
-from _nvtest.resource import ResourceHandler
 from _nvtest.runners import TestCaseRunner as xTestCaseRunner
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import mkdirp
@@ -89,10 +88,9 @@ add_test(test1 "echo" "This test should fail")
 set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test should fail$")
 """
             )
-        rh = ResourceHandler()
         file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
         [case] = file.lock()
-        runner = xTestCaseRunner(rh)
+        runner = xTestCaseRunner()
         mkdirp("./foo")
         case.setup(exec_root=f"{os.getcwd()}/foo")
         runner.run(case)
@@ -113,10 +111,9 @@ add_test(test1 "./script.sh")
 set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test should be skipped$")
 """
             )
-        rh = ResourceHandler()
         file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
         [case] = file.lock()
-        runner = xTestCaseRunner(rh)
+        runner = xTestCaseRunner()
         mkdirp("./foo")
         case.setup(exec_root=f"{os.getcwd()}/foo")
         runner.run(case)
@@ -135,10 +132,9 @@ add_test(test1 "./script.sh")
 set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test should pass$")
 """
             )
-        rh = ResourceHandler()
         file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
         [case] = file.lock()
-        runner = xTestCaseRunner(rh)
+        runner = xTestCaseRunner()
         mkdirp("./foo")
         case.setup(exec_root=f"{os.getcwd()}/foo")
         runner.run(case)

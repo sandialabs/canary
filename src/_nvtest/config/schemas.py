@@ -44,7 +44,7 @@ config_schema = Schema(
     {
         "config": {
             Optional("debug"): bool,
-            Optional("no_cache"): bool,
+            Optional("cache_runtimes"): bool,
             Optional("log_level"): log_levels,
         }
     }
@@ -97,6 +97,12 @@ build_schema = Schema(
                     Optional("mpicxx"): optional_str,
                     Optional("mpifc"): optional_str,
                 },
+                Optional("cc"): optional_str,
+                Optional("cxx"): optional_str,
+                Optional("fc"): optional_str,
+                Optional("mpicc"): optional_str,
+                Optional("mpicxx"): optional_str,
+                Optional("mpifc"): optional_str,
             },
             Optional("options"): optional_dict,
         }

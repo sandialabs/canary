@@ -436,7 +436,7 @@ def p_VVT(filename: Path | str) -> Generator[SimpleNamespace, None, None]:
             if not os.path.exists(inc_file):
                 raise VVTParseError(f"include file does not exist: {ns.argument()!r}", ns)
             when = m_when.When.factory(ns.when)
-            result = when.evaluate(on_options=config.getoption("on_options"))
+            result = when.evaluate(on_options=getattr(config.options, "on_options", []))
             if not result.value:
                 logging.debug(
                     f"{filename}: Skipping inclusion of {inc_file} due to:\n{result.reason}"
@@ -651,9 +651,9 @@ def to_seconds(
 def get_vvtest_attrs(case: "TestCase", stage: str = "test") -> dict:
     attrs = {}
     compiler_spec = None
-    if config.get("build:compiler:vendor") is None:
-        vendor = config.get("build:compiler:vendor")
-        version = config.get("build:compiler:version")
+    if config.build.compiler.vendor is not None:
+        vendor = config.build.compiler.vendor
+        version = config.build.compiler.version
         compiler_spec = f"{vendor}@{version}"
     attrs["NAME"] = case.family
     attrs["TESTID"] = case.fullname

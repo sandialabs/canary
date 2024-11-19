@@ -57,7 +57,7 @@ def partition_t(
     to ``t``
 
     """
-    cpus_per_node: int = config.get("machine:cpus_per_node")
+    cpus_per_node: int = config.machine.cpus_per_node
 
     partitions: list[list[TestCase]] = []
 
