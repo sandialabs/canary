@@ -14,21 +14,24 @@ class AbstractTestCase(abc.ABC):
     def cpu_ids(self) -> list[int]:
         return self._cpu_ids
 
-    def assign_cpu_ids(self, arg: list[int]) -> None:
-        if not self.exclusive:
-            assert len(arg) == self.cpus
+    @cpu_ids.setter
+    def cpu_ids(self, arg: list[int]) -> None:
+        if not self.exclusive and len(arg) < self.cpus:
+            raise ValueError(f"{self}: received fewer cpu IDs than required!")
         self._cpu_ids = list(arg)
 
     @property
     def exclusive(self) -> bool:
-        return True
+        return False
 
     @property
     def gpu_ids(self) -> list[int]:
         return self._gpu_ids
 
-    def assign_gpu_ids(self, arg: list[int]) -> None:
-        assert len(arg) == self.gpus
+    @gpu_ids.setter
+    def gpu_ids(self, arg: list[int]) -> None:
+        if not self.exclusive and len(arg) < self.gpus:
+            raise ValueError(f"{self}: received fewer gpu IDs than required!")
         self._gpu_ids = list(arg)
 
     @property

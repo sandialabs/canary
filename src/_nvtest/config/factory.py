@@ -40,7 +40,7 @@ class Session:
         gpu_count: int | None = None,
         gpu_ids: list[int] | None = None,
         timeout: float = -1.0,
-        workers: float = -1.0,
+        workers: int = -1,
         work_tree: str | None = None,
     ):
         self._node_count: int
@@ -618,10 +618,9 @@ class Config:
         return getattr(self.options, key, default)
 
     def describe(self, section: str | None = None) -> str:
-
-        def join_ilist(a: list[int], threshold: int = 8):
+        def join_ilist(a: list[Any], threshold: int = 8):
             if len(a) > threshold:
-                a = a[:threshold//2] + ['...'] + a[-threshold//2:]
+                a = a[: threshold // 2] + ["..."] + a[-threshold // 2 :]
             return ", ".join(str(_) for _ in a)
 
         if section is not None:

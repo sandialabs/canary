@@ -152,13 +152,13 @@ class ResourceQueue(abc.ABC):
                         (self.cpu_count, obj.gpus), self.available_resources()
                     ):
                         self._busy[i] = self.buffer.pop(i)
-                        self._busy[i].assign_cpu_ids(self.acquire_cpus(self.cpu_count))
-                        self._busy[i].assign_gpu_ids(self.acquire_gpus(self._busy[i].gpus))
+                        self._busy[i].cpu_ids = self.acquire_cpus(self.cpu_count)
+                        self._busy[i].gpu_ids = self.acquire_gpus(self._busy[i].gpus)
                         return (i, self._busy[i])
                     elif le((obj.cpus, obj.gpus), self.available_resources()):
                         self._busy[i] = self.buffer.pop(i)
-                        self._busy[i].assign_cpu_ids(self.acquire_cpus(self._busy[i].cpus))
-                        self._busy[i].assign_gpu_ids(self.acquire_gpus(self._busy[i].gpus))
+                        self._busy[i].cpu_ids = self.acquire_cpus(self._busy[i].cpus)
+                        self._busy[i].gpu_ids = self.acquire_gpus(self._busy[i].gpus)
                         return (i, self._busy[i])
         return None
 
