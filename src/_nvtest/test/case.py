@@ -105,7 +105,7 @@ class TestCase(AbstractTestCase):
         if parameters is not None:
             self.parameters = parameters
         if timeout is not None:
-            self.timeout = timeout
+            self.timeout = float(timeout)
         if baseline is not None:
             self.baseline = baseline
         if sources is not None:
@@ -307,12 +307,14 @@ class TestCase(AbstractTestCase):
     def timeout(self) -> float:
         if self._timeout is None:
             self.set_default_timeout()
-        assert isinstance(self._timeout, float)
+        if not isinstance(self._timeout, (int, float)):
+            logging.warning(f"{self}: expected timeout to be a number but got {self.timeout=}")
+            self._timeout = float(self._timeout)  # type: ignore
         return self._timeout
 
     @timeout.setter
     def timeout(self, arg: float) -> None:
-        self._timeout = arg
+        self._timeout = float(arg)
 
     @property
     def baseline(self) -> list[str | tuple[str, str]]:
@@ -669,7 +671,7 @@ class TestCase(AbstractTestCase):
             timeout = config.test.timeout_long
         else:
             timeout = config.test.timeout_default
-        self._timeout = timeout
+        self._timeout = float(timeout)
 
     def load_runtimes(self):
         # return mean, min, max runtimes
