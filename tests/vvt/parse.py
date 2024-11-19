@@ -143,11 +143,13 @@ def test_parse_parameterize_gen(tmpdir):
         with open("my-test.vvt", "w") as fh:
             fh.write(s)
         with open("my-script.py", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import json
 a = [{'A': 1.0, 'B': 2.0}, {'B': 4.0, 'A': 3.0}]
 print(json.dumps(a))
-""")
+"""
+            )
         command = next(vvtest.p_VVT(s))
         names, values, _, _ = vvtest.p_PARAMETERIZE(command)
     assert names == ["A", "B"]
@@ -163,13 +165,15 @@ def test_parse_parameterize_gen_deps(tmpdir):
         with open("my-test.vvt", "w") as fh:
             fh.write(s)
         with open("my-script.py", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 import json
 a = [{'A': 1.0, 'B': 2.0}, {'B': 4.0, 'A': 3.0}]
 print(json.dumps(a))
 deps = [None, 'a.*']
 print(json.dumps(deps))
-""")
+"""
+            )
         command = next(vvtest.p_VVT(s))
         names, values, _, deps = vvtest.p_PARAMETERIZE(command)
     assert names == ["A", "B"]
@@ -193,7 +197,8 @@ def test_parse_parameterize_gen_deps_2(tmpdir):
     fs.mkdirp(testdir)
     with fs.working_dir(testdir):
         with open("my-test.vvt", "w") as fh:
-            fh.write("""\
+            fh.write(
+                """\
 #!/usr/bin/env python3
 # VVT: keywords: small
 # VVT: link: ../../../preload
@@ -238,7 +243,8 @@ import vvtest_util as vvt
 
 if __name__ == "__main__":
     assert 0, "This test is not actually run"
-""")
+"""
+            )
         with open("vvtest_param_generator.py", "w") as fh:
             fh.write(f"#!{sys.executable}\n")
             fh.write("import json\nimport sys\n")

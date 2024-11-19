@@ -116,9 +116,11 @@ def setup_hpc_connect(args: argparse.Namespace) -> None:
         if batch_scheduler == "null":
             return
         hpc_connect.set(scheduler=batch_scheduler)  # type: ignore
-        config.machine.node_count = hpc_connect.scheduler.config.node_count  # type: ignore
-        config.machine.cpus_per_node = hpc_connect.scheduler.config.cpus_per_node  # type: ignore
-        config.machine.gpus_per_node = hpc_connect.scheduler.config.gpus_per_node  # type: ignore
+        config.update_resource_counts(
+            node_count=hpc_connect.scheduler.config.node_count,  # type: ignore
+            cpus_per_node=hpc_connect.scheduler.config.cpus_per_node,  # type: ignore
+            gpus_per_node=hpc_connect.scheduler.config.gpus_per_node,  # type: ignore
+        )
 
 
 def invoke_command(command: "Command", args: argparse.Namespace) -> int:

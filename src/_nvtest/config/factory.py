@@ -292,13 +292,11 @@ class Config:
         kwds["machine"] = m = Machine(**mc)
 
         kwds["session"] = Session(
-            cpu_count=m.cpu_count, gpu_count=m.gpu_count, node_count=m.node_count
+            node_count=m.node_count, cpu_count=m.cpu_count, gpu_count=m.gpu_count
         )
 
         kwds["test"] = Test(
-            cpu_count=(1, m.cpu_count),
-            gpu_count=(0, m.gpu_count),
-            node_count=(1, m.node_count),
+            node_count=(1, m.node_count), cpu_count=(1, m.cpu_count), gpu_count=(0, m.gpu_count)
         )
 
         if "build" in kwds:
@@ -309,6 +307,29 @@ class Config:
             kwds["build"] = Build(**kwds["build"])
 
         return cls(**kwds)
+
+    def update_resource_counts(
+        self,
+        *,
+        node_count: int | None = None,
+        cpus_per_node: int | None = None,
+        gpus_per_node: int | None = None,
+    ) -> None:
+        updated = any([cnt is not None for cnt in (node_count, cpus_per_node, gpus_per_node)])
+        if not updated:
+            return
+        if node_count is not None:
+            self.machine.node_count = node_count
+        if cpus_per_node is not None:
+            self.machine.cpus_per_node = cpus_per_node
+        if gpus_per_node is not None:
+            self.machine.gpus_per_node = gpus_per_node
+        self.session.node_count = self.machine.node_count
+        self.session.cpu_count = self.machine.cpu_count
+        self.session.gpu_count = self.machine.gpu_count
+        self.test.node_count = (1, self.machine.node_count)
+        self.test.cpu_count = (1, self.machine.cpu_count)
+        self.test.gpu_count = (0, self.machine.gpu_count)
 
     def validate(self):
         cpu_count = self.machine.cpu_count
@@ -480,7 +501,7 @@ class Config:
                     if key not in ("node_count", "cpus_per_node", "gpus_per_node"):
                         msg = f"Illegal configuration setting: {path}"
                         raise ValueError(path)
-                    setattr(self.machine, key, int(value))
+                    self.update_resource_counts(**{key: int(value)})
                 case ["test", key]:
                     if key not in ("timeout_fast", "timeout_long", "timeout_default"):
                         msg = f"Illegal configuration setting: {path}"

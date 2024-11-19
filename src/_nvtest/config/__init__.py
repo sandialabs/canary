@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     variables = _config.variables
     invocation_dir = _config.invocation_dir
     set_main_options = _config.set_main_options
+    update_resource_counts = _config.update_resource_counts
     validate = _config.validate
     describe = _config.describe
     config_file = _config.config_file
