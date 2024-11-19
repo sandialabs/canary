@@ -615,8 +615,11 @@ class Config:
         return getattr(self.options, key, default)
 
     def describe(self, section: str | None = None) -> str:
-        def joinints(a):
-            return ",".join(str(_) for _ in a)
+
+        def join_ilist(a: list[int], threshold: int = 8):
+            if len(a) > threshold:
+                a = a[:threshold//2] + ['...'] + a[-threshold//2:]
+            return ", ".join(str(_) for _ in a)
 
         if section is not None:
             asdict = {section: dataclasses.asdict(getattr(self, section))}
@@ -626,13 +629,13 @@ class Config:
             asdict["system"]["os"] = vars(self.system.os)
         if "session" in asdict:
             asdict["session"] = self.session.asdict()
-            asdict["session"]["cpu_ids"] = joinints(asdict["session"]["cpu_ids"])
+            asdict["session"]["cpu_ids"] = join_ilist(asdict["session"]["cpu_ids"])
         if "options" in asdict:
             asdict["options"] = vars(self.options)
         if "test" in asdict:
-            asdict["test"]["node_count"] = joinints(asdict["test"]["node_count"])
-            asdict["test"]["cpu_count"] = joinints(asdict["test"]["cpu_count"])
-            asdict["test"]["gpu_count"] = joinints(asdict["test"]["gpu_count"])
+            asdict["test"]["node_count"] = join_ilist(asdict["test"]["node_count"])
+            asdict["test"]["cpu_count"] = join_ilist(asdict["test"]["cpu_count"])
+            asdict["test"]["gpu_count"] = join_ilist(asdict["test"]["gpu_count"])
         try:
             import yaml
 
