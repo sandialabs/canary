@@ -4,7 +4,6 @@ import threading
 from typing import Any
 
 from . import config
-from .resource import ResourceHandler
 from .test.batch import TestBatch
 from .test.case import TestCase
 from .third_party import color
@@ -205,12 +204,12 @@ class ResourceQueue(abc.ABC):
 
 
 class DirectResourceQueue(ResourceQueue):
-    def __init__(self, rh: ResourceHandler, lock: threading.Lock) -> None:
-        workers = int(rh["session:workers"])
+    def __init__(self, lock: threading.Lock) -> None:
+        workers = int(config.session.workers)
         super().__init__(
             lock=lock,
-            cpu_ids=rh["session:cpu_ids"],
-            gpu_ids=rh["session:gpu_ids"],
+            cpu_ids=config.session.cpu_ids,
+            gpu_ids=config.session.gpu_ids,
             workers=cpu_count() if workers < 0 else workers,
         )
 
@@ -266,16 +265,15 @@ class DirectResourceQueue(ResourceQueue):
 
 
 class BatchResourceQueue(ResourceQueue):
-    def __init__(self, rh: ResourceHandler, lock: threading.Lock) -> None:
-        workers = int(rh["session:workers"])
+    def __init__(self, lock: threading.Lock) -> None:
+        workers = int(config.session.workers)
         super().__init__(
             lock=lock,
-            cpu_ids=rh["session:cpu_ids"],
-            gpu_ids=rh["session:gpu_ids"],
+            cpu_ids=config.session.cpu_ids,
+            gpu_ids=config.session.gpu_ids,
             workers=5 if workers < 0 else workers,
         )
-        self.rh = rh
-        if self.rh["batch:scheduler"] is None:
+        if config.batch.scheduler is None:
             raise ValueError("BatchResourceQueue requires a batch:scheduler")
         self.tmp_buffer: list[TestCase] = []
 
@@ -285,11 +283,11 @@ class BatchResourceQueue(ResourceQueue):
     def prepare(self, **kwds: Any) -> None:
         lot_no = kwds.pop("lot_no")
         partitions: list[list[TestCase]]
-        if self.rh["batch:count"]:
-            partitions = partition_n(self.tmp_buffer, n=self.rh["batch:count"])
+        if config.batch.count:
+            partitions = partition_n(self.tmp_buffer, n=config.batch.count)
         else:
-            default_length = config.get("batch:length") or 30 * 60
-            length = float(self.rh["batch:length"] or default_length)  # 30 minute default
+            default_length = 30 * 60
+            length = float(config.batch.length or default_length)  # 30 minute default
             partitions = partition_t(self.tmp_buffer, t=length)
         n = len(partitions)
         batches = [TestBatch(p, i, n, lot_no) for i, p in enumerate(partitions, start=1) if len(p)]
@@ -383,21 +381,18 @@ def le(arg1: tuple[int, ...], arg2: tuple[int, ...]) -> bool:
     return all(a <= b for a, b in zip(arg1, arg2))
 
 
-def factory(rh: ResourceHandler, lock: threading.Lock) -> ResourceQueue:
+def factory(lock: threading.Lock) -> ResourceQueue:
     """Setup the test queue
 
     Args:
-      cases: the test cases to run
-      rh: resource handler
+      lock: threading lock
 
     """
     queue: ResourceQueue
-    if rh["batch:scheduler"] is None:
-        if rh["batch:count"] is not None or rh["batch:length"] is not None:
-            raise ValueError("batched execution requires a batch:scheduler")
-        queue = DirectResourceQueue(rh, lock)
+    if not config.batch.scheduler:
+        queue = DirectResourceQueue(lock)
     else:
-        queue = BatchResourceQueue(rh, lock)
+        queue = BatchResourceQueue(lock)
     return queue
 
 

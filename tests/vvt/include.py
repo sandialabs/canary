@@ -72,12 +72,12 @@ def test_include_file_options_yes(tmpdir):
 #!/usr/bin/env python3
 # VVT: include (option="baz") : ./file1.txt
 """
-    with nvtest.filesystem.working_dir(tmpdir.strpath, create=True):
+    with nvtest.filesystem.working_dir(tmpdir.strpath, create=True), nvtest.config.override():
         with open("file1.txt", "w") as fh:
             fh.write("# VVT: parameterize (int,int) : np,n = 1,2 3,4 5,6 7,8\n")
-        nvtest.config.set("option:on_options", ["baz"])
+        nvtest.config.options.on_options = ["baz"]
         commands = list(vvtest.p_VVT(s))
-        nvtest.config.set("option:on_options", [])
+        nvtest.config.options.on_options = []
         assert commands[0].command == "parameterize"
         assert "%".join(commands[0].argument.split()) == "np,n%=%1,2%3,4%5,6%7,8"
         names, values, kwds, _ = vvtest.p_PARAMETERIZE(commands[0])

@@ -221,7 +221,7 @@ class TestCase(AbstractTestCase):
     def exec_dir(self) -> str:
         exec_root = self.exec_root
         if not exec_root:
-            exec_root = config.get("session:root")
+            exec_root = config.session.work_tree
         if not exec_root:
             raise ValueError("exec_root must be set during set up") from None
         return os.path.normpath(os.path.join(exec_root, self.exec_path))
@@ -599,7 +599,7 @@ class TestCase(AbstractTestCase):
         if "nnode" in self.parameters:
             return int(self.parameters["nnode"])  # type: ignore
         else:
-            cpus_per_node = config.get("machine:cpus_per_node")
+            cpus_per_node = config.machine.cpus_per_node
             nodes = math.ceil(self.cpus / cpus_per_node)
             return nodes
 
@@ -664,16 +664,16 @@ class TestCase(AbstractTestCase):
             else:
                 timeout = 2.0 * self.runtimes[2]
         elif "fast" in self.keywords:
-            timeout = config.get("test:timeout:fast")
+            timeout = config.test.timeout_fast
         elif "long" in self.keywords:
-            timeout = config.get("test:timeout:long")
+            timeout = config.test.timeout_long
         else:
-            timeout = config.get("test:timeout:default")
+            timeout = config.test.timeout_default
         self._timeout = timeout
 
     def load_runtimes(self):
         # return mean, min, max runtimes
-        if config.get("config:no_cache"):
+        if not config.cache_runtimes:
             return [None, None, None]
         cache_dir = cache.get_cache_dir(self.file_root)
         file = self.cache_file(cache_dir)
@@ -693,7 +693,7 @@ class TestCase(AbstractTestCase):
 
     def cache_runtime(self) -> None:
         """store mean, min, max runtimes"""
-        if config.get("config:no_cache"):
+        if not config.cache_runtimes:
             return
         if self.status.value not in ("success", "diffed"):
             return

@@ -10,4 +10,3 @@ Configuration
    configuration.file
    configuration.sections
    configuration.command-line
-   configuration.environment

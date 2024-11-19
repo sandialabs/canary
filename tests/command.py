@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import nvtest
 from _nvtest.main import NVTestCommand
 from _nvtest.util.filesystem import force_remove
 from _nvtest.util.filesystem import working_dir
@@ -20,13 +21,13 @@ import nvtest
 nvtest.directives.parameterize('a', (1, 2, 3, 4, 5, 6, 7, 8))
 def test():
     self = nvtest.get_instance()
-    if self.paramaters.a == 2:
+    if self.parameters.a == 2:
         raise nvtest.TestDiffed()
-    elif self.paramaters.a == 3:
+    elif self.parameters.a == 3:
         raise nvtest.TestFailed()
-    elif self.paramaters.a == 4:
+    elif self.parameters.a == 4:
         raise nvtest.TestSkipped()
-    elif self.paramaters.a == 5:
+    elif self.parameters.a == 5:
         raise nvtest.TestTimedOut()
 if __name__ == "__main__":
     test()
@@ -39,7 +40,7 @@ import nvtest
 nvtest.directives.parameterize('a', (1, 2))
 def test():
     self = nvtest.get_instance()
-    if self.paramaters.a == 2:
+    if self.parameters.a == 2:
         raise nvtest.TestDiffed()
 if __name__ == "__main__":
     test()
@@ -53,7 +54,7 @@ nvtest.directives.execbase()
 nvtest.directives.parameterize('a', (1, 2))
 def test():
     self = nvtest.get_instance()
-    if self.paramaters.a == 2:
+    if self.parameters.a == 2:
         raise nvtest.TestDiffed()
 def analyze_case():
     pass
@@ -73,74 +74,85 @@ if __name__ == "__main__":
         force_remove(d)
 
 
-def test_report_cdash(setup):
-    with working_dir(setup.results_path):
-        report = NVTestCommand("report")
-        report("cdash", "create")
-
-
 def test_report_html(setup):
     with working_dir(setup.results_path):
-        report = NVTestCommand("report")
-        report("html", "create")
+        with nvtest.config.override():
+            report = NVTestCommand("report")
+            report("html", "create")
+
+
+def test_report_cdash(setup):
+    with working_dir(setup.results_path):
+        with nvtest.config.override():
+            report = NVTestCommand("report")
+            report("cdash", "create")
 
 
 def test_report_json(setup):
     with working_dir(setup.results_path):
-        report = NVTestCommand("report")
-        report("json", "create")
+        with nvtest.config.override():
+            report = NVTestCommand("report")
+            report("json", "create")
 
 
 def test_report_markdown(setup):
     with working_dir(setup.results_path):
-        report = NVTestCommand("report")
-        report("markdown", "create")
+        with nvtest.config.override():
+            report = NVTestCommand("report")
+            report("markdown", "create")
 
 
 def test_report_junit(setup):
     with working_dir(setup.results_path):
-        report = NVTestCommand("report")
-        report("junit", "create")
+        with nvtest.config.override():
+            report = NVTestCommand("report")
+            report("junit", "create")
 
 
 def test_location_0(setup):
     with working_dir(setup.results_path):
-        location = NVTestCommand("location")
-        location("-i", "f[a=1]")
+        with nvtest.config.override():
+            location = NVTestCommand("location")
+            location("-i", "f[a=1]")
 
 
 def test_location_1(setup):
     with working_dir(setup.results_path):
-        location = NVTestCommand("location")
-        location("-l", "f[a=1]")
+        with nvtest.config.override():
+            location = NVTestCommand("location")
+            location("-l", "f[a=1]")
 
 
 def test_location_2(setup):
     with working_dir(setup.results_path):
-        location = NVTestCommand("location")
-        location("-s", "f[a=1]")
+        with nvtest.config.override():
+            location = NVTestCommand("location")
+            location("-s", "f[a=1]")
 
 
 def test_location_3(setup):
     with working_dir(setup.results_path):
-        location = NVTestCommand("location")
-        location("-x", "f[a=1]")
+        with nvtest.config.override():
+            location = NVTestCommand("location")
+            location("-x", "f[a=1]")
 
 
 def test_location_4(setup):
     with working_dir(setup.results_path):
-        location = NVTestCommand("location")
-        location("f[a=1]")
+        with nvtest.config.override():
+            location = NVTestCommand("location")
+            location("f[a=1]")
 
 
 def test_log(setup):
     with working_dir(setup.results_path):
-        log = NVTestCommand("log")
-        log("f[a=1]")
+        with nvtest.config.override():
+            log = NVTestCommand("log")
+            log("f[a=1]")
 
 
 def test_status(setup):
-    with working_dir(setup.results_path):
+    with working_dir(setup.results_path), nvtest.config.override():
         status = NVTestCommand("status")
         status()
         status("-rA")
@@ -179,7 +191,7 @@ def test_config_show():
 
 
 def test_analyze(setup):
-    with working_dir(setup.results_path):
+    with working_dir(setup.results_path), nvtest.config.override():
         analyze = NVTestCommand("analyze")
         analyze(".")
 

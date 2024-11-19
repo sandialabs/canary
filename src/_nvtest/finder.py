@@ -9,7 +9,6 @@ from . import config
 from . import plugin
 from . import when
 from .generator import AbstractTestGenerator
-from .resource import ResourceHandler
 from .test.case import TestCase
 from .third_party.colify import colified
 from .third_party.color import colorize
@@ -191,7 +190,6 @@ class Finder:
     @staticmethod
     def lock_and_filter(
         files: list[AbstractTestGenerator],
-        rh: ResourceHandler | None = None,
         keyword_expr: str | None = None,
         parameter_expr: str | None = None,
         on_options: list[str] | None = None,
@@ -205,7 +203,6 @@ class Finder:
             f"    keywords={keyword_expr}\n"
             f"    parameters={parameter_expr}"
         )
-        rh = rh or ResourceHandler()
         concrete_test_groups = [f.lock(on_options=on_options) for f in files]
         cases: list[TestCase] = [case for group in concrete_test_groups for case in group if case]
 
@@ -219,7 +216,7 @@ class Finder:
 
         Finder.resolve_dependencies(cases)
         Finder.filter(
-            cases, rh=rh, keyword_expr=keyword_expr, parameter_expr=parameter_expr, owners=owners
+            cases, keyword_expr=keyword_expr, parameter_expr=parameter_expr, owners=owners
         )
         Finder.check_for_skipped_dependencies(cases)
 
@@ -233,25 +230,14 @@ class Finder:
     @staticmethod
     def filter(
         cases: list[TestCase],
-        rh: ResourceHandler | None = None,
         keyword_expr: str | None = None,
         parameter_expr: str | None = None,
         owners: set[str] | None = None,
     ) -> None:
-        rh = rh or ResourceHandler()
-        cpus = rh["test:cpu_count"]
-        gpus = rh["test:gpu_count"]
-        nodes = rh["test:node_count"]
-        timeout = rh["test:timeout"]
-
-        cpus_per_node: int = config.get("machine:cpus_per_node")
-        gpus_per_node: int = config.get("machine:gpus_per_node")
-        node_count: int = config.get("machine:node_count")
-        cpu_count = node_count * cpus_per_node
-        gpu_count = node_count * gpus_per_node
-        min_cpus, max_cpus = cpus or (0, cpu_count)
-        min_gpus, max_gpus = gpus or (0, gpu_count)
-        min_nodes, max_nodes = nodes or (0, node_count)
+        cpus_per_node: int = config.machine.cpus_per_node
+        min_cpus, max_cpus = config.test.cpu_count
+        min_gpus, max_gpus = config.test.gpu_count
+        min_nodes, max_nodes = config.test.node_count
 
         owners = set(owners or [])
         for case in cases:
@@ -304,7 +290,7 @@ class Finder:
                 if not match:
                     case.mask = colorize("deselected due to @*b{parameter expression}")
 
-            if timeout is not None and timeout > 0 and case.runtime > timeout:
+            if config.test.timeout > 0 and case.runtime > config.test.timeout:
                 case.mask = "runtime exceeds time limit"
 
             if case.mask is None and any(dep.mask for dep in case.dependencies):

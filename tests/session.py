@@ -1,9 +1,8 @@
 import os
 import types
 
+import _nvtest.config as config
 import _nvtest.session as session
-from _nvtest import config
-from _nvtest.resource import ResourceHandler
 from _nvtest.util.filesystem import working_dir
 
 
@@ -24,10 +23,7 @@ def test_session_filter(tmpdir):
         s.discover()
         s.lock()
         cases = s.populate()
-        save_debug = config.get("config:debug")
-        config.set("config:debug", True)
         s.run(cases)
-        config.set("config:debug", save_debug)
 
         with working_dir("tests"):
             s = session.Session(".", mode="r")
@@ -49,22 +45,24 @@ def test_session_filter(tmpdir):
 def test_session_bfilter(tmpdir):
     p = paths()
     with working_dir(tmpdir.strpath, create=True):
-        rh = ResourceHandler()
-        rh.set("batch:scheduler", "none")
-        rh.set("batch:count", 2)
-        s = session.Session("tests", mode="w", force=True)
-        s.add_search_paths([os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")])
-        s.discover()
-        s.lock(rh=rh)
-        cases = s.populate()
-        s.run(cases, rh=rh)
-        f1 = s.blogfile(1, None)
-        f2 = s.blogfile(1, 1)
-        assert f1 == f2
+        with config.override():
+            config.batch.scheduler = "none"
+            config.batch.count = 2
+            s = session.Session("tests", mode="w", force=True)
+            s.add_search_paths(
+                [os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")]
+            )
+            s.discover()
+            s.lock()
+            cases = s.populate()
+            s.run(cases)
+            f1 = s.blogfile(1, None)
+            f2 = s.blogfile(1, 1)
+            assert f1 == f2
 
-        with working_dir("tests"):
-            s = session.Session(".", mode="r")
-            cases = s.bfilter(lot_no=1, batch_no=1)
+            with working_dir("tests"):
+                s = session.Session(".", mode="r")
+                cases = s.bfilter(lot_no=1, batch_no=1)
 
 
 def test_session_fail_fast(tmpdir):

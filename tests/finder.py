@@ -1,7 +1,7 @@
+import _nvtest.config as config
 import _nvtest.test.case as tc
 import nvtest
 from _nvtest.finder import Finder
-from _nvtest.resource import ResourceHandler
 from _nvtest.util.filesystem import mkdirp
 from _nvtest.util.filesystem import working_dir
 
@@ -111,16 +111,19 @@ def test_cpu_count(tmpdir):
         with open("a.pyt", "w") as fh:
             fh.write("import nvtest\n")
             fh.write("nvtest.directives.parameterize('np', [1, 4, 8, 32])\n")
-    nvtest.config.set("machine:cpus_per_node", 40)
-    finder = Finder()
-    finder.add(workdir)
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if not c.mask]) == 4
-    nvtest.config.set("machine:cpus_per_node", 2)
-    cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if not c.mask]) == 1
+    with nvtest.config.override():
+        nvtest.config.machine.cpus_per_node = 42
+        nvtest.config.test.cpu_count = (1, 42)
+        finder = Finder()
+        finder.add(workdir)
+        finder.prepare()
+        files = finder.discover()
+        cases = finder.lock_and_filter(files)
+        print([c.mask for c in cases])
+        assert len([c for c in cases if not c.mask]) == 4
+        nvtest.config.test.cpu_count = (1, 2)
+        cases = finder.lock_and_filter(files)
+        assert len([c for c in cases if not c.mask]) == 1
 
 
 def test_dep_patterns(tmpdir):
@@ -218,61 +221,58 @@ nvtest.directives.parameterize('np', (1, 2, 3), when="options='baz'")
 nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """
             )
-        rh = ResourceHandler()
-        rh["test:cpu_count"] = [1, 10]
-        rh["test:gpu_count"] = [0, 0]
-        rh["test:node_count"] = [1, 1]
+        with config.override():
+            config.test.cpu_count = (1, 10)
+            config.test.gpu_count = (0, 0)
+            config.test.node_count = (1, 1)
 
-        finder = Finder()
-        finder.add(".")
-        finder.prepare()
-        files = finder.discover()
-        cases = finder.lock_and_filter(
-            files,
-            rh=rh,
-            keyword_expr="test and unit",
-            on_options=["baz"],
-            owners=["me"],
-            env_mods={"SPAM": "EGGS"},
-        )
-        assert len(cases) == 10
-        assert isinstance(cases[-1], tc.TestMultiCase)
-        for case in cases:
-            assert not case.masked, case.mask
+            finder = Finder()
+            finder.add(".")
+            finder.prepare()
+            files = finder.discover()
+            cases = finder.lock_and_filter(
+                files,
+                keyword_expr="test and unit",
+                on_options=["baz"],
+                owners=["me"],
+                env_mods={"SPAM": "EGGS"},
+            )
+            assert len(cases) == 10
+            assert isinstance(cases[-1], tc.TestMultiCase)
+            for case in cases:
+                assert not case.masked, case.mask
 
-        # without the baz option, the `np` parameter will not be expanded so we will be left with
-        # three test cases and one analyze.  The analyze will not be masked because the `np`
-        # parameter is never expanded
-        cases = finder.lock_and_filter(
-            files,
-            rh=rh,
-            keyword_expr="test and unit",
-            owners=["me"],
-            env_mods={"SPAM": "EGGS"},
-        )
-        assert len(cases) == 4
-        assert isinstance(cases[-1], tc.TestMultiCase)
-        assert not cases[-1].masked
+            # without the baz option, the `np` parameter will not be expanded so we will be left with
+            # three test cases and one analyze.  The analyze will not be masked because the `np`
+            # parameter is never expanded
+            cases = finder.lock_and_filter(
+                files,
+                keyword_expr="test and unit",
+                owners=["me"],
+                env_mods={"SPAM": "EGGS"},
+            )
+            assert len(cases) == 4
+            assert isinstance(cases[-1], tc.TestMultiCase)
+            assert not cases[-1].masked
 
-        # with np<3, some of the cases will be filtered
-        cases = finder.lock_and_filter(
-            files,
-            rh=rh,
-            keyword_expr="test and unit",
-            on_options=["baz"],
-            parameter_expr="np < 3",
-            owners=["me"],
-            env_mods={"SPAM": "EGGS"},
-        )
-        assert len(cases) == 10
-        assert isinstance(cases[-1], tc.TestMultiCase)
-        assert cases[-1].masked
-        for case in cases[:-1]:
-            assert isinstance(case, tc.TestCase)
-            if case.processors == 3:
-                assert case.masked
-            else:
-                assert not case.masked
+            # with np<3, some of the cases will be filtered
+            cases = finder.lock_and_filter(
+                files,
+                keyword_expr="test and unit",
+                on_options=["baz"],
+                parameter_expr="np < 3",
+                owners=["me"],
+                env_mods={"SPAM": "EGGS"},
+            )
+            assert len(cases) == 10
+            assert isinstance(cases[-1], tc.TestMultiCase)
+            assert cases[-1].masked
+            for case in cases[:-1]:
+                assert isinstance(case, tc.TestCase)
+                if case.processors == 3:
+                    assert case.masked
+                else:
+                    assert not case.masked
 
 
 def test_vvt_generator(tmpdir):
@@ -287,47 +287,45 @@ def test_vvt_generator(tmpdir):
 # VVT: parameterize : a,b,c=1,11,111 2,22,222 3,33,333
 """
             )
-        rh = ResourceHandler()
-        rh["test:cpu_count"] = [1, 10]
-        rh["test:gpu_count"] = [0, 0]
-        rh["test:node_count"] = [1, 1]
-        finder = Finder()
-        finder.add(".")
-        finder.prepare()
-        files = finder.discover()
-        cases = finder.lock_and_filter(
-            files, rh=rh, keyword_expr="test and unit", on_options=["baz"]
-        )
-        assert len(cases) == 10
-        assert isinstance(cases[-1], tc.TestMultiCase)
-        for case in cases:
-            assert not case.masked
+        with config.override():
+            config.test.cpu_count = (1, 10)
+            config.test.gpu_count = (0, 0)
+            config.test.node_count = (1, 1)
 
-        # without the baz option, the `np` parameter will not be expanded so we will be left with
-        # three test cases and one analyze.  The analyze will not be masked because the `np`
-        # parameter is never expanded
-        cases = finder.lock_and_filter(
-            files, rh=rh, keyword_expr="test and unit", env_mods={"SPAM": "EGGS"}
-        )
-        assert len(cases) == 4
-        assert isinstance(cases[-1], tc.TestMultiCase)
-        assert not cases[-1].masked
-
-        # with np<3, some of the cases will be filtered
-        cases = finder.lock_and_filter(
-            files,
-            rh=rh,
-            keyword_expr="test and unit",
-            on_options=["baz"],
-            parameter_expr="np < 3",
-            env_mods={"SPAM": "EGGS"},
-        )
-        assert len(cases) == 10
-        assert isinstance(cases[-1], tc.TestMultiCase)
-        assert cases[-1].masked
-        for case in cases[:-1]:
-            assert isinstance(case, tc.TestCase)
-            if case.processors == 3:
-                assert case.masked
-            else:
+            finder = Finder()
+            finder.add(".")
+            finder.prepare()
+            files = finder.discover()
+            cases = finder.lock_and_filter(files, keyword_expr="test and unit", on_options=["baz"])
+            assert len(cases) == 10
+            assert isinstance(cases[-1], tc.TestMultiCase)
+            for case in cases:
                 assert not case.masked
+
+            # without the baz option, the `np` parameter will not be expanded so we will be left with
+            # three test cases and one analyze.  The analyze will not be masked because the `np`
+            # parameter is never expanded
+            cases = finder.lock_and_filter(
+                files, keyword_expr="test and unit", env_mods={"SPAM": "EGGS"}
+            )
+            assert len(cases) == 4
+            assert isinstance(cases[-1], tc.TestMultiCase)
+            assert not cases[-1].masked
+
+            # with np<3, some of the cases will be filtered
+            cases = finder.lock_and_filter(
+                files,
+                keyword_expr="test and unit",
+                on_options=["baz"],
+                parameter_expr="np < 3",
+                env_mods={"SPAM": "EGGS"},
+            )
+            assert len(cases) == 10
+            assert isinstance(cases[-1], tc.TestMultiCase)
+            assert cases[-1].masked
+            for case in cases[:-1]:
+                assert isinstance(case, tc.TestCase)
+                if case.processors == 3:
+                    assert case.masked
+                else:
+                    assert not case.masked

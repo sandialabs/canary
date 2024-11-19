@@ -28,7 +28,6 @@ class AbstractTestGenerator(ABC):
        from typing import Optional
 
        import nvtest
-       from _nvtest.resource import ResourceHandler
 
        class MyGenerator(nvtest.AbstractTestGenerator):
 

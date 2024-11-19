@@ -1,5 +1,4 @@
 import argparse
-import json
 import os
 import shlex
 import signal
@@ -14,8 +13,6 @@ from . import config
 from . import plugin
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
-from .resource import setup_resource_handler
-from .session import Session
 from .util import logging
 
 if TYPE_CHECKING:
@@ -41,9 +38,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/nvtest")] + [_ for _ in m.argv if _ != "--echo"]
             logging.emit(shlex.join(a) + "\n")
-        config.set_command_options(args.command, args)
         setup_hpc_connect(args)
-        setup_resource_handler(args)
+        config.set_main_options(args)
+        config.validate()
         command = parser.get_command(args.command)
         if command is None:
             parser.print_help()
@@ -64,12 +61,11 @@ class NVTestMain:
     def __enter__(self) -> "NVTestMain":
         parser = make_argument_parser()
         parser.add_all_commands()
+        # preparse to get the list of plugins to load and/or not load
         args = parser.preparse(self.argv)
-        config.set_main_options(args)
         if args.C:
             self.working_dir = args.C
         os.chdir(self.working_dir)
-        load_plugins(args.plugin_dirs or [])
         return self
 
     def __exit__(self, ex_type, ex_value, ex_traceback):
@@ -92,14 +88,16 @@ class NVTestCommand:
         try:
             save_debug: bool | None = None
             if self.debug:
-                save_debug = config.get("config:debug")
-                config.set("config:debug", True)
+                save_debug = config.debug
+                config.debug = True
             parser = make_argument_parser()
             parser.add_command(self.command)
             argv = [self.command.cmd_name()] + list(args_in)
             args = parser.parse_args(argv)
             setup_hpc_connect(args)
-            setup_resource_handler(args)
+            config.set_main_options(args)
+            config.validate()
+            load_plugins(args.plugin_dirs or [])
             rc = self.command.execute(args)
             self.returncode = rc
         except Exception:
@@ -108,37 +106,19 @@ class NVTestCommand:
             self.returncode = 1
         finally:
             if save_debug is not None:
-                config.set("config:debug", save_debug)
+                config.debug = save_debug
         return self.returncode
 
 
 def setup_hpc_connect(args: argparse.Namespace) -> None:
     """Set the hpc_connect library"""
-    has_scheduler = False
-    if resource_setter := getattr(args, "resource_setter", None):
-        for path, value in resource_setter:
-            if path == "batch:scheduler":
-                hpc_connect.set(scheduler=value)  # type: ignore
-                has_scheduler = True
-                break
-    elif root := Session.find_root(os.getcwd()):
-        # check if previous invocation was batched
-        f = os.path.join(root, "objects/batches/1/config")
-        if os.path.exists(f):
-            with open(f) as fh:
-                cfg = json.load(fh)
-            for var, val in cfg.items():
-                if var == "scheduler":
-                    hpc_connect.set(scheduler=val)  # type: ignore
-                    has_scheduler = True
-                    break
-    if has_scheduler:
-        cfg = {
-            "node_count": hpc_connect.scheduler.config.node_count,  # type: ignore
-            "cpus_per_node": hpc_connect.scheduler.config.cpus_per_node,  # type: ignore
-            "gpus_per_node": hpc_connect.scheduler.config.gpus_per_node,  # type: ignore
-        }
-        config.config.update_config("machine", cfg, scope="command_line")
+    if batch_scheduler := getattr(args, "batch_scheduler", None):
+        if batch_scheduler == "null":
+            return
+        hpc_connect.set(scheduler=batch_scheduler)  # type: ignore
+        config.machine.node_count = hpc_connect.scheduler.config.node_count  # type: ignore
+        config.machine.cpus_per_node = hpc_connect.scheduler.config.cpus_per_node  # type: ignore
+        config.machine.gpus_per_node = hpc_connect.scheduler.config.gpus_per_node  # type: ignore
 
 
 def invoke_command(command: "Command", args: argparse.Namespace) -> int:
@@ -227,24 +207,24 @@ def console_main() -> int:
             logging.error(e.message)
         return e.exit_code
     except TimeoutError as e:
-        if config.get("config:debug"):
+        if config.debug:
             raise
         logging.error(e.args[0])
         return 4
     except KeyboardInterrupt:
-        if config.get("config:debug"):
+        if config.debug:
             raise
         sys.stderr.write("\n")
         logging.error("Keyboard interrupt.")
         return signal.SIGINT.value
     except SystemExit as e:
-        if config.get("config:debug"):
+        if config.debug:
             traceback.print_exc()
         if isinstance(e.code, int):
             return e.code
         return 1
     except Exception as e:
-        if config.get("config:debug"):
+        if config.debug:
             raise
         logging.error(str(e))
         return 3

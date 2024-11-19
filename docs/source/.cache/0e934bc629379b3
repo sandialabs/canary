@@ -1,4 +1,4 @@
 {
   "returncode": 0,
-  "output": "           #             #   \n# #  #  # ####  ##   ## #### \n## # #  #  #   #  # #    #   \n#  # #  #  #   #### ##   #   \n#  # #  #  #   #     ##  #   \n#  #  ##   #   #      #  #   \n#  #  ##    ##  ### ##    ##\nsearching for tests in basic\ngenerating test cases from test files\ncollected 2 tests from 2 files\nselected 1 test from 1 file\nskipping 1 test cases\n\u2022 1 deselected by keyword expression\n==> Starting 8fa07b3 second\n==> Finished 8fa07b3 second PASS\n\ud83d\udca5\ud83d\udca5 Session done -- 1 total, 1 pass in 00:00:01.00"
+  "output": "888  ,d8 d88   88 888888888   ,d8PPPP 88888888  888888888 \n888_dPY8 d88   88    '88d     d88ooo  88ooooPp     '88d   \n8888' 88 d88_o8P'   '888    ,88'             d8   '888    \nY8P   Y8 Y88P'    '88p      88bdPPP   8888888P  '88p\nsearching for tests in basic\ngenerating test cases from test files\ncollected 2 tests from 2 files\nselected 1 test from 1 file\nskipping 1 test cases\n\u2022 1 deselected by keyword expression\n==> Starting 8fa07b3 second\n==> Finished 8fa07b3 second PASS\n\ud83d\udca5\ud83d\udca5 Session done -- 1 total, 1 pass in 00:00:00.00"
 }

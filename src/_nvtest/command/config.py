@@ -4,7 +4,7 @@ import io
 import os
 from typing import Any
 
-import _nvtest.config as _config
+import _nvtest.config
 from _nvtest.config.argparsing import Parser
 from _nvtest.session import Session
 
@@ -42,7 +42,7 @@ class Config(Command):
                 text = get_active_plugin_description()
                 do_pretty_print = False
             else:
-                text = _config.describe(section=args.section)
+                text = _nvtest.config.describe(section=args.section)
             try:
                 if do_pretty_print:
                     pretty_print(text)
@@ -52,11 +52,7 @@ class Config(Command):
                 print(text)
             return 0
         elif args.subcommand == "add":
-            _config.add(args.path, scope=args.scope)
-            file = _config.config_file(args.scope)
-            assert file is not None
-            with open(file, "w") as fh:
-                _config.save(fh, scope=args.scope)
+            _nvtest.config.save(args.path, scope=args.scope)
         elif args.command is None:
             raise ValueError("nvtest config: missing required subcommand (choose from show, add)")
         else:

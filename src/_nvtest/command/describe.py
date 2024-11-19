@@ -4,7 +4,6 @@ import os
 import _nvtest.finder as finder
 from _nvtest.config.argparsing import Parser
 from _nvtest.generator import AbstractTestGenerator
-from _nvtest.resource import ResourceHandler
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.util import logging
@@ -31,7 +30,6 @@ class Describe(Command):
                 path,
                 keyword_expr=args.keyword_expr,
                 on_options=args.on_options,
-                rh=args.rh,
                 parameter_expr=args.parameter_expr,
             )
         if finder.is_test_file(args.testspec):
@@ -53,7 +51,6 @@ class Describe(Command):
         keyword_expr: str | None = None,
         on_options: list[str] | None = None,
         parameter_expr: str | None = None,
-        rh: ResourceHandler | None = None,
     ) -> int:
         f = finder.Finder()
         f.add(path)

@@ -31,7 +31,7 @@ class HTMLReporter(Reporter):
                 self.generate_case_file(case, fh)
         with open(self.index, "w") as fh:
             self.generate_index(fh)
-        f = os.path.relpath(self.index, config.get("session:invocation_dir"))
+        f = os.path.relpath(self.index, config.invocation_dir)
         logging.info(f"HTML report written to {f}")
 
     @property
@@ -94,8 +94,8 @@ class HTMLReporter(Reporter):
                 group = case.status.name.title()
             totals.setdefault(group, []).append(case)
         fh.write("<tr>")
-        fh.write(f"<td>{config.get('system:host')}</td>")
-        fh.write(f"<td>{config.get('build:project')}</td>")
+        fh.write(f"<td>{config.system.host}</td>")
+        fh.write(f"<td>{config.build.project}</td>")
         for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass"):
             if group not in totals:
                 fh.write("<td>0</td>")

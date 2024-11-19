@@ -45,8 +45,8 @@ class TestBatch(AbstractTestCase):
         if len(self.cases) == 1:
             self._runtime = self.cases[0].runtime
         else:
-            cpus_per_node = config.get("machine:cpus_per_node")
-            node_count = config.get("machine:node_count")
+            cpus_per_node = config.machine.cpus_per_node
+            node_count = config.machine.node_count
             grid = partition.tile(self.cases, cpus_per_node * node_count)
             self._runtime = sum([max(case.runtime for case in row) for row in grid])
         self._status: Status
@@ -69,11 +69,6 @@ class TestBatch(AbstractTestCase):
             "NVTEST_LOT_NO": str(self.lot_no),
             "NVTEST_BATCH_NO": str(self.batch_no),
             "NVTEST_NBATCHES": str(self.nbatches),
-            "NVTEST_LEVEL": "1",
-            "NVTEST_DISABLE_KB": "1",
-            "NVTEST_BATCH_SCHEDULER": None,
-            "NVTEST_BATCH_SCHEDULER_ARGS": None,
-            "NVTEST_BATCH_LENGTH": None,
         }
 
     def validate(self, cases: Sequence[TestCase]):

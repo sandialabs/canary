@@ -21,7 +21,6 @@ All modules and packages live in the ``_nvtest`` namespace.
    plugins/index
    queues
    reporter
-   resource
    runners
    session
    status

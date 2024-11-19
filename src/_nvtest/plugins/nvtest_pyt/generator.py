@@ -112,7 +112,7 @@ class PYTTestFile(AbstractTestGenerator):
             cases = self._lock(on_options=on_options)
             return cases
         except Exception as e:
-            if config.get("config:debug"):
+            if config.debug:
                 raise
             raise ValueError(f"Failed to lock {self.file}: {e}") from None
 
@@ -573,7 +573,9 @@ class PYTTestFile(AbstractTestGenerator):
         if type is enums.centered_parameter_space:
             pset = ParameterSet.centered_parameter_space(argnames, argvalues, file=self.file)
         elif type is enums.random_parameter_space:
-            pset = ParameterSet.random_parameter_space(argnames, argvalues, samples=samples, file=self.file)
+            pset = ParameterSet.random_parameter_space(
+                argnames, argvalues, samples=samples, file=self.file
+            )
         else:
             pset = ParameterSet.list_parameter_space(
                 argnames,

@@ -7,7 +7,6 @@ from graphlib import TopologicalSorter
 
 from _nvtest import config
 from _nvtest._version import version as nvtest_version
-from _nvtest.config.machine import system_config
 from _nvtest.reporter import TestData
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
@@ -137,18 +136,17 @@ class CDashXMLReporter:
         if self.meta is None:
             self.meta = {}
             host = os.uname().nodename
-            machine = system_config()
-            os_release = machine["os"]["release"]
-            os_name = machine["platform"]
-            os_version = machine["os"]["fullversion"]
-            os_platform = machine["arch"]
+            os_release = config.system.os.release
+            os_name = config.system.platform
+            os_version = config.system.os.fullversion
+            os_platform = config.system.arch
             self.meta["BuildName"] = self.buildname
             self.meta["BuildStamp"] = self.buildstamp
             self.meta["Name"] = self.site
             self.meta["Generator"] = self.generator
-            if config.get("build"):
-                vendor = config.get("build:compiler:vendor")
-                version = config.get("build:compiler:version")
+            if config.build.compiler.vendor is not None:
+                vendor = config.build.compiler.vendor
+                version = config.build.compiler.version
                 self.meta["CompilerName"] = vendor
                 self.meta["CompilerVersion"] = version
             self.meta["Hostname"] = host
@@ -168,7 +166,7 @@ class CDashXMLReporter:
             if not os.path.exists(filename):
                 break
             i += 1
-        f = os.path.relpath(filename, config.get("session:invocation_dir"))
+        f = os.path.relpath(filename, config.invocation_dir)
         logging.log(logging.INFO, f"WRITING: {len(cases)} test cases to {f}", prefix=None)
         starttime = self.data.start
 
@@ -239,6 +237,12 @@ class CDashXMLReporter:
                 add_measurement(results, name="GPUs", value=case.gpus)
             if url := getattr(case, "url", None):
                 add_measurement(results, name="Script", cdata=url)
+            if case.measurements:
+                for name, measurement in case.measurements.items():
+                    if isinstance(measurement, (str, int, float)):
+                        add_measurement(results, name=name.title(), value=measurement)
+                    else:
+                        add_measurement(results, name=name.title(), value=json.dumps(measurement))
             add_measurement(
                 results,
                 value=case.output(compress=True),
@@ -263,7 +267,7 @@ class CDashXMLReporter:
 
     def write_notes_xml(self) -> str:
         filename = unique_file(self.xml_dir, "Notes", ".xml")
-        f = os.path.relpath(filename, config.get("session:invocation_dir"))
+        f = os.path.relpath(filename, config.invocation_dir)
         logging.log(logging.INFO, f"WRITING: Notes.xml to {f}", prefix=None)
         notes: dict[str, str] = {}
         doc = xdom.Document()

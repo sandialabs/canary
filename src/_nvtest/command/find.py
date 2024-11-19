@@ -41,7 +41,6 @@ class Find(Command):
         generators = finder.discover()
         cases = finder.lock_and_filter(
             generators,
-            rh=args.rh,
             keyword_expr=args.keyword_expr,
             parameter_expr=args.parameter_expr,
             on_options=args.on_options,

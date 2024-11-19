@@ -1,4 +1,4 @@
 {
   "returncode": 7,
-  "output": "##  ###  ### ###   ######  #######   #####    ######  \n### ###  ### ###   # ## #  ### ###  ###  ##   # ## #  \n#######  ### ###     ##    ###      ###         ##    \n#######  ### ###     ##    #####     #####      ##    \n### ###  ### ###     ##    ###           ##     ##    \n### ###   #####      ##    ### ###  ###  ##     ##    \n### ###    ###       ##    #######   #####      ##\nsearching for tests in enable\ngenerating test cases from test files\n==> Error: No tests to run"
+  "output": "                     d8                      d8   \n888-~88e Y88b    / _d88__  e88~~8e   d88~\\ _d88__ \n888  888  Y88b  /   888   d888  88b C888    888   \n888  888   Y88b/    888   8888__888  Y88b   888   \n888  888    Y8/     888   Y888    ,   888D  888   \n888  888     Y      \"88_/  \"88___/  \\_88P   \"88_/\nsearching for tests in enable\ngenerating test cases from test files\n==> Error: No tests to run"
 }

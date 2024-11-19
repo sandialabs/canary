@@ -4,7 +4,6 @@ import os
 
 def test_batch_args():
     import _nvtest.command.common as common
-    import _nvtest.main as _main
 
     parser = argparse.ArgumentParser()
     common.add_resource_arguments(parser)
@@ -20,8 +19,8 @@ def test_batch_args():
             "batch:args='--a=b -c d'",
         ]
     )
-    _main.setup_resource_handler(args)
-    assert args.rh["batch:scheduler_args"] == [
+    assert args.batched_invocation is True
+    assert args.batch_scheduler_args == [
         "--account=XYZ123",
         "--licenses=pscratch",
         "--foo=bar",
@@ -30,8 +29,6 @@ def test_batch_args():
         "-c",
         "d",
     ]
-    assert args.rh["batch:batched"] is True
-    assert args.batched_invocation is True
 
 
 def test_config_args():
@@ -52,14 +49,12 @@ def test_config_args():
         ]
     )
     try:
-        config = Config()
+        config = Config.factory()
         config.set_main_options(args)
-        print(config.scopes["command_line"])
-        cls = config.scopes["command_line"]
-        assert cls["config"]["debug"] is True
-        assert cls["machine"]["cpus_per_node"] == 8
-        assert cls["machine"]["gpus_per_node"] == 4
-        assert cls["variables"]["SPAM"] == "EGGS"
+        assert config.debug is True
+        assert config.machine.cpus_per_node == 8
+        assert config.machine.gpus_per_node == 4
+        assert config.variables["SPAM"] == "EGGS"
         assert os.environ["SPAM"] == "EGGS"
     finally:
         os.environ.pop("SPAM")
