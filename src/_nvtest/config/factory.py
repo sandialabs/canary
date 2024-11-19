@@ -91,6 +91,10 @@ class Session:
         self.workers = workers
         self.work_tree = work_tree
 
+    def __repr__(self) -> str:
+        kwds = [f"{key.lstrip('_')}={value!r}" for key, value in vars(self).items()]
+        return "{}({})".format(type(self).__name__, ", ".join(kwds))
+
     def asdict(self) -> dict[str, Any]:
         d: dict[str, Any] = {}
         for name, value in vars(self).items():
