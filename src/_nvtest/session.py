@@ -169,6 +169,7 @@ class Session:
             self.initialize()
         for hook in plugin.plugins():
             hook.session_initialize(self)
+
         self.exitstatus = -1
         self.returncode = -1
         self.mode = mode
@@ -176,7 +177,9 @@ class Session:
         self.finish = -1.0
 
         os.environ.setdefault("NVTEST_LEVEL", "0")
-        os.environ["NVTEST_WORK_TREE"] = self.work_tree
+        config.variables["NVTEST_WORK_TREE"] = self.work_tree
+        if mode == "w":
+            self.save(ini=True)
 
     @staticmethod
     def find_root(path: str):
@@ -331,7 +334,6 @@ class Session:
             fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
             fh.write("# This file is a results directory tag automatically created by nvtest.\n")
         self.set_config_values()
-        self.save(ini=True)
 
     def set_config_values(self):
         """Set ``section`` configuration values"""

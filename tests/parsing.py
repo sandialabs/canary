@@ -48,13 +48,11 @@ def test_config_args():
             "SPAM=EGGS",
         ]
     )
-    try:
-        config = Config.factory()
-        config.set_main_options(args)
-        assert config.debug is True
-        assert config.machine.cpus_per_node == 8
-        assert config.machine.gpus_per_node == 4
-        assert config.variables["SPAM"] == "EGGS"
-        assert os.environ["SPAM"] == "EGGS"
-    finally:
-        os.environ.pop("SPAM")
+    config = Config.factory()
+    config.set_main_options(args)
+    assert config.debug is True
+    assert config.machine.cpus_per_node == 8
+    assert config.machine.gpus_per_node == 4
+    assert config.variables["SPAM"] == "EGGS"
+    assert os.environ["SPAM"] == "EGGS"
+    os.environ.pop("SPAM")

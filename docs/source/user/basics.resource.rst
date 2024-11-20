@@ -17,7 +17,9 @@ The following machine resources can be set in the :ref:`global or local configur
 * ``gpus_per_node``: the number of GPUs per node available to this test session
 * ``node_count``: the number of compute modes available to this test session
 
-Finer-grained control over machine resources can be set via the following variables:
+.. note::
+
+  Here, and elsewhere in the documentation, ``cpus_per_node`` is interpreted to mean the number of MPI ranks.
 
 By default, ``nvtest`` performs a system probe [1]_ to determine appropriate values for each machine configuration variable.
 

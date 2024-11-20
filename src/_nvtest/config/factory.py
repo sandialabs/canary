@@ -29,6 +29,28 @@ section_schemas: dict[str, Schema] = {
 }
 
 
+class Variables(dict):
+    """Dict subclass that updates os.environ"""
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        if value is None:
+            os.environ.pop(str(key), None)
+        else:
+            os.environ[str(key)] = str(value)
+        super().__setitem__(key, value)
+
+    def update(self, *args, **kwargs):
+        if len(args) > 1:
+            raise TypeError(f"update expected at most 1 argument, got {len(args)}")
+        other = dict(*args, **kwargs)
+        for key in other:
+            self[key] = other[key]
+
+    def pop(self, key: Any, /, default: Any = None) -> Any:
+        os.environ.pop(str(key), default)
+        return super().pop(key, default)
+
+
 class Session:
     def __init__(
         self,
@@ -177,6 +199,15 @@ class Test:
 
 @dataclasses.dataclass
 class Machine:
+    """Resources available on this machine
+
+    Args:
+      node_count: number of compute nodes
+      cpus_per_node: number of **compute** CPUs (MPI ranks) per node
+      gpus_per_node: number of **compute** GPUs per node
+
+    """
+
     node_count: int
     cpus_per_node: int
     gpus_per_node: int
@@ -263,14 +294,10 @@ class Config:
     debug: bool = False
     cache_runtimes: bool = True
     log_level: str = "INFO"
-    variables: dict[str, str] = dataclasses.field(default_factory=dict)
+    variables: Variables = dataclasses.field(default_factory=Variables)
     batch: Batch = dataclasses.field(default_factory=Batch)
     build: Build = dataclasses.field(default_factory=Build)
     options: argparse.Namespace = dataclasses.field(default_factory=argparse.Namespace)
-
-    def __post_init__(self) -> None:
-        for key, val in self.variables.items():
-            os.environ[key] = val
 
     @classmethod
     def factory(cls) -> "Config":
@@ -406,7 +433,8 @@ class Config:
         snapshot = json.load(fh)
         self.system = System(snapshot["system"])
         self.machine = Machine(**snapshot["machine"])
-        self.variables = snapshot["variables"]
+        self.variables.clear()
+        self.variables.update(snapshot["variables"])
         self.session = Session(**snapshot["session"])
         self.test = Test(**snapshot["test"])
         compiler = Compiler(**snapshot["build"].pop("compiler"))
@@ -414,9 +442,6 @@ class Config:
         self.options = argparse.Namespace(**snapshot["options"])
         for key, val in snapshot["config"].items():
             setattr(self, key, val)
-
-        for key, val in self.variables.items():
-            os.environ[key] = val
 
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The
@@ -433,7 +458,7 @@ class Config:
         snapshot["system"] = dataclasses.asdict(self.system)
         snapshot["system"]["os"] = vars(snapshot["system"]["os"])
         snapshot["machine"] = dataclasses.asdict(self.machine)
-        snapshot["variables"] = self.variables
+        snapshot["variables"] = dict(self.variables)
         snapshot["session"] = self.session.asdict()
         snapshot["test"] = dataclasses.asdict(self.test)
         snapshot["batch"] = dataclasses.asdict(self.batch)
@@ -490,8 +515,6 @@ class Config:
             logging.set_level(logging.DEBUG)
         if "session" in args.env_mods:
             self.variables.update(args.env_mods["session"])
-            for key, val in args.env_mods["session"].items():
-                os.environ[key] = val
         for path in args.config_mods:
             *components, value = path.split(":")
             match components:
