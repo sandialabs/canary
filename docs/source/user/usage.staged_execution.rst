@@ -3,7 +3,7 @@
 Defining additional execution stages
 ====================================
 
-The ``nvtest.directives.stages`` directive configures a test to run in specific stages.  All tests are assigned the stage ``run``, regardless of whether the ``stages`` directive is called.
+The :func:`nvtest.directives.stages` directive configures a test to run in specific stages.  All tests are assigned the stage ``run``, regardless of whether the ``stages`` directive is called.
 
 By default ``nvtest run`` executes tests in the ``run`` stage and only a single stage is executed per invocation.  Additional stages can be run invoking ``nvtest`` as ``nvtest run --stage=STAGE ...`` **after** the initial run (with ``stage=run``).
 

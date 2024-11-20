@@ -63,7 +63,7 @@ In the test, ``add.py`` is linked to the execution directory, is executed, and o
 
 This test introduces two new features:
 
-* ``nvtest.directives.link``: links ``add.py`` into the execution directory (see :ref:`test-directives` for more directives); and
+* :func:`nvtest.directives.link`: links ``add.py`` into the execution directory (see :ref:`test-directives` for more directives); and
 * ``nvtest.Executable``: creates a callable wrapper around executable scripts.
 
 To run the test, navigate to the examples folder and run:

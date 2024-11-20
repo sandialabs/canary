@@ -10,7 +10,7 @@ The "execute and analyze" pattern generates a collection of :ref:`test cases <ba
 
 The base case runs only after all of the parameterized test cases are finished.
 
-The execute and analyze pattern is enabled by adding :ref:`nvtest.directives.generate_composite_base_case <directive-generate-composite-base-case>` to the test file's directives.
+The execute and analyze pattern is enabled by adding :func:`nvtest.directives.generate_composite_base_case` to the test file's directives.
 
 .. admonition:: vvtest compatibility
 

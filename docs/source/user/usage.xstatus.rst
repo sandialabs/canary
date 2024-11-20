@@ -3,7 +3,7 @@
 Marking a test expected to diff or fail
 =======================================
 
-The :ref:`xdiff<directive-xdiff>` and :ref:`xfail<directive-xfail>` directives can mark tests that you expect to diff or fail, respectively.  For example, the following test is expected to :ref:`diff <stat-diffed>`:
+The :func:`nvtest.directives.xdiff` and :func:`nvtest.directives.xfail` directives can mark tests that you expect to diff or fail, respectively.  For example, the following test is expected to :ref:`diff <stat-diffed>`:
 
 .. literalinclude:: /examples/xstatus/xdiff.pyt
     :language: python

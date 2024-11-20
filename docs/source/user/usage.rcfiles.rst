@@ -15,7 +15,7 @@ Some tests require a modified environment.  When the required environment modifi
           with nvtest.shell.source("filename"):
               # do work
 
-2. Through the ``nvtest.directives.source`` directive:
+2. Through the :func:`nvtest.directives.source` directive:
 
    .. code-block:: python
 

@@ -23,7 +23,7 @@ Some tests require a modified environment.  When the required environment modifi
           with nvtest.module.load("modulename", use="modulepath"):
             # do work
 
-2. Through the ``nvtest.directives.load_module`` directive:
+2. Through the :func:`nvtest.directives.load_module` directive:
 
    .. code-block:: python
 
