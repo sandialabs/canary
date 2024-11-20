@@ -16,7 +16,7 @@ Examples
 
 This test defines the additional test stage "analyze" that can be run separately from the run stage.
 
-To determine the stage of execution, the test should parse the command line for the ``--staged`` option.  As a convenience, ``nvtest`` provides the ``make_argument_parser`` utility that creates and ``argparse.ArgumentParser`` object and adds several common arguments, including ``--staged``:
+To determine the stage of execution, the test should parse the command line for the ``--stage`` option.  As a convenience, ``nvtest`` provides the ``make_argument_parser`` utility that creates and ``argparse.ArgumentParser`` object and adds several common arguments, including ``--stage``:
 
 .. literalinclude:: /examples/staged/staged.pyt
     :language: python
