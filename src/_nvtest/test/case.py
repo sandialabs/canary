@@ -465,7 +465,8 @@ class TestCase(AbstractTestCase):
             cmd.append(self.launcher)
             cmd.extend(self.preflags or [])
         cmd.append(self.exe)
-        cmd.append(f"--stage={stage}")
+        if self.file.endswith(".pyt"):
+            cmd.append(f"--stage={stage}")
         if self.file.endswith(".vvt") and stage == "analyze":
             cmd.append("--execute-analysis-sections")
         cmd.extend(self.postflags or [])
@@ -1127,7 +1128,8 @@ class TestMultiCase(TestCase):
             cmd.append(self.launcher)
             cmd.extend(self.preflags or [])
         cmd.append(self.exe)
-        cmd.append(f"--stage={stage}")
+        if self.file.endswith(".pyt"):
+            cmd.append(f"--stage={stage}")
         cmd.extend(self.postflags or [])
         return cmd
 
