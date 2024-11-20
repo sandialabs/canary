@@ -14,7 +14,7 @@ Examples
     :language: python
     :lines: 4-22
 
-This test defines the additional test stage "analyze" that is run during the run stage but can also be run separately during the analyze stage.
+This test defines the additional test stage "analyze" that can be run separately from the run stage.
 
 To determine the stage of execution, the test should parse the command line for the ``--staged`` option.  As a convenience, ``nvtest`` provides the ``make_argument_parser`` utility that creates and ``argparse.ArgumentParser`` object and adds several common arguments, including ``--staged``:
 
