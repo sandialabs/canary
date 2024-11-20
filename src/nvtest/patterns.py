@@ -9,7 +9,7 @@ class ExecuteAndAnalyze:
     """Run the execute/analyze/analyze group test pattern
 
     Args:
-      exec_fn: Function that executes the test
+      test_fn: Function that executes the test
       verify_fn: Function that analyzes the parameterized test
       analyze_fn: Function that executes the base case
 
@@ -18,11 +18,11 @@ class ExecuteAndAnalyze:
     def __init__(
         self,
         *,
-        exec_fn: Callable = identity,
+        test_fn: Callable = identity,
         verify_fn: Callable = identity,
         analyze_fn: Callable = identity,
     ) -> None:
-        self.run_test = exec_fn
+        self.run_test = test_fn
         self.analyze_parameterized_test = verify_fn
         self.analyze_base_case = analyze_fn
 
