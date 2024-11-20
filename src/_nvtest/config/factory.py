@@ -128,6 +128,9 @@ class Session:
                 d[name[1:]] = value
             else:
                 d[name] = value
+        # these are set during the process
+        d["stage"] = None
+        d["level"] = None
         return d
 
     @property

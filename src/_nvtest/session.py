@@ -626,7 +626,8 @@ class Session:
             raise ValueError("There are no cases to run in this session")
         queue = self.setup_queue(cases)
         config.session.stage = stage = stage or "run"
-        with self.rc_environ(NVTEST_STAGE=stage):
+        config.variables[stage] = stage
+        with self.rc_environ():
             with working_dir(self.work_tree):
                 cleanup_queue = True
                 try:

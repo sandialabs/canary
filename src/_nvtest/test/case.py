@@ -615,7 +615,8 @@ class TestCase(AbstractTestCase):
 
     @property
     def cpus(self) -> int:
-        if os.getenv("NVTEST_STAGE", "run") != "run":
+        stage = config.session.stage or "run"
+        if stage != "run":
             return 1
         return int(self.parameters.get("np") or 1)  # type: ignore
 

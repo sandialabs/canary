@@ -85,7 +85,7 @@ class TestCaseRunner(AbstractTestRunner):
                     if self.timeoutx != 1.0:
                         fh.write(f"==> Timeout multiplier: {self.timeoutx}\n")
                     fh.flush()
-                    with case.rc_environ(NVTEST_STAGE=stage):
+                    with case.rc_environ():
                         tic = time.monotonic()
                         proc = subprocess.Popen(
                             cmd, start_new_session=True, stdout=fh, stderr=subprocess.STDOUT
