@@ -132,7 +132,7 @@ pages:
   extends: .pages
   before_script:
   # make sure to install from main to get the right version number
-  - git checkout $CI_DEFAULT_BBRANCH
+  - git checkout main
   - git pull
   - git fetch --tags
   rules:
