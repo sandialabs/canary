@@ -35,6 +35,14 @@ Thereafter, the additional stages can be run:
     :cwd: /examples
     :extraargs: -rv
 
+.. note::
+
+    ``nvtest run --stage=STAGE`` for any other stage than run should be executed in the session work tree.
+
+.. note::
+
+    When ``nvtest run`` is invoked with ``--stage=STAGE``, only tests having been assigned the stage ``STAGE`` will be run.
+
 The complete file
 ~~~~~~~~~~~~~~~~~
 
