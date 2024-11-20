@@ -87,6 +87,11 @@ class Run(Command):
             help="Do not collect a test's process information [default: %(default)s]",
         )
         add_resource_arguments(parser)
+        parser.add_argument(
+            "--stage",
+            default=None,
+            help="Run this execution stage [default: run]",
+        )
         PathSpec.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
@@ -94,7 +99,10 @@ class Run(Command):
         PathSpec.parse(args)
         session: Session
         cases: list[TestCase]
+        stage: str = args.stage or "run"
         if args.mode == "w":
+            if stage != "run":
+                raise ValueError("--stage must equal run when creating a new session")
             path = args.work_tree or Session.default_worktree
             session = Session(path, mode=args.mode, force=args.wipe)
             session.add_search_paths(args.paths)
@@ -140,6 +148,7 @@ class Run(Command):
                 start=args.start,
                 keyword_expr=args.keyword_expr,
                 parameter_expr=args.parameter_expr,
+                stage=stage,
             )
             if not args.no_header:
                 logging.emit(session.overview(cases))
@@ -150,7 +159,9 @@ class Run(Command):
         level = ProgressReporting.progress_bar if args.r == "b" else ProgressReporting.verbose
         reporting = ProgressReporting(level=level)
         try:
-            session.exitstatus = session.run(cases, reporting=reporting, fail_fast=args.fail_fast)
+            session.exitstatus = session.run(
+                cases, reporting=reporting, fail_fast=args.fail_fast, stage=stage
+            )
         except KeyboardInterrupt:
             session.exitstatus = ExitCode.INTERRUPTED
         except StopExecution as e:

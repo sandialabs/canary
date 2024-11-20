@@ -50,7 +50,7 @@ if __name__ == "__main__":
             fh.write(
                 """\
 import nvtest
-nvtest.directives.execbase()
+nvtest.directives.generate_composite_base_case()
 nvtest.directives.parameterize('a', (1, 2))
 def test():
     self = nvtest.get_instance()

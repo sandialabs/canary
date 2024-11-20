@@ -95,7 +95,7 @@ nvtest.directives.parameterize('b', [1])
 nvtest.directives.analyze(script='baz.py')
 def test():
     self = nvtest.get_instance()
-    if self.multicase:
+    if isinstance(self, nvtest.TestMultiInstance):
         assert 0, 'The script should be called!'
     assert self.parameters.a == 0
     assert self.parameters.b == 1

@@ -127,7 +127,7 @@ class VVTTestFile(PYTTestFile):
         if arg.argument:
             key = "flag" if arg.argument.startswith("-") else "script"
             options[key] = arg.argument
-        self.m_execbase(when=arg.when, **options)
+        self.m_generate_composite_base_case(when=arg.when, **options)
 
     def f_TIMEOUT(self, arg: SimpleNamespace) -> None:
         """# VVT: timeout ( OPTIONS ) [:=] SECONDS"""
@@ -648,7 +648,7 @@ def to_seconds(
 
 
 @typing.no_type_check
-def get_vvtest_attrs(case: "TestCase", stage: str = "test") -> dict:
+def get_vvtest_attrs(case: "TestCase", stage: str = "run") -> dict:
     attrs = {}
     compiler_spec = None
     if config.build.compiler.vendor is not None:
@@ -705,7 +705,7 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "test") -> dict:
     return attrs
 
 
-def write_vvtest_util(case: "TestCase", stage: str = "test") -> None:
+def write_vvtest_util(case: "TestCase", stage: str = "run") -> None:
     if not case.file_path.endswith(".vvt"):
         return
     attrs = get_vvtest_attrs(case, stage=stage)
@@ -734,7 +734,7 @@ def setup(case: "TestCase") -> None:
 
 
 @nvtest.plugin.register(scope="test", stage="before_run")
-def prelaunch(case: "TestCase", stage: str = "test") -> None:
+def prelaunch(case: "TestCase", stage: str = "run") -> None:
     if not case.file_path.endswith(".vvt"):
         return
     write_vvtest_util(case, stage=stage)

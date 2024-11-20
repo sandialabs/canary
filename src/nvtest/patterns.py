@@ -10,8 +10,8 @@ class ExecuteAndAnalyze:
 
     Args:
       exec_fn: Function that executes the test
-      analyze_fn: Function that analyzes the parameterized test
-      base_fn: Function that executes the base case
+      verify_fn: Function that analyzes the parameterized test
+      analyze_fn: Function that executes the base case
 
     """
 
@@ -19,12 +19,12 @@ class ExecuteAndAnalyze:
         self,
         *,
         exec_fn: Callable = identity,
+        verify_fn: Callable = identity,
         analyze_fn: Callable = identity,
-        base_fn: Callable = identity,
     ) -> None:
         self.run_test = exec_fn
-        self.analyze_parameterized_test = analyze_fn
-        self.analyze_base_case = base_fn
+        self.analyze_parameterized_test = verify_fn
+        self.analyze_base_case = analyze_fn
 
     @staticmethod
     def make_parser() -> argparse.ArgumentParser:
@@ -32,13 +32,10 @@ class ExecuteAndAnalyze:
         group = parser.add_mutually_exclusive_group()
         group.add_argument(
             "--analyze",
-            action="store_true",
-            help="Run a final cross parameter analyze function",
-        )
-        group.add_argument(
             "--base",
+            dest="analyze_composite_base",
             action="store_true",
-            help="Run a final cross parameter analyze function",
+            help="Run a final composite base case's analyze function",
         )
         group.add_argument(
             "--execute-analysis-sections",
@@ -57,9 +54,7 @@ class ExecuteAndAnalyze:
         if args is None:
             parser = self.make_parser()
             args, _ = parser.parse_known_args()
-        if args.analyze:
-            self.analyze_base_case()
-        elif args.base:
+        if args.analyze_composite_base:
             self.analyze_base_case()
         else:
             if not args.execute_analysis_sections:

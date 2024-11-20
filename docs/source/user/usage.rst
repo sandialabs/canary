@@ -23,6 +23,7 @@ nvtest usage
    usage.report
    usage.enable
    usage.copy_and_link
+   usage.staged_execution
    usage.execute_and_analyze
    usage.xstatus
    usage.modules

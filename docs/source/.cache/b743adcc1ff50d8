@@ -1,4 +1,4 @@
 {
   "returncode": 0,
-  "output": "               _                 _   \n _            (_)_   ____  ____ (_)_ \n(_)__   _   _ (___) (____)(____)(___)\n(____) (_) (_)(_)  (_)_(_)(_)__ (_)  \n(_) (_)(_)_(_)(_)_ (__)__  _(__)(_)_ \n(_) (_)  (_)   (__) (____)(____) (__)\nsearching for tests in copy_and_link\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting be563b6 copy_and_link\n==> Finished be563b6 copy_and_link PASS\n\u2728\u2728 Session done -- 1 total, 1 pass in 00:00:00.00"
+  "output": " ____   __ __  ______    ___   _____ ______ \n|    \\ |  T  ||      T  /  _] / ___/|      T\n|  _  Y|  |  ||      | /  [_ (   \\_ |      |\n|  |  ||  |  |l_j  l_jY    _] \\__  Tl_j  l_j\n|  |  |l  :  !  |  |  |   [_  /  \\ |  |  |  \n|  |  | \\   /   |  |  |     T \\    |  |  |  \nl__j__j  \\_/    l__j  l_____j  \\___j  l__j\nsearching for tests in copy_and_link\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting stage run be563b6 copy_and_link\n==> Finished stage run be563b6 copy_and_link PASS\n\u2728\u2728 Session done -- 1 total, 1 pass in 00:00:00.00"
 }

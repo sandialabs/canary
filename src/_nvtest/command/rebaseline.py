@@ -2,6 +2,7 @@ import argparse
 import os
 
 from _nvtest.config.argparsing import Parser
+from _nvtest.runners import TestCaseRunner
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.util import logging
@@ -31,6 +32,8 @@ class Rebaseline(Command):
             cases = filter_cases_by_path(session.cases, args.pathspec)
         else:
             cases = filter_cases_by_status(session.cases, ("failed", "diffed"))
+        cases = [case for case in cases if "baseline" in case.stages]
+        runner = TestCaseRunner()
         for case in cases:
-            case.do_baseline()
+            runner.baseline(case)
         return 0

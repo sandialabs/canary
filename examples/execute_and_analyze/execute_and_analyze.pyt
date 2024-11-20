@@ -3,39 +3,30 @@ import sys
 
 import nvtest
 
-nvtest.directives.execbase()
 nvtest.directives.parameterize("a", [1, 2, 3])
+nvtest.directives.generate_composite_base_case()
 
 
-def test():
+def run_parameterized_case(case: nvtest.TestInstance) -> None:
     # Run the test
-    self = nvtest.test.instance
-    f = f"{self.parameters.a}.txt"
+    f = f"{case.parameters.a}.txt"
     nvtest.filesystem.touchp(f)
-    return 0
 
 
-def analyze_parameterized_test():
-    # Analyze a single parameterized test
-    self = nvtest.test.instance
-    f = f"{self.parameters.a}.txt"
-    assert os.path.exists(f)
-
-
-def analyze_base_case():
+def analyze_composite_base_case(case: nvtest.TestMultiInstance) -> None:
     # Analyze the collective
-    self = nvtest.test.instance
-    assert len(self.dependencies) == 3
-    for dep in self.dependencies:
+    assert len(case.dependencies) == 3
+    for dep in case.dependencies:
         f = os.path.join(dep.exec_dir, f"{dep.parameters.a}.txt")
         assert os.path.exists(f)
 
 
 def main():
-    pattern = nvtest.patterns.ExecuteAndAnalyze(
-        exec_fn=test, analyze_fn=analyze_parameterized_test, base_fn=analyze_base_case
-    )
-    pattern.execute()
+    self = nvtest.get_instance()
+    if isinstance(self, nvtest.TestMultiInstance):
+        analyze_composite_base_case(self)
+    else:
+        run_parameterized_case(self)
     return 0
 
 

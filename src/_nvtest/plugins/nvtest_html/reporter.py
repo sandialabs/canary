@@ -88,10 +88,7 @@ class HTMLReporter(Reporter):
         for case in self.data.cases:
             if case.mask:
                 continue
-            if case.skipped:
-                group = "Not Run"
-            else:
-                group = case.status.name.title()
+            group = case.status.name.title()
             totals.setdefault(group, []).append(case)
         fh.write("<tr>")
         fh.write(f"<td>{config.system.host}</td>")

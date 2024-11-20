@@ -39,22 +39,24 @@ class AbstractTestRunner:
 
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
         prefix = colorize("@*b{==>} ")
-        progress_bar: bool = getattr(config.options, "progress_bar", False)
+        verbose = kwargs.get("verbose", True)
+        progress_bar = not verbose
+        stage = kwargs.get("stage", "run")
         if not progress_bar:
-            logging.emit("%s%s\n" % (prefix, self.start_msg(case)))
-        self.run(case)
+            logging.emit("%s%s\n" % (prefix, self.start_msg(case, stage)))
+        self.run(case, stage)
         if not progress_bar:
-            logging.emit("%s%s\n" % (prefix, self.end_msg(case)))
+            logging.emit("%s%s\n" % (prefix, self.end_msg(case, stage)))
         return None
 
     @abc.abstractmethod
-    def run(self, case: AbstractTestCase, stage: str = "test") -> None: ...
+    def run(self, case: AbstractTestCase, stage: str = "run") -> None: ...
 
     @abc.abstractmethod
-    def start_msg(self, case: AbstractTestCase) -> str: ...
+    def start_msg(self, case: AbstractTestCase, stage: str = "run") -> str: ...
 
     @abc.abstractmethod
-    def end_msg(self, case: AbstractTestCase) -> str: ...
+    def end_msg(self, case: AbstractTestCase, stage: str = "run") -> str: ...
 
 
 class TestCaseRunner(AbstractTestRunner):
@@ -63,9 +65,10 @@ class TestCaseRunner(AbstractTestRunner):
     def __init__(self) -> None:
         super().__init__()
 
-    def run(self, case: "AbstractTestCase", stage: str = "test") -> None:
+    def run(self, case: "AbstractTestCase", stage: str = "run") -> None:
         assert isinstance(case, TestCase)
-        assert stage in ("test", "analyze")
+        if stage == "baseline":
+            return self.baseline(case)
         measure: bool = not getattr(config.options, "dont_measure", False)
         try:
             metrics: dict[str, Any] | None = None
@@ -82,7 +85,7 @@ class TestCaseRunner(AbstractTestRunner):
                     if self.timeoutx != 1.0:
                         fh.write(f"==> Timeout multiplier: {self.timeoutx}\n")
                     fh.flush()
-                    with case.rc_environ():
+                    with case.rc_environ(NVTEST_STAGE=stage):
                         tic = time.monotonic()
                         proc = subprocess.Popen(
                             cmd, start_new_session=True, stdout=fh, stderr=subprocess.STDOUT
@@ -134,23 +137,35 @@ class TestCaseRunner(AbstractTestRunner):
             case.finish = timestamp()
             for hook in plugin.plugins():
                 hook.test_after_run(case)
-            case.wrap_up()
+            case.wrap_up(stage)
         return
 
     def analyze(self, case: "TestCase") -> None:
-        logging.emit(self.start_msg(case) + "\n")
+        logging.emit(self.start_msg(case, "analyze") + "\n")
         self.run(case, stage="analyze")
-        logging.emit(self.end_msg(case) + "\n")
+        logging.emit(self.end_msg(case, "analyze") + "\n")
 
-    def start_msg(self, case: AbstractTestCase) -> str:
+    def baseline(self, case: "TestCase") -> None:
+        logging.emit(self.start_msg(case, "baseline") + "\n")
+        if "baseline" not in case.stages:
+            logging.warning(f"{case} does not define a baseline stage, skipping")
+        else:
+            case.do_baseline()
+        logging.emit(self.end_msg(case, "baseline ") + "\n")
+
+    def start_msg(self, case: AbstractTestCase, stage: str = "run") -> str:
         assert isinstance(case, TestCase)
         id = colorize("@b{%s}" % case.id[:7])
-        return "Starting {0} {1}".format(id, case.pretty_repr())
+        st = colorize("@*{%s}" % stage)
+        return "Starting stage {0} {1} {2}".format(st, id, case.pretty_repr())
 
-    def end_msg(self, case: AbstractTestCase) -> str:
+    def end_msg(self, case: AbstractTestCase, stage: str = "run") -> str:
         assert isinstance(case, TestCase)
         id = colorize("@b{%s}" % case.id[:7])
-        return "Finished {0} {1} {2}".format(id, case.pretty_repr(), case.status.cname)
+        st = colorize("@*{%s}" % stage)
+        return "Finished stage {0} {1} {2} {3}".format(
+            st, id, case.pretty_repr(), case.status.cname
+        )
 
     def get_process_metrics(
         self, pid: int, metrics: dict[str, Any] | None = None
@@ -235,7 +250,7 @@ class BatchRunner(AbstractTestRunner):
         if config.batch.scheduler_args:
             self.scheduler.add_default_args(*config.batch.scheduler_args)
 
-    def run(self, batch: AbstractTestCase, stage: str = "test") -> None:
+    def run(self, batch: AbstractTestCase, stage: str = "run") -> None:
         import hpc_connect
 
         assert isinstance(batch, TestBatch)
@@ -243,7 +258,7 @@ class BatchRunner(AbstractTestRunner):
             logging.debug(f"Running batch {batch.batch_no}")
             start = time.monotonic()
             node_count = math.ceil(batch.max_cpus_required / self.scheduler.config.cpus_per_node)
-            nvtest_invocation = self.nvtest_invocation(batch, node_count=node_count)
+            nvtest_invocation = self.nvtest_invocation(batch, node_count=node_count, stage=stage)
             scriptname = batch.submission_script_filename()
             mkdirp(os.path.dirname(scriptname))
             variables = dict(batch.variables)
@@ -284,12 +299,12 @@ class BatchRunner(AbstractTestRunner):
                     case.save()
         return
 
-    def start_msg(self, batch: AbstractTestCase) -> str:
+    def start_msg(self, batch: AbstractTestCase, stage: str = "run") -> str:
         assert isinstance(batch, TestBatch)
         n = len(batch.cases)
         return f"Submitting batch {batch.batch_no} of {batch.nbatches} ({n} tests)"
 
-    def end_msg(self, batch: AbstractTestCase) -> str:
+    def end_msg(self, batch: AbstractTestCase, stage: str = "run") -> str:
         assert isinstance(batch, TestBatch)
         stat: dict[str, int] = {}
         for case in batch.cases:
@@ -311,7 +326,9 @@ class BatchRunner(AbstractTestRunner):
         s.write(")")
         return s.getvalue()
 
-    def nvtest_invocation(self, batch: TestBatch, node_count: int | None = None) -> str:
+    def nvtest_invocation(
+        self, batch: TestBatch, node_count: int | None = None, stage: str = "run"
+    ) -> str:
         """Write the nvtest invocation used to run this batch."""
         fp = io.StringIO()
         fp.write("nvtest ")
@@ -320,7 +337,7 @@ class BatchRunner(AbstractTestRunner):
         if getattr(config.options, "plugin_dirs", None):
             for p in config.options.plugin_dirs:
                 fp.write(f"-p {p} ")
-        fp.write(f"-C {batch.root} run -rv ")
+        fp.write(f"-C {batch.root} run -rv --stage={stage} ")
         if getattr(config.options, "fail_fast", False):
             fp.write("--fail-fast ")
         if getattr(config.options, "dont_measure", False):

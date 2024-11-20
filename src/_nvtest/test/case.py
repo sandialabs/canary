@@ -70,6 +70,7 @@ class TestCase(AbstractTestCase):
         owners: list[str] | None = None,
         artifacts: list[dict[str, str]] | None = None,
         exclusive: bool = False,
+        stages: list[str] | None = None,
     ):
         super().__init__()
 
@@ -91,6 +92,7 @@ class TestCase(AbstractTestCase):
         self._owners: list[str] = []
         self._artifacts: list[dict[str, str]] = []
         self._exclusive: bool = exclusive
+        self.stages: list[str] = stages or ["run"]
 
         if file_root is not None:
             self.file_root = file_root
@@ -457,13 +459,14 @@ class TestCase(AbstractTestCase):
     def exe(self, arg: str) -> None:
         self._exe = arg
 
-    def command(self, stage: str = "test") -> list[str]:
+    def command(self, stage: str = "run") -> list[str]:
         cmd: list[str] = []
         if self.launcher:
             cmd.append(self.launcher)
             cmd.extend(self.preflags or [])
         cmd.append(self.exe)
-        if stage == "analyze":
+        cmd.append(f"--stage={stage}")
+        if self.file.endswith(".vvt") and stage == "analyze":
             cmd.append("--execute-analysis-sections")
         cmd.extend(self.postflags or [])
         return cmd
@@ -590,6 +593,8 @@ class TestCase(AbstractTestCase):
 
     @property
     def cpus(self) -> int:
+        if os.getenv("NVTEST_STAGE", "run") != "run":
+            return 1
         return int(self.parameters.get("np") or 1)  # type: ignore
 
     @property
@@ -868,9 +873,9 @@ class TestCase(AbstractTestCase):
             dep.refresh()
 
     @contextmanager
-    def rc_environ(self) -> Generator[None, None, None]:
+    def rc_environ(self, **variables) -> Generator[None, None, None]:
         save_env = os.environ.copy()
-        variables = dict(PYTHONPATH=self.pythonpath)
+        variables.update(dict(PYTHONPATH=self.pythonpath))
         vars = {}
         vars["cpu_ids"] = variables["NVTEST_CPU_IDS"] = ",".join(map(str, self.cpu_ids))
         vars["gpu_ids"] = variables["NVTEST_GPU_IDS"] = ",".join(map(str, self.gpu_ids))
@@ -962,7 +967,7 @@ class TestCase(AbstractTestCase):
         id = colorize("@b{%s}" % self.id[:7])
         return "FINISHED: {0} {1} {2}".format(id, self.pretty_repr(), self.status.cname)
 
-    def prepare_for_launch(self, stage: str = "test") -> None:
+    def prepare_for_launch(self, stage: str = "run") -> None:
         if os.getenv("NVTEST_RESETUP"):
             assert isinstance(self.exec_root, str)
             self.setup(self.exec_root)
@@ -973,12 +978,12 @@ class TestCase(AbstractTestCase):
                 hook.test_before_run(self, stage=stage)
         self.save()
 
-    def wrap_up(self) -> None:
+    def wrap_up(self, stage: str = "run") -> None:
         with fs.working_dir(self.exec_dir):
             self.cache_runtime()
             self.save()
             with open(self.logfile(), "w") as fh:
-                for stage in ("setup", "test", "analyze"):
+                for stage in ("setup", "run", "analyze"):
                     file = self.logfile(stage)
                     if os.path.exists(file):
                         fh.write(open(file).read())
@@ -1055,7 +1060,7 @@ class TestMultiCase(TestCase):
         file_root: str | None = None,
         file_path: str | None = None,
         *,
-        flag: str = "--base",
+        flag: str = "--analyze",
         paramsets: list[ParameterSet] | None = None,
         family: str | None = None,
         keywords: list[str] = [],
@@ -1069,6 +1074,7 @@ class TestMultiCase(TestCase):
         owners: list[str] | None = None,
         artifacts: list[dict[str, str]] | None = None,
         exclusive: bool = False,
+        stages: list[str] | None = None,
     ):
         super().__init__(
             file_root=file_root,
@@ -1085,7 +1091,10 @@ class TestMultiCase(TestCase):
             owners=owners,
             artifacts=artifacts,
             exclusive=exclusive,
+            stages=stages,
         )
+        if "analyze" not in self.stages:
+            self.stages.extend("analyze")
         if flag.startswith("-"):
             # for the base case, call back on the test file with ``flag`` on the command line
             self.launcher = sys.executable
@@ -1112,12 +1121,13 @@ class TestMultiCase(TestCase):
     def flag(self, arg: str) -> None:
         self._flag = arg
 
-    def command(self, stage: str = "test") -> list[str]:
+    def command(self, stage: str = "run") -> list[str]:
         cmd: list[str] = []
         if self.launcher:
             cmd.append(self.launcher)
             cmd.extend(self.preflags or [])
         cmd.append(self.exe)
+        cmd.append(f"--stage={stage}")
         cmd.extend(self.postflags or [])
         return cmd
 
@@ -1131,6 +1141,10 @@ class TestMultiCase(TestCase):
         self._paramsets = arg
         if self._paramsets:
             assert isinstance(self._paramsets[0], ParameterSet)
+
+    @property
+    def cpus(self) -> int:
+        return 1
 
 
 def factory(type: str, **kwargs: Any) -> TestCase | TestMultiCase:

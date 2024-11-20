@@ -58,10 +58,7 @@ class MarkdownReporter(Reporter):
         for case in self.data.cases:
             if case.mask:
                 continue
-            if case.skipped:
-                group = "Not Run"
-            else:
-                group = case.status.name.title()
+            group = case.status.name.title()
             totals.setdefault(group, []).append(case)
         fh.write(f"| {config.system.host} ")
         fh.write(f"| {config.build.project} ")

@@ -1,4 +1,4 @@
 {
   "returncode": 0,
-  "output": "\u2717 SKIPPED ae490dc skip: Skipped due to runtime exception\n\u2717 DIFF 72687c5 diff\n\u2717 FAIL d4a9b9c fail\n\u2717 FAIL 27e30ad xdiff-fail\n\u2717 FAIL 97b2dc6 xfail-fail\n\u2717 TIMEOUT 4ae5647 timeout\n\u2717 TIMEOUT ca79c93 timeout\n\n\ud83d\udc22\ud83d\udc22 Slowest 5 durations \ud83d\udc22\ud83d\udc22\n\n\n\u2728\u2728 Summary -- 61 total, 51 pass, 2 xfail, 1 xdiff, 1 skipped, 1 diff, 3 fail, 2 timeout in 00:00:03"
+  "output": "\u2717 SKIPPED ae490dc skip: Skipped due to runtime exception\n\u2717 DIFF 72687c5 diff\n\u2717 FAIL d4a9b9c fail\n\u2717 FAIL 27e30ad xdiff-fail\n\u2717 FAIL 97b2dc6 xfail-fail\n\u2717 TIMEOUT 4ae5647 timeout started: 17:11:03, finished: 17:11:04, duration: 1.00s.\n\u2717 TIMEOUT ca79c93 timeout\n\n\ud83d\udc22\ud83d\udc22 Slowest 5 durations \ud83d\udc22\ud83d\udc22\n    1.00   4ae5647    timeout\n\n\n\u26a1\u26a1 Summary -- 64 total, 54 pass, 2 xfail, 1 xdiff, 1 skipped, 1 diff, 3 fail, 2 timeout in 00:00:03"
 }

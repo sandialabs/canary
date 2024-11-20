@@ -482,6 +482,7 @@ class Session:
         parameter_expr: str | None = None,
         start: str | None = None,
         case_specs: list[str] | None = None,
+        stage: str | None = None,
     ) -> list[TestCase]:
         """Filter test cases (mask test cases that don't meet a specific criteria)
 
@@ -531,7 +532,10 @@ class Session:
                 case.status.set("ready")
                 continue
             if not when_expr:
-                if case.status.value in ("not_run", "cancelled"):
+                if stage is not None:
+                    if stage in case.stages:
+                        case.status.set("ready" if not case.dependencies else "pending")
+                elif case.status.value in ("not_run", "cancelled"):
                     case.status.set("ready" if not case.dependencies else "pending")
             else:
                 match = when(
@@ -601,6 +605,7 @@ class Session:
         *,
         fail_fast: bool = False,
         reporting: ProgressReporting = ProgressReporting(),
+        stage: str | None = None,
     ) -> int:
         """Run each test case in ``cases``.
 
@@ -617,13 +622,15 @@ class Session:
         if not cases:
             raise ValueError("There are no cases to run in this session")
         queue = self.setup_queue(cases)
-        with self.rc_environ():
+        with self.rc_environ(NVTEST_STAGE=stage or "run"):
             with working_dir(self.root):
                 cleanup_queue = True
                 try:
                     self.start = timestamp()
                     self.finish = -1.0
-                    self.process_queue(queue=queue, fail_fast=fail_fast, reporting=reporting)
+                    self.process_queue(
+                        queue=queue, fail_fast=fail_fast, reporting=reporting, stage=stage or "run"
+                    )
                 except ProcessPoolExecutorFailedToStart:
                     if int(os.getenv("NVTEST_LEVEL", "0")) > 1:
                         # This can happen when the ProcessPoolExecutor fails to obtain a lock.
@@ -661,11 +668,12 @@ class Session:
         return self.returncode
 
     @contextmanager
-    def rc_environ(self) -> Generator[None, None, None]:
+    def rc_environ(self, **variables) -> Generator[None, None, None]:
         """Set the runtime environment"""
         save_env = os.environ.copy()
         for var, val in config.variables.items():
             os.environ[var] = val
+        os.environ.update(variables)
         level = logging.get_level()
         os.environ["NVTEST_LOG_LEVEL"] = logging.get_level_name(level)
         yield
@@ -678,6 +686,7 @@ class Session:
         queue: ResourceQueue,
         fail_fast: bool,
         reporting: ProgressReporting = ProgressReporting(),
+        stage: str,
     ) -> None:
         """Process the test queue, asynchronously
 
@@ -686,6 +695,7 @@ class Session:
           fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
             continuing running until all tests have been run.
           reporting: level of verbosity
+          stage: the execution stage
 
         """
         futures: dict = {}
@@ -712,7 +722,7 @@ class Session:
                     except EmptyQueue:
                         break
                     future = ppe.submit(
-                        runner, obj, verbose=reporting == ProgressReporting.verbose
+                        runner, obj, verbose=reporting == ProgressReporting.verbose, stage=stage
                     )
                     callback = partial(self.done_callback, iid, queue, fail_fast)
                     future.add_done_callback(callback)

@@ -479,14 +479,16 @@ def exclusive(*, when: WhenType | None = None) -> None:
     """
 
 
-def execbase(
+def generate_composite_base_case(
     *,
     when: WhenType | None = None,
     flag: str | None = None,
     script: str | None = None,
 ) -> None:
-    """Create a test instance that depends on all parameterized test instances
-    and run it after they have completed.
+    """Create an aggregate test case that depends on the multiple parameterized test cases.
+
+    The aggregate test case will run after all other parameterized test cases and can be used to
+    to ensure that the overall behavior of the parameterized test cases.
 
     Usage
     -----
@@ -496,7 +498,7 @@ def execbase(
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.execbase(*, flag=None, script=None, when=...)
+       nvtest.directives.generate_composite_base_case(*, flag=None, script=None, when=...)
 
     ``.vvt``:
 
@@ -533,7 +535,7 @@ def execbase(
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.execbase(flag="--base", when="platforms='not darwin'")
+       nvtest.directives.generate_composite_base_case(flag="--base", when="platforms='not darwin'")
        nvtest.directives.parameterize("a,b", [(1, 2), (3, 4)])
 
     .. code-block:: python
@@ -555,7 +557,7 @@ def execbase(
        import sys
 
        import nvtest
-       nvtest.directives.execbase(flag="--base", when="platforms='not darwin'")
+       nvtest.directives.generate_composite_base_case(flag="--base", when="platforms='not darwin'")
        nvtest.directives.parameterize("a,b", [(1, 2), (3, 4)])
 
 
@@ -579,7 +581,7 @@ def execbase(
     """
 
 
-analyze = execbase
+analyze = generate_composite_base_case
 
 
 def gpus(*ngpus: int, when: WhenType | None = None) -> None:
@@ -1429,6 +1431,68 @@ def skipif(arg: bool, *, reason: str) -> None:
 
 
 def sources(*args: str, when: WhenType | None = None) -> None:
+    pass
+
+
+def stages(*args: str) -> None:
+    """Assign different execution stages to this test case.
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code-block:: python
+
+       import nvtest
+       nvtest.directives.stages(stage_1, ...)
+
+    ``.vvt``: ``NA``
+
+    Parameters
+    ----------
+
+    * ``args``: The stage names.  By default, all test cases have an ``execute`` stage.
+
+    References
+    ----------
+
+    * :ref:`Staged test execution <usage-staged-execution>`
+
+    Notes
+    -----
+
+    The stage name is passed on the command line to the test as ``--stage=<stage>``.  Test case's
+    must parse the command line to determine the current execution stage.
+
+    Examples
+    --------
+
+    .. code-block:: python
+
+       import nvtest
+       nvtest.directives.stages("run", "post-process")
+
+       def run(case: nvtest.TestCase) -> int:
+           # run the case
+
+       def post(case: nvtest.TestCase) -> int:
+           # perform post processing
+
+       def main() -> int:
+           case = nvtest.get_instance()
+           parser = nvtest.make_argument_parser()
+           args = parser.parse_args()
+           if args.stage == "run":
+               return run(case)
+           elif args.stage == "post-process":
+               return post_process(case)
+           raise ValueError(f"unrecognized test stage: {case.stage}")
+
+       if __name__ == "__main__":
+           sys.exit(main())
+
+    """
     pass
 
 

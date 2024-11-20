@@ -165,7 +165,6 @@ class TestInstance:
     file: str
     cpu_ids: list[int]
     gpu_ids: list[int]
-    multicase: bool
     family: str
     keywords: list[str]
     parameters: Parameters
@@ -186,30 +185,20 @@ class TestInstance:
 
     @property
     def analyze(self) -> bool:
-        # compatibility with nvtest
-        return self.multicase
+        # compatibility with vvtest
+        return False
 
     @property
-    def base_case(self) -> bool:
-        # compatibility with nvtest
-        return self.multicase
+    def multicase(self) -> bool:
+        # compatibility with vvtest
+        return False
 
     @classmethod
     def from_case(cls: Type["TestInstance"], case: TestCase) -> "TestInstance":
         dependencies: list[TestInstance] = []
         for dep in case.dependencies:
             dependencies.append(TestInstance.from_case(dep))
-        parameters: Parameters
-        if not isinstance(case, TestMultiCase):
-            parameters = Parameters(**case.parameters)
-        else:
-            columns: dict[str, list[Any]] = {}
-            for key in case.dependencies[0].parameters.keys():
-                col = columns.setdefault(key, [])
-                for dep in case.dependencies:
-                    col.append(dep.parameters[key])
-            parameters = MultiParameters(**columns)
-
+        parameters = Parameters(**case.parameters)
         self = cls(
             file_root=case.file_root,
             file_path=case.file_path,
@@ -218,7 +207,6 @@ class TestInstance:
             cpu_ids=case.cpu_ids,
             gpu_ids=case.gpu_ids,
             family=case.family,
-            multicase=isinstance(case, TestMultiCase),
             keywords=case.keywords,
             parameters=parameters,
             timeout=case.timeout,
@@ -250,20 +238,81 @@ class TestInstance:
     def gpus(self) -> int:
         return len(self.gpu_ids)
 
-    @classmethod
-    def load(cls: Type["TestInstance"], arg_path: str | None = None) -> "TestInstance":
-        dbf = TestCase._dbfile
-        if arg_path is None:
-            arg_path = dbf
-        elif arg_path.endswith((".vvt", ".pyt")):
-            arg_path = os.path.join(os.path.dirname(arg_path), dbf)
-        with open(arg_path, "r") as fh:
-            state = json.load(fh)
-            case = testcase_from_state(state)
-        return TestInstance.from_case(case)
-
     def get_dependency(self, **params: Any) -> "TestInstance | None":
         for dep in self.dependencies:
             if dep.parameters == params:
                 return dep
         return None
+
+
+class TestMultiInstance(TestInstance):
+    @classmethod
+    def from_case(cls: Type["TestMultiInstance"], case: TestMultiCase) -> "TestMultiInstance":  # type: ignore
+        dependencies: list[TestInstance] = []
+        for dep in case.dependencies:
+            dependencies.append(TestInstance.from_case(dep))
+        columns: dict[str, list[Any]] = {}
+        for key in case.dependencies[0].parameters.keys():
+            col = columns.setdefault(key, [])
+            for dep in case.dependencies:
+                col.append(dep.parameters[key])
+        parameters = MultiParameters(**columns)
+        self = cls(
+            file_root=case.file_root,
+            file_path=case.file_path,
+            name=case.name,
+            file=os.path.join(case.file_root, case.file_path),
+            cpu_ids=case.cpu_ids,
+            gpu_ids=case.gpu_ids,
+            family=case.family,
+            keywords=case.keywords,
+            parameters=parameters,
+            timeout=case.timeout,
+            runtime=case.runtime,
+            baseline=case.baseline,
+            sources=case.sources,
+            exec_root=case.exec_root,  # type: ignore
+            exec_dir=case.exec_dir,
+            status=case.status,
+            start=case.start,
+            finish=case.finish,
+            id=case.id,
+            cmd_line=case.cmd_line,
+            returncode=case.returncode,
+            variables=case.variables,
+            dependencies=dependencies,
+        )
+        return self
+
+    @property
+    def analyze(self) -> bool:
+        # compatibility with vvtest
+        return True
+
+    @property
+    def multicase(self) -> bool:
+        # compatibility with vvtest
+        return True
+
+
+def load(arg_path: str | None = None) -> TestInstance | TestMultiInstance:
+    dbf = TestCase._dbfile
+    file: str
+    if arg_path is None:
+        file = dbf
+    elif os.path.isdir(arg_path):
+        file = os.path.join(arg_path, dbf)
+    elif arg_path.endswith((".vvt", ".pyt")):
+        file = os.path.join(os.path.dirname(arg_path), dbf)
+    else:
+        raise ValueError(f"incorrect {arg_path=}")
+    case: TestCase | TestMultiCase
+    with open(file, "r") as fh:
+        state = json.load(fh)
+        case = testcase_from_state(state)
+    instance: TestInstance | TestMultiInstance
+    if isinstance(case, TestMultiCase):
+        instance = TestMultiInstance.from_case(case)
+    else:
+        instance = TestInstance.from_case(case)
+    return instance

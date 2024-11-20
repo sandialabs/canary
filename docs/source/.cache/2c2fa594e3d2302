@@ -1,0 +1,4 @@
+{
+  "returncode": 2,
+  "output": "usage: nvtest [-hvqd] [--version] [-C path] [-p directory] [--echo] [--profile] [--sorted-profile stat]\n              [--lines LINES] [-c path] [-e var=val]\n              ...\nnvtest: error: unrecognized arguments: -C ."
+}

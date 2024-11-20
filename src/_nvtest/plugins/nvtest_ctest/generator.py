@@ -217,6 +217,15 @@ class CTestTestCase(TestCase):
             kwds.append("ctest")
         return list(kwds)
 
+    def command(self, stage: str = "run") -> list[str]:
+        cmd: list[str] = []
+        if self.launcher:
+            cmd.append(self.launcher)
+            cmd.extend(self.preflags or [])
+        cmd.append(self.exe)
+        cmd.extend(self.postflags or [])
+        return cmd
+
     @property
     def working_directory(self) -> str:
         return self._working_directory
@@ -226,8 +235,8 @@ class CTestTestCase(TestCase):
         self._working_directory = arg
 
     @contextmanager
-    def rc_environ(self) -> Generator[None, None, None]:
-        with super().rc_environ():
+    def rc_environ(self, **variables: str) -> Generator[None, None, None]:
+        with super().rc_environ(**variables):
             self.apply_environment_modifications(os.environ)
             yield
 
@@ -266,9 +275,9 @@ class CTestTestCase(TestCase):
             with open("ctest-command.txt", "w") as fh:
                 fh.write(" ".join(self.command()))
 
-    def wrap_up(self) -> None:
+    def wrap_up(self, stage: str = "run") -> None:
         super().wrap_up()
-        file = self.logfile("test")
+        file = self.logfile(stage)
 
         if self.status.value in ("timeout", "skipped", "not_run"):
             return

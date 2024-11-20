@@ -1,4 +1,8 @@
 import argparse
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Sequence
 
 import _nvtest.config as config
 import _nvtest.enums as enums
@@ -20,6 +24,8 @@ from _nvtest.reporter import Reporter
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.test.instance import TestInstance
+from _nvtest.test.instance import TestMultiInstance
+from _nvtest.test.instance import load as load_instance
 from _nvtest.util import filesystem
 from _nvtest.util import logging
 from _nvtest.util import module
@@ -30,8 +36,16 @@ from . import directives
 from . import patterns
 
 
-def make_std_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser()
+class TestParser(argparse.ArgumentParser):
+    def parse_args(self, args=None, namespace=None):
+        namespace, unknown_args = super().parse_known_args(args, namespace)
+        namespace.extra_args = unknown_args
+        return namespace
+
+
+def make_argument_parser() -> TestParser:
+    parser = TestParser()
+    parser.add_argument("--stage")
     parser.add_argument("--baseline", action="store_true")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--analyze", action="store_true")
@@ -39,9 +53,12 @@ def make_std_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def get_instance() -> TestInstance | None:
+make_std_parser = make_argument_parser
+
+
+def get_instance(arg_path: str | None = None) -> TestInstance | None:
     try:
-        return TestInstance.load()
+        return load_instance(arg_path=arg_path)
     except FileNotFoundError:
         return None
 

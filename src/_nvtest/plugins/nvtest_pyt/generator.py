@@ -66,7 +66,7 @@ class PYTTestFile(AbstractTestGenerator):
         self._attributes: list[FilterNamespace] = []
         self._names: list[FilterNamespace] = []
         self._timeout: list[FilterNamespace] = []
-        self._execbase: list[FilterNamespace] = []
+        self._generate_composite_base_case: list[FilterNamespace] = []
         self._sources: list[FilterNamespace] = []
         self._baseline: list[FilterNamespace] = []
         self._enable: list[FilterNamespace] = []
@@ -78,6 +78,7 @@ class PYTTestFile(AbstractTestGenerator):
         self._skipif_reason: str | None = None
         self._exclusive: FilterNamespace | None = None
         self._xstatus: FilterNamespace | None = None
+        self._stages: set[str] = {"run"}
         self.load()
 
     def __repr__(self) -> str:
@@ -159,6 +160,7 @@ class PYTTestFile(AbstractTestGenerator):
                     exclusive=self.exclusive(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
+                    stages=self.stages,
                 )
                 case.launcher = sys.executable
                 if test_mask is not None:
@@ -179,15 +181,17 @@ class PYTTestFile(AbstractTestGenerator):
                     case.add_dependency(*dependencies)
                 cases.append(case)
 
-            execbase = self.execbase(testname=name, on_options=on_options)
-            if execbase:
+            generate_composite_base_case = self.generate_composite_base_case(
+                testname=name, on_options=on_options
+            )
+            if generate_composite_base_case:
                 # add previous cases as dependencies
                 modules = self.modules(testname=name, on_options=on_options)
                 parent = TestMultiCase(
                     self.root,
                     self.path,
                     paramsets=paramsets,
-                    flag=execbase,
+                    flag=generate_composite_base_case,
                     family=name,
                     keywords=self.keywords(testname=name),
                     timeout=self.timeout(testname=name),
@@ -204,6 +208,7 @@ class PYTTestFile(AbstractTestGenerator):
                     exclusive=self.exclusive(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
+                    stages=self.stages,
                 )
                 parent.launcher = sys.executable
                 if test_mask is not None:
@@ -240,6 +245,15 @@ class PYTTestFile(AbstractTestGenerator):
             case.dep_patterns = [_ for _ in case.dep_patterns if _ != "null"]
 
     # -------------------------------------------------------------------------------- #
+
+    @property
+    def stages(self) -> list[str]:
+        std_stages = {"run": 0, "post-process": 1, "post": 1, "analyze": 2, "baseline": 3}
+        return sorted(self._stages, key=lambda s: (std_stages.get(s, 100), s[0]))
+
+    @stages.setter
+    def stages(self, arg: Sequence[str]) -> None:
+        self._stages.update(arg)
 
     @property
     def skipif_reason(self) -> str | None:
@@ -382,8 +396,10 @@ class PYTTestFile(AbstractTestGenerator):
             names.append(self.name)
         return names
 
-    def execbase(self, testname: str | None = None, on_options: list[str] | None = None) -> str:
-        for ns in self._execbase:
+    def generate_composite_base_case(
+        self, testname: str | None = None, on_options: list[str] | None = None
+    ) -> str:
+        for ns in self._generate_composite_base_case:
             result = ns.when.evaluate(testname=testname, on_options=on_options)
             if not result.value:
                 continue
@@ -646,7 +662,11 @@ class PYTTestFile(AbstractTestGenerator):
     ) -> None:
         self.add_sources("sources", *files, when=when)
 
-    def m_execbase(
+    def m_stages(self, *args: str) -> None:
+        # For now just pass through, could add a when statement?
+        self._stages.update(args)
+
+    def m_generate_composite_base_case(
         self,
         *,
         flag: str | None = None,
@@ -655,14 +675,14 @@ class PYTTestFile(AbstractTestGenerator):
     ) -> None:
         if flag is not None and script is not None:
             raise ValueError(
-                "PYTTestFile.execbase: 'script' and 'flag' keyword arguments are mutually exclusive"
+                "PYTTestFile.generate_composite_base_case: 'script' and 'flag' keyword arguments are mutually exclusive"
             )
         if script is not None:
             string = script
         else:
             string = flag or "--base"
         ns = FilterNamespace(string, when=when)
-        self._execbase.append(ns)
+        self._generate_composite_base_case.append(ns)
 
     def m_name(self, arg: str) -> None:
         self._names.append(FilterNamespace(arg))
@@ -718,6 +738,7 @@ class PYTTestFile(AbstractTestGenerator):
                 "PYTTestFile.baseline: missing required argument 'src'/'dst' or 'flag'"
             )
         self._baseline.append(ns)
+        self._stages.add("baseline")
 
     def load(self):
         import _nvtest
@@ -751,14 +772,14 @@ class PYTTestFile(AbstractTestGenerator):
             return True
         return False
 
-    def f_execbase(
+    def f_generate_composite_base_case(
         self,
         *,
         when: WhenType | None = None,
         flag: str | None = None,
         script: str | None = None,
     ):
-        self.m_execbase(when=when, flag=flag, script=script)
+        self.m_generate_composite_base_case(when=when, flag=flag, script=script)
 
     def f_analyze(
         self,
@@ -770,7 +791,7 @@ class PYTTestFile(AbstractTestGenerator):
         # vvtest compatibility
         if script is None and flag is None:
             flag = "--analyze"
-        self.m_execbase(when=when, flag=flag, script=script)
+        self.m_generate_composite_base_case(when=when, flag=flag, script=script)
 
     def f_copy(
         self,
@@ -862,6 +883,9 @@ class PYTTestFile(AbstractTestGenerator):
 
     def f_sources(self, *args: str, when: WhenType | None = None):
         self.m_sources(*args, when=when)
+
+    def f_stages(self, *args: str):
+        self.m_stages(*args)
 
     def f_testname(self, arg: str) -> None:
         self.m_name(arg)

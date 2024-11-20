@@ -28,6 +28,7 @@ class CDashXMLReporter:
         dest = dest or os.path.join("." if not session else session.root, "_reports/cdash")
         self.xml_dir = os.path.abspath(dest)
         self.xml_files: list[str] = []
+        self.notes: dict[str, str] = {}
 
     @classmethod
     def from_json(cls, file: str, dest: str | None = None) -> "CDashXMLReporter":
@@ -53,6 +54,7 @@ class CDashXMLReporter:
             cases[id] = case
         for case in cases.values():
             if not case.mask:
+                case.refresh()
                 self.data.add_test(case)
         return self
 
@@ -241,8 +243,10 @@ class CDashXMLReporter:
                 for name, measurement in case.measurements.items():
                     if isinstance(measurement, (str, int, float)):
                         add_measurement(results, name=name.title(), value=measurement)
+                        self.notes[name.title()] = str(measurement)
                     else:
                         add_measurement(results, name=name.title(), value=json.dumps(measurement))
+                        self.notes[name.title()] = json.dumps(measurement)
             add_measurement(
                 results,
                 value=case.output(compress=True),
@@ -269,11 +273,10 @@ class CDashXMLReporter:
         filename = unique_file(self.xml_dir, "Notes", ".xml")
         f = os.path.relpath(filename, config.invocation_dir)
         logging.log(logging.INFO, f"WRITING: Notes.xml to {f}", prefix=None)
-        notes: dict[str, str] = {}
         doc = xdom.Document()
         root = self.site_node
         notes_el = doc.createElement("Notes")
-        for name, text in notes.items():
+        for name, text in self.notes.items():
             t = timestamp()
             s = strftimestamp(t)
             el = doc.createElement("Note")
