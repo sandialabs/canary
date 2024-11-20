@@ -20,7 +20,7 @@ Consider the directives section of the test file ``examples/execute_and_analyze/
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :language: python
-    :lines: 1-7
+    :lines: 3-8
 
 The dependency graph for this test is
 
@@ -36,7 +36,7 @@ As can be seen, the base case ``execute_and_analyze`` depends on ``execute_and_a
 Test execution phases
 ---------------------
 
-To take advantage of the execute and analyze pattern, a test should define separate functions for the parameterized and base test cases. For example, a test might define separate ``run_parameterized_case`` and ``analyze_base_case`` functions as below:
+To take advantage of the execute and analyze pattern, a test should define separate functions for the parameterized and base test cases. For example, a test might define separate ``run_parameterized_case`` and ``analyze_composite_base_case`` functions as below:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :lines: 9-22
@@ -69,13 +69,13 @@ Dependency parameters can be accessed directly from the base test instance's ``d
 or, in the base test instance's ``parameters`` attribute.  Consider the following test:
 
 .. literalinclude:: /examples/analyze_only/analyze_only.pyt
-    :lines: 7-9
+    :lines: 6-10
     :language: python
 
 The parameters ``np``, ``a``, and ``b`` of each dependency can be accessed directly:
 
 .. literalinclude:: /examples/analyze_only/analyze_only.pyt
-    :lines: 35-42
+    :lines: 30-32
     :language: python
 
 The ordering of the parameters is guaranteed to be the same as the ordering the ``dependencies``.  E.g., ``self.dependencies[i].parameters.a == self.parameters.a[i]``.
@@ -83,7 +83,7 @@ The ordering of the parameters is guaranteed to be the same as the ordering the 
 Additionally, a full table of dependency parameters is accessible via key entry into the ``parameters`` attribute, where the key is a tuple containing each individual parameter name, e.g.:
 
 .. literalinclude:: /examples/analyze_only/analyze_only.pyt
-    :lines: 32-39
+    :lines: 36-43
     :language: python
 
 Run only the analysis section of a test
