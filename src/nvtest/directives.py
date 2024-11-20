@@ -1473,10 +1473,10 @@ def stages(*args: str) -> None:
        import nvtest
        nvtest.directives.stages("run", "post-process")
 
-       def run(case: nvtest.TestCase) -> int:
+       def run(case: nvtest.TestInstance) -> int:
            # run the case
 
-       def post(case: nvtest.TestCase) -> int:
+       def post_process(case: nvtest.TestInstance) -> int:
            # perform post processing
 
        def main() -> int:
