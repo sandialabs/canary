@@ -41,4 +41,4 @@ class Log(Command):
                     print(f"{f}:")
                     pydoc.pager(open(f).read())
                     return 0
-        raise ValueError(f"{args.testspec}: no matching test found in {session.root}")
+        raise ValueError(f"{args.testspec}: no matching test found in {session.work_tree}")

@@ -97,6 +97,6 @@ Test execution directory
 
     The test execution directory is an implementation detail and could change.  Do not rely on it for dependent tests.  Instead, use the ``nvtest.test.instance.dependencies`` object to get the ``exec_dir`` of each dependency.
 
-The current test exeuction directory naming scheme matches ``vvtest``'s: ``<session_root>/<path>/<name>``, where ``path`` is the test file's path *relative* to the test file's search root.  Eg, if ``/the/search/root`` is passed to ``nvtest run`` and the test file is found in ``some/sub_directory/file.pyt``, the test execution directory would be ``<session_root>/some/sub_directory/<name>``.
+The current test exeuction directory naming scheme matches ``vvtest``'s: ``<work_tree>/<path>/<name>``, where ``path`` is the test file's path *relative* to the test file's search root.  Eg, if ``/the/search/root`` is passed to ``nvtest run`` and the test file is found in ``some/sub_directory/file.pyt``, the test execution directory would be ``<work_tree>/some/sub_directory/<name>``.
 
 .. [1] The CPU and GPU ids are IDs used internally in ``nvtest`` and may, or may not, correspond to the actual hardware IDs.

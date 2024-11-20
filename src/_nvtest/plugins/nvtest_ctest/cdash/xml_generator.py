@@ -25,7 +25,7 @@ class CDashXMLReporter:
             cases_to_run: list["TestCase"] = [c for c in session.cases if not c.mask]
             for case in cases_to_run:
                 self.data.add_test(case)
-        dest = dest or os.path.join("." if not session else session.root, "_reports/cdash")
+        dest = dest or os.path.join("." if not session else session.work_tree, "_reports/cdash")
         self.xml_dir = os.path.abspath(dest)
         self.xml_files: list[str] = []
         self.notes: dict[str, str] = {}

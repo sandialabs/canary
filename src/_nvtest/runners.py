@@ -337,7 +337,7 @@ class BatchRunner(AbstractTestRunner):
         if getattr(config.options, "plugin_dirs", None):
             for p in config.options.plugin_dirs:
                 fp.write(f"-p {p} ")
-        fp.write(f"-C {batch.root} run -rv --stage={stage} ")
+        fp.write(f"-C {config.session.work_tree} run -rv --stage={stage} ")
         if getattr(config.options, "fail_fast", False):
             fp.write("--fail-fast ")
         if getattr(config.options, "dont_measure", False):

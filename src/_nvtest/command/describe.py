@@ -9,7 +9,7 @@ from _nvtest.test.case import TestCase
 from _nvtest.util import logging
 
 from .base import Command
-from .common import add_mark_arguments
+from .common import add_filter_arguments
 from .common import add_resource_arguments
 
 
@@ -19,7 +19,7 @@ class Describe(Command):
         return "Print information about a test file or test case"
 
     def setup_parser(self, parser: Parser):
-        add_mark_arguments(parser)
+        add_filter_arguments(parser)
         add_resource_arguments(parser)
         parser.add_argument("testspec", help="Test file or test case spec")
 

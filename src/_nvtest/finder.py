@@ -1,6 +1,7 @@
 import fnmatch
 import math
 import os
+import re
 import sys
 from typing import Any
 from typing import TextIO
@@ -195,6 +196,7 @@ class Finder:
         on_options: list[str] | None = None,
         owners: set[str] | None = None,
         env_mods: dict[str, str] | None = None,
+        regex: str | None = None,
     ) -> list[TestCase]:
         o = ",".join(on_options or [])
         logging.debug(
@@ -216,7 +218,11 @@ class Finder:
 
         Finder.resolve_dependencies(cases)
         Finder.filter(
-            cases, keyword_expr=keyword_expr, parameter_expr=parameter_expr, owners=owners
+            cases,
+            keyword_expr=keyword_expr,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
         )
         Finder.check_for_skipped_dependencies(cases)
 
@@ -233,11 +239,17 @@ class Finder:
         keyword_expr: str | None = None,
         parameter_expr: str | None = None,
         owners: set[str] | None = None,
+        regex: str | None = None,
     ) -> None:
         cpus_per_node: int = config.machine.cpus_per_node
         min_cpus, max_cpus = config.test.cpu_count
         min_gpus, max_gpus = config.test.gpu_count
         min_nodes, max_nodes = config.test.node_count
+
+        rx: re.Pattern | None = None
+        if regex is not None:
+            logging.warning("Regular expression search can be slow for large test suites")
+            rx = re.compile(regex)
 
         owners = set(owners or [])
         for case in cases:
@@ -295,6 +307,23 @@ class Finder:
 
             if case.mask is None and any(dep.mask for dep in case.dependencies):
                 case.mask = colorize("deselected due to @*b{skipped dependencies}")
+
+            if case.mask is None and rx is not None:
+                found: bool = False
+                for asset in case.assets:
+                    if os.path.isfile(asset.src):
+                        try:
+                            for line in open(asset.src):
+                                if rx.search(line):
+                                    found = True
+                                    break
+                        except UnicodeDecodeError:
+                            continue
+                    if found:
+                        break
+                else:
+                    msg = "deselected due to @*{re.search(%r) is None} evaluated to True" % regex
+                    case.mask = colorize(msg)
 
     @staticmethod
     def pprint_paths(cases: list[TestCase], file: TextIO = sys.stdout) -> None:

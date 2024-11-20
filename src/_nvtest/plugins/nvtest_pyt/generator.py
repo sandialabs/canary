@@ -470,13 +470,13 @@ class PYTTestFile(AbstractTestGenerator):
         testname: str | None = None,
         on_options: list[str] | None = None,
         parameters: dict[str, Any] | None = None,
-    ) -> dict[str, list[tuple[str, str]]]:
+    ) -> dict[str, list[tuple[str, str | None]]]:
         kwds = dict(parameters) if parameters else {}
         if testname:
             kwds["name"] = testname
         for key in list(kwds.keys()):
             kwds[key.upper()] = kwds[key]
-        sources: dict[str, list[tuple[str, str]]] = {}
+        sources: dict[str, list[tuple[str, str | None]]] = {}
         dirname = os.path.join(self.root, os.path.dirname(self.path))
         for ns in self._sources:
             assert isinstance(ns.action, str)
@@ -488,12 +488,18 @@ class PYTTestFile(AbstractTestGenerator):
             src, dst = ns.value
             src = self.safe_substitute(src, **kwds)
             if dst is None:
-                files = glob.glob(os.path.join(dirname, src))
-                for file in files:
-                    dst = os.path.basename(file)
-                    sources.setdefault(ns.action, []).append((file, dst))
+                f = os.path.join(dirname, src)
+                if os.path.exists(f):
+                    sources.setdefault(ns.action, []).append((src, None))
+                else:
+                    files = glob.glob(f)
+                    for file in files:
+                        # keep paths relative to dirname
+                        file = os.path.relpath(file, dirname)
+                        sources.setdefault(ns.action, []).append((file, None))
             else:
                 dst = self.safe_substitute(dst, **kwds)
+                src, dst = [os.path.relpath(p, dirname) for p in (src, dst)]
                 sources.setdefault(ns.action, []).append((src, dst))
         return sources
 

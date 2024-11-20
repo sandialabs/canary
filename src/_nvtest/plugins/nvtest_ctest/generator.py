@@ -132,7 +132,7 @@ class CTestTestCase(TestCase):
             with nvtest.filesystem.working_dir(self.file_dir):
                 ns = parse_test_args(command)
 
-            self.sources = {}
+            self.assets = []
             self.launcher = ns.launcher
             self.preflags = ns.preflags
             self.exe = ns.command

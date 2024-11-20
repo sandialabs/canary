@@ -42,6 +42,8 @@ class Session:
         timeout: float = -1.0,
         workers: int = -1,
         work_tree: str | None = None,
+        level: int | None = None,
+        stage: str | None = None,
     ):
         self._node_count: int
         self._node_ids: list[int]
@@ -90,6 +92,8 @@ class Session:
         self.timeout = timeout
         self.workers = workers
         self.work_tree = work_tree
+        self.stage = stage
+        self.level = level
 
     def __repr__(self) -> str:
         kwds = [f"{key.lstrip('_')}={value!r}" for key, value in vars(self).items()]
@@ -272,7 +276,7 @@ class Config:
     def factory(cls) -> "Config":
         """Create the configuration object"""
         self = cls.create()
-        root = find_session_root()
+        root = find_work_tree()
         if root:
             # If we are inside a session directory, then we want to restore its configuration
             # any changes create happens before setting command line options, so changes can still
@@ -656,7 +660,7 @@ def boolean(arg: Any) -> bool:
     return bool(arg)
 
 
-def find_session_root(start: str | None = None) -> str | None:
+def find_work_tree(start: str | None = None) -> str | None:
     path = os.path.abspath(start or os.getcwd())
     tagfile = "SESSION.TAG"
     while True:

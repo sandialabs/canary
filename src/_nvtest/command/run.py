@@ -16,7 +16,7 @@ from _nvtest.util.banner import banner
 
 from .base import Command
 from .common import PathSpec
-from .common import add_mark_arguments
+from .common import add_filter_arguments
 from .common import add_resource_arguments
 from .common import add_work_tree_arguments
 
@@ -29,7 +29,7 @@ class Run(Command):
     def setup_parser(self, parser: "Parser"):
         parser.epilog = PathSpec.description()
         add_work_tree_arguments(parser)
-        add_mark_arguments(parser)
+        add_filter_arguments(parser)
         group = parser.add_argument_group("console reporting")
         group.add_argument(
             "--no-header",
@@ -126,6 +126,7 @@ class Run(Command):
                 parameter_expr=args.parameter_expr,
                 on_options=args.on_options,
                 env_mods=args.env_mods.get("test") or {},
+                regex=args.regex_filter,
             )
             if args.until is not None:
                 unmasked_cases = [case for case in session.cases if not case.mask]

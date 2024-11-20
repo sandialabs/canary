@@ -152,7 +152,7 @@ Examples
     def llvm_coverage_combine(session: nvtest.Session) -> None:
         if not nvtest.config.get("option:code_coverage"):
             return
-        files = find_raw_profiling_files(session.root)
+        files = find_raw_profiling_files(session.work_tree)
         combined_files = combine_profiling_files(files)
         create_coverage_maps(combined_files)
 

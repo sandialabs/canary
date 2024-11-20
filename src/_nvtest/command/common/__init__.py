@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 __all__ = [
     "PathSpec",
     "setdefault",
-    "add_mark_arguments",
+    "add_filter_arguments",
     "add_work_tree_arguments",
     "add_resource_arguments",
 ]
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from ...test.case import TestCase
 
 
-def add_mark_arguments(parser: "Parser") -> None:
+def add_filter_arguments(parser: "Parser") -> None:
     group = parser.add_argument_group("filtering")
     group.add_argument(
         "-k",
@@ -43,6 +43,15 @@ def add_mark_arguments(parser: "Parser") -> None:
         metavar="expression",
         default=None,
         help="Filter tests by parameter name and value, such as '-p np=8' or '-p np<8'",
+    )
+    group.add_argument(
+        "-R",
+        dest="regex_filter",
+        metavar="regex",
+        default=None,
+        help="Include tests containing the regular expression regex in at least 1 of its "
+        "resources.  regex is a python regular expression, see "
+        "https://docs.python.org/3/library/re.html",
     )
 
 

@@ -34,8 +34,6 @@ class TestBatch(AbstractTestCase):
         self.nbatches = nbatches
         self.lot_no = lot_no
         self.name = f"nv.{self.lot_no}/{self.batch_no}/{self.nbatches}"
-        first = next(iter(cases))
-        self.root = self.exec_dir = first.exec_root
         self.total_duration: float = -1
         self._submit_cpus = 1
         self._submit_gpus = 0
@@ -137,7 +135,7 @@ class TestBatch(AbstractTestCase):
 
     @property
     def stage(self):
-        return os.path.join(self.root, ".nvtest/batches", str(self.lot_no))
+        return os.path.join(config.session.work_tree, ".nvtest/batches", str(self.lot_no))
 
     def submission_script_filename(self) -> str:
         basename = f"batch.{self.batch_no}-inp.sh"

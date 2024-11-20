@@ -1,3 +1,4 @@
+import dataclasses
 import datetime
 import io
 import itertools
@@ -43,6 +44,13 @@ def stringify(arg: Any, float_fmt: str | None = None) -> str:
     return str(arg)
 
 
+@dataclasses.dataclass
+class Asset:
+    src: str
+    dst: str | None
+    action: str
+
+
 class TestCase(AbstractTestCase):
     _dbfile = "testcase.lock"
 
@@ -62,7 +70,7 @@ class TestCase(AbstractTestCase):
         parameters: dict[str, Any] | None = None,
         timeout: float | None = None,
         baseline: list[str | tuple[str, str]] | None = None,
-        sources: dict[str, list[tuple[str, str]]] | None = None,
+        sources: dict[str, list[tuple[str, str | None]]] | None = None,
         xstatus: int | None = None,
         preload: str | None = None,
         modules: list[str] | None = None,
@@ -84,7 +92,7 @@ class TestCase(AbstractTestCase):
         self._parameters: dict[str, Any] = {}
         self._timeout: float | None = None
         self._baseline: list[str | tuple[str, str]] = []
-        self._sources: dict[str, list[tuple[str, str]]] = {}
+        self._assets: list[Asset] = []
         self._xstatus: int = 0
         self._preload: str | None = None
         self._modules: list[str] = []
@@ -92,36 +100,6 @@ class TestCase(AbstractTestCase):
         self._owners: list[str] = []
         self._artifacts: list[dict[str, str]] = []
         self._exclusive: bool = exclusive
-        self.stages: list[str] = stages or ["run"]
-
-        if file_root is not None:
-            self.file_root = file_root
-        if file_path is not None:
-            self.file_path = file_path
-        if family is not None:
-            self.family = family
-        if owners is not None:
-            self.owners = owners
-        if keywords is not None:
-            self.keywords = keywords
-        if parameters is not None:
-            self.parameters = parameters
-        if timeout is not None:
-            self.timeout = float(timeout)
-        if baseline is not None:
-            self.baseline = baseline
-        if sources is not None:
-            self.sources = sources
-        if xstatus is not None:
-            self.xstatus = xstatus
-        if preload is not None:
-            self.preload = preload
-        if modules is not None:
-            self.modules = modules
-        if rcfiles is not None:
-            self.rcfiles = rcfiles
-        if artifacts is not None:
-            self.artifacts = artifacts
 
         self._mask: str | None = None
         self._name: str | None = None
@@ -153,6 +131,37 @@ class TestCase(AbstractTestCase):
         self._variables: dict[str, str] = {}
 
         self._measurements: dict[str, Any] = {}
+
+        self.stages: list[str] = stages or ["run"]
+
+        if file_root is not None:
+            self.file_root = file_root
+        if file_path is not None:
+            self.file_path = file_path
+        if family is not None:
+            self.family = family
+        if owners is not None:
+            self.owners = owners
+        if keywords is not None:
+            self.keywords = keywords
+        if parameters is not None:
+            self.parameters = parameters
+        if timeout is not None:
+            self.timeout = float(timeout)
+        if baseline is not None:
+            self.baseline = baseline
+        if sources is not None:
+            self.assets = sources  # type: ignore
+        if xstatus is not None:
+            self.xstatus = xstatus
+        if preload is not None:
+            self.preload = preload
+        if modules is not None:
+            self.modules = modules
+        if rcfiles is not None:
+            self.rcfiles = rcfiles
+        if artifacts is not None:
+            self.artifacts = artifacts
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -327,12 +336,24 @@ class TestCase(AbstractTestCase):
         self._baseline = list(arg)
 
     @property
-    def sources(self) -> dict[str, list[tuple[str, str]]]:
-        return self._sources
+    def assets(self) -> list[Asset]:
+        return self._assets
 
-    @sources.setter
-    def sources(self, arg: dict[str, list[tuple[str, str]]]) -> None:
-        self._sources = arg
+    @assets.setter
+    def assets(self, arg: dict[str, list[tuple[str, str | None]]]) -> None:
+        """Transfer source files to this test case's assets.
+
+        {action: [(src, dst), ...]}
+
+        """
+        self._assets.clear()
+        for action in arg:
+            for t, dst in arg[action]:
+                src = t if os.path.exists(t) else os.path.join(self.file_dir, t)
+                if not os.path.exists(src):
+                    logging.warning(f"{self}: {action} resource file {t} not found")
+                asset = Asset(src=os.path.abspath(src), dst=dst, action=action)
+                self._assets.append(asset)
 
     @property
     def xstatus(self) -> int:
@@ -835,24 +856,22 @@ class TestCase(AbstractTestCase):
 
     def copy_sources_to_workdir(self, copy_all_resources: bool = False):
         workdir = self.exec_dir
-        for action in ("copy", "link"):
-            for t, dst in self.sources.get(action, []):
-                if os.path.exists(t):
-                    src = t
-                else:
-                    src = os.path.join(self.file_dir, t)
-                dst = os.path.join(workdir, os.path.basename(dst))
-                if not os.path.exists(src):
-                    s = f"{self}: {action} resource file {t} not found"
-                    raise MissingSourceError(s)
-                elif os.path.exists(dst):
-                    logging.warning(f"{os.path.basename(dst)} already exists in {workdir}")
-                    continue
-                if action == "copy" or copy_all_resources:
-                    fs.force_copy(src, dst, echo=logging.info)
-                else:
-                    relsrc = os.path.relpath(src, workdir)
-                    fs.force_symlink(relsrc, dst, echo=logging.info)
+        for asset in self.assets:
+            if asset.action not in ("copy", "link"):
+                continue
+            if not os.path.exists(asset.src):
+                s = f"{self.file}: {asset.action} resource file {asset.src} not found"
+                raise MissingSourceError(s)
+            dst: str
+            if asset.dst is None:
+                dst = os.path.join(self.exec_dir, os.path.basename(asset.src))
+            else:
+                dst = os.path.join(self.exec_dir, asset.dst)
+            if asset.action == "copy" or copy_all_resources:
+                fs.force_copy(asset.src, dst, echo=logging.info)
+            else:
+                relsrc = os.path.relpath(asset.src, workdir)
+                fs.force_symlink(relsrc, dst, echo=logging.info)
 
     def save(self):
         file = self.dbfile
@@ -1016,6 +1035,11 @@ class TestCase(AbstractTestCase):
             name = attr[1:] if private else attr
             if name == "dependencies":
                 value = [dep.getstate() for dep in value]
+            elif name == "assets":
+                sources: dict[str, list[list[str | None]]] = {}
+                for asset in value:
+                    sources.setdefault(asset.action, []).append([asset.src, asset.dst])
+                value = sources
             elif name == "status":
                 value = {"value": value.value, "details": value.details}
             elif name == "paramsets":
@@ -1067,7 +1091,7 @@ class TestMultiCase(TestCase):
         keywords: list[str] = [],
         timeout: float | None = None,
         baseline: list[str | tuple[str, str]] = [],
-        sources: dict[str, list[tuple[str, str]]] = {},
+        sources: dict[str, list[tuple[str, str | None]]] = {},
         xstatus: int = 0,
         preload: str | None = None,
         modules: list[str] | None = None,
@@ -1102,14 +1126,18 @@ class TestMultiCase(TestCase):
             self.exe = os.path.basename(self.file)
             self.postflags.append(flag)
         else:
-            # flag is a script to run during analysis, check if it is going to be copied/linked
-            self.exe = flag
+            src = flag if os.path.exists(flag) else os.path.join(self.file_dir, flag)
+            if not os.path.exists(src):
+                logging.warning(f"{self}: analyze script {flag} not found")
+            self.exe = os.path.basename(flag)
             self.launcher = None
-            for action in ("link", "copy"):
-                if action in self.sources and flag in [_[0] for _ in self.sources[action]]:
+            # flag is a script to run during analysis, check if it is going to be copied/linked
+            for asset in self.assets:
+                if asset.action in ("link", "copy") and self.exe == os.path.basename(asset.src):
                     break
             else:
-                sources.setdefault("link", []).append((flag, flag))
+                asset = Asset(src=os.path.abspath(src), dst=None, action="link")
+                self.assets.append(asset)
         self._flag = flag
         self._paramsets = paramsets
 

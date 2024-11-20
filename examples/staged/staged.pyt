@@ -3,14 +3,14 @@ import sys
 
 import nvtest
 
-nvtest.directives.parameterize("a", [1, 2, 3])
+nvtest.directives.parameterize("np", [1, 4, 8])
 nvtest.directives.stages("analyze")
 
 
 def run(case: nvtest.TestInstance) -> None:
     # Run the test
     nvtest.logging.info("running the very expensive 'run' stage")
-    f = f"{case.parameters.a}.txt"
+    f = f"{case.parameters.np}.txt"
     nvtest.filesystem.touchp(f)
     analyze(case)
 
@@ -18,7 +18,7 @@ def run(case: nvtest.TestInstance) -> None:
 def analyze(case: nvtest.TestInstance) -> None:
     # Analyze a single parameterized test
     nvtest.logging.info("running the relatively cheap 'analyze' stage")
-    f = f"{case.parameters.a}.txt"
+    f = f"{case.parameters.np}.txt"
     assert os.path.exists(f)
 
 

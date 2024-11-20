@@ -259,11 +259,11 @@ def load_module_from_file(name: str, path: Path | str):
 def factory() -> Manager:
     manager = Manager()
     manager.load_builtins()
-    if os.getenv("NVTEST_LEVEL") == "0" and "NVTEST_SESSION_DIR" in os.environ:
+    if os.getenv("NVTEST_LEVEL") == "0" and "NVTEST_WORK_TREE" in os.environ:
         # Setting up test cases and several other operations are done in a
         # multiprocessing Pool so we reload the configuration that existed when that pool
         # was created
-        file = os.path.join(os.environ["NVTEST_SESSION_DIR"], ".nvtest/objects/plugin")
+        file = os.path.join(os.environ["NVTEST_WORK_TREE"], ".nvtest/objects/plugin")
         if os.path.exists(file):
             state = json.load(open(file))
             manager.setstate(state)

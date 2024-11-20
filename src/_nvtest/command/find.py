@@ -9,7 +9,7 @@ from _nvtest.util.banner import banner
 
 from .base import Command
 from .common import PathSpec
-from .common import add_mark_arguments
+from .common import add_filter_arguments
 from .common import add_resource_arguments
 
 
@@ -27,7 +27,7 @@ class Find(Command):
         parser.add_argument(
             "--owner", dest="owners", action="append", help="Show tests owned by 'owner'"
         )
-        add_mark_arguments(parser)
+        add_filter_arguments(parser)
         add_resource_arguments(parser)
         PathSpec.setup_parser(parser)
 
@@ -46,6 +46,7 @@ class Find(Command):
             on_options=args.on_options,
             owners=None if not args.owners else set(args.owners),
             env_mods=args.env_mods.get("test") or {},
+            regex=args.regex_filter,
         )
         cases_to_run = [case for case in cases if not case.mask]
         cases_to_run.sort(key=lambda x: x.name)

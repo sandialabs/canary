@@ -6,6 +6,7 @@ from _nvtest.runners import TestCaseRunner
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 
+from .. import config
 from .base import Command
 from .common import add_resource_arguments
 from .common import filter_cases_by_path
@@ -37,6 +38,7 @@ Note: this command must be run in a test session directory.
 
     def execute(self, args: argparse.Namespace) -> int:
         session = Session(os.getcwd(), mode="r")
+        config.session.stage = "analyze"
         cases: list[TestCase]
         if args.pathspec:
             cases = filter_cases_by_path(session.cases, args.pathspec)

@@ -141,7 +141,7 @@ class Session:
     def __init__(self, path: str, mode: str = "r", force: bool = False) -> None:
         if mode not in "arw":
             raise ValueError(f"invalid mode: {mode!r}")
-        self.root: str
+        self.work_tree: str
         if mode == "w":
             path = os.path.abspath(path)
             if force and os.path.exists(path):
@@ -150,13 +150,13 @@ class Session:
                 force_remove(path)
             if os.path.exists(path):
                 raise DirectoryExistsError(f"{path}: directory exists")
-            self.root = path
+            self.work_tree = path
         else:
             root = self.find_root(path)
             if root is None:
                 raise NotASession("not a nvtest session (or any of the parent directories)")
-            self.root = root
-        self.config_dir = os.path.join(self.root, ".nvtest")
+            self.work_tree = root
+        self.config_dir = os.path.join(self.work_tree, ".nvtest")
         self.log_dir = os.path.join(self.config_dir, "logs")
         self.mode = mode
         self.search_paths: dict[str, list[str]] = {}
@@ -176,8 +176,7 @@ class Session:
         self.finish = -1.0
 
         os.environ.setdefault("NVTEST_LEVEL", "0")
-        os.environ["NVTEST_SESSION_DIR"] = self.root
-        os.environ["NVTEST_SESSION_CONFIG_DIR"] = self.config_dir
+        os.environ["NVTEST_WORK_TREE"] = self.work_tree
 
     @staticmethod
     def find_root(path: str):
@@ -264,7 +263,7 @@ class Session:
         logging.debug("Resolving test case dependencies")
         for case_id in ts.static_order():
             state = mapping[case_id]
-            state["properties"]["exec_root"] = self.root
+            state["properties"]["exec_root"] = self.work_tree
             dependency_ids = state["properties"].pop("dependencies", [])
             case = testcase_from_state(state)
             case.dependencies = [cases[dep_id] for dep_id in dependency_ids]
@@ -300,11 +299,11 @@ class Session:
         * set configuration values.
 
         """
-        logging.debug(f"Loading test session in {self.root}")
-        if config.session.work_tree != self.root:
+        logging.debug(f"Loading test session in {self.work_tree}")
+        if config.session.work_tree != self.work_tree:
             raise RuntimeError(
                 f"Configuration failed to load correctly, expected "
-                f"config.session.work_tree={self.root!r} but got {config.session.work_tree}"
+                f"config.session.work_tree={self.work_tree!r} but got {config.session.work_tree}"
             )
 
         with self.db.open("files", "r") as record:
@@ -325,7 +324,7 @@ class Session:
         * save local configuration values to the session configuration scope
 
         """
-        logging.debug(f"Initializing test session in {self.root}")
+        logging.debug(f"Initializing test session in {self.work_tree}")
         file = os.path.join(self.config_dir, self.tagfile)
         mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
@@ -336,7 +335,7 @@ class Session:
 
     def set_config_values(self):
         """Set ``section`` configuration values"""
-        config.session.work_tree = self.root
+        config.session.work_tree = self.work_tree
 
     def save(self, ini: bool = False) -> None:
         """Save session data, excluding data that is stored separately in the database"""
@@ -398,6 +397,7 @@ class Session:
         on_options: list[str] | None = None,
         owners: set[str] | None = None,
         env_mods: dict[str, str] | None = None,
+        regex: str | None = None,
     ) -> None:
         """Lock test files into concrete (parameterized) test cases
 
@@ -425,6 +425,7 @@ class Session:
             on_options=on_options,
             owners=owners,
             env_mods=env_mods,
+            regex=regex,
         )
         cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:
@@ -439,7 +440,7 @@ class Session:
         """Populate the work tree with test case assets and return the list of cases ready to run"""
         logging.debug("Populating test case directories")
         with self.rc_environ():
-            with working_dir(self.root):
+            with working_dir(self.work_tree):
                 self.setup_testcases(copy_all_resources=copy_all_resources)
         return [case for case in self.cases if case.status.satisfies(("pending", "ready"))]
 
@@ -454,7 +455,7 @@ class Session:
         errors = 0
         while ts.is_active():
             group = ts.get_ready()
-            args = zip(group, repeat(self.root), repeat(copy_all_resources))
+            args = zip(group, repeat(self.work_tree), repeat(copy_all_resources))
             if config.debug:
                 for a in args:
                     setup_individual_case(*a)
@@ -498,9 +499,9 @@ class Session:
         """
         explicit_start_path = start is not None
         if start is None:
-            start = self.root
+            start = self.work_tree
         elif not os.path.isabs(start):
-            start = os.path.join(self.root, start)
+            start = os.path.join(self.work_tree, start)
         start = os.path.normpath(start)
         # mask all tests and then later enable based on additional conditions
         for case in self.cases:
@@ -622,14 +623,15 @@ class Session:
         if not cases:
             raise ValueError("There are no cases to run in this session")
         queue = self.setup_queue(cases)
-        with self.rc_environ(NVTEST_STAGE=stage or "run"):
-            with working_dir(self.root):
+        config.session.stage = stage = stage or "run"
+        with self.rc_environ(NVTEST_STAGE=stage):
+            with working_dir(self.work_tree):
                 cleanup_queue = True
                 try:
                     self.start = timestamp()
                     self.finish = -1.0
                     self.process_queue(
-                        queue=queue, fail_fast=fail_fast, reporting=reporting, stage=stage or "run"
+                        queue=queue, fail_fast=fail_fast, reporting=reporting, stage=stage
                     )
                 except ProcessPoolExecutorFailedToStart:
                     if int(os.getenv("NVTEST_LEVEL", "0")) > 1:
@@ -1026,7 +1028,7 @@ class Session:
                 rc.add("A")
             else:
                 pathspec = os.path.abspath(pathspec)
-                if pathspec != self.root:
+                if pathspec != self.work_tree:
                     cases = [c for c in cases if c.exec_dir.startswith(pathspec)]
         if "A" in rc:
             if "x" in rc:

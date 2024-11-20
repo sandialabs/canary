@@ -72,4 +72,4 @@ Note: this command must be run from inside of a test session directory.
                     f = case.exec_dir
                 print(f)
                 return 0
-        raise ValueError(f"{args.testspec}: no matching test found in {session.root}")
+        raise ValueError(f"{args.testspec}: no matching test found in {session.work_tree}")

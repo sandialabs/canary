@@ -7,6 +7,7 @@ from _nvtest.session import Session
 from _nvtest.test.case import TestCase
 from _nvtest.util import logging
 
+from .. import config
 from .base import Command
 from .common import filter_cases_by_path
 from .common import filter_cases_by_status
@@ -28,6 +29,7 @@ class Rebaseline(Command):
         with logging.level(logging.WARNING):
             session = Session(os.getcwd(), mode="r")
         cases: list[TestCase]
+        config.session.stage = "baseline"
         if args.pathspec:
             cases = filter_cases_by_path(session.cases, args.pathspec)
         else:

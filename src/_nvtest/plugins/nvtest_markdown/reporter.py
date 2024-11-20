@@ -11,14 +11,14 @@ from _nvtest.util.filesystem import mkdirp
 
 
 class MarkdownReporter(Reporter):
-    def create(self, dest: str = "$session_root") -> None:  # type: ignore
+    def create(self, dest: str = "$nvtest_work_tree") -> None:  # type: ignore
         """Create a multi-page markdown report
 
         Args:
           dest: Directory to write report
 
         """
-        dest = string.Template(dest).safe_substitute(session_root=self.session.root)
+        dest = string.Template(dest).safe_substitute(nvtest_work_tree=self.session.work_tree)
         self.md_dir = os.path.join(dest, "MARKDOWN")
         self.index = os.path.join(dest, "Results.md")
         self.root = dest

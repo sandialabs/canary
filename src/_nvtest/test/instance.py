@@ -171,7 +171,7 @@ class TestInstance:
     timeout: float | int | None
     runtime: float | int | None
     baseline: list[str | tuple[str, str]]
-    sources: dict[str, list[tuple[str, str]]]
+    sources: dict[str, list[tuple[str, str | None]]]
     exec_root: str
     exec_dir: str
     status: Status
@@ -199,6 +199,9 @@ class TestInstance:
         for dep in case.dependencies:
             dependencies.append(TestInstance.from_case(dep))
         parameters = Parameters(**case.parameters)
+        sources: dict[str, list[tuple[str, str | None]]] = {}
+        for asset in case.assets:
+            sources.setdefault(asset.action, []).append((asset.src, asset.dst))
         self = cls(
             file_root=case.file_root,
             file_path=case.file_path,
@@ -212,7 +215,7 @@ class TestInstance:
             timeout=case.timeout,
             runtime=case.runtime,
             baseline=case.baseline,
-            sources=case.sources,
+            sources=sources,
             exec_root=case.exec_root,  # type: ignore
             exec_dir=case.exec_dir,
             status=case.status,
@@ -257,6 +260,9 @@ class TestMultiInstance(TestInstance):
             for dep in case.dependencies:
                 col.append(dep.parameters[key])
         parameters = MultiParameters(**columns)
+        sources: dict[str, list[tuple[str, str | None]]] = {}
+        for asset in case.assets:
+            sources.setdefault(asset.action, []).append((asset.src, asset.dst))
         self = cls(
             file_root=case.file_root,
             file_path=case.file_path,
@@ -270,7 +276,7 @@ class TestMultiInstance(TestInstance):
             timeout=case.timeout,
             runtime=case.runtime,
             baseline=case.baseline,
-            sources=case.sources,
+            sources=sources,
             exec_root=case.exec_root,  # type: ignore
             exec_dir=case.exec_dir,
             status=case.status,
