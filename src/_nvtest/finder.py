@@ -309,21 +309,16 @@ class Finder:
                 case.mask = colorize("deselected due to @*b{skipped dependencies}")
 
             if case.mask is None and rx is not None:
-                found: bool = False
-                for asset in case.assets:
-                    if os.path.isfile(asset.src):
-                        try:
-                            for line in open(asset.src):
-                                if rx.search(line):
-                                    found = True
-                                    break
-                        except UnicodeDecodeError:
-                            continue
-                    if found:
-                        break
-                else:
-                    msg = "deselected due to @*{re.search(%r) is None} evaluated to True" % regex
-                    case.mask = colorize(msg)
+                if not fs.grep(rx, case.file):
+                    for asset in case.assets:
+                        if os.path.isfile(asset.src):
+                            if fs.grep(rx, asset.src):
+                                break
+                    else:
+                        msg = (
+                            "deselected due to @*{re.search(%r) is None} evaluated to True" % regex
+                        )
+                        case.mask = colorize(msg)
 
     @staticmethod
     def pprint_paths(cases: list[TestCase], file: TextIO = sys.stdout) -> None:

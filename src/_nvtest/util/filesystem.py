@@ -4,6 +4,7 @@ import getpass
 import grp
 import os
 import pathlib
+import re
 import shlex
 import shutil
 import stat
@@ -18,6 +19,7 @@ from . import logging
 
 __all__ = [
     "ancestor",
+    "grep",
     "which",
     "copyfile",
     "movefile",
@@ -422,3 +424,14 @@ def ancestor(dir: str, n: int = 1) -> str:
     for i in range(n):
         parent = os.path.dirname(parent)
     return parent
+
+
+def grep(regex: str | re.Pattern, file: str) -> bool:
+    rx: re.Pattern = re.compile(regex) if isinstance(regex, str) else regex
+    try:
+        for line in open(file):
+            if rx.search(line):
+                return True
+    except UnicodeDecodeError:
+        pass
+    return False

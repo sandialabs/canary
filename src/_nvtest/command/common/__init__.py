@@ -50,7 +50,7 @@ def add_filter_arguments(parser: "Parser") -> None:
         metavar="regex",
         default=None,
         help="Include tests containing the regular expression regex in at least 1 of its "
-        "resources.  regex is a python regular expression, see "
+        "file assets.  regex is a python regular expression, see "
         "https://docs.python.org/3/library/re.html",
     )
 
