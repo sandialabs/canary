@@ -130,6 +130,11 @@ mypy:
 
 pages:
   extends: .pages
+  before_script:
+  # make sure to install from main to get the right version number
+  - git checkout $CI_DEFAULT_BBRANCH
+  - git pull
+  - git fetch --tags
   rules:
   - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     changes:
