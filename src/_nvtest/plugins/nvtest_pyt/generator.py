@@ -500,9 +500,8 @@ class PYTTestFile(AbstractTestGenerator):
                         sources.setdefault(ns.action, []).append((file, None))
             else:
                 dst = self.safe_substitute(dst, **kwds)
-                dst = dst if os.path.isabs(dst) else os.path.join(dirname, dst)
-                src, dst = [os.path.relpath(p, dirname) for p in (src, dst)]
-                sources.setdefault(ns.action, []).append((src, dst))
+                file = os.path.relpath(src, dirname)
+                sources.setdefault(ns.action, []).append((file, dst))
         return sources
 
     def depends_on(
