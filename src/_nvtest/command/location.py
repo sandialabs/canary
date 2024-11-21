@@ -39,7 +39,7 @@ Note: this command must be run from inside of a test session directory.
         )
         group.add_argument(
             "-x",
-            dest="show_exec_dir",
+            dest="show_working_directory",
             action="store_true",
             default=False,
             help="Show the location of the test's execution directory",
@@ -66,10 +66,10 @@ Note: this command must be run from inside of a test session directory.
                     f = case.file
                 elif args.show_source_dir:
                     f = case.file_dir
-                elif args.show_exec_dir:
-                    f = case.exec_dir
+                elif args.show_working_directory:
+                    f = case.working_directory
                 else:
-                    f = case.exec_dir
+                    f = case.working_directory
                 print(f)
                 return 0
         raise ValueError(f"{args.testspec}: no matching test found in {session.work_tree}")

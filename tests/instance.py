@@ -21,11 +21,11 @@ def test_instance_deps(tmpdir):
     files = finder.discover()
     cases = finder.lock_and_filter(files)
     assert len([c for c in cases if not c.mask]) == 7
-    exec_root = os.path.join(workdir, "tests")
-    mkdirp(exec_root)
+    work_tree = os.path.join(workdir, "tests")
+    mkdirp(work_tree)
     for case in cases:
-        case.setup(exec_root=exec_root)
-        instance = inst.load(case.exec_dir)
+        case.setup(work_tree=work_tree)
+        instance = inst.load(case.working_directory)
         if isinstance(case, inst.TestMultiInstance):
             assert instance.parameters.a == (0, 2, 4, 0, 2, 4)
             assert instance.parameters.b == (1, 3, 5, 1, 3, 5)

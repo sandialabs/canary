@@ -73,8 +73,8 @@ class DependencyPatterns:
             names = {case.name}
             if extra_fields:
                 names.add(case.display_name)
-                names.add(case.exec_path)
-                d = os.path.dirname(case.exec_path)
+                names.add(case.branch)
+                d = os.path.dirname(case.branch)
                 names.add(os.path.join(d, case.display_name))
             for pattern in self.value:
                 for name in names:
@@ -137,11 +137,11 @@ class TestCase(AbstractTestCase):
         self._mask: str | None = None
         self._name: str | None = None
         self._display_name: str | None = None
-        self._classname: str | None = None
         self._id: str | None = None
         self._status: Status = Status()
         self._cmd_line: str | None = None
-        self._exec_root: str | None = None
+        self._work_tree: str | None = None
+        self._working_directory: str | None = None
 
         # The process running the test case
         self._start: float = -1.0
@@ -212,12 +212,8 @@ class TestCase(AbstractTestCase):
         return self.display_name
 
     @property
-    def working_directory(self) -> str:
-        return self.exec_dir
-
-    @property
     def dbfile(self) -> str:
-        file = os.path.join(self.exec_dir, self._dbfile)
+        file = os.path.join(self.cache_directory, self._dbfile)
         return file
 
     @property
@@ -249,27 +245,37 @@ class TestCase(AbstractTestCase):
         return os.path.dirname(self.file)
 
     @property
-    def exec_root(self) -> str | None:
-        return self._exec_root
+    def work_tree(self) -> str | None:
+        return self._work_tree
 
-    @exec_root.setter
-    def exec_root(self, arg: str | None) -> None:
+    @work_tree.setter
+    def work_tree(self, arg: str | None) -> None:
         if arg is not None:
             assert os.path.exists(arg)
-            self._exec_root = arg
+            self._work_tree = arg
 
     @property
-    def exec_path(self) -> str:
+    def branch(self) -> str:
         return os.path.join(os.path.dirname(self.file_path), self.name)
 
     @property
-    def exec_dir(self) -> str:
-        exec_root = self.exec_root
-        if not exec_root:
-            exec_root = config.session.work_tree
-        if not exec_root:
-            raise ValueError("exec_root must be set during set up") from None
-        return os.path.normpath(os.path.join(exec_root, self.exec_path))
+    def cache_directory(self) -> str:
+        work_tree = self.work_tree
+        if not work_tree:
+            work_tree = config.session.work_tree
+        if not work_tree:
+            raise ValueError("work_tree must be set during set up") from None
+        return os.path.normpath(os.path.join(work_tree, self.branch))
+
+    @property
+    def working_directory(self) -> str:
+        if self._working_directory is None:
+            self._working_directory = self.cache_directory
+        return self._working_directory
+
+    @working_directory.setter
+    def working_directory(self, arg: str) -> None:
+        self._working_directory = arg
 
     @property
     def family(self) -> str:
@@ -607,14 +613,10 @@ class TestCase(AbstractTestCase):
 
     @property
     def classname(self) -> str:
-        if self._classname is None:
-            self.set_default_names()
-        assert self._classname is not None
-        return self._classname
-
-    @classname.setter
-    def classname(self, arg: str) -> None:
-        self._classname = arg
+        classname = os.path.dirname(self.file_path).strip()
+        if not classname:
+            classname = os.path.basename(self.file_dir).strip()
+        return classname.replace(os.path.sep, ".")
 
     @property
     def cmd_line(self) -> str | None:
@@ -713,16 +715,16 @@ class TestCase(AbstractTestCase):
     @property
     def pythonpath(self):
         path = [_ for _ in os.getenv("PYTHONPATH", "").split(os.pathsep) if _.split()]
-        if self.exec_dir not in path:
-            path.insert(0, self.exec_dir)
+        if self.working_directory not in path:
+            path.insert(0, self.working_directory)
         else:
-            path.insert(0, path.pop(path.index(self.exec_dir)))
+            path.insert(0, path.pop(path.index(self.working_directory)))
         return os.pathsep.join(path)
 
     def logfile(self, stage: str | None = None) -> str:
         if stage is None:
-            return os.path.join(self.exec_dir, "nvtest-out.txt")
-        return os.path.join(self.exec_dir, f"nvtest-{stage}-out.txt")
+            return os.path.join(self.cache_directory, "nvtest-out.txt")
+        return os.path.join(self.cache_directory, f"nvtest-{stage}-out.txt")
 
     def set_default_names(self) -> None:
         self.name = self.family
@@ -733,10 +735,6 @@ class TestCase(AbstractTestCase):
             s_params = [f"{k}={s_vals[i]}" for (i, k) in enumerate(keys)]
             self.name = f"{self._name}.{'.'.join(s_params)}"
             self.display_name = f"{self._display_name}[{','.join(s_params)}]"
-        classname = os.path.dirname(self.file_path).strip()
-        if not classname:
-            classname = os.path.basename(self.file_dir).strip()
-        self.classname = classname.replace(os.path.sep, ".")
 
     def set_default_timeout(self) -> None:
         if self.runtimes[2] is not None:
@@ -763,8 +761,8 @@ class TestCase(AbstractTestCase):
         # return mean, min, max runtimes
         if not config.cache_runtimes:
             return [None, None, None]
-        cache_dir = cache.get_cache_dir(self.file_root)
-        file = self.cache_file(cache_dir)
+        global_cache = cache.get_cache_dir(self.file_root)
+        file = self.cache_file(global_cache)
         if not os.path.exists(file):
             return [None, None, None]
         tries = 0
@@ -785,10 +783,10 @@ class TestCase(AbstractTestCase):
             return
         if self.status.value not in ("success", "diffed"):
             return
-        cache_dir = cache.create_cache_dir(self.file_root)
-        if cache_dir is None:
+        global_cache = cache.create_cache_dir(self.file_root)
+        if global_cache is None:
             return
-        file = self.cache_file(cache_dir)
+        file = self.cache_file(global_cache)
         if not os.path.exists(file):
             n = 0
             mean = minimum = maximum = self.duration
@@ -912,7 +910,7 @@ class TestCase(AbstractTestCase):
         assert len(self.dependencies) == len(self.dep_done_criteria)
 
     def copy_sources_to_workdir(self, copy_all_resources: bool = False):
-        workdir = self.exec_dir
+        workdir = self.working_directory
         for asset in self.assets:
             if asset.action not in ("copy", "link"):
                 continue
@@ -921,9 +919,9 @@ class TestCase(AbstractTestCase):
                 raise MissingSourceError(s)
             dst: str
             if asset.dst is None:
-                dst = os.path.join(self.exec_dir, os.path.basename(asset.src))
+                dst = os.path.join(self.working_directory, os.path.basename(asset.src))
             else:
-                dst = os.path.join(self.exec_dir, asset.dst)
+                dst = os.path.join(self.working_directory, asset.dst)
             if asset.action == "copy" or copy_all_resources:
                 fs.force_copy(asset.src, dst, echo=logging.info)
             else:
@@ -946,7 +944,7 @@ class TestCase(AbstractTestCase):
             "start",
             "finish",
             "returncode",
-            "exec_root",
+            "work_tree",
             "status",
             "measurements",
             "dep_done_criteria",
@@ -991,26 +989,26 @@ class TestCase(AbstractTestCase):
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
 
-    def setup(self, exec_root: str, copy_all_resources: bool = False) -> None:
+    def setup(self, work_tree: str, copy_all_resources: bool = False, clean: bool = True) -> None:
         if len(self.dependencies) != len(self.dep_done_criteria):
             raise ValueError("Inconsistent dependency/dep_done_criteria lists")
         logging.trace(f"Setting up {self}")
-        if self.exec_root is not None:
-            assert os.path.samefile(exec_root, self.exec_root)
-        self.exec_root = exec_root
-        if os.path.exists(self.exec_dir):
-            with fs.working_dir(self.exec_dir):
-                for f in os.listdir("."):
-                    fs.force_remove(f)
-        with fs.working_dir(self.exec_dir, create=True):
-            self.setup_exec_dir(copy_all_resources=copy_all_resources)
+        if self.work_tree is not None:
+            assert os.path.samefile(work_tree, self.work_tree)
+        self.work_tree = work_tree
+        clean_out_folder(self.cache_directory)
+        fs.mkdirp(self.cache_directory)
+        if clean:
+            clean_out_folder(self.working_directory)
+        with fs.working_dir(self.working_directory, create=True):
+            self.setup_working_directory(copy_all_resources=copy_all_resources)
             self._status.set("ready" if not self.dependencies else "pending")
             for hook in plugin.plugins():
                 hook.test_setup(self)
             self.save()
         logging.trace(f"Done setting up {self}")
 
-    def setup_exec_dir(self, copy_all_resources: bool = False) -> None:
+    def setup_working_directory(self, copy_all_resources: bool = False) -> None:
         with logging.capture(self.logfile("setup"), mode="w"):
             with logging.timestamps():
                 logging.info(f"Preparing test: {self.name}")
@@ -1028,7 +1026,7 @@ class TestCase(AbstractTestCase):
         if not self.baseline:
             return
         logging.info(f"Rebaselining {self.pretty_repr()}")
-        with fs.working_dir(self.exec_dir):
+        with fs.working_dir(self.working_directory):
             for hook in plugin.plugins():
                 hook.test_before_run(self, stage="baseline")
             for arg in self.baseline:
@@ -1043,7 +1041,7 @@ class TestCase(AbstractTestCase):
                         exe(*args, fail_on_error=False)
                 else:
                     a, b = arg
-                    src = os.path.join(self.exec_dir, a)
+                    src = os.path.join(self.working_directory, a)
                     dst = os.path.join(self.file_dir, b)
                     if os.path.exists(src):
                         logging.emit(f"    Replacing {b} with {a}\n")
@@ -1059,17 +1057,17 @@ class TestCase(AbstractTestCase):
 
     def prepare_for_launch(self, stage: str = "run") -> None:
         if os.getenv("NVTEST_RESETUP"):
-            assert isinstance(self.exec_root, str)
-            self.setup(self.exec_root)
+            assert isinstance(self.work_tree, str)
+            self.setup(self.work_tree)
         if self.unresolved_dependencies:
             raise RuntimeError("All dependencies must be resolved before running")
-        with fs.working_dir(self.exec_dir):
+        with fs.working_dir(self.working_directory):
             for hook in plugin.plugins():
                 hook.test_before_run(self, stage=stage)
         self.save()
 
     def wrap_up(self, stage: str = "run") -> None:
-        with fs.working_dir(self.exec_dir):
+        with fs.working_dir(self.working_directory):
             self.cache_runtime()
             self.save()
             with open(self.logfile(), "w") as fh:
@@ -1280,6 +1278,13 @@ def from_state(state: dict[str, Any]) -> TestCase | TestMultiCase:
     case = factory(state.pop("type"))
     case.setstate(state)
     return case
+
+
+def clean_out_folder(folder: str) -> None:
+    if os.path.exists(folder):
+        with fs.working_dir(folder):
+            for f in os.listdir("."):
+                fs.force_remove(f)
 
 
 class MissingSourceError(Exception):

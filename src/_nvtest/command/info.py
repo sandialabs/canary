@@ -43,8 +43,8 @@ class Info(Command):
         from pygments.formatters import TerminalTrueColorFormatter as Formatter
         from pygments.lexers import get_lexer_by_name
 
-        if case.exec_root is None:
-            case.exec_root = "."
+        if case.work_tree is None:
+            case.work_tree = "."
         state = case.getstate()
         text = self.dump({"name": case.display_name, **state})
         lexer = get_lexer_by_name("yaml")

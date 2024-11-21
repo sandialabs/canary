@@ -127,7 +127,7 @@ class CTestTestCase(TestCase):
         )
 
         self._resource_groups: dict[str, int] | None = None
-        self._working_directory = working_directory or self.file_dir
+        self.working_directory = working_directory or self.file_dir
 
         if command is not None:
             with nvtest.filesystem.working_dir(self.file_dir):
@@ -229,14 +229,6 @@ class CTestTestCase(TestCase):
         cmd.extend(self.postflags or [])
         return cmd
 
-    @property
-    def working_directory(self) -> str:
-        return self._working_directory
-
-    @working_directory.setter
-    def working_directory(self, arg: str) -> None:
-        self._working_directory = arg
-
     @contextmanager
     def rc_environ(self, **variables: str) -> Generator[None, None, None]:
         with super().rc_environ(**variables):
@@ -272,9 +264,9 @@ class CTestTestCase(TestCase):
                     old = os.getenv(name, "")
                     env[name] = f"{value};{old}"
 
-    def setup(self, exec_root: str, copy_all_resources: bool = False) -> None:
-        super().setup(exec_root, copy_all_resources=copy_all_resources)
-        with nvtest.filesystem.working_dir(self.exec_dir):
+    def setup(self, work_tree: str, copy_all_resources: bool = False, clean: bool = True) -> None:
+        super().setup(work_tree, copy_all_resources=copy_all_resources, clean=False)
+        with nvtest.filesystem.working_dir(self.working_directory):
             with open("ctest-command.txt", "w") as fh:
                 fh.write(" ".join(self.command()))
 

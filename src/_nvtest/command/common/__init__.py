@@ -100,7 +100,7 @@ def add_resource_arguments(parser: "Parser") -> None:
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:
     prefix = os.path.abspath(pathspec)
-    return [c for c in cases if c.matches(pathspec) or c.exec_dir.startswith(prefix)]
+    return [c for c in cases if c.matches(pathspec) or c.working_directory.startswith(prefix)]
 
 
 def filter_cases_by_status(cases: list["TestCase"], status: tuple | str) -> list["TestCase"]:

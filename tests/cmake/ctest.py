@@ -92,7 +92,7 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
         [case] = file.lock()
         runner = xTestCaseRunner()
         mkdirp("./foo")
-        case.setup(exec_root=f"{os.getcwd()}/foo")
+        case.setup(work_tree=f"{os.getcwd()}/foo")
         runner.run(case)
         assert case.returncode == 0
         assert case.status == "failed"
@@ -115,7 +115,7 @@ set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test shoul
         [case] = file.lock()
         runner = xTestCaseRunner()
         mkdirp("./foo")
-        case.setup(exec_root=f"{os.getcwd()}/foo")
+        case.setup(work_tree=f"{os.getcwd()}/foo")
         runner.run(case)
 
 
@@ -136,7 +136,11 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
         [case] = file.lock()
         runner = xTestCaseRunner()
         mkdirp("./foo")
-        case.setup(exec_root=f"{os.getcwd()}/foo")
+        case.setup(work_tree=f"{os.getcwd()}/foo")
+        print(case.cache_directory)
+        print(os.listdir(case.cache_directory))
+        print(case.working_directory)
+        print(os.listdir(case.working_directory))
         runner.run(case)
         assert case.status == "success"
         assert case.returncode == 1

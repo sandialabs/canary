@@ -245,7 +245,7 @@ class Session:
             state = case.getstate()
             props = state["properties"]
             props["dependencies"] = [dep["properties"]["id"] for dep in props["dependencies"]]
-            props.pop("exec_root", None)
+            props.pop("work_tree", None)
             states.append(state)
         json.dump(states, file, indent=2)
 
@@ -267,7 +267,7 @@ class Session:
         for case_id in ts.static_order():
             state = mapping[case_id]
             dependency_ids = state["properties"].pop("dependencies", [])
-            state["properties"]["exec_root"] = self.work_tree
+            state["properties"]["work_tree"] = self.work_tree
             case = testcase_from_state(state)
             case.dependencies = [cases[dep_id] for dep_id in dependency_ids]
             cases[case.id] = case
@@ -470,9 +470,9 @@ class Session:
                 # state is lost and needs to be updated
                 case.refresh()
                 assert case.status.satisfies(("skipped", "ready", "pending"))
-                if case.exec_root is None:
+                if case.work_tree is None:
                     errors += 1
-                    logging.error(f"{case}: exec_root not set after setup")
+                    logging.error(f"{case}: work_tree not set after setup")
             ts.done(*group)
         with self.db.open("snapshots", "a") as record:
             self.dump_snapshots(record)
@@ -511,7 +511,7 @@ class Session:
         for case in self.cases:
             if case.mask:
                 continue
-            if not case.exec_dir.startswith(start):
+            if not case.working_directory.startswith(start):
                 case.mask = "Unreachable from start directory"
                 continue
             if case_specs is not None:
@@ -859,7 +859,7 @@ class Session:
                 case.save()
             elif not case.status.satisfies(("ready", "pending")):
                 raise ValueError(f"{case}: case is not ready or pending")
-            elif case.exec_root is None:
+            elif case.work_tree is None:
                 raise ValueError(f"{case}: exec root is not set")
         queue.put(*[case for case in cases if case.status.satisfies(("ready", "pending"))])
         queue.prepare(**kwds)
@@ -1034,7 +1034,7 @@ class Session:
             else:
                 pathspec = os.path.abspath(pathspec)
                 if pathspec != self.work_tree:
-                    cases = [c for c in cases if c.exec_dir.startswith(pathspec)]
+                    cases = [c for c in cases if c.working_directory.startswith(pathspec)]
         if "A" in rc:
             if "x" in rc:
                 cases_to_show = cases
@@ -1118,11 +1118,11 @@ class Database:
                 yield fh
 
 
-def setup_individual_case(case, exec_root, copy_all_resources):
+def setup_individual_case(case, work_tree, copy_all_resources):
     """Set up the test case.  This is done in a free function so that it can
     more easily be parallelized in a multiprocessor Pool"""
     logging.debug(f"Setting up {case}")
-    case.setup(exec_root, copy_all_resources=copy_all_resources)
+    case.setup(work_tree, copy_all_resources=copy_all_resources)
 
 
 def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:

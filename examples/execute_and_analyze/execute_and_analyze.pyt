@@ -17,7 +17,7 @@ def analyze_composite_base_case(case: nvtest.TestMultiInstance) -> None:
     # Analyze the collective
     assert len(case.dependencies) == 3
     for dep in case.dependencies:
-        f = os.path.join(dep.exec_dir, f"{dep.parameters.a}.txt")
+        f = os.path.join(dep.working_directory, f"{dep.parameters.a}.txt")
         assert os.path.exists(f)
 
 

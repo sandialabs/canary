@@ -29,7 +29,7 @@ nvtest.directives.depends_on('f1')
 def test():
     self = nvtest.get_instance()
     assert len(self.dependencies) == 1
-    assert os.path.exists(os.path.join(self.dependencies[0].exec_dir, "baz.txt"))
+    assert os.path.exists(os.path.join(self.dependencies[0].working_directory, "baz.txt"))
 if __name__ == '__main__':
     sys.exit(test())
 """
@@ -68,7 +68,7 @@ nvtest.directives.depends_on('f1')
 def test():
     self = nvtest.get_instance()
     assert len(self.dependencies) == 1
-    assert os.path.exists(os.path.join(self.dependencies[0].exec_dir, "baz.txt"))
+    assert os.path.exists(os.path.join(self.dependencies[0].working_directory, "baz.txt"))
 if __name__ == '__main__':
     sys.exit(test())
 """
@@ -83,7 +83,7 @@ nvtest.directives.depends_on('f1')
 def test():
     self = nvtest.get_instance()
     assert len(self.dependencies) == 1
-    assert os.path.exists(os.path.join(self.dependencies[0].exec_dir, "baz.txt"))
+    assert os.path.exists(os.path.join(self.dependencies[0].working_directory, "baz.txt"))
 if __name__ == '__main__':
     sys.exit(test())
 """
@@ -126,7 +126,7 @@ def test():
     assert len(self.dependencies) == 1
     dep = self.dependences[0]
     assert dep.parameters.a == 2
-    f = os.path.join(dep.exec_dir, f"baz-{dep.parameters.a}.txt")
+    f = os.path.join(dep.working_directory, f"baz-{dep.parameters.a}.txt")
     assert os.path.exists(f)
 if __name__ == '__main__':
     sys.exit(test())
@@ -161,7 +161,7 @@ def test():
     assert len(self.dependencies) == 3
     for dep in self.dependencies:
         assert dep.parameters.a in (1, 3, 4)
-        f = os.path.join(dep.exec_dir, f"baz-{dep.parameters.a}.txt")
+        f = os.path.join(dep.working_directory, f"baz-{dep.parameters.a}.txt")
         assert os.path.exists(f)
 if __name__ == '__main__':
     sys.exit(test())

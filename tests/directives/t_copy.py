@@ -23,7 +23,7 @@ def test_copy(tmpdir):
         python("-m", "nvtest", "run", "-w", ".", fail_on_error=False)
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")
-            raise ValueError(f"test failed. files in exec_dir: {files}")
+            raise ValueError(f"test failed. files in working directory: {files}")
 
 
 def test_copy_rename(tmpdir):
@@ -44,4 +44,4 @@ def test_copy_rename(tmpdir):
         python("-m", "nvtest", "run", "-w", ".", fail_on_error=False)
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")
-            raise ValueError(f"test failed. files in exec_dir: {files}")
+            raise ValueError(f"test failed. files in working directory: {files}")

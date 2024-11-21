@@ -24,7 +24,7 @@ def single_test_case(case: nvtest.TestInstance):
 
 def composite_base_case(case: nvtest.TestMultiInstance):
     for dep in case.dependencies:
-        file = os.path.join(dep.exec_dir, "output.json")
+        file = os.path.join(dep.working_directory, "output.json")
         with open(file) as fh:
             parameters = json.load(fh)
             assert parameters["np"] == dep.parameters.np

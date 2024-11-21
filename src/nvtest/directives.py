@@ -365,7 +365,7 @@ def depends_on(
        def test():
            self = nvtest.test.instance
            baz = self.dependencies[0]
-           print(f"baz's results can be found in {baz.exec_dir}")
+           print(f"baz's results can be found in {baz.working directory}")
 
     ``.vvt``:
 
@@ -376,8 +376,8 @@ def depends_on(
        import vvtest_util as vvt
 
        def test():
-           exec_dir = vvt.DEPDIRS[0]
-           print(f"baz's results can be found in {exec_dir}")
+           working directory = vvt.DEPDIRS[0]
+           print(f"baz's results can be found in {working directory}")
 
     -------
 
@@ -394,7 +394,7 @@ def depends_on(
        def test():
            self = nvtest.test.instance
            baz = self.dependencies[0]
-           print(f"baz's results can be found in {baz.exec_dir}")
+           print(f"baz's results can be found in {baz.working directory}")
 
     ``.vvt``:
 
@@ -405,8 +405,8 @@ def depends_on(
        import vvtest_util as vvt
 
        def test():
-           exec_dir = vvt.DEPDIRS[0]
-           print(f"baz's results can be found in {exec_dir}")
+           working directory = vvt.DEPDIRS[0]
+           print(f"baz's results can be found in {working directory}")
 
     -------
 
@@ -423,7 +423,7 @@ def depends_on(
        def test():
            self = nvtest.test.instance
            baz = self.dependencies[0]
-           print(f"baz's results can be found in {baz.exec_dir}")
+           print(f"baz's results can be found in {baz.working directory}")
 
     ``.vvt``:
 
@@ -434,8 +434,8 @@ def depends_on(
        import vvtest_util as vvt
 
        def test():
-           exec_dir = vvt.DEPDIRS[0]
-           print(f"baz's results can be found in {exec_dir}")
+           working directory = vvt.DEPDIRS[0]
+           print(f"baz's results can be found in {working directory}")
 
     """  # noqa: E501
 

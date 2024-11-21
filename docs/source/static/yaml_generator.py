@@ -117,9 +117,9 @@ class YAMLTestCase(nvtest.TestCase):
             t = Template(line)
             self.script.append(t.safe_substitute(**parameters))
 
-    def setup(self, exec_root: str, copy_all_resources: bool = False) -> None:
-        super().setup(exec_root, copy_all_resources=copy_all_resources)
-        with working_dir(self.exec_dir):
+    def setup(self, work_tree: str, copy_all_resources: bool = False) -> None:
+        super().setup(work_tree, copy_all_resources=copy_all_resources)
+        with working_dir(self.working_directory):
             with open(self.exe, "w") as fh:
                 fh.write("#!/usr/bin/env bash\n")
                 fh.write("\n".join(self.script))

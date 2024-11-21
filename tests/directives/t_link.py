@@ -24,7 +24,7 @@ def test_link(tmpdir):
         python("-m", "nvtest", "run", "-w", ".", fail_on_error=False)
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")
-            raise ValueError(f"test failed. files in exec_dir: {files}")
+            raise ValueError(f"test failed. files in working directory: {files}")
 
 
 def test_link_rename(tmpdir):
@@ -45,7 +45,7 @@ def test_link_rename(tmpdir):
         python("-m", "nvtest", "run", "-w", ".", fail_on_error=False)
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")
-            raise ValueError(f"test failed. files in exec_dir: {files}")
+            raise ValueError(f"test failed. files in working directory: {files}")
 
 
 def test_link_rename_rel(tmpdir):
@@ -67,7 +67,7 @@ def test_link_rename_rel(tmpdir):
         python("-m", "nvtest", "run", "-w", ".", fail_on_error=False)
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")
-            raise ValueError(f"test failed. files in exec_dir: {files}")
+            raise ValueError(f"test failed. files in working directory: {files}")
 
 
 def test_link_rename_rel_vvt(tmpdir):
@@ -89,7 +89,7 @@ def test_link_rename_rel_vvt(tmpdir):
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")
             print(open("./TestResults/a/nvtest-out.txt").read())
-            raise ValueError(f"test failed. files in exec_dir: {files}")
+            raise ValueError(f"test failed. files in working directory: {files}")
 
 
 def test_link_when(tmpdir):
@@ -137,4 +137,4 @@ if __name__ == '__main__':
 
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")
-            raise ValueError(f"test failed. files in exec_dir: {files}")
+            raise ValueError(f"test failed. files in working directory: {files}")

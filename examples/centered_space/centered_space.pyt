@@ -22,7 +22,7 @@ def analyze():
     self = nvtest.get_instance()
     parameters = {}
     for dep in self.dependencies:
-        with open(os.path.join(dep.exec_dir, "output.json")) as fh:
+        with open(os.path.join(dep.working_directory, "output.json")) as fh:
             data = json.load(fh)
             parameters.setdefault("a", []).append(data["a"])
             parameters.setdefault("b", []).append(data["b"])

@@ -72,8 +72,8 @@ class Describe(Command):
 
     @staticmethod
     def describe_testcase(case: TestCase, indent: str = "") -> int:
-        if case.exec_root is None:
-            case.exec_root = "."
+        if case.work_tree is None:
+            case.work_tree = "."
         d = dict(vars(case))
         d["status"] = (case.status.value, case.status.details)
         d["logfile"] = case.logfile()

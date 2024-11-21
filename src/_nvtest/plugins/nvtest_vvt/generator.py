@@ -667,7 +667,7 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "run") -> dict:
     attrs["TESTID"] = case.fullname
     attrs["PLATFORM"] = sys.platform.lower()
     attrs["COMPILER"] = compiler_spec or "UNKNOWN@UNKNOWN"
-    attrs["TESTROOT"] = case.exec_root
+    attrs["TESTROOT"] = case.work_tree
     attrs["VVTESTSRC"] = ""
     attrs["PROJECT"] = ""
     attrs["OPTIONS"] = []  # FIXME
@@ -695,12 +695,12 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "run") -> dict:
                     table.append(list(row))
 
     # DEPDIRS and DEPDIRMAP should always exist.
-    attrs["DEPDIRS"] = [dep.exec_dir for dep in getattr(case, "dependencies", [])]
+    attrs["DEPDIRS"] = [dep.working_directory for dep in getattr(case, "dependencies", [])]
     attrs["DEPDIRMAP"] = {}  # FIXME
 
-    attrs["exec_dir"] = case.exec_dir
-    attrs["exec_root"] = case.exec_root
-    attrs["exec_path"] = case.exec_path
+    attrs["exec_dir"] = case.working_directory
+    attrs["exec_root"] = case.work_tree
+    attrs["exec_path"] = case.branch
     attrs["file_root"] = case.file_root
     attrs["file_dir"] = case.file_dir
     attrs["file_path"] = case.file_path
@@ -718,7 +718,7 @@ def write_vvtest_util(case: "TestCase", stage: str = "run") -> None:
         return
     attrs = get_vvtest_attrs(case, stage=stage)
     file = os.path.abspath("./vvtest_util.py")
-    if os.path.dirname(file) != case.exec_dir:
+    if os.path.dirname(file) != case.working_directory:
         raise ValueError("Incorrect directory for writing vvtest_util")
     with open(file, "w") as fh:
         fh.write("import os\n")
@@ -747,7 +747,7 @@ def prelaunch(case: "TestCase", stage: str = "run") -> None:
         return
     write_vvtest_util(case, stage=stage)
     # symlink the test file before test is run for tests needing it
-    f = os.path.join(case.exec_dir, "execute.log")
+    f = os.path.join(case.cache_directory, "execute.log")
     nvtest.filesystem.force_symlink(case.logfile(stage), f)
 
 
@@ -755,7 +755,7 @@ def prelaunch(case: "TestCase", stage: str = "run") -> None:
 def write_execute_log(case: "TestCase") -> None:
     if not case.file_path.endswith(".vvt"):
         return
-    f = os.path.join(case.exec_dir, "execute.log")
+    f = os.path.join(case.cache_directory, "execute.log")
     nvtest.filesystem.force_symlink(case.logfile(), f)
 
 
