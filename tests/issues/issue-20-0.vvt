@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+# VVT: keywords : empire empire-em nophysics small fast
+#
+# VVT: name : demo
+# VVT: parameterize (testname="demo",autotype): stat,fruit = pass,banana diff,grape fail,grapefruit
+#
+# VVT: name : demo_analyze_question
+# VVT: depends on (testname="demo_analyze_question",expect="?",result="pass") : demo.*fruit=banana.*
+#
+# VVT: name : demo_analyze_plus
+# VVT: depends on (testname="demo_analyze_plus",expect="+",result="not skip") : demo.*
+#
+# VVT: name : demo_analyze_int
+# VVT: depends on (testname="demo_analyze_int",expect="2",result="diff or fail") : demo.*fruit=grape*.*
+#
+# VVT: name : demo_analyze_star
+# VVT: depends on (testname="demo_analyze_star",expect="*",result="*") : demo.*
+
+import sys
+import vvtest_util as vvt
+
+if __name__ == "__main__":
+    if vvt.NAME == "demo":
+        retcode = {"pass": 0, "diff": vvt.diff_exit_status, "fail": 1}[vvt.stat]
+        print(vvt.stat, retcode)
+        sys.exit(retcode)
+    elif vvt.NAME == "demo_analyze_question":
+        assert len(vvt.DEPDIRS) == 1
+    elif vvt.NAME == "demo_analyze_plus":
+        assert len(vvt.DEPDIRS) == 3
+    elif vvt.NAME == "demo_analyze_int":
+        assert len(vvt.DEPDIRS) == 2
+    elif vvt.NAME == "demo_analyze_star":
+        assert len(vvt.DEPDIRS) == 3
+    else:
+        raise Exception("bad")

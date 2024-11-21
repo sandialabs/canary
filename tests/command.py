@@ -6,7 +6,6 @@ import pytest
 
 import nvtest
 from _nvtest.main import NVTestCommand
-from _nvtest.util.filesystem import force_remove
 from _nvtest.util.filesystem import working_dir
 
 
@@ -52,26 +51,22 @@ if __name__ == "__main__":
 import nvtest
 nvtest.directives.generate_composite_base_case()
 nvtest.directives.parameterize('a', (1, 2))
-def test():
-    self = nvtest.get_instance()
+def test(case):
     if self.parameters.a == 2:
         raise nvtest.TestDiffed()
-def analyze_case():
-    pass
-def analyze_base_case():
-    pass
 if __name__ == "__main__":
-    pattern = nvtest.patterns.ExecuteAndAnalyze(
-        exec_fn=test, analyze_fn=analyze_case, base_fn=analyze_base_case
-    )
-    test()
+    self = nvtest.get_instance()
+    if not isinstance(self, nvtest.TestMultiInstance):
+        test(self)
 """
             )
         run = NVTestCommand("run")
         run(".")
         ns = SimpleNamespace(tmp_path=d, results_path=os.path.join(d, "TestResults"))
         yield ns
-        force_remove(d)
+
+
+#        force_remove(d)
 
 
 def test_report_html(setup):

@@ -45,7 +45,6 @@ class Info(Command):
 
         if case.exec_root is None:
             case.exec_root = "."
-        case.refresh()
         state = case.getstate()
         text = self.dump({"name": case.display_name, **state})
         lexer = get_lexer_by_name("yaml")

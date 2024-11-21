@@ -110,7 +110,7 @@ class Status:
         elif arg == diff_exit_status:
             self.set("diffed")
         elif arg == skip_exit_status:
-            self.set("skipped", "runtime exception")
+            self.set("skipped", "a skip exit status was returned")
         elif arg == fail_exit_status:
             self.set("failed")
         elif arg == timeout_exit_status:
@@ -167,5 +167,6 @@ class Status:
             "m": "#F202FE",
             "g": "#02FE20",
             "y": "#FEFD02",
+            "c": "#00FFFF",
         }[self.color.lower()]
         return f"<font color={color}>{self.name}</font>"

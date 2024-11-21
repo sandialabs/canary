@@ -1,4 +1,3 @@
-import fnmatch
 import math
 import os
 import re
@@ -143,30 +142,26 @@ class Finder:
     @staticmethod
     def resolve_dependencies(cases: list[TestCase]) -> None:
         logging.debug("Resolving dependencies across test suite")
-        case_map = {}
-        for i, case in enumerate(cases):
-            case_map[case.name] = i
-            case_map[case.display_name] = i
-            case_map[case.exec_path] = i
-            d = os.path.dirname(case.exec_path)
-            case_map[os.path.join(d, case.display_name)] = i
-        for i, case in enumerate(cases):
+        for case in cases:
             while True:
-                if not case.dep_patterns:
+                if not case.unresolved_dependencies:
                     break
-                pat = case.dep_patterns.pop(0)
-                matches = [
-                    cases[k]
-                    for (name, k) in case_map.items()
-                    if i != k and (fnmatch.fnmatchcase(name, pat) or name == pat)
-                ]
-                if not matches:
+                dep = case.unresolved_dependencies.pop(0)
+                matches = dep.evaluate([c for c in cases if c != case], extra_fields=True)
+                n = len(matches)
+                if dep.expect == "+" and n < 1:
+                    raise ValueError(f"{case}: expected at least one dependency, got {n}")
+                elif dep.expect == "?" and n not in (0, 1):
+                    raise ValueError(f"{case}: expected 0 or 1 dependency, got {n}")
+                elif isinstance(dep.expect, int) and n != dep.expect:
+                    raise ValueError(f"{case}: expected {dep.expect} dependencies, got {n}")
+                elif dep.expect != "*" and n == 0:
                     raise ValueError(
-                        f"Dependency pattern {pat!r} of test case {case.name} not found"
+                        f"Dependency pattern {dep.value} of test case {case.name} not found"
                     )
                 for match in matches:
                     assert isinstance(match, TestCase)
-                    case.add_dependency(match)
+                    case.add_dependency(match, dep.result)
         logging.debug("Done resolving dependencies across test suite")
 
     @staticmethod
@@ -255,7 +250,6 @@ class Finder:
         for case in cases:
             if case.mask is None and owners:
                 if not owners.intersection(case.owners):
-                    print(owners, case.owners)
                     case.mask = colorize("deselected by @*b{owner expression}")
 
             if case.mask is None and keyword_expr is not None:

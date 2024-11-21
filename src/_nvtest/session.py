@@ -266,11 +266,13 @@ class Session:
         logging.debug("Resolving test case dependencies")
         for case_id in ts.static_order():
             state = mapping[case_id]
-            state["properties"]["exec_root"] = self.work_tree
             dependency_ids = state["properties"].pop("dependencies", [])
+            state["properties"]["exec_root"] = self.work_tree
             case = testcase_from_state(state)
             case.dependencies = [cases[dep_id] for dep_id in dependency_ids]
             cases[case.id] = case
+            if not case.mask:
+                case.refresh(propagate=False)
 
         logging.debug("Updating test case state to latest snapshot")
         with self.db.open("snapshots", "r") as record:
