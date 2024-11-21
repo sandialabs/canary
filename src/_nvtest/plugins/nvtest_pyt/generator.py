@@ -487,18 +487,20 @@ class PYTTestFile(AbstractTestGenerator):
                 continue
             src, dst = ns.value
             src = self.safe_substitute(src, **kwds)
+            src = src if os.path.isabs(src) else os.path.join(dirname, src)
             if dst is None:
-                f = src if os.path.isabs(src) else os.path.join(dirname, src)
-                if os.path.exists(f):
-                    sources.setdefault(ns.action, []).append((src, None))
+                if os.path.exists(src):
+                    file = os.path.relpath(src, dirname)
+                    sources.setdefault(ns.action, []).append((file, None))
                 else:
-                    files = glob.glob(f)
+                    files = glob.glob(src)
                     for file in files:
                         # keep paths relative to dirname
                         file = os.path.relpath(file, dirname)
                         sources.setdefault(ns.action, []).append((file, None))
             else:
                 dst = self.safe_substitute(dst, **kwds)
+                dst = dst if os.path.isabs(dst) else os.path.join(dirname, dst)
                 src, dst = [os.path.relpath(p, dirname) for p in (src, dst)]
                 sources.setdefault(ns.action, []).append((src, dst))
         return sources

@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+# VVT: keywords : empire empire-em nophysics fast small
+#
+# VVT: name : just_link
+# VVT: link (testname="just_link") : top_secret.txt
+#
+# VVT: name : link_rename
+# VVT: link (testname="link_rename",rename) : top_secret.txt,read_this.txt
+
+import vvtest_util as vvt
+
+filename = {
+    "just_link": "top_secret.txt",
+    "link_rename": "read_this.txt",
+}[vvt.NAME]
+with open(filename, "r") as stream:
+    secret = stream.read().strip()
+
+print(f"secret from {filename}", secret)
+assert secret == "foo"

@@ -349,7 +349,7 @@ class TestCase(AbstractTestCase):
         self._assets.clear()
         for action in arg:
             for t, dst in arg[action]:
-                src = t if os.path.exists(t) else os.path.join(self.file_dir, t)
+                src = t if os.path.isabs(t) else os.path.join(self.file_dir, t)
                 if not os.path.exists(src):
                     logging.warning(f"{self}: {action} resource file {t} not found")
                 asset = Asset(src=os.path.abspath(src), dst=dst, action=action)
