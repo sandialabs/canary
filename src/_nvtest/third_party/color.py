@@ -60,6 +60,7 @@ The console can be reset later to plain text with '@.'.
 To output an @, use '@@'.  To output a } inside braces, use '}}'.
 """
 
+import os
 import re
 import sys
 from contextlib import contextmanager
@@ -108,7 +109,7 @@ color_when_values = {"always": True, "auto": None, "never": False}
 
 # Force color; None: Only color if stderr is a tty
 # True: Always colorize output, False: Never colorize output
-_force_color = None
+_force_color = color_when_values.get(os.getenv("COLOR_WHEN", "auto"))
 
 
 def _color_when_value(when):
@@ -139,6 +140,12 @@ def set_color_when(when):
     * None or 'auto': only print color if sys.stderr is a tty.
     """
     global _force_color
+    if when in (True, "always"):
+        os.environ["COLOR_WHEN"] = "always"
+    elif when in (False, "never"):
+        os.environ["COLOR_WHEN"] = "never"
+    elif when in (None, "auto"):
+        os.environ["COLOR_WHEN"] = "auto"
     _force_color = _color_when_value(when)
 
 

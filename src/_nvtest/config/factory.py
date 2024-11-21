@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 from typing import TextIO
 
+from ..third_party import color
 from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
 from ..util import logging
@@ -507,6 +508,8 @@ class Config:
 
     def set_main_options(self, args: argparse.Namespace) -> None:
         logging.set_level(logging.INFO)
+        if args.color is not None:
+            color.set_color_when(args.color)
         log_levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.TRACE)
         if args.q or args.v:
             i = min(max(2 - args.q + args.v, 0), 4)

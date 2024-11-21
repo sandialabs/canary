@@ -488,7 +488,7 @@ class PYTTestFile(AbstractTestGenerator):
             src, dst = ns.value
             src = self.safe_substitute(src, **kwds)
             if dst is None:
-                f = os.path.join(dirname, src)
+                f = src if os.path.isabs(src) else os.path.join(dirname, src)
                 if os.path.exists(f):
                     sources.setdefault(ns.action, []).append((src, None))
                 else:

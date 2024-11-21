@@ -246,6 +246,12 @@ def make_argument_parser(**kwargs):
         default=False,
         help="Echo command line to the console [default: %(default)s]",
     )
+    parser.add_argument(
+        "--color",
+        choices=("auto", "always", "never"),
+        default=None,
+        help="When to color output [default: auto]",
+    )
     group = parser.add_argument_group("profiling")
     group.add_argument(
         "--profile",
