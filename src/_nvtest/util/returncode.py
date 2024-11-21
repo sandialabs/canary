@@ -1,7 +1,7 @@
 from typing import Sequence
 
 from ..test.case import TestCase
-from .import logging
+from . import logging
 
 
 def compute_returncode(cases: Sequence[TestCase], permissive: bool = False) -> int:
@@ -10,6 +10,7 @@ def compute_returncode(cases: Sequence[TestCase], permissive: bool = False) -> i
     results: dict[str, int] = {}
     for case in cases:
         results[case.status.value] = results.get(case.status.value, 0) + 1
+    warned: set[str] = set()
     for result, n in results.items():
         for i in range(n):
             if result in ("success", "xfail", "xdiff"):
@@ -32,6 +33,8 @@ def compute_returncode(cases: Sequence[TestCase], permissive: bool = False) -> i
                 returncode |= 2**8
             elif not permissive:
                 # any other code is a failure
-                logging.warning(f"{case}: unhandled status: {case.status}")
                 returncode |= 2**9
+                if case.status.value not in warned:
+                    logging.warning(f"{case}: unhandled status: {case.status}")
+                    warned.add(case.status.value)
     return returncode
