@@ -209,7 +209,7 @@ class When:
         string = safe_substitute(self.keyword_expr, **kwds)
         string = remove_surrounding_quotes(string)
         expr = Expression.compile(string, allow_wildcards=True)
-        if not expr.evaluate(AnyMatcher(set(keywords_arg))):
+        if not expr.evaluate(AnyMatcher(set(keywords_arg), False)):
             fmt = "@*{{keywords={0}}} evaluated to @*r{{False}} for keywords={1}"
             reason = colorize(fmt.format(expr.string, json.dumps(keywords_arg)))
             return reason
@@ -311,11 +311,12 @@ class OptionMatcher:
 class AnyMatcher:
     """Tries to match on any options, attached to the given items"""
 
-    __slots__ = ("own_names",)
+    __slots__ = ("own_names", "case_sensitive")
     own_names: AbstractSet[str]
+    case_sensitive: bool
 
     def __call__(self, name: str) -> bool:
-        return anymatch(self.own_names, name)
+        return anymatch(self.own_names, name, case_sensitive=self.case_sensitive)
 
 
 class PlatformMatcher:
@@ -333,6 +334,11 @@ class PlatformMatcher:
         if "any" in self.own_platform_names:
             return True
         return anymatch(self.own_platform_names, name, case_sensitive=False)
+
+
+def match_any(code: str, items: list[str]) -> bool:
+    expr = Expression.compile(code, allow_wildcards=True)
+    return expr.evaluate(AnyMatcher(set(items), True))
 
 
 def safe_substitute(arg: str, **kwds) -> str:

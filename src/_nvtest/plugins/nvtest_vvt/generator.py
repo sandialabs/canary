@@ -177,8 +177,16 @@ class VVTTestFile(PYTTestFile):
         """# VVT: depends on ( OPTIONS ) [:=] STRING"""
         options = dict(arg.options)
         if "expect" in options:
-            options["expect"] = int(options["expect"])
-        self.m_depends_on(arg.argument.strip(), when=arg.when, **options)
+            try:
+                options["expect"] = int(options["expect"])
+            except ValueError:
+                pass
+        if "result" in options:
+            options["result"] = re.sub(r"(?i)\bpass\b", "success", options["result"])
+            options["result"] = re.sub(r"(?i)\bdiff\b", "diffed", options["result"])
+            options["result"] = re.sub(r"(?i)\bfail\b", "failed", options["result"])
+            options["result"] = re.sub(r"(?i)\bskip\b", "skipped", options["result"])
+        self.m_depends_on(arg.argument, when=arg.when, **options)
 
 
 def csplit(text: str) -> list[Any]:

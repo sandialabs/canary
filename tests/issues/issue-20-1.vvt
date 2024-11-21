@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+# VVT: keywords : empire empire-em nophysics small fast
+#
+# VVT: name : foo_pass
+# VVT: name : foo_diff
+# VVT: name : foo_fail
+# VVT: name : foo_skip
+#
+# VVT: name : bar_analyze_pass
+# VVT: depends on (testname="bar_analyze_pass",expect="+",result="pass") : foo_pass
+#
+# VVT: name : bar_analyze_diff
+# VVT: depends on (testname="bar_analyze_diff",expect="1",result="diff") : foo_diff
+#
+# VVT: name : bar_analyze_fail
+# VVT: depends on (testname="bar_analyze_fail",expect="?",result="fail") : foo_fail
+#
+# VVT: name : bar_analyze_skip
+# VVT: depends on (testname="bar_analyze_skip",expect="+",result="skip") : foo_skip
+#
+#
+# VVT: name : bar_analyze_pass_diff
+# VVT: depends on (testname="bar_analyze_pass_diff",expect="+",result="pass or diff") : foo_pass foo_diff
+#
+# NOTE: vvtest fails to do this one correctly. Something about the `expect="2"` it doesn't like.
+# VVT: name : bar_analyze_diff_pass
+# VVT: depends on (testname="bar_analyze_diff_pass",expect="2",result="pass or diff") : foo_pass foo_diff
+#
+# VVT: name : bar_analyze_fail_skip
+# VVT: depends on (testname="bar_analyze_fail_skip",expect="+",result="fail or skip") : foo_fail foo_skip
+#
+# VVT: name : bar_analyze_pass_diff_fail_skip
+# VVT: depends on (testname="bar_analyze_pass_diff_fail_skip",expect="+",result="*") : foo_*
+#
+# NOTE: use `expect="*"` to be happy with matching to nothing.
+# VVT: name : bar_analyze_
+# VVT: depends on (testname="bar_analyze_",expect="*",result="*") : fizz*
+
+import sys
+import os
+import vvtest_util as vvt
+
+if __name__ == "__main__":
+    if vvt.NAME.startswith("foo_"):
+        status_type = vvt.NAME.split("_")[-1]
+        retcode = {
+            "pass": 0,
+            "diff": vvt.diff_exit_status,
+            "fail": 1,
+            "skip": vvt.skip_exit_status,
+        }[status_type]
+        print(vvt.NAME, status_type, retcode)
+        sys.exit(retcode)
+    elif vvt.NAME.startswith("bar_analyze_"):
+        gold_statuses = set(vvt.NAME[len("bar_analyze_"):].split("_"))
+        if gold_statuses == set(['']):
+            gold_statuses = set()
+        comp_statuses = set([os.path.basename(_)[len("foo_"):] for _ in vvt.DEPDIRS])
+        print(gold_statuses)
+        print(comp_statuses)
+        assert len(vvt.DEPDIRS) == len(gold_statuses)
+        assert gold_statuses == comp_statuses
+    else:
+        raise Exception("bad")

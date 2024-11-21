@@ -1,5 +1,6 @@
 import dataclasses
 import datetime
+import fnmatch
 import io
 import itertools
 import json
@@ -30,6 +31,7 @@ from ..util.filesystem import mkdirp
 from ..util.hash import hashit
 from ..util.module import load_module
 from ..util.shell import source_rcfile
+from ..when import match_any
 
 
 def stringify(arg: Any, float_fmt: str | None = None) -> str:
@@ -49,6 +51,37 @@ class Asset:
     src: str
     dst: str | None
     action: str
+
+
+@dataclasses.dataclass
+class DependencyPatterns:
+    value: str | list[str]
+    expect: str | int | None
+    result: str
+
+    def __post_init__(self):
+        if isinstance(self.value, str):
+            self.value = self.value.split()
+
+    def evaluate(self, cases: list["TestCase"], extra_fields: bool = False) -> list["TestCase"]:
+        matches: set[TestCase] = set()
+
+        def match(name, pattern):
+            return name == pattern or fnmatch.fnmatchcase(name, pattern)
+
+        for case in cases:
+            names = {case.name}
+            if extra_fields:
+                names.add(case.display_name)
+                names.add(case.exec_path)
+                d = os.path.dirname(case.exec_path)
+                names.add(os.path.join(d, case.display_name))
+            for pattern in self.value:
+                for name in names:
+                    if match(name, pattern):
+                        matches.add(case)
+                        break
+        return list(matches)
 
 
 class TestCase(AbstractTestCase):
@@ -116,8 +149,9 @@ class TestCase(AbstractTestCase):
         self._returncode: int = -1
 
         # Dependency management
-        self._dep_patterns: list[str] = []
+        self._unresolved_dependencies: list[DependencyPatterns] = []
         self._dependencies: list["TestCase"] = []
+        self._dep_done_criteria: list[str] = []
 
         # mean, min, max runtimes
         self._runtimes: list[float | None] = [None, None, None]
@@ -289,12 +323,20 @@ class TestCase(AbstractTestCase):
                     )
 
     @property
-    def dep_patterns(self) -> list[str]:
-        return self._dep_patterns
+    def unresolved_dependencies(self) -> list[DependencyPatterns]:
+        return self._unresolved_dependencies
 
-    @dep_patterns.setter
-    def dep_patterns(self, arg: list[str]) -> None:
-        self._dep_patterns = list(arg)
+    @unresolved_dependencies.setter
+    def unresolved_dependencies(self, arg: list[DependencyPatterns]) -> None:
+        self._unresolved_dependencies = list(arg)
+
+    @property
+    def dep_done_criteria(self) -> list[str]:
+        return self._dep_done_criteria
+
+    @dep_done_criteria.setter
+    def dep_done_criteria(self, arg: list[str]) -> None:
+        self._dep_done_criteria = list(arg)
 
     @property
     def dependencies(self) -> list["TestCase"]:
@@ -410,20 +452,36 @@ class TestCase(AbstractTestCase):
     @property
     def status(self) -> Status:
         if self._status.pending():
-            # Determine if dependent cases have completed and, if so, flip status to 'ready'
             if not self.dependencies:
                 raise ValueError("should never have a pending case without dependencies")
-            stat = [dep.status.value for dep in self.dependencies]
-            if all([_ in ("success", "diffed") for _ in stat]):
+            # Determine if dependent cases have completed and, if so, flip status to 'ready'
+            expected = self.dep_done_criteria
+            ready: list[bool] = [False] * len(self.dependencies)
+            for i, dep in enumerate(self.dependencies):
+                if dep.status.value not in ("ready", "pending", "running"):
+                    if expected[i] in (None, dep.status.value, "*"):
+                        ready[i] = True
+                    else:
+                        ready[i] = match_any(expected[i], [dep.status.value, dep.status.name])
+                    if ready[i] is False:
+                        # this case will never be able to run
+                        if dep.status == "skipped":
+                            self._status.set("skipped", "one or more dependencies was skipped")
+                        elif dep.status == "cancelled":
+                            self._status.set("not_run", "one or more dependencies was cancelled")
+                        elif dep.status == "timeout":
+                            self._status.set("not_run", "one or more dependencies timed out")
+                        elif dep.status == "failed":
+                            self._status.set("not_run", "one or more dependencies failed")
+                        elif dep.status == "diffed":
+                            self._status.set("skipped", "one or more dependencies diffed")
+                        else:
+                            self._status.set(
+                                "skipped",
+                                f"one or more dependencies failed with status {dep.status.value}",
+                            )
+            if all(ready):
                 self._status.set("ready")
-            elif any([_ == "skipped" for _ in stat]):
-                self._status.set("skipped", "one or more dependency was skipped")
-            elif any([_ == "cancelled" for _ in stat]):
-                self._status.set("not_run", "one or more dependency was cancelled")
-            elif any([_ == "timeout" for _ in stat]):
-                self._status.set("not_run", "one or more dependency timed out")
-            elif any([_ == "failed" for _ in stat]):
-                self._status.set("not_run", "one or more dependency failed")
         return self._status
 
     @status.setter
@@ -793,7 +851,9 @@ class TestCase(AbstractTestCase):
             string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.mask)
             return colorize(string)
         string = "%s %s %s" % (self.status.cname, id, self.pretty_repr())
-        if self.duration > 0:
+        if self.status == "skipped":
+            string += ": Skipped because %s" % self.status.details
+        elif self.duration >= 0:
             today = datetime.datetime.today()
             start = datetime.datetime.fromtimestamp(self.start)
             finish = datetime.datetime.fromtimestamp(self.finish)
@@ -802,8 +862,6 @@ class TestCase(AbstractTestCase):
             a = start.strftime(fmt)
             b = finish.strftime(fmt)
             string += f" started: {a}, finished: {b}, duration: {self.duration:.2f}s."
-        elif self.status == "skipped":
-            string += ": Skipped due to %s" % self.status.details
         if include_logfile_path:
             f = os.path.relpath(self.logfile(), os.getcwd())
             string += colorize(": @m{%s}" % f)
@@ -848,12 +906,10 @@ class TestCase(AbstractTestCase):
     def copy(self) -> "TestCase":
         return deepcopy(self)
 
-    def add_dependency(self, *cases: "TestCase | str") -> None:
-        for case in cases:
-            if isinstance(case, TestCase):
-                self.dependencies.append(case)
-            else:
-                self.dep_patterns.append(case)
+    def add_dependency(self, case: "TestCase", /, expected_result: str = "success"):
+        self.dependencies.append(case)
+        self.dep_done_criteria.append(expected_result)
+        assert len(self.dependencies) == len(self.dep_done_criteria)
 
     def copy_sources_to_workdir(self, copy_all_resources: bool = False):
         workdir = self.exec_dir
@@ -880,18 +936,27 @@ class TestCase(AbstractTestCase):
         with open(file, "w") as fh:
             self.dump(fh)
 
-    def refresh(self) -> None:
+    def refresh(self, propagate: bool = True) -> None:
         file = self.dbfile
         if not os.path.exists(file):
             raise FileNotFoundError(file)
         with open(file, "r") as fh:
             state = json.load(fh)
-        keep = ("start", "finish", "returncode", "exec_root", "status", "measurements")
+        keep = (
+            "start",
+            "finish",
+            "returncode",
+            "exec_root",
+            "status",
+            "measurements",
+            "dep_done_criteria",
+        )
         for name, value in state["properties"].items():
             if name in keep:
                 setattr(self, name, value)
-        for dep in self.dependencies:
-            dep.refresh()
+        if propagate:
+            for dep in self.dependencies:
+                dep.refresh()
 
     @contextmanager
     def rc_environ(self, **variables) -> Generator[None, None, None]:
@@ -918,6 +983,8 @@ class TestCase(AbstractTestCase):
     def output(self, compress: bool = False) -> str:
         if not self.status.complete():
             return "Log not found"
+        elif self.status == "skipped":
+            return "Test skipped"
         text = io.open(self.logfile(), errors="ignore").read()
         if compress:
             kb_to_keep = 2 if self.status == "success" else 300
@@ -925,6 +992,8 @@ class TestCase(AbstractTestCase):
         return text
 
     def setup(self, exec_root: str, copy_all_resources: bool = False) -> None:
+        if len(self.dependencies) != len(self.dep_done_criteria):
+            raise ValueError("Inconsistent dependency/dep_done_criteria lists")
         logging.trace(f"Setting up {self}")
         if self.exec_root is not None:
             assert os.path.samefile(exec_root, self.exec_root)
@@ -992,8 +1061,8 @@ class TestCase(AbstractTestCase):
         if os.getenv("NVTEST_RESETUP"):
             assert isinstance(self.exec_root, str)
             self.setup(self.exec_root)
-        if self.dep_patterns:
-            raise RuntimeError("Dependency patterns must be resolved before running")
+        if self.unresolved_dependencies:
+            raise RuntimeError("All dependencies must be resolved before running")
         with fs.working_dir(self.exec_dir):
             for hook in plugin.plugins():
                 hook.test_before_run(self, stage=stage)
@@ -1069,8 +1138,12 @@ class TestCase(AbstractTestCase):
                 properties[name] = Status(value["value"], details=value["details"])
         for name, value in properties.items():
             if name == "dependencies":
-                for dep in value:
-                    self.add_dependency(dep)
+                self.dependencies.clear()
+                self.dep_done_criteria.clear()
+                for i, dep in enumerate(value):
+                    self.add_dependency(dep, properties["dep_done_criteria"][i])
+            elif name == "dep_done_criteria":
+                continue
             elif name == "cpu_ids":
                 self._cpu_ids = value
             elif name == "gpu_ids":

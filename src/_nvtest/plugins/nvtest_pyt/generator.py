@@ -15,6 +15,7 @@ from _nvtest import enums
 from _nvtest.error import diff_exit_status
 from _nvtest.generator import AbstractTestGenerator
 from _nvtest.paramset import ParameterSet
+from _nvtest.test.case import DependencyPatterns
 from _nvtest.test.case import TestCase
 from _nvtest.test.case import TestMultiCase
 from _nvtest.third_party.color import colorize
@@ -32,7 +33,7 @@ class FilterNamespace:
         value: Any,
         *,
         when: WhenType | None = None,
-        expect: int | None = None,
+        expect: int | str | None = None,
         result: str | None = None,
         action: str | None = None,
         **kwargs: Any,
@@ -122,6 +123,7 @@ class PYTTestFile(AbstractTestGenerator):
 
         names = ", ".join(self.names())
         logging.debug(f"Generating test cases for {self} using the following test names: {names}")
+        dependencies: dict[str, list[DependencyPatterns]] = {}
         for name in self.names():
             test_mask = self.skipif_reason
             enabled, reason = self.enable(testname=name, on_options=on_options)
@@ -176,9 +178,7 @@ class PYTTestFile(AbstractTestGenerator):
                 )
                 for attr, value in attributes.items():
                     case.set_attribute(attr, value)
-                dependencies = self.depends_on(testname=name, parameters=parameters)
-                if dependencies:
-                    case.add_dependency(*dependencies)
+                dependencies[case.id] = self.depends_on(testname=name, parameters=parameters)
                 cases.append(case)
 
             generate_composite_base_case = self.generate_composite_base_case(
@@ -220,29 +220,36 @@ class PYTTestFile(AbstractTestGenerator):
                             mp.insert(0, use)
                     parent.add_default_env(MODULEPATH=":".join(mp))
                 for case in cases:
-                    parent.add_dependency(case)
+                    parent.add_dependency(case, "success")
                 cases.append(parent)
 
             testcases.extend(cases)
-        self.resolve_dependencies(testcases)
+        self.resolve_inter_dependencies(testcases, dependencies)
         return testcases
 
     @staticmethod
-    def resolve_dependencies(cases: list[TestCase]) -> None:
+    def resolve_inter_dependencies(
+        cases: list[TestCase], dependencies: dict[str, list[DependencyPatterns]]
+    ) -> None:
         logging.debug("Resolving dependencies in test file")
-        case_map = dict([(case.name, i) for (i, case) in enumerate(cases)])
-        for i, case in enumerate(cases):
-            for j, pat in enumerate(case.dep_patterns):
-                matches = [
-                    cases[k]
-                    for (name, k) in case_map.items()
-                    if i != k and fnmatch.fnmatchcase(name, pat)
-                ]
+        for case in cases:
+            if case.id not in dependencies:
+                continue
+            for dep in dependencies[case.id]:
+                matches = dep.evaluate([c for c in cases if c != case])
+                n = len(matches)
                 if matches:
-                    case.dep_patterns[j] = "null"
+                    if dep.expect == "+" and n < 1:
+                        raise ValueError(f"{case}: expected at least one dependency, got {n}")
+                    elif dep.expect == "?" and n not in (0, 1):
+                        raise ValueError(f"{case}: expected 0 or 1 dependency, got {n}")
+                    elif isinstance(dep.expect, int) and n != dep.expect:
+                        raise ValueError(f"{case}: expected {dep.expect} dependencies, got {n}")
                     for match in matches:
-                        case.add_dependency(match)
-            case.dep_patterns = [_ for _ in case.dep_patterns if _ != "null"]
+                        case.add_dependency(match, dep.result)
+                else:
+                    # hope this gets resolved at the next level up
+                    case.unresolved_dependencies.append(dep)
 
     # -------------------------------------------------------------------------------- #
 
@@ -509,20 +516,25 @@ class PYTTestFile(AbstractTestGenerator):
         testname: str | None = None,
         on_options: list[str] | None = None,
         parameters: dict[str, Any] | None = None,
-    ) -> list[str]:
+    ) -> list[DependencyPatterns]:
         kwds = dict(parameters) if parameters else {}
         if testname:
             kwds["name"] = testname
         for key in list(kwds.keys()):
             kwds[key.upper()] = kwds[key]
-        dependencies: list[str] = []
+        dependencies: list[DependencyPatterns] = []
         for ns in self._depends_on:
             result = ns.when.evaluate(
                 testname=testname, on_options=on_options, parameters=parameters
             )
             if not result.value:
                 continue
-            dependencies.append(self.safe_substitute(ns.value, **kwds))
+            dep = DependencyPatterns(
+                value=ns.value, result=ns.result or "success", expect=ns.expect or "+"
+            )
+            for i, f in enumerate(dep.value):
+                dep.value[i] = self.safe_substitute(f, **kwds)  # type: ignore
+            dependencies.append(dep)
         return dependencies
 
     @staticmethod
@@ -551,11 +563,15 @@ class PYTTestFile(AbstractTestGenerator):
 
     def m_depends_on(
         self,
-        arg: str,
+        arg: str | list[str],
         when: WhenType | None = None,
         result: str | None = None,
-        expect: int | None = None,
+        expect: int | str | None = None,
     ) -> None:
+        if isinstance(expect, str) and expect not in "?+*":
+            raise ValueError(
+                f"{self.path}: depends_on: expect: expected one of '?+*', got {expect!r}"
+            )
         ns = FilterNamespace(arg, when=when, result=result, expect=expect)
         self._depends_on.append(ns)
 
@@ -813,7 +829,7 @@ class PYTTestFile(AbstractTestGenerator):
         self,
         arg: str,
         when: WhenType | None = None,
-        expect: int | None = None,
+        expect: int | str | None = None,
         result: str | None = None,
     ):
         self.m_depends_on(arg, when=when, result=result, expect=expect)

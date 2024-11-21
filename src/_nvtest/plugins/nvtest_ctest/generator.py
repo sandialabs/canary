@@ -12,6 +12,7 @@ from typing import MutableMapping
 
 import nvtest
 from _nvtest.generator import AbstractTestGenerator
+from _nvtest.test.case import DependencyPatterns
 from _nvtest.test.case import TestCase
 from _nvtest.util import graph
 from _nvtest.util import logging
@@ -148,7 +149,9 @@ class CTestTestCase(TestCase):
             self.parameters["np"] = parse_np(self.preflags)
 
         if depends:
-            self.dep_patterns.extend(depends)
+            self.unresolved_dependencies.extend(
+                [DependencyPatterns(value=d, result="success", expect="+") for d in depends]
+            )
 
         if environment is not None:
             self.add_default_env(**environment)
