@@ -1,9 +1,10 @@
 from typing import Sequence
 
 from ..test.case import TestCase
+from .import logging
 
 
-def compute_returncode(cases: Sequence[TestCase]) -> int:
+def compute_returncode(cases: Sequence[TestCase], permissive: bool = False) -> int:
     returncode: int = 0
 
     results: dict[str, int] = {}
@@ -29,4 +30,8 @@ def compute_returncode(cases: Sequence[TestCase]) -> int:
                 returncode |= 2**7
             elif result == "not_run":
                 returncode |= 2**8
+            elif not permissive:
+                # any other code is a failure
+                logging.warning(f"{case}: unhandled status: {case.status}")
+                returncode |= 2**9
     return returncode

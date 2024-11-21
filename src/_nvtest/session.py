@@ -799,7 +799,7 @@ class Session:
 
         obj: TestCase | TestBatch = queue.done(iid)
         if not isinstance(obj, (TestBatch, TestCase)):
-            logging.error(f"Expected ATC, got {obj.__class__.__name__}")
+            logging.error(f"Expected AbstractTestCase, got {obj.__class__.__name__}")
             return
         obj.refresh()
         if isinstance(obj, TestCase):
