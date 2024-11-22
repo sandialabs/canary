@@ -73,8 +73,8 @@ class DependencyPatterns:
             names = {case.name}
             if extra_fields:
                 names.add(case.display_name)
-                names.add(case.branch)
-                d = os.path.dirname(case.branch)
+                names.add(case.namespace)
+                d = os.path.dirname(case.namespace)
                 names.add(os.path.join(d, case.display_name))
             for pattern in self.value:
                 for name in names:
@@ -255,9 +255,14 @@ class TestCase(AbstractTestCase):
             assert os.path.exists(arg)
             self._work_tree = arg
 
+    exec_root = work_tree
+
     @property
-    def branch(self) -> str:
+    def namespace(self) -> str:
         return os.path.join(os.path.dirname(self.file_path), self.name)
+
+    # backward compatibility
+    branch = exec_path = namespace
 
     @property
     def cache_directory(self) -> str:
@@ -266,7 +271,7 @@ class TestCase(AbstractTestCase):
             work_tree = config.session.work_tree
         if not work_tree:
             raise ValueError("work_tree must be set during set up") from None
-        return os.path.normpath(os.path.join(work_tree, self.branch))
+        return os.path.normpath(os.path.join(work_tree, self.namespace))
 
     @property
     def working_directory(self) -> str:

@@ -700,7 +700,7 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "run") -> dict:
 
     attrs["exec_dir"] = case.working_directory
     attrs["exec_root"] = case.work_tree
-    attrs["exec_path"] = case.branch
+    attrs["exec_path"] = case.namespace
     attrs["file_root"] = case.file_root
     attrs["file_dir"] = case.file_dir
     attrs["file_path"] = case.file_path
