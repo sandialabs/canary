@@ -121,6 +121,7 @@ class TestCase(AbstractTestCase):
         self._file_path: str = ""
         self._url: str | None = None
         self._family: str = ""
+        self._classname: str | None = None
         self._keywords: list[str] = []
         self._parameters: dict[str, Any] = {}
         self._timeout: float | None = None
@@ -613,10 +614,16 @@ class TestCase(AbstractTestCase):
 
     @property
     def classname(self) -> str:
-        classname = os.path.dirname(self.file_path).strip()
-        if not classname:
-            classname = os.path.basename(self.file_dir).strip()
-        return classname.replace(os.path.sep, ".")
+        if self._classname is None:
+            classname = os.path.dirname(self.file_path).strip()
+            if not classname:
+                classname = os.path.basename(self.file_dir).strip()
+            self._classname = classname.replace(os.path.sep, ".")
+        return self._classname
+
+    @classname.setter
+    def classname(self, arg: str) -> None:
+        self._classname = arg
 
     @property
     def cmd_line(self) -> str | None:
