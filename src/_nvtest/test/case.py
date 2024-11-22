@@ -123,6 +123,7 @@ class TestCase(AbstractTestCase):
       REGISTRY: A registry of all test case subclasses.
 
     """
+
     _lockfile = "testcase.lock"
 
     REGISTRY: set[Type["TestCase"]] = set()

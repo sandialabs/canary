@@ -270,6 +270,9 @@ class CTestTestCase(TestCase):
             with open("ctest-command.txt", "w") as fh:
                 fh.write(" ".join(self.command()))
 
+    def setup_working_directory(self, copy_all_resources: bool = False) -> None:
+        """CMake sets up the working (binary) directory"""
+
     def wrap_up(self, stage: str = "run") -> None:
         super().wrap_up()
         file = self.logfile(stage)

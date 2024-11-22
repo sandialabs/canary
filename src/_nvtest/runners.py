@@ -330,6 +330,10 @@ class BatchRunner(AbstractTestRunner):
         self, batch: TestBatch, node_count: int | None = None, stage: str = "run"
     ) -> str:
         """Write the nvtest invocation used to run this batch."""
+
+        if node_count is None:
+            node_count = math.ceil(batch.max_cpus_required / self.scheduler.config.cpus_per_node)
+
         fp = io.StringIO()
         fp.write("nvtest ")
         if config.debug:
@@ -337,6 +341,11 @@ class BatchRunner(AbstractTestRunner):
         if getattr(config.options, "plugin_dirs", None):
             for p in config.options.plugin_dirs:
                 fp.write(f"-p {p} ")
+
+        # The batch will be run in a compute node, so hpc_connect won't set the machine limits
+        fp.write(f"-c machine:node_count:{node_count} ")
+        fp.write(f"-c machine:cpus_per_node:{config.machine.cpus_per_node} ")
+        fp.write(f"-c machine:gpus_per_node:{config.machine.gpus_per_node} ")
         fp.write(f"-C {config.session.work_tree} run -rv --stage={stage} ")
         if getattr(config.options, "fail_fast", False):
             fp.write("--fail-fast ")
@@ -347,9 +356,8 @@ class BatchRunner(AbstractTestRunner):
                 fp.write(f"-P{p} ")
         if workers := config.batch.workers:
             fp.write(f"-l session:workers={workers} ")
-        if node_count is None:
-            node_count = math.ceil(batch.max_cpus_required / self.scheduler.config.cpus_per_node)
-        fp.write(f"-l session:cpu_count={node_count * self.scheduler.config.cpus_per_node} ")
+        fp.write(f"-l session:cpu_count={node_count * config.machine.cpus_per_node} ")
+        fp.write(f"-l session:gpu_count={node_count * config.machine.gpus_per_node} ")
         fp.write(f"-l test:timeoutx={self.timeoutx} ")
         fp.write("-l batch:scheduler=null ")  # guard against infinite batch recursion
         fp.write(f"^{batch.lot_no}:{batch.batch_no}")

@@ -374,64 +374,104 @@ class Config:
         self.test.gpu_count = (0, self.machine.gpu_count)
 
     def validate(self):
-        cpu_count = self.machine.cpu_count
-        gpu_count = self.machine.gpu_count
+        mc = self.machine
+        sc = self.session
 
-        if self.session.cpu_count <= 0:
-            raise ValueError(f"session:cpu_count = {self.session.cpu_count} <= 0")
-        if self.session.cpu_count > cpu_count:
-            raise ValueError("session cpu request exceeds machine cpu count")
-        if self.session.gpu_count < 0:
-            raise ValueError(f"session:gpu_count = {self.session.gpu_count} < 0")
-        if self.session.gpu_count > gpu_count:
-            raise ValueError("session gpu request exceeds machine gpu count")
-        if self.session.workers > cpu_count:
-            raise ValueError("session worker request exceeds machine cpu count")
+        errors: int = 0
+
+        def resource_floor_error(name: str, val: int, /, floor: int = 1) -> None:
+            nonlocal errors
+            errors += 1
+            logging.error(
+                f"Requested {name}={val} < {floor}.\n    "
+                f"To continue, set {name} to a value > {floor}"
+            )
+
+        def resource_threshold_error(rname: str, rcnt: int, tname: str, tcnt: int) -> None:
+            nonlocal errors
+            errors += 1
+            logging.error(
+                f"Requested {rname}={rcnt} > {tname}={tcnt}.\n    "
+                f"To continue, increase {tname} to a value greater than or equal to {rcnt},\n    "
+                f"or decrease {rname} to a value less than or equal to {tcnt}"
+            )
+
+        if mc.cpu_count < 1:
+            resource_floor_error("machine:cpu_count", sc.cpu_count, 1)
+        if mc.gpu_count < 0:
+            resource_floor_error("machine:gpu_count", sc.gpu_count, 0)
+        if mc.node_count < 1:
+            resource_floor_error("machine:node_count", sc.node_count, 1)
+
+        if sc.cpu_count < 1:
+            resource_floor_error("session:cpu_count", sc.cpu_count, 1)
+        if sc.cpu_count > mc.cpu_count:
+            resource_threshold_error(
+                "session:cpu_count", sc.cpu_count, "machine:cpu_count", mc.cpu_count
+            )
+        if sc.gpu_count < 0:
+            resource_floor_error("session:gpu_count", sc.gpu_count, 0)
+        if sc.gpu_count > mc.gpu_count:
+            resource_threshold_error(
+                "session:gpu_count", sc.gpu_count, "machine:gpu_count", mc.gpu_count
+            )
+        if sc.workers > sc.cpu_count:
+            resource_threshold_error(
+                "session:workers", sc.workers, "session:cpu_count", sc.cpu_count
+            )
 
         min_cpus, max_cpus = self.test.cpu_count
         if min_cpus > max_cpus:
-            raise ValueError("test min cpus > test max cpus")
+            resource_threshold_error("test:cpu_count[0]", min_cpus, "test:cpu_count[1]", max_cpus)
         if min_cpus < 1:
-            raise ValueError(f"test:min_cpus = {min_cpus} < 1")
+            resource_floor_error("test:cpu_count[0]", min_cpus, 1)
         if max_cpus < 1:
-            raise ValueError(f"test:max_cpus = {max_cpus} < 1")
-        if max_cpus > cpu_count:
-            raise ValueError("test max cpu request exceeds machine cpu count")
-        if self.session.cpu_count > 1 and max_cpus > self.session.cpu_count:
-            raise ValueError("test cpu request exceeds session cpu limit")
+            resource_floor_error("test:cpu_count[1]", max_cpus, 1)
+        if max_cpus > sc.cpu_count:
+            resource_threshold_error(
+                "test:cpu_count[1]", max_cpus, "session:cpu_count", sc.cpu_count
+            )
 
         min_gpus, max_gpus = self.test.gpu_count
         if min_gpus > max_gpus:
-            raise ValueError("test min gpus > test max gpus")
+            resource_threshold_error("test:gpu_count[0]", min_gpus, "test:gpu_count[1]", max_gpus)
         if min_gpus < 0:
-            raise ValueError(f"test:min_gpus = {min_gpus} < 0")
+            resource_floor_error("test:gpu_count[0]", min_gpus, 0)
         if max_gpus < 0:
-            raise ValueError(f"test:max_gpus = {max_gpus} < 0")
-        if max_gpus > gpu_count:
-            raise ValueError("test max gpu request exceeds machine gpu count")
-        if self.session.gpu_count > 0 and max_gpus > self.session.gpu_count:
-            raise ValueError("test gpu request exceeds session gpu limit")
+            resource_floor_error("test:gpu_count[0]", max_gpus, 0)
+        if max_gpus > sc.gpu_count:
+            resource_threshold_error(
+                "test:gpu_count[1]", max_gpus, "session:gpu_count", sc.gpu_count
+            )
 
         min_nodes, max_nodes = self.test.node_count
         if min_nodes > max_nodes:
-            raise ValueError("test min nodes > test max nodes")
+            resource_threshold_error(
+                "test:node_count[0]", min_nodes, "test:node_count[1]", max_nodes
+            )
         if min_nodes < 1:
-            raise ValueError(f"test:min_nodes = {min_nodes} < 1")
+            resource_floor_error("test:node_count[0]", min_nodes, 1)
         if max_nodes < 1:
-            raise ValueError(f"test:max_nodes = {max_nodes} < 1")
-        if max_nodes > self.machine.node_count:
-            raise ValueError("test max node request exceeds machine node count")
+            resource_floor_error("test:node_count[0]", max_nodes, 1)
+        if max_nodes > sc.node_count:
+            resource_threshold_error(
+                "test:node_count[1]", max_nodes, "session:node_count", sc.node_count
+            )
 
         if self.test.timeoutx <= 0.0:
-            raise ValueError("test timeoutx must be > 0")
+            resource_floor_error("test:timeoutx", self.test.timeoutx, 0.0)
 
         # --- batch resources
-        if self.batch.length and self.batch.length <= 0.0:
-            raise ValueError("batch length must be > 0")
-        if self.batch.count and self.batch.count <= 0:
-            raise ValueError("batch count must be > 0")
-        if self.batch.workers is not None and self.batch.workers > cpu_count:
-            raise ValueError("batch worker request exceeds machine cpu count")
+        if self.batch.length is not None and self.batch.length <= 0.0:
+            resource_floor_error("batch:length", self.batch.length, 0.0)
+        if self.batch.count is not None and self.batch.count <= 0:
+            resource_floor_error("batch:count", self.batch.count, 0)
+        if self.batch.workers is not None and self.batch.workers > mc.cpu_count:
+            resource_floor_error("batch:workers", self.batch.workers, 0)
+
+        if errors:
+            logging.error(f"Encountered {errors} errors while validated resource counts")
+            raise ValueError("Stopping due to previous errors")
 
     def restore_from_snapshot(self, fh: TextIO) -> None:
         snapshot = json.load(fh)
@@ -521,8 +561,13 @@ class Config:
             logging.set_level(logging.DEBUG)
         if "session" in args.env_mods:
             self.variables.update(args.env_mods["session"])
+        errors: int = 0
+        counts: dict[str, int] = {}
         for path in args.config_mods:
             *components, value = path.split(":")
+            if "=" in value:
+                c, value = value.split("=", 1)
+                components.append(c)
             match components:
                 case ["config", "debug"] | ["debug"]:
                     self.debug = boolean(value)
@@ -539,14 +584,24 @@ class Config:
                     self.batch.length = time_in_seconds(value)
                 case ["machine", key]:
                     if key not in ("node_count", "cpus_per_node", "gpus_per_node"):
-                        msg = f"Illegal configuration setting: {path}"
-                        raise ValueError(path)
-                    self.update_resource_counts(**{key: int(value)})
+                        errors += 1
+                        logging.error(
+                            f"Illegal machine configuration setting: {key!r}.  Valid settings are "
+                            "node_count, cpus_per_node, and gpus_per_node"
+                        )
+                    counts[key] = int(value)
                 case ["test", key]:
                     if key not in ("timeout_fast", "timeout_long", "timeout_default"):
-                        msg = f"Illegal configuration setting: {path}"
-                        raise ValueError(msg)
+                        errors += 1
+                        logging.error(
+                            f"Illegal test configuration setting: {key!r}.  Valid settings are "
+                            "timeout_fast, timeout_long, timeout_default"
+                        )
                     setattr(self.test, key, time_in_seconds(value))
+        if errors:
+            raise ValueError("Stopping due to previous errors")
+        if counts:
+            self.update_resource_counts(**counts)
         if getattr(args, "session_node_count", None) is not None:
             self.session.node_count = args.session_node_count
         if getattr(args, "session_node_ids", None) is not None:

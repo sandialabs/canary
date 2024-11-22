@@ -32,3 +32,5 @@ build
 mock-tests
 
 *.orig
+
+examples/ctest/ctest-command.txt

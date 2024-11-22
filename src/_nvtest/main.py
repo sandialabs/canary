@@ -115,7 +115,15 @@ def setup_hpc_connect(args: argparse.Namespace) -> None:
     if batch_scheduler := getattr(args, "batch_scheduler", None):
         if batch_scheduler == "null":
             return
+        logging.debug(f"Setting up HPC Connect for {batch_scheduler}")
         hpc_connect.set(scheduler=batch_scheduler)  # type: ignore
+        logging.debug(f"  HPC connect: node count: {hpc_connect.scheduler.config.node_count}")
+        logging.debug(
+            f"  HPC connect: CPUs per node: {hpc_connect.scheduler.config.cpus_per_node}"
+        )
+        logging.debug(
+            f"  HPC connect: GPUs per node: {hpc_connect.scheduler.config.gpus_per_node}"
+        )
         config.update_resource_counts(
             node_count=hpc_connect.scheduler.config.node_count,  # type: ignore
             cpus_per_node=hpc_connect.scheduler.config.cpus_per_node,  # type: ignore
