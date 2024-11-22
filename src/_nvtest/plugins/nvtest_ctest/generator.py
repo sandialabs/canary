@@ -266,7 +266,7 @@ class CTestTestCase(TestCase):
 
     def setup(self, work_tree: str, copy_all_resources: bool = False, clean: bool = True) -> None:
         super().setup(work_tree, copy_all_resources=copy_all_resources, clean=False)
-        with nvtest.filesystem.working_dir(self.working_directory):
+        with nvtest.filesystem.working_dir(self.cache_directory):
             with open("ctest-command.txt", "w") as fh:
                 fh.write(" ".join(self.command()))
 
