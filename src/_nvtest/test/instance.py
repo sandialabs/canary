@@ -302,7 +302,7 @@ class TestMultiInstance(TestInstance):
 
 
 def load(arg_path: str | None = None) -> TestInstance | TestMultiInstance:
-    dbf = TestCase._dbfile
+    dbf = TestCase._lockfile
     file: str
     if arg_path is None:
         file = dbf

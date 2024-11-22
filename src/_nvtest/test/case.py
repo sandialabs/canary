@@ -35,6 +35,7 @@ from ..when import match_any
 
 
 def stringify(arg: Any, float_fmt: str | None = None) -> str:
+    """Turn the thing into a string"""
     if isinstance(arg, float) and float_fmt is not None:
         return float_fmt % arg
     if hasattr(arg, "string"):
@@ -55,6 +56,18 @@ class Asset:
 
 @dataclasses.dataclass
 class DependencyPatterns:
+    """String representation of test dependencies
+
+    Dependency resolution is performed after test case discovery.  The ``DependencyPatterns``
+    object holds information needed to perform the resolution.
+
+    Args:
+      value: The dependency name or glob pattern.
+      expect: For glob patterns, how many dependencies are expected to be found
+      result: The test case will run if the dependency exits with this status.  Usually ``success``
+
+    """
+
     value: str | list[str]
     expect: str | int | None
     result: str
@@ -85,7 +98,32 @@ class DependencyPatterns:
 
 
 class TestCase(AbstractTestCase):
-    _dbfile = "testcase.lock"
+    """Manages the configuration, execution, and dependencies of a test case.
+
+    Args:
+      file_root: The root directory for the test files.
+      file_path: The relative path to the test file.
+      family: The family name of the test.
+      keywords: A list of keywords associated with the test.
+      parameters: Parameters for the test case.
+      timeout: Timeout for the test case execution.
+      baseline: Baseline data for comparison.
+      sources: Source files for the test.
+      xstatus: Exit status for the test case.
+      preload: Preload configuration for the test case.
+      modules: List of modules to be used in the test.
+      rcfiles: List of configuration files for the test.
+      owners: List of owners responsible for the test.
+      artifacts: Artifacts produced by the test.
+      exclusive: Whether the test case is exclusive.
+      stages: Stages of the test case execution.
+
+    Attributes:
+      _lockfile: The name of the lock file associated with the test case.
+      REGISTRY: A registry of all test case subclasses.
+
+    """
+    _lockfile = "testcase.lock"
 
     REGISTRY: set[Type["TestCase"]] = set()
 
@@ -213,12 +251,14 @@ class TestCase(AbstractTestCase):
         return self.display_name
 
     @property
-    def dbfile(self) -> str:
-        file = os.path.join(self.cache_directory, self._dbfile)
+    def lockfile(self) -> str:
+        """Path to lock file containing information needed to generate this case at runtime"""
+        file = os.path.join(self.cache_directory, self._lockfile)
         return file
 
     @property
     def file_root(self) -> str:
+        """Source file root, e.g., the stem of the search path used to find this file"""
         assert self._file_root is not None
         return self._file_root
 
@@ -229,6 +269,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def file_path(self) -> str:
+        """Source file path, e.g., the relative path from file_root to the file"""
         assert self._file_path is not None
         return self._file_path
 
@@ -239,6 +280,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def file(self) -> str:
+        """Full source file path"""
         return os.path.join(self.file_root, self.file_path)
 
     @property
@@ -247,6 +289,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def work_tree(self) -> str | None:
+        """The session work tree.  Can be lazily evaluated so we don't set it here if missing"""
         return self._work_tree
 
     @work_tree.setter
@@ -255,10 +298,12 @@ class TestCase(AbstractTestCase):
             assert os.path.exists(arg)
             self._work_tree = arg
 
+    # Backward compatibility
     exec_root = work_tree
 
     @property
     def namespace(self) -> str:
+        """The relative path from ``self.work_tree`` to ``self.cache_directory``"""
         return os.path.join(os.path.dirname(self.file_path), self.name)
 
     # backward compatibility
@@ -266,6 +311,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def cache_directory(self) -> str:
+        """Directory where output and lock files are written"""
         work_tree = self.work_tree
         if not work_tree:
             work_tree = config.session.work_tree
@@ -275,6 +321,8 @@ class TestCase(AbstractTestCase):
 
     @property
     def working_directory(self) -> str:
+        """Directory where the test is executed.  Usually the same as the cache_directory.  For
+        CTests, the working_directory is set to the tests binary directory"""
         if self._working_directory is None:
             self._working_directory = self.cache_directory
         return self._working_directory
@@ -285,6 +333,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def family(self) -> str:
+        """The test family.  Usually the basename of the file"""
         if not self._family:
             self._family = os.path.splitext(os.path.basename(self.file_path))[0]
         return self._family
@@ -295,6 +344,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def owners(self) -> list[str]:
+        """Test owners"""
         return self._owners
 
     @owners.setter
@@ -303,6 +353,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def keywords(self) -> list[str]:
+        """Test keywords (labels)"""
         return self._keywords
 
     @keywords.setter
@@ -311,11 +362,13 @@ class TestCase(AbstractTestCase):
 
     @property
     def implicit_keywords(self) -> list[str]:
+        """Implicit keywords, used for some filtering operations"""
         kwds = {self.status.name.lower(), self.status.value.lower(), self.name, self.family}
         return list(kwds)
 
     @property
     def parameters(self) -> dict[str, Any]:
+        """This test's parameters"""
         return self._parameters
 
     @parameters.setter
@@ -336,6 +389,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def unresolved_dependencies(self) -> list[DependencyPatterns]:
+        """List of dependency patterns that must be resolved before running"""
         return self._unresolved_dependencies
 
     @unresolved_dependencies.setter
@@ -344,6 +398,10 @@ class TestCase(AbstractTestCase):
 
     @property
     def dep_done_criteria(self) -> list[str]:
+        """``dep_done_criteria[i]`` is the expected exit status of the ``i``\ th dependency.  This
+        case will not run unless the ``i``\ th dependency exits with this status.  Usually
+        ``dep_done_criteria[i]`` is 'success'.
+        """
         return self._dep_done_criteria
 
     @dep_done_criteria.setter
@@ -352,6 +410,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def dependencies(self) -> list["TestCase"]:
+        """This test's dependencies"""
         return self._dependencies
 
     @dependencies.setter
@@ -360,6 +419,16 @@ class TestCase(AbstractTestCase):
 
     @property
     def runtimes(self) -> list[float | None]:
+        """Basic running time information.  If run continually in the same session, this data can
+        be used in optimizing test submission.
+
+        Returns:
+          runtimes: Running time metrics
+            ``runtimes[0]``: minimum time recorded
+            ``runtimes[1]``: mean time recorded
+            ``runtimes[2]``: maximum time recorded
+
+        """
         if self._runtimes[0] is None:
             self.load_runtimes()
         return self._runtimes
@@ -370,6 +439,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def timeout(self) -> float:
+        """This test's timeout.  See :meth:`set_default_timeout`"""
         if self._timeout is None:
             self.set_default_timeout()
         if not isinstance(self._timeout, (int, float)):
@@ -604,6 +674,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def display_name(self) -> str:
+        """The name displayed to the console"""
         if self._display_name is None:
             self.set_default_names()
         assert self._display_name is not None
@@ -749,6 +820,9 @@ class TestCase(AbstractTestCase):
             self.display_name = f"{self._display_name}[{','.join(s_params)}]"
 
     def set_default_timeout(self) -> None:
+        """Sets the default timeout.  If runtime statistics have been collected those will be used,
+        otherwise the timeout will be based on the presence of the long or fast keywords
+        """
         if self.runtimes[2] is not None:
             max_runtime = self.runtimes[2]
             if max_runtime < 5.0:
@@ -941,13 +1015,13 @@ class TestCase(AbstractTestCase):
                 fs.force_symlink(relsrc, dst, echo=logging.info)
 
     def save(self):
-        file = self.dbfile
+        file = self.lockfile
         mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
             self.dump(fh)
 
     def refresh(self, propagate: bool = True) -> None:
-        file = self.dbfile
+        file = self.lockfile
         if not os.path.exists(file):
             raise FileNotFoundError(file)
         with open(file, "r") as fh:
