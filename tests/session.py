@@ -34,12 +34,13 @@ def test_session_filter(tmpdir):
             cases = s.filter(parameter_expr="np=4")
             assert len(cases) == 1
             assert cases[0].family == "test_exec_dir"
+            p = cases[0].path
 
-        with working_dir("tests/first"):
+        with working_dir(f"tests/{p}"):
             s = session.Session(".", mode="r")
             cases = s.filter(start=os.getcwd())
             assert len(cases) == 1
-            assert cases[0].name == "first"
+            assert cases[0].name == "test_exec_dir.np=4.x=1.234e7"
 
 
 def test_session_bfilter(tmpdir):

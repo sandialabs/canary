@@ -20,8 +20,11 @@ if __name__ == '__main__':
 
         run = NVTestCommand("run")
         rc = run("-w", "-l", "batch:count=4", "-l", "batch:scheduler=none", ".")
-        dirs = [".nvtest"] + [f"test_{i}" for i in range(12)]
-        assert sorted(os.listdir("TestResults")) == sorted(dirs)
+        dirs = os.listdir("TestResults")
+        assert len(dirs) == 13
+        if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() in ("yes", "true", "1", "on"):
+            expected = [".nvtest"] + [f"test_{i}" for i in range(12)]
+            assert sorted(expected) == sorted(dirs)
         assert os.path.exists("TestResults/.nvtest/batches/1")
         batch_assets = sorted(os.listdir("TestResults/.nvtest/batches/1"))
         expected_batch_assets = [

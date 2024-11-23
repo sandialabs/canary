@@ -304,7 +304,9 @@ class TestCase(AbstractTestCase):
     @property
     def path(self) -> str:
         """The relative path from ``self.work_tree`` to ``self.cache_directory``"""
-        return os.path.join(os.path.dirname(self.file_path), self.name)
+        if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() in ("yes", "true", "1", "on"):
+            return os.path.join(os.path.dirname(self.file_path), self.name)
+        return os.path.join(self.id[:2], self.id[2:])
 
     # backward compatibility
     exec_path = path
@@ -961,6 +963,8 @@ class TestCase(AbstractTestCase):
         if pattern.startswith("/") and self.id.startswith(pattern[1:]):
             return True
         elif self.display_name == pattern:
+            return True
+        elif self.name == pattern:
             return True
         elif self.file_path.endswith(pattern):
             return True

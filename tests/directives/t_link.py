@@ -128,12 +128,19 @@ if __name__ == '__main__':
             files = glob.glob(os.path.join(tmpdir, d, "*.txt"))
             return sorted([basename(f) for f in files if not basename(f).startswith("nvtest-")])
 
+        # if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() in ("yes", "true", "1", "on"):
+
         python = Executable(sys.executable)
         python("-m", "nvtest", "run", "-w", ".", fail_on_error=False)
-        assert txtfiles("TestResults/a.a=foo.b=1") == ["foo.txt"]
-        assert txtfiles("TestResults/a.a=foo.b=2") == ["foo-b2.txt"]
-        assert txtfiles("TestResults/a.a=baz.b=1") == ["baz.txt"]
-        assert txtfiles("TestResults/a.a=baz.b=2") == ["baz-b2.txt"]
+
+        p = python("-m", "nvtest", "-C", "TestResults", "location", "a.a=foo.b=1", stdout=str)
+        assert txtfiles(p.out.strip()) == ["foo.txt"]
+        p = python("-m", "nvtest", "-C", "TestResults", "location", "a.a=foo.b=2", stdout=str)
+        assert txtfiles(p.out.strip()) == ["foo-b2.txt"]
+        p = python("-m", "nvtest", "-C", "TestResults", "location", "a.a=baz.b=1", stdout=str)
+        assert txtfiles(p.out.strip()) == ["baz.txt"]
+        p = python("-m", "nvtest", "-C", "TestResults", "location", "a.a=baz.b=2", stdout=str)
+        assert txtfiles(p.out.strip()) == ["baz-b2.txt"]
 
         if python.returncode != 0:
             files = os.listdir("./TestResults/a")

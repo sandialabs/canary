@@ -827,12 +827,12 @@ class PYTTestFile(AbstractTestGenerator):
 
     def f_depends_on(
         self,
-        arg: str,
+        *args: str,
         when: WhenType | None = None,
         expect: int | str | None = None,
         result: str | None = None,
     ):
-        self.m_depends_on(arg, when=when, result=result, expect=expect)
+        self.m_depends_on(list(args), when=when, result=result, expect=expect)
 
     def f_gpus(self, *ngpus: int, when: WhenType | None = None) -> None:
         self.m_parameterize("ngpu", list(ngpus), when=when)

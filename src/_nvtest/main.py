@@ -112,18 +112,19 @@ class NVTestCommand:
 
 def setup_hpc_connect(args: argparse.Namespace) -> None:
     """Set the hpc_connect library"""
+    debug = getattr(args, "debug", False)
+    # main options have not been set, fake the logger to print output
+    level = logging.FATAL if debug else logging.TRACE
+    log = lambda message: logging.log(level, message, prefix="@*g{==>}")
+    # main options have not yet been set
     if batch_scheduler := getattr(args, "batch_scheduler", None):
         if batch_scheduler == "null":
             return
-        logging.debug(f"Setting up HPC Connect for {batch_scheduler}")
+        log(f"Setting up HPC Connect for {batch_scheduler}")
         hpc_connect.set(scheduler=batch_scheduler)  # type: ignore
-        logging.debug(f"  HPC connect: node count: {hpc_connect.scheduler.config.node_count}")
-        logging.debug(
-            f"  HPC connect: CPUs per node: {hpc_connect.scheduler.config.cpus_per_node}"
-        )
-        logging.debug(
-            f"  HPC connect: GPUs per node: {hpc_connect.scheduler.config.gpus_per_node}"
-        )
+        log(f"  HPC connect: node count: {hpc_connect.scheduler.config.node_count}")
+        log(f"  HPC connect: CPUs per node: {hpc_connect.scheduler.config.cpus_per_node}")
+        log(f"  HPC connect: GPUs per node: {hpc_connect.scheduler.config.gpus_per_node}")
         config.update_resource_counts(
             node_count=hpc_connect.scheduler.config.node_count,  # type: ignore
             cpus_per_node=hpc_connect.scheduler.config.cpus_per_node,  # type: ignore
