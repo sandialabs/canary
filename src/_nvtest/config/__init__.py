@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     options = _config.options
     cache_runtimes = _config.cache_runtimes
     debug = _config.debug
+    getoption = _config.getoption
     variables = _config.variables
     invocation_dir = _config.invocation_dir
     set_main_options = _config.set_main_options
