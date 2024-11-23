@@ -5,14 +5,14 @@ import os
 import signal
 import subprocess
 import time
-from types import ModuleType
 from typing import Any
 
-psutil: ModuleType | None
 try:
     import psutil  # type: ignore
+
+    HAVE_PSUTIL = True
 except ImportError:
-    psutil = None
+    HAVE_PSUTIL = False
 
 
 from . import config
@@ -69,7 +69,7 @@ class TestCaseRunner(AbstractTestRunner):
         assert isinstance(case, TestCase)
         if stage == "baseline":
             return self.baseline(case)
-        measure: bool = not getattr(config.options, "dont_measure", False)
+        measure: bool = not config.getoption("dont_measure")
         try:
             metrics: dict[str, Any] | None = None
             case.start = timestamp()
@@ -87,14 +87,12 @@ class TestCaseRunner(AbstractTestRunner):
                     fh.flush()
                     with case.rc_environ():
                         tic = time.monotonic()
-                        proc = subprocess.Popen(
+                        proc = Popen(
                             cmd, start_new_session=True, stdout=fh, stderr=subprocess.STDOUT
                         )
-                        if measure:
-                            metrics = self.get_process_metrics(proc.pid)
+                        metrics = self.get_process_metrics(proc)
                         while proc.poll() is None:
-                            if measure:
-                                self.get_process_metrics(proc.pid, metrics=metrics)
+                            self.get_process_metrics(proc, metrics=metrics)
                             toc = time.monotonic()
                             if timeout > 0 and toc - tic > timeout:
                                 os.kill(proc.pid, signal.SIGINT)
@@ -168,10 +166,10 @@ class TestCaseRunner(AbstractTestRunner):
         )
 
     def get_process_metrics(
-        self, pid: int, metrics: dict[str, Any] | None = None
+        self, proc: "psutil.Popen", metrics: dict[str, Any] | None = None
     ) -> dict[str, Any] | None:
         # Collect process information
-        if psutil is None:
+        if not HAVE_PSUTIL:
             return None
         metrics = metrics or {}
         try:
@@ -195,7 +193,6 @@ class TestCaseRunner(AbstractTestRunner):
                 "username",
             }
             names = valid_names - skip_names
-            proc = psutil.Process(pid)
             new_metrics = proc.as_dict(names)
         except psutil.NoSuchProcess:
             logging.debug(f"Process with PID {proc.pid} does not exist.")
@@ -389,3 +386,9 @@ def factory() -> "AbstractTestRunner":
     else:
         runner = BatchRunner()
     return runner
+
+
+def Popen(*args, **kwargs) -> "subprocess.Popen | psutil.Popen":
+    if HAVE_PSUTIL:
+        return psutil.Popen(*args, **kwargs)
+    return subprocess.Popen(*args, **kwargs)

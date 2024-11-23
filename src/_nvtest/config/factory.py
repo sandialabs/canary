@@ -373,13 +373,13 @@ class Config:
         self.test.cpu_count = (1, self.machine.cpu_count)
         self.test.gpu_count = (0, self.machine.gpu_count)
 
-    def validate(self):
+    def validate(self) -> None:
         mc = self.machine
         sc = self.session
 
         errors: int = 0
 
-        def resource_floor_error(name: str, val: int, /, floor: int = 1) -> None:
+        def resource_floor_error(name: str, val: int | float, /, floor: int | float = 1) -> None:
             nonlocal errors
             errors += 1
             logging.error(

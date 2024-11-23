@@ -85,10 +85,9 @@ class DependencyPatterns:
         for case in cases:
             names = {case.name}
             if extra_fields:
-                names.add(case.display_name)
-                names.add(case.namespace)
-                d = os.path.dirname(case.namespace)
-                names.add(os.path.join(d, case.display_name))
+                names.update((case.fullname, case.display_name))
+                names.add(os.path.join(os.path.dirname(case.file_path), case.name))
+                names.add(os.path.join(os.path.dirname(case.file_path), case.display_name))
             for pattern in self.value:
                 for name in names:
                     if match(name, pattern):
@@ -303,12 +302,14 @@ class TestCase(AbstractTestCase):
     exec_root = work_tree
 
     @property
-    def namespace(self) -> str:
+    def path(self) -> str:
         """The relative path from ``self.work_tree`` to ``self.cache_directory``"""
-        return os.path.join(os.path.dirname(self.file_path), self.name)
+        if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() in ("yes", "true", "1", "on"):
+            return os.path.join(os.path.dirname(self.file_path), self.name)
+        return os.path.join(self.id[:2], self.id[2:])
 
     # backward compatibility
-    branch = exec_path = namespace
+    exec_path = path
 
     @property
     def cache_directory(self) -> str:
@@ -318,7 +319,7 @@ class TestCase(AbstractTestCase):
             work_tree = config.session.work_tree
         if not work_tree:
             raise ValueError("work_tree must be set during set up") from None
-        return os.path.normpath(os.path.join(work_tree, self.namespace))
+        return os.path.normpath(os.path.join(work_tree, self.path))
 
     @property
     def working_directory(self) -> str:
@@ -962,6 +963,8 @@ class TestCase(AbstractTestCase):
         if pattern.startswith("/") and self.id.startswith(pattern[1:]):
             return True
         elif self.display_name == pattern:
+            return True
+        elif self.name == pattern:
             return True
         elif self.file_path.endswith(pattern):
             return True

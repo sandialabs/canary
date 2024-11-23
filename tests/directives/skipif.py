@@ -24,7 +24,9 @@ if __name__ == '__main__':
             )
         run = NVTestCommand("run")
         rc = run("-w", ".")
-        assert os.listdir("TestResults") == [".nvtest", "f1"]
+        if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() in ("yes", "true", "1", "on"):
+            assert os.listdir("TestResults") == [".nvtest", "f1"]
+        assert len(os.listdir("TestResults")) == 2
         assert rc == 0
         with pytest.raises(StopExecution):
             # Error raised due to empty test session

@@ -1,3 +1,4 @@
+import glob
 import importlib.resources
 import os
 
@@ -39,9 +40,11 @@ def test_cmake_integration(tmpdir):
             make()
             run = NVTestCommand("run", debug=True)
             run("-w", ".")
-            assert os.path.exists("TestResults/spam")
-            assert os.path.exists("TestResults/foo")
-            assert os.path.exists("TestResults/baz")
+            dirs = sorted(os.listdir("TestResults"))
+            dirs.remove(".nvtest")
+            assert len(dirs) == 3
+            if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() == "yes":
+                assert dirs == ["baz", "foo", "spam"]
 
 
 f3 = fs.which("mpirun")
@@ -72,9 +75,11 @@ def test_cmake_integration_parallel(tmpdir):
             run = NVTestCommand("run", debug=True)
             run("-w", ".", fail_on_error=False)
             if run.returncode != 0:
-                print(open("TestResults/foo.np=4/nvtest-out.txt").read())
+                files = glob.glob("TestResults/**/nvtest-out.txt")
+                for file in files:
+                    print(open(file).read())
                 assert 0, "test failed"
-            assert os.path.exists("TestResults/foo.np=4")
+            assert len(os.listdir("TestResults")) == 2
 
 
 f3 = fs.which("mpirun")

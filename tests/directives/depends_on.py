@@ -37,10 +37,11 @@ if __name__ == '__main__':
         run = NVTestCommand("run")
         rc = run("-w", ".")
         if rc != 0:
-            for file in glob.glob("TestResults/**/nvtest-out.txt"):
+            for file in glob.glob("TestResults/**/nvtest-out.txt", recursive=True):
                 print(open(file).read())
-        assert os.path.exists("TestResults/f1")
-        assert os.path.exists("TestResults/f2")
+        if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() in ("yes", "true", "1", "on"):
+            assert os.path.exists("TestResults/f1")
+            assert os.path.exists("TestResults/f2")
         assert rc == 0
 
 
@@ -91,11 +92,12 @@ if __name__ == '__main__':
         run = NVTestCommand("run")
         rc = run("-w", ".")
         if rc != 0:
-            for file in glob.glob("TestResults/**/nvtest-out.txt"):
+            for file in glob.glob("TestResults/**/nvtest-out.txt", recursive=True):
                 print(open(file).read())
-        assert os.path.exists("TestResults/f1")
-        assert os.path.exists("TestResults/f2")
-        assert os.path.exists("TestResults/f3")
+        if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() in ("yes", "true", "1", "on"):
+            assert os.path.exists("TestResults/f1")
+            assert os.path.exists("TestResults/f2")
+            assert os.path.exists("TestResults/f3")
         assert rc == 0
 
 
@@ -123,8 +125,9 @@ import nvtest
 nvtest.directives.depends_on('f1.a=2')
 def test():
     self = nvtest.get_instance()
+    print(self.dependencies)
     assert len(self.dependencies) == 1
-    dep = self.dependences[0]
+    dep = self.dependencies[0]
     assert dep.parameters.a == 2
     f = os.path.join(dep.working_directory, f"baz-{dep.parameters.a}.txt")
     assert os.path.exists(f)
@@ -132,6 +135,12 @@ if __name__ == '__main__':
     sys.exit(test())
 """
             )
+        run = NVTestCommand("run")
+        rc = run("-w", ".")
+        if rc != 0:
+            for file in glob.glob("TestResults/**/nvtest-out.txt", recursive=True):
+                print(open(file).read())
+        assert rc == 0
 
 
 def test_depends_on_many_to_one(tmpdir):
@@ -158,6 +167,7 @@ import nvtest
 nvtest.directives.depends_on('f1.a=1', 'f1.a=3', 'f1.a=4')
 def test():
     self = nvtest.get_instance()
+    print(self.dependencies)
     assert len(self.dependencies) == 3
     for dep in self.dependencies:
         assert dep.parameters.a in (1, 3, 4)
@@ -167,3 +177,9 @@ if __name__ == '__main__':
     sys.exit(test())
 """
             )
+        run = NVTestCommand("run")
+        rc = run("-w", ".")
+        if rc != 0:
+            for file in glob.glob("TestResults/**/nvtest-out.txt", recursive=True):
+                print(open(file).read())
+        assert rc == 0
