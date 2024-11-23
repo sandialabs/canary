@@ -37,10 +37,10 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • session:gpu_count=N: Occupy at most N gpus at any one time.\n\n
 • session:gpu_ids=L: Comma separated list of GPU ids available to the session, mutually exclusive with session:gpu_count.\n\n
 • session:timeout=T: Set a timeout on test session execution in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: 60m]\n\n
-• test:cpu_count=[n:]N: Skip tests requiring less than n and more than N cpu cores [default: [1, machine:cpu_count]]\n\n
-• test:gpu_count=[n:]N: Skip tests requiring less than n and more than N gpus [default: [0, machine:gpu_count]]\n\n
-• test:node_count=[n:]N: Skip tests requiring less than n and more than N nodes [default: [1, machine:node_count]]\n\n
-• test:timeout=T: Exclude tests whose timeout or runtime exceeds `T` in seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s)\n\n
+• test:cpu_count=[n:]N: Exclude tests requiring less than n or more than N cpu cores [default: [1, machine:cpu_count]]\n\n
+• test:gpu_count=[n:]N: Exclude tests requiring less than n or more than N gpus [default: [0, machine:gpu_count]]\n\n
+• test:node_count=[n:]N: Exclude tests requiring less than n or more than N nodes [default: [1, machine:node_count]]\n\n
+• test:timeout=T: Exclude tests having a timeout or runtime exceeding `T` seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s)\n\n
 • test:timeoutx=R: Set a timeout multiplier for all tests [default: 1.0]\n\n
 • batch:count=N: Execute tests in N batches.\n\n
 • batch:length=T: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
