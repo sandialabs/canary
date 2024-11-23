@@ -27,7 +27,7 @@ unit-test:
   - module load aue/cmake/3.27.7 > /dev/null 2>&1 || true
   - module load aue/gcc/12.1.0 > /dev/null 2>&1 || true
   - module load aue/openmpi/4.1.6-gcc-12.1.0 > /dev/null 2>&1 || true
-  - python3 -m pip install $STD_PIP_ARGS -e .[dev,slurm,pbs,flux]
+  - python3 -m pip install $STD_PIP_ARGS -e .[dev,slurm,pbs,flux,psutil]
   - pytest tests
   rules:
   - if: $RUN_UNIT_TESTS
@@ -43,7 +43,7 @@ coverage-test:
   - module load aue/cmake/3.27.7 > /dev/null 2>&1 || true
   - module load aue/gcc/12.1.0 > /dev/null 2>&1 || true
   - module load aue/openmpi/4.1.6-gcc-12.1.0 > /dev/null 2>&1 || true
-  - python3 -m pip install $STD_PIP_ARGS -e .[dev,slurm,pbs,flux]
+  - python3 -m pip install $STD_PIP_ARGS -e .[dev,slurm,pbs,flux,psutil]
   - coverage run
   - coverage report
   - coverage xml
@@ -97,7 +97,7 @@ mypy:
   tags:
   - cee.build
   script:
-  - python3 -m pip install $STD_PIP_ARGS -e .[dev,slurm,pbs,flux]
+  - python3 -m pip install $STD_PIP_ARGS -e .[dev,slurm,pbs,flux,psutil]
   - python3 -m pip install $STD_PIP_ARGS mypy mypy-gitlab-code-quality
   - mypy ./src --no-error-summary > mypy-out.txt || true
   - mypy-gitlab-code-quality < mypy-out.txt > codequality.json
