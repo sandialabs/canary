@@ -208,6 +208,7 @@ macro(set_tests_properties NAME)
   endif()
 
   set(output "{\"name\": \"${NAME}\", \"properties\": ${properties}]}")
+  string(REGEX REPLACE "\n" "\\\\n" output "${output}")
   execute_process(COMMAND ${CMAKE_COMMAND} -E echo "${output}")
 endmacro()
 
