@@ -243,10 +243,8 @@ class CDashXMLReporter:
                 for name, measurement in case.measurements.items():
                     if isinstance(measurement, (str, int, float)):
                         add_measurement(results, name=name.title(), value=measurement)
-                        self.notes[name.title()] = str(measurement)
                     else:
                         add_measurement(results, name=name.title(), value=json.dumps(measurement))
-                        self.notes[name.title()] = json.dumps(measurement)
             add_measurement(
                 results,
                 value=case.output(compress=True),
