@@ -167,7 +167,7 @@ class Session:
             self.load()
         else:
             self.initialize()
-        for hook in plugin.plugins():
+        for hook in plugin.hooks():
             hook.session_initialize(self)
 
         self.exitstatus = -1
@@ -386,7 +386,7 @@ class Session:
         finder = Finder()
         for root, paths in self.search_paths.items():
             finder.add(root, *paths, tolerant=True)
-        for hook in plugin.plugins():
+        for hook in plugin.hooks():
             hook.session_discovery(finder)
         finder.prepare()
         self.generators = finder.discover(pedantic=pedantic)
@@ -668,7 +668,7 @@ class Session:
                 finally:
                     queue.close(cleanup=cleanup_queue)
                     self.finish = timestamp()
-                for hook in plugin.plugins():
+                for hook in plugin.hooks():
                     hook.session_finish(self)
         self.exitstatus = self.returncode
         self.save()

@@ -1093,7 +1093,7 @@ class TestCase(AbstractTestCase):
         with fs.working_dir(self.working_directory, create=True):
             self.setup_working_directory(copy_all_resources=copy_all_resources)
             self._status.set("ready" if not self.dependencies else "pending")
-            for hook in plugin.plugins():
+            for hook in plugin.hooks():
                 hook.test_setup(self)
             self.save()
         logging.trace(f"Done setting up {self}")
@@ -1117,7 +1117,7 @@ class TestCase(AbstractTestCase):
             return
         logging.info(f"Rebaselining {self.pretty_repr()}")
         with fs.working_dir(self.working_directory):
-            for hook in plugin.plugins():
+            for hook in plugin.hooks():
                 hook.test_before_run(self, stage="baseline")
             for arg in self.baseline:
                 if isinstance(arg, str):
@@ -1152,7 +1152,7 @@ class TestCase(AbstractTestCase):
         if self.unresolved_dependencies:
             raise RuntimeError("All dependencies must be resolved before running")
         with fs.working_dir(self.working_directory):
-            for hook in plugin.plugins():
+            for hook in plugin.hooks():
                 hook.test_before_run(self, stage=stage)
         self.save()
 

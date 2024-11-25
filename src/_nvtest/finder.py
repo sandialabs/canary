@@ -221,7 +221,7 @@ class Finder:
         )
         Finder.check_for_skipped_dependencies(cases)
 
-        for p in plugin.plugins():
+        for p in plugin.hooks():
             for case in cases:
                 p.test_discovery(case)
 

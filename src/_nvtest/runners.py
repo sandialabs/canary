@@ -133,7 +133,7 @@ class TestCaseRunner(AbstractTestRunner):
             if metrics is not None:
                 case.add_measurement(**metrics)
             case.finish = timestamp()
-            for hook in plugin.plugins():
+            for hook in plugin.hooks():
                 hook.test_after_run(case)
             case.wrap_up(stage)
         return

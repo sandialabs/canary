@@ -97,7 +97,7 @@ class Manager:
                 method_name = "session_discovery"
             case ["session", "initialize"] | ["session", "setup"]:
                 method_name = "session_initialize"
-            case ["session", "finish"] | ["session", "teardown"]:
+            case ["session", "finish"] | ["session", "teardown"] | ["session", "after_run"]:
                 method_name = "session_finish"
             case ["test", "discovery"]:
                 method_name = "test_discovery"
@@ -274,6 +274,10 @@ _manager = Singleton(factory)
 
 
 def plugins() -> Generator[Type[PluginHook], None, None]:
+    return _manager.iterplugins()
+
+
+def hooks() -> Generator[Type[PluginHook], None, None]:
     return _manager.iterplugins()
 
 

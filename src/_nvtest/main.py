@@ -33,6 +33,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     with NVTestMain(argv) as m:
         parser = make_argument_parser()
+        for hook in plugin.hooks():
+            hook.main_setup(parser)
         parser.add_all_commands()
         args = parser.parse_args(m.argv)
         if args.echo:

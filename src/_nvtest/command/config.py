@@ -87,7 +87,7 @@ def get_active_plugin_description() -> str:
 
     table: list[tuple[str, str, str]] = []
     widths = [len("Namespace"), len("Name"), 0]
-    for hook in plugin.plugins():
+    for hook in plugin.hooks():
         row = _get_plugin_info(hook)
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))
