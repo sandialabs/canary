@@ -13,6 +13,7 @@ from . import config
 from . import plugin
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
+from .third_party.monkeypatch import monkeypatch
 from .util import logging
 
 if TYPE_CHECKING:
@@ -33,9 +34,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     with NVTestMain(argv) as m:
         parser = make_argument_parser()
-        for hook in plugin.hooks():
-            hook.main_setup(parser)
         parser.add_all_commands()
+        with monkeypatch.context() as mp:
+            mp.setattr(parser, "add_argument", parser.add_plugin_argument)
+            for hook in plugin.hooks():
+                hook.main_setup(parser)
         args = parser.parse_args(m.argv)
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/nvtest")] + [_ for _ in m.argv if _ != "--echo"]

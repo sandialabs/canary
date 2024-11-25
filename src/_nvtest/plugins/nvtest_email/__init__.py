@@ -12,14 +12,16 @@ from _nvtest.util.sendmail import sendmail
 @nvtest.plugin.register(scope="main", stage="setup")
 def setup_parser(parser: nvtest.Parser) -> None:
     user = getuser()
-    parser.add_plugin_argument(
+    parser.add_argument(
         "--mail-to",
         help="Send a test session summary to the comma separated list of email addresses",
+        command="run",
     )
-    parser.add_plugin_argument(
+    parser.add_argument(
         "--mail-from",
         default=f"{user}@sandia.gov",
         help="Send mail from this user [default: %(default)s] summary of test session",
+        command="run",
     )
 
 

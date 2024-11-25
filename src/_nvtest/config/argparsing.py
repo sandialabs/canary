@@ -66,6 +66,7 @@ class Parser(argparse.ArgumentParser):
         super().__init__(*args, **kwargs)
         self.register("type", None, identity)
         self.__subcommand_objects: dict[str, "Command"] = {}
+        self.__subcommand_parsers: dict[str, "Parser"] = {}
         self.argv: Sequence[str] = sys.argv[1:]
         if positionals_title:
             self._positionals.title = positionals_title
@@ -116,6 +117,7 @@ class Parser(argparse.ArgumentParser):
         subparser.register("type", None, identity)
         command.setup_parser(subparser)  # type: ignore
         self.__subcommand_objects[cmdname] = command
+        self.__subcommand_parsers[cmdname] = subparser
 
     def get_command(self, cmdname: str) -> "Command | None":
         for name, command in self.__subcommand_objects.items():
@@ -146,7 +148,13 @@ class Parser(argparse.ArgumentParser):
         return group
 
     def add_plugin_argument(self, *args, **kwargs):
-        group = self.get_group("plugin options")
+        parser = self.__subcommand_parsers.get(kwargs.pop("command", None)) or self
+        group_name = "plugin options"
+        for group in parser._action_groups:
+            if group.title == group_name:
+                break
+        else:
+            group = parser.add_argument_group(group_name)
         group.add_argument(*args, **kwargs)
 
     def add_all_commands(self, add_help_override: bool = False) -> None:
