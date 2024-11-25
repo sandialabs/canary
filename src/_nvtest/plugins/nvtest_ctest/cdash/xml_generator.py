@@ -6,7 +6,6 @@ import xml.dom.minidom as xdom
 from graphlib import TopologicalSorter
 
 from _nvtest import config
-from _nvtest._version import version as nvtest_version
 from _nvtest.reporter import TestData
 from _nvtest.session import Session
 from _nvtest.test.case import TestCase
@@ -16,6 +15,7 @@ from _nvtest.util import logging
 from _nvtest.util.filesystem import mkdirp
 from _nvtest.util.time import strftimestamp
 from _nvtest.util.time import timestamp
+from _nvtest.version import version as nvtest_version
 
 
 class CDashXMLReporter:

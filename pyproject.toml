@@ -30,10 +30,8 @@ pbs = [
 requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools_scm]
-version_file = "src/_nvtest/_version.py"
-version_scheme = "python-simplified-semver"
-local_scheme = "no-local-version"
+[tool.setuptools.dynamic]
+version = {attr = "_nvtest.util.generate_version.__generate_dynamic_version__"}
 
 [tool.mypy]
 exclude = [

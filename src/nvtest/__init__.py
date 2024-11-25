@@ -7,9 +7,6 @@ if TYPE_CHECKING:
 import _nvtest.config as config
 import _nvtest.enums as enums
 import _nvtest.plugin as plugin
-from _nvtest._version import __version__
-from _nvtest._version import version
-from _nvtest._version import version_tuple
 from _nvtest.command.base import Command
 from _nvtest.config.argparsing import Parser
 from _nvtest.enums import centered_parameter_space
@@ -31,6 +28,9 @@ from _nvtest.util import logging
 from _nvtest.util import module
 from _nvtest.util import shell
 from _nvtest.util.executable import Executable
+from _nvtest.version import __version__
+from _nvtest.version import version
+from _nvtest.version import version_tuple
 
 from . import directives
 from . import patterns

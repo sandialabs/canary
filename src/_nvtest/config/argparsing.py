@@ -17,7 +17,7 @@ from ..util.time import time_in_seconds
 if TYPE_CHECKING:
     from ..command.base import Command
 
-import _nvtest._version
+from _nvtest.version import __version__
 
 stat_names = pstats.Stats.sort_arg_dict_default
 
@@ -209,7 +209,7 @@ def make_argument_parser(**kwargs):
     parser.add_argument(
         "--version",
         action="version",
-        version=_nvtest._version.version,
+        version=__version__,
         help="show version and exit",
     )
     parser.add_argument(

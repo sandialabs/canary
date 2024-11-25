@@ -32,7 +32,7 @@ copyright = "2024, National Technology & Engineering Solutions of Sandia, LLC (N
 author = "National Technology & Engineering Solutions of Sandia, LLC (NTESS)"
 
 # The short X.Y version
-version = re.sub(r"\.dev.*$", r"", nvtest.__version__)
+version = re.sub(r"\+.*$", r"", nvtest.__version__)
 
 # The full version, including alpha/beta/rc tags
 release = nvtest.__version__

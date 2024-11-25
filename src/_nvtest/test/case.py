@@ -117,10 +117,6 @@ class TestCase(AbstractTestCase):
       exclusive: Whether the test case is exclusive.
       stages: Stages of the test case execution.
 
-    Attributes:
-      _lockfile: The name of the lock file associated with the test case.
-      REGISTRY: A registry of all test case subclasses.
-
     """
 
     _lockfile = "testcase.lock"
