@@ -5,7 +5,6 @@ from typing import TextIO
 
 def version_components_from_git(full: bool = False) -> tuple[int, int, int, str]:
     try:
-        f = open("foo-v.txt", "w")
         save_cwd = os.getcwd()
         os.chdir(os.path.join(os.path.dirname(__file__), "../../.."))
         proc = subprocess.Popen(
