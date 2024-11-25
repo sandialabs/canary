@@ -20,6 +20,9 @@ if TYPE_CHECKING:
     from .command.base import Command
 
 
+reraise: bool = False
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Perform an in-process test run.
 
@@ -64,10 +67,15 @@ class NVTestMain:
         self.invocation_dir = self.working_dir = os.getcwd()
 
     def __enter__(self) -> "NVTestMain":
+        global reraise
+        if "GITLAB_CI" in os.environ:
+            reraise = True
         parser = make_argument_parser()
         parser.add_all_commands()
         # preparse to get the list of plugins to load and/or not load
         args = parser.preparse(self.argv)
+        if args.debug:
+            reraise = True
         if args.C:
             self.working_dir = args.C
         os.chdir(self.working_dir)
@@ -223,24 +231,24 @@ def console_main() -> int:
             logging.error(e.message)
         return e.exit_code
     except TimeoutError as e:
-        if config.debug:
+        if reraise:
             raise
         logging.error(e.args[0])
         return 4
     except KeyboardInterrupt:
-        if config.debug:
+        if reraise:
             raise
         sys.stderr.write("\n")
         logging.error("Keyboard interrupt.")
         return signal.SIGINT.value
     except SystemExit as e:
-        if config.debug:
+        if reraise:
             traceback.print_exc()
         if isinstance(e.code, int):
             return e.code
         return 1
     except Exception as e:
-        if config.debug:
+        if reraise:
             raise
         logging.error(str(e))
         return 3
