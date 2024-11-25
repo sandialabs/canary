@@ -24,7 +24,6 @@ def version_components_from_git(full: bool = False) -> tuple[int, int, int, str]
         return major - 2000, minor, micro, local
     finally:
         os.chdir(save_cwd)
-        f.close()
 
 
 def write_version_file(file: TextIO, major: int, minor: int, micro: int, local: str) -> None:
