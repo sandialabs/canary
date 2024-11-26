@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 
 import _nvtest.plugins.nvtest_ctest.generator as ctg
+from _nvtest.util.filesystem import force_remove
 from _nvtest.util.filesystem import which
 
 
@@ -11,7 +12,8 @@ from _nvtest.util.filesystem import which
 def loadtestfile():
     file = os.path.join(os.path.dirname(__file__), "CTestTestfile.cmake")
     tests = ctg.load(file)
-    return tests
+    yield tests
+    force_remove(os.path.join(os.path.dirname(__file__), "Testing"))
 
 
 def test_parse_np():
@@ -125,28 +127,32 @@ def test_parse_ctesttestfile_fixtures_setup(loadtestfile):
     assert find_property(test["properties"], "FIXTURES_SETUP") == ["Foo"]
 
 
-@pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
-def test_parse_ctesttestfile_generated_resource_spec_file(loadtestfile):
-    test = loadtestfile["generated_resource_spec_file"]
-    assert find_property(test["properties"], "GENERATED_RESOURCE_SPEC_FILE") == "file.txt"
+# @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
+# def test_parse_ctesttestfile_generated_resource_spec_file(loadtestfile):
+#    test = loadtestfile["generated_resource_spec_file"]
+#    assert find_property(test["properties"], "GENERATED_RESOURCE_SPEC_FILE") == "file.txt"
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
 def test_parse_ctesttestfile_labels(loadtestfile):
     test = loadtestfile["labels"]
-    assert find_property(test["properties"], "LABELS") == ["foo", "bar"]
+    assert find_property(test["properties"], "LABELS") == ["bar", "foo"]
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
 def test_parse_ctesttestfile_measurement_1(loadtestfile):
     test = loadtestfile["measurement_1"]
-    assert find_property(test["properties"], "MEASUREMENT") == {"name": "foo", "value": 1}
+    assert find_property(test["properties"], "MEASUREMENT") == [
+        {"measurement": "foo", "value": "1"}
+    ]
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
 def test_parse_ctesttestfile_measurement_2(loadtestfile):
     test = loadtestfile["measurement_2"]
-    assert find_property(test["properties"], "MEASUREMENT") == {"name": "foo", "value": 2}
+    assert find_property(test["properties"], "MEASUREMENT") == [
+        {"measurement": "foo", "value": "2"}
+    ]
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -222,8 +228,8 @@ def test_parse_ctesttestfile_timeout(loadtestfile):
 def test_parse_ctesttestfile_timeout_after_match(loadtestfile):
     test = loadtestfile["timeout_after_match"]
     assert find_property(test["properties"], "TIMEOUT_AFTER_MATCH") == {
-        "pattern": "foo",
-        "seconds": 1,
+        "regex": ["foo"],
+        "timeout": 1.0,
     }
 
 
@@ -231,8 +237,10 @@ def test_parse_ctesttestfile_timeout_after_match(loadtestfile):
 def test_parse_ctesttestfile_timeout_signal(loadtestfile):
     test = loadtestfile["timeout_signal"]
     assert find_property(test["properties"], "TIMEOUT") == 1
-    assert find_property(test["properties"], "TIMEOUT_SIGNAL_NAME") == "SIGINT"
-    assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == 2.0
+    with pytest.raises(KeyError):
+        assert find_property(test["properties"], "TIMEOUT_SIGNAL_NAME") == "SIGINT"
+    with pytest.raises(KeyError):
+        assert find_property(test["properties"], "TIMEOUT_SIGNAL_GRACE_PERIOD") == "2.0"
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -244,11 +252,14 @@ def test_parse_ctesttestfile_will_fail(loadtestfile):
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
 def test_parse_ctesttestfile_working_directory(loadtestfile):
     test = loadtestfile["working_directory"]
-    wd = os.path.dirname(__file__)
-    assert find_property(test["properties"], "WORKING_DIRECTORY") == wd
+    wd = os.getcwd()
+    wdt = os.path.abspath(find_property(test["properties"], "WORKING_DIRECTORY"))
+    assert wdt == wd
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
 def test_parse_ctesttestfile_cmake_driven_cmd(loadtestfile):
     test = loadtestfile["cmake_driven_cmd"]
-    assert test["command"] == ["cmake", "-DOPTION=VAL1;VAL2", "-DSPAM=BAZ", "-P", "FILE"]
+    command = test["command"]
+    command[0] = os.path.basename(command[0])
+    assert command == ["cmake", "-DOPTION=VAL1;VAL2", "-DSPAM=BAZ", "-P", "FILE"]

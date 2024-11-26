@@ -34,3 +34,4 @@ mock-tests
 *.orig
 
 examples/ctest/ctest-command.txt
+examples/ctest/Testing/

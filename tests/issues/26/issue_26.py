@@ -3,6 +3,7 @@ import os
 import pytest
 
 import _nvtest.plugins.nvtest_ctest.generator as ctg
+from _nvtest.util.filesystem import force_remove
 from _nvtest.util.filesystem import which
 
 
@@ -10,6 +11,7 @@ from _nvtest.util.filesystem import which
 def test_issue_26():
     file = os.path.join(os.path.dirname(__file__), "CTestTestfile.cmake")
     tests = ctg.load(file)
+    print(tests)
     test = tests["my-test"]
     for prop in test["properties"]:
         if prop["name"] == "PASS_REGULAR_EXPRESSION":
@@ -17,3 +19,4 @@ def test_issue_26():
     else:
         assert 0, "property not found"
     assert prop["value"] == ["this test has a new\nline", "and another\none"]
+    force_remove(os.path.join(os.path.dirname(__file__), "Testing"))

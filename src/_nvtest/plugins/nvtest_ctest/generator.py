@@ -1,5 +1,4 @@
 import argparse
-import importlib.resources as ir
 import io
 import json
 import os
@@ -17,8 +16,6 @@ from _nvtest.test.case import TestCase
 from _nvtest.util import graph
 from _nvtest.util import logging
 from _nvtest.util.filesystem import is_exe
-
-USE_CTEST_JSON_V1 = True
 
 
 class CTestTestFile(AbstractTestGenerator):
@@ -69,15 +66,7 @@ class CTestTestFile(AbstractTestGenerator):
         return file.getvalue()
 
     def load(self) -> dict:
-        kwds: dict[str, str] = {}
-        build_type = find_build_type(os.path.dirname(self.file))
-        if build_type is not None:
-            kwds["CTEST_CONFIGURATION_TYPE"] = build_type
-        tests: dict[str, Any]
-        if USE_CTEST_JSON_V1:
-            tests = load2(self.file, **kwds)
-        else:
-            tests = load(self.file, **kwds)
+        tests = load(self.file)
         transform(tests)
         return tests
 
@@ -357,39 +346,6 @@ class CTestTestCase(TestCase):
         self._resource_groups = arg
 
 
-class CMakeCache(dict):
-    def __init__(self, file: str) -> None:
-        self.directory = os.path.dirname(os.path.abspath(file))
-        with open(file) as fh:
-            for line in fh:
-                if line.strip().startswith("CMAKE_"):
-                    type = "string"
-                    var, val = [_.strip() for _ in line.split("=", 1)]
-                    if ":" in var:
-                        var, type = var.split(":", 1)
-                    self[var.replace("CMAKE_", "").lower()] = {"type": type, "value": val}
-
-
-cmake_caches: dict[str, CMakeCache] = {}
-
-
-def find_cmake_cache(directory: str) -> CMakeCache | None:
-    if directory == os.path.sep:
-        return None
-    if directory in cmake_caches:
-        return cmake_caches[directory]
-    file = os.path.join(directory, "CMakeCache.txt")
-    if os.path.exists(file):
-        cmake_caches[directory] = CMakeCache(file)
-        return cmake_caches[directory]
-    return find_cmake_cache(os.path.dirname(directory))
-
-
-def find_build_type(directory: str) -> str | None:
-    cache = find_cmake_cache(directory)
-    return None if cache is None else cache["build_type"]["value"]
-
-
 def is_mpi_launcher(arg: str) -> bool:
     launchers = ("mpiexec", "mpirun", "srun", "jsrun")
     return is_exe(arg) and arg.endswith(launchers)
@@ -431,46 +387,7 @@ def parse_np(args: list[str]) -> int:
     return 1
 
 
-def load(file, **defs: str) -> dict[str, Any]:
-    parser = ir.files("_nvtest").joinpath("plugins/nvtest_ctest/parser.cmake")
-    tests: dict[str, Any] = {}
-    with nvtest.filesystem.working_dir(os.path.dirname(file)):
-        cmake = find_cmake()
-        args = [cmake, f"-DTESTFILE={file}"]
-        for key, val in defs.items():
-            args.append(f"-D{key}={val}")
-        args.append(f"-P{parser}")
-        p = subprocess.Popen(args, stdout=subprocess.PIPE)
-        p.wait()
-        out, _ = p.communicate()
-        lines = [l.strip() for l in out.decode("utf-8").split("\n") if l.split()]
-        for line in lines:
-            try:
-                fd = json.loads(line)
-            except json.JSONDecodeError:
-                logging.error(f"Failed to parse line {line!r} of {file}")
-                raise
-            assert "name" in fd
-            if "command" in fd:
-                td = tests.setdefault(fd["name"], {})
-                td["command"] = fd["command"]
-            elif "properties" in fd:
-                td = tests.setdefault(fd["name"], {})
-                td["properties"] = fd["properties"]
-            else:
-                raise ValueError("Expected 'command' or 'properties' group")
-    for test in tests.values():
-        test["file"] = file
-        if "properties" not in test:
-            test["properties"] = [
-                {"name": "WORKING_DIRECTORY", "value": os.path.dirname(os.path.realpath(file))}
-            ]
-    with open("/Users/tjfulle/Desktop/load.json", "w") as fh:
-        json.dump(tests, fh, indent=2)
-    return tests
-
-
-def load2(file, **defs: str) -> dict[str, Any]:
+def load(file: str) -> dict[str, Any]:
     """Use ctest --show-only"""
     tests: dict[str, Any] = {}
     with nvtest.filesystem.working_dir(os.path.dirname(file)):
@@ -479,6 +396,7 @@ def load2(file, **defs: str) -> dict[str, Any]:
         p.wait()
         out, _ = p.communicate()
         payload = json.loads(out.decode("utf-8"))
+        print(payload)
         nodes = payload["backtraceGraph"]["nodes"]
         files = payload["backtraceGraph"]["files"]
         for test in payload["tests"]:
