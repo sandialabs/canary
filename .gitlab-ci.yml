@@ -131,6 +131,8 @@ mypy:
 
 pages:
   extends: .pages
+  variables:
+    GIT_STRATEGY: clone
   before_script:
   # make sure to install from main to get the right version number
   - git checkout main
