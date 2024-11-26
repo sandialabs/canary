@@ -58,7 +58,8 @@ class CTestTestFile(AbstractTestGenerator):
         tests = self.load()
         cases: list[CTestTestCase] = []
         for family, td in tests.items():
-            case = CTestTestCase(file_root=self.root, file_path=self.path, family=family, **td)
+            path = os.path.relpath(td["file"], self.root)
+            case = CTestTestCase(file_root=self.root, file_path=path, family=family, **td)
             cases.append(case)
         self.resolve_inter_dependencies(cases)
         self.resolve_fixtures(cases)
@@ -434,7 +435,7 @@ def transform(tests: dict[str, Any]) -> None:
 
     """
     for name, data in tests.items():
-        transformed = {"command": data["command"]}
+        transformed = {"command": data["command"], "file": data["file"]}
         for prop in data["properties"]:
             prop_name, prop_value = prop["name"], prop["value"]
             if prop_name == "ENVIRONMENT":
