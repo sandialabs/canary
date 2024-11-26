@@ -67,9 +67,8 @@ class TestCaseRunner(AbstractTestRunner):
 
     def run(self, case: "AbstractTestCase", stage: str = "run") -> None:
         assert isinstance(case, TestCase)
-        if stage == "baseline":
+        if stage in ("baseline", "rebase", "rebaseline"):
             return self.baseline(case)
-        measure: bool = not config.getoption("dont_measure")
         try:
             metrics: dict[str, Any] | None = None
             case.start = timestamp()
@@ -137,11 +136,6 @@ class TestCaseRunner(AbstractTestRunner):
                 hook.test_after_run(case)
             case.wrap_up(stage)
         return
-
-    def analyze(self, case: "TestCase") -> None:
-        logging.emit(self.start_msg(case, "analyze") + "\n")
-        self.run(case, stage="analyze")
-        logging.emit(self.end_msg(case, "analyze") + "\n")
 
     def baseline(self, case: "TestCase") -> None:
         logging.emit(self.start_msg(case, "baseline") + "\n")

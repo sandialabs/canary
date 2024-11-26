@@ -3,53 +3,69 @@
 Defining additional execution stages
 ====================================
 
-The :func:`nvtest.directives.stages` directive configures a test to run in specific stages.  All tests are assigned the stage ``run``, regardless of whether the ``stages`` directive is called.
+All tests are configured to run during the ``run`` stage of execution.  :func:`nvtest.directives.stages` configures a test to run in additional stages of execution, as illustrated in the following example.
 
-By default ``nvtest run`` executes tests in the ``run`` stage and only a single stage is executed per invocation.  Additional stages can be run invoking ``nvtest`` as ``nvtest run --stage=STAGE ...`` **after** the initial run (with ``stage=run``).
-
-Examples
+Example
 --------
+
+The following example defines the additional post processing stages "analyze" and "plot", each defining their behavior in a corresponding function:
 
 .. literalinclude:: /examples/staged/staged.pyt
     :language: python
-    :lines: 4-22
+    :lines: 4-7
 
-This test defines the additional test stage "analyze" that can be run separately from the run stage.
+.. literalinclude:: /examples/staged/staged.pyt
+    :language: python
+    :lines: 10-11
+
+.. literalinclude:: /examples/staged/staged.pyt
+    :language: python
+    :lines: 18-19
+
+.. literalinclude:: /examples/staged/staged.pyt
+    :language: python
+    :lines: 27-28
 
 To determine the stage of execution, the test should parse the command line for the ``--stage`` option.  As a convenience, ``nvtest`` provides the ``make_argument_parser`` utility that creates and ``argparse.ArgumentParser`` object and adds several common arguments, including ``--stage``:
 
 .. literalinclude:: /examples/staged/staged.pyt
     :language: python
-    :lines: 24-36
+    :lines: 38-50
 
 The test must first be run with ``--stage=run`` (the default) to generate the test session:
+
+.. note::
+
+    All tests are assigned the stage ``run``, regardless of whether the ``stages`` directive is called.
 
 .. command-output:: nvtest run -d TestResults.Staged ./staged
     :cwd: /examples
     :extraargs: -rv -w
 
-
 Thereafter, the additional stages can be run:
-
-.. command-output:: nvtest -C TestResults.Staged run --stage=analyze .
-    :cwd: /examples
-    :extraargs: -rv
-
-.. note::
-
-    ``nvtest run --stage=STAGE`` for any other stage than run should be executed in the session work tree.
 
 .. note::
 
     When ``nvtest run`` is invoked with ``--stage=STAGE``, only tests having been assigned the stage ``STAGE`` will be run.
 
+.. note::
+
+    ``nvtest run --stage=STAGE`` for any other stage than run should be executed in the session work tree.
+
+.. command-output:: nvtest -C TestResults.Staged run --stage=analyze .
+    :cwd: /examples
+    :extraargs: -rv
+
+.. command-output:: nvtest -C TestResults.Staged run --stage=plot .
+    :cwd: /examples
+    :extraargs: -rv
+
+.. admonition:: Processor counts
+
+    During any stageanalyze other than ``run``, ``nvtest`` assumes that the stage will use only one processor.
+
 The complete file
-~~~~~~~~~~~~~~~~~
+.................
 
 .. literalinclude:: /examples/staged/staged.pyt
     :language: python
-
-Processor counts
-----------------
-
-During any stage other than ``run``, ``nvtest`` assumes that the test uses only one processor.

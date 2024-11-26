@@ -154,7 +154,7 @@ def baseline(
     when: WhenType | None = None,
     flag: str | None = None,
 ) -> None:
-    """Rebaseline a test
+    """Rebaseline a test by running ``nvtest run --stage=baseline ...`` in the test session directory (or one of its subdirectories)
 
     Usage
     -----
@@ -204,7 +204,14 @@ def baseline(
 
        # VVT: baseline (platforms="not darwin") : file.exo,file.base_exo
 
-    will replace ``file.base_exo`` with ``file.exo``.
+    will replace ``file.base_exo`` with ``file.exo`` when the baseline stage is ran in its results directory:
+
+    .. code-block:: console
+
+       $ nvtest run [options]
+       $ cd $(nvtest -C TestResults location /TESTID)
+       $ nvtest run --stage=baseline .
+
 
     """
 

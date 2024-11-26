@@ -6,7 +6,6 @@ Plugins defining builtin commands.
 .. toctree::
    :maxdepth: 1
 
-   analyze
    autodoc
    base
    config
@@ -16,7 +15,6 @@ Plugins defining builtin commands.
    help
    location
    log
-   rebaseline
    report
    run
    status

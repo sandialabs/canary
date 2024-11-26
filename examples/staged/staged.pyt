@@ -4,22 +4,35 @@ import sys
 import nvtest
 
 nvtest.directives.parameterize("np", [1, 4, 8])
-nvtest.directives.stages("analyze")
+nvtest.directives.stages("analyze", "plot")
 
 
 def run(case: nvtest.TestInstance) -> None:
-    # Run the test
+    """Run the test"""
     nvtest.logging.info("running the very expensive 'run' stage")
-    f = f"{case.parameters.np}.txt"
-    nvtest.filesystem.touchp(f)
+    with open("run.txt", "w") as fh:
+        fh.write("success")
     analyze(case)
 
 
 def analyze(case: nvtest.TestInstance) -> None:
-    # Analyze a single parameterized test
+    """Analyze a single parameterized test"""
     nvtest.logging.info("running the relatively cheap 'analyze' stage")
-    f = f"{case.parameters.np}.txt"
-    assert os.path.exists(f)
+    if not open("run.txt").read() == "success":
+        raise nvtest.TestFailed(f"{case}: 'run' stage did not successfully complete")
+    with open("analyze.txt", "w") as fh:
+        fh.write("success")
+
+
+def plot(case: nvtest.TestInstance) -> None:
+    """Plot the results after the analysis stage"""
+    nvtest.logging.info("plotting results during the 'plot' stage")
+    if not os.path.exists("analyze.txt"):
+        raise ValueError(f"{case}: analyze.txt not found, did you run the 'analyze' stage?")
+    if not open("analyze.txt").read() == "success":
+        raise nvtest.TestFailed(f"{case}: 'analyze' stage did not successfully complete")
+    with open("plot.txt", "w") as fh:
+        fh.write("success")
 
 
 def main():
@@ -28,6 +41,8 @@ def main():
     self = nvtest.get_instance()
     if args.stage == "analyze":
         analyze(self)
+    elif args.stage == "plot":
+        plot(self)
     elif args.stage == "run":
         run(self)
     else:

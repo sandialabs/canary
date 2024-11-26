@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     from .base import Command
 
 # The act of importing command modules will register the commands
-from . import analyze
 from . import autodoc
 from . import changelog
 from . import config
@@ -17,7 +16,6 @@ from . import help
 from . import info
 from . import location
 from . import log
-from . import rebaseline
 from . import report
 from . import run
 from . import status

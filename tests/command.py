@@ -187,8 +187,8 @@ def test_config_show():
 
 def test_analyze(setup):
     with working_dir(setup.results_path), nvtest.config.override():
-        analyze = NVTestCommand("analyze")
-        analyze(".")
+        run = NVTestCommand("run")
+        run("--stage=analyze", ".")
 
 
 def test_tree():

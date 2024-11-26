@@ -89,7 +89,7 @@ Additionally, a full table of dependency parameters is accessible via key entry 
 Run only the analysis section of a test
 ---------------------------------------
 
-After a test is run, the composite base case can be run with the :ref:`nvtest analyze<nvtest-analyze>` command.  Consider the test introduced in :ref:`usage-execute-and-analyze`, repeated here for convenience:
+After a test is run, the composite base case can be run with the :ref:`nvtest run --stage=analyze<nvtest-run>` command.  Consider the test introduced in :ref:`usage-execute-and-analyze`, repeated here for convenience:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :language: python
@@ -102,7 +102,7 @@ After the test has been run, the analysis sections can be run without rerunning 
     :ellipsis: 0
 
 
-.. command-output:: nvtest -C TestResults.ExecuteAndAnalyze analyze .
+.. command-output:: nvtest -C TestResults.ExecuteAndAnalyze run --stage=analyze .
     :cwd: /examples
 
 

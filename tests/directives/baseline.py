@@ -30,8 +30,8 @@ if __name__ == '__main__':
                 print(open(file).read())
         assert rc == 0
         with working_dir("TestResults"):
-            baseline = NVTestCommand("rebaseline")
-            rc = baseline(".")
+            run = NVTestCommand("run")
+            rc = run("--stage=baseline", ".")
         assert rc == 0
         assert open("a.txt").read() == "a=1"
 
@@ -73,7 +73,7 @@ if __name__ == '__main__':
                 print(open(file).read())
         assert rc == 0
         with working_dir("TestResults"):
-            baseline = NVTestCommand("rebaseline")
-            rc = baseline(".")
+            run = NVTestCommand("run")
+            rc = run("--stage=baseline", ".")
         assert rc == 0
         assert open("a.txt").read() == "a=1"

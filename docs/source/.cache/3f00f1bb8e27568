@@ -1,4 +1,4 @@
 {
   "returncode": 0,
-  "output": " ###  ##  ###  ##  ######   #######  #######  ######  \n  ### ##   ##  ##  #    #                 ##  #    #  \n  ######   ##  ##    ##      ##       ##        ##    \n  ## ###   ##  ##    ##      ####     ######    ##    \n  ##  ##   ##  ##    ##      ##           ##    ##    \n  ##  ##    ####     ##      ##       ##  ##    ##    \n  ##  ##     ##     ####     ######   ######   ####\nsearching for tests in .\n==> collected 27 files from 1 root\n==> done with test discovery"
+  "output": "               _               _   \n _ __  __   __| |_   ___  ___ | |_ \n| '_ \\ \\ \\ / /| __| / _ \\/ __|| __|\n| | | | \\ V / | |_ |  __/\\__ \\| |_ \n|_| |_|  \\_/   \\__| \\___||___/ \\__|\nsearching for tests in .\n==> collected 27 files from 1 root\n==> done with test discovery"
 }
