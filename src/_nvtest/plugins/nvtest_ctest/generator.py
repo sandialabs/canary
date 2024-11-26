@@ -19,7 +19,7 @@ from _nvtest.util.filesystem import is_exe
 
 
 class CTestTestFile(AbstractTestGenerator):
-    binary_dirs: set[str] = set()
+    no_recurse_dirs: set[str] = set()
 
     def __init__(self, root: str, path: str | None = None) -> None:
         super().__init__(root, path=path)
@@ -30,11 +30,19 @@ class CTestTestFile(AbstractTestGenerator):
         matches = cls.always_matches(path)
         if matches:
             dir = os.path.dirname(os.path.abspath(path))
-            for binary_dir in CTestTestFile.binary_dirs:
-                if dir.startswith(binary_dir):
-                    break
+            cmakecache = os.path.join(dir, "CMakeCache.txt")
+            if os.path.exists(cmakecache):
+                # This file is in the root of the binary directory, we don't need to recurse any
+                # further since CTest will do that
+                CTestTestFile.no_recurse_dirs.add(dir)
+                logging.debug(f"CTest: marked {dir} to skip recursion")
+                return True
             else:
-                CTestTestFile.binary_dirs.add(dir)
+                for no_recurse_dir in CTestTestFile.no_recurse_dirs:
+                    if dir.startswith(no_recurse_dir):
+                        # tests in this file should have already been added by cmake
+                        logging.debug(f"CTest: skipping {path} due to skipped recursion")
+                        return False
                 return True
         return False
 

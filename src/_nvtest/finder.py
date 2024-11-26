@@ -120,7 +120,7 @@ class Finder:
                 [
                     (root, os.path.relpath(os.path.join(dirname, f), root))
                     for f in files
-                    if any([g.matches(f) for g in plugin.generators()])
+                    if any([g.matches(os.path.join(dirname, f)) for g in plugin.generators()])
                 ]
             )
         errors = 0
