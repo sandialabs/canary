@@ -16,8 +16,10 @@ class ResourceSetter(argparse.Action):
             if not values.startswith("batch:"):
                 values = f"batch:{values}"
         key, value = ResourceSetter.parse(values, args)
-        if key.startswith("batch_"):
-            setattr(args, "batched_invocation", True)
+        if key == "batch_duration":
+            setattr(args, "batch_scheme", "duration")
+        elif key == "batch_count":
+            setattr(args, "batch_scheme", "count")
         self.check_for_mutually_exclusive_arguments(args, key, value)
         if isinstance(value, list):
             old = getattr(args, key, [])
@@ -42,8 +44,9 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • test:node_count=[n:]N: Exclude tests requiring less than n or more than N nodes [default: [1, machine:node_count]]\n\n
 • test:timeout=T: Exclude tests having a timeout or runtime exceeding `T` seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s)\n\n
 • test:timeoutx=R: Set a timeout multiplier for all tests [default: 1.0]\n\n
-• batch:count=N: Execute tests in N batches.\n\n
-• batch:length=T: Execute tests in batches having runtimes of approximately T seconds.  [default: 30 min]\n\n
+• batch:count=N: Execute tests in N batches.  Sets batch:scheme=count\n\n
+• batch:duration=T: Execute tests in batches having runtimes of approximately T seconds.  Sets batch:scheme=duration [default: 30 min]\n\n
+• batch:scheme=S: Partition tests into batches using the scheme {duration, count, isolate} [default: None]\n\n
 • batch:scheduler=S: Submit test batches to scheduler 'S'.\n\n
 • batch:workers=N: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
 • batch:scheduler_args=A: Any additional args 'A' are passed directly to the scheduler,
@@ -110,15 +113,20 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         elif match := re.search(r"^test:timeoutx[:=](.*)$", arg):
             raw = strip_quotes(match.group(1))
             return ("test_timeoutx", time_in_seconds(raw))
-        elif match := re.search(r"^batch:length[:=](.*)$", arg):
-            raw = strip_quotes(match.group(1))
-            length = time_in_seconds(raw)
-            if length <= 0:
-                raise ValueError("batch length <= 0")
-            return ("batch_length", time_in_seconds(raw))
+        elif match := re.search(r"^batch:(duration|length)[:=](.*)$", arg):
+            raw = strip_quotes(match.group(2))
+            duration = time_in_seconds(raw)
+            if duration <= 0:
+                raise ValueError("batch duration <= 0")
+            return ("batch_duration", duration)
         elif match := re.search(r"^batch:(count|workers)[:=](\d+)$", arg):
             type, raw = match.groups()
             return (f"batch_{type}", int(raw))
+        elif match := re.search(r"^batch:scheme[:=](\w+)$", arg):
+            raw = match.group(1)
+            if raw not in ("count", "duration", "isolate"):
+                raise ValueError(f"batch:scheme={raw} not in (count, duration, isolate)")
+            return ("batch_scheme", str(raw))
         elif match := re.search(r"^batch:(runner|scheduler|type)[:=](\w+)$", arg):
             raw = match.group(2)
             return ("batch_scheduler", str(raw))
@@ -152,14 +160,35 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         elif key == "session_gpu_ids" and getattr(args, "session_gpu_count", None) is not None:
             logging.warning("session:gpu_count being overridden by session:gpu_ids")
             args.session_gpu_count = None
-        elif key == "batch_length" and getattr(args, "batch_count", None) is not None:
+        elif key == "batch_duration" and getattr(args, "batch_count", None) is not None:
             # last wins
-            logging.warning("batch:count being overridden by batch:length")
+            logging.warning("batch:count being overridden by batch:duration")
             args.batch_count = None
-        elif key == "batch_count" and getattr(args, "batch_length", None) is not None:
+        elif key == "batch_count" and getattr(args, "batch_duration", None) is not None:
             # last wins
-            logging.warning("batch:length being overridden by batch:count")
-            args.batch_length = None
+            logging.warning("batch:duration being overridden by batch:count")
+            args.batch_duration = None
+        elif (key, value) == ("batch_scheme", "isolate"):
+            # last wins
+            if getattr(args, "batch_duration", None) is not None:
+                logging.warning("batch:duration being overridden by batch:scheme=isolate")
+                args.batch_duration = None
+            if getattr(args, "batch_count", None) is not None:
+                logging.warning("batch:count being overridden by batch:scheme=isolate")
+                args.batch_count = None
+        elif (key, value) == ("batch_scheme", "count"):
+            if getattr(args, "batch_duration", None) is not None:
+                # last wins
+                logging.warning("batch:duration being overridden by batch:scheme=count")
+                args.batch_duration = None
+        elif (key, value) == ("batch_scheme", "duration"):
+            if getattr(args, "batch_count", None) is not None:
+                logging.warning("batch:count being overridden by batch:scheme=duration")
+                args.batch_count = None
+
+            # last wins
+            logging.warning("batch:count being overridden by batch:duration")
+            args.batch_count = None
 
 
 def _bold(arg: str) -> str:

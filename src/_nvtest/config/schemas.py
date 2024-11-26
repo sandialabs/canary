@@ -51,7 +51,7 @@ config_schema = Schema(
 )
 
 
-batch_schema = Schema({"batch": {Optional("length"): time_in_seconds}})
+batch_schema = Schema({"batch": {Optional("duration"): time_in_seconds}})
 
 test_schema = Schema(
     {
