@@ -17,13 +17,15 @@ good = f1 is not None and f2 is not None and os.path.exists(nvf)
 def test_cmake_integration(tmpdir):
     from _nvtest.main import NVTestCommand
 
-    with fs.working_dir(tmpdir.strpath, create=True):
+    workdir = tmpdir.strpath
+    workdir = os.path.expanduser("~/Desktop/foo")
+    with fs.working_dir(workdir, create=True):
         with open("foo.c", "w") as fh:
             fh.write("int main() { return 0; }\n")
         with open("baz.pyt", "w") as fh:
             fh.write("def test():\n    return 0\ntest()\n")
         with open("CMakeLists.txt", "w") as fh:
-            fh.write("cmake_minimum_required(VERSION 3.1...3.28)\n")
+            fh.write("cmake_minimum_required(VERSION 3.18...3.28)\n")
             fh.write("project(Foo VERSION 1.0 LANGUAGES C)\n")
             fh.write("enable_testing()\n")
             fh.write(f"include({nvf})\n")
@@ -38,10 +40,12 @@ def test_cmake_integration(tmpdir):
             assert os.path.exists("baz.pyt")
             make = ex.Executable("make")
             make()
+            print(os.listdir("."))
             run = NVTestCommand("run", debug=True)
             run("-w", ".")
             dirs = sorted(os.listdir("TestResults"))
             dirs.remove(".nvtest")
+            print(dirs)
             assert len(dirs) == 3
             if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() == "yes":
                 assert dirs == ["baz", "foo", "spam"]
@@ -75,7 +79,7 @@ def test_cmake_integration_parallel(tmpdir):
             run = NVTestCommand("run", debug=True)
             run("-w", ".", fail_on_error=False)
             if run.returncode != 0:
-                files = glob.glob("TestResults/**/nvtest-out.txt")
+                files = glob.glob("TestResults/**/nvtest-out.txt", recursive=True)
                 for file in files:
                     print(open(file).read())
                 assert 0, "test failed"

@@ -40,13 +40,17 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         assert "foo" in case.keywords
         assert "baz" in case.keywords
         assert case.launcher is None
-        assert case.command() == ["script.sh", "some-exe"]
+        command = case.command()
+        command[0] = os.path.basename(command[0])
+        assert command == ["script.sh", "some-exe"]
         assert case.variables["CTEST_NUM_RANKS"] == "5"
         assert case.variables["SPAM"] == "BAZ"
 
         case = cases[1]
         assert case.launcher.endswith("mpiexec")
-        assert case.command() == ["mpiexec", "-n", "4", "some-exe"]
+        command = case.command()
+        command[0] = os.path.basename(command[0])
+        assert command == ["mpiexec", "-n", "4", "some-exe"]
         assert case.cpus == 4
         assert "foo" in case.keywords
         assert "spam" in case.keywords
@@ -69,6 +73,8 @@ def test_parse_ctesttestfile_1(tmpdir):
         with working_dir("build", create=True):
             cmake = Executable("cmake")
             cmake("..")
+            make = Executable("make")
+            make()
             file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
             cases = file.lock()
             assert len(cases) == 1
@@ -137,10 +143,6 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
         runner = xTestCaseRunner()
         mkdirp("./foo")
         case.setup(work_tree=f"{os.getcwd()}/foo")
-        print(case.cache_directory)
-        print(os.listdir(case.cache_directory))
-        print(case.working_directory)
-        print(os.listdir(case.working_directory))
         runner.run(case)
         assert case.status == "success"
         assert case.returncode == 1
@@ -149,43 +151,65 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
 def test_fixtures(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
+        for f in (
+            "emailResults",
+            "testFoo",
+            "testDb",
+            "testDbWithFoo",
+            "initDB",
+            "userCreation",
+            "deleteDB",
+            "removeFoos",
+        ):
+            touchp(f)
+            set_executable(f)
         with open("CTestTestfile.cmake", "w") as fh:
             fh.write(
                 """\
-add_test(setup_foo "ls" "/")
-add_test(setup_bar "ls" "/")
-add_test(cleanup_foo "ls" "/")
-add_test(cleanup_bar "ls" "/")
-add_test(test_foo "ls" "/")
-add_test(test_bar "ls" "/")
-add_test(test_both "ls" "/")
-add_test(oddball "ls" "/")
-set_tests_properties(setup_foo PROPERTIES FIXTURES_REQUIRED Oddball)
-set_tests_properties(test_foo PROPERTIES FIXTURES_REQUIRED Foo)
-set_tests_properties(test_bar PROPERTIES FIXTURES_REQUIRED Bar)
-set_tests_properties(test_both PROPERTIES FIXTURES_REQUIRED "Foo;Bar")
-set_tests_properties(oddball PROPERTIES FIXTURES_SETUP Oddball)
-set_tests_properties(setup_foo PROPERTIES FIXTURES_SETUP Foo)
-set_tests_properties(setup_bar PROPERTIES FIXTURES_SETUP Bar)
-set_tests_properties(cleanup_foo PROPERTIES FIXTURES_CLEANUP Foo)
-set_tests_properties(cleanup_bar PROPERTIES FIXTURES_CLEANUP Bar)
+# Example from https://cmake.org/cmake/help/latest/prop_test/FIXTURES_REQUIRED.html
+add_test(testsDone   ./emailResults)
+add_test(fooOnly     ./testFoo)
+add_test(dbOnly      ./testDb)
+add_test(dbWithFoo   ./testDbWithFoo)
+add_test(createDB    ./initDB)
+add_test(setupUsers  ./userCreation)
+add_test(cleanupDB   ./deleteDB)
+add_test(cleanupFoo  ./removeFoos)
+set_tests_properties(setupUsers PROPERTIES DEPENDS createDB)
+set_tests_properties(createDB   PROPERTIES FIXTURES_SETUP    DB)
+set_tests_properties(setupUsers PROPERTIES FIXTURES_SETUP    DB)
+set_tests_properties(cleanupDB  PROPERTIES FIXTURES_CLEANUP  DB)
+set_tests_properties(cleanupFoo PROPERTIES FIXTURES_CLEANUP  Foo)
+set_tests_properties(testsDone  PROPERTIES FIXTURES_CLEANUP  "DB;Foo")
+set_tests_properties(fooOnly    PROPERTIES FIXTURES_REQUIRED Foo)
+set_tests_properties(dbOnly     PROPERTIES FIXTURES_REQUIRED DB)
+set_tests_properties(dbWithFoo  PROPERTIES FIXTURES_REQUIRED "DB;Foo")
+set_tests_properties(dbOnly dbWithFoo createDB setupUsers cleanupDB PROPERTIES RESOURCE_LOCK DbAccess)
 """
             )
         file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
         cases = file.lock()
-        assert len(cases) == 8
         case_map = {case.name: case for case in cases}
-        assert len(case_map["oddball"].dependencies) == 0
-        assert len(case_map["setup_foo"].dependencies) == 0
-        assert len(case_map["setup_bar"].dependencies) == 0
-        assert case_map["cleanup_bar"].dependencies == [
-            case_map["test_bar"],
-            case_map["test_both"],
-        ]
-        assert case_map["cleanup_foo"].dependencies == [
-            case_map["test_foo"],
-            case_map["test_both"],
-        ]
-        assert case_map["test_bar"].dependencies == [case_map["setup_bar"]]
-        assert case_map["test_foo"].dependencies == [case_map["setup_foo"]]
-        assert case_map["test_both"].dependencies == [case_map["setup_foo"], case_map["setup_bar"]]
+
+        tests_done = case_map["testsDone"]
+        foo_only = case_map["fooOnly"]
+        db_only = case_map["dbOnly"]
+        db_with_foo = case_map["dbWithFoo"]
+        create_db = case_map["createDB"]
+        setup_users = case_map["setupUsers"]
+        cleanup_db = case_map["cleanupDB"]
+        cleanup_foo = case_map["cleanupFoo"]
+
+        assert set(setup_users.dependencies) == {create_db}
+        assert set(tests_done.dependencies) == {
+            create_db,
+            foo_only,
+            db_with_foo,
+            db_only,
+            setup_users,
+        }
+        assert foo_only.dependencies == []
+        assert set(db_only.dependencies) == {create_db, setup_users}
+        assert set(db_with_foo.dependencies) == {setup_users, create_db}
+        assert set(cleanup_db.dependencies) == {db_only, db_with_foo, create_db, setup_users}
+        assert set(cleanup_foo.dependencies) == {foo_only, db_with_foo}

@@ -18,14 +18,31 @@ from _nvtest.util import graph
 from _nvtest.util import logging
 from _nvtest.util.filesystem import is_exe
 
+USE_CTEST_JSON_V1 = True
+
 
 class CTestTestFile(AbstractTestGenerator):
+    binary_dirs: set[str] = set()
+
     def __init__(self, root: str, path: str | None = None) -> None:
         super().__init__(root, path=path)
         self.owners: list[str] = []
 
     @classmethod
     def matches(cls, path: str) -> bool:
+        matches = cls.always_matches(path)
+        if matches:
+            dir = os.path.dirname(os.path.abspath(path))
+            for binary_dir in CTestTestFile.binary_dirs:
+                if dir.startswith(binary_dir):
+                    break
+            else:
+                CTestTestFile.binary_dirs.add(dir)
+                return True
+        return False
+
+    @classmethod
+    def always_matches(cls, path: str) -> bool:
         return os.path.basename(path) == "CTestTestfile.cmake"
 
     def lock(self, on_options: list[str] | None = None) -> list[TestCase]:
@@ -38,6 +55,7 @@ class CTestTestFile(AbstractTestGenerator):
         for family, td in tests.items():
             case = CTestTestCase(file_root=self.root, file_path=self.path, family=family, **td)
             cases.append(case)
+        self.resolve_inter_dependencies(cases)
         self.resolve_fixtures(cases)
         return cases  # type: ignore
 
@@ -55,27 +73,42 @@ class CTestTestFile(AbstractTestGenerator):
         build_type = find_build_type(os.path.dirname(self.file))
         if build_type is not None:
             kwds["CTEST_CONFIGURATION_TYPE"] = build_type
-        tests = load(self.file, **kwds)
+        tests: dict[str, Any]
+        if USE_CTEST_JSON_V1:
+            tests = load2(self.file, **kwds)
+        else:
+            tests = load(self.file, **kwds)
         transform(tests)
         return tests
 
     def resolve_fixtures(self, cases: list["CTestTestCase"]) -> None:
-        setup_fixtures: dict[str, CTestTestCase] = {}
-        cleanup_fixtures: dict[str, CTestTestCase] = {}
+        setup_fixtures: dict[str, list[CTestTestCase]] = {}
+        cleanup_fixtures: dict[str, list[CTestTestCase]] = {}
         for case in cases:
-            if "setup" in case.fixtures:
-                for fixture_name in case.fixtures["setup"]:
-                    setup_fixtures[fixture_name] = case
-            if "cleanup" in case.fixtures:
-                for fixture_name in case.fixtures["cleanup"]:
-                    cleanup_fixtures[fixture_name] = case
+            for fixture_name in case.fixtures["setup"]:
+                setup_fixtures.setdefault(fixture_name, []).append(case)
+            for fixture_name in case.fixtures["cleanup"]:
+                cleanup_fixtures.setdefault(fixture_name, []).append(case)
         for case in cases:
-            if "required" in case.fixtures:
-                for fixture_name in case.fixtures["required"]:
-                    if fixture_name in setup_fixtures:
-                        case.add_dependency(setup_fixtures[fixture_name])
-                    if fixture_name in cleanup_fixtures:
-                        cleanup_fixtures[fixture_name].add_dependency(case)
+            for fixture_name in case.fixtures["required"]:
+                if fixture_name in setup_fixtures:
+                    for fixture in setup_fixtures[fixture_name]:
+                        case.add_dependency(fixture)
+                if fixture_name in cleanup_fixtures:
+                    for fixture in cleanup_fixtures[fixture_name]:
+                        fixture.add_dependency(case)
+
+    @staticmethod
+    def resolve_inter_dependencies(cases: list["CTestTestCase"]) -> None:
+        logging.debug("Resolving dependencies in test file")
+        for case in cases:
+            while True:
+                if not case.unresolved_dependencies:
+                    break
+                dep = case.unresolved_dependencies.pop(0)
+                matches = dep.evaluate([c for c in cases if c != case])
+                for match in matches:
+                    case.add_dependency(match)
 
 
 class CTestTestCase(TestCase):
@@ -178,13 +211,13 @@ class CTestTestCase(TestCase):
         self.fail_regular_expression = fail_regular_expression
         self.skip_regular_expression = skip_regular_expression
         self.skip_return_code = skip_return_code
-        self.fixtures: dict[str, list[str]] = {}
+        self.fixtures: dict[str, list[str]] = {"cleanup": [], "required": [], "setup": []}
         if fixtures_cleanup:
-            self.fixtures["cleanup"] = fixtures_cleanup
+            self.fixtures["cleanup"].extend(fixtures_cleanup)
         if fixtures_required:
-            self.fixtures["required"] = fixtures_required
+            self.fixtures["required"].extend(fixtures_required)
         if fixtures_setup:
-            self.fixtures["setup"] = fixtures_setup
+            self.fixtures["setup"].extend(fixtures_setup)
 
         def unsupported_ctest_option(option: str) -> str:
             file = io.StringIO()
@@ -309,8 +342,6 @@ class CTestTestCase(TestCase):
 
         if self.fail_regular_expression is not None:
             for fail_regular_expression in self.fail_regular_expression:
-                print(0, fail_regular_expression)
-                print(1, open(file).read())
                 if file_contains(file, fail_regular_expression):
                     self.status.set(
                         "failed", f"Regular expression {fail_regular_expression!r} found in {file}"
@@ -429,10 +460,39 @@ def load(file, **defs: str) -> dict[str, Any]:
             else:
                 raise ValueError("Expected 'command' or 'properties' group")
     for test in tests.values():
+        test["file"] = file
         if "properties" not in test:
             test["properties"] = [
                 {"name": "WORKING_DIRECTORY", "value": os.path.dirname(os.path.realpath(file))}
             ]
+    with open("/Users/tjfulle/Desktop/load.json", "w") as fh:
+        json.dump(tests, fh, indent=2)
+    return tests
+
+
+def load2(file, **defs: str) -> dict[str, Any]:
+    """Use ctest --show-only"""
+    tests: dict[str, Any] = {}
+    with nvtest.filesystem.working_dir(os.path.dirname(file)):
+        ctest = nvtest.filesystem.which("ctest")
+        p = subprocess.Popen([ctest, "--show-only=json-v1"], stdout=subprocess.PIPE)  # type: ignore
+        p.wait()
+        out, _ = p.communicate()
+        payload = json.loads(out.decode("utf-8"))
+        nodes = payload["backtraceGraph"]["nodes"]
+        files = payload["backtraceGraph"]["files"]
+        for test in payload["tests"]:
+            if "command" not in test:
+                # this test does not define a command
+                continue
+            t = tests.setdefault(test["name"], {})
+            t["properties"] = test["properties"]
+            t["command"] = test["command"]
+            if nodes:
+                node = nodes[test["backtrace"]]
+                t["file"] = files[node["file"]]
+            else:
+                t["file"] = file
     return tests
 
 

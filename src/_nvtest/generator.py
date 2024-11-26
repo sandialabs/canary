@@ -64,6 +64,10 @@ class AbstractTestGenerator(ABC):
     def matches(cls, path: str) -> bool:
         """Is the file at ``path`` a test file?"""
 
+    @classmethod
+    def always_matches(cls, path: str) -> bool:
+        return cls.matches(path)
+
     @abstractmethod
     def describe(self, on_options: list[str] | None = None) -> str:
         """Return a description of the test"""
@@ -110,7 +114,7 @@ class AbstractTestGenerator(ABC):
     @staticmethod
     def factory(root: str, path: str | None = None) -> "AbstractTestGenerator":
         for gen_type in AbstractTestGenerator.REGISTRY:
-            if gen_type.matches(root if path is None else path):
+            if gen_type.always_matches(root if path is None else path):
                 return gen_type(root, path=path)
         f = root if path is None else os.path.join(root, path)
         raise TypeError(f"No test generator for {f}")

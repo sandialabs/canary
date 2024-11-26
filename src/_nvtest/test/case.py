@@ -991,9 +991,10 @@ class TestCase(AbstractTestCase):
         return deepcopy(self)
 
     def add_dependency(self, case: "TestCase", /, expected_result: str = "success"):
-        self.dependencies.append(case)
-        self.dep_done_criteria.append(expected_result)
-        assert len(self.dependencies) == len(self.dep_done_criteria)
+        if case not in self.dependencies:
+            self.dependencies.append(case)
+            self.dep_done_criteria.append(expected_result)
+            assert len(self.dependencies) == len(self.dep_done_criteria)
 
     def copy_sources_to_workdir(self, copy_all_resources: bool = False):
         workdir = self.working_directory

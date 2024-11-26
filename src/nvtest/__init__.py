@@ -30,7 +30,6 @@ from _nvtest.util import shell
 from _nvtest.util.executable import Executable
 from _nvtest.version import __version__
 from _nvtest.version import version
-from _nvtest.version import version_tuple
 
 from . import directives
 from . import patterns
