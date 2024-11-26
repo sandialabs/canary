@@ -396,7 +396,6 @@ def load(file: str) -> dict[str, Any]:
         p.wait()
         out, _ = p.communicate()
         payload = json.loads(out.decode("utf-8"))
-        print(payload)
         nodes = payload["backtraceGraph"]["nodes"]
         files = payload["backtraceGraph"]["files"]
         for test in payload["tests"]:
