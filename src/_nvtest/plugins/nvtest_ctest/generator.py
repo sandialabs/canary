@@ -56,10 +56,20 @@ class CTestTestFile(AbstractTestGenerator):
             logging.warning("cmake not found, test cases cannot be generated")
             return []
         tests = self.load()
+        if not tests:
+            return []
         cases: list[CTestTestCase] = []
+        cmakefiles = sorted([td["file"] for td in tests.values()], key=lambda x: len(x))
+        root = os.path.dirname(os.path.abspath(cmakefiles[0]))
         for family, td in tests.items():
-            path = os.path.relpath(td["file"], self.root)
-            case = CTestTestCase(file_root=self.root, file_path=path, family=family, **td)
+            cmakefile = td["file"]
+            if os.path.exists(cmakefile):
+                path = os.path.relpath(cmakefile, root)
+                case = CTestTestCase(file_root=root, file_path=path, family=family, **td)
+            else:
+                # This happens in unit tests where we use a CTestTestfile.cmake without an
+                # associated CMake file
+                case = CTestTestCase(file_root=self.root, file_path=self.path, family=family, **td)
             cases.append(case)
         self.resolve_inter_dependencies(cases)
         self.resolve_fixtures(cases)
@@ -161,7 +171,7 @@ class CTestTestCase(TestCase):
         self.working_directory = working_directory or self.file_dir
 
         if command is not None:
-            with nvtest.filesystem.working_dir(self.file_dir):
+            with nvtest.filesystem.working_dir(self.working_directory):
                 ns = parse_test_args(command)
 
             self.assets = []
@@ -241,6 +251,11 @@ class CTestTestCase(TestCase):
             logging.warning(unsupported_ctest_option("timeout_signal_grace_period"))
         if timeout_signal_name is not None:
             logging.warning(unsupported_ctest_option("timeout_signal_name"))
+
+    @property
+    def path(self) -> str:
+        """The relative path from ``self.work_tree`` to ``self.cache_directory``"""
+        return os.path.join("ctest", self.id[:2], self.id[2:])
 
     @property
     def implicit_keywords(self) -> list[str]:
@@ -418,7 +433,7 @@ def load(file: str) -> dict[str, Any]:
                 node = nodes[test["backtrace"]]
                 t["file"] = files[node["file"]]
             else:
-                t["file"] = file
+                t["file"] = os.path.abspath(file)
     return tests
 
 

@@ -18,7 +18,6 @@ def test_cmake_integration(tmpdir):
     from _nvtest.main import NVTestCommand
 
     workdir = tmpdir.strpath
-    workdir = os.path.expanduser("~/Desktop/foo")
     with fs.working_dir(workdir, create=True):
         with open("foo.c", "w") as fh:
             fh.write("int main() { return 0; }\n")
@@ -48,7 +47,7 @@ def test_cmake_integration(tmpdir):
             print(dirs)
             assert len(dirs) == 3
             if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() == "yes":
-                assert dirs == ["baz", "foo", "spam"]
+                assert dirs == ["baz", "ctest", "foo"]
 
 
 f3 = fs.which("mpirun")

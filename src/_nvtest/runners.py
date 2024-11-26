@@ -246,26 +246,42 @@ class BatchRunner(AbstractTestRunner):
         try:
             logging.debug(f"Running batch {batch.batch_no}")
             start = time.monotonic()
-            node_count = math.ceil(batch.max_cpus_required / self.scheduler.config.cpus_per_node)
-            nvtest_invocation = self.nvtest_invocation(batch, node_count=node_count, stage=stage)
             variables = dict(batch.variables)
             variables["NVTEST_LEVEL"] = "1"
             variables["NVTEST_DISABLE_KB"] = "1"
             variables["NVTEST_BATCH_SCHEDULER"] = "null"  # guard against infinite batch recursion
-            job = hpc_connect.Job(
-                name=batch.name,
-                commands=[nvtest_invocation],
-                tasks=batch.max_cpus_required,
-                nodes=node_count,
-                script=batch.submission_script_filename(),
-                output=batch.logfile(),
-                error=batch.logfile(),
-                qtime=self.qtime(batch) * self.timeoutx,
-                variables=variables,
-            )
+            jobs: list[hpc_connect.Job] = []
+            if config.batch.scheme == "isolate" and self.scheduler.supports_subscheduling:
+                scriptdir = os.path.dirname(batch.submission_script_filename())
+                for case in batch:
+                    nvtest_invocation = self.nvtest_invocation(case, stage=stage)
+                    job = hpc_connect.Job(
+                        name=case.name,
+                        commands=[nvtest_invocation],
+                        tasks=case.cpus,
+                        script=os.path.join(scriptdir, f"{case.name}-inp.sh"),
+                        output=os.path.join(scriptdir, f"{case.name}-out.txt"),
+                        error=os.path.join(scriptdir, f"{case.name}-err.txt"),
+                        qtime=case.runtime * self.timeoutx,
+                        variables=variables,
+                    )
+                    jobs.append(job)
+            else:
+                nvtest_invocation = self.nvtest_invocation(batch, stage=stage)
+                job = hpc_connect.Job(
+                    name=batch.name,
+                    commands=[nvtest_invocation],
+                    tasks=batch.max_cpus_required,
+                    script=batch.submission_script_filename(),
+                    output=batch.logfile(),
+                    error=batch.logfile(),
+                    qtime=self.qtime(batch) * self.timeoutx,
+                    variables=variables,
+                )
+                jobs.append(job)
             if config.debug:
                 logging.debug(f"Submitting batch {batch.batch_no} of {batch.nbatches}")
-            self.scheduler.submit_and_wait(job)
+            self.scheduler.submit_and_wait(*jobs, independent=config.batch.scheme == "isolate")
         except hpc_connect.HPCSubmissionFailedError:
             logging.error(f"Failed to submit {batch.name}!")
             for case in batch.cases:
@@ -311,13 +327,8 @@ class BatchRunner(AbstractTestRunner):
         s.write(")")
         return s.getvalue()
 
-    def nvtest_invocation(
-        self, batch: TestBatch, node_count: int | None = None, stage: str = "run"
-    ) -> str:
+    def nvtest_invocation(self, arg: TestBatch | TestCase, stage: str = "run") -> str:
         """Write the nvtest invocation used to run this batch."""
-
-        if node_count is None:
-            node_count = math.ceil(batch.max_cpus_required / self.scheduler.config.cpus_per_node)
 
         fp = io.StringIO()
         fp.write("nvtest ")
@@ -328,6 +339,8 @@ class BatchRunner(AbstractTestRunner):
                 fp.write(f"-p {p} ")
 
         # The batch will be run in a compute node, so hpc_connect won't set the machine limits
+        tasks = arg.max_cpus_required if isinstance(arg, TestBatch) else arg.cpus
+        node_count = math.ceil(tasks / self.scheduler.config.cpus_per_node)
         fp.write(f"-c machine:node_count:{node_count} ")
         fp.write(f"-c machine:cpus_per_node:{config.machine.cpus_per_node} ")
         fp.write(f"-c machine:gpus_per_node:{config.machine.gpus_per_node} ")
@@ -339,13 +352,16 @@ class BatchRunner(AbstractTestRunner):
         if p := getattr(config.options, "P", None):
             if p != "pedantic":
                 fp.write(f"-P{p} ")
-        if workers := config.batch.workers:
-            fp.write(f"-l session:workers={workers} ")
+        if isinstance(arg, TestBatch) and config.batch.workers is not None:
+            fp.write(f"-l session:workers={config.batch.workers} ")
         fp.write(f"-l session:cpu_count={node_count * config.machine.cpus_per_node} ")
         fp.write(f"-l session:gpu_count={node_count * config.machine.gpus_per_node} ")
         fp.write(f"-l test:timeoutx={self.timeoutx} ")
         fp.write("-l batch:scheduler=null ")  # guard against infinite batch recursion
-        fp.write(f"^{batch.lot_no}:{batch.batch_no}")
+        if isinstance(arg, TestBatch):
+            fp.write(f"^{arg.lot_no}:{arg.batch_no}")
+        else:
+            fp.write(f"/{arg.id}")
         return fp.getvalue()
 
     def qtime(self, batch: TestBatch) -> float:
