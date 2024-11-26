@@ -30,7 +30,7 @@ To determine the stage of execution, the test should parse the command line for 
 
 .. literalinclude:: /examples/staged/staged.pyt
     :language: python
-    :lines: 38-50
+    :lines: 37-50
 
 The test must first be run with ``--stage=run`` (the default) to generate the test session:
 

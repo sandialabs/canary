@@ -12,7 +12,6 @@ def run(case: nvtest.TestInstance) -> None:
     nvtest.logging.info("running the very expensive 'run' stage")
     with open("run.txt", "w") as fh:
         fh.write("success")
-    analyze(case)
 
 
 def analyze(case: nvtest.TestInstance) -> None:
@@ -45,6 +44,7 @@ def main():
         plot(self)
     elif args.stage == "run":
         run(self)
+        analyze(self)
     else:
         nvtest.logging.warning(f"unknown execution stage {args.stage=}")
     return 0
