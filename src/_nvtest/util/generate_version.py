@@ -14,7 +14,7 @@ def version_components_from_git(full: bool = False) -> tuple[int, int, int, str]
         )
         proc.wait()
         out, _ = [_.decode("utf-8") for _ in proc.communicate()]
-        date, local = out.split()
+        date, local, *_ = out.split()
         major, minor, micro = [int(_) for _ in date.split("-")]
         if full:
             proc = subprocess.Popen(["git", "diff", "--quiet"])
