@@ -275,15 +275,17 @@ class Batch:
     scheduler: str | None = None
     scheduler_args: list[str] | None = None
     workers: int | None = None
-    length: float | None = None
+    duration: float | None = None
     count: int | None = None
+    scheme: str | None = None
 
     def __post_init__(self) -> None:
         if self.scheduler == "null" or os.getenv("NVTEST_BATCH_SCHEDULER") == "null":
             self.scheduler = None
             self.workers = None
-            self.length = None
+            self.duration = None
             self.count = None
+            self.scheme = None
 
 
 @dataclasses.dataclass
@@ -462,8 +464,8 @@ class Config:
             resource_floor_error("test:timeoutx", self.test.timeoutx, 0.0)
 
         # --- batch resources
-        if self.batch.length is not None and self.batch.length <= 0.0:
-            resource_floor_error("batch:length", self.batch.length, 0.0)
+        if self.batch.duration is not None and self.batch.duration <= 0.0:
+            resource_floor_error("batch:duration", self.batch.duration, 0.0)
         if self.batch.count is not None and self.batch.count <= 0:
             resource_floor_error("batch:count", self.batch.count, 0)
         if self.batch.workers is not None and self.batch.workers > mc.cpu_count:
@@ -541,8 +543,10 @@ class Config:
                 if "gpus_per_node" in items:
                     config["gpus_per_node"] = items["gpus_per_node"]
             elif key == "batch":
-                if "length" in items:
-                    config["batch_length"] = items["length"]
+                if "duration" in items:
+                    config["batch_duration"] = items["duration"]
+                elif "length" in items:
+                    config["batch_duration"] = items["length"]
             elif key in ("variables", "build"):
                 config[key] = items
 
@@ -580,8 +584,8 @@ class Config:
                     self.log_level = value.upper()
                     level = logging.get_level(self.log_level)
                     logging.set_level(level)
-                case ["batch", "length"]:
-                    self.batch.length = time_in_seconds(value)
+                case ["batch", "duration"]:
+                    self.batch.duration = time_in_seconds(value)
                 case ["machine", key]:
                     if key not in ("node_count", "cpus_per_node", "gpus_per_node"):
                         errors += 1
@@ -628,10 +632,14 @@ class Config:
             self.test.timeout = args.test_timeout
         if getattr(args, "test_timeoutx", None) is not None:
             self.test.timeoutx = args.test_timeoutx
-        if getattr(args, "batch_length", None) is not None:
-            self.batch.length = args.batch_length
+        if getattr(args, "batch_duration", None) is not None:
+            self.batch.duration = args.batch_duration
+            self.batch.scheme = "duration"
         if getattr(args, "batch_count", None) is not None:
             self.batch.count = args.batch_count
+            self.batch.scheme = "count"
+        if getattr(args, "batch_scheme", None) is not None:
+            self.batch.scheme = args.batch_scheme
         if getattr(args, "batch_workers", None) is not None:
             self.batch.workers = args.batch_workers
         if getattr(args, "batch_scheduler", None) is not None:
