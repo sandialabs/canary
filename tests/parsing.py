@@ -19,6 +19,7 @@ def test_batch_args():
             "batch:args='--a=b -c d'",
         ]
     )
+    assert args.batched_invocation is True
     assert args.batch_scheduler_args == [
         "--account=XYZ123",
         "--licenses=pscratch",

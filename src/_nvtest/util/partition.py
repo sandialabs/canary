@@ -14,7 +14,7 @@ class Partition(set):
 
 
 def groupby_dep(cases: list[TestCase]) -> list[set[TestCase]]:
-    """Group cases such that a case and any of its dependencies are in the same
+    """Group cases such that a case an any of its dependencies are in the same
     group
     """
     groups: list[set[TestCase]] = []
@@ -50,30 +50,11 @@ def partition_n(cases: list[TestCase], n: int = 8) -> list[list[TestCase]]:
     return [p for p in partitions if len(p)]
 
 
-def partition_x(cases: list[TestCase]) -> list[list[TestCase]]:
-    """Partition tests cases such that each partition has no intra-dependencies.  Partitions can
-    depend on other partitions
-
-    """
-    graph = {}
-    for case in cases:
-        graph[case] = case.dependencies
-    ts = TopologicalSorter(graph)
-    ts.prepare()
-    partitions: list[list[TestCase]] = []
-    while ts.is_active():
-        ready = ts.get_ready()
-        partitions.append(list(ready))
-        ts.done(*ready)
-    return partitions
-
-
 def partition_t(
     cases: list[TestCase], t: float = 60 * 30, fac: float = 1.15
 ) -> list[list[TestCase]]:
     """Partition test cases into partitions having a runtime approximately equal
-    to ``t``.  Partitions may contain intra-test case dependencies and also partitions may depend
-    on other partitions
+    to ``t``
 
     """
     cpus_per_node: int = config.machine.cpus_per_node

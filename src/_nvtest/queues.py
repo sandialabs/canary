@@ -10,7 +10,6 @@ from .third_party import color
 from .util import logging
 from .util.partition import partition_n
 from .util.partition import partition_t
-from .util.partition import partition_x
 from .util.progress import progress
 from .util.rprobe import cpu_count
 from .util.time import timestamp
@@ -284,16 +283,11 @@ class BatchResourceQueue(ResourceQueue):
     def prepare(self, **kwds: Any) -> None:
         lot_no = kwds.pop("lot_no")
         partitions: list[list[TestCase]]
-        if config.batch.scheme == "count":
-            if config.batch.count is None:
-                raise ValueError("batch:scheme=count requires batch:count=N be defined")
+        if config.batch.count:
             partitions = partition_n(self.tmp_buffer, n=config.batch.count)
-        elif config.batch.scheme == "isolate":
-            partitions = partition_x(self.tmp_buffer)
         else:
-            # duration is the default batch scheme
             default_length = 30 * 60
-            length = float(config.batch.duration or default_length)  # 30 minute default
+            length = float(config.batch.length or default_length)  # 30 minute default
             partitions = partition_t(self.tmp_buffer, t=length)
         n = len(partitions)
         batches = [TestBatch(p, i, n, lot_no) for i, p in enumerate(partitions, start=1) if len(p)]
