@@ -24,8 +24,6 @@ from .test.batch import TestBatch
 from .test.case import TestCase
 from .third_party.color import colorize
 from .util import logging
-from .util.filesystem import mkdirp
-from .util.filesystem import set_executable
 from .util.filesystem import working_dir
 from .util.time import hhmmss
 from .util.time import timestamp
@@ -250,28 +248,24 @@ class BatchRunner(AbstractTestRunner):
             start = time.monotonic()
             node_count = math.ceil(batch.max_cpus_required / self.scheduler.config.cpus_per_node)
             nvtest_invocation = self.nvtest_invocation(batch, node_count=node_count, stage=stage)
-            scriptname = batch.submission_script_filename()
-            mkdirp(os.path.dirname(scriptname))
             variables = dict(batch.variables)
             variables["NVTEST_LEVEL"] = "1"
             variables["NVTEST_DISABLE_KB"] = "1"
             variables["NVTEST_BATCH_SCHEDULER"] = "null"  # guard against infinite batch recursion
-            with open(scriptname, "w") as fh:
-                self.scheduler.write_submission_script(
-                    [nvtest_invocation],
-                    fh,
-                    tasks=batch.max_cpus_required,
-                    nodes=node_count,
-                    job_name=batch.name,
-                    output=batch.logfile(),
-                    error=batch.logfile(),
-                    qtime=self.qtime(batch) * self.timeoutx,
-                    variables=variables,
-                )
-            set_executable(scriptname)
+            job = hpc_connect.Job(
+                name=batch.name,
+                commands=[nvtest_invocation],
+                tasks=batch.max_cpus_required,
+                nodes=node_count,
+                script=batch.submission_script_filename(),
+                output=batch.logfile(),
+                error=batch.logfile(),
+                qtime=self.qtime(batch) * self.timeoutx,
+                variables=variables,
+            )
             if config.debug:
                 logging.debug(f"Submitting batch {batch.batch_no} of {batch.nbatches}")
-            self.scheduler.submit_and_wait(scriptname, job_name=batch.name)
+            self.scheduler.submit_and_wait(job)
         except hpc_connect.HPCSubmissionFailedError:
             logging.error(f"Failed to submit {batch.name}!")
             for case in batch.cases:
