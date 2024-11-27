@@ -1,6 +1,7 @@
 import abc
 import io
 import threading
+import time
 from typing import Any
 
 from . import config
@@ -13,6 +14,7 @@ from .util.partition import partition_t
 from .util.partition import partition_x
 from .util.progress import progress
 from .util.rprobe import cpu_count
+from .util.time import hhmmss
 from .util.time import timestamp
 
 
@@ -163,7 +165,7 @@ class ResourceQueue(abc.ABC):
                         return (i, self._busy[i])
         return None
 
-    def status(self) -> str:
+    def status(self, start: float | None = None) -> str:
         def count(objs) -> int:
             return sum([1 if isinstance(obj, TestCase) else len(obj) for obj in objs])
 
@@ -188,6 +190,9 @@ class ResourceQueue(abc.ABC):
                     else:
                         f += 1
             fmt = "%d/%d running, %d/%d done, %d/%d queued "
+            if start is not None:
+                duration = hhmmss(time.time() - start)
+                fmt += f"in {duration} "
             fmt += "(@g{%d pass}, @y{%d diff}, @r{%d fail}, @m{%d timeout})"
             text = color.colorize(fmt % (busy, total, done, total, notrun, total, p, d, f, t))
             n = color.clen(text)

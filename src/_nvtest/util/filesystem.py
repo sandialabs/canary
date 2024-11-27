@@ -255,7 +255,7 @@ def gethome() -> str:
 
 
 def filesize(filename: str, *, units: str | None = None) -> int:
-    """Return ``filename``\ 's size.  If ``units`` is ``None``, the size in bytes is returned.
+    r"""Return ``filename``\ 's size.  If ``units`` is ``None``, the size in bytes is returned.
     Valid ``units`` are ``kilobytes``, ``megabytes``, and ``gigabytes``.
 
     """
@@ -283,7 +283,7 @@ def git_revision(path: str) -> str:
 
 
 def file_age_in_days(file: str) -> float:
-    """Return the ``file``\ 's age in days"""
+    r"""Return the ``file``\ 's age in days"""
     now = datetime.datetime.now(datetime.timezone.utc)
     mtime = datetime.datetime.fromtimestamp(os.path.getmtime(file), datetime.timezone.utc)
     delta = now - mtime

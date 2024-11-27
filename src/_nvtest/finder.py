@@ -9,6 +9,7 @@ from . import config
 from . import plugin
 from . import when
 from .generator import AbstractTestGenerator
+from .generator import StopRecursion
 from .test.case import TestCase
 from .third_party.colify import colified
 from .third_party.color import colorize
@@ -116,13 +117,15 @@ class Finder:
             if skip_dir(dirname):
                 del dirs[:]
                 continue
-            paths.extend(
-                [
-                    (root, os.path.relpath(os.path.join(dirname, f), root))
-                    for f in files
-                    if any([g.matches(os.path.join(dirname, f)) for g in plugin.generators()])
-                ]
-            )
+            for basename in files:
+                file = os.path.join(dirname, basename)
+                try:
+                    if any(generator.matches(file) for generator in plugin.generators()):
+                        paths.append((root, os.path.relpath(file, root)))
+                except StopRecursion:
+                    paths.append((root, os.path.relpath(file, root)))
+                    del dirs[:]
+                    break
         errors = 0
         generators: list[AbstractTestGenerator] = []
         for p in paths:
@@ -364,7 +367,7 @@ class Finder:
 
 def is_test_file(file: str) -> bool:
     for generator in plugin.generators():
-        if generator.matches(file):
+        if generator.always_matches(file):
             return True
     return False
 

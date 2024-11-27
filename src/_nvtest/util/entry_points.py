@@ -19,4 +19,4 @@ def get_entry_points(*, group: str):
         # Prior to Python 3.10, entry_points accepted no parameters and always
         # returned a dictionary of entry points, keyed by group.  See
         # https://docs.python.org/3/library/importlib.metadata.html#entry-points
-        return importlib.metadata.entry_points().get(group, [])
+        return importlib.metadata.entry_points().get(group, [])  # type: ignore

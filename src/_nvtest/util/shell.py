@@ -30,7 +30,7 @@ class Bash:
             return {}
         environ: dict[str, str] = {}
         skip_vars = ("PWD", "SHLVL")
-        for name, value in re.findall("declare -x (\w+)=(.*)\n", match.group(1)):
+        for name, value in re.findall(r"declare -x (\w+)=(.*)\n", match.group(1)):
             if name in skip_vars:
                 continue
             environ[name] = value[1:-1]  # strip quotes

@@ -118,3 +118,7 @@ class AbstractTestGenerator(ABC):
                 return gen_type(root, path=path)
         f = root if path is None else os.path.join(root, path)
         raise TypeError(f"No test generator for {f}")
+
+
+class StopRecursion(Exception):
+    """Stop recursing for more tests (useful for ctest)"""

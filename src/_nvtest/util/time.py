@@ -113,13 +113,13 @@ class Duration:
             r"(?xm)(?:\s|^)([-+]*(?:\d+\.\d*|\.?\d+)(?:[eE][-+]?\d+)?)(?=\s|$)", duration
         ):
             return timedelta(seconds=sign * float(duration))
-        elif re.search("^\d{1,2}:\d{1,2}:\d{1,2}(\.\d+)?$", duration):
+        elif re.search(r"^\d{1,2}:\d{1,2}:\d{1,2}(\.\d+)?$", duration):
             hours, minutes, seconds = [float(_) for _ in duration.split(":")]
             units = Duration.units
             microseconds = hours * units["h"] + minutes * units["m"] + seconds * units["s"]
             print(microseconds / Duration._microsecond_size)
             return timedelta(microseconds=sign * microseconds / Duration._microsecond_size)
-        elif re.search("^\d{1,2}:\d{1,2}(\.\d+)?$", duration):
+        elif re.search(r"^\d{1,2}:\d{1,2}(\.\d+)?$", duration):
             minutes, seconds = [float(_) for _ in duration.split(":")]
             microseconds = minutes * 60.0 + seconds * 1.0
             return timedelta(microseconds=sign * microseconds / Duration._microsecond_size)

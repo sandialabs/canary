@@ -109,7 +109,7 @@ class ParameterSet:
         argvalues: list[Sequence[Any] | Any],
         file: str | None = None,
     ) -> "ParameterSet":
-        """Generate parameters for a centered parameter study
+        r"""Generate parameters for a centered parameter study
 
         Args:
           argnames: Same arguments as for ``ParameterSpace.list_parameter_space``

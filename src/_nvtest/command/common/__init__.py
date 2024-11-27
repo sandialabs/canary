@@ -22,6 +22,14 @@ if TYPE_CHECKING:
 def add_filter_arguments(parser: "Parser") -> None:
     group = parser.add_argument_group("filtering")
     group.add_argument(
+        "--recurse-cmake",
+        action="store_true",
+        default=False,
+        help="Recurse CMake binary directory for test files.  CTest tests can be detected "
+        "from the root CTestTestfile.cmake, so this is option is not necessary unless there "
+        "is a mix of CTests and other test types in the binary directory",
+    )
+    group.add_argument(
         "-k",
         dest="keyword_expr",
         default=None,

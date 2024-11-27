@@ -168,7 +168,7 @@ class match_to_ansi(object):
         if self.color:
             cs = "\033[%sm" % s
             if self.extra_escape:
-                cs = "\[%s\]" % cs
+                cs = r"\[%s\]" % cs
             return cs
         else:
             return ""

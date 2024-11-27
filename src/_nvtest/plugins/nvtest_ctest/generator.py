@@ -10,12 +10,27 @@ from typing import Generator
 from typing import MutableMapping
 
 import nvtest
+from _nvtest import config
 from _nvtest.generator import AbstractTestGenerator
+from _nvtest.generator import StopRecursion
 from _nvtest.test.case import DependencyPatterns
 from _nvtest.test.case import TestCase
 from _nvtest.util import graph
 from _nvtest.util import logging
+from _nvtest.util.filesystem import force_remove
 from _nvtest.util.filesystem import is_exe
+
+warning_cache = set()
+
+
+def warn_unsupported_ctest_option(option: str) -> None:
+    if option in warning_cache:
+        return
+    file = io.StringIO()
+    file.write(f"The ctest test property {option.upper()!r} is currently not supported, ")
+    file.write("contact the nvtest developers to implement this property")
+    logging.warning(file.getvalue())
+    warning_cache.add(option)
 
 
 class CTestTestFile(AbstractTestGenerator):
@@ -29,6 +44,8 @@ class CTestTestFile(AbstractTestGenerator):
     def matches(cls, path: str) -> bool:
         matches = cls.always_matches(path)
         if matches:
+            if not config.getoption("recurse_cmake"):
+                raise StopRecursion
             dir = os.path.dirname(os.path.abspath(path))
             cmakecache = os.path.join(dir, "CMakeCache.txt")
             if os.path.exists(cmakecache):
@@ -164,10 +181,11 @@ class CTestTestCase(TestCase):
             file_path=file_path,
             family=family,
             keywords=labels,
-            timeout=timeout or 10.0,
+            timeout=timeout or 60.0,
         )
 
         self._resource_groups: dict[str, int] | None = None
+        self._required_files: list[str] | None = None
         self.working_directory = working_directory or self.file_dir
 
         if command is not None:
@@ -214,6 +232,9 @@ class CTestTestCase(TestCase):
         if run_serial is True:
             self.exclusive = True
 
+        if required_files:
+            self.required_files = required_files
+
         self.environment_modification = environment_modification
         self.pass_regular_expression = pass_regular_expression
         self.fail_regular_expression = fail_regular_expression
@@ -227,30 +248,22 @@ class CTestTestCase(TestCase):
         if fixtures_setup:
             self.fixtures["setup"].extend(fixtures_setup)
 
-        def unsupported_ctest_option(option: str) -> str:
-            file = io.StringIO()
-            file.write(f"The ctest test property {option.upper()!r} is currently not supported, ")
-            file.write("contact the nvtest developers to implement this property")
-            return file.getvalue()
-
         if cost is not None:
-            logging.warning(unsupported_ctest_option("cost"))
+            warn_unsupported_ctest_option("cost")
         if generated_resource_spec_file is not None:
-            logging.warning(unsupported_ctest_option("generated_resource_spec_file"))
+            warn_unsupported_ctest_option("generated_resource_spec_file")
         if measurement is not None:
-            logging.warning(unsupported_ctest_option("measurement"))
+            warn_unsupported_ctest_option("measurement")
         if processor_affinity:
-            logging.warning(unsupported_ctest_option("processor_affinity"))
-        if required_files is not None:
-            logging.warning(unsupported_ctest_option("required_files"))
+            warn_unsupported_ctest_option("processor_affinity")
         if resource_lock is not None:
-            logging.warning(unsupported_ctest_option("resource_lock"))
+            warn_unsupported_ctest_option("resource_lock")
         if timeout_after_match is not None:
-            logging.warning(unsupported_ctest_option("timeout_after_match"))
+            warn_unsupported_ctest_option("timeout_after_match")
         if timeout_signal_grace_period is not None:
-            logging.warning(unsupported_ctest_option("timeout_signal_grace_period"))
+            warn_unsupported_ctest_option("timeout_signal_grace_period")
         if timeout_signal_name is not None:
-            logging.warning(unsupported_ctest_option("timeout_signal_name"))
+            warn_unsupported_ctest_option("timeout_signal_name")
 
     @property
     def path(self) -> str:
@@ -369,6 +382,17 @@ class CTestTestCase(TestCase):
     def resource_groups(self, arg: dict[str, int]) -> None:
         self._resource_groups = arg
 
+    @property
+    def required_files(self) -> list[str]:
+        return self._required_files or []
+
+    @required_files.setter
+    def required_files(self, arg: list[str]) -> None:
+        self._required_files = list(arg)
+        for file in arg:
+            if not os.path.exists(file):
+                logging.debug(f"{self}: missing required file: {file}")
+
 
 def is_mpi_launcher(arg: str) -> bool:
     launchers = ("mpiexec", "mpirun", "srun", "jsrun")
@@ -392,7 +416,10 @@ def parse_test_args(args: list[str]) -> argparse.Namespace:
                 ns.preflags.append(arg)
         else:
             s = " ".join(args)
-            raise ValueError(f"Unable to find test program in {s}")
+            logging.debug(f"Unable to find test program in {s}")
+            ns.launcher = None
+            arg = args[0]
+            iter_args = iter(args[1:])
     ns.command = arg
     ns.postflags = list(iter_args)
     return ns
@@ -414,12 +441,18 @@ def parse_np(args: list[str]) -> int:
 def load(file: str) -> dict[str, Any]:
     """Use ctest --show-only"""
     tests: dict[str, Any] = {}
+    logging.debug(f"Loading ctest tests from {file}")
     with nvtest.filesystem.working_dir(os.path.dirname(file)):
         ctest = nvtest.filesystem.which("ctest")
-        p = subprocess.Popen([ctest, "--show-only=json-v1"], stdout=subprocess.PIPE)  # type: ignore
-        p.wait()
-        out, _ = p.communicate()
-        payload = json.loads(out.decode("utf-8"))
+        assert ctest is not None
+        try:
+            with open(".ctest-json-v1.json", "w") as fh:
+                p = subprocess.Popen([ctest, "--show-only=json-v1"], stdout=fh)
+                p.wait()
+            with open(".ctest-json-v1.json", "r") as fh:
+                payload = json.load(fh)
+        finally:
+            force_remove(".ctest-json-v1.json")
         nodes = payload["backtraceGraph"]["nodes"]
         files = payload["backtraceGraph"]["files"]
         for test in payload["tests"]:
@@ -434,6 +467,7 @@ def load(file: str) -> dict[str, Any]:
                 t["file"] = files[node["file"]]
             else:
                 t["file"] = os.path.abspath(file)
+    logging.debug(f"Found {len(tests)} in {file}")
     return tests
 
 

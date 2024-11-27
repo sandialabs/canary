@@ -396,7 +396,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def dep_done_criteria(self) -> list[str]:
-        """``dep_done_criteria[i]`` is the expected exit status of the ``i``\ th dependency.  This
+        r"""``dep_done_criteria[i]`` is the expected exit status of the ``i``\ th dependency.  This
         case will not run unless the ``i``\ th dependency exits with this status.  Usually
         ``dep_done_criteria[i]`` is 'success'.
         """
@@ -1050,6 +1050,11 @@ class TestCase(AbstractTestCase):
         vars = {}
         vars["cpu_ids"] = variables["NVTEST_CPU_IDS"] = ",".join(map(str, self.cpu_ids))
         vars["gpu_ids"] = variables["NVTEST_GPU_IDS"] = ",".join(map(str, self.gpu_ids))
+        for key, value in os.environ.items():
+            try:
+                os.environ[key] = value % vars
+            except Exception:
+                pass
         for key, value in self.variables.items():
             variables[key] = value % vars
         for var, value in variables.items():

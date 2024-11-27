@@ -747,7 +747,7 @@ def enable(*args: bool, when: WhenType | None = None) -> None:
 
 
 def include(file: str, *, when: WhenType | None = None) -> None:
-    """Include the contents of ``file`` at the point where the directive appears.
+    r"""Include the contents of ``file`` at the point where the directive appears.
 
     Usage
     -----

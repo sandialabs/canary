@@ -714,7 +714,7 @@ class Session:
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
-                        logging.emit(queue.status())
+                        logging.emit(queue.status(start=self.start))
                     if reporting == ProgressReporting.progress_bar:
                         queue.display_progress(self.start)
                     if timeout >= 0.0 and duration() > timeout:
