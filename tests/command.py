@@ -151,7 +151,6 @@ def test_status(setup):
         status = NVTestCommand("status")
         status()
         status("-rA")
-        status("-l")
         status("-rA", "--durations")
         status("--sort-by", "duration")
 

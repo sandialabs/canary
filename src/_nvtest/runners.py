@@ -132,7 +132,7 @@ class TestCaseRunner(AbstractTestRunner):
             case.finish = timestamp()
             for hook in plugin.hooks():
                 hook.test_after_run(case)
-            case.wrap_up(stage)
+            case.finalize(stage)
         return
 
     def baseline(self, case: "TestCase") -> None:

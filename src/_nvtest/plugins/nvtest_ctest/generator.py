@@ -330,48 +330,44 @@ class CTestTestCase(TestCase):
     def setup_working_directory(self, copy_all_resources: bool = False) -> None:
         """CMake sets up the working (binary) directory"""
 
-    def wrap_up(self, stage: str = "run") -> None:
-        super().wrap_up()
+    def finalize(self, stage: str = "run") -> None:
+        self.cache_runtime()
+        self.concatenate_logs()
         file = self.logfile(stage)
 
         if self.status.value in ("timeout", "skipped", "not_run"):
+            self.save()
             return
+
+        if self.pass_regular_expression is not None:
+            for regex in self.pass_regular_expression:
+                if file_contains(file, regex):
+                    self.status.set("success")
+                    break
+            else:
+                regex = ", ".join(self.pass_regular_expression)
+                self.status.set("failed", f"Regular expressions {regex} not found in {file}")
 
         if self.skip_return_code is not None:
             if self.returncode == self.skip_return_code:
                 self.status.set("skipped", f"Return code={self.skip_return_code!r}")
 
         if self.skip_regular_expression is not None:
-            for skip_regular_expression in self.skip_regular_expression:
-                if file_contains(file, skip_regular_expression):
-                    self.status.set(
-                        "skipped",
-                        f"Regular expression {skip_regular_expression!r} found in {file}",
-                    )
+            for regex in self.skip_regular_expression:
+                if file_contains(file, regex):
+                    self.status.set("skipped", f"Regular expression {regex!r} found in {file}")
                     break
-
-        if self.pass_regular_expression is not None:
-            for pass_regular_expression in self.pass_regular_expression:
-                if file_contains(file, pass_regular_expression):
-                    self.status.set("success")
-                    break
-            else:
-                self.status.set(
-                    "failed",
-                    f"Regular expression {pass_regular_expression!r} not found in {file}",
-                )
 
         if self.fail_regular_expression is not None:
-            for fail_regular_expression in self.fail_regular_expression:
-                if file_contains(file, fail_regular_expression):
-                    self.status.set(
-                        "failed", f"Regular expression {fail_regular_expression!r} found in {file}"
-                    )
+            for regex in self.fail_regular_expression:
+                if file_contains(file, regex):
+                    self.status.set("failed", f"Regular expression {regex!r} found in {file}")
+                    break
 
         # invert logic
         if self.will_fail:
             if self.status == "success":
-                self.status.set("failed", "Expected case to fail")
+                self.status.set("failed", "Test case marked will_fail but succeeded")
             elif self.status.value not in ("skipped",):
                 self.status.set("success")
 

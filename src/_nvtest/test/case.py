@@ -1,5 +1,4 @@
 import dataclasses
-import datetime
 import fnmatch
 import io
 import itertools
@@ -31,6 +30,7 @@ from ..util.filesystem import mkdirp
 from ..util.hash import hashit
 from ..util.module import load_module
 from ..util.shell import source_rcfile
+from ..util.time import hhmmss
 from ..when import match_any
 
 
@@ -926,27 +926,21 @@ class TestCase(AbstractTestCase):
             else:
                 setattr(self, name, value)
 
-    def describe(self, include_logfile_path: bool = False) -> str:
+    def describe(self) -> str:
         """Write a string describing the test case"""
         id = colorize("@*b{%s}" % self.id[:7])
         if self.mask is not None:
             string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.mask)
             return colorize(string)
         string = "%s %s %s" % (self.status.cname, id, self.pretty_repr())
+        if self.duration >= 0:
+            string += f" ({hhmmss(self.duration)})"
         if self.status == "skipped":
-            string += ": Skipped because %s" % self.status.details
-        elif self.duration >= 0:
-            today = datetime.datetime.today()
-            start = datetime.datetime.fromtimestamp(self.start)
-            finish = datetime.datetime.fromtimestamp(self.finish)
-            dt = today - start
-            fmt = "%H:%m:%S" if dt.days <= 1 else "%M %d %H:%m:%S"
-            a = start.strftime(fmt)
-            b = finish.strftime(fmt)
-            string += f" started: {a}, finished: {b}, duration: {self.duration:.2f}s."
-        if include_logfile_path:
-            f = os.path.relpath(self.logfile(), os.getcwd())
-            string += colorize(": @m{%s}" % f)
+            string += " skip reason: %s" % self.status.details or "unknown"
+        elif self.status == "failed":
+            string += " fail reason: %s" % self.status.details or "unknown"
+        elif self.status == "diffed":
+            string += " diff reason: %s" % self.status.details or "unknown"
         return string
 
     def complete(self) -> bool:
@@ -1158,15 +1152,17 @@ class TestCase(AbstractTestCase):
                 hook.test_before_run(self, stage=stage)
         self.save()
 
-    def wrap_up(self, stage: str = "run") -> None:
-        with fs.working_dir(self.working_directory):
-            self.cache_runtime()
-            self.save()
-            with open(self.logfile(), "w") as fh:
-                for stage in ("setup", "run", "analyze"):
-                    file = self.logfile(stage)
-                    if os.path.exists(file):
-                        fh.write(open(file).read())
+    def concatenate_logs(self) -> None:
+        with open(self.logfile(), "w") as fh:
+            for stage in ("setup", "run", "analyze"):
+                file = self.logfile(stage)
+                if os.path.exists(file):
+                    fh.write(open(file).read())
+
+    def finalize(self, stage: str = "run") -> None:
+        self.cache_runtime()
+        self.concatenate_logs()
+        self.save()
 
     def teardown(self) -> None: ...
 

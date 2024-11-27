@@ -45,13 +45,6 @@ class Status(Command):
             "(A)ll.  [default: dftns]",
         )
         parser.add_argument(
-            "-l",
-            dest="show_logs",
-            action="store_true",
-            default=False,
-            help="Show log file location as well as names [default: %(default)s]",
-        )
-        parser.add_argument(
             "--sort-by",
             default="name",
             choices=("duration", "name"),
@@ -66,8 +59,6 @@ class Status(Command):
             rc = "dftns"
         else:
             rc = "".join(args.report_chars)
-        report = session.report(
-            rc, show_logs=args.show_logs, sortby=args.sort_by, durations=args.durations
-        )
+        report = session.report(rc, sortby=args.sort_by, durations=args.durations)
         logging.emit(report)
         return 0
