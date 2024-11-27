@@ -186,6 +186,7 @@ class CTestTestCase(TestCase):
 
         self._resource_groups: dict[str, int] | None = None
         self._required_files: list[str] | None = None
+        self._will_fail: bool = will_fail or False
         self.working_directory = working_directory or self.file_dir
 
         if command is not None:
@@ -197,9 +198,6 @@ class CTestTestCase(TestCase):
             self.preflags = ns.preflags
             self.exe = ns.command
             self.postflags = ns.postflags
-
-        if will_fail:
-            self.xstatus = -1
 
         if processors is not None:
             self.parameters["np"] = processors
@@ -339,6 +337,10 @@ class CTestTestCase(TestCase):
         if self.status.value in ("timeout", "skipped", "not_run"):
             return
 
+        if self.skip_return_code is not None:
+            if self.returncode == self.skip_return_code:
+                self.status.set("skipped", f"Return code={self.skip_return_code!r}")
+
         if self.skip_regular_expression is not None:
             for skip_regular_expression in self.skip_regular_expression:
                 if file_contains(file, skip_regular_expression):
@@ -346,14 +348,7 @@ class CTestTestCase(TestCase):
                         "skipped",
                         f"Regular expression {skip_regular_expression!r} found in {file}",
                     )
-                    self.save()
-                    return
-
-        if self.skip_return_code is not None:
-            if self.returncode == self.skip_return_code:
-                self.status.set("skipped", f"Return code={self.skip_return_code!r}")
-                self.save()
-                return
+                    break
 
         if self.pass_regular_expression is not None:
             for pass_regular_expression in self.pass_regular_expression:
@@ -365,10 +360,6 @@ class CTestTestCase(TestCase):
                     "failed",
                     f"Regular expression {pass_regular_expression!r} not found in {file}",
                 )
-            self.save()
-
-        if self.status == "failed":
-            return
 
         if self.fail_regular_expression is not None:
             for fail_regular_expression in self.fail_regular_expression:
@@ -376,7 +367,15 @@ class CTestTestCase(TestCase):
                     self.status.set(
                         "failed", f"Regular expression {fail_regular_expression!r} found in {file}"
                     )
-            self.save()
+
+        # invert logic
+        if self.will_fail:
+            if self.status == "success":
+                self.status.set("failed", "Expected case to fail")
+            elif self.status.value not in ("skipped",):
+                self.status.set("success")
+
+        self.save()
 
     @property
     def resource_groups(self) -> dict[str, int]:
@@ -396,6 +395,14 @@ class CTestTestCase(TestCase):
         for file in arg:
             if not os.path.exists(file):
                 logging.debug(f"{self}: missing required file: {file}")
+
+    @property
+    def will_fail(self) -> bool:
+        return self._will_fail
+
+    @will_fail.setter
+    def will_fail(self, arg: bool) -> None:
+        self._will_fail = bool(arg)
 
 
 def is_mpi_launcher(arg: str) -> bool:
