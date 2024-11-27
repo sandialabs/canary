@@ -1,3 +1,4 @@
+from . import config
 from .error import diff_exit_status
 from .error import fail_exit_status
 from .error import skip_exit_status
@@ -150,8 +151,9 @@ class Status:
     def set(self, arg: str, details: str | None = None) -> None:
         if arg not in self.members:
             raise ValueError(f"{arg} is not a valid status")
-        if arg in ("skipped",):
-            if details is None:
+        if arg in ("skipped", "failed", "diffed") and details is None:
+            details = "unknown"
+            if config.debug:
                 raise ValueError(f"details for status {arg!r} must be provided")
         if arg in ("pending", "ready", "created", "retry"):
             if details is not None:

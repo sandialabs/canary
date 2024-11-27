@@ -995,7 +995,7 @@ class Session:
         return string.getvalue()
 
     @staticmethod
-    def status(cases: list[TestCase], show_logs: bool = False, sortby: str = "duration") -> str:
+    def status(cases: list[TestCase], sortby: str = "duration") -> str:
         """Return a string describing the status of each test (grouped by status)"""
         file = io.StringIO()
         totals: dict[str, list[TestCase]] = {}
@@ -1006,20 +1006,19 @@ class Session:
                 totals.setdefault(case.status.value, []).append(case)
         if "masked" in totals:
             for case in sort_cases_by(totals["masked"], field=sortby):
-                description = case.describe(include_logfile_path=show_logs)
+                description = case.describe()
                 file.write("%s %s\n" % (glyphs.masked, description))
         for member in Status.members:
             if member in totals:
                 for case in sort_cases_by(totals[member], field=sortby):
                     glyph = Status.glyph(case.status.value)
-                    description = case.describe(include_logfile_path=show_logs)
+                    description = case.describe()
                     file.write("%s %s\n" % (glyph, description))
         return file.getvalue()
 
     def report(
         self,
         report_chars: str,
-        show_logs: bool = False,
         sortby: str = "durations",
         durations: int | None = None,
         pathspec: str | None = None,
@@ -1071,7 +1070,7 @@ class Session:
                     cases_to_show.append(case)
         file = io.StringIO()
         if cases_to_show:
-            file.write(self.status(cases_to_show, show_logs=show_logs, sortby=sortby) + "\n")
+            file.write(self.status(cases_to_show, sortby=sortby) + "\n")
         if durations:
             file.write(self.durations(cases_to_show, int(durations)) + "\n")
         file.write(self.footer([c for c in self.cases if not c.mask], title="Summary") + "\n")

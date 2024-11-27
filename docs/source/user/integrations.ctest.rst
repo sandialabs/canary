@@ -68,3 +68,22 @@ RESOURCE_GROUPS
 ~~~~~~~~~~~~~~~
 
 ``nvtest`` does not currently read in a `CTest resource specification file <https://cmake.org/cmake/help/latest/manual/ctest.1.html#resource-specification-file>`_ and only recognizes the ``gpus`` `resource group <https://cmake.org/cmake/help/git-master/prop_test/RESOURCE_GROUPS.html>`_.  Eg, ``set_tests_properties(name PROPERTIES RESOURCE_GROUPS N:gpus,n)``
+
+\*_REGULAR_EXPRESSION behavior
+------------------------------
+
+``*_REGULAR_EXPRESSION`` patterns are evaluated in the following order:
+
+If ``PASS_REGULAR_EXPRESSION`` is defined
+  set status to ``success`` if any pass regular expression matches, otherwise set status to ``failed``.
+
+If ``SKIP_RETURN_CODE`` is defined
+  set status to ``skipped`` if the test's return code is equal to ``SKIP_RETURN_CODE``
+
+If ``SKIP_REGULAR_EXPRESSION`` is defined
+  set status to ``skipped`` if any skip regular expression matches
+
+If ``FAIL_REGULAR_EXPRESSION`` is defined
+  set status to ``failed`` if any fail regular expression matches
+
+Thus, if a test defines both ``PASS_REGULAR_EXPRESSION`` and ``FAIL_REGULAR_EXPRESSION`` and the output contains *both* patterns, the test will be marked as ``failed`` since the fail regular expression is evaluated last.

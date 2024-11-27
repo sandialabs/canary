@@ -41,7 +41,7 @@ def test_cmake_integration(tmpdir):
             make()
             print(os.listdir("."))
             run = NVTestCommand("run", debug=True)
-            run("-w", ".")
+            run("-w", "--recurse-cmake", ".")
             dirs = sorted(os.listdir("TestResults"))
             dirs.remove(".nvtest")
             print(dirs)
