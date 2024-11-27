@@ -511,7 +511,7 @@ class Session:
         for case in self.cases:
             if case.mask:
                 continue
-            if not case.working_directory.startswith(start):
+            if not case.cache_directory.startswith(start):
                 case.mask = "Unreachable from start directory"
                 continue
             if case_specs is not None:

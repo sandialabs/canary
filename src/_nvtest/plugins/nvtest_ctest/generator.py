@@ -346,22 +346,26 @@ class CTestTestCase(TestCase):
                         "skipped",
                         f"Regular expression {skip_regular_expression!r} found in {file}",
                     )
+                    self.save()
                     return
 
         if self.skip_return_code is not None:
             if self.returncode == self.skip_return_code:
                 self.status.set("skipped", f"Return code={self.skip_return_code!r}")
+                self.save()
                 return
 
         if self.pass_regular_expression is not None:
             for pass_regular_expression in self.pass_regular_expression:
                 if file_contains(file, pass_regular_expression):
                     self.status.set("success")
-                    return
-            self.status.set(
-                "failed", f"Regular expression {pass_regular_expression!r} not found in {file}"
-            )
-            return
+                    break
+            else:
+                self.status.set(
+                    "failed",
+                    f"Regular expression {pass_regular_expression!r} not found in {file}",
+                )
+            self.save()
 
         if self.status == "failed":
             return
@@ -372,7 +376,7 @@ class CTestTestCase(TestCase):
                     self.status.set(
                         "failed", f"Regular expression {fail_regular_expression!r} found in {file}"
                     )
-                    return
+            self.save()
 
     @property
     def resource_groups(self) -> dict[str, int]:

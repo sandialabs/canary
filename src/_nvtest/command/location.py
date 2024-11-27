@@ -45,6 +45,13 @@ Note: this command must be run from inside of a test session directory.
             help="Show the location of the test's execution directory",
         )
         group.add_argument(
+            "-c",
+            dest="show_cache_directory",
+            action="store_true",
+            default=False,
+            help="Show the location of the test's execution directory",
+        )
+        group.add_argument(
             "-s",
             dest="show_source_dir",
             action="store_true",
@@ -68,8 +75,13 @@ Note: this command must be run from inside of a test session directory.
                     f = case.file_dir
                 elif args.show_working_directory:
                     f = case.working_directory
+                elif args.show_cache_directory:
+                    f = case.cache_directory
                 else:
-                    f = case.working_directory
+                    if case.file.endswith(".cmake"):
+                        f = case.cache_directory
+                    else:
+                        f = case.working_directory
                 print(f)
                 return 0
         raise ValueError(f"{args.testspec}: no matching test found in {session.work_tree}")

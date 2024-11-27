@@ -75,7 +75,7 @@ class PathSpec:
     @staticmethod
     def parse_in_session(args: argparse.Namespace) -> None:
         args.mode = "a"
-        if args.work_tree is not None:
+        if getattr(args, "work_tree", None) is not None:
             raise ValueError(f"work_tree={args.work_tree} incompatible with path arguments")
         args.work_tree = Session.find_root(os.getcwd())
 
@@ -112,7 +112,7 @@ class PathSpec:
             raise ValueError("incompatible input path arguments")
         if args.f_pathspec:
             raise ValueError("-f option is illegal in re-use mode")
-        if args.wipe:
+        if getattr(args, "wipe", None) is True:
             raise ValueError("wipe=True incompatible with path arguments")
         if pathspec:
             path = os.path.abspath(pathspec.pop(0))
