@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Sequence
 
@@ -6,6 +7,8 @@ from ..atc import AbstractTestCase
 from ..status import Status
 from ..util import logging
 from ..util import partition
+from ..util.filesystem import mkdirp
+from ..util.hash import hashit
 from .case import TestCase
 
 
@@ -14,26 +17,17 @@ class TestBatch(AbstractTestCase):
 
     Args:
       cases: The list of test cases in this batch
-      batch_no: The index of this batch in the group
-      nbatches: The number of partitions in the group
-      lot_no: The lot number of the group
 
     """
 
     def __init__(
         self,
         cases: Sequence[TestCase],
-        batch_no: int,
-        nbatches: int,
-        lot_no: int = 1,
     ) -> None:
         super().__init__()
         self.validate(cases)
         self.cases = list(cases)
-        self.id = self.batch_no = batch_no
-        self.nbatches = nbatches
-        self.lot_no = lot_no
-        self.name = f"nv.{self.lot_no}/{self.batch_no}/{self.nbatches}"
+        self._id = hashit(",".join(case.id for case in self.cases), length=20)
         self.total_duration: float = -1
         self._submit_cpus = 1
         self._submit_gpus = 0
@@ -63,11 +57,7 @@ class TestBatch(AbstractTestCase):
 
     @property
     def variables(self) -> dict[str, str | None]:
-        return {
-            "NVTEST_LOT_NO": str(self.lot_no),
-            "NVTEST_BATCH_NO": str(self.batch_no),
-            "NVTEST_NBATCHES": str(self.nbatches),
-        }
+        return {"NVTEST_BATCH_ID": str(self.id)}
 
     def validate(self, cases: Sequence[TestCase]):
         errors = 0
@@ -82,7 +72,7 @@ class TestBatch(AbstractTestCase):
         if errors:
             raise ValueError("Stopping due to previous errors")
 
-    def command(self, stage: str = "test") -> list[str]:
+    def command(self, stage: str = "run") -> list[str]:
         raise NotImplementedError
 
     @property
@@ -134,13 +124,40 @@ class TestBatch(AbstractTestCase):
             case.refresh()
 
     @property
-    def stage(self):
-        return os.path.join(config.session.work_tree, ".nvtest/batches", str(self.lot_no))
+    def id(self) -> str:
+        return self._id
 
     def submission_script_filename(self) -> str:
-        basename = f"batch.{self.batch_no}-inp.sh"
-        return os.path.join(self.stage, basename)
+        return os.path.join(self.stage(self.id), "nvtest-inp.sh")
 
-    def logfile(self) -> str:
-        basename = f"batch.{self.batch_no}-out.txt"
-        return os.path.join(self.stage, basename)
+    def logfile(self, stage: str | None = None) -> str:
+        return os.path.join(self.stage(self.id), "nvtest-out.txt")
+
+    @property
+    def path(self) -> str:
+        return os.path.join(".nvtest/batch", self.id[:2], self.id[2:])
+
+    def save(self):
+        f = os.path.join(self.stage(self.id), "index")
+        mkdirp(os.path.dirname(f))
+        with open(f, "w") as fh:
+            json.dump([case.id for case in self], fh, indent=2)
+
+    @staticmethod
+    def load(batch_id: str) -> list[str] | None:
+        f = os.path.join(TestBatch.stage(batch_id), "index")
+        if not os.path.exists(f):
+            return None
+        with open(f, "r") as fh:
+            return json.load(fh)
+
+    @staticmethod
+    def logfile_path(batch_id: str) -> str:
+        """Get the path of the batch log file"""
+        return os.path.join(TestBatch.stage(batch_id), "nvtest-out.txt")
+
+    @staticmethod
+    def stage(batch_id: str) -> str:
+        work_tree = config.session.work_tree
+        assert work_tree is not None
+        return os.path.join(work_tree, ".nvtest/batch", batch_id[:2], batch_id[2:])

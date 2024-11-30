@@ -12,7 +12,6 @@ from concurrent.futures import Future
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
-from dataclasses import asdict
 from datetime import datetime
 from functools import partial
 from itertools import repeat
@@ -28,6 +27,7 @@ from .error import StopExecution
 from .finder import Finder
 from .generator import AbstractTestGenerator
 from .queues import BatchResourceQueue
+from .queues import Busy as BusyQueue
 from .queues import Empty as EmptyQueue
 from .queues import ResourceQueue
 from .queues import factory as q_factory
@@ -559,6 +559,7 @@ class Session:
         for case in self.cases:
             if case.status.satisfies(("pending", "ready")):
                 for dep in case.dependencies:
+                    # FIXME: CHECK OTHER CODES AS REQUIRED BY THE TEST
                     if not dep.status.satisfies(("pending", "ready", "success", "diff")):
                         case.mask = color.colorize("deselected due to @*b{dependency status}")
                         break
@@ -566,13 +567,13 @@ class Session:
                     cases.append(case)
         return cases
 
-    def bfilter(self, *, lot_no: int, batch_no: int) -> list[TestCase]:
-        """Mask any test cases not in batch number ``batch_no`` from batch lot ``lot_no``"""
-        with self.db.open(f"batches/{lot_no}/index", "r") as record:
-            batch_info = json.load(record)
-        batch_case_ids = batch_info[str(batch_no)]
+    def bfilter(self, *, batch_id: str) -> list[TestCase]:
+        """Mask any test cases not in batch ``batch_id``"""
+        batch_case_ids = TestBatch.load(batch_id)
+        if batch_case_ids is None:
+            raise ValueError(f"could not find index for batch {batch_id}")
         expected = len(batch_case_ids)
-        logging.info(f"Selecting {expected} tests from batch {lot_no}:{batch_no}")
+        logging.info(f"Selecting {expected} tests from batch {batch_id}")
         for case in self.cases:
             if case.id in batch_case_ids:
                 assert not case.mask, case.mask
@@ -601,7 +602,7 @@ class Session:
                         case.status.set("not_run", "one or more dependencies failed")
                         case.mask = str(case.status.details)
             else:
-                case.mask = f"Case not in batch {lot_no}:{batch_no}"
+                case.mask = f"Case not in batch {batch_id}"
         return [case for case in self.cases if not case.mask]
 
     def run(
@@ -709,6 +710,8 @@ class Session:
         duration = lambda: timestamp() - self.start
         timeout = config.session.timeout or -1
         runner = r_factory()
+        qsize = queue.qsize
+        qrank = 0
         try:
             with ProcessPoolExecutor(max_workers=queue.workers) as ppe:
                 while True:
@@ -720,17 +723,22 @@ class Session:
                     if timeout >= 0.0 and duration() > timeout:
                         raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
                     try:
-                        iid_obj = queue.get()
-                        if iid_obj is None:
-                            time.sleep(0.01)
-                            continue
-                        iid, obj = iid_obj
+                        iid, obj = queue.get()
                         self.heartbeat(queue)
+                    except BusyQueue:
+                        time.sleep(0.01)
+                        continue
                     except EmptyQueue:
                         break
                     future = ppe.submit(
-                        runner, obj, verbose=reporting == ProgressReporting.verbose, stage=stage
+                        runner,
+                        obj,
+                        qsize=qsize,
+                        qrank=qrank,
+                        verbose=reporting == ProgressReporting.verbose,
+                        stage=stage,
                     )
+                    qrank += 1
                     callback = partial(self.done_callback, iid, queue, fail_fast)
                     future.add_done_callback(callback)
                     futures[iid] = (obj, future)
@@ -758,9 +766,9 @@ class Session:
         hb["busy cpus"] = [cpu_id for case in busy for cpu_id in case.cpu_ids]
         hb["busy gpus"] = [gpu_id for case in busy for gpu_id in case.gpu_ids]
         file: str
-        if "NVTEST_LOT_NO" in os.environ:
-            lot_no, batch_no = os.environ["NVTEST_LOT_NO"], os.environ["NVTEST_BATCH_NO"]
-            file = os.path.join(self.log_dir, f"batches/{lot_no}/hb.{batch_no}.json")
+        if "NVTEST_BATCH_ID" in os.environ:
+            batch_id = os.environ["NVTEST_BATCH_ID"]
+            file = os.path.join(self.log_dir, f"hb.{batch_id}.json")
         else:
             file = os.path.join(self.log_dir, "hb.json")
         mkdirp(os.path.dirname(file))
@@ -817,7 +825,7 @@ class Session:
                 snapshots = self.load_snapshots(record)
             for case in obj:
                 if case.id not in snapshots:
-                    logging.error(f"case ID {case.id} not in batch {obj.batch_no}")
+                    logging.error(f"case ID {case.id} not in batch {obj.id}")
                     continue
                 if case.status == "running":
                     # Job was cancelled
@@ -831,7 +839,7 @@ class Session:
                         fs = case.status.value
                         ss = snapshots[case.id]["status"]["value"]
                         logging.warning(
-                            f"batch {obj.batch_no}, {case}: "
+                            f"batch {obj.id}, {case}: "
                             f"expected status of future.result to be {ss}, not {fs}"
                         )
                         case.status.set("failed", "unknown failure")
@@ -848,12 +856,6 @@ class Session:
         """
         kwds: dict[str, Any] = {}
         queue: ResourceQueue = q_factory(global_session_lock)
-        if isinstance(queue, BatchResourceQueue):
-            batch_stage = os.path.join(self.config_dir, "batches")
-            mkdirp(batch_stage)
-            kwds["stage"] = batch_stage
-            lot_no = len(os.listdir(batch_stage)) + 1
-            kwds["lot_no"] = lot_no
         for case in cases:
             if case.status == "skipped":
                 case.save()
@@ -866,21 +868,16 @@ class Session:
         if queue.empty():
             raise ValueError("There are no cases to run in this session")
         if isinstance(queue, BatchResourceQueue):
-            batches: dict[str, list[str]] = {}
             for batch in queue.queued():
-                batches.setdefault(str(batch.batch_no), []).extend([case.id for case in batch])
-            with self.db.open(f"batches/{lot_no}/index", "w") as record:
-                json.dump(batches, record, indent=2)
-            with self.db.open(f"batches/{lot_no}/config", "w") as record:
-                json.dump(asdict(config.batch), record, indent=2)
+                batch.save()
         return queue
 
-    def blogfile(self, batch_no: int, lot_no: int | None) -> str:
+    def batch_logfile(self, batch_id: str) -> str:
         """Get the path of the batch log file"""
-        if lot_no is None:
-            lot_no = len(os.listdir(os.path.join(self.config_dir, "batches")))  # use latest
-        file = os.path.join(self.config_dir, f"batches/{lot_no}/batch.{batch_no}-out.txt")
-        return file
+        path = os.path.join(self.work_tree, TestBatch.logfile_path(batch_id))
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        return path
 
     def is_test_case(self, spec: str) -> bool:
         for case in self.cases:

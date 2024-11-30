@@ -18,7 +18,7 @@ class Log(Command):
         return "Note: this command must be run from inside of a test session directory."
 
     def setup_parser(self, parser: Parser):
-        parser.add_argument("testspec", help="Test name, /TEST_ID, or ^BATCH_LOT:BATCH_NO")
+        parser.add_argument("testspec", help="Test name, /TEST_ID, or ^BATCH_ID")
 
     def execute(self, args: argparse.Namespace) -> int:
         import pydoc
@@ -27,8 +27,7 @@ class Log(Command):
             session = Session(os.getcwd(), mode="r")
 
         if args.testspec.startswith("^"):
-            lot_no, batch_no = [int(_) for _ in args.testspec[1:].split(":")]
-            file = session.blogfile(batch_no, lot_no=lot_no)
+            file = session.batch_logfile(args.testspec[1:])
             print(f"{file}:")
             pydoc.pager(open(file).read())
             return 0

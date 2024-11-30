@@ -26,6 +26,7 @@ from ..util import logging
 from ..util.compression import compress_str
 from ..util.executable import Executable
 from ..util.filesystem import copyfile
+from ..util.filesystem import max_name_length
 from ..util.filesystem import mkdirp
 from ..util.hash import hashit
 from ..util.module import load_module
@@ -177,6 +178,7 @@ class TestCase(AbstractTestCase):
         self._cmd_line: str | None = None
         self._work_tree: str | None = None
         self._working_directory: str | None = None
+        self._path: str | None = None
 
         # The process running the test case
         self._start: float = -1.0
@@ -300,9 +302,21 @@ class TestCase(AbstractTestCase):
     @property
     def path(self) -> str:
         """The relative path from ``self.work_tree`` to ``self.cache_directory``"""
-        if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() in ("yes", "true", "1", "on"):
-            return os.path.join(os.path.dirname(self.file_path), self.name)
-        return os.path.join(self.id[:2], self.id[2:])
+        if self._path is None:
+            work_tree = config.session.work_tree or config.invocation_dir
+            dirname, basename = os.path.split(self.file_path)
+            path = os.path.join(work_tree, dirname, self.name)
+            n = max_name_length()
+            if len(os.path.join(path, basename)) < n:
+                self._path = os.path.join(dirname, self.name)
+            else:
+                self._path = os.path.join(dirname, f"{self.family}.{self.id[:7]}")
+        assert isinstance(self._path, str)
+        return self._path
+
+    @path.setter
+    def path(self, arg: str) -> None:
+        self._path = arg
 
     # backward compatibility
     exec_path = path
@@ -316,6 +330,11 @@ class TestCase(AbstractTestCase):
         if not work_tree:
             raise ValueError("work_tree must be set during set up") from None
         return os.path.normpath(os.path.join(work_tree, self.path))
+
+    def logfile(self, stage: str | None = None) -> str:
+        if stage is None:
+            return os.path.join(self.cache_directory, "nvtest-out.txt")
+        return os.path.join(self.cache_directory, f"nvtest-{stage}-out.txt")
 
     @property
     def working_directory(self) -> str:
@@ -739,7 +758,7 @@ class TestCase(AbstractTestCase):
         self._returncode = int(arg)
 
     @property
-    def id(self):
+    def id(self) -> str:
         if not self._id:
             unique_str = io.StringIO()
             unique_str.write(self.name)
@@ -747,6 +766,7 @@ class TestCase(AbstractTestCase):
             for k in sorted(self.parameters):
                 unique_str.write(f",{k}={stringify(self.parameters[k], float_fmt='%.16e')}")
             self._id = hashit(unique_str.getvalue(), length=20)
+        assert isinstance(self._id, str)
         return self._id
 
     @id.setter
@@ -801,11 +821,6 @@ class TestCase(AbstractTestCase):
         else:
             path.insert(0, path.pop(path.index(self.working_directory)))
         return os.pathsep.join(path)
-
-    def logfile(self, stage: str | None = None) -> str:
-        if stage is None:
-            return os.path.join(self.cache_directory, "nvtest-out.txt")
-        return os.path.join(self.cache_directory, f"nvtest-{stage}-out.txt")
 
     def set_default_names(self) -> None:
         self.name = self.family

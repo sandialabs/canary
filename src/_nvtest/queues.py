@@ -3,6 +3,7 @@ import io
 import threading
 import time
 from typing import Any
+from typing import Callable
 
 from . import config
 from .test.batch import TestBatch
@@ -137,10 +138,11 @@ class ResourceQueue(abc.ABC):
         for key in keys:
             self._notrun[key] = self.buffer.pop(key)
 
-    def get(self) -> tuple[int, TestCase | TestBatch] | None:
+    def get(self) -> tuple[int, TestCase | TestBatch]:
+        """return (total number in queue, this number, iid, obj)"""
         with self.lock:
             if self.available_workers() <= 0:
-                return None
+                raise Busy
             if not len(self.buffer):
                 raise Empty
             for i in self.iter_keys():
@@ -163,7 +165,14 @@ class ResourceQueue(abc.ABC):
                         self._busy[i].cpu_ids = self.acquire_cpus(self._busy[i].cpus)
                         self._busy[i].gpu_ids = self.acquire_gpus(self._busy[i].gpus)
                         return (i, self._busy[i])
-        return None
+        raise Busy
+
+    def counts(self, count: Callable = len) -> tuple[int, int, int]:
+        done = count(self.finished())
+        busy = count(self.busy())
+        notrun = count(self.queued())
+        notrun += count(self.notrun())
+        return done, busy, notrun
 
     def status(self, start: float | None = None) -> str:
         def count(objs) -> int:
@@ -172,10 +181,7 @@ class ResourceQueue(abc.ABC):
         string = io.StringIO()
         with self.lock:
             p = d = f = t = 0
-            done = count(self.finished())
-            busy = count(self.busy())
-            notrun = count(self.queued())
-            notrun += count(self.notrun())
+            done, busy, notrun = self.counts(count=count)
             total = done + busy + notrun
             for obj in self.finished():
                 if isinstance(obj, TestCase):
@@ -287,7 +293,6 @@ class BatchResourceQueue(ResourceQueue):
         return list(self.buffer.keys())
 
     def prepare(self, **kwds: Any) -> None:
-        lot_no = kwds.pop("lot_no")
         partitions: list[list[TestCase]]
         if config.batch.scheme == "count":
             if config.batch.count is None:
@@ -300,8 +305,7 @@ class BatchResourceQueue(ResourceQueue):
             default_length = 30 * 60
             length = float(config.batch.duration or default_length)  # 30 minute default
             partitions = partition_t(self.tmp_buffer, t=length)
-        n = len(partitions)
-        batches = [TestBatch(p, i, n, lot_no) for i, p in enumerate(partitions, start=1) if len(p)]
+        batches = [TestBatch(p) for p in partitions if len(p)]
         for batch in batches:
             super().put(batch)
 
@@ -408,6 +412,10 @@ def factory(lock: threading.Lock) -> ResourceQueue:
 
 
 class Empty(Exception):
+    pass
+
+
+class Busy(Exception):
     pass
 
 

@@ -40,21 +40,37 @@ class AbstractTestRunner:
         verbose = kwargs.get("verbose", True)
         progress_bar = not verbose
         stage = kwargs.get("stage", "run")
+        qsize = kwargs.get("qsize")
+        qrank = kwargs.get("qrank")
         if not progress_bar:
-            logging.emit("%s%s\n" % (prefix, self.start_msg(case, stage)))
+            logging.emit(
+                "%s%s\n" % (prefix, self.start_msg(case, stage, qsize=qsize, qrank=qrank))
+            )
         self.run(case, stage)
         if not progress_bar:
-            logging.emit("%s%s\n" % (prefix, self.end_msg(case, stage)))
+            logging.emit("%s%s\n" % (prefix, self.end_msg(case, stage, qsize=qsize, qrank=qrank)))
         return None
 
     @abc.abstractmethod
     def run(self, case: AbstractTestCase, stage: str = "run") -> None: ...
 
     @abc.abstractmethod
-    def start_msg(self, case: AbstractTestCase, stage: str = "run") -> str: ...
+    def start_msg(
+        self,
+        case: AbstractTestCase,
+        stage: str = "run",
+        qsize: int | None = None,
+        qrank: int | None = None,
+    ) -> str: ...
 
     @abc.abstractmethod
-    def end_msg(self, case: AbstractTestCase, stage: str = "run") -> str: ...
+    def end_msg(
+        self,
+        case: AbstractTestCase,
+        stage: str = "run",
+        qsize: int | None = None,
+        qrank: int | None = None,
+    ) -> str: ...
 
 
 class TestCaseRunner(AbstractTestRunner):
@@ -143,19 +159,31 @@ class TestCaseRunner(AbstractTestRunner):
             case.do_baseline()
         logging.emit(self.end_msg(case, "baseline ") + "\n")
 
-    def start_msg(self, case: AbstractTestCase, stage: str = "run") -> str:
+    def start_msg(
+        self,
+        case: AbstractTestCase,
+        stage: str = "run",
+        qsize: int | None = None,
+        qrank: int | None = None,
+    ) -> str:
         assert isinstance(case, TestCase)
+        f = io.StringIO()
         id = colorize("@b{%s}" % case.id[:7])
-        st = colorize("@*{%s}" % stage)
-        return "Starting stage {0} {1} {2}".format(st, id, case.pretty_repr())
+        f.write(f"Starting {id}: {case.pretty_repr()}")
+        return f.getvalue()
 
-    def end_msg(self, case: AbstractTestCase, stage: str = "run") -> str:
+    def end_msg(
+        self,
+        case: AbstractTestCase,
+        stage: str = "run",
+        qsize: int | None = None,
+        qrank: int | None = None,
+    ) -> str:
         assert isinstance(case, TestCase)
+        f = io.StringIO()
         id = colorize("@b{%s}" % case.id[:7])
-        st = colorize("@*{%s}" % stage)
-        return "Finished stage {0} {1} {2} {3}".format(
-            st, id, case.pretty_repr(), case.status.cname
-        )
+        f.write(f"Finished {id}: {case.pretty_repr()} {case.status.cname}")
+        return f.getvalue()
 
     def get_process_metrics(
         self, proc: "psutil.Popen", metrics: dict[str, Any] | None = None
@@ -244,7 +272,7 @@ class BatchRunner(AbstractTestRunner):
 
         assert isinstance(batch, TestBatch)
         try:
-            logging.debug(f"Running batch {batch.batch_no}")
+            logging.debug(f"Running batch {batch.id[:7]}")
             start = time.monotonic()
             variables = dict(batch.variables)
             variables["NVTEST_LEVEL"] = "1"
@@ -269,7 +297,7 @@ class BatchRunner(AbstractTestRunner):
             else:
                 nvtest_invocation = self.nvtest_invocation(batch, stage=stage)
                 job = hpc_connect.Job(
-                    name=batch.name,
+                    name=f"nvtest.{batch.id[:7]}",
                     commands=[nvtest_invocation],
                     tasks=batch.max_cpus_required,
                     script=batch.submission_script_filename(),
@@ -280,10 +308,10 @@ class BatchRunner(AbstractTestRunner):
                 )
                 jobs.append(job)
             if config.debug:
-                logging.debug(f"Submitting batch {batch.batch_no} of {batch.nbatches}")
+                logging.debug(f"Submitting batch {batch.id[:7]}")
             self.scheduler.submit_and_wait(*jobs, independent=config.batch.scheme == "isolate")
         except hpc_connect.HPCSubmissionFailedError:
-            logging.error(f"Failed to submit {batch.name}!")
+            logging.error(f"Failed to submit {batch.id[:7]}!")
             for case in batch.cases:
                 if case.status.value in ("ready", "pending"):
                     case.status.set("not_run", "batch submission failed")
@@ -300,12 +328,27 @@ class BatchRunner(AbstractTestRunner):
                     case.save()
         return
 
-    def start_msg(self, batch: AbstractTestCase, stage: str = "run") -> str:
+    def start_msg(
+        self,
+        batch: AbstractTestCase,
+        stage: str = "run",
+        qsize: int | None = None,
+        qrank: int | None = None,
+    ) -> str:
         assert isinstance(batch, TestBatch)
         n = len(batch.cases)
-        return f"Submitting batch {batch.batch_no} of {batch.nbatches} ({n} tests)"
+        f = io.StringIO()
+        id = colorize("@b{%s}" % batch.id[:7])
+        f.write(f"Submitting batch {id}: {n} tests")
+        return f.getvalue()
 
-    def end_msg(self, batch: AbstractTestCase, stage: str = "run") -> str:
+    def end_msg(
+        self,
+        batch: AbstractTestCase,
+        stage: str = "run",
+        qsize: int | None = None,
+        qrank: int | None = None,
+    ) -> str:
         assert isinstance(batch, TestBatch)
         stat: dict[str, int] = {}
         for case in batch.cases:
@@ -314,18 +357,19 @@ class BatchRunner(AbstractTestRunner):
         colors = Status.colors
         st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
         duration: float | None = batch.total_duration if batch.total_duration > 0 else None
-        s = io.StringIO()
-        s.write(f"Finished batch {batch.batch_no} of {batch.nbatches}, {st_stat} ")
-        s.write(f"(time: {hhmmss(duration, threshold=0)}")
+        f = io.StringIO()
+        id = colorize("@b{%s}" % batch.id[:7])
+        f.write(f"Finished batch {id}: {st_stat} ")
+        f.write(f"(time: {hhmmss(duration, threshold=0)}")
         if any(_.start > 0 for _ in batch.cases) and any(_.finish > 0 for _ in batch.cases):
             ti = min(_.start for _ in batch.cases if _.start > 0)
             tf = max(_.finish for _ in batch.cases if _.finish > 0)
-            s.write(f", running: {hhmmss(tf - ti, threshold=0)}")
+            f.write(f", running: {hhmmss(tf - ti, threshold=0)}")
             if duration:
                 time_in_queue = max(duration - (tf - ti), 0)
-                s.write(f", queued: {hhmmss(time_in_queue, threshold=0)}")
-        s.write(")")
-        return s.getvalue()
+                f.write(f", queued: {hhmmss(time_in_queue, threshold=0)}")
+        f.write(")")
+        return f.getvalue()
 
     def nvtest_invocation(self, arg: TestBatch | TestCase, stage: str = "run") -> str:
         """Write the nvtest invocation used to run this batch."""
@@ -358,10 +402,8 @@ class BatchRunner(AbstractTestRunner):
         fp.write(f"-l session:gpu_count={node_count * config.machine.gpus_per_node} ")
         fp.write(f"-l test:timeoutx={self.timeoutx} ")
         fp.write("-l batch:scheduler=null ")  # guard against infinite batch recursion
-        if isinstance(arg, TestBatch):
-            fp.write(f"^{arg.lot_no}:{arg.batch_no}")
-        else:
-            fp.write(f"/{arg.id}")
+        sigil = "^" if isinstance(arg, TestBatch) else "/"
+        fp.write(f"{sigil}{arg.id}")
         return fp.getvalue()
 
     def qtime(self, batch: TestBatch) -> float:

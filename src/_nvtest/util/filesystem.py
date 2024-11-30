@@ -35,6 +35,7 @@ __all__ = [
     "filesize",
     "force_copy",
     "force_remove",
+    "max_name_length",
     "which",
     "touch",
     "touchp",
@@ -50,6 +51,12 @@ __all__ = [
 
 def is_hidden(path: str) -> bool:
     return os.path.basename(path).startswith(".")
+
+
+def max_name_length() -> int:
+    if os.name == "nt":
+        return 260
+    return os.pathconf("/", "PC_NAME_MAX")
 
 
 def which(

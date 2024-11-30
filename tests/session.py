@@ -57,13 +57,13 @@ def test_session_bfilter(tmpdir):
             s.lock()
             cases = s.populate()
             s.run(cases)
-            f1 = s.blogfile(1, None)
-            f2 = s.blogfile(1, 1)
-            assert f1 == f2
-
+            d1 = os.listdir("tests/.nvtest/batch")[0]
+            d2 = os.listdir(os.path.join("tests/.nvtest/batch", d1))[0]
+            id = d1 + d2
+            f1 = s.batch_logfile(id)
             with working_dir("tests"):
                 s = session.Session(".", mode="r")
-                cases = s.bfilter(lot_no=1, batch_no=1)
+                cases = s.bfilter(batch_id=id)
 
 
 def test_session_fail_fast(tmpdir):

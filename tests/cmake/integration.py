@@ -44,10 +44,8 @@ def test_cmake_integration(tmpdir):
             run("-w", "--recurse-cmake", ".")
             dirs = sorted(os.listdir("TestResults"))
             dirs.remove(".nvtest")
-            print(dirs)
             assert len(dirs) == 3
-            if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() == "yes":
-                assert dirs == ["baz", "ctest", "foo"]
+            assert dirs == ["baz", "foo", "spam"]
 
 
 f3 = fs.which("mpirun")

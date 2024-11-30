@@ -109,11 +109,11 @@ class Status:
         if arg == 0:
             self.set("success")
         elif arg == diff_exit_status:
-            self.set("diffed")
+            self.set("diffed", "a diff exit status was returned")
         elif arg == skip_exit_status:
             self.set("skipped", "a skip exit status was returned")
         elif arg == fail_exit_status:
-            self.set("failed")
+            self.set("failed", "a non-zero exit status was returned")
         elif arg == timeout_exit_status:
             self.set("timeout")
         elif arg == -2:

@@ -156,7 +156,7 @@ class Run(Command):
         else:
             assert args.mode == "b"
             session = Session(args.work_tree, mode="a")
-            cases = session.bfilter(lot_no=args.lot_no, batch_no=args.batch_no)
+            cases = session.bfilter(batch_id=args.batch_id)
         level = ProgressReporting.progress_bar if args.r == "b" else ProgressReporting.verbose
         reporting = ProgressReporting(level=level)
         try:

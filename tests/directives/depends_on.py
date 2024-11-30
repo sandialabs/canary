@@ -39,9 +39,8 @@ if __name__ == '__main__':
         if rc != 0:
             for file in glob.glob("TestResults/**/nvtest-out.txt", recursive=True):
                 print(open(file).read())
-        if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() in ("yes", "true", "1", "on"):
-            assert os.path.exists("TestResults/f1")
-            assert os.path.exists("TestResults/f2")
+        assert os.path.exists("TestResults/f1")
+        assert os.path.exists("TestResults/f2")
         assert rc == 0
 
 
@@ -94,10 +93,9 @@ if __name__ == '__main__':
         if rc != 0:
             for file in glob.glob("TestResults/**/nvtest-out.txt", recursive=True):
                 print(open(file).read())
-        if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() in ("yes", "true", "1", "on"):
-            assert os.path.exists("TestResults/f1")
-            assert os.path.exists("TestResults/f2")
-            assert os.path.exists("TestResults/f3")
+        assert os.path.exists("TestResults/f1")
+        assert os.path.exists("TestResults/f2")
+        assert os.path.exists("TestResults/f3")
         assert rc == 0
 
 

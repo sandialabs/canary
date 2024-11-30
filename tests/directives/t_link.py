@@ -128,8 +128,6 @@ if __name__ == '__main__':
             files = glob.glob(os.path.join(tmpdir, d, "*.txt"))
             return sorted([basename(f) for f in files if not basename(f).startswith("nvtest-")])
 
-        # if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() in ("yes", "true", "1", "on"):
-
         python = Executable(sys.executable)
         python("-m", "nvtest", "run", "-w", ".", fail_on_error=False)
 

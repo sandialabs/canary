@@ -11,28 +11,8 @@ class AbstractTestCase(abc.ABC):
         self._gpu_ids: list[int] = []
 
     @property
-    def cpu_ids(self) -> list[int]:
-        return self._cpu_ids
-
-    @cpu_ids.setter
-    def cpu_ids(self, arg: list[int]) -> None:
-        if not self.exclusive and len(arg) < self.cpus:
-            raise ValueError(f"{self}: received fewer cpu IDs than required!")
-        self._cpu_ids = list(arg)
-
-    @property
-    def exclusive(self) -> bool:
-        return False
-
-    @property
-    def gpu_ids(self) -> list[int]:
-        return self._gpu_ids
-
-    @gpu_ids.setter
-    def gpu_ids(self, arg: list[int]) -> None:
-        if not self.exclusive and len(arg) < self.gpus:
-            raise ValueError(f"{self}: received fewer gpu IDs than required!")
-        self._gpu_ids = list(arg)
+    @abc.abstractmethod
+    def id(self) -> str: ...
 
     @property
     @abc.abstractmethod
@@ -58,8 +38,36 @@ class AbstractTestCase(abc.ABC):
     @abc.abstractmethod
     def runtime(self) -> float: ...
 
+    @property
+    @abc.abstractmethod
+    def path(self) -> str: ...
+
     @abc.abstractmethod
     def refresh(self) -> None: ...
 
     @abc.abstractmethod
-    def command(self, stage: str = "test") -> list[str]: ...
+    def command(self, stage: str = "run") -> list[str]: ...
+
+    @property
+    def cpu_ids(self) -> list[int]:
+        return self._cpu_ids
+
+    @cpu_ids.setter
+    def cpu_ids(self, arg: list[int]) -> None:
+        if not self.exclusive and len(arg) < self.cpus:
+            raise ValueError(f"{self}: received fewer cpu IDs than required!")
+        self._cpu_ids = list(arg)
+
+    @property
+    def exclusive(self) -> bool:
+        return False
+
+    @property
+    def gpu_ids(self) -> list[int]:
+        return self._gpu_ids
+
+    @gpu_ids.setter
+    def gpu_ids(self, arg: list[int]) -> None:
+        if not self.exclusive and len(arg) < self.gpus:
+            raise ValueError(f"{self}: received fewer gpu IDs than required!")
+        self._gpu_ids = list(arg)

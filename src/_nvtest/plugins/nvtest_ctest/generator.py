@@ -264,11 +264,6 @@ class CTestTestCase(TestCase):
             warn_unsupported_ctest_option("timeout_signal_name")
 
     @property
-    def path(self) -> str:
-        """The relative path from ``self.work_tree`` to ``self.cache_directory``"""
-        return os.path.join("ctest", self.id[:2], self.id[2:])
-
-    @property
     def implicit_keywords(self) -> list[str]:
         kwds = super().implicit_keywords
         if "unit" not in kwds:
@@ -325,7 +320,8 @@ class CTestTestCase(TestCase):
         super().setup(work_tree, copy_all_resources=copy_all_resources, clean=False)
         with nvtest.filesystem.working_dir(self.cache_directory):
             with open("ctest-command.txt", "w") as fh:
-                fh.write(" ".join(self.command()))
+                command = " ".join(self.command())
+                fh.write(f"cd {self.working_directory} && {command}")
 
     def setup_working_directory(self, copy_all_resources: bool = False) -> None:
         """CMake sets up the working (binary) directory"""
