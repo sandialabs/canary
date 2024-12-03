@@ -3,7 +3,7 @@
 Machine resources
 =================
 
-``nvtest`` uses a `ProcessPoolExecutor <https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ProcessPoolExecutor>`_ to execute tests asynchronously using :ref:`N <workers>` workers.  Tests requiring ``np`` processors and ``ngpu`` gpus are submitted to the executor such that the total number of resources used remains less than or equal to the number of available resources.  The availability of resources can be set in one of two ways:
+``nvtest`` uses a `ProcessPoolExecutor <https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ProcessPoolExecutor>`_ to execute tests asynchronously using :ref:`N <workers>` workers.  Tests requiring ``cpus`` processors and ``gpus`` gpus are submitted to the executor such that the total number of resources used remains less than or equal to the number of available resources.  The availability of resources can be set in one of two ways:
 
 * as a machine configuration setting; and
 * as a test session resource limit.
@@ -68,12 +68,12 @@ The number of resources made available to individual tests can be limited by pas
 Setting the number of processors required by a test
 ...................................................
 
-The number of processors required by a test is inferred from the :ref:`np<np-ngpu-parameters>` parameter.  If ``np`` is not set, the number of processors required by the test is assumed to by ``1``.
+The number of processors required by a test is inferred from the :ref:`cpus<cpus-gpus-parameters>` parameter.  If ``cpus`` is not set, the number of processors required by the test is assumed to by ``1``.
 
 Setting the number of gpus required by a test
 .............................................
 
-The number of gpus required by a test is inferred from the :ref:`ngpu<np-ngpu-parameters>` parameter.  If ``ngpu`` is not set, the number of gpus required by the test is assumed to by ``0``.
+The number of gpus required by a test is inferred from the :ref:`gpus<cpus-gpus-parameters>` parameter.  If ``gpus`` is not set, the number of gpus required by the test is assumed to by ``0``.
 
 
 CPU and GPU ID identification

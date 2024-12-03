@@ -1,9 +1,11 @@
 import argparse
+import copy
 import dataclasses
 import json
 import os
 from string import Template
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
 
@@ -19,6 +21,9 @@ from .schemas import config_schema
 from .schemas import machine_schema
 from .schemas import test_schema
 from .schemas import variables_schema
+
+if TYPE_CHECKING:
+    from ..atc import AbstractTestCase
 
 section_schemas: dict[str, Schema] = {
     "build": build_schema,
@@ -50,6 +55,50 @@ class Variables(dict):
     def pop(self, key: Any, /, default: Any = None) -> Any:
         os.environ.pop(str(key), default)
         return super().pop(key, default)
+
+
+class Resources:
+    """Class representing resources available on the computer
+
+    By default, the resource set consists of the number of cpus
+
+    .. code-block: yaml
+
+      name:
+      - id: str  # the resource name
+        .slots: int  # number available
+
+    """
+
+    def __init__(self, types: dict[str, list[dict]] | None = None) -> None:
+        self.types: dict[str, list[dict]] = types or {}
+
+    def set(self, name: str, n: int) -> None:
+        resource: list[dict] = []
+        for i in range(n):
+            instance = {"id": str(i), "slots": 1}
+            resource.append(instance)
+        self.types[name] = resource
+
+    def validate(self, obj: "AbstractTestCase") -> None:
+        """determine if the resources for this test are satisfiable"""
+        required = obj.required_resources()
+        save = copy.deepcopy(self.types)
+        try:
+            for group in required:
+                for type, slots in group:
+                    if type not in self.types:
+                        msg = f"resource type {type!r} is not registered with nvtest"
+                        raise ResourceUnsatisfiable(msg)
+                    for instance in self.types[type]:
+                        if slots <= instance["slots"]:
+                            instance["slots"] -= slots
+                            break
+                    else:
+                        raise ResourceUnsatisfiable(f"insufficient slots of {type!r} available")
+        finally:
+            self.types.clear()
+            self.types.update(save)
 
 
 class Session:
@@ -191,11 +240,6 @@ class Session:
 
 @dataclasses.dataclass
 class Test:
-    cpu_count: tuple[int, int]
-    gpu_count: tuple[int, int]
-    node_count: tuple[int, int]
-    timeout: float = -1.0
-    timeoutx: float = 1.0
     timeout_fast: float = 120.0
     timeout_default: float = 5 * 60.0
     timeout_long: float = 15 * 60.0
@@ -339,9 +383,7 @@ class Config:
             node_count=m.node_count, cpu_count=m.cpu_count, gpu_count=m.gpu_count
         )
 
-        kwds["test"] = Test(
-            node_count=(1, m.node_count), cpu_count=(1, m.cpu_count), gpu_count=(0, m.gpu_count)
-        )
+        kwds["test"] = Test()
 
         if "build" in kwds:
             c = kwds["build"]["compiler"]
@@ -371,14 +413,8 @@ class Config:
         self.session.node_count = self.machine.node_count
         self.session.cpu_count = self.machine.cpu_count
         self.session.gpu_count = self.machine.gpu_count
-        self.test.node_count = (1, self.machine.node_count)
-        self.test.cpu_count = (1, self.machine.cpu_count)
-        self.test.gpu_count = (0, self.machine.gpu_count)
 
     def validate(self) -> None:
-        mc = self.machine
-        sc = self.session
-
         errors: int = 0
 
         def resource_floor_error(name: str, val: int | float, /, floor: int | float = 1) -> None:
@@ -398,77 +434,27 @@ class Config:
                 f"or decrease {rname} to a value less than or equal to {tcnt}"
             )
 
-        if mc.cpu_count < 1:
-            resource_floor_error("machine:cpu_count", sc.cpu_count, 1)
-        if mc.gpu_count < 0:
-            resource_floor_error("machine:gpu_count", sc.gpu_count, 0)
-        if mc.node_count < 1:
-            resource_floor_error("machine:node_count", sc.node_count, 1)
+        if self.machine.cpu_count < 1:
+            resource_floor_error("machine:cpu_count", self.machine.cpu_count, 1)
+        if self.machine.gpu_count < 0:
+            resource_floor_error("machine:gpu_count", self.machine.gpu_count, 0)
+        if self.machine.node_count < 1:
+            resource_floor_error("machine:node_count", self.machine.node_count, 1)
 
-        if sc.cpu_count < 1:
-            resource_floor_error("session:cpu_count", sc.cpu_count, 1)
-        if sc.cpu_count > mc.cpu_count:
+        if self.session.workers > self.machine.cpu_count:
             resource_threshold_error(
-                "session:cpu_count", sc.cpu_count, "machine:cpu_count", mc.cpu_count
+                "session:workers",
+                self.session.workers,
+                "machine:cpu_count",
+                self.machine.cpu_count,
             )
-        if sc.gpu_count < 0:
-            resource_floor_error("session:gpu_count", sc.gpu_count, 0)
-        if sc.gpu_count > mc.gpu_count:
-            resource_threshold_error(
-                "session:gpu_count", sc.gpu_count, "machine:gpu_count", mc.gpu_count
-            )
-        if sc.workers > sc.cpu_count:
-            resource_threshold_error(
-                "session:workers", sc.workers, "session:cpu_count", sc.cpu_count
-            )
-
-        min_cpus, max_cpus = self.test.cpu_count
-        if min_cpus > max_cpus:
-            resource_threshold_error("test:cpu_count[0]", min_cpus, "test:cpu_count[1]", max_cpus)
-        if min_cpus < 1:
-            resource_floor_error("test:cpu_count[0]", min_cpus, 1)
-        if max_cpus < 1:
-            resource_floor_error("test:cpu_count[1]", max_cpus, 1)
-        if max_cpus > sc.cpu_count:
-            resource_threshold_error(
-                "test:cpu_count[1]", max_cpus, "session:cpu_count", sc.cpu_count
-            )
-
-        min_gpus, max_gpus = self.test.gpu_count
-        if min_gpus > max_gpus:
-            resource_threshold_error("test:gpu_count[0]", min_gpus, "test:gpu_count[1]", max_gpus)
-        if min_gpus < 0:
-            resource_floor_error("test:gpu_count[0]", min_gpus, 0)
-        if max_gpus < 0:
-            resource_floor_error("test:gpu_count[0]", max_gpus, 0)
-        if max_gpus > sc.gpu_count:
-            resource_threshold_error(
-                "test:gpu_count[1]", max_gpus, "session:gpu_count", sc.gpu_count
-            )
-
-        min_nodes, max_nodes = self.test.node_count
-        if min_nodes > max_nodes:
-            resource_threshold_error(
-                "test:node_count[0]", min_nodes, "test:node_count[1]", max_nodes
-            )
-        if min_nodes < 1:
-            resource_floor_error("test:node_count[0]", min_nodes, 1)
-        if max_nodes < 1:
-            resource_floor_error("test:node_count[0]", max_nodes, 1)
-        if max_nodes > sc.node_count:
-            resource_threshold_error(
-                "test:node_count[1]", max_nodes, "session:node_count", sc.node_count
-            )
-
-        if self.test.timeoutx <= 0.0:
-            resource_floor_error("test:timeoutx", self.test.timeoutx, 0.0)
 
         # --- batch resources
         if self.batch.duration is not None and self.batch.duration <= 0.0:
             resource_floor_error("batch:duration", self.batch.duration, 0.0)
         if self.batch.count is not None and self.batch.count <= 0:
             resource_floor_error("batch:count", self.batch.count, 0)
-        if self.batch.workers is not None and self.batch.workers > mc.cpu_count:
+        if self.batch.workers is not None and self.batch.workers > self.machine.cpu_count:
             resource_floor_error("batch:workers", self.batch.workers, 0)
 
         if errors:
@@ -532,9 +518,9 @@ class Config:
                 if "log_level" in items:
                     config["log_level"] = items["log_level"]
             elif key == "test":
-                for key in ("fast", "long", "default"):
-                    if key in items.get("timeout", {}):
-                        config[f"test_timeout_{key}"] = items["timeout"][key]
+                for name in ("fast", "long", "default"):
+                    if name in items.get("timeout", {}):
+                        config[f"test_timeout_{name}"] = items["timeout"][name]
             elif key == "machine":
                 if "node_count" in items:
                     config["node_count"] = items["node_count"]
@@ -622,16 +608,6 @@ class Config:
             self.session.workers = args.session_workers
         if getattr(args, "session_timeout", None) is not None:
             self.session.timeout = args.session_timeout
-        if getattr(args, "test_node_count", None) is not None:
-            self.test.node_count = tuple(args.test_node_count)
-        if getattr(args, "test_cpu_count", None) is not None:
-            self.test.cpu_count = tuple(args.test_cpu_count)
-        if getattr(args, "test_gpu_count", None) is not None:
-            self.test.cpu_count = tuple(args.test_gpu_count)
-        if getattr(args, "test_timeout", None) is not None:
-            self.test.timeout = args.test_timeout
-        if getattr(args, "test_timeoutx", None) is not None:
-            self.test.timeoutx = args.test_timeoutx
         if getattr(args, "batch_duration", None) is not None:
             self.batch.duration = args.batch_duration
             self.batch.scheme = "duration"
@@ -734,10 +710,6 @@ class Config:
             asdict["session"]["cpu_ids"] = join_ilist(asdict["session"]["cpu_ids"])
         if "options" in asdict:
             asdict["options"] = vars(self.options)
-        if "test" in asdict:
-            asdict["test"]["node_count"] = join_ilist(asdict["test"]["node_count"])
-            asdict["test"]["cpu_count"] = join_ilist(asdict["test"]["cpu_count"])
-            asdict["test"]["gpu_count"] = join_ilist(asdict["test"]["gpu_count"])
         try:
             import yaml
 
@@ -776,3 +748,7 @@ def safe_loads(arg):
         return json.loads(arg)
     except json.decoder.JSONDecodeError:
         return arg
+
+
+class ResourceUnsatisfiable(Exception):
+    pass

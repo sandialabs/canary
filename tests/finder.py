@@ -110,10 +110,10 @@ def test_cpu_count(tmpdir):
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
             fh.write("import nvtest\n")
-            fh.write("nvtest.directives.parameterize('np', [1, 4, 8, 32])\n")
+            fh.write("nvtest.directives.parameterize('cpus', [1, 4, 8, 32])\n")
     with nvtest.config.override():
         nvtest.config.machine.cpus_per_node = 42
-        nvtest.config.test.cpu_count = (1, 42)
+        nvtest.config.session.cpu_count = 42
         finder = Finder()
         finder.add(workdir)
         finder.prepare()
@@ -121,7 +121,7 @@ def test_cpu_count(tmpdir):
         cases = finder.lock_and_filter(files)
         print([c.mask for c in cases])
         assert len([c for c in cases if not c.mask]) == 4
-        nvtest.config.test.cpu_count = (1, 2)
+        nvtest.config.session.cpu_count = 2
         cases = finder.lock_and_filter(files)
         assert len([c for c in cases if not c.mask]) == 1
 
@@ -217,7 +217,7 @@ nvtest.directives.name('baz')
 nvtest.directives.analyze()
 nvtest.directives.owner('me')
 nvtest.directives.keywords('test', 'unit')
-nvtest.directives.parameterize('np', (1, 2, 3), when="options='baz'")
+nvtest.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
 nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """
             )
@@ -242,8 +242,8 @@ nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             for case in cases:
                 assert not case.masked, case.mask
 
-            # without the baz option, the `np` parameter will not be expanded so we will be left with
-            # three test cases and one analyze.  The analyze will not be masked because the `np`
+            # without the baz option, the `cpus` parameter will not be expanded so we will be left with
+            # three test cases and one analyze.  The analyze will not be masked because the `cpus`
             # parameter is never expanded
             cases = finder.lock_and_filter(
                 files,
@@ -255,12 +255,12 @@ nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             assert isinstance(cases[-1], tc.TestMultiCase)
             assert not cases[-1].masked
 
-            # with np<3, some of the cases will be filtered
+            # with cpus<3, some of the cases will be filtered
             cases = finder.lock_and_filter(
                 files,
                 keyword_expr="test and unit",
                 on_options=["baz"],
-                parameter_expr="np < 3",
+                parameter_expr="cpus < 3",
                 owners=["me"],
                 env_mods={"SPAM": "EGGS"},
             )
@@ -269,7 +269,7 @@ nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             assert cases[-1].masked
             for case in cases[:-1]:
                 assert isinstance(case, tc.TestCase)
-                if case.processors == 3:
+                if case.cpus == 3:
                     assert case.masked
                 else:
                     assert not case.masked
@@ -325,7 +325,7 @@ def test_vvt_generator(tmpdir):
             assert cases[-1].masked
             for case in cases[:-1]:
                 assert isinstance(case, tc.TestCase)
-                if case.processors == 3:
+                if case.cpus == 3:
                     assert case.masked
                 else:
                     assert not case.masked

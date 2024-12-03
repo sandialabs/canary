@@ -72,7 +72,7 @@ or, in the base test instance's ``parameters`` attribute.  Consider the followin
     :lines: 6-10
     :language: python
 
-The parameters ``np``, ``a``, and ``b`` of each dependency can be accessed directly:
+The parameters ``cpus``, ``a``, and ``b`` of each dependency can be accessed directly:
 
 .. literalinclude:: /examples/analyze_only/analyze_only.pyt
     :lines: 30-32

@@ -520,13 +520,11 @@ class Session:
                 else:
                     case.mask = color.colorize("deselected by @*b{testspec expression}")
                 continue
-            if config.test.cpu_count[1] and case.cpus > config.test.cpu_count[1]:
-                n = config.test.cpu_count[1]
-                case.mask = f"test requires more than {n} cpus"
+            if case.cpus > config.session.cpu_count:
+                case.mask = f"test requires more than {config.session.cpu_count} cpus"
                 continue
-            if config.test.gpu_count[1] and case.gpus > config.test.gpu_count[1]:
-                n = config.test.gpu_count[1]
-                case.mask = f"test requires more than {n} gpus"
+            if case.gpus > config.session.gpu_count:
+                case.mask = f"test requires more than {config.session.gpu_count} gpus"
                 continue
             when_expr: dict[str, str] = {}
             if parameter_expr:

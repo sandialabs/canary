@@ -20,7 +20,7 @@ if __name__ == '__main__':
                 )
 
         run = NVTestCommand("run")
-        rc = run("-w", "-l", "batch:count=4", "-l", "batch:scheduler=none", ".")
+        rc = run("-w", "-b", "count=4", "-b", "scheduler=none", ".")
         dirs = os.listdir("TestResults")
         expected = [".nvtest"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)

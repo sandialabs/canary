@@ -163,8 +163,8 @@ class TestInstance:
     file_path: str
     name: str
     file: str
-    cpu_ids: list[int]
-    gpu_ids: list[int]
+    cpu_ids: list[str]
+    gpu_ids: list[str]
     family: str
     keywords: list[str]
     parameters: Parameters

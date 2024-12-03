@@ -1,4 +1,4 @@
 {
   "returncode": 0,
-  "output": "\u2717 FAIL d4a9b9c fail started: 08:11:52, finished: 08:11:52, duration: 0.00s.\n\u2717 FAIL 27e30ad xdiff-fail started: 08:11:51, finished: 08:11:51, duration: 0.00s.\n\u2717 FAIL 97b2dc6 xfail-fail started: 08:11:50, finished: 08:11:51, duration: 1.00s.\n\n\u2728\u2728 Summary -- 63 total, 53 pass, 2 xfail, 1 xdiff, 1 skipped, 1 diff, 3 fail, 2 timeout in 00:00:04"
+  "output": "\u2717 FAIL d4a9b9c fail (00:00:00.00) fail reason: a non-zero exit status was returned\n\u2717 FAIL 27e30ad xdiff-fail (00:00:00.00) fail reason: expected xdiff-fail to diff\n\u2717 FAIL 97b2dc6 xfail-fail (00:00:00.00) fail reason: expected xfail-fail to exit with code != 0\n\n\u2728\u2728 Summary -- 64 total, 54 pass, 2 xfail, 1 xdiff, 1 skipped, 1 diff, 3 fail, 2 timeout in 00:00:05"
 }

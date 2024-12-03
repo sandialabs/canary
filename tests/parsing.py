@@ -2,7 +2,7 @@ import argparse
 import os
 
 
-def test_batch_args():
+def test_batch_args_backward():
     import _nvtest.command.common as common
 
     parser = argparse.ArgumentParser()
@@ -28,6 +28,43 @@ def test_batch_args():
         "-c",
         "d",
     ]
+
+
+def test_batch_args():
+    import _nvtest.command.common as common
+
+    parser = argparse.ArgumentParser()
+    common.add_resource_arguments(parser)
+    args = parser.parse_args(
+        [
+            "-b",
+            "args=--account=XYZ123",
+            "-b",
+            "args=--licenses=pscratch",
+            "-b",
+            "args=--foo=bar --baz=spam",
+            "-b",
+            "args='--a=b -c d'",
+        ]
+    )
+    assert args.batch_scheduler_args == [
+        "--account=XYZ123",
+        "--licenses=pscratch",
+        "--foo=bar",
+        "--baz=spam",
+        "--a=b",
+        "-c",
+        "d",
+    ]
+
+
+def test_parsing_backward():
+    import _nvtest.command.common as common
+
+    parser = argparse.ArgumentParser()
+    common.add_resource_arguments(parser)
+    args = parser.parse_args(["-l", "test:timeoutx=2.0"])
+    assert args.timeout_multiplier == 2.0
 
 
 def test_config_args():

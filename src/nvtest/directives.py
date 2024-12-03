@@ -425,7 +425,7 @@ def depends_on(
 
        # spam.pyt
        import nvtest
-       nvtest.directives.depends_on("baz.np=1")
+       nvtest.directives.depends_on("baz.cpus=1")
 
        def test():
            self = nvtest.test.instance
@@ -595,64 +595,6 @@ def generate_composite_base_case(
 
 
 analyze = generate_composite_base_case
-
-
-def gpus(*ngpus: int, when: WhenType | None = None) -> None:
-    """Run the test with this many gpus
-
-    Usage
-    -----
-
-    ``.pyt``:
-
-    .. code-block:: python
-
-       import nvtest
-       nvtest.directives.gpus(*ngpus, when=...)
-
-
-    ``.vvt``: ``NA``
-
-    Parameters
-    ----------
-
-    * ``ngpus``: List of gpu counts
-    * ``when``: Restrict processing of the directive to this condition
-
-    The ``when`` expression is limited to the following conditions:
-
-    * ``testname``: Restrict processing of the directive to this test name
-    * ``platform``: Restrict processing of the directive to certain platform or
-      platforms
-    * ``option``: Restrict processing of the directive to command line ``-o`` options
-
-    Notes
-    -----
-
-    * ``gpus(...)`` is equivalent to ``parameterize("ngpu", ...)``
-
-    Examples
-    --------
-
-    The following equivalent test specifications result in 4 test instantiations
-
-    ``test1.pyt``:
-
-    .. code-block:: python
-
-       # test1
-       nvtest.directives.gpus(1, 2)
-
-    .. code-block:: console
-
-       2 test cases:
-       ├── test1[ngpu=1]
-       ├── test1[ngpu=2]
-
-    """
-
-
-devices = gpus
 
 
 def enable(*args: bool, when: WhenType | None = None) -> None:
@@ -864,7 +806,7 @@ def keywords(*args: str, when: WhenType | None = None) -> None:
     .. code-block:: python
 
        import nvtest
-       nvtest.directives.keywords("3D", "mhd", when="testname=spam parameters='np>1'")
+       nvtest.directives.keywords("3D", "mhd", when="testname=spam parameters='cpus>1'")
 
     .. code-block:: python
 
@@ -1028,11 +970,11 @@ def parameterize(
     Special argnames
     ----------------
 
-    * ``np`` interpreted to mean "number of processing cores".
-      If the ``np`` parameter is not defined, the test is assumed to use 1
+    * ``cpus`` interpreted to mean "number of processing cores".
+      If the ``cpus`` parameter is not defined, the test is assumed to use 1
       processing core.
-    * ``ngpu`` interpreted to mean "number of gpus".
-      If the ``ngpu`` parameter is not defined, the test is assumed to use 0
+    * ``gpus`` interpreted to mean "number of gpus".
+      If the ``gpus`` parameter is not defined, the test is assumed to use 0
       gpus.
 
     References
@@ -1050,7 +992,7 @@ def parameterize(
     .. code-block:: python
 
        # test1
-       nvtest.directives.parameterize("np", (4, 8, 12, 32))
+       nvtest.directives.parameterize("cpus", (4, 8, 12, 32))
 
     ``test1.vvt``:
 
@@ -1062,10 +1004,10 @@ def parameterize(
     .. code-block:: console
 
        4 test cases:
-       ├── test1[np=4]
-       ├── test1[np=8]
-       ├── test1[np=12]
-       ├── test1[np=32]
+       ├── test1[cpus=4]
+       ├── test1[cpus=8]
+       ├── test1[cpus=12]
+       ├── test1[cpus=32]
 
     ----
 
@@ -1143,123 +1085,6 @@ def preload(arg: str, *, when: WhenType | None = None, source: bool = False) -> 
        The ``preload`` currently has no effect.  Use ``nvtest.shell.source`` instead,
        see :ref:`usage-rcfiles`.
 
-
-    """
-
-
-def cpus(*values: int, when: WhenType | None = None) -> None:
-    """Run the test with this many processors
-
-    Usage
-    -----
-
-    ``.pyt``:
-
-    .. code-block:: python
-
-       import nvtest
-       nvtest.directives.cpus(*nprocs, when=...)
-
-
-    ``.vvt``: ``NA``
-
-    Parameters
-    ----------
-
-    * ``nprocs``: List of processor counts
-    * ``when``: Restrict processing of the directive to this condition
-
-    The ``when`` expression is limited to the following conditions:
-
-    * ``testname``: Restrict processing of the directive to this test name
-    * ``platform``: Restrict processing of the directive to certain platform or
-      platforms
-    * ``option``: Restrict processing of the directive to command line ``-o`` options
-
-    Notes
-    -----
-
-    * ``cpus(...)`` is equivalent to ``parameterize("np", ...)``
-
-    Examples
-    --------
-
-    The following test specification result in 4 test instantiations
-
-    ``test1.pyt``:
-
-    .. code-block:: python
-
-       # test1
-       nvtest.directives.cpus(4, 8, 12, 32)
-
-    .. code-block:: console
-
-       4 test cases:
-       ├── test1[np=4]
-       ├── test1[np=8]
-       ├── test1[np=12]
-       ├── test1[np=32]
-
-    """
-
-
-processors = cpus
-
-
-def nodes(*values: int, when: WhenType | None = None) -> None:
-    """Run the test with this many processors
-
-    Usage
-    -----
-
-    ``.pyt``:
-
-    .. code-block:: python
-
-       import nvtest
-       nvtest.directives.nodes(*nnode, when=...)
-
-
-    ``.vvt``: ``NA``
-
-    Parameters
-    ----------
-
-    * ``nnodes``: List of node counts
-    * ``when``: Restrict processing of the directive to this condition
-
-    The ``when`` expression is limited to the following conditions:
-
-    * ``testname``: Restrict processing of the directive to this test name
-    * ``platform``: Restrict processing of the directive to certain platform or
-      platforms
-    * ``option``: Restrict processing of the directive to command line ``-o`` options
-
-    Notes
-    -----
-
-    * ``nodes(...)`` is equivalent to ``parameterize("nnode", ...)``
-
-    Examples
-    --------
-
-    The following test specification result in 4 test instantiations
-
-    ``test1.pyt``:
-
-    .. code-block:: python
-
-       # test1
-       nvtest.directives.nodes(4, 8, 12, 32)
-
-    .. code-block:: console
-
-       4 test cases:
-       ├── test1[nnode=4]
-       ├── test1[nnode=8]
-       ├── test1[nnode=12]
-       ├── test1[nnode=32]
 
     """
 

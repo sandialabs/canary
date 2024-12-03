@@ -384,25 +384,68 @@ class TestCase(AbstractTestCase):
         return list(kwds)
 
     @property
+    def implicit_parameters(self) -> dict[str, int | float]:
+        # backward compatibility with vvtest
+        parameters: dict[str, int | float] = {}
+        if "np" in self.parameters:
+            parameters["cpus"] = self.parameters["np"]
+        elif "cpus" in self.parameters:
+            parameters["np"] = self.parameters["cpus"]
+        else:
+            parameters["np"] = parameters["cpus"] = 1
+        if "ndevice" in self.parameters:
+            parameters["gpus"] = self.parameters["ndevice"]
+        elif "gpus" in self.parameters:
+            parameters["ndevice"] = self.parameters["gpus"]
+        else:
+            parameters["ndevice"] = parameters["gpus"] = 0
+        if "nodes" in self.parameters:
+            nodes = self.parameters["nodes"]
+            parameters["np"] = parameters["cpus"] = nodes * config.machine.cpus_per_node
+            parameters["ndevices"] = parameters["gpus"] = nodes * config.machine.gpus_per_node
+        parameters["runtime"] = self.runtime
+        return parameters
+
+    @property
     def parameters(self) -> dict[str, Any]:
         """This test's parameters"""
         return self._parameters
 
     @parameters.setter
     def parameters(self, arg: dict[str, Any]) -> None:
-        self._parameters = dict(arg)
-        np = self._parameters.get("np") or 1
-        if not isinstance(np, int):
-            class_name = np.__class__.__name__
-            raise ValueError(f"{self.family}: expected np={np} to be an int, not {class_name}")
-        for key in ("ngpu", "ndevice"):
-            if key in self._parameters:
-                nd = self._parameters[key]
-                if not isinstance(nd, int) and nd is not None:
-                    class_name = nd.__class__.__name__
+        if "cpus" in arg and "np" in arg and arg["cpus"] != arg["np"]:
+            raise ValueError("parameters cpus and np are mutually exclusive")
+        for key in ("cpus", "np"):  # np is for vvtest backward compatibility
+            if key in arg:
+                if not isinstance(arg[key], int):
+                    class_name = arg[key].__class__.__name__
                     raise ValueError(
-                        f"{self.family}: expected {key}={nd} " f"to be an int, not {class_name}"
+                        f"{self.family}: expected {key}={arg[key]} to be an int, not {class_name}"
                     )
+        if "gpus" in arg and "ndevice" in arg and arg["gpus"] != arg["ndevice"]:
+            raise ValueError("parameters gpus and ndevice are mutually exclusive")
+        for key in ("gpus", "ndevice"):  # ndevice is for vvtest backward compatibility
+            if key in arg:
+                if not isinstance(arg[key], int) and arg[key] is not None:
+                    class_name = arg[key].__class__.__name__
+                    raise ValueError(
+                        f"{self.family}: expected {key}={arg[key]} to be an int, not {class_name}"
+                    )
+        if "nodes" in arg and "nnode" in arg and arg["nodes"] != arg["nnode"]:
+            raise ValueError("parameters nodes and nnode are mutually exclusive")
+        for key in ("nodes", "nnode"):  # nnode is for vvtest backward compatibility
+            if key in arg:
+                if not isinstance(arg[key], int) and arg[key] is not None:
+                    class_name = arg[key].__class__.__name__
+                    raise ValueError(
+                        f"{self.family}: expected {key}={arg[key]} to be an int, not {class_name}"
+                    )
+                disallowed = {"cpus", "np", "gpus", "ndevice"} & arg.keys()
+                if disallowed:
+                    s = ", ".join(f"{key} and {_}" for _ in disallowed)
+                    raise ValueError(f"parameters {s} are mutually exclusive")
+        self._parameters.clear()
+        self._parameters.update(arg)
 
     @property
     def unresolved_dependencies(self) -> list[DependencyPatterns]:
@@ -447,7 +490,8 @@ class TestCase(AbstractTestCase):
 
         """
         if self._runtimes[0] is None:
-            self.load_runtimes()
+            self._runtimes.clear()
+            self._runtimes.extend(self.load_runtimes())
         return self._runtimes
 
     @runtimes.setter
@@ -776,32 +820,43 @@ class TestCase(AbstractTestCase):
 
     @property
     def cpus(self) -> int:
+        cpus: int = 1
         stage = config.session.stage or "run"
-        if stage != "run":
-            return 1
-        return int(self.parameters.get("np") or 1)  # type: ignore
-
-    @property
-    def processors(self) -> int:
-        return self.cpus
+        if stage == "run":
+            if "cpus" in self.parameters:
+                cpus = int(self.parameters["cpus"])
+            elif "np" in self.parameters:
+                cpus = int(self.parameters["np"])
+            elif "nodes" in self.parameters:
+                nodes = int(self.parameters["nodes"])
+                cpus = nodes * config.machine.cpus_per_node
+        return cpus
 
     @property
     def nodes(self) -> int:
-        if "nnode" in self.parameters:
-            return int(self.parameters["nnode"])  # type: ignore
-        else:
-            cpus_per_node = config.machine.cpus_per_node
-            nodes = math.ceil(self.cpus / cpus_per_node)
-            return nodes
+        nodes: int = 1
+        stage = config.session.stage or "run"
+        if stage == "run":
+            if "nodes" in self.parameters:
+                nodes = int(self.parameters["nodes"])  # type: ignore
+            else:
+                cpus_per_node = config.machine.cpus_per_node
+                nodes = math.ceil(self.cpus / cpus_per_node)
+        return nodes
 
     @property
     def gpus(self) -> int:
-        if "ngpu" in self.parameters:
-            return int(self.parameters["ngpu"])  # type: ignore
-        elif "ndevice" in self.parameters:
-            return int(self.parameters["ndevice"])  # type: ignore
-        else:
-            return 0
+        gpus: int = 0
+        stage = config.session.stage or "run"
+        if stage == "run":
+            if "gpus" in self.parameters:
+                gpus = int(self.parameters["gpus"])  # type: ignore
+            elif "ndevice" in self.parameters:
+                gpus = int(self.parameters["ndevice"])  # type: ignore
+            elif "nodes" in self.parameters:
+                nodes = int(self.parameters["nodes"])
+                gpus = nodes * config.machine.gpus_per_node
+        return gpus
 
     @property
     def cputime(self) -> float | int:
@@ -809,9 +864,9 @@ class TestCase(AbstractTestCase):
 
     @property
     def runtime(self) -> float | int:
-        if self._runtimes[0] is None:
+        if self.runtimes[0] is None:
             return self.timeout
-        return self._runtimes[0]
+        return self.runtimes[0]
 
     @property
     def pythonpath(self):
@@ -856,7 +911,7 @@ class TestCase(AbstractTestCase):
             timeout = config.test.timeout_default
         self._timeout = float(timeout)
 
-    def load_runtimes(self):
+    def load_runtimes(self) -> list[float | None]:
         # return mean, min, max runtimes
         if not config.cache_runtimes:
             return [None, None, None]
@@ -1349,6 +1404,14 @@ class TestMultiCase(TestCase):
 
     @property
     def cpus(self) -> int:
+        return 1
+
+    @property
+    def gpus(self) -> int:
+        return 0
+
+    @property
+    def nodes(self) -> int:
         return 1
 
 

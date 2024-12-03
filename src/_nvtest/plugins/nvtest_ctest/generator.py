@@ -200,10 +200,10 @@ class CTestTestCase(TestCase):
             self.postflags = ns.postflags
 
         if processors is not None:
-            self.parameters["np"] = processors
+            self.parameters["cpus"] = processors
 
         elif self.preflags:
-            self.parameters["np"] = parse_np(self.preflags)
+            self.parameters["cpus"] = parse_np(self.preflags)
 
         if depends:
             self.unresolved_dependencies.extend(
@@ -216,7 +216,7 @@ class CTestTestCase(TestCase):
         if resource_groups is not None:
             self.resource_groups = resource_groups
             if "gpus" in self.resource_groups:
-                self.parameters["ngpu"] = self.resource_groups["gpus"]
+                self.parameters["gpus"] = self.resource_groups["gpus"]
 
         if disabled:
             self.mask = f"Explicitly disabled in {self.file}"

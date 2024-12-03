@@ -11,12 +11,17 @@ A single test file can generate many test cases, each having different parameter
 
 instructs ``nvtest`` to create two test instances with parameters ``odd=1`` and ``even=2`` in the first, and parameters ``odd=3`` and ``even=4`` in the second.
 
-.. _np-ngpu-parameters:
+.. _cpus-gpus-parameters:
 
 Special parameter names
 -----------------------
 
-The ``np`` and ``ngpu`` parameters are interpreted by ``nvtest`` to be the number of cpus and gpus, respectively, needed by the test case.  For compatiblity with ``vvtest``, ``ndevice`` is interpreted the same as ``ngpu``.
+The ``cpus`` and ``gpus`` parameters are interpreted by ``nvtest`` to be the number of cpus and gpus, respectively, needed by the test case.
+
+.. admonition:: vvtest compatiblity
+
+    The ``np`` and ``ndevice`` parameters are taken to be synonyms for ``cpus`` and ``gpus``, respectively.
+
 
 The type argument
 -----------------
