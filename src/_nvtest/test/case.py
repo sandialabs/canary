@@ -1125,28 +1125,28 @@ class TestCase(AbstractTestCase):
                 dep.refresh()
 
     @contextmanager
-    def rc_environ(self, **variables: str) -> Generator[None, None, None]:
+    def rc_environ(self, **env: str) -> Generator[None, None, None]:
         save_env = os.environ.copy()
-        variables = dict(variables)
-        vars = {}
-        vars["cpu_ids"] = variables["NVTEST_CPU_IDS"] = ",".join(map(str, self.cpu_ids))
-        vars["gpu_ids"] = variables["NVTEST_GPU_IDS"] = ",".join(map(str, self.gpu_ids))
-        for key, value in os.environ.items():
-            try:
-                os.environ[key] = value % vars
-            except Exception:
-                pass
+        variables: dict[str, str] = dict(env)
+        variables.update(os.environ)
+        variables.update(self.variables)
         for name, value, action, sep in self.environment_modifications:
             if action == "set":
                 variables[name] = value
             elif action == "unset":
                 os.environ.pop(name, None)
             elif action == "prepend-path":
-                variables[name] = f"{value}{sep}{os.getenv(name, '')}"
+                variables[name] = f"{value}{sep}{variables.get(name, '')}"
             elif action == "append-path":
-                variables[name] = f"{os.getenv(name, '')}{sep}{value}"
-        for key, value in self.variables.items():
-            variables[key] = value % vars
+                variables[name] = f"{variables.get(name, '')}{sep}{value}"
+        vars = {}
+        vars["cpu_ids"] = variables["NVTEST_CPU_IDS"] = ",".join(map(str, self.cpu_ids))
+        vars["gpu_ids"] = variables["NVTEST_GPU_IDS"] = ",".join(map(str, self.gpu_ids))
+        for key, value in variables.items():
+            try:
+                variables[key] = value % vars
+            except Exception:
+                pass
         variables["PYTHONPATH"] = f"{self.pythonpath}:{os.getenv('PYTHONPATH', '')}"
         variables["PATH"] = f"{self.working_directory}:{os.environ['PATH']}"
         os.environ.update(variables)
