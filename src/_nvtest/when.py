@@ -44,7 +44,7 @@ class When:
       options: expression defining options under which the directive will be activated, e.g.,
         options='opt and baz'.  Options are typically passed on the command line.
       parameters: expression defining parameterizations under which the directive will be
-        activated, e.g., ``parameters='np>1'``.
+        activated, e.g., ``parameters='cpus>1'``.
       testname: expression defining the testname under which the directive will be activated, e.g.
         testname='baz'.
       platforms: expression defining the platforms under which the directive will be activated, e.g.
@@ -58,7 +58,7 @@ class When:
     Examples:
 
     >>> import nvtest
-    >>> nvtest.directives.parameterize('ngpu', (1, 4), when='platform=linux')
+    >>> nvtest.directives.parameterize('gpus', (1, 4), when='platform=linux')
 
     """
 

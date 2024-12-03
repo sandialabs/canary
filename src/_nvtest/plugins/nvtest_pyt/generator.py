@@ -623,7 +623,7 @@ class PYTTestFile(AbstractTestGenerator):
             )
         for row in pset:
             for i, (key, value) in enumerate(row):
-                if key in ("np", "ngpu", "ndevice", "nnode"):
+                if key in ("cpus", "gpus", "nodes", "np", "ndevice", "nnode"):
                     if not isinstance(value, int):
                         raise ValueError(
                             f"{self.path}: parameterize: expected {key}={value} to be an int"
@@ -833,18 +833,6 @@ class PYTTestFile(AbstractTestGenerator):
         result: str | None = None,
     ):
         self.m_depends_on(list(args), when=when, result=result, expect=expect)
-
-    def f_gpus(self, *ngpus: int, when: WhenType | None = None) -> None:
-        self.m_parameterize("ngpu", list(ngpus), when=when)
-
-    def f_cpus(self, *values: int, when: WhenType | None = None) -> None:
-        self.m_parameterize("np", list(values), when=when)
-
-    def f_processors(self, *values: int, when: WhenType | None = None) -> None:
-        self.m_parameterize("np", list(values), when=when)
-
-    def f_nodes(self, *values: int, when: WhenType | None = None) -> None:
-        self.m_parameterize("nnode", list(values), when=when)
 
     def f_enable(self, *args: bool, when: WhenType | None = None):
         arg = True if not args else args[0]

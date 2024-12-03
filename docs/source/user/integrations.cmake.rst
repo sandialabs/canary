@@ -148,11 +148,11 @@ would generate the following file in the current binary directory
    import nvtest
    nvtest.directives.keywords("fast", "unit_test")
    nvtest.directives.link("my_test")
-   nvtest.directives.parameterize("np", [1, 4])
+   nvtest.directives.parameterize("cpus", [1, 4])
    def test():
        self = nvtest.test.instance
        mpi = nvtest.Executable("${MPIEXEC_EXECUTABLE}")
-       args = ["${MPIEXEC_NUMPROC_FLAG}", self.parameters.np, "my_parallel_test", "--option=value"]
+       args = ["${MPIEXEC_NUMPROC_FLAG}", self.parameters.cpus, "my_parallel_test", "--option=value"]
        mpi(*args, fail_on_error=False)
        if mpi.returncode != 0:
            raise nvtest.TestFailed("my_parallel_test")

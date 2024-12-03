@@ -1,6 +1,7 @@
-import argparse
 import os
 from typing import TYPE_CHECKING
+
+from _nvtest.util.time import time_in_seconds
 
 __all__ = [
     "PathSpec",
@@ -32,7 +33,6 @@ def add_filter_arguments(parser: "Parser") -> None:
     group.add_argument(
         "-k",
         dest="keyword_expr",
-        default=None,
         metavar="expression",
         help="Only run tests matching given keyword expression. "
         "For example: `-k 'key1 and not key2'`.",
@@ -49,14 +49,12 @@ def add_filter_arguments(parser: "Parser") -> None:
         "-p",
         dest="parameter_expr",
         metavar="expression",
-        default=None,
-        help="Filter tests by parameter name and value, such as '-p np=8' or '-p np<8'",
+        help="Filter tests by parameter name and value, such as '-p cpus=8' or '-p cpus<8'",
     )
     group.add_argument(
         "-R",
         dest="regex_filter",
         metavar="regex",
-        default=None,
         help="Include tests containing the regular expression regex in at least 1 of its "
         "file assets.  regex is a python regular expression, see "
         "https://docs.python.org/3/library/re.html",
@@ -76,13 +74,13 @@ def add_work_tree_arguments(parser: "Parser") -> None:
         "--work-tree",
         dest="work_tree",
         metavar="directory",
-        default=None,
         help="Set the path to the working tree. It can be an absolute path or a "
         "path relative to the current working directory. [default: ./TestResults]",
     )
 
 
 def add_resource_arguments(parser: "Parser") -> None:
+    from .resource import BatchResourceSetter
     from .resource import ResourceSetter
 
     group = parser.add_argument_group("resource control")
@@ -91,18 +89,22 @@ def add_resource_arguments(parser: "Parser") -> None:
         action=ResourceSetter,
         metavar="resource",
         dest="resource_setter",
-        default=None,
         help=ResourceSetter.help_page("-l"),
     )
+    group.add_argument(
+        "--timeout-multiplier",
+        metavar="X",
+        type=time_in_seconds,
+        help="Set a timeout multiplier for all tests [default: 1.0]",
+    )
 
-    group.add_argument("--batched-invocation", default=False, help=argparse.SUPPRESS)
+    group = parser.add_argument_group("batch control")
     group.add_argument(
         "-b",
-        action=ResourceSetter,
+        action=BatchResourceSetter,
         metavar="resource",
-        dest="resource_setter",
-        default=None,
-        help=argparse.SUPPRESS,
+        dest="batched_invocation",
+        help=BatchResourceSetter.help_page("-b"),
     )
 
 

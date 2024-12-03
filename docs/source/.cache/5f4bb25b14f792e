@@ -1,4 +1,4 @@
 {
   "returncode": 0,
-  "output": "--- random_space ------------\nFile: /opt/alegranevada/team/x/darwin/src/nvtest/examples/random_space/random_space.pyt\nKeywords: \n4 test cases:\n\u251c\u2500\u2500 random_space[a=4.75198,b=6.03782]\n\u251c\u2500\u2500 random_space[a=3.1324,b=7.51081]\n\u251c\u2500\u2500 random_space[a=0.309466,b=7.62322]\n\u2514\u2500\u2500 random_space[a=0.310093,b=8.22258]"
+  "output": "--- random_space ------------\nFile: /opt/alegranevada/team/x/darwin/src/nvtest/examples/random_space/random_space.pyt\nKeywords: \n4 test cases:\n\u251c\u2500\u2500 random_space[a=3.16744,b=7.88714]\n\u251c\u2500\u2500 random_space[a=4.56353,b=7.58228]\n\u251c\u2500\u2500 random_space[a=4.04535,b=8.87223]\n\u2514\u2500\u2500 random_space[a=1.31047,b=7.9553]"
 }

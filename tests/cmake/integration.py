@@ -111,4 +111,4 @@ def test_cmake_integration_parallel_override(tmpdir):
             with open("foo.pyt") as fh:
                 lines = fh.read()
                 assert 'mpi = nvtest.Executable("my-mpirun")' in lines
-                assert 'args.extend(["-x", str(self.parameters.np)])' in lines
+                assert 'args.extend(["-x", str(self.parameters.cpus)])' in lines

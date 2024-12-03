@@ -14,7 +14,7 @@ nvtest.directives.name('baz')
 nvtest.directives.analyze()
 nvtest.directives.owner('me')
 nvtest.directives.keywords('test', 'unit')
-nvtest.directives.parameterize('np', (1, 2, 3), when="options='baz'")
+nvtest.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
 nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """
             )

@@ -3,7 +3,7 @@ import sys
 
 import nvtest
 
-nvtest.directives.parameterize("np", [1, 4, 8])
+nvtest.directives.parameterize("cpus", [1, 4, 8])
 nvtest.directives.stages("analyze", "plot")
 
 

@@ -34,18 +34,18 @@ Use ``not`` to do the inverse, eg, ``nvtest run -k 'not conduction'`` means run 
 
 .. _filter-parameters:
 
-Filtering by parameters
------------------------
+Filter by parameters
+--------------------
 
 When tests define parameters using the :ref:`parameterize directive<directive-parameterize>`, then the resulting parameter names and values can be used to select tests.  Consider the test file ``p1.pyt``
 
 .. code-block:: python
 
    import nvtest
-   nvtest.directives.parameterize("np", (1, 4))
+   nvtest.directives.parameterize("cpus", (1, 4))
    print("running test p1")
 
-and the test file ``p2.vvt``:
+and the test file ``p2.pyt``:
 
 .. code-block:: python
 
@@ -53,11 +53,28 @@ and the test file ``p2.vvt``:
    nvtest.directives.parameterize("MODEL", ("elastic", "elasticplastic"))
    print("running test p2")
 
-The command ``nvtest run -p np`` would only run test ``p1``, because the ``np`` parameter is only defined in that test file.  In general, specifying a parameter name means include the test if the parameter is defined by the test.
+The command ``nvtest run -p cpus`` would only run test ``p1``, because the ``cpus`` parameter is only defined in that test file.  In general, specifying a parameter name means include the test if the parameter is defined by the test.
 
 The value of a parameter can be specified as well. For example, the command ``nvtest run -p MODEL=elastic`` would only run the ``p2.MODEL=elastic`` test and no others. In general, ``-p name=value`` means run any test that defines the parameter ``name`` and which has the value ``value``.
 
-More comparison operators in addition to ``=`` can be used, such as ``>``, ``<``, ``>=``, ``!=``, etc. For example, the command ``nvtest run -p 'np>1'`` would run the ``p1.np=4`` test and no others.
+More comparison operators in addition to ``=`` can be used, such as ``>``, ``<``, ``>=``, ``!=``, etc. For example, the command ``nvtest run -p 'cpus>1'`` would run the ``p1.cpus=4`` test and no others.
+
+Implicit parameters
+~~~~~~~~~~~~~~~~~~~
+
+The following implicit parameters defined for filtering purposes:
+
+* ``np``: alias to ``cpus``
+* ``ndevice``: alias to ``gpus``
+* ``runtime``: the test runtime in seconds
+* ``timeout``: the test timeout in seconds
+
+For example, tests having a running time exceeding 30 seconds can be filtered by
+
+.. code-block:: console
+
+   nvtest run -p 'runtime <= 30' ...
+
 
 .. _filter-platform:
 

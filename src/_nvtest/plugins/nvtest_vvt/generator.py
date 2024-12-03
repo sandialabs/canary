@@ -359,7 +359,7 @@ def p_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, list | None]
     elif len(types) != len(names):
         raise VVTParseError(f"incorrect number of parameter types: {arg.line!r}", arg)
     for i, name in enumerate(names):
-        if name in ("np", "ngpu", "ndevice", "nnode"):
+        if name in ("np", "ndevice", "nnode"):
             types[i] = "int"
     values = []
     table = make_table(values_spec)
@@ -706,9 +706,9 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "run") -> dict:
     attrs["file_path"] = case.file_path
 
     attrs["RESOURCE_np"] = case.cpus
-    attrs["RESOURCE_IDS_np"] = case.cpu_ids
+    attrs["RESOURCE_IDS_np"] = [int(_) for _ in case.cpu_ids]
     attrs["RESOURCE_ndevice"] = case.gpus
-    attrs["RESOURCE_IDS_ndevice"] = case.gpu_ids
+    attrs["RESOURCE_IDS_ndevice"] = [int(_) for _ in case.gpu_ids]
 
     return attrs
 

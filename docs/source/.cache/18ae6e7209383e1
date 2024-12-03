@@ -1,4 +1,4 @@
 {
   "returncode": 0,
-  "output": " _____  __ __  ____  _____  _____  ____ \n/  _  \\/  |  \\/    \\/   __\\/  ___>/    \\\n|  |  |\\  |  /\\-  -/|   __||___  |\\-  -/\n\\__|__/ \\___/  |__| \\_____/<_____/ |__|\nsearching for tests in basic\ngenerating test cases from test files\ncollected 2 tests from 2 files\nselected 2 tests from 2 files\n==> Starting stage run 63f2de8 first\n==> Starting stage run 8fa07b3 second\n==> Finished stage run 63f2de8 first PASS\n==> Finished stage run 8fa07b3 second PASS\n\u2728\u2728 Session done -- 2 total, 2 pass in 00:00:00.00"
+  "output": " ______   _     _  _______  ______  ______  _______ \n| |  \\ \\ | |   | |   | |   | |     / |        | |   \n| |  | | \\ \\   / /   | |   | |---- '------.   | |   \n|_|  |_|  \\_\\_/_/    |_|   |_|____  ____|_/   |_|\nsearching for tests in basic\ngenerating test cases from test files\ncollected 2 tests from 2 files\nselected 2 tests from 2 files\n==> Starting 8fa07b3: second\n==> Starting 63f2de8: first\n==> Finished 63f2de8: first PASS\n==> Finished 8fa07b3: second PASS\n\u26a1\u26a1 Session done -- 2 total, 2 pass in 00:00:00.00"
 }

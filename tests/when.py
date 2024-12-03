@@ -42,43 +42,43 @@ def test_when_options():
 
 
 def test_when_parameters():
-    expr = When.from_string("parameters='np<4'")
+    expr = When.from_string("parameters='cpus<4'")
     assert expr.evaluate().value is False
-    assert expr.evaluate(parameters={"np": 1}).value is True
-    assert expr.evaluate(parameters={"np": 5}).value is False
+    assert expr.evaluate(parameters={"cpus": 1}).value is True
+    assert expr.evaluate(parameters={"cpus": 5}).value is False
 
-    expr = When.from_string("parameters='np> 2 and np<6'")
+    expr = When.from_string("parameters='cpus> 2 and cpus<6'")
     assert expr.evaluate().value is False
-    assert expr.evaluate(parameters={"np": 3}).value is True
-    assert expr.evaluate(parameters={"np": 7}).value is False
+    assert expr.evaluate(parameters={"cpus": 3}).value is True
+    assert expr.evaluate(parameters={"cpus": 7}).value is False
 
-    expr = When.from_string("parameters='!np'")
+    expr = When.from_string("parameters='!cpus'")
     assert expr.evaluate().value is False
     assert expr.evaluate(parameters={"spam": "baz"}).value is True
 
-    expr = When.from_string("parameters='np>2 and baz=spam'")
+    expr = When.from_string("parameters='cpus>2 and baz=spam'")
     assert expr.evaluate().value is False
-    assert expr.evaluate(parameters={"np": 3}).value is False
-    assert expr.evaluate(parameters={"np": 3, "baz": "wubble"}).value is False
-    assert expr.evaluate(parameters={"np": 3, "baz": "spam"}).value is True
+    assert expr.evaluate(parameters={"cpus": 3}).value is False
+    assert expr.evaluate(parameters={"cpus": 3, "baz": "wubble"}).value is False
+    assert expr.evaluate(parameters={"cpus": 3, "baz": "spam"}).value is True
 
-    expr = When.from_string("parameters='np>2 or baz=spam'")
+    expr = When.from_string("parameters='cpus>2 or baz=spam'")
     assert expr.evaluate().value is False
-    assert expr.evaluate(parameters={"np": 3}).value is True
-    assert expr.evaluate(parameters={"np": 3, "baz": "wubble"}).value is True
-    assert expr.evaluate(parameters={"np": 3, "baz": "spam"}).value is True
+    assert expr.evaluate(parameters={"cpus": 3}).value is True
+    assert expr.evaluate(parameters={"cpus": 3, "baz": "wubble"}).value is True
+    assert expr.evaluate(parameters={"cpus": 3, "baz": "spam"}).value is True
 
-    expr = When.from_string("parameters='np>2 or baz==spam'")
+    expr = When.from_string("parameters='cpus>2 or baz==spam'")
     assert expr.evaluate().value is False
-    assert expr.evaluate(parameters={"np": 3}).value is True
-    assert expr.evaluate(parameters={"np": 3, "baz": "wubble"}).value is True
-    assert expr.evaluate(parameters={"np": 3, "baz": "spam"}).value is True
+    assert expr.evaluate(parameters={"cpus": 3}).value is True
+    assert expr.evaluate(parameters={"cpus": 3, "baz": "wubble"}).value is True
+    assert expr.evaluate(parameters={"cpus": 3, "baz": "spam"}).value is True
 
 
 def test_when_composite():
-    params = {"np": 4}
+    params = {"cpus": 4}
     opts = ["spam", "baz"]
-    expr = When.from_string(f"parameters='np>2' options='spam and baz' platforms={sys.platform}")
+    expr = When.from_string(f"parameters='cpus>2' options='spam and baz' platforms={sys.platform}")
     assert expr.evaluate(parameters=params, on_options=opts).value is True
-    expr = When.from_string(f"parameters='np=2' options='spam and baz' platforms={sys.platform}")
+    expr = When.from_string(f"parameters='cpus=2' options='spam and baz' platforms={sys.platform}")
     assert expr.evaluate(parameters=params, on_options=opts).value is False

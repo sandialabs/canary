@@ -74,3 +74,8 @@ def partition(sequence: list, predicate: Callable) -> tuple[list, list]:
         else:
             second.append(item)
     return first, second
+
+
+def argsort(sequence: Sequence) -> list[int]:
+    # http://stackoverflow.com/questions/3071415/efficient-method-to-calculate-the-rank-vector-of-a-list-in-python
+    return sorted(range(len(sequence)), key=sequence.__getitem__)

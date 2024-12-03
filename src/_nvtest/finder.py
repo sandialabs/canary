@@ -1,4 +1,3 @@
-import math
 import os
 import re
 import sys
@@ -239,11 +238,6 @@ class Finder:
         owners: set[str] | None = None,
         regex: str | None = None,
     ) -> None:
-        cpus_per_node: int = config.machine.cpus_per_node
-        min_cpus, max_cpus = config.test.cpu_count
-        min_gpus, max_gpus = config.test.gpu_count
-        min_nodes, max_nodes = config.test.node_count
-
         rx: re.Pattern | None = None
         if regex is not None:
             logging.warning("Regular expression search can be slow for large test suites")
@@ -251,6 +245,13 @@ class Finder:
 
         owners = set(owners or [])
         for case in cases:
+            #            try:
+            #                config.resources.validate(case)
+            #            except config.ResourceUnsatisfiable as e:
+            #                if case.mask is None:
+            #                    s = "deselected due to @*{ResourceUnsatisfiable}(%r)" % e.args[0]
+            #                    case.mask = colorize(s)
+
             if case.mask is None and owners:
                 if not owners.intersection(case.owners):
                     case.mask = colorize("deselected by @*b{owner expression}")
@@ -265,42 +266,25 @@ class Finder:
                     logging.debug(f"Skipping {case}::{case.name}")
                     case.mask = colorize("deselected by @*b{keyword expression}")
 
-            np = case.processors
-            nc = int(math.ceil(np / cpus_per_node))
-            if case.mask is None and nc > max_nodes:
-                s = "deselected due to @*b{requiring more nodes than max node count}"
-                case.mask = colorize(s)
-
-            if case.mask is None and nc < min_nodes:
-                s = "deselected due to @*b{requiring fewer nodes than min node count}"
-                case.mask = colorize(s)
-
-            if case.mask is None and np > max_cpus:
+            # some of these can be removed in favor of the resource groups
+            if case.mask is None and case.cpus > config.session.cpu_count:
                 s = "deselected due to @*b{requiring more cpus than max cpu count}"
                 case.mask = colorize(s)
 
-            if case.mask is None and np < min_cpus:
-                s = "deselected due to @*b{requiring fewer cpus than min cpu count}"
-                case.mask = colorize(s)
-
-            nd = case.gpus
-            if case.mask is None and nd and nd > max_gpus:
+            if case.mask is None and case.gpus and case.gpus > config.session.gpu_count:
                 s = "deselected due to @*b{requiring more gpus than max gpu count}"
-                case.mask = colorize(s)
-            if case.mask is None and nd and nd < min_gpus:
-                s = "deselected due to @*b{requiring fewer gpus than min gpu count}"
                 case.mask = colorize(s)
 
             if case.mask is None and ("TDD" in case.keywords or "tdd" in case.keywords):
                 case.mask = colorize("deselected due to @*b{TDD keyword}")
 
             if case.mask is None and parameter_expr:
-                match = when.when(f"parameters={parameter_expr!r}", parameters=case.parameters)
+                match = when.when(
+                    f"parameters={parameter_expr!r}",
+                    parameters=case.parameters | case.implicit_parameters,
+                )
                 if not match:
                     case.mask = colorize("deselected due to @*b{parameter expression}")
-
-            if config.test.timeout > 0 and case.runtime > config.test.timeout:
-                case.mask = "runtime exceeds time limit"
 
             if case.mask is None and any(dep.mask for dep in case.dependencies):
                 case.mask = colorize("deselected due to @*b{skipped dependencies}")

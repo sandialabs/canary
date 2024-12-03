@@ -1,4 +1,5 @@
 import abc
+import copy
 import io
 import threading
 import time
@@ -28,8 +29,6 @@ class ResourceQueue(abc.ABC):
         cpu_ids: list[int],
         gpu_ids: list[int],
     ) -> None:
-        self.cpu_ids = list(cpu_ids)
-        self.gpu_ids = list(gpu_ids)
         self.workers = workers
         self.buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
@@ -37,8 +36,13 @@ class ResourceQueue(abc.ABC):
         self._notrun: dict[int, Any] = {}
         self.meta: dict[int, dict] = {}
         self.lock = lock
-        self.cpu_count = len(self.cpu_ids)
-        self.gpu_count = len(self.gpu_ids)
+        self.resource_groups: dict[str, list[dict[str, str | int]]] = {}
+        self.exclusive_lock: bool = False
+        for id in cpu_ids:
+            self.resource_groups.setdefault("cpus", []).append({"id": str(id), "slots": 1})
+        for id in gpu_ids:
+            self.resource_groups.setdefault("gpus", []).append({"id": str(id), "slots": 1})
+        self.cpu_count = len(self.resource_groups["cpus"])
 
     @abc.abstractmethod
     def iter_keys(self) -> list[int]: ...
@@ -73,46 +77,47 @@ class ResourceQueue(abc.ABC):
     def available_workers(self) -> int:
         return self.workers - len(self._busy)
 
-    def available_cpus(self) -> int:
-        return len(self.cpu_ids)
+    def acquire_resources(
+        self, required: list[list[tuple[str, int]]]
+    ) -> list[tuple[str, str, int]]:
+        saved = copy.deepcopy(self.resource_groups)
+        if self.exclusive_lock:
+            raise ResourceUnavailable("waiting on exclusive lock")
+        totals: dict[str, int] = {}
+        resources: list[tuple[str, str, int]] = []
+        try:
+            for group in required:
+                for type, slots in group:
+                    if type not in self.resource_groups:
+                        raise TypeError(f"unknown resource requirement type {type!r}")
+                    for instance in self.resource_groups[type]:
+                        if slots <= instance["slots"]:  # type: ignore
+                            instance["slots"] -= slots  # type: ignore
+                            resources.append((type, instance["id"], slots))  # type: ignore
+                            totals[type] = totals.get(type, 0) + slots
+                            break
+                    else:
+                        raise ResourceUnavailable(f"insufficient slots of {type!r} available")
+        except Exception:
+            self.resource_groups.clear()
+            self.resource_groups.update(saved)
+            raise
+        else:
+            if config.debug:
+                N: int = 0
+                for type, n in totals.items():
+                    N = sum([_["slots"] for _ in self.resource_groups[type]]) + n
+                    logging.debug(f"Acquiring {n} {type} from {N} available")
+            return resources
 
-    def available_gpus(self) -> int:
-        return len(self.gpu_ids)
-
-    def available_resources(self) -> tuple[int, int]:
-        return (self.available_cpus(), self.available_gpus())
-
-    def acquire_cpus(self, n: int) -> list[int]:
-        N = len(self.cpu_ids)
-        if N < n:
-            raise ResourceError(f"requested cpus ({n}) exceeds available cpus ({N})")
-        elif n:
-            logging.debug(f"Acquiring {n} CPU{'s ' if n > 1 else ' '}from {N} available")
-        cpu_ids = list(self.cpu_ids[:n])
-        del self.cpu_ids[:n]
-        return cpu_ids
-
-    def acquire_gpus(self, n: int) -> list[int]:
-        N = len(self.gpu_ids)
-        if N < n:
-            raise ResourceError(f"requested gpus ({n}) exceeds available gpus ({N})")
-        elif n:
-            logging.debug(f"Acquiring {n} GPU{'s ' if n > 1 else ' '}from {N} available")
-        gpu_ids = list(self.gpu_ids[:n])
-        del self.gpu_ids[:n]
-        return gpu_ids
-
-    def release_cpus(self, ids: list[int]) -> None:
-        if ids:
-            logging.debug(f"Releasing {len(ids)} CPU IDs ({idjoin(ids)})")
-        self.cpu_ids.extend(ids)
-        self.cpu_ids.sort()
-
-    def release_gpus(self, ids: list[int]) -> None:
-        if ids:
-            logging.debug(f"Releasing {len(ids)} GPU IDs ({idjoin(ids)})")
-        self.gpu_ids.extend(ids)
-        self.gpu_ids.sort()
+    def reclaim_resources(self, resources: list[tuple[str, str, int]]) -> None:
+        for type, id, slots in resources:
+            for instance in self.resource_groups[type]:
+                if instance["id"] == id:
+                    instance["slots"] += slots  # type: ignore
+                    break
+            else:
+                raise ValueError("Attempting to reclaim a resource whose ID is unknown")
 
     @property
     def qsize(self):
@@ -153,17 +158,15 @@ class ResourceQueue(abc.ABC):
                     self.skip(i)
                     continue
                 elif status == "ready":
-                    if obj.exclusive and le(
-                        (self.cpu_count, obj.gpus), self.available_resources()
-                    ):
+                    try:
+                        if obj.exclusive and self.busy():
+                            continue
+                        resources = self.acquire_resources(obj.required_resources())
+                    except ResourceUnavailable:
+                        continue
+                    else:
                         self._busy[i] = self.buffer.pop(i)
-                        self._busy[i].cpu_ids = self.acquire_cpus(self.cpu_count)
-                        self._busy[i].gpu_ids = self.acquire_gpus(self._busy[i].gpus)
-                        return (i, self._busy[i])
-                    elif le((obj.cpus, obj.gpus), self.available_resources()):
-                        self._busy[i] = self.buffer.pop(i)
-                        self._busy[i].cpu_ids = self.acquire_cpus(self._busy[i].cpus)
-                        self._busy[i].gpu_ids = self.acquire_gpus(self._busy[i].gpus)
+                        self._busy[i].assign_resources(resources)
                         return (i, self._busy[i])
         raise Busy
 
@@ -251,9 +254,11 @@ class DirectResourceQueue(ResourceQueue):
         with self.lock:
             if obj_no not in self._busy:
                 raise RuntimeError(f"case {obj_no} is not running")
-            self._finished[obj_no] = self._busy.pop(obj_no)
-            self.release_cpus(self._finished[obj_no].cpu_ids)
-            self.release_gpus(self._finished[obj_no].gpu_ids)
+            obj = self._finished[obj_no] = self._busy.pop(obj_no)
+            resources = obj.release_resources()
+            self.reclaim_resources(resources)
+            if obj.exclusive:
+                self.exclusive_lock = False
             for case in self.buffer.values():
                 for i, dep in enumerate(case.dependencies):
                     if dep.id == self._finished[obj_no].id:
@@ -331,9 +336,10 @@ class BatchResourceQueue(ResourceQueue):
         with self.lock:
             if obj_no not in self._busy:
                 raise RuntimeError(f"batch {obj_no} is not running")
-            self._finished[obj_no] = self._busy.pop(obj_no)
-            self.release_cpus(self._finished[obj_no].cpu_ids)
-            self.release_gpus(self._finished[obj_no].gpu_ids)
+            obj = self._finished[obj_no] = self._busy.pop(obj_no)
+            resources = obj.release_resources()
+            self.reclaim_resources(resources)
+            obj.resources.clear()
             completed = dict([(_.id, _) for _ in self.finished()])
             for batch in self.buffer.values():
                 for case in batch:
@@ -420,4 +426,8 @@ class Busy(Exception):
 
 
 class ResourceError(Exception):
+    pass
+
+
+class ResourceUnavailable(Exception):
     pass

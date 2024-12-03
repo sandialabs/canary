@@ -32,9 +32,6 @@ from .util.time import timestamp
 class AbstractTestRunner:
     scheduled = False
 
-    def __init__(self) -> None:
-        self.timeoutx = config.test.timeoutx
-
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
         prefix = colorize("@*b{==>} ")
         verbose = kwargs.get("verbose", True)
@@ -88,15 +85,17 @@ class TestCaseRunner(AbstractTestRunner):
             case.start = timestamp()
             case.status.set("running")
             case.prepare_for_launch(stage=stage)
-            timeout = case.timeout * self.timeoutx
+            timeout = case.timeout
+            if timeoutx := config.getoption("timeout_multiplier"):
+                timeout *= timeoutx
             with working_dir(case.working_directory):
                 with open(case.logfile(stage), "w") as fh:
                     cmd = case.command(stage=stage)
                     case.cmd_line = " ".join(cmd)
                     fh.write(f"==> Running {case.display_name}\n")
                     fh.write(f"==> Command line: {case.cmd_line}\n")
-                    if self.timeoutx != 1.0:
-                        fh.write(f"==> Timeout multiplier: {self.timeoutx}\n")
+                    if timeoutx:
+                        fh.write(f"==> Timeout multiplier: {timeoutx}\n")
                     fh.flush()
                     with case.rc_environ():
                         tic = time.monotonic()
@@ -281,6 +280,7 @@ class BatchRunner(AbstractTestRunner):
             jobs: list[hpc_connect.Job] = []
             if config.batch.scheme == "isolate" and self.scheduler.supports_subscheduling:
                 scriptdir = os.path.dirname(batch.submission_script_filename())
+                timeoutx = config.getoption("timeout_multiplier") or 1.0
                 for case in batch:
                     nvtest_invocation = self.nvtest_invocation(case, stage=stage)
                     job = hpc_connect.Job(
@@ -290,12 +290,15 @@ class BatchRunner(AbstractTestRunner):
                         script=os.path.join(scriptdir, f"{case.name}-inp.sh"),
                         output=os.path.join(scriptdir, f"{case.name}-out.txt"),
                         error=os.path.join(scriptdir, f"{case.name}-err.txt"),
-                        qtime=case.runtime * self.timeoutx,
+                        qtime=case.runtime * timeoutx,
                         variables=variables,
                     )
                     jobs.append(job)
             else:
                 nvtest_invocation = self.nvtest_invocation(batch, stage=stage)
+                qtime = self.qtime(batch)
+                if timeoutx := config.getoption("timeout_multiplier"):
+                    qtime *= timeoutx
                 job = hpc_connect.Job(
                     name=f"nvtest.{batch.id[:7]}",
                     commands=[nvtest_invocation],
@@ -303,13 +306,13 @@ class BatchRunner(AbstractTestRunner):
                     script=batch.submission_script_filename(),
                     output=batch.logfile(),
                     error=batch.logfile(),
-                    qtime=self.qtime(batch) * self.timeoutx,
+                    qtime=qtime,
                     variables=variables,
                 )
                 jobs.append(job)
             if config.debug:
                 logging.debug(f"Submitting batch {batch.id[:7]}")
-            self.scheduler.submit_and_wait(*jobs, independent=config.batch.scheme == "isolate")
+            self.scheduler.submit_and_wait(*jobs, sequential=config.batch.scheme != "isolate")
         except hpc_connect.HPCSubmissionFailedError:
             logging.error(f"Failed to submit {batch.id[:7]}!")
             for case in batch.cases:
@@ -398,9 +401,8 @@ class BatchRunner(AbstractTestRunner):
                 fp.write(f"-P{p} ")
         if isinstance(arg, TestBatch) and config.batch.workers is not None:
             fp.write(f"-l session:workers={config.batch.workers} ")
-        fp.write(f"-l session:cpu_count={node_count * config.machine.cpus_per_node} ")
-        fp.write(f"-l session:gpu_count={node_count * config.machine.gpus_per_node} ")
-        fp.write(f"-l test:timeoutx={self.timeoutx} ")
+        if timeoutx := config.getoption("timeout_multiplier"):
+            fp.write(f"--timeout-multiplier={timeoutx} ")
         fp.write("-l batch:scheduler=null ")  # guard against infinite batch recursion
         sigil = "^" if isinstance(arg, TestBatch) else "/"
         fp.write(f"{sigil}{arg.id}")
