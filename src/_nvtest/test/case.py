@@ -200,6 +200,7 @@ class TestCase(AbstractTestCase):
 
         # Environment variables specific to this case
         self._variables: dict[str, str] = {}
+        self._environment_modifications: list[tuple[str, str, str, str]] = []
 
         self._measurements: dict[str, Any] = {}
 
@@ -703,6 +704,14 @@ class TestCase(AbstractTestCase):
         self._variables = dict(arg)
 
     @property
+    def environment_modifications(self) -> list[tuple[str, str, str, str]]:
+        return self._environment_modifications
+
+    @environment_modifications.setter
+    def environment_modifications(self, arg: list[tuple[str, str, str, str]]) -> None:
+        self._environment_modifications = list(arg)
+
+    @property
     def measurements(self) -> dict[str, Any]:
         return self._measurements
 
@@ -976,6 +985,14 @@ class TestCase(AbstractTestCase):
         if kwds:
             self.variables.update(kwds)
 
+    def modify_env(
+        self, name: str, value: str | list[str] = "", *, action: str = "set", sep: str = ":"
+    ) -> None:
+        if isinstance(value, list):
+            value = sep.join(value)
+        assert isinstance(value, str)
+        self.environment_modifications.append((name, value, action, sep))
+
     def add_measurement(self, **kwds: Any) -> None:
         self.measurements.update(kwds)
 
@@ -1108,9 +1125,9 @@ class TestCase(AbstractTestCase):
                 dep.refresh()
 
     @contextmanager
-    def rc_environ(self, **variables) -> Generator[None, None, None]:
+    def rc_environ(self, **variables: str) -> Generator[None, None, None]:
         save_env = os.environ.copy()
-        variables.update(dict(PYTHONPATH=self.pythonpath))
+        variables = dict(variables)
         vars = {}
         vars["cpu_ids"] = variables["NVTEST_CPU_IDS"] = ",".join(map(str, self.cpu_ids))
         vars["gpu_ids"] = variables["NVTEST_GPU_IDS"] = ",".join(map(str, self.gpu_ids))
@@ -1119,11 +1136,20 @@ class TestCase(AbstractTestCase):
                 os.environ[key] = value % vars
             except Exception:
                 pass
+        for name, value, action, sep in self.environment_modifications:
+            if action == "set":
+                variables[name] = value
+            elif action == "unset":
+                os.environ.pop(name, None)
+            elif action == "prepend-path":
+                variables[name] = f"{value}{sep}{os.getenv(name, '')}"
+            elif action == "append-path":
+                variables[name] = f"{os.getenv(name, '')}{sep}{value}"
         for key, value in self.variables.items():
             variables[key] = value % vars
-        for var, value in variables.items():
-            os.environ[var] = value
-        os.environ["PATH"] = f"{self.working_directory}:{os.environ['PATH']}"
+        variables["PYTHONPATH"] = f"{self.pythonpath}:{os.getenv('PYTHONPATH', '')}"
+        variables["PATH"] = f"{self.working_directory}:{os.environ['PATH']}"
+        os.environ.update(variables)
         try:
             for module in self.modules:
                 load_module(module)

@@ -4,10 +4,7 @@ import json
 import os
 import re
 import subprocess
-from contextlib import contextmanager
 from typing import Any
-from typing import Generator
-from typing import MutableMapping
 
 import nvtest
 from _nvtest import config
@@ -233,7 +230,9 @@ class CTestTestCase(TestCase):
         if required_files:
             self.required_files = required_files
 
-        self.environment_modification = environment_modification
+        if environment_modification is not None:
+            self.apply_environment_modifications(environment_modification)
+
         self.pass_regular_expression = pass_regular_expression
         self.fail_regular_expression = fail_regular_expression
         self.skip_regular_expression = skip_regular_expression
@@ -281,40 +280,24 @@ class CTestTestCase(TestCase):
         cmd.extend(self.postflags or [])
         return cmd
 
-    @contextmanager
-    def rc_environ(self, **variables: str) -> Generator[None, None, None]:
-        with super().rc_environ(**variables):
-            self.apply_environment_modifications(os.environ)
-            yield
-
-    def apply_environment_modifications(self, env: MutableMapping[str, str]) -> None:
-        if self.environment_modification is None:
-            return
-        for em in self.environment_modification:
+    def apply_environment_modifications(self, mods: list[dict[str, str]]) -> None:
+        for em in mods:
             op, name, value = em["op"], em["name"], em["value"]
             match op:
-                case "set":
-                    env[name] = value
-                case "unset":
-                    env.pop(name, None)
+                case "set" | "unset":
+                    self.modify_env(name, value, action=op)
                 case "string_append":
-                    old = os.getenv(name, "")
-                    env[name] = f"{old}{value}"
+                    self.modify_env(name, f"{os.getenv(name, '')}{value}", action="set")
                 case "string_prepend":
-                    old = os.getenv(name, "")
-                    env[name] = f"{value}{old}"
+                    self.modify_env(name, f"{value}{os.getenv(name, '')}", action="set")
                 case "path_list_append":
-                    old = os.getenv(name, "")
-                    env[name] = f"{old}:{value}"
+                    self.modify_env(name, value, action="append-path", sep=":")
                 case "path_list_prepend":
-                    old = os.getenv(name, "")
-                    env[name] = f"{value}:{old}"
+                    self.modify_env(name, value, action="prepend-path", sep=":")
                 case "cmake_list_append":
-                    old = os.getenv(name, "")
-                    env[name] = f"{old};{value}"
+                    self.modify_env(name, value, action="append-path", sep=";")
                 case "cmake_list_prepend":
-                    old = os.getenv(name, "")
-                    env[name] = f"{value};{old}"
+                    self.modify_env(name, value, action="prepend-path", sep=";")
 
     def setup(self, work_tree: str, copy_all_resources: bool = False, clean: bool = True) -> None:
         super().setup(work_tree, copy_all_resources=copy_all_resources, clean=False)
