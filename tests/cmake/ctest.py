@@ -234,21 +234,23 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
 
         pool = [
             {
-                ".local": "1",
-                "cpus": [
-                    {"id": "0", "slots": 1},
-                    {"id": "1", "slots": 1},
-                    {"id": "2", "slots": 1},
-                    {"id": "3", "slots": 1},
-                    {"id": "4", "slots": 1},
-                ],
-                "gpus": [
-                    {"id": "0", "slots": 2},
-                    {"id": "1", "slots": 4},
-                    {"id": "2", "slots": 2},
-                    {"id": "3", "slots": 1},
-                ],
-                "crypto_chips": [{"id": "card0", "slots": 4}],
+                "local": {
+                    ".id": "1",
+                    "cpus": [
+                        {"id": "0", "slots": 1},
+                        {"id": "1", "slots": 1},
+                        {"id": "2", "slots": 1},
+                        {"id": "3", "slots": 1},
+                        {"id": "4", "slots": 1},
+                    ],
+                    "gpus": [
+                        {"id": "0", "slots": 2},
+                        {"id": "1", "slots": 4},
+                        {"id": "2", "slots": 2},
+                        {"id": "3", "slots": 1},
+                    ],
+                    "crypto_chips": [{"id": "card0", "slots": 4}],
+                }
             }
         ]
         with nvtest.config.override():

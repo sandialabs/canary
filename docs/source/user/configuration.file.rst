@@ -3,12 +3,12 @@
 Configuration file
 ==================
 
-In addition to the command line, configuration variables can be explicitly set ``toml`` formatted files in:
+In addition to the command line, configuration variables can be explicitly set ``yaml`` formatted files in:
 
 - ``~/.nvtest``.
-- ``./nvtest.toml``
+- ``./nvtest.yaml``
 
-``~/.nvtest`` is the "global" configuration scope while ``./nvtest.toml`` is the "local" configuration scope.  The order of precedence for configuration scopes is
+``~/.nvtest`` is the "global" configuration scope while ``./nvtest.yaml`` is the "local" configuration scope.  The order of precedence for configuration scopes is
 
 1. Command line
 2. Local configuration

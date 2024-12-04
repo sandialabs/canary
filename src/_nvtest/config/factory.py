@@ -73,11 +73,11 @@ class ResourcePool:
     .. code-block:: yaml
 
         local:
-          <name>:
-          - id: <string resource id>
-            slots: <integer number of slots>
+          str:
+          - id: str
+            slots: int
 
-    where ``name`` is some resource name.  For example, a machine with 4 GPUs may have
+    For example, a machine with 4 GPUs may have
 
     .. code-block:: yaml
 
@@ -97,44 +97,42 @@ class ResourcePool:
 
     .. code-block:: yaml
 
-        pool:
-        - .local: <pid>
-          <name>:
-          - id: <string id>
-            slots: <integer number of slots>
+        resource_pool:
+        - local:
+          id: str
+          str:
+          - id: str
+            slots: int
 
-    where ``pid`` is the ID of the ith entry in ``pool``
-
-    .. note::
-
-      The ``pool`` root object is used because toml does not support root-level arrays.  Otherwise,
-      we could have accepted a list of ``local``.
+    where ``local:id`` is the ID of the ith entry in ``pool``
 
     For example, a machine having 2 nodes with 4 GPUs per node may have
 
     .. code-block:: yaml
 
-        pool:
-        - .local: "01"
-          gpus:
-          - id: "01"
-            slots: 1
-          - id: "02"
-            slots: 1
-          - id: "03"
-            slots: 1
-          - id: "04"
-            slots: 1
-        - .local: "02"
-          gpus:
-          - id: "01"
-            slots: 1
-          - id: "02"
-            slots: 1
-          - id: "03"
-            slots: 1
-          - id: "04"
-            slots: 1
+        resource_pool:
+        - local:
+            .id: "01"
+            gpus:
+            - .id: "01"
+              slots: 1
+            - id: "02"
+              slots: 1
+            - id: "03"
+              slots: 1
+            - id: "04"
+              slots: 1
+        - local:
+            .id: "02"
+            gpus:
+            - id: "01"
+                slots: 1
+            - id: "02"
+                slots: 1
+            - id: "03"
+                slots: 1
+            - id: "04"
+                slots: 1
 
     Resource allocation
     -------------------
@@ -175,8 +173,9 @@ class ResourcePool:
     def fill(self, pool: list[dict[str, Any]]) -> None:
         self.clear()
         gids: dict[str, int] = {}
-        for i, local in enumerate(pool):
-            pid = str(local.pop(".local", i))
+        for i, item in enumerate(pool):
+            local = item["local"]
+            pid = str(local.pop(".id", i))
             for type, instances in local.items():
                 if type.startswith("."):
                     continue
@@ -201,11 +200,12 @@ class ResourcePool:
             return 0
         raise KeyError(item)
 
-    def asdict(self) -> dict[str, list[dict[str, Any]]]:
+    def aslist(self) -> list[dict[str, Any]]:
         pool: list[dict[str, Any]] = []
         for pid, spec in self.pool.items():
-            pool.append({".local": pid} | spec)
-        return {"pool": pool}
+            local = {".id": pid} | spec
+            pool.append({"local": local})
+        return pool
 
     def gid(self, type: str, pid: str, lid: str) -> int:
         return self.map[type][(pid, lid)]
@@ -239,15 +239,15 @@ class ResourcePool:
     def fill_uniform(self, *, node_count: int, cpus_per_node: int, **kwds: int) -> None:
         pool: list[dict[str, Any]] = []
         for i in range(node_count):
-            spec: dict[str, Any] = {}
+            local: dict[str, Any] = {}
             for j in range(cpus_per_node):
-                spec.setdefault("cpus", []).append({"id": str(j), "slots": 1})
+                local.setdefault("cpus", []).append({"id": str(j), "slots": 1})
             for name, count in kwds.items():
-                assert name.endswith("_per_node")
-                for j in range(count):
-                    spec.setdefault(name[:-9], []).append({"id": str(j), "slots": 1})
-            spec[".local"] = str(i)
-            pool.append(spec)
+                if name.endswith("_per_node"):
+                    for j in range(count):
+                        local.setdefault(name[:-9], []).append({"id": str(j), "slots": 1})
+            local[".id"] = str(i)
+            pool.append({"local": local})
         self.fill(pool)
 
     def validate(self, obj: "AbstractTestCase") -> None:
@@ -591,7 +591,7 @@ class Config:
         self.build = Build(compiler=compiler, **snapshot["build"])
         self.options = argparse.Namespace(**snapshot["options"])
         self.resource_pool = ResourcePool()
-        self.resource_pool.fill(snapshot["resource_pool"]["pool"])
+        self.resource_pool.fill(snapshot["resource_pool"])
         for key, val in snapshot["config"].items():
             setattr(self, key, val)
 
@@ -615,7 +615,7 @@ class Config:
         snapshot["test"] = dataclasses.asdict(self.test)
         snapshot["batch"] = dataclasses.asdict(self.batch)
         snapshot["build"] = dataclasses.asdict(self.build)
-        snapshot["resource_pool"] = self.resource_pool.asdict()
+        snapshot["resource_pool"] = self.resource_pool.aslist()
         snapshot["options"] = vars(self.options)
         config = snapshot.setdefault("config", {})
         config["invocation_dir"] = self.invocation_dir
@@ -739,12 +739,13 @@ class Config:
     @classmethod
     def read_config(cls, file: str) -> dict:
         try:
-            import toml
+            import yaml
         except ImportError:
-            logging.warning("Install toml to read configuration file {file!r}")
+            logging.warning("Install yaml to read configuration file {file!r}")
             return {}
 
-        data = toml.load(file)
+        with open(file) as fh:
+            data = yaml.safe_load(fh)
         variables = dict(os.environ)
 
         # make variables available in other config sections
@@ -785,32 +786,28 @@ class Config:
                 home = os.environ["HOME"]
                 return os.path.join(home, ".nvtest")
         elif scope == "local":
-            return os.path.abspath("./nvtest.toml")
+            return os.path.abspath("./nvtest.yaml")
         return None
 
     @classmethod
     def save(cls, path: str, scope: str | None = None):
-        import toml
+        import yaml
 
         file = cls.config_file(scope or "local")
         assert file is not None
         section, key, value = path.split(":")
         with open(file, "r") as fh:
-            config = toml.load(fh)
+            config = yaml.safe_load(fh)
         config.setdefault(section, {})[key] = safe_loads(value)
         with open(file, "w") as fh:
-            toml.dump(config, fh)
+            yaml.dump(config, fh, default_flow_style=False)
 
     def getoption(self, key: str, default: Any = None) -> Any:
         """Compatibility with external tools"""
         return getattr(self.options, key, default)
 
     def describe(self, section: str | None = None) -> str:
-        def join_ilist(a: list[Any], threshold: int = 8):
-            if len(a) > threshold:
-                a = a[: threshold // 2] + ["..."] + a[-threshold // 2 :]
-            return ", ".join(str(_) for _ in a)
-
+        asdict: dict[str, Any]
         if section is not None:
             asdict = {section: dataclasses.asdict(getattr(self, section))}
         else:
@@ -820,7 +817,7 @@ class Config:
         if "session" in asdict:
             asdict["session"] = self.session.asdict()
         if "resource_pool" in asdict:
-            asdict["resource_pool"] = self.resource_pool.pool
+            asdict["resource_pool"] = self.resource_pool.aslist()
         if "options" in asdict:
             asdict["options"] = vars(self.options)
         if "variables" in asdict:

@@ -6,6 +6,7 @@ license = {"file" = "LICENSE"}
 description = "nvtest: application testing with Python"
 requires-python = ">=3.10"
 dependencies = [
+  "PyYAML",
   "hpc-connect @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/hpc-connect"
 ]
 
