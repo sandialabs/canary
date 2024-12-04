@@ -87,9 +87,9 @@ class ResourcePool:
             slots: 1
           - id: "02"
             slots: 1
-          - id: "02"
+          - id: "03"
             slots: 1
-          - id: "02"
+          - id: "04"
             slots: 1
 
     nvtest adopts a similar layout to work on multi-node systems by allowing for a list of ``local``
@@ -99,10 +99,10 @@ class ResourcePool:
 
         resource_pool:
         - local:
-          id: str
-          str:
-          - id: str
-            slots: int
+            .id: str
+            str:
+            - id: str
+              slots: int
 
     where ``local:id`` is the ID of the ith entry in ``pool``
 
