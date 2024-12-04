@@ -2,7 +2,9 @@ import argparse
 import copy
 import dataclasses
 import json
+import math
 import os
+import re
 from string import Template
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -57,110 +59,285 @@ class Variables(dict):
         return super().pop(key, default)
 
 
-class Resources:
+class ResourcePool:
     """Class representing resources available on the computer
 
-    By default, the resource set consists of the number of cpus
+    Args:
+      pool: The resource pool specification
 
-    .. code-block: yaml
+    Resource specification
+    ----------------------
 
-      name:
-      - id: str  # the resource name
-        .slots: int  # number available
+    The specification for the resource pool is adopted from the ctest schema:
+
+    .. code-block:: yaml
+
+        local:
+          <name>:
+          - id: <string resource id>
+            slots: <integer number of slots>
+
+    where ``name`` is some resource name.  For example, a machine with 4 GPUs may have
+
+    .. code-block:: yaml
+
+        local:
+          gpus:
+          - id: "01"
+            slots: 1
+          - id: "02"
+            slots: 1
+          - id: "02"
+            slots: 1
+          - id: "02"
+            slots: 1
+
+    nvtest adopts a similar layout to work on multi-node systems by allowing for a list of ``local``
+    objects and giving each ``local`` object its own ``id``:
+
+    .. code-block:: yaml
+
+        pool:
+        - .local: <pid>
+          <name>:
+          - id: <string id>
+            slots: <integer number of slots>
+
+    where ``pid`` is the ID of the ith entry in ``pool``
+
+    .. note::
+
+      The ``pool`` root object is used because toml does not support root-level arrays.  Otherwise,
+      we could have accepted a list of ``local``.
+
+    For example, a machine having 2 nodes with 4 GPUs per node may have
+
+    .. code-block:: yaml
+
+        pool:
+        - .local: "01"
+          gpus:
+          - id: "01"
+            slots: 1
+          - id: "02"
+            slots: 1
+          - id: "03"
+            slots: 1
+          - id: "04"
+            slots: 1
+        - .local: "02"
+          gpus:
+          - id: "01"
+            slots: 1
+          - id: "02"
+            slots: 1
+          - id: "03"
+            slots: 1
+          - id: "04"
+            slots: 1
+
+    Resource allocation
+    -------------------
+
+    Resources are allocated from a global resource pool that is generated from the list of ``local``
+    resource specifications.  A global-to-local mapping is maintained which maps the global resource
+    ID understood by ``nvtest`` to the local resource ID given in the ``local`` resource spec.
+    E.g., ``gid = map[type][(pid, lid)]``.
+
+    Internal representation
+    -----------------------
+
+    Internally, the pool of resources is stored as a dictionary with layout (eg, for the example
+    above):
+
+    .. code-block:: python
+
+       pool = {
+           "01": {
+             "gpus": [
+               {"id": "01", "slots": 1},
+               {"id": "02", "slots": 1},
+               {"id": "03", "slots": 1},
+               {"id": "04", "slots": 1},
+             ]
+           }
+       }
 
     """
 
-    def __init__(self, types: dict[str, list[dict]] | None = None) -> None:
-        self.types: dict[str, list[dict]] = types or {}
+    def __init__(self, pool: list[dict[str, Any]] | None = None) -> None:
+        self.map: dict[str, dict[tuple[str, str], int]] = {}
+        self.pool: dict[str, Any] = {}
+        self.types: set[str] = set()
+        if pool:
+            self.fill(pool)
 
-    def set(self, name: str, n: int) -> None:
-        resource: list[dict] = []
-        for i in range(n):
-            instance = {"id": str(i), "slots": 1}
-            resource.append(instance)
-        self.types[name] = resource
+    def fill(self, pool: list[dict[str, Any]]) -> None:
+        self.clear()
+        gids: dict[str, int] = {}
+        for i, local in enumerate(pool):
+            pid = str(local.pop(".local", i))
+            for type, instances in local.items():
+                if type.startswith("."):
+                    continue
+                self.types.add(type)
+                for instance in instances:
+                    lid = instance["id"]
+                    gid = gids.setdefault(type, 0)
+                    self.map.setdefault(type, {})[(pid, lid)] = gid
+                    gids[type] += 1
+            self.pool[pid] = local
+
+    def pinfo(self, item: str) -> Any:
+        if item == "cpus_per_node":
+            for local in self.pool.values():
+                if "cpus" in local:
+                    return len(local["cpus"])
+            return 0
+        if item == "gpus_per_node":
+            for local in self.pool.values():
+                if "gpus" in local:
+                    return len(local["gpus"])
+            return 0
+        raise KeyError(item)
+
+    def asdict(self) -> dict[str, list[dict[str, Any]]]:
+        pool: list[dict[str, Any]] = []
+        for pid, spec in self.pool.items():
+            pool.append({".local": pid} | spec)
+        return {"pool": pool}
+
+    def gid(self, type: str, pid: str, lid: str) -> int:
+        return self.map[type][(pid, lid)]
+
+    def local_ids(self, type: str, arg_gid: int) -> tuple[str, str]:
+        for key, gid in self.map[type].items():
+            if arg_gid == gid:
+                return key[0], key[1]
+        raise KeyError((type, arg_gid))
+
+    def node_count(self, obj: "AbstractTestCase") -> int:
+        """Determine the number of nodes required by ``obj``"""
+        node_count: int = 1
+        local = next(iter(self.pool.values()))
+        if "cpus" in self.types:
+            # always should be
+            cpus_per_node = len(local["cpus"])
+            cpus = max(_.cpus for _ in obj)
+            node_count = math.ceil(cpus / cpus_per_node)
+        if "gpus" in self.types:
+            gpus_per_node = len(local["gpus"])
+            gpus = max(_.gpus for _ in obj)
+            node_count = max(math.ceil(gpus / gpus_per_node))
+        return node_count
+
+    def clear(self) -> None:
+        self.map.clear()
+        self.pool.clear()
+        self.types.clear()
+
+    def fill_uniform(self, *, node_count: int, cpus_per_node: int, **kwds: int) -> None:
+        pool: list[dict[str, Any]] = []
+        for i in range(node_count):
+            spec: dict[str, Any] = {}
+            for j in range(cpus_per_node):
+                spec.setdefault("cpus", []).append({"id": str(j), "slots": 1})
+            for name, count in kwds.items():
+                assert name.endswith("_per_node")
+                for j in range(count):
+                    spec.setdefault(name[:-9], []).append({"id": str(j), "slots": 1})
+            spec[".local"] = str(i)
+            pool.append(spec)
+        self.fill(pool)
 
     def validate(self, obj: "AbstractTestCase") -> None:
         """determine if the resources for this test are satisfiable"""
         required = obj.required_resources()
-        save = copy.deepcopy(self.types)
         try:
+            save = copy.deepcopy(self.pool)
             for group in required:
-                for type, slots in group:
-                    if type not in self.types:
-                        msg = f"resource type {type!r} is not registered with nvtest"
+                for item in group:
+                    if item["type"] not in self.types:
+                        msg = f"resource type {item['type']!r} is not registered with nvtest"
                         raise ResourceUnsatisfiable(msg)
-                    for instance in self.types[type]:
+                    try:
+                        self._get_from_pool(item["type"], item["slots"])
+                    except ResourceUnavailable:
+                        msg = f"insufficient slots of {item['type']!r} available"
+                        raise ResourceUnsatisfiable(msg) from None
+        finally:
+            self.pool.clear()
+            self.pool.update(save)
+
+    def _get_from_pool(self, type: str, slots: int) -> dict[str, Any]:
+        for pid, local in self.pool.items():
+            for name, instances in local.items():
+                if type == name:
+                    for instance in sorted(instances, key=lambda x: x["slots"]):
                         if slots <= instance["slots"]:
                             instance["slots"] -= slots
+                            gid = self.gid(type, pid, instance["id"])
+                            return {"gid": gid, "slots": slots}
+        raise ResourceUnavailable
+
+    def acquire(self, obj: "AbstractTestCase") -> None:
+        """Returns resources available to the test
+
+        specs[i] = {<type>: [{'gid': <gid>, 'slots': <slots>}, ...], ... }
+
+        """
+        totals: dict[str, int] = {}
+        required = obj.required_resources()
+        resource_specs: list[dict[str, list[dict]]] = []
+        try:
+            saved = copy.deepcopy(self.pool)
+            for group in required:
+                # {type: [{gid: ..., slots: ...}]}
+                spec: dict[str, list[dict]] = {}
+                for item in group:
+                    type, slots = item["type"], item["slots"]
+                    if type not in self.types:
+                        raise TypeError(f"unknown resource requirement type {type!r}")
+                    r = self._get_from_pool(item["type"], item["slots"])
+                    items = spec.setdefault(type, [])
+                    items.append(r)
+                    totals[type] = totals.get(type, 0) + slots
+                resource_specs.append(spec)
+        except Exception:
+            self.pool.clear()
+            self.pool.update(saved)
+            raise
+        if logging.LEVEL == logging.DEBUG:
+            for type, n in totals.items():
+                N = sum([_["slots"] for local in self.pool.values() for _ in local[type]]) + n
+                logging.debug(f"Acquiring {n} {type} from {N} available")
+        obj.resources = resource_specs
+        return
+
+    def reclaim(self, obj: "AbstractTestCase") -> None:
+        for resource in obj.resources:  # list[dict[str, list[dict]]]) -> None:
+            for type, items in resource.items():
+                for item in items:
+                    pid, lid = self.local_ids(type, item["gid"])
+                    for instance in self.pool[pid][type]:
+                        if instance["id"] == lid:
+                            instance["slots"] += item["slots"]
                             break
                     else:
-                        raise ResourceUnsatisfiable(f"insufficient slots of {type!r} available")
-        finally:
-            self.types.clear()
-            self.types.update(save)
+                        raise ValueError("Attempting to reclaim a resource whose ID is unknown")
+        obj.resources.clear()
 
 
 class Session:
     def __init__(
         self,
         *,
-        node_count: int | None = None,
-        node_ids: list[int] | None = None,
-        cpu_count: int | None = None,
-        cpu_ids: list[int] | None = None,
-        gpu_count: int | None = None,
-        gpu_ids: list[int] | None = None,
         timeout: float = -1.0,
         workers: int = -1,
         work_tree: str | None = None,
         level: int | None = None,
         stage: str | None = None,
     ):
-        self._node_count: int
-        self._node_ids: list[int]
-        self._cpu_count: int
-        self._cpu_ids: list[int]
-        self._gpu_count: int = 0
-        self._gpu_ids: list[int] = []
-
-        if node_count is not None:
-            if node_ids is not None and node_count != len(node_ids):
-                raise ValueError("node_count and node_ids are mutually exclusive")
-            self._node_count = node_count
-            self._node_ids = list(range(node_count))
-        elif node_ids is not None:
-            if node_count is not None and node_count != len(node_ids):
-                raise ValueError("node_count and node_ids are mutually exclusive")
-            self._node_ids = list(node_ids)
-            self._node_count = len(node_ids)
-        else:
-            raise TypeError("missing required argument: node_count")
-        if cpu_count is not None:
-            if cpu_ids is not None and cpu_count != len(cpu_ids):
-                raise ValueError("cpu_count and cpu_ids are mutually exclusive")
-            self._cpu_count = cpu_count
-            self._cpu_ids = list(range(cpu_count))
-        elif cpu_ids is not None:
-            if cpu_count is not None and cpu_count != len(cpu_ids):
-                raise ValueError("cpu_count and cpu_ids are mutually exclusive")
-            self._cpu_ids = list(cpu_ids)
-            self._cpu_count = len(cpu_ids)
-        else:
-            raise TypeError("missing required argument: cpu_count")
-        if gpu_count is not None:
-            if gpu_ids is not None and gpu_count != len(gpu_ids):
-                raise ValueError("gpu_count and gpu_ids are mutually exclusive")
-            self._gpu_count = gpu_count
-            self._gpu_ids = list(range(gpu_count))
-        elif gpu_ids is not None:
-            if gpu_count is not None and gpu_count != len(gpu_ids):
-                raise ValueError("gpu_count and gpu_ids are mutually exclusive")
-            self._gpu_ids = list(gpu_ids)
-            self._gpu_count = len(gpu_ids)
-        else:
-            raise TypeError("missing required argument: gpu_count")
-
         self.timeout = timeout
         self.workers = workers
         self.work_tree = work_tree
@@ -183,60 +360,6 @@ class Session:
         d["level"] = None
         return d
 
-    @property
-    def node_count(self) -> int:
-        return self._node_count
-
-    @node_count.setter
-    def node_count(self, arg: int) -> None:
-        self._node_count = arg
-        self._node_ids = list(range(arg))
-
-    @property
-    def node_ids(self) -> list[int]:
-        return self._node_ids
-
-    @node_ids.setter
-    def node_ids(self, arg: list[int]) -> None:
-        self._node_ids = list(arg)
-        self._node_count = len(arg)
-
-    @property
-    def cpu_count(self) -> int:
-        return self._cpu_count
-
-    @cpu_count.setter
-    def cpu_count(self, arg: int) -> None:
-        self._cpu_count = arg
-        self._cpu_ids = list(range(arg))
-
-    @property
-    def cpu_ids(self) -> list[int]:
-        return self._cpu_ids
-
-    @cpu_ids.setter
-    def cpu_ids(self, arg: list[int]) -> None:
-        self._cpu_ids = list(arg)
-        self._cpu_count = len(arg)
-
-    @property
-    def gpu_count(self) -> int:
-        return self._gpu_count
-
-    @gpu_count.setter
-    def gpu_count(self, arg: int) -> None:
-        self._gpu_count = arg
-        self._gpu_ids = list(range(arg))
-
-    @property
-    def gpu_ids(self) -> list[int]:
-        return self._gpu_ids
-
-    @gpu_ids.setter
-    def gpu_ids(self, arg: list[int]) -> None:
-        self._gpu_ids = list(arg)
-        self._gpu_count = len(arg)
-
 
 @dataclasses.dataclass
 class Test:
@@ -251,8 +374,7 @@ class Machine:
 
     Args:
       node_count: number of compute nodes
-      cpus_per_node: number of **compute** CPUs (MPI ranks) per node
-      gpus_per_node: number of **compute** GPUs per node
+      *_per_node: number of **compute** '*' per node
 
     """
 
@@ -348,6 +470,7 @@ class Config:
     batch: Batch = dataclasses.field(default_factory=Batch)
     build: Build = dataclasses.field(default_factory=Build)
     options: argparse.Namespace = dataclasses.field(default_factory=argparse.Namespace)
+    resource_pool: ResourcePool = dataclasses.field(default_factory=ResourcePool)
 
     @classmethod
     def factory(cls) -> "Config":
@@ -379,9 +502,7 @@ class Config:
         mc.update(config.get("machine", {}))
         kwds["machine"] = m = Machine(**mc)
 
-        kwds["session"] = Session(
-            node_count=m.node_count, cpu_count=m.cpu_count, gpu_count=m.gpu_count
-        )
+        kwds["session"] = Session()
 
         kwds["test"] = Test()
 
@@ -392,27 +513,24 @@ class Config:
             kwds["build"]["compiler"] = Compiler(**c)
             kwds["build"] = Build(**kwds["build"])
 
+        kwds["resource_pool"] = ResourcePool()
+        kwds["resource_pool"].fill_uniform(
+            node_count=m.node_count, cpus_per_node=m.cpus_per_node, gpus_per_node=m.gpus_per_node
+        )
+
         return cls(**kwds)
 
-    def update_resource_counts(
-        self,
-        *,
-        node_count: int | None = None,
-        cpus_per_node: int | None = None,
-        gpus_per_node: int | None = None,
-    ) -> None:
-        updated = any([cnt is not None for cnt in (node_count, cpus_per_node, gpus_per_node)])
-        if not updated:
-            return
+    def update_resource_counts(self, *, node_count: int | None = None, **kwds: int) -> None:
+        updated = 0
         if node_count is not None:
+            updated += 1
             self.machine.node_count = node_count
-        if cpus_per_node is not None:
-            self.machine.cpus_per_node = cpus_per_node
-        if gpus_per_node is not None:
-            self.machine.gpus_per_node = gpus_per_node
-        self.session.node_count = self.machine.node_count
-        self.session.cpu_count = self.machine.cpu_count
-        self.session.gpu_count = self.machine.gpu_count
+        for key, val in kwds.items():
+            if key.endswith("_per_node"):
+                updated += 1
+                setattr(self.machine, key, val)
+        if updated:
+            self.resource_pool.fill_uniform(node_count=self.machine.node_count, **kwds)
 
     def validate(self) -> None:
         errors: int = 0
@@ -472,6 +590,8 @@ class Config:
         compiler = Compiler(**snapshot["build"].pop("compiler"))
         self.build = Build(compiler=compiler, **snapshot["build"])
         self.options = argparse.Namespace(**snapshot["options"])
+        self.resource_pool = ResourcePool()
+        self.resource_pool.fill(snapshot["resource_pool"]["pool"])
         for key, val in snapshot["config"].items():
             setattr(self, key, val)
 
@@ -495,6 +615,7 @@ class Config:
         snapshot["test"] = dataclasses.asdict(self.test)
         snapshot["batch"] = dataclasses.asdict(self.batch)
         snapshot["build"] = dataclasses.asdict(self.build)
+        snapshot["resource_pool"] = self.resource_pool.asdict()
         snapshot["options"] = vars(self.options)
         config = snapshot.setdefault("config", {})
         config["invocation_dir"] = self.invocation_dir
@@ -573,13 +694,14 @@ class Config:
                 case ["batch", "duration"]:
                     self.batch.duration = time_in_seconds(value)
                 case ["machine", key]:
-                    if key not in ("node_count", "cpus_per_node", "gpus_per_node"):
+                    if not re.search(r"^(node_count|[a-z_][a-z0-0_]*_per_node)$", key):
                         errors += 1
                         logging.error(
                             f"Illegal machine configuration setting: {key!r}.  Valid settings are "
                             "node_count, cpus_per_node, and gpus_per_node"
                         )
-                    counts[key] = int(value)
+                    else:
+                        counts[key] = int(value)
                 case ["test", key]:
                     if key not in ("timeout_fast", "timeout_long", "timeout_default"):
                         errors += 1
@@ -590,24 +712,14 @@ class Config:
                     setattr(self.test, key, time_in_seconds(value))
         if errors:
             raise ValueError("Stopping due to previous errors")
+
         if counts:
             self.update_resource_counts(**counts)
-        if getattr(args, "session_node_count", None) is not None:
-            self.session.node_count = args.session_node_count
-        if getattr(args, "session_node_ids", None) is not None:
-            self.session.node_ids = args.session_node_ids
-        if getattr(args, "session_cpu_count", None) is not None:
-            self.session.cpu_count = args.session_cpu_count
-        if getattr(args, "session_cpu_ids", None) is not None:
-            self.session.cpu_ids = args.session_cpu_ids
-        if getattr(args, "session_gpu_count", None) is not None:
-            self.session.gpu_count = args.session_gpu_count
-        if getattr(args, "session_gpu_ids", None) is not None:
-            self.session.gpu_ids = args.session_gpu_ids
-        if getattr(args, "session_workers", None) is not None:
-            self.session.workers = args.session_workers
-        if getattr(args, "session_timeout", None) is not None:
-            self.session.timeout = args.session_timeout
+
+        if getattr(args, "workers", None) is not None:
+            self.session.workers = args.workers
+        if getattr(args, "timeout", None) is not None:
+            self.session.timeout = args.timeout
         if getattr(args, "batch_duration", None) is not None:
             self.batch.duration = args.batch_duration
             self.batch.scheme = "duration"
@@ -707,9 +819,12 @@ class Config:
             asdict["system"]["os"] = vars(self.system.os)
         if "session" in asdict:
             asdict["session"] = self.session.asdict()
-            asdict["session"]["cpu_ids"] = join_ilist(asdict["session"]["cpu_ids"])
+        if "resource_pool" in asdict:
+            asdict["resource_pool"] = self.resource_pool.pool
         if "options" in asdict:
             asdict["options"] = vars(self.options)
+        if "variables" in asdict:
+            asdict["variables"] = dict(asdict["variables"])
         try:
             import yaml
 
@@ -751,4 +866,8 @@ def safe_loads(arg):
 
 
 class ResourceUnsatisfiable(Exception):
+    pass
+
+
+class ResourceUnavailable(Exception):
     pass

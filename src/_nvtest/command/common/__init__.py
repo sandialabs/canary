@@ -1,3 +1,4 @@
+import argparse
 import os
 from typing import TYPE_CHECKING
 
@@ -81,15 +82,22 @@ def add_work_tree_arguments(parser: "Parser") -> None:
 
 def add_resource_arguments(parser: "Parser") -> None:
     from .resource import BatchResourceSetter
-    from .resource import ResourceSetter
+    from .resource import DeprecatedResourceSetter
 
     group = parser.add_argument_group("resource control")
+    group.add_argument("-l", help=argparse.SUPPRESS, action=DeprecatedResourceSetter)
     group.add_argument(
-        "-l",
-        action=ResourceSetter,
-        metavar="resource",
-        dest="resource_setter",
-        help=ResourceSetter.help_page("-l"),
+        "--workers",
+        metavar="N",
+        type=int,
+        help="Execute the test session asynchronously using a pool of at most N workers",
+    )
+    group.add_argument(
+        "--timeout",
+        metavar="T",
+        type=time_in_seconds,
+        help="Set a timeout on test session execution in seconds "
+        "(accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: None]",
     )
     group.add_argument(
         "--timeout-multiplier",

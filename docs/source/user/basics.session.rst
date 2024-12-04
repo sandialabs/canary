@@ -95,13 +95,13 @@ Batch
 [Optional] Group test cases into batches to run in a batch runner.  The default batching scheme is to:
 
 1. group cases by the number of compute nodes required to run; and
-2. partition each group into batches that complete in a set time (defined by the ``-l batch:length=T`` option).
+2. partition each group into batches that complete in a set time (defined by the ``-b length=T`` option).
 
 .. note::
 
    A test is always batched with tests requiring the same node count.
 
-Optionally, a fixed number of batches can be requested (``-l batch:count=N``).
+Optionally, a fixed number of batches can be requested (``-b count=N``).
 
 .. _run:
 
@@ -121,4 +121,4 @@ During test execution, ``nvtest`` navigates to each test directory and runs the 
 
 .. note::
 
-   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by the ``-l scope:type=X`` option (e.g. ``-l session:workers=N``, ``-l session:cpus=N``, etc.). See :ref:`basics-resource`.
+   The default behavior is to run cases asynchronously utilizing all available resources.  This behavior can be modified by ``--workers=N``. See :ref:`basics-resource`.

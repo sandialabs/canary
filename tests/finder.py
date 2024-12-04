@@ -112,8 +112,7 @@ def test_cpu_count(tmpdir):
             fh.write("import nvtest\n")
             fh.write("nvtest.directives.parameterize('cpus', [1, 4, 8, 32])\n")
     with nvtest.config.override():
-        nvtest.config.machine.cpus_per_node = 42
-        nvtest.config.session.cpu_count = 42
+        nvtest.config.update_resource_counts(cpus_per_node=42)
         finder = Finder()
         finder.add(workdir)
         finder.prepare()
@@ -121,7 +120,8 @@ def test_cpu_count(tmpdir):
         cases = finder.lock_and_filter(files)
         print([c.mask for c in cases])
         assert len([c for c in cases if not c.mask]) == 4
-        nvtest.config.session.cpu_count = 2
+    with nvtest.config.override():
+        nvtest.config.update_resource_counts(cpus_per_node=2)
         cases = finder.lock_and_filter(files)
         assert len([c for c in cases if not c.mask]) == 1
 

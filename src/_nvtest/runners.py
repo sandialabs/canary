@@ -1,6 +1,5 @@
 import abc
 import io
-import math
 import os
 import signal
 import subprocess
@@ -302,7 +301,7 @@ class BatchRunner(AbstractTestRunner):
                 job = hpc_connect.Job(
                     name=f"nvtest.{batch.id[:7]}",
                     commands=[nvtest_invocation],
-                    tasks=batch.max_cpus_required,
+                    tasks=max(_.cpus for _ in batch),
                     script=batch.submission_script_filename(),
                     output=batch.logfile(),
                     error=batch.logfile(),
@@ -386,11 +385,12 @@ class BatchRunner(AbstractTestRunner):
                 fp.write(f"-p {p} ")
 
         # The batch will be run in a compute node, so hpc_connect won't set the machine limits
-        tasks = arg.max_cpus_required if isinstance(arg, TestBatch) else arg.cpus
-        node_count = math.ceil(tasks / self.scheduler.config.cpus_per_node)
+        node_count = config.resource_pool.node_count(arg)
+        cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
+        gpus_per_node = config.resource_pool.pinfo("gpus_per_node")
         fp.write(f"-c machine:node_count:{node_count} ")
-        fp.write(f"-c machine:cpus_per_node:{config.machine.cpus_per_node} ")
-        fp.write(f"-c machine:gpus_per_node:{config.machine.gpus_per_node} ")
+        fp.write(f"-c machine:cpus_per_node:{cpus_per_node} ")
+        fp.write(f"-c machine:gpus_per_node:{gpus_per_node} ")
         fp.write(f"-C {config.session.work_tree} run -rv --stage={stage} ")
         if getattr(config.options, "fail_fast", False):
             fp.write("--fail-fast ")
@@ -400,10 +400,10 @@ class BatchRunner(AbstractTestRunner):
             if p != "pedantic":
                 fp.write(f"-P{p} ")
         if isinstance(arg, TestBatch) and config.batch.workers is not None:
-            fp.write(f"-l session:workers={config.batch.workers} ")
+            fp.write(f"-l workers={config.batch.workers} ")
         if timeoutx := config.getoption("timeout_multiplier"):
             fp.write(f"--timeout-multiplier={timeoutx} ")
-        fp.write("-l batch:scheduler=null ")  # guard against infinite batch recursion
+        fp.write("-b scheduler=null ")  # guard against infinite batch recursion
         sigil = "^" if isinstance(arg, TestBatch) else "/"
         fp.write(f"{sigil}{arg.id}")
         return fp.getvalue()

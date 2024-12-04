@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "                            /'                               /'\n                        --/'--                           --/'--\n     ,____  .     ,     /'         ____      ____        /'    \n    /'    ) |    /    /'         /'    )   /'    )--   /'      \n  /'    /'  |  /'   /'         /(___,/'   '---,      /'        \n/'    /(__ _|/(__  (__        (________ (___,/      (__\nsearching for tests in basic\ngenerating test cases from test files\ncollected 2 tests from 2 files\nselected 2 tests from 2 files\n==> Starting 8fa07b3: second\n==> Finished 8fa07b3: second PASS\n==> Starting 63f2de8: first\n==> Finished 63f2de8: first PASS\n\ud83d\udca5\ud83d\udca5 Session done -- 2 total, 2 pass in 00:00:00.00"
-}

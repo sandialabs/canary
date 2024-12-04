@@ -1,5 +1,4 @@
 import abc
-import copy
 import io
 import threading
 import time
@@ -21,14 +20,7 @@ from .util.time import timestamp
 
 
 class ResourceQueue(abc.ABC):
-    def __init__(
-        self,
-        *,
-        lock: threading.Lock,
-        workers: int,
-        cpu_ids: list[int],
-        gpu_ids: list[int],
-    ) -> None:
+    def __init__(self, *, lock: threading.Lock, workers: int) -> None:
         self.workers = workers
         self.buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
@@ -36,13 +28,7 @@ class ResourceQueue(abc.ABC):
         self._notrun: dict[int, Any] = {}
         self.meta: dict[int, dict] = {}
         self.lock = lock
-        self.resource_groups: dict[str, list[dict[str, str | int]]] = {}
         self.exclusive_lock: bool = False
-        for id in cpu_ids:
-            self.resource_groups.setdefault("cpus", []).append({"id": str(id), "slots": 1})
-        for id in gpu_ids:
-            self.resource_groups.setdefault("gpus", []).append({"id": str(id), "slots": 1})
-        self.cpu_count = len(self.resource_groups["cpus"])
 
     @abc.abstractmethod
     def iter_keys(self) -> list[int]: ...
@@ -76,48 +62,6 @@ class ResourceQueue(abc.ABC):
 
     def available_workers(self) -> int:
         return self.workers - len(self._busy)
-
-    def acquire_resources(
-        self, required: list[list[tuple[str, int]]]
-    ) -> list[tuple[str, str, int]]:
-        saved = copy.deepcopy(self.resource_groups)
-        if self.exclusive_lock:
-            raise ResourceUnavailable("waiting on exclusive lock")
-        totals: dict[str, int] = {}
-        resources: list[tuple[str, str, int]] = []
-        try:
-            for group in required:
-                for type, slots in group:
-                    if type not in self.resource_groups:
-                        raise TypeError(f"unknown resource requirement type {type!r}")
-                    for instance in self.resource_groups[type]:
-                        if slots <= instance["slots"]:  # type: ignore
-                            instance["slots"] -= slots  # type: ignore
-                            resources.append((type, instance["id"], slots))  # type: ignore
-                            totals[type] = totals.get(type, 0) + slots
-                            break
-                    else:
-                        raise ResourceUnavailable(f"insufficient slots of {type!r} available")
-        except Exception:
-            self.resource_groups.clear()
-            self.resource_groups.update(saved)
-            raise
-        else:
-            if config.debug:
-                N: int = 0
-                for type, n in totals.items():
-                    N = sum([_["slots"] for _ in self.resource_groups[type]]) + n
-                    logging.debug(f"Acquiring {n} {type} from {N} available")
-            return resources
-
-    def reclaim_resources(self, resources: list[tuple[str, str, int]]) -> None:
-        for type, id, slots in resources:
-            for instance in self.resource_groups[type]:
-                if instance["id"] == id:
-                    instance["slots"] += slots  # type: ignore
-                    break
-            else:
-                raise ValueError("Attempting to reclaim a resource whose ID is unknown")
 
     @property
     def qsize(self):
@@ -161,12 +105,13 @@ class ResourceQueue(abc.ABC):
                     try:
                         if obj.exclusive and self.busy():
                             continue
-                        resources = self.acquire_resources(obj.required_resources())
-                    except ResourceUnavailable:
+                        config.resource_pool.acquire(obj)
+                    except config.ResourceUnavailable:
                         continue
                     else:
                         self._busy[i] = self.buffer.pop(i)
-                        self._busy[i].assign_resources(resources)
+                        if obj.exclusive:
+                            self.exclusive_lock = True
                         return (i, self._busy[i])
         raise Busy
 
@@ -221,12 +166,7 @@ class ResourceQueue(abc.ABC):
 class DirectResourceQueue(ResourceQueue):
     def __init__(self, lock: threading.Lock) -> None:
         workers = int(config.session.workers)
-        super().__init__(
-            lock=lock,
-            cpu_ids=config.session.cpu_ids,
-            gpu_ids=config.session.gpu_ids,
-            workers=cpu_count() if workers < 0 else workers,
-        )
+        super().__init__(lock=lock, workers=cpu_count() if workers < 0 else workers)
 
     def iter_keys(self) -> list[int]:
         return sorted(self.buffer.keys(), key=lambda k: self.buffer[k].cpus)
@@ -236,11 +176,9 @@ class DirectResourceQueue(ResourceQueue):
 
     def put(self, *cases: Any) -> None:
         for case in cases:
-            if case.cpus > self.cpu_count:
-                raise ValueError(
-                    f"{case!r}: required cpus ({case.cpus}) "
-                    f"exceeds max cpu count ({self.cpu_count})"
-                )
+            if config.debug:
+                # The case should have already been validated
+                config.resource_pool.validate(case)
             super().put(case)
 
     def skip(self, obj_no: int) -> None:
@@ -255,8 +193,7 @@ class DirectResourceQueue(ResourceQueue):
             if obj_no not in self._busy:
                 raise RuntimeError(f"case {obj_no} is not running")
             obj = self._finished[obj_no] = self._busy.pop(obj_no)
-            resources = obj.release_resources()
-            self.reclaim_resources(resources)
+            config.resource_pool.reclaim(obj)
             if obj.exclusive:
                 self.exclusive_lock = False
             for case in self.buffer.values():
@@ -284,12 +221,7 @@ class DirectResourceQueue(ResourceQueue):
 class BatchResourceQueue(ResourceQueue):
     def __init__(self, lock: threading.Lock) -> None:
         workers = int(config.session.workers)
-        super().__init__(
-            lock=lock,
-            cpu_ids=config.session.cpu_ids,
-            gpu_ids=config.session.gpu_ids,
-            workers=5 if workers < 0 else workers,
-        )
+        super().__init__(lock=lock, workers=5 if workers < 0 else workers)
         if config.batch.scheduler is None:
             raise ValueError("BatchResourceQueue requires a batch:scheduler")
         self.tmp_buffer: list[TestCase] = []
@@ -316,11 +248,8 @@ class BatchResourceQueue(ResourceQueue):
 
     def put(self, *cases: Any) -> None:
         for case in cases:
-            if case.cpus > self.cpu_count:
-                raise ValueError(
-                    f"{case!r}: required cpus ({case.cpus}) "
-                    f"exceeds max cpu count ({self.cpu_count})"
-                )
+            if config.debug:
+                config.resource_pool.validate(case)
             self.tmp_buffer.append(case)
 
     def skip(self, obj_no: int) -> None:
@@ -337,9 +266,7 @@ class BatchResourceQueue(ResourceQueue):
             if obj_no not in self._busy:
                 raise RuntimeError(f"batch {obj_no} is not running")
             obj = self._finished[obj_no] = self._busy.pop(obj_no)
-            resources = obj.release_resources()
-            self.reclaim_resources(resources)
-            obj.resources.clear()
+            config.resource_pool.reclaim(obj)
             completed = dict([(_.id, _) for _ in self.finished()])
             for batch in self.buffer.values():
                 for case in batch:
@@ -422,12 +349,4 @@ class Empty(Exception):
 
 
 class Busy(Exception):
-    pass
-
-
-class ResourceError(Exception):
-    pass
-
-
-class ResourceUnavailable(Exception):
     pass

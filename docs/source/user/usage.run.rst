@@ -34,11 +34,11 @@ Limit the number of concurrent tests
 
 .. code-block:: console
 
-   nvtest run -l session:workers:N PATH [PATHS...]
+   nvtest run --workers=N PATH [PATHS...]
 
 where ``N`` is a number of workers.  For example,
 
-.. command-output:: nvtest run -d TestResults.Basic -l session:workers:1 ./basic
+.. command-output:: nvtest run -d TestResults.Basic --workers=1 ./basic
     :cwd: /examples
     :extraargs: -rv -w
 
@@ -47,11 +47,11 @@ Set a timeout on the test session
 
 .. code-block:: console
 
-   nvtest run -l session:timeout:T PATH [PATHS...]
+   nvtest run --timeout=T PATH [PATHS...]
 
 where ``T`` is a duration in Go's duration format (``40s,``, ``1h20m``, ``2h``, ``4h30m30s``, etc.)  For example,
 
-.. command-output:: nvtest run -d TestResults.Basic -l 'session:timeout:1m' ./basic
+.. command-output:: nvtest run -d TestResults.Basic --timeout=1m ./basic
     :cwd: /examples
     :extraargs: -rv -w
 

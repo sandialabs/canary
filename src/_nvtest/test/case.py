@@ -200,7 +200,7 @@ class TestCase(AbstractTestCase):
 
         # Environment variables specific to this case
         self._variables: dict[str, str] = {}
-        self._environment_modifications: list[tuple[str, str, str, str]] = []
+        self._environment_modifications: list[dict[str, str]] = []
 
         self._measurements: dict[str, Any] = {}
 
@@ -704,11 +704,11 @@ class TestCase(AbstractTestCase):
         self._variables = dict(arg)
 
     @property
-    def environment_modifications(self) -> list[tuple[str, str, str, str]]:
+    def environment_modifications(self) -> list[dict[str, str]]:
         return self._environment_modifications
 
     @environment_modifications.setter
-    def environment_modifications(self, arg: list[tuple[str, str, str, str]]) -> None:
+    def environment_modifications(self, arg: list[dict[str, str]]) -> None:
         self._environment_modifications = list(arg)
 
     @property
@@ -991,7 +991,8 @@ class TestCase(AbstractTestCase):
         if isinstance(value, list):
             value = sep.join(value)
         assert isinstance(value, str)
-        self.environment_modifications.append((name, value, action, sep))
+        entry: dict[str, str] = dict(name=name, value=value, action=action, sep=sep)
+        self.environment_modifications.append(entry)
 
     def add_measurement(self, **kwds: Any) -> None:
         self.measurements.update(kwds)
@@ -1130,7 +1131,8 @@ class TestCase(AbstractTestCase):
         variables: dict[str, str] = dict(env)
         variables.update(os.environ)
         variables.update(self.variables)
-        for name, value, action, sep in self.environment_modifications:
+        for mod in self.environment_modifications:
+            name, action, value, sep = mod["name"], mod["action"], mod["value"], mod["sep"]
             if action == "set":
                 variables[name] = value
             elif action == "unset":
@@ -1149,8 +1151,9 @@ class TestCase(AbstractTestCase):
                 pass
         variables["PYTHONPATH"] = f"{self.pythonpath}:{os.getenv('PYTHONPATH', '')}"
         variables["PATH"] = f"{self.working_directory}:{os.environ['PATH']}"
-        os.environ.update(variables)
         try:
+            os.environ.clear()
+            os.environ.update(variables)
             for module in self.modules:
                 load_module(module)
             for rcfile in self.rcfiles:

@@ -191,7 +191,13 @@ def test_parse_ctesttestfile_resource_groups(loadtestfile):
         {"requirements": [{".type": "gpus", "slots": 1}]},
     ]
     rg = ctg.parse_resource_groups(resource_groups)
-    assert rg == {"gpus": 5}
+    assert rg == [
+        [{"type": "gpus", "slots": 1}],
+        [{"type": "gpus", "slots": 1}],
+        [{"type": "gpus", "slots": 1}],
+        [{"type": "gpus", "slots": 1}],
+        [{"type": "gpus", "slots": 1}],
+    ]
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")

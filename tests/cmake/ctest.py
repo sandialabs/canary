@@ -1,8 +1,11 @@
 import os
+import threading
 
 import pytest
 
+import nvtest
 from _nvtest.plugins.nvtest_ctest.generator import CTestTestFile
+from _nvtest.queues import DirectResourceQueue
 from _nvtest.runners import TestCaseRunner as xTestCaseRunner
 from _nvtest.util.executable import Executable
 from _nvtest.util.filesystem import mkdirp
@@ -213,3 +216,57 @@ set_tests_properties(dbOnly dbWithFoo createDB setupUsers cleanupDB PROPERTIES R
         assert set(db_with_foo.dependencies) == {setup_users, create_db}
         assert set(cleanup_db.dependencies) == {db_only, db_with_foo, create_db, setup_users}
         assert set(cleanup_foo.dependencies) == {foo_only, db_with_foo}
+
+
+@pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
+def test_parse_ctest_resource_env(tmpdir):
+    """Example taken from https://cmake.org/cmake/help/latest/manual/ctest.1.html#id41"""
+    with working_dir(tmpdir.strpath, create=True):
+        touchp("script.py")
+        set_executable("script.py")
+        with open("CTestTestfile.cmake", "w") as fh:
+            fh.write(
+                """\
+add_test(test1 "script.py")
+set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,crypto_chips:2" _BACKTRACE_TRIPLES "CMakeLists.txt;0;")
+"""
+            )
+
+        pool = [
+            {
+                ".local": "1",
+                "cpus": [
+                    {"id": "0", "slots": 1},
+                    {"id": "1", "slots": 1},
+                    {"id": "2", "slots": 1},
+                    {"id": "3", "slots": 1},
+                    {"id": "4", "slots": 1},
+                ],
+                "gpus": [
+                    {"id": "0", "slots": 2},
+                    {"id": "1", "slots": 4},
+                    {"id": "2", "slots": 2},
+                    {"id": "3", "slots": 1},
+                ],
+                "crypto_chips": [{"id": "card0", "slots": 4}],
+            }
+        ]
+        with nvtest.config.override():
+            nvtest.config.resource_pool.fill(pool)
+            file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
+            [case] = file.lock()
+            nvtest.config.resource_pool.validate(case)
+            case.status.set("ready")
+            queue = DirectResourceQueue(threading.Lock())
+            queue.put(case)
+            queue.prepare()
+            _, c = queue.get()
+            with c.rc_environ():
+                assert os.environ["CTEST_RESOURCE_GROUP_COUNT"] == "3"
+                assert os.environ["CTEST_RESOURCE_GROUP_0"] == "gpus"
+                assert os.environ["CTEST_RESOURCE_GROUP_1"] == "gpus"
+                assert os.environ["CTEST_RESOURCE_GROUP_2"] == "crypto_chips,gpus"
+                assert os.environ["CTEST_RESOURCE_GROUP_0_GPUS"] == "id:0,slots:2"
+                assert os.environ["CTEST_RESOURCE_GROUP_1_GPUS"] == "id:2,slots:2"
+                assert os.environ["CTEST_RESOURCE_GROUP_2_GPUS"] == "id:1,slots:4;id:3,slots:1"
+                assert os.environ["CTEST_RESOURCE_GROUP_2_CRYPTO_CHIPS"] == "id:card0,slots:2"

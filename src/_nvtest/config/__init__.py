@@ -5,6 +5,8 @@ from typing import Generator
 
 from ..util.singleton import Singleton
 from .factory import Config
+from .factory import ResourcePool  # noqa: F401
+from .factory import ResourceUnavailable  # noqa: F401
 from .factory import ResourceUnsatisfiable  # noqa: F401
 
 if TYPE_CHECKING:
@@ -16,7 +18,7 @@ if TYPE_CHECKING:
     test = _config.test
     build = _config.build
     options = _config.options
-    # resources = _config.resources
+    resource_pool = _config.resource_pool
     cache_runtimes = _config.cache_runtimes
     debug = _config.debug
     getoption = _config.getoption

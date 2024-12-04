@@ -4,7 +4,9 @@ import json
 import os
 import re
 import subprocess
+from contextlib import contextmanager
 from typing import Any
+from typing import Generator
 
 import nvtest
 from _nvtest import config
@@ -159,7 +161,7 @@ class CTestTestCase(TestCase):
         processor_affinity: bool = False,
         processors: int | None = None,
         required_files: list[str] | None = None,
-        resource_groups: dict[str, int] | None = None,
+        resource_groups: list[list[dict[str, Any]]] | None = None,
         resource_lock: list[str] | None = None,
         run_serial: bool = False,
         skip_regular_expression: list[str] | None = None,
@@ -181,7 +183,7 @@ class CTestTestCase(TestCase):
             timeout=timeout or 60.0,
         )
 
-        self._resource_groups: dict[str, int] | None = None
+        self._resource_groups: list[list[dict[str, Any]]] | None = None
         self._required_files: list[str] | None = None
         self._will_fail: bool = will_fail or False
         self.working_directory = working_directory or self.file_dir
@@ -212,8 +214,6 @@ class CTestTestCase(TestCase):
 
         if resource_groups is not None:
             self.resource_groups = resource_groups
-            if "gpus" in self.resource_groups:
-                self.parameters["gpus"] = self.resource_groups["gpus"]
 
         if disabled:
             self.mask = f"Explicitly disabled in {self.file}"
@@ -262,6 +262,9 @@ class CTestTestCase(TestCase):
         if timeout_signal_name is not None:
             warn_unsupported_ctest_option("timeout_signal_name")
 
+    def required_resources(self) -> list[list[dict[str, Any]]]:
+        return self.resource_groups
+
     @property
     def implicit_keywords(self) -> list[str]:
         kwds = super().implicit_keywords
@@ -298,6 +301,26 @@ class CTestTestCase(TestCase):
                     self.modify_env(name, value, action="append-path", sep=";")
                 case "cmake_list_prepend":
                     self.modify_env(name, value, action="prepend-path", sep=";")
+
+    @contextmanager
+    def rc_environ(self, **env: str) -> Generator[None, None, None]:
+        with super().rc_environ(**env):
+            self.set_resource_groups_vars()
+            yield
+
+    def set_resource_groups_vars(self) -> None:
+        os.environ["CTEST_RESOURCE_GROUP_COUNT"] = str(len(self.resources))
+        for i, spec in enumerate(self.resources):
+            types = sorted(spec.keys())
+            os.environ[f"CTEST_RESOURCE_GROUP_{i}"] = ",".join(types)
+            for type, items in spec.items():
+                key = f"CTEST_RESOURCE_GROUP_{i}_{type.upper()}"
+                values = []
+                for item in items:
+                    # use LID since CTest is not designed for multi-node execution
+                    _, lid = config.resource_pool.local_ids(type, item["gid"])
+                    values.append(f"id:{lid},slots:{item['slots']}")
+                os.environ[key] = ";".join(values)
 
     def setup(self, work_tree: str, copy_all_resources: bool = False, clean: bool = True) -> None:
         super().setup(work_tree, copy_all_resources=copy_all_resources, clean=False)
@@ -353,12 +376,18 @@ class CTestTestCase(TestCase):
         self.save()
 
     @property
-    def resource_groups(self) -> dict[str, int]:
-        return self._resource_groups or {}
+    def resource_groups(self) -> list[list[dict[str, Any]]]:
+        return self._resource_groups or []
 
     @resource_groups.setter
-    def resource_groups(self, arg: dict[str, int]) -> None:
+    def resource_groups(self, arg: list[list[dict[str, Any]]]) -> None:
         self._resource_groups = arg
+        gpus: int = 0
+        for group in arg:
+            for item in group:
+                if item["type"] == "gpus":
+                    gpus += item["slots"]  # type: ignore
+        self.parameters["gpus"] = gpus
 
     @property
     def required_files(self) -> list[str]:
@@ -507,12 +536,14 @@ def file_contains(file, pattern) -> bool:
     return False
 
 
-def parse_resource_groups(resource_groups: list[dict[str, list]]) -> dict[str, int]:
-    groups: dict[str, int] = {}
+def parse_resource_groups(resource_groups: list[dict[str, list]]) -> list[list[dict[str, Any]]]:
+    groups: list[list[dict[str, Any]]] = []
     for rg in resource_groups:
+        group: list[dict[str, Any]] = []
         for requirement in rg["requirements"]:
             type, slots = requirement[".type"], requirement["slots"]
-            groups[type] = groups.setdefault(type, 0) + slots
+            group.append({"type": type, "slots": slots})
+        groups.append(group)
     return groups
 
 

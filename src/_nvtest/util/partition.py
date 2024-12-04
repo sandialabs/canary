@@ -76,8 +76,7 @@ def partition_t(
     on other partitions
 
     """
-    cpus_per_node: int = config.machine.cpus_per_node
-
+    cpus_per_node: int = config.resource_pool.pinfo("cpus_per_node")
     partitions: list[list[TestCase]] = []
 
     graph = {}
@@ -91,7 +90,7 @@ def partition_t(
         # group tests requiring the same number of nodes and attempt to create
         # partitions with equal runtimes
         for case in ready:
-            c_nodes = math.ceil(case.cpus / cpus_per_node)
+            c_nodes = config.resource_pool.node_count(case)
             groups.setdefault(c_nodes, []).append(case)
         for g_nodes, group in groups.items():
             g_runtime = 0.0

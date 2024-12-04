@@ -1,48 +1,27 @@
 .. _basics-resource:
 
-Machine resources
-=================
+Resource allocation
+===================
 
-``nvtest`` uses a `ProcessPoolExecutor <https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ProcessPoolExecutor>`_ to execute tests asynchronously using :ref:`N <workers>` workers.  Tests requiring ``cpus`` processors and ``gpus`` gpus are submitted to the executor such that the total number of resources used remains less than or equal to the number of available resources.  The availability of resources can be set in one of two ways:
+``nvtest`` uses a `ProcessPoolExecutor <https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ProcessPoolExecutor>`_ to execute tests asynchronously using :ref:`N <workers>` workers.  Tests are submitted to the executor such that the total number of resources used remains less than or equal to the number of available resources.  The availability of resources is controlled by a :class:`~_nvtest.config.ResourcePool`.  The resource pool is automatically generated based on the :ref:`machine configuration <machine_config>`.
 
-* as a machine configuration setting; and
-* as a test session resource limit.
+By default, ``nvtest`` performs a system probe [1]_ to determine appropriate values for each machine configuration variable but these variables can be overridden on the command line.  For example, to set the number of nodes and CPUs per node:
 
-Setting available machine resources
------------------------------------
+.. code-block:: console
 
-The following machine resources can be set in the :ref:`global or local configuration file<configuration>` or from the command line using the ``-c machine:<resource>:<value>`` flag:
+  nvtest -c machine:node_count=N -c machine:cpus_per_node=M
 
-* ``cpus_per_node``: the number of CPUs per node available to this test session
-* ``gpus_per_node``: the number of GPUs per node available to this test session
-* ``node_count``: the number of compute modes available to this test session
+New machine resources can also be generated:
 
-.. note::
+.. code-block:: console
 
-  Here, and elsewhere in the documentation, ``cpus_per_node`` is interpreted to mean the number of MPI ranks.
+  nvtest -c machine:node_count=N -c machine:fgpas_per_node=M
 
-By default, ``nvtest`` performs a system probe [1]_ to determine appropriate values for each machine configuration variable.
+``nvtest`` does not do a system probe to determine the number of GPUs.  The number of available GPUs must be explicitly set.
 
-.. note::
+.. code-block:: console
 
-    ``nvtest`` does not do a system probe to determine the number of GPUs.  The number of available GPUs must be explicitly set.
-
-Setting resources available to a test session
----------------------------------------------
-
-The number of resources made available to a test session can be limited by passing ``-l session:<resource>=<value>`` to :ref:`nvtest run<nvtest-run>`.  Recognized resources are:
-
-* ``cpu_count``: the number of CPUs available to this session.
-* ``cpu_ids``: comma-separate list of CPU IDs available to this session.
-* ``gpu_count``: the number of GPUs available to this session.
-* ``gpu_ids``: comma-separate list of GPU IDs available to this session.
-* ``node_count``: the number of compute nodes available to this session.
-* ``workers``: the number of simultaneous tests or batches to run.
-* ``timeout``: the time, in seconds, the test session can run.  Also accepts GO's time format.
-
-.. note::
-
-    ``cpu_count`` and ``cpu_ids`` are mutually exclusive.  Likewise, ``gpu_count`` and ``gpu_ids`` are mutually exclusive.
+  nvtest -c machine:node_count=N -c machine:gpus_per_node=M
 
 .. _workers:
 
@@ -54,17 +33,6 @@ If the number of workers is not given, it will receive a default value based on 
 * 5 for :ref:`batched <usage-run-batched>` test sessions,
 * the number of processors on the machine, otherwise.
 
-Setting resources available to individual tests
------------------------------------------------
-
-The number of resources made available to individual tests can be limited by passing ``-l test:<resource>=<value>`` to :ref:`nvtest run<nvtest-run>`.  Recognized resources are:
-
-* ``cpu_count``: ``[min:]max`` CPUs available per test.  Tests requiring less than ``min`` CPUs (default: 1) and tests requiring more than ``max`` CPUs are ignored.
-* ``gpu_count``: ``[min:]max`` GPUs available per test.  Tests requiring less than ``min`` GPUs (default: 0) and tests requiring more than ``max`` GPUs are ignored.
-* ``node_count``: ``[min:]max`` Compute nodes available per test.  Tests requiring less than ``min`` nodes (default: 1) and tests requiring more than ``max`` nodes are ignored.
-* ``timeout``: the time, in seconds, the test can run.  Tests requiring more than ``timeout`` seconds are ignored.  Also accepts GO's time format.
-* ``timeoutx``: apply this multiplier to the test's default timeout.
-
 Setting the number of processors required by a test
 ...................................................
 
@@ -75,11 +43,14 @@ Setting the number of gpus required by a test
 
 The number of gpus required by a test is inferred from the :ref:`gpus<cpus-gpus-parameters>` parameter.  If ``gpus`` is not set, the number of gpus required by the test is assumed to by ``0``.
 
+Environment variables
+---------------------
 
-CPU and GPU ID identification
-------------------------------
+When a test is executed by ``nvtest`` it sets and passes the following environment variables to the test process:
 
-When a test is executed by ``nvtest``, it first expands environment variables looking for the placeholders ``%(gpu_ids)s`` and ``%(cpu_ids)s``. It inserts the GPU and CPU IDs [2]_, respectively, into these environment variables. This allows tests to know which CPUs and GPUs it has been allocated.
+* ``NVTEST_<NAME>_IDS`` is a comma separated list of **globall** ids for machine resource ``NAME``.
+
+Additionally, existing environment variables having the placeholders ``%(gpu_ids)s`` and ``%(cpu_ids)s`` are expanded with ``gpu_ids`` and ``cpu_ids`` being replaced with their global ids.
 
 -----------------------
 
@@ -105,7 +76,7 @@ Examples
 
   .. code-block:: console
 
-      nvtest -c machine:cpus_per_node:32 -c machine:gpus_per_node:4 run -l session:cpu_count:12 ...
+      nvtest -c machine:node_count -c machine:cpus_per_node:12 run ...
 
 * Set ``CUDA_VISIBLE_DEVICES`` to the GPUs available to a test:
 

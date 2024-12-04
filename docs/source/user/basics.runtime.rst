@@ -37,21 +37,15 @@ which can also be set from the command line, eg:
 
 .. code-block:: console
 
-   nvtest -c test:timeout:fast:60s ...
-
-A timeout ``T`` for all tests in a session can also be set on the command line:
-
-.. code-block:: console
-
-   nvtest run -l test:timeout=T
+   nvtest -c test:timeout_fast:60s ...
 
 Timeout multiplier
 ------------------
 
-You may also want to increase the timeout applied to tests.  Do so by specifying ``-l test:timeoutx`` option:
+You may also want to increase the timeout applied to tests.  Do so by specifying ``--timeout-multiplier`` option:
 
 .. code-block:: console
 
-   nvtest run -l test:timeoutx=X ...
+   nvtest run --timeoutx-multiplier=X ...
 
 In this case, the timeout for each test will be the ``X`` times the test's default timeout.

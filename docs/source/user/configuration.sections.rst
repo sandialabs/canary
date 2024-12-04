@@ -48,6 +48,8 @@ Set environment variables that will be set during runtime.
    [variables]
    var = value # (str) environment variables to set for the test session
 
+.. _machine_config:
+
 machine
 -------
 

@@ -520,12 +520,14 @@ class Session:
                 else:
                     case.mask = color.colorize("deselected by @*b{testspec expression}")
                 continue
-            if case.cpus > config.session.cpu_count:
-                case.mask = f"test requires more than {config.session.cpu_count} cpus"
+
+            try:
+                config.resource_pool.validate(case)
+            except config.ResourceUnsatisfiable as e:
+                s = "deselected due to @*{ResourceUnsatisfiable}(%r)" % e.args[0]
+                case.mask = color.colorize(s)
                 continue
-            if case.gpus > config.session.gpu_count:
-                case.mask = f"test requires more than {config.session.gpu_count} gpus"
-                continue
+
             when_expr: dict[str, str] = {}
             if parameter_expr:
                 when_expr.update({"parameters": parameter_expr})

@@ -1,4 +1,4 @@
 {
   "returncode": 0,
-  "output": "                 _                   _   \n ____   _   _  _| |_  _____   ___  _| |_ \n|  _ \\ | | | |(_   _)| ___ | /___)(_   _)\n| | | | \\ V /   | |_ | ____||___ |  | |_ \n|_| |_|  \\_/     \\__)|_____)(___/    \\__)\nsearching for tests in enable\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting 80ac6e0: enable\n==> Finished 80ac6e0: enable PASS\n\ud83d\udca5\ud83d\udca5 Session done -- 1 total, 1 pass in 00:00:00.00"
+  "output": "               __                  __   \n.-----..--.--.|  |_ .-----..-----.|  |_ \n|     ||  |  ||   _||  -__||__ --||   _|\n|__|__| \\___/ |____||_____||_____||____|\nsearching for tests in enable\ngenerating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting 80ac6e0: enable\n==> Finished 80ac6e0: enable PASS\n\u2728\u2728 Session done -- 1 total, 1 pass in 00:00:00.00"
 }

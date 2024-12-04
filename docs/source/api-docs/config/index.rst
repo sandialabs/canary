@@ -10,6 +10,7 @@ config
    The config class<init>
    Command line parsing<argparsing>
    Configuration schemas<schemas>
+   Resource pool<resource>
 
 .. rubric:: Machine configurations
 

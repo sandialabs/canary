@@ -245,12 +245,12 @@ class Finder:
 
         owners = set(owners or [])
         for case in cases:
-            #            try:
-            #                config.resources.validate(case)
-            #            except config.ResourceUnsatisfiable as e:
-            #                if case.mask is None:
-            #                    s = "deselected due to @*{ResourceUnsatisfiable}(%r)" % e.args[0]
-            #                    case.mask = colorize(s)
+            try:
+                config.resource_pool.validate(case)
+            except config.ResourceUnsatisfiable as e:
+                if case.mask is None:
+                    s = "deselected due to @*{ResourceUnsatisfiable}(%r)" % e.args[0]
+                    case.mask = colorize(s)
 
             if case.mask is None and owners:
                 if not owners.intersection(case.owners):
@@ -265,15 +265,6 @@ class Finder:
                 if not match:
                     logging.debug(f"Skipping {case}::{case.name}")
                     case.mask = colorize("deselected by @*b{keyword expression}")
-
-            # some of these can be removed in favor of the resource groups
-            if case.mask is None and case.cpus > config.session.cpu_count:
-                s = "deselected due to @*b{requiring more cpus than max cpu count}"
-                case.mask = colorize(s)
-
-            if case.mask is None and case.gpus and case.gpus > config.session.gpu_count:
-                s = "deselected due to @*b{requiring more gpus than max gpu count}"
-                case.mask = colorize(s)
 
             if case.mask is None and ("TDD" in case.keywords or "tdd" in case.keywords):
                 case.mask = colorize("deselected due to @*b{TDD keyword}")
