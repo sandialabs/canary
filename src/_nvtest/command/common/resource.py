@@ -13,7 +13,7 @@ class DeprecatedResourceSetter(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
         prefix = f"[OPTION REMOVED]: '{option_string or '-l'} {values}'"
         if values.startswith("batch:"):
-            BatchResourceSetter.consume(args, values[6:], option_string)
+            BatchResourceSetter.consume("batch", args, values[6:], option_string)
             return
         pattern = r"(session)?(cpu_count|cpus|cores|processors|node_count|nodes|gpu_count|gpus).*"
         if match := re.search(pattern, values):
@@ -38,22 +38,27 @@ class DeprecatedResourceSetter(argparse.Action):
 
 class BatchResourceSetter(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
-        setattr(args, self.dest, True)
-        self.consume(args, values, option_string)
+        BatchResourceSetter.consume(self.dest, args, values, option_string)
 
     @staticmethod
-    def consume(args: argparse.Namespace, values: str, option_string: str | None) -> None:
+    def consume(
+        dest: str, args: argparse.Namespace, values: str, option_string: str | None
+    ) -> None:
         key, value = BatchResourceSetter.parse(values, args)
-        if key == "batch_duration":
-            setattr(args, "batch_scheme", "duration")
-        elif key == "batch_count":
-            setattr(args, "batch_scheme", "count")
-        BatchResourceSetter.check_for_mutually_exclusive_arguments(args, key, value, option_string)
+        batch = getattr(args, dest) or {}
+        if key == "duration":
+            batch["scheme"] = "duration"
+        elif key == "count":
+            batch["scheme"] = "count"
+        BatchResourceSetter.check_for_mutually_exclusive_arguments(
+            batch, key, value, option_string
+        )
         if isinstance(value, list):
-            old = getattr(args, key, [])
+            old = batch.get(key, [])
             old.extend(value)
             value = old
-        setattr(args, key, value)
+        batch[key] = value
+        setattr(args, dest, batch)
 
     @staticmethod
     def help_page(flag: str) -> str:
@@ -79,60 +84,51 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             duration = time_in_seconds(raw)
             if duration <= 0:
                 raise ValueError("batch duration <= 0")
-            return ("batch_duration", duration)
+            return ("duration", duration)
         elif match := re.search(r"^(count|workers)[:=](\d+)$", arg):
             type, raw = match.groups()
-            return (f"batch_{type}", int(raw))
+            return (type, int(raw))
         elif match := re.search(r"^scheme[:=](\w+)$", arg):
             raw = match.group(1)
             if raw not in ("count", "duration", "isolate"):
                 raise ValueError(f"scheme={raw} not in (count, duration, isolate)")
-            return ("batch_scheme", str(raw))
+            return ("scheme", raw)
         elif match := re.search(r"^(runner|scheduler|type)[:=](\w+)$", arg):
             raw = match.group(2)
-            return ("batch_scheduler", str(raw))
+            return ("scheduler", raw)
         elif match := re.search(r"^(args|runner_args|scheduler_args)[:=](.*)$", arg):
             raw = strip_quotes(match.group(2))
-            return ("batch_scheduler_args", shlex.split(raw))
+            return ("scheduler_args", shlex.split(raw))
         else:
             raise ValueError(f"invalid resource arg: {arg!r}")
 
     @staticmethod
     def check_for_mutually_exclusive_arguments(
-        args: argparse.Namespace, key: str, value: Any, option_string: str | None
+        batch: dict[str, Any], key: str, value: Any, option_string: str | None
     ) -> None:
         opt = option_string or "-b"
-        if key == "batch_duration" and getattr(args, "batch_count", None) is not None:
-            # last wins
-            old = args.batch_count
+        # last wins
+        if key == "duration" and batch.get("count") is not None:
+            old = batch.pop("count")
             logging.warning(f"{opt} count={old} being overridden by {opt} duration={value}")
-            args.batch_count = None
-        elif key == "batch_count" and getattr(args, "batch_duration", None) is not None:
-            # last wins
-            old = args.batch_duration
+        elif key == "count" and batch.get("duration") is not None:
+            old = batch.pop("duration")
             logging.warning(f"{opt} duration={old} being overridden by {opt} count={value}")
-            args.batch_duration = None
-        elif (key, value) == ("batch_scheme", "isolate"):
-            # last wins
-            if getattr(args, "batch_duration", None) is not None:
-                old = args.batch_duration
+        elif (key, value) == ("scheme", "isolate"):
+            if batch.get("duration") is not None:
+                old = batch.pop("duration")
                 logging.warning(f"{opt} duration={old} being overridden by {opt} scheme=isolate")
-                args.batch_duration = None
-            if getattr(args, "batch_count", None) is not None:
-                old = args.batch_count
+            if batch.get("count") is not None:
+                old = batch.pop("count")
                 logging.warning(f"{opt} count={old} being overridden by {opt} scheme=isolate")
-                args.batch_count = None
-        elif (key, value) == ("batch_scheme", "count"):
-            if getattr(args, "batch_duration", None) is not None:
-                # last wins
-                old = args.batch_duration
+        elif (key, value) == ("scheme", "count"):
+            if batch.get("duration") is not None:
+                old = batch.pop("duration")
                 logging.warning(f"{opt} duration={old} being overridden {opt} scheme=count")
-                args.batch_duration = None
-        elif (key, value) == ("batch_scheme", "duration"):
-            if getattr(args, "batch_count", None) is not None:
-                old = args.batch_count
+        elif (key, value) == ("scheme", "duration"):
+            if batch.get("count") is not None:
+                old = batch.pop("count")
                 logging.warning(f"{opt} count={old} being overridden by {opt} scheme=duration")
-                args.batch_count = None
 
 
 def _bold(arg: str) -> str:

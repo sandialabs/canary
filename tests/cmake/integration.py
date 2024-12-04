@@ -1,6 +1,8 @@
 import glob
 import importlib.resources
 import os
+import subprocess
+import sys
 
 import pytest
 
@@ -112,3 +114,29 @@ def test_cmake_integration_parallel_override(tmpdir):
                 lines = fh.read()
                 assert 'mpi = nvtest.Executable("my-mpirun")' in lines
                 assert 'args.extend(["-x", str(self.parameters.cpus)])' in lines
+
+
+@pytest.mark.skipif(not good, reason="gcc and/or cmake not on PATH")
+def test_cmake_integration_build_config(tmpdir):
+    workdir = tmpdir.strpath
+    with fs.working_dir(workdir, create=True):
+        with open("foo.c", "w") as fh:
+            fh.write("int main() { return 0; }\n")
+        with open("CMakeLists.txt", "w") as fh:
+            fh.write("cmake_minimum_required(VERSION 3.18...3.28)\n")
+            fh.write("project(Foo VERSION 1.0 LANGUAGES C)\n")
+            fh.write(f"include({nvf})\n")
+            fh.write("add_executable(foo foo.c)\n")
+            fh.write("write_nvtest_config()\n")
+        with fs.working_dir("build", create=True):
+            cmake = ex.Executable("cmake")
+            cmake("..")
+            make = ex.Executable("make")
+            make()
+            p = subprocess.Popen(
+                [sys.executable, "-m", "nvtest", "-d", "config", "show"], stdout=subprocess.PIPE
+            )
+            p.wait()
+            #            out = p.communicate()[0].decode("utf-8")
+            #            print(out)
+            assert p.returncode == 0

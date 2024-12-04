@@ -1,4 +1,5 @@
 import argparse
+import json
 import pstats
 import re
 import shlex
@@ -9,6 +10,7 @@ from typing import Any
 from typing import Sequence
 
 from ..third_party.color import colorize
+from ..util.collections import merge
 from ..util.term import terminal_size
 
 if TYPE_CHECKING:
@@ -193,6 +195,21 @@ class EnvironmentModification(argparse.Action):
         setattr(namespace, self.dest, env_mods)
 
 
+class ConfigMods(argparse.Action):
+    def __call__(self, parser, namespace, option, option_str=None):
+        *parts, value = option.split(":")
+        data = {}
+        current = data
+        while len(parts) > 1:
+            key = parts.pop(0)
+            current[key] = {}
+            current = current[key]
+        current[parts[0]] = safe_loads(value)
+        config = getattr(namespace, self.dest, None) or {}
+        config = merge(config, data)
+        setattr(namespace, self.dest, config)
+
+
 def make_argument_parser(**kwargs):
     """Create an basic argument parser without any subcommands added."""
     parser = Parser(
@@ -282,9 +299,8 @@ def make_argument_parser(**kwargs):
     group.add_argument(
         "-c",
         dest="config_mods",
-        action="append",
+        action=ConfigMods,
         metavar="path",
-        default=[],
         help="Add the colon-separated path to test session's configuration, "
         "e.g. %s" % colorize("@*{-c config:debug:true}"),
     )
@@ -303,3 +319,10 @@ def make_argument_parser(**kwargs):
     )
 
     return parser
+
+
+def safe_loads(arg):
+    try:
+        return json.loads(arg)
+    except json.decoder.JSONDecodeError:
+        return arg

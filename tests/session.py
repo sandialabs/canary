@@ -47,8 +47,7 @@ def test_session_bfilter(tmpdir):
     p = paths()
     with working_dir(tmpdir.strpath, create=True):
         with config.override():
-            config.batch.scheduler = "none"
-            config.batch.count = 2
+            config.options.batch = {"scheduler": "none", "count": 2, "scheme": "count"}
             s = session.Session("tests", mode="w", force=True)
             s.add_search_paths(
                 [os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")]

@@ -708,7 +708,7 @@ class Session:
         """
         futures: dict = {}
         duration = lambda: timestamp() - self.start
-        timeout = config.session.timeout or -1
+        timeout = float(config.getoption("timeout", -1))
         runner = r_factory()
         qsize = queue.qsize
         qrank = 0

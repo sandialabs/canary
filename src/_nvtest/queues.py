@@ -165,7 +165,7 @@ class ResourceQueue(abc.ABC):
 
 class DirectResourceQueue(ResourceQueue):
     def __init__(self, lock: threading.Lock) -> None:
-        workers = int(config.session.workers)
+        workers = int(config.getoption("workers", -1))
         super().__init__(lock=lock, workers=cpu_count() if workers < 0 else workers)
 
     def iter_keys(self) -> list[int]:
@@ -220,10 +220,22 @@ class DirectResourceQueue(ResourceQueue):
 
 class BatchResourceQueue(ResourceQueue):
     def __init__(self, lock: threading.Lock) -> None:
-        workers = int(config.session.workers)
+        workers = int(config.getoption("workers", -1))
         super().__init__(lock=lock, workers=5 if workers < 0 else workers)
-        if config.batch.scheduler is None:
+        batchopts = config.getoption("batch", {})
+        if scheduler := batchopts.get("scheduler"):
+            self.scheduler = scheduler
+        else:
             raise ValueError("BatchResourceQueue requires a batch:scheduler")
+        scheme: str
+        if scheme := batchopts.get("scheme"):
+            if scheme == "count":
+                if batchopts.get("count") is None:
+                    raise ValueError("batch:scheme=count requires batch:count=N be defined")
+        else:
+            scheme = "duration"
+        assert scheme in ("count", "duration", "isolate")
+        self.batch_scheme = scheme
         self.tmp_buffer: list[TestCase] = []
 
     def iter_keys(self) -> list[int]:
@@ -231,16 +243,17 @@ class BatchResourceQueue(ResourceQueue):
 
     def prepare(self, **kwds: Any) -> None:
         partitions: list[list[TestCase]]
-        if config.batch.scheme == "count":
-            if config.batch.count is None:
-                raise ValueError("batch:scheme=count requires batch:count=N be defined")
-            partitions = partition_n(self.tmp_buffer, n=config.batch.count)
-        elif config.batch.scheme == "isolate":
+        batchopts = config.getoption("batch", {})
+        if self.batch_scheme == "count":
+            count = batchopts.get("count")
+            assert isinstance(count, int)
+            partitions = partition_n(self.tmp_buffer, n=count)
+        elif self.batch_scheme == "isolate":
             partitions = partition_x(self.tmp_buffer)
         else:
             # duration is the default batch scheme
             default_length = 30 * 60
-            length = float(config.batch.duration or default_length)  # 30 minute default
+            length = float(batchopts.get("duration") or default_length)  # 30 minute default
             partitions = partition_t(self.tmp_buffer, t=length)
         batches = [TestBatch(p) for p in partitions if len(p)]
         for batch in batches:
@@ -337,10 +350,11 @@ def factory(lock: threading.Lock) -> ResourceQueue:
 
     """
     queue: ResourceQueue
-    if not config.batch.scheduler:
-        queue = DirectResourceQueue(lock)
-    else:
+    batchopts = config.getoption("batch", {})
+    if batchopts.get("scheduler"):
         queue = BatchResourceQueue(lock)
+    else:
+        queue = DirectResourceQueue(lock)
     return queue
 
 

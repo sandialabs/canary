@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any
 from typing import Sequence
 
 from .. import config
@@ -58,6 +59,11 @@ class TestBatch(AbstractTestCase):
     @property
     def variables(self) -> dict[str, str | None]:
         return {"NVTEST_BATCH_ID": str(self.id)}
+
+    def required_resources(self) -> list[list[dict[str, Any]]]:
+        group: list[dict[str, Any]] = [{"type": "cpus", "slots": 1} for _ in range(self.cpus)]
+        # by default, only one resource group is returned
+        return [group]
 
     def validate(self, cases: Sequence[TestCase]):
         errors = 0

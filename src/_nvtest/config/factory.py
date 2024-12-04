@@ -11,11 +11,13 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
 
+import yaml
+
 from ..third_party import color
 from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
 from ..util import logging
-from ..util.time import time_in_seconds
+from ..util.collections import merge
 from . import _machine
 from .schemas import batch_schema
 from .schemas import build_schema
@@ -36,6 +38,8 @@ section_schemas: dict[str, Schema] = {
     "test": test_schema,
 }
 
+log_levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.TRACE)
+
 
 class Variables(dict):
     """Dict subclass that updates os.environ"""
@@ -49,7 +53,7 @@ class Variables(dict):
 
     def update(self, *args, **kwargs):
         if len(args) > 1:
-            raise TypeError(f"update expected at most 1 argument, got {len(args)}")
+            raise TypeError(f"Variables.update() expected at most 1 argument, got {len(args)}")
         other = dict(*args, **kwargs)
         for key in other:
             self[key] = other[key]
@@ -167,6 +171,8 @@ class ResourcePool:
         self.map: dict[str, dict[tuple[str, str], int]] = {}
         self.pool: dict[str, Any] = {}
         self.types: set[str] = set()
+        # parameters that should be considered resources
+        self.resource_params: list[str] = ["cpus", "gpus"]
         if pool:
             self.fill(pool)
 
@@ -188,19 +194,24 @@ class ResourcePool:
             self.pool[pid] = local
 
     def pinfo(self, item: str) -> Any:
-        if item == "cpus_per_node":
+        if item == "node_count":
+            return len(self.pool)
+        if item.endswith("_per_node"):
+            key = item[:-9]
             for local in self.pool.values():
-                if "cpus" in local:
-                    return len(local["cpus"])
+                if key in local:
+                    return len(local[key])
             return 0
-        if item == "gpus_per_node":
+        if item.endswith("_count"):
+            key = item[:-6] + "s"
+            count = 0
             for local in self.pool.values():
-                if "gpus" in local:
-                    return len(local["gpus"])
+                if key in local:
+                    count += len(local[key])
             return 0
         raise KeyError(item)
 
-    def aslist(self) -> list[dict[str, Any]]:
+    def getstate(self) -> list[dict[str, Any]]:
         pool: list[dict[str, Any]] = []
         for pid, spec in self.pool.items():
             local = {".id": pid} | spec
@@ -332,14 +343,10 @@ class Session:
     def __init__(
         self,
         *,
-        timeout: float = -1.0,
-        workers: int = -1,
         work_tree: str | None = None,
         level: int | None = None,
         stage: str | None = None,
     ):
-        self.timeout = timeout
-        self.workers = workers
         self.work_tree = work_tree
         self.stage = stage
         self.level = level
@@ -348,13 +355,8 @@ class Session:
         kwds = [f"{key.lstrip('_')}={value!r}" for key, value in vars(self).items()]
         return "{}({})".format(type(self).__name__, ", ".join(kwds))
 
-    def asdict(self) -> dict[str, Any]:
-        d: dict[str, Any] = {}
-        for name, value in vars(self).items():
-            if name.startswith("_"):
-                d[name[1:]] = value
-            else:
-                d[name] = value
+    def getstate(self) -> dict[str, Any]:
+        d = dict(vars(self))
         # these are set during the process
         d["stage"] = None
         d["level"] = None
@@ -367,8 +369,18 @@ class Test:
     timeout_default: float = 5 * 60.0
     timeout_long: float = 15 * 60.0
 
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        if len(args) > 1:
+            raise TypeError(f"Test.update() expected at most 1 argument, got {len(args)}")
+        data = dict(*args) | kwargs
+        for key, value in data.items():
+            if key == "timeout":
+                for k, v in value.items():
+                    setattr(self, f"{key}_{k}", v)
+            else:
+                setattr(self, key, value)
 
-@dataclasses.dataclass
+
 class Machine:
     """Resources available on this machine
 
@@ -378,17 +390,50 @@ class Machine:
 
     """
 
-    node_count: int
-    cpus_per_node: int
-    gpus_per_node: int
+    def __init__(self, node_count: int, cpus_per_node: int, **kwds: int) -> None:
+        if node_count < 1:
+            raise ValueError(f"node count must be >= 1 ({node_count=})")
+        self.node_count = node_count
 
-    @property
-    def cpu_count(self) -> int:
-        return self.node_count * self.cpus_per_node
+        if cpus_per_node < 1:
+            raise ValueError(f"cpus per node must be >= 1 ({cpus_per_node=})")
+        self.cpus_per_node = cpus_per_node
 
-    @property
-    def gpu_count(self) -> int:
-        return self.node_count * self.gpus_per_node
+        for key, value in kwds.items():
+            if key.endswith("_per_node"):
+                if value < 0:
+                    raise ValueError(f"{key} must be > 0 ({key}={value})")
+                setattr(self, key, value)
+            else:
+                raise TypeError(f"Machine() got an unexpected keyword argument {key!r}")
+
+    def __repr__(self) -> str:
+        return "Machine(%s)" % ", ".join(f"{k}={v}" for k, v in vars(self).items())
+
+    def get(self, name: str) -> int:
+        if hasattr(self, name):
+            return getattr(self, name)
+        if name.endswith("_per_node"):
+            return 0
+        raise TypeError(f"Machine.get() got an unexpected keyword argument {name!r}")
+
+    def count(self, item: str) -> int:
+        for key, value in self.__dict__.items():
+            if key == f"{item}s_per_node" or key == f"{item}_per_node":
+                return self.node_count * value
+        return 0
+
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        if len(args) > 1:
+            raise TypeError(f"Machine.update() expected at most 1 argument, got {len(args)}")
+        data = dict(*args) | kwargs
+        for key, value in data.items():
+            if not re.search("(node_count)|([a-z_][a-z0-9_]*s_per_node)", key):
+                raise TypeError(f"Machine.update() got an unexpected keyword argument {key!r}")
+            setattr(self, key, value)
+
+    def getstate(self) -> dict[str, int]:
+        return dict(vars(self))
 
 
 @dataclasses.dataclass(init=False, slots=True)
@@ -435,23 +480,27 @@ class Build:
     source_directory: str | None = None
     compiler: Compiler = dataclasses.field(default_factory=Compiler)
 
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        if len(args) > 1:
+            raise TypeError(f"Build.update() expected at most 1 argument, got {len(args)}")
+        data = dict(*args) | kwargs
+        if compiler := data.pop("compiler", None):
+            for key, value in compiler.items():
+                setattr(self.compiler, key, value)
+        for key, value in data.items():
+            setattr(self, key, value)
+
 
 @dataclasses.dataclass
 class Batch:
-    scheduler: str | None = None
-    scheduler_args: list[str] | None = None
-    workers: int | None = None
-    duration: float | None = None
-    count: int | None = None
-    scheme: str | None = None
+    duration: float = 30 * 60  # 30 minutes
 
-    def __post_init__(self) -> None:
-        if self.scheduler == "null" or os.getenv("NVTEST_BATCH_SCHEDULER") == "null":
-            self.scheduler = None
-            self.workers = None
-            self.duration = None
-            self.count = None
-            self.scheme = None
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        if len(args) > 1:
+            raise TypeError(f"Batch.update() expected at most 1 argument, got {len(args)}")
+        data = dict(*args) | kwargs
+        for key, value in data.items():
+            setattr(self, key, value)
 
 
 @dataclasses.dataclass
@@ -514,70 +563,13 @@ class Config:
             kwds["build"] = Build(**kwds["build"])
 
         kwds["resource_pool"] = ResourcePool()
-        kwds["resource_pool"].fill_uniform(
-            node_count=m.node_count, cpus_per_node=m.cpus_per_node, gpus_per_node=m.gpus_per_node
-        )
+        kwds["resource_pool"].fill_uniform(**vars(m))
 
         return cls(**kwds)
 
-    def update_resource_counts(self, *, node_count: int | None = None, **kwds: int) -> None:
-        updated = 0
-        if node_count is not None:
-            updated += 1
-            self.machine.node_count = node_count
-        for key, val in kwds.items():
-            if key.endswith("_per_node"):
-                updated += 1
-                setattr(self.machine, key, val)
-        if updated:
-            self.resource_pool.fill_uniform(node_count=self.machine.node_count, **kwds)
-
-    def validate(self) -> None:
-        errors: int = 0
-
-        def resource_floor_error(name: str, val: int | float, /, floor: int | float = 1) -> None:
-            nonlocal errors
-            errors += 1
-            logging.error(
-                f"Requested {name}={val} < {floor}.\n    "
-                f"To continue, set {name} to a value > {floor}"
-            )
-
-        def resource_threshold_error(rname: str, rcnt: int, tname: str, tcnt: int) -> None:
-            nonlocal errors
-            errors += 1
-            logging.error(
-                f"Requested {rname}={rcnt} > {tname}={tcnt}.\n    "
-                f"To continue, increase {tname} to a value greater than or equal to {rcnt},\n    "
-                f"or decrease {rname} to a value less than or equal to {tcnt}"
-            )
-
-        if self.machine.cpu_count < 1:
-            resource_floor_error("machine:cpu_count", self.machine.cpu_count, 1)
-        if self.machine.gpu_count < 0:
-            resource_floor_error("machine:gpu_count", self.machine.gpu_count, 0)
-        if self.machine.node_count < 1:
-            resource_floor_error("machine:node_count", self.machine.node_count, 1)
-
-        if self.session.workers > self.machine.cpu_count:
-            resource_threshold_error(
-                "session:workers",
-                self.session.workers,
-                "machine:cpu_count",
-                self.machine.cpu_count,
-            )
-
-        # --- batch resources
-        if self.batch.duration is not None and self.batch.duration <= 0.0:
-            resource_floor_error("batch:duration", self.batch.duration, 0.0)
-        if self.batch.count is not None and self.batch.count <= 0:
-            resource_floor_error("batch:count", self.batch.count, 0)
-        if self.batch.workers is not None and self.batch.workers > self.machine.cpu_count:
-            resource_floor_error("batch:workers", self.batch.workers, 0)
-
-        if errors:
-            logging.error(f"Encountered {errors} errors while validated resource counts")
-            raise ValueError("Stopping due to previous errors")
+    def update_resource_counts(self) -> None:
+        kwds = vars(self.machine)
+        self.resource_pool.fill_uniform(**kwds)
 
     def restore_from_snapshot(self, fh: TextIO) -> None:
         snapshot = json.load(fh)
@@ -589,39 +581,23 @@ class Config:
         self.test = Test(**snapshot["test"])
         compiler = Compiler(**snapshot["build"].pop("compiler"))
         self.build = Build(compiler=compiler, **snapshot["build"])
-        self.options = argparse.Namespace(**snapshot["options"])
         self.resource_pool = ResourcePool()
         self.resource_pool.fill(snapshot["resource_pool"])
         for key, val in snapshot["config"].items():
             setattr(self, key, val)
+        self.batch = Batch(**snapshot["batch"])
 
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The
-        # batch runner sets the variables NVTEST_BATCH_SCHEDULER=null to guard against this case.
-        if os.getenv("NVTEST_BATCH_SCHEDULER") == "null":
+        # batch runner sets the variable NVTEST_LEVEL=1 to guard against this case.
+        if os.getenv("NVTEST_LEVEL") == "1":
             # no batching (default)
-            self.batch = Batch()
-        else:
-            self.batch = Batch(**snapshot["batch"])
+            snapshot["options"].pop("batch", None)
+        self.options = argparse.Namespace(**snapshot["options"])
         return
 
     def snapshot(self, fh: TextIO) -> None:
-        snapshot: dict[str, Any] = {}
-        snapshot["system"] = dataclasses.asdict(self.system)
-        snapshot["system"]["os"] = vars(snapshot["system"]["os"])
-        snapshot["machine"] = dataclasses.asdict(self.machine)
-        snapshot["variables"] = dict(self.variables)
-        snapshot["session"] = self.session.asdict()
-        snapshot["test"] = dataclasses.asdict(self.test)
-        snapshot["batch"] = dataclasses.asdict(self.batch)
-        snapshot["build"] = dataclasses.asdict(self.build)
-        snapshot["resource_pool"] = self.resource_pool.aslist()
-        snapshot["options"] = vars(self.options)
-        config = snapshot.setdefault("config", {})
-        config["invocation_dir"] = self.invocation_dir
-        config["debug"] = self.debug
-        config["cache_runtimes"] = self.cache_runtimes
-        config["log_level"] = self.log_level
+        snapshot = self.getstate()
         json.dump(snapshot, fh, indent=2)
 
     @classmethod
@@ -657,93 +633,85 @@ class Config:
             elif key in ("variables", "build"):
                 config[key] = items
 
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        if len(args) > 1:
+            raise TypeError(f"Config.update() expected at most 1 argument, got {len(args)}")
+        data = dict(*args) | kwargs
+        if "debug" in data:
+            self.debug = boolean(data["debug"])
+            if self.debug:
+                self.log_level = logging.get_level_name(log_levels[3])
+                logging.set_level(logging.DEBUG)
+        if "cache_runtimes" in data:
+            self.cache_runtimes = boolean(data["cache_runtimes"])
+        if "log_level" in data:
+            self.log_level = data["log_level"].upper()
+            level = logging.get_level(self.log_level)
+            logging.set_level(level)
+
     def set_main_options(self, args: argparse.Namespace) -> None:
         logging.set_level(logging.INFO)
         if args.color is not None:
             color.set_color_when(args.color)
-        log_levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.TRACE)
+
         if args.q or args.v:
             i = min(max(2 - args.q + args.v, 0), 4)
             self.log_level = logging.get_level_name(log_levels[i])
             logging.set_level(log_levels[i])
+
         if args.debug:
             self.debug = True
             self.log_level = logging.get_level_name(log_levels[3])
             logging.set_level(logging.DEBUG)
+
         if "session" in args.env_mods:
             self.variables.update(args.env_mods["session"])
+
         errors: int = 0
-        counts: dict[str, int] = {}
-        for path in args.config_mods:
-            *components, value = path.split(":")
-            if "=" in value:
-                c, value = value.split("=", 1)
-                components.append(c)
-            match components:
-                case ["config", "debug"] | ["debug"]:
-                    self.debug = boolean(value)
-                    if self.debug:
-                        self.log_level = logging.get_level_name(log_levels[3])
-                        logging.set_level(logging.DEBUG)
-                case ["config", "cache_runtimes"] | ["cache_runtimes"]:
-                    self.cache_runtimes = boolean(value)
-                case ["config", "log_level"] | ["log_level"]:
-                    self.log_level = value.upper()
-                    level = logging.get_level(self.log_level)
-                    logging.set_level(level)
-                case ["batch", "duration"]:
-                    self.batch.duration = time_in_seconds(value)
-                case ["machine", key]:
-                    if not re.search(r"^(node_count|[a-z_][a-z0-0_]*_per_node)$", key):
-                        errors += 1
-                        logging.error(
-                            f"Illegal machine configuration setting: {key!r}.  Valid settings are "
-                            "node_count, cpus_per_node, and gpus_per_node"
-                        )
-                    else:
-                        counts[key] = int(value)
-                case ["test", key]:
-                    if key not in ("timeout_fast", "timeout_long", "timeout_default"):
-                        errors += 1
-                        logging.error(
-                            f"Illegal test configuration setting: {key!r}.  Valid settings are "
-                            "timeout_fast, timeout_long, timeout_default"
-                        )
-                    setattr(self.test, key, time_in_seconds(value))
+        config_mods = args.config_mods or {}
+        for section, section_data in config_mods.items():
+            if section not in section_schemas:
+                errors += 1
+                logging.error(f"Illegal config section: {section!r}")
+                continue
+            schema = section_schemas[section]
+            config_mods[section] = schema.validate({section: section_data})[section]
+
         if errors:
             raise ValueError("Stopping due to previous errors")
 
-        if counts:
-            self.update_resource_counts(**counts)
+        for section, section_data in config_mods.items():
+            obj = self if section == "config" else getattr(self, section)
+            if hasattr(obj, "update"):
+                obj.update(section_data)
 
-        if getattr(args, "workers", None) is not None:
-            self.session.workers = args.workers
-        if getattr(args, "timeout", None) is not None:
-            self.session.timeout = args.timeout
-        if getattr(args, "batch_duration", None) is not None:
-            self.batch.duration = args.batch_duration
-            self.batch.scheme = "duration"
-        if getattr(args, "batch_count", None) is not None:
-            self.batch.count = args.batch_count
-            self.batch.scheme = "count"
-        if getattr(args, "batch_scheme", None) is not None:
-            self.batch.scheme = args.batch_scheme
-        if getattr(args, "batch_workers", None) is not None:
-            self.batch.workers = args.batch_workers
-        if getattr(args, "batch_scheduler", None) is not None:
-            self.batch.scheduler = None if args.batch_scheduler == "null" else args.batch_scheduler
-        if getattr(args, "batch_scheduler_args", None) is not None:
-            self.batch.scheduler_args = args.batch_scheduler_args
+        if "machine" in config_mods:
+            self.update_resource_counts()
+
+        if n := getattr(args, "workers", None):
+            if n > os.cpu_count():
+                raise ValueError(f"workers={n} > cpu_count={os.cpu_count()}")
+        if b := getattr(args, "batch", None):
+            if n := b.get("workers"):
+                if n > os.cpu_count():
+                    raise ValueError(f"batch:workers={n} > cpu_count={os.cpu_count()}")
+
+        # We need to be careful when restoring the batch configuration.  If this session is being
+        # restored while running a batch, restoring the batch can lead to infinite recursion.  The
+        # batch runner sets the variable NVTEST_LEVEL=1 to guard against this case.  But, if we are
+        # running tests inside an existing test session and no batch arguments are given, we want
+        # to use the original batch arguments.
+        if os.getenv("NVTEST_LEVEL") == "1":
+            # no batching
+            args.batch = {}
+        else:
+            current = getattr(args, "batch", None) or {}
+            old = getattr(self.options, "batch", None) or {}
+            args.batch = merge(old, current)
         self.options = args
 
     @classmethod
     def read_config(cls, file: str) -> dict:
-        try:
-            import yaml
-        except ImportError:
-            logging.warning("Install yaml to read configuration file {file!r}")
-            return {}
-
         with open(file) as fh:
             data = yaml.safe_load(fh)
         variables = dict(os.environ)
@@ -757,24 +725,25 @@ class Config:
                 variables[key] = section_data[key]
 
         for section in data:
-            if section == "variables":
+            if section in ("variables",):
                 continue
             for key, raw_value in data[section].items():
                 value = expandvars(raw_value, variables)
-                data[section][key] = safe_loads(value)
+                data[section][key] = value
 
         config: dict[str, Any] = {}
         # expand any keys given as a:b:c
-        for path, section_data in data.items():
-            if path in section_schemas:
-                logging.warning(f"ignoring unrecognized config section: {path}")
+        for section, section_data in data.items():
+            if section not in section_schemas:
+                logging.warning(f"ignoring unrecognized config section: {section}")
+                continue
             schema = section_schemas[section]
             try:
-                schema.validate({section: section_data})
+                validated = schema.validate({section: section_data})
             except SchemaError as e:
                 msg = f"Schema error encountered in {file}: {e.args[0]}"
                 raise ValueError(msg) from None
-            config[section] = section_data
+            config[section] = validated
         return config
 
     @staticmethod
@@ -791,8 +760,6 @@ class Config:
 
     @classmethod
     def save(cls, path: str, scope: str | None = None):
-        import yaml
-
         file = cls.config_file(scope or "local")
         assert file is not None
         section, key, value = path.split(":")
@@ -804,30 +771,31 @@ class Config:
 
     def getoption(self, key: str, default: Any = None) -> Any:
         """Compatibility with external tools"""
-        return getattr(self.options, key, default)
+        option = getattr(self.options, key, None) or default
+        return option
+
+    def getstate(self) -> dict[str, Any]:
+        d: dict[str, Any] = {}
+        for key, value in vars(self).items():
+            if dataclasses.is_dataclass(value):
+                d[key] = dataclasses.asdict(value)
+                if key == "system":
+                    d[key]["os"] = vars(d[key]["os"])
+            elif hasattr(value, "getstate"):
+                d[key] = value.getstate()
+            elif isinstance(value, (argparse.Namespace, SimpleNamespace)):
+                d[key] = vars(value)
+            elif isinstance(value, Variables):
+                d[key] = dict(value)
+            else:
+                d.setdefault("config", {})[key] = value
+        return d
 
     def describe(self, section: str | None = None) -> str:
-        asdict: dict[str, Any]
+        state = self.getstate()
         if section is not None:
-            asdict = {section: dataclasses.asdict(getattr(self, section))}
-        else:
-            asdict = dataclasses.asdict(self)
-        if "system" in asdict:
-            asdict["system"]["os"] = vars(self.system.os)
-        if "session" in asdict:
-            asdict["session"] = self.session.asdict()
-        if "resource_pool" in asdict:
-            asdict["resource_pool"] = self.resource_pool.aslist()
-        if "options" in asdict:
-            asdict["options"] = vars(self.options)
-        if "variables" in asdict:
-            asdict["variables"] = dict(asdict["variables"])
-        try:
-            import yaml
-
-            return yaml.dump(asdict, default_flow_style=False)
-        except ImportError:
-            return json.dumps(asdict, indent=2)
+            state = {section: state[section]}
+        return yaml.dump(state, default_flow_style=False)
 
 
 def boolean(arg: Any) -> bool:
@@ -850,9 +818,19 @@ def find_work_tree(start: str | None = None) -> str | None:
     return None
 
 
-def expandvars(arg: str, mapping: dict) -> str:
-    t = Template(arg)
-    return t.safe_substitute(mapping)
+def expandvars(arg: Any, mapping: dict) -> Any:
+    if isinstance(arg, list):
+        for i, item in enumerate(arg):
+            arg[i] = expandvars(item, mapping)
+        return arg
+    elif isinstance(arg, dict):
+        for key, value in arg.items():
+            arg[key] = expandvars(value, mapping)
+        return arg
+    elif isinstance(arg, str):
+        t = Template(arg)
+        return t.safe_substitute(mapping)
+    return arg
 
 
 def safe_loads(arg):

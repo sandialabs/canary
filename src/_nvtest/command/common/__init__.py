@@ -111,7 +111,7 @@ def add_resource_arguments(parser: "Parser") -> None:
         "-b",
         action=BatchResourceSetter,
         metavar="resource",
-        dest="batched_invocation",
+        dest="batch",
         help=BatchResourceSetter.help_page("-b"),
     )
 

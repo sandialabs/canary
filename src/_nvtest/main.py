@@ -48,7 +48,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             logging.emit(shlex.join(a) + "\n")
         setup_hpc_connect(args)
         config.set_main_options(args)
-        config.validate()
         command = parser.get_command(args.command)
         if command is None:
             parser.print_help()
@@ -109,7 +108,6 @@ class NVTestCommand:
             args = parser.parse_args(argv)
             setup_hpc_connect(args)
             config.set_main_options(args)
-            config.validate()
             load_plugins(args.plugin_dirs or [])
             rc = self.command.execute(args)
             self.returncode = rc
@@ -129,20 +127,26 @@ def setup_hpc_connect(args: argparse.Namespace) -> None:
     # main options have not been set, fake the logger to print output
     level = logging.FATAL if debug else logging.TRACE
     log = lambda message: logging.log(level, message, prefix="@*g{==>}")
-    # main options have not yet been set
-    if batch_scheduler := getattr(args, "batch_scheduler", None):
-        if batch_scheduler == "null":
+    # main options have not yet been set, but we want to start up hpc_connect and get its machine
+    # configuration, if any
+    batchopts = getattr(args, "batch", {})
+    if not batchopts:
+        return
+    if scheduler := batchopts.get("scheduler"):
+        if scheduler == "null":
+            batchopts.clear()
             return
-        log(f"Setting up HPC Connect for {batch_scheduler}")
-        hpc_connect.set(scheduler=batch_scheduler)  # type: ignore
+        log(f"Setting up HPC Connect for {scheduler}")
+        hpc_connect.set(scheduler=scheduler)  # type: ignore
         log(f"  HPC connect: node count: {hpc_connect.scheduler.config.node_count}")
         log(f"  HPC connect: CPUs per node: {hpc_connect.scheduler.config.cpus_per_node}")
         log(f"  HPC connect: GPUs per node: {hpc_connect.scheduler.config.gpus_per_node}")
-        config.update_resource_counts(
-            node_count=hpc_connect.scheduler.config.node_count,  # type: ignore
-            cpus_per_node=hpc_connect.scheduler.config.cpus_per_node,  # type: ignore
-            gpus_per_node=hpc_connect.scheduler.config.gpus_per_node,  # type: ignore
+        config.machine.update(
+            node_count=hpc_connect.scheduler.config.node_count,
+            cpus_per_node=hpc_connect.scheduler.config.cpus_per_node,
+            gpus_per_node=hpc_connect.scheduler.config.gpus_per_node,
         )
+        config.update_resource_counts()
 
 
 def invoke_command(command: "Command", args: argparse.Namespace) -> int:

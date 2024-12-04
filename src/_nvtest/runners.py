@@ -260,10 +260,12 @@ class BatchRunner(AbstractTestRunner):
 
         # by this point, hpc_connect should have already be set up
         if hpc_connect.backend._scheduler is None:  # type: ignore
-            hpc_connect.set(scheduler=config.batch.scheduler)  # type: ignore
+            scheduler = config.getoption("batch", {}).get("scheduler")
+            assert scheduler is not None
+            hpc_connect.set(scheduler=scheduler)  # type: ignore
         self.scheduler = hpc_connect.scheduler  # type: ignore
-        if config.batch.scheduler_args:
-            self.scheduler.add_default_args(*config.batch.scheduler_args)
+        if args := config.getoption("scheduler_args"):
+            self.scheduler.add_default_args(*args)
 
     def run(self, batch: AbstractTestCase, stage: str = "run") -> None:
         import hpc_connect
@@ -277,9 +279,11 @@ class BatchRunner(AbstractTestRunner):
             variables["NVTEST_DISABLE_KB"] = "1"
             variables["NVTEST_BATCH_SCHEDULER"] = "null"  # guard against infinite batch recursion
             jobs: list[hpc_connect.Job] = []
-            if config.batch.scheme == "isolate" and self.scheduler.supports_subscheduling:
+            batchopts = config.getoption("batch", {})
+            scheme = batchopts.get("scheme")
+            if scheme == "isolate" and self.scheduler.supports_subscheduling:
                 scriptdir = os.path.dirname(batch.submission_script_filename())
-                timeoutx = config.getoption("timeout_multiplier") or 1.0
+                timeoutx = config.getoption("timeout_multiplier", 1.0)
                 for case in batch:
                     nvtest_invocation = self.nvtest_invocation(case, stage=stage)
                     job = hpc_connect.Job(
@@ -311,7 +315,7 @@ class BatchRunner(AbstractTestRunner):
                 jobs.append(job)
             if config.debug:
                 logging.debug(f"Submitting batch {batch.id[:7]}")
-            self.scheduler.submit_and_wait(*jobs, sequential=config.batch.scheme != "isolate")
+            self.scheduler.submit_and_wait(*jobs, sequential=scheme != "isolate")
         except hpc_connect.HPCSubmissionFailedError:
             logging.error(f"Failed to submit {batch.id[:7]}!")
             for case in batch.cases:
@@ -399,8 +403,9 @@ class BatchRunner(AbstractTestRunner):
         if p := getattr(config.options, "P", None):
             if p != "pedantic":
                 fp.write(f"-P{p} ")
-        if isinstance(arg, TestBatch) and config.batch.workers is not None:
-            fp.write(f"-l workers={config.batch.workers} ")
+        workers = config.getoption("batch").get("workers")
+        if isinstance(arg, TestBatch) and workers is not None:
+            fp.write(f"-l workers={workers} ")
         if timeoutx := config.getoption("timeout_multiplier"):
             fp.write(f"--timeout-multiplier={timeoutx} ")
         fp.write("-b scheduler=null ")  # guard against infinite batch recursion
@@ -429,7 +434,7 @@ class BatchRunner(AbstractTestRunner):
 
 def factory() -> "AbstractTestRunner":
     runner: "AbstractTestRunner"
-    if config.batch.scheduler is None:
+    if config.getoption("batch", {}).get("scheduler") is None:
         runner = TestCaseRunner()
     else:
         runner = BatchRunner()

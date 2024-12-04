@@ -17,6 +17,7 @@ class AbstractTestCase(abc.ABC):
     def __len__(self) -> int:
         return 1
 
+    @abc.abstractmethod
     def required_resources(self) -> list[list[dict[str, Any]]]:
         """Returns a list of resource
 
@@ -31,10 +32,7 @@ class AbstractTestCase(abc.ABC):
         available
 
         """
-        group: list[dict[str, Any]] = [{"type": "cpus", "slots": 1} for _ in range(self.cpus)]
-        group.extend([{"type": "gpus", "slots": 1} for _ in range(self.gpus)])
-        # by default, only one resource group is returned
-        return [group]
+        pass
 
     @property
     def resources(self) -> list[dict[str, list[dict]]]:

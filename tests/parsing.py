@@ -19,7 +19,7 @@ def test_batch_args_backward():
             "batch:args='--a=b -c d'",
         ]
     )
-    assert args.batch_scheduler_args == [
+    assert args.batch["scheduler_args"] == [
         "--account=XYZ123",
         "--licenses=pscratch",
         "--foo=bar",
@@ -47,7 +47,7 @@ def test_batch_args():
             "args='--a=b -c d'",
         ]
     )
-    assert args.batch_scheduler_args == [
+    assert args.batch["scheduler_args"] == [
         "--account=XYZ123",
         "--licenses=pscratch",
         "--foo=bar",

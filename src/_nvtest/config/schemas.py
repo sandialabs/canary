@@ -2,7 +2,9 @@ from typing import Any
 
 from ..third_party.schema import Optional
 from ..third_party.schema import Or
+from ..third_party.schema import Regex
 from ..third_party.schema import Schema
+from ..third_party.schema import Use
 from ..util.time import time_in_seconds
 
 
@@ -15,7 +17,6 @@ def list_of_int(arg: Any) -> bool:
 
 
 optional_dict = Or(dict, None)
-optional_int = Or(int, None)
 optional_str = Or(str, None)
 
 
@@ -40,26 +41,32 @@ def log_levels(arg: Any) -> bool:
     return True
 
 
+def boolean(arg: Any) -> bool:
+    if isinstance(arg, str):
+        return arg.lower() in ("0", "off", "false", "no")
+    return bool(arg)
+
+
 config_schema = Schema(
     {
         "config": {
-            Optional("debug"): bool,
-            Optional("cache_runtimes"): bool,
+            Optional("debug"): Use(boolean),
+            Optional("cache_runtimes"): Use(boolean),
             Optional("log_level"): log_levels,
         }
     }
 )
 
 
-batch_schema = Schema({"batch": {Optional("duration"): time_in_seconds}})
+batch_schema = Schema({"batch": {Optional("duration"): Use(time_in_seconds)}})
 
 test_schema = Schema(
     {
         "test": {
             "timeout": {
-                Optional("fast"): time_in_seconds,
-                Optional("long"): time_in_seconds,
-                Optional("default"): time_in_seconds,
+                Optional("fast"): Use(time_in_seconds),
+                Optional("long"): Use(time_in_seconds),
+                Optional("default"): Use(time_in_seconds),
             }
         }
     }
@@ -68,9 +75,8 @@ test_schema = Schema(
 machine_schema = Schema(
     {
         "machine": {
-            Optional("node_count"): optional_int,
-            Optional("cpus_per_node"): int,
-            Optional("gpus_per_node"): int,
+            Optional("node_count"): Use(int),
+            Optional(Regex("^[a-z_][a-z0-9_]*?_per_node$")): Use(int),
         },
     }
 )
