@@ -409,10 +409,18 @@ class TestCase(AbstractTestCase):
         parameters["runtime"] = self.runtime
         return parameters
 
+    def size(self) -> float:
+        vec: list[float | int] = [self.timeout]
+        for name, value in self.parameters.items():
+            if name in config.resource_params:
+                assert isinstance(value, int)
+                vec.append(value)
+        return math.sqrt(sum(_**2 for _ in vec))
+
     def required_resources(self) -> list[list[dict[str, Any]]]:
         group: list[dict[str, Any]] = []
         for name, value in self.parameters.items():
-            if name in config.resource_pool.resource_params:
+            if name in config.resource_params:
                 assert isinstance(value, int)
                 group.extend([{"type": name, "slots": 1} for _ in range(value)])
         # by default, only one resource group is returned

@@ -1,18 +1,19 @@
 import abc
 import io
+import math
 import threading
 import time
 from typing import Any
 from typing import Callable
 
 from . import config
+from .partition import autopartition
+from .partition import partition_n
+from .partition import partition_x
 from .test.batch import TestBatch
 from .test.case import TestCase
 from .third_party import color
 from .util import logging
-from .util.partition import partition_n
-from .util.partition import partition_t
-from .util.partition import partition_x
 from .util.progress import progress
 from .util.rprobe import cpu_count
 from .util.time import hhmmss
@@ -169,7 +170,9 @@ class DirectResourceQueue(ResourceQueue):
         super().__init__(lock=lock, workers=cpu_count() if workers < 0 else workers)
 
     def iter_keys(self) -> list[int]:
-        return sorted(self.buffer.keys(), key=lambda k: self.buffer[k].cpus)
+        # want bigger tests first
+        norm = lambda c: math.sqrt(c.cpus**2 + c.runtime**2)
+        return sorted(self.buffer.keys(), key=lambda k: norm(self.buffer[k]), reverse=True)
 
     def retry(self, obj_id: int) -> Any:
         raise NotImplementedError
@@ -242,20 +245,19 @@ class BatchResourceQueue(ResourceQueue):
         return list(self.buffer.keys())
 
     def prepare(self, **kwds: Any) -> None:
-        partitions: list[list[TestCase]]
+        batches: list[TestBatch]
         batchopts = config.getoption("batch", {})
         if self.batch_scheme == "count":
             count = batchopts.get("count")
             assert isinstance(count, int)
-            partitions = partition_n(self.tmp_buffer, n=count)
+            batches = partition_n(self.tmp_buffer, n=count)
         elif self.batch_scheme == "isolate":
-            partitions = partition_x(self.tmp_buffer)
+            batches = partition_x(self.tmp_buffer)
         else:
             # duration is the default batch scheme
             default_length = 30 * 60
             length = float(batchopts.get("duration") or default_length)  # 30 minute default
-            partitions = partition_t(self.tmp_buffer, t=length)
-        batches = [TestBatch(p) for p in partitions if len(p)]
+            batches = autopartition(self.tmp_buffer, t=length)
         for batch in batches:
             super().put(batch)
 

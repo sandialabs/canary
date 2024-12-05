@@ -1,6 +1,6 @@
 import pytest
 
-import _nvtest.util.partition as p
+import _nvtest.partition as p
 from _nvtest.finder import Finder
 from _nvtest.util.filesystem import mkdirp
 
@@ -48,7 +48,7 @@ def test_partition_n(generate_files):
     assert sum(len(_) for _ in partitions) == num_cases
 
 
-def test_partition_t(generate_files):
+def test_autopartition(generate_files):
     workdir = generate_files
     finder = Finder()
     finder.add(workdir)
@@ -56,5 +56,5 @@ def test_partition_t(generate_files):
     files = finder.discover()
     cases = finder.lock_and_filter(files)
     assert len([c for c in cases if not c.mask]) == num_cases
-    partitions = p.partition_t(cases, t=15 * 60)  # 5x long test case duration
+    partitions = p.autopartition(cases, t=15 * 60)  # 5x long test case duration
     assert sum(len(_) for _ in partitions) == num_cases

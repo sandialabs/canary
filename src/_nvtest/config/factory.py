@@ -171,8 +171,6 @@ class ResourcePool:
         self.map: dict[str, dict[tuple[str, str], int]] = {}
         self.pool: dict[str, Any] = {}
         self.types: set[str] = set()
-        # parameters that should be considered resources
-        self.resource_params: list[str] = ["cpus", "gpus"]
         if pool:
             self.fill(pool)
 
@@ -520,6 +518,11 @@ class Config:
     build: Build = dataclasses.field(default_factory=Build)
     options: argparse.Namespace = dataclasses.field(default_factory=argparse.Namespace)
     resource_pool: ResourcePool = dataclasses.field(default_factory=ResourcePool)
+    resource_params: list[str] = dataclasses.field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.resource_params:
+            self.resource_params = ["cpus", "gpus"]
 
     @classmethod
     def factory(cls) -> "Config":
@@ -614,6 +617,8 @@ class Config:
                     config["cache_runtimes"] = bool(items["cache_runtimes"])
                 if "log_level" in items:
                     config["log_level"] = items["log_level"]
+                if "resource_params" in items:
+                    config["resource_params"] = list(items["resource_params"])
             elif key == "test":
                 for name in ("fast", "long", "default"):
                     if name in items.get("timeout", {}):
@@ -644,6 +649,8 @@ class Config:
                 logging.set_level(logging.DEBUG)
         if "cache_runtimes" in data:
             self.cache_runtimes = boolean(data["cache_runtimes"])
+        if "resource_params" in data:
+            self.resource_params = list(data["resource_params"])
         if "log_level" in data:
             self.log_level = data["log_level"].upper()
             level = logging.get_level(self.log_level)

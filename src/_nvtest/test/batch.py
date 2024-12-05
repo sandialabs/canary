@@ -1,4 +1,5 @@
 import json
+import math
 import os
 from typing import Any
 from typing import Sequence
@@ -7,7 +8,6 @@ from .. import config
 from ..atc import AbstractTestCase
 from ..status import Status
 from ..util import logging
-from ..util import partition
 from ..util.filesystem import mkdirp
 from ..util.hash import hashit
 from .case import TestCase
@@ -24,6 +24,7 @@ class TestBatch(AbstractTestCase):
     def __init__(
         self,
         cases: Sequence[TestCase],
+        runtime: float | None = None,
     ) -> None:
         super().__init__()
         self.validate(cases)
@@ -34,14 +35,7 @@ class TestBatch(AbstractTestCase):
         self._submit_gpus = 0
         self.max_cpus_required = max([case.cpus for case in self.cases])
         self.max_gpus_required = max([case.gpus for case in self.cases])
-        self._runtime: float
-        if len(self.cases) == 1:
-            self._runtime = self.cases[0].runtime
-        else:
-            cpus_per_node = config.machine.cpus_per_node
-            node_count = config.machine.node_count
-            grid = partition.tile(self.cases, cpus_per_node * node_count)
-            self._runtime = sum([max(case.runtime for case in row) for row in grid])
+        self._runtime: float | None = runtime
         self._status: Status
         for case in self.cases:
             if any(dep not in self.cases for dep in case.dependencies):
@@ -59,6 +53,24 @@ class TestBatch(AbstractTestCase):
     @property
     def variables(self) -> dict[str, str | None]:
         return {"NVTEST_BATCH_ID": str(self.id)}
+
+    @property
+    def runtime(self) -> float:
+        from .. import partition
+
+        if self._runtime is None:
+            if len(self.cases) == 1:
+                self._runtime = self.cases[0].runtime
+            else:
+                _, height = partition.packed_perimeter(self.cases)
+                t = sum(c.runtime for c in self)
+                self._runtime = float(min(height, t))
+        assert self._runtime is not None
+        return self._runtime
+
+    def size(self) -> float:
+        vec = [self.runtime, self.cpus]
+        return math.sqrt(sum(_**2 for _ in vec))
 
     def required_resources(self) -> list[list[dict[str, Any]]]:
         group: list[dict[str, Any]] = [{"type": "cpus", "slots": 1} for _ in range(self.cpus)]
@@ -84,10 +96,6 @@ class TestBatch(AbstractTestCase):
     @property
     def cputime(self) -> float:
         return sum(case.cpus * min(case.runtime, 5.0) for case in self) * 1.5
-
-    @property
-    def runtime(self) -> float:
-        return self._runtime
 
     @property
     def has_dependencies(self) -> bool:

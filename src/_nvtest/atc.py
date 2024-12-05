@@ -18,6 +18,10 @@ class AbstractTestCase(abc.ABC):
         return 1
 
     @abc.abstractmethod
+    def size(self) -> float:
+        pass
+
+    @abc.abstractmethod
     def required_resources(self) -> list[list[dict[str, Any]]]:
         """Returns a list of resource
 
