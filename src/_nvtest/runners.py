@@ -259,12 +259,13 @@ class BatchRunner(AbstractTestRunner):
         super().__init__()
 
         # by this point, hpc_connect should have already be set up
+        batchopts = config.getoption("batch", {})
         if hpc_connect.backend._scheduler is None:  # type: ignore
-            scheduler = config.getoption("batch", {}).get("scheduler")
+            scheduler = batchopts.get("scheduler")
             assert scheduler is not None
             hpc_connect.set(scheduler=scheduler)  # type: ignore
         self.scheduler = hpc_connect.scheduler  # type: ignore
-        if args := config.getoption("scheduler_args"):
+        if args := batchopts.get("scheduler_args"):
             self.scheduler.add_default_args(*args)
 
     def run(self, batch: AbstractTestCase, stage: str = "run") -> None:
@@ -403,7 +404,8 @@ class BatchRunner(AbstractTestRunner):
         if p := getattr(config.options, "P", None):
             if p != "pedantic":
                 fp.write(f"-P{p} ")
-        workers = config.getoption("batch").get("workers")
+        batchopts = config.getoption("batch", {})
+        workers = batchopts.get("workers")
         if isinstance(arg, TestBatch) and workers is not None:
             fp.write(f"-l workers={workers} ")
         if timeoutx := config.getoption("timeout_multiplier"):
