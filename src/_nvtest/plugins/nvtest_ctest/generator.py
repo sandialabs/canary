@@ -320,13 +320,15 @@ class CTestTestCase(TestCase):
 
     def set_resource_groups_vars(self) -> None:
         os.environ["CTEST_RESOURCE_GROUP_COUNT"] = str(len(self.resources))
+        # some resources may have been added to the required resources even if they aren't in the
+        # resource groups (eg, cpus).  make sure to remove them so they don't unexpectedly appear
+        # in the environment variables
+        resource_group_types = {_["type"] for group in self.resource_groups for _ in group}
         for i, spec in enumerate(self.resources):
-            types = sorted(spec.keys())
-            if "cpus" in types:
-                types.remove("cpus")
+            types = sorted(resource_group_types & spec.keys())
             os.environ[f"CTEST_RESOURCE_GROUP_{i}"] = ",".join(types)
             for type, items in spec.items():
-                if type == "cpus":
+                if type not in types:
                     continue
                 key = f"CTEST_RESOURCE_GROUP_{i}_{type.upper()}"
                 values = []
