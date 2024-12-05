@@ -402,10 +402,9 @@ class TestCase(AbstractTestCase):
             parameters["ndevice"] = parameters["gpus"] = 0
         if "nodes" in self.parameters:
             nodes = self.parameters["nodes"]
-            parameters["np"] = parameters["cpus"] = nodes * config.machine.cpus_per_node
-            parameters["ndevice"] = parameters["gpus"] = nodes * config.machine.get(
-                "gpus_per_node"
-            )
+            pinfo = config.resource_pool.pinfo
+            parameters["cpus"] = parameters["np"] = nodes * pinfo("cpus_per_node")
+            parameters["gpus"] = parameters["ndevice"] = nodes * pinfo("gpus_per_node")
         parameters["runtime"] = self.runtime
         return parameters
 
@@ -419,7 +418,8 @@ class TestCase(AbstractTestCase):
 
     def required_resources(self) -> list[list[dict[str, Any]]]:
         group: list[dict[str, Any]] = []
-        for name, value in self.parameters.items():
+        parameters = self.parameters | self.implicit_parameters
+        for name, value in parameters.items():
             if name in config.resource_params:
                 assert isinstance(value, int)
                 group.extend([{"type": name, "slots": 1} for _ in range(value)])

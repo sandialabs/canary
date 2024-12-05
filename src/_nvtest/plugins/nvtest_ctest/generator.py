@@ -1,4 +1,5 @@
 import argparse
+import copy
 import io
 import json
 import os
@@ -200,7 +201,6 @@ class CTestTestCase(TestCase):
 
         if processors is not None:
             self.parameters["cpus"] = processors
-
         elif self.preflags:
             self.parameters["cpus"] = parse_np(self.preflags)
 
@@ -263,7 +263,17 @@ class CTestTestCase(TestCase):
             warn_unsupported_ctest_option("timeout_signal_name")
 
     def required_resources(self) -> list[list[dict[str, Any]]]:
-        return self.resource_groups
+        required = copy.deepcopy(self.resource_groups)
+        if not required:
+            return [[{"type": "cpus", "slots": 1}]]
+        for group in required:
+            for item in group:
+                if item["type"] == "cpus":
+                    break
+            else:
+                slots = self.parameters.get("cpus", 1)
+                group.append({"type": "cpus", "slots": slots})
+        return required
 
     @property
     def implicit_keywords(self) -> list[str]:
@@ -312,8 +322,12 @@ class CTestTestCase(TestCase):
         os.environ["CTEST_RESOURCE_GROUP_COUNT"] = str(len(self.resources))
         for i, spec in enumerate(self.resources):
             types = sorted(spec.keys())
+            if "cpus" in types:
+                types.remove("cpus")
             os.environ[f"CTEST_RESOURCE_GROUP_{i}"] = ",".join(types)
             for type, items in spec.items():
+                if type == "cpus":
+                    continue
                 key = f"CTEST_RESOURCE_GROUP_{i}_{type.upper()}"
                 values = []
                 for item in items:

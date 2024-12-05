@@ -1,4 +1,3 @@
-from . import config
 from .error import diff_exit_status
 from .error import fail_exit_status
 from .error import skip_exit_status
@@ -153,8 +152,6 @@ class Status:
             raise ValueError(f"{arg} is not a valid status")
         if arg in ("skipped", "failed", "diffed") and details is None:
             details = "unknown"
-            if config.debug:
-                raise ValueError(f"details for status {arg!r} must be provided")
         if arg in ("pending", "ready", "created", "retry"):
             if details is not None:
                 raise ValueError(f"details not compatible with Status({arg!r})")

@@ -281,6 +281,8 @@ class Session:
             snapshot = snapshots.get(case.id)
             if snapshot is not None:
                 case.update(**snapshot)
+
+        logging.debug("Finished loading test cases")
         return list(cases.values())
 
     def dump_testfiles(self, file: IO[Any]) -> None:

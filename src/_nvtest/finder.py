@@ -263,7 +263,6 @@ class Finder:
                 kwds.update(case.parameters.keys())
                 match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
                 if not match:
-                    logging.debug(f"Skipping {case}::{case.name}")
                     case.mask = colorize("deselected by @*b{keyword expression}")
 
             if case.mask is None and ("TDD" in case.keywords or "tdd" in case.keywords):

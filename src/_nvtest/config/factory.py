@@ -297,6 +297,10 @@ class ResourcePool:
         """
         totals: dict[str, int] = {}
         required = obj.required_resources()
+        if not required:
+            raise ValueError(
+                f"{obj}: no resources requested, a test should require at least 1 cpu"
+            )
         resource_specs: list[dict[str, list[dict]]] = []
         try:
             saved = copy.deepcopy(self.pool)
