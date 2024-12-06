@@ -525,8 +525,10 @@ class Config:
     resource_params: list[str] = dataclasses.field(default_factory=list)
 
     def __post_init__(self) -> None:
-        if not self.resource_params:
-            self.resource_params = ["cpus", "gpus"]
+        if "cpus" not in self.resource_params:
+            self.resource_params.append("cpus")
+        if "gpus" not in self.resource_params:
+            self.resource_params.append("gpus")
 
     @classmethod
     def factory(cls) -> "Config":

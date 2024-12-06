@@ -230,8 +230,9 @@ Add options to the ``build:options`` configuration setting.
 would cause the following to be written to the build configuration
 (:ref:`cdash-write-config` must be called):
 
-.. code-block:: ini
+.. code-block:: yaml
 
-   [build:options]
-   feature1 = true
-   feature2 = true
+   build:
+     options:
+       feature1: true
+       feature2: true
