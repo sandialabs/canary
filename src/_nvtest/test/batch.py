@@ -175,8 +175,12 @@ class TestBatch(AbstractTestCase):
     def stage(batch_id: str) -> str:
         work_tree = config.session.work_tree
         assert work_tree is not None
-        pattern = os.path.join(work_tree, ".nvtest/batch", batch_id[:2], f"{batch_id[2:]}*")
-        candidates = glob.glob(pattern)
-        if not candidates:
-            raise ValueError(f"cannot find stage for batch {batch_id}")
-        return candidates[0]
+        if len(batch_id) < 20:
+            # Find an existing batch from a shortened ID
+            pattern = os.path.join(work_tree, ".nvtest/batch", batch_id[:2], f"{batch_id[2:]}*")
+            candidates = glob.glob(pattern)
+            if not candidates:
+                raise ValueError(f"cannot find stage for batch {batch_id}")
+            return candidates[0]
+        else:
+            return os.path.join(work_tree, ".nvtest/batch", batch_id[:2], f"{batch_id[2:]}")
