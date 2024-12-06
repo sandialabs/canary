@@ -3,6 +3,7 @@ import re
 import sys
 from typing import Any
 from typing import TextIO
+from typing import Type
 
 from . import config
 from . import plugin
@@ -14,6 +15,8 @@ from .third_party.color import colorize
 from .util import filesystem as fs
 from .util import graph
 from .util import logging
+from .util.misc import partition
+from .util.parallel import starmap
 from .util.term import terminal_size
 from .util.time import hhmmss
 
@@ -192,7 +195,7 @@ class Finder:
             f"    keywords={keyword_expr}\n"
             f"    parameters={parameter_expr}"
         )
-        concrete_test_groups = [f.lock(on_options=on_options) for f in files]
+        concrete_test_groups = starmap(generator_lock, [(f, on_options) for f in files])
         cases: list[TestCase] = [case for group in concrete_test_groups for case in group if case]
 
         # this sanity check should not be necessary
@@ -342,3 +345,21 @@ def find(path: str) -> AbstractTestGenerator:
 
 class FinderError(Exception):
     pass
+
+
+def generator_factory(
+    generators: set[Type[AbstractTestGenerator]], root: str, dirname: str, basename: str
+) -> AbstractTestGenerator | int:
+    path = os.path.relpath(os.path.join(dirname, basename), root)
+    for gen_type in generators:
+        if gen_type.always_matches(root if path is None else path):
+            try:
+                return gen_type(root, path=path)
+            except Exception as e:
+                logging.exception(f"Failed to parse {root}/{path}", e)
+                return 1
+    return 0
+
+
+def generator_lock(generator: AbstractTestGenerator, on: list[str] | None) -> list[TestCase]:
+    return generator.lock(on_options=on)
