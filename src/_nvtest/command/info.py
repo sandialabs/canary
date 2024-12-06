@@ -1,7 +1,8 @@
 import argparse
 import os
-import yaml
 from typing import Any
+
+import yaml
 
 from _nvtest import config
 from _nvtest.config.argparsing import Parser

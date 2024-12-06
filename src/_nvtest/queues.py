@@ -247,6 +247,7 @@ class BatchResourceQueue(ResourceQueue):
     def prepare(self, **kwds: Any) -> None:
         batches: list[TestBatch]
         batchopts = config.getoption("batch", {})
+        logging.info(f"Batching test cases using scheme={self.batch_scheme}")
         if self.batch_scheme == "count":
             count = batchopts.get("count")
             assert isinstance(count, int)
@@ -258,6 +259,7 @@ class BatchResourceQueue(ResourceQueue):
             default_length = 30 * 60
             length = float(batchopts.get("duration") or default_length)  # 30 minute default
             batches = autopartition(self.tmp_buffer, t=length)
+        logging.info(f"Generated {len(batches)} batches")
         for batch in batches:
             super().put(batch)
 
