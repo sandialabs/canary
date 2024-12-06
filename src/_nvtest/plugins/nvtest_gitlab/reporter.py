@@ -103,10 +103,10 @@ class MergeRequest:
 
 def group_failed_tests(cases: list[TestCase]):
     failed: dict[str, list[TestCase]] = {}
-    nonpass = ("skipped", "failed", "diffed", "timeout")
+    nonpass = ("skipped", "diffed", "failed", "timeout", "not_run", "cancelled")
     for case in cases:
-        if case.status.iid in nonpass:
-            failed.setdefault(case.status.iid, []).append(case)
+        if case.status.value in nonpass:
+            failed.setdefault(case.status.value, []).append(case)
     return failed
 
 
