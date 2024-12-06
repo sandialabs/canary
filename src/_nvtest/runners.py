@@ -308,8 +308,8 @@ class BatchRunner(AbstractTestRunner):
                     commands=[nvtest_invocation],
                     tasks=max(_.cpus for _ in batch),
                     script=batch.submission_script_filename(),
-                    output=batch.logfile(),
-                    error=batch.logfile(),
+                    output=batch.logfile(batch.id),
+                    error=batch.logfile(batch.id),
                     qtime=qtime,
                     variables=variables,
                 )

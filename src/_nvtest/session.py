@@ -571,7 +571,7 @@ class Session:
 
     def bfilter(self, *, batch_id: str) -> list[TestCase]:
         """Mask any test cases not in batch ``batch_id``"""
-        batch_case_ids = TestBatch.load(batch_id)
+        batch_case_ids = TestBatch.loadindex(batch_id)
         if batch_case_ids is None:
             raise ValueError(f"could not find index for batch {batch_id}")
         expected = len(batch_case_ids)
@@ -876,7 +876,7 @@ class Session:
 
     def batch_logfile(self, batch_id: str) -> str:
         """Get the path of the batch log file"""
-        path = os.path.join(self.work_tree, TestBatch.logfile_path(batch_id))
+        path = TestBatch.logfile(batch_id)
         if not os.path.exists(path):
             raise FileNotFoundError(path)
         return path

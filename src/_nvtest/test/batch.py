@@ -145,8 +145,10 @@ class TestBatch(AbstractTestCase):
     def submission_script_filename(self) -> str:
         return os.path.join(self.stage(self.id), "nvtest-inp.sh")
 
-    def logfile(self, stage: str | None = None) -> str:
-        return os.path.join(self.stage(self.id), "nvtest-out.txt")
+    @staticmethod
+    def logfile(batch_id: str) -> str:
+        """Get the path of the batch log file"""
+        return os.path.join(TestBatch.stage(batch_id), "nvtest-out.txt")
 
     @property
     def path(self) -> str:
@@ -159,28 +161,35 @@ class TestBatch(AbstractTestCase):
             json.dump([case.id for case in self], fh, indent=2)
 
     @staticmethod
-    def load(batch_id: str) -> list[str] | None:
-        f = os.path.join(TestBatch.stage(batch_id), "index")
+    def loadindex(batch_id: str) -> list[str] | None:
+        try:
+            full_batch_id = TestBatch.find(batch_id)
+        except BatchNotFound:
+            return None
+        stage = TestBatch.stage(full_batch_id)
+        f = os.path.join(stage, "index")
         if not os.path.exists(f):
             return None
         with open(f, "r") as fh:
             return json.load(fh)
 
     @staticmethod
-    def logfile_path(batch_id: str) -> str:
-        """Get the path of the batch log file"""
-        return os.path.join(TestBatch.stage(batch_id), "nvtest-out.txt")
-
-    @staticmethod
     def stage(batch_id: str) -> str:
         work_tree = config.session.work_tree
         assert work_tree is not None
-        if len(batch_id) < 20:
-            # Find an existing batch from a shortened ID
-            pattern = os.path.join(work_tree, ".nvtest/batch", batch_id[:2], f"{batch_id[2:]}*")
-            candidates = glob.glob(pattern)
-            if not candidates:
-                raise ValueError(f"cannot find stage for batch {batch_id}")
-            return candidates[0]
-        else:
-            return os.path.join(work_tree, ".nvtest/batch", batch_id[:2], f"{batch_id[2:]}")
+        return os.path.join(work_tree, ".nvtest/batch", batch_id[:2], f"{batch_id[2:]}")
+
+    @staticmethod
+    def find(batch_id: str) -> str:
+        """Find the full batch ID from batch_id"""
+        work_tree = config.session.work_tree
+        assert work_tree is not None
+        pattern = os.path.join(work_tree, ".nvtest/batch", batch_id[:2], f"{batch_id[2:]}*")
+        candidates = glob.glob(pattern)
+        if not candidates:
+            raise BatchNotFound(f"cannot find stage for batch {batch_id}")
+        return "".join(candidates[0].split(os.path.sep)[-2:])
+
+
+class BatchNotFound(Exception):
+    pass
