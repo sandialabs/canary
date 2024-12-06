@@ -107,7 +107,7 @@ class Run(Command):
             session = Session(path, mode=args.mode, force=args.wipe)
             session.add_search_paths(args.paths)
             s = ", ".join(os.path.relpath(p, os.getcwd()) for p in session.search_paths)
-            logging.emit(colorize("@*{searching} for tests in %s\n" % s))
+            logging.emit(colorize("@*{Searching} for tests in %s\n" % s))
             session.discover(pedantic=args.P == "pedantic")
             if args.until is not None:
                 generators = session.generators
@@ -116,11 +116,11 @@ class Run(Command):
                     roots.add(generator.root)
                 n, N = len(generators), len(roots)
                 s, S = "" if n == 1 else "s", "" if N == 1 else "s"
-                logging.info(colorize("@*{collected} %d file%s from %d root%s" % (n, s, N, S)))
+                logging.info(colorize("@*{Collected} %d file%s from %d root%s" % (n, s, N, S)))
                 if args.until == "discover":
-                    logging.info("done with test discovery")
+                    logging.info("Done with test discovery")
                     return 0
-            logging.emit(colorize("@*{generating} test cases from test files\n"))
+            logging.emit(colorize("@*{Generating} test cases from test files\n"))
             session.lock(
                 keyword_expr=args.keyword_expr,
                 parameter_expr=args.parameter_expr,
@@ -132,16 +132,16 @@ class Run(Command):
                 unmasked_cases = [case for case in session.cases if not case.mask]
                 n, N = len(unmasked_cases), len([case.file for case in unmasked_cases])
                 s, S = "" if n == 1 else "s", "" if N == 1 else "s"
-                logging.info(colorize("@*{expanded} %d case%s from %d file%s" % (n, s, N, S)))
+                logging.info(colorize("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S)))
                 graph.print(unmasked_cases, file=sys.stdout)
                 if args.until == "lock":
-                    logging.info("done freezing test cases")
+                    logging.info("Done freezing test cases")
                     return 0
             if not args.no_header:
                 logging.emit(session.overview(session.cases))
             cases = session.populate(copy_all_resources=args.copy_all_resources)
             if args.until == "populate":
-                logging.info("done populating worktree")
+                logging.info("Done populating worktree")
                 return 0
         elif args.mode == "a":
             session = Session(args.work_tree, mode=args.mode)
