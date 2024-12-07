@@ -252,8 +252,9 @@ class TestCase(AbstractTestCase):
     @property
     def lockfile(self) -> str:
         """Path to lock file containing information needed to generate this case at runtime"""
-        file = os.path.join(self.cache_directory, self._lockfile)
-        return file
+        work_tree = config.session.work_tree
+        assert work_tree is not None
+        return os.path.join(work_tree, ".nvtest/cases", self.id[:2], self.id[2:], self._lockfile)
 
     @property
     def file_root(self) -> str:
@@ -1091,13 +1092,14 @@ class TestCase(AbstractTestCase):
     def copy(self) -> "TestCase":
         return deepcopy(self)
 
-    def add_dependency(self, case: "TestCase", /, expected_result: str = "success"):
+    def add_dependency(self, case: "TestCase", /, expected_result: str = "success") -> None:
         if case not in self.dependencies:
             self.dependencies.append(case)
             self.dep_done_criteria.append(expected_result)
             assert len(self.dependencies) == len(self.dep_done_criteria)
 
-    def copy_sources_to_workdir(self, copy_all_resources: bool = False):
+    def copy_sources_to_workdir(self) -> None:
+        copy_all_resources: bool = config.getoption("copy_all_resources", False)
         workdir = self.working_directory
         for asset in self.assets:
             if asset.action not in ("copy", "link"):
@@ -1117,10 +1119,13 @@ class TestCase(AbstractTestCase):
                 fs.force_symlink(relsrc, dst, echo=logging.info)
 
     def save(self):
-        file = self.lockfile
-        mkdirp(os.path.dirname(file))
-        with open(file, "w") as fh:
+        lockfile = self.lockfile
+        mkdirp(os.path.dirname(lockfile))
+        with open(lockfile, "w") as fh:
             self.dump(fh)
+        file = os.path.join(self.cache_directory, self._lockfile)
+        mkdirp(os.path.dirname(file))
+        fs.force_symlink(lockfile, file)
 
     def refresh(self, propagate: bool = True) -> None:
         file = self.lockfile
@@ -1193,26 +1198,23 @@ class TestCase(AbstractTestCase):
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
 
-    def setup(self, work_tree: str, copy_all_resources: bool = False, clean: bool = True) -> None:
+    def setup(self) -> None:
         if len(self.dependencies) != len(self.dep_done_criteria):
             raise ValueError("Inconsistent dependency/dep_done_criteria lists")
-        logging.trace(f"Setting up {self}")
-        if self.work_tree is not None:
-            assert os.path.samefile(work_tree, self.work_tree)
-        self.work_tree = work_tree
-        clean_out_folder(self.cache_directory)
+        logging.debug(f"Setting up {self}")
+        self.work_tree = config.session.work_tree
         fs.mkdirp(self.cache_directory)
-        if clean:
-            clean_out_folder(self.working_directory)
+        clean_out_folder(self.cache_directory)
         with fs.working_dir(self.working_directory, create=True):
-            self.setup_working_directory(copy_all_resources=copy_all_resources)
+            self.setup_working_directory()
             self._status.set("ready" if not self.dependencies else "pending")
             for hook in plugin.hooks():
                 hook.test_setup(self)
             self.save()
         logging.trace(f"Done setting up {self}")
 
-    def setup_working_directory(self, copy_all_resources: bool = False) -> None:
+    def setup_working_directory(self) -> None:
+        copy_all_resources: bool = config.getoption("copy_all_resources", False)
         with logging.capture(self.logfile("setup"), mode="w"):
             with logging.timestamps():
                 logging.info(f"Preparing test: {self.name}")
@@ -1224,7 +1226,7 @@ class TestCase(AbstractTestCase):
                 else:
                     relsrc = os.path.relpath(self.file, os.getcwd())
                     fs.force_symlink(relsrc, os.path.basename(self.file), echo=logging.info)
-                self.copy_sources_to_workdir(copy_all_resources=copy_all_resources)
+                self.copy_sources_to_workdir()
 
     def do_baseline(self) -> None:
         if not self.baseline:
@@ -1260,15 +1262,14 @@ class TestCase(AbstractTestCase):
         return "FINISHED: {0} {1} {2}".format(id, self.pretty_repr(), self.status.cname)
 
     def prepare_for_launch(self, stage: str = "run") -> None:
-        if os.getenv("NVTEST_RESETUP"):
-            assert isinstance(self.work_tree, str)
-            self.setup(self.work_tree)
-        if self.unresolved_dependencies:
-            raise RuntimeError("All dependencies must be resolved before running")
-        with fs.working_dir(self.working_directory):
-            for hook in plugin.hooks():
-                hook.test_before_run(self, stage=stage)
-        self.save()
+        if stage == "run":
+            self.setup()
+            if self.unresolved_dependencies:
+                raise RuntimeError("All dependencies must be resolved before running")
+            with fs.working_dir(self.working_directory):
+                for hook in plugin.hooks():
+                    hook.test_before_run(self, stage=stage)
+            self.save()
 
     def concatenate_logs(self) -> None:
         with open(self.logfile(), "w") as fh:

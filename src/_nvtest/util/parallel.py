@@ -6,6 +6,7 @@ import traceback
 from multiprocessing.process import BaseProcess
 from typing import Any
 from typing import Callable
+from typing import Sequence
 
 from ..util.rprobe import cpu_count
 
@@ -116,12 +117,17 @@ def num_processes(max_processes: int | None = None, _cache: dict = {}) -> int:
     return n
 
 
-def map(func: Callable, args: list, processes: int | None = None, debug: bool = False) -> Any:
+def map(
+    func: Callable,
+    args: Sequence,
+    processes: int | None = None,
+    debug: bool = False,
+) -> Any:
     """Map a func to the list of arguments, return the list of results.
 
     Args:
       func: user defined task object
-      args: list of arguments for the task
+      args: iterator of arguments for the task
       processes: maximum number of processes allowed
       debug: if False, raise an exception containing just the error messages from
         workers, if True an exception with complete stacktraces
@@ -140,7 +146,12 @@ def map(func: Callable, args: list, processes: int | None = None, debug: bool = 
     return results
 
 
-def starmap(func: Callable, args: list, processes: int | None = None, debug: bool = False) -> Any:
+def starmap(
+    func: Callable,
+    args: Sequence,
+    processes: int | None = None,
+    debug: bool = False,
+) -> Any:
     """Map a func to the list of arguments, return the list of results.
 
     Args:

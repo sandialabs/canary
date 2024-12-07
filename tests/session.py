@@ -21,8 +21,7 @@ def test_session_filter(tmpdir):
         s = session.Session("tests", mode="w", force=True)
         s.add_search_paths([os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")])
         s.discover()
-        s.lock()
-        cases = s.populate()
+        cases = s.lock()
         s.run(cases)
 
         with working_dir("tests"):
@@ -53,8 +52,7 @@ def test_session_bfilter(tmpdir):
                 [os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")]
             )
             s.discover()
-            s.lock()
-            cases = s.populate()
+            cases = s.lock()
             s.run(cases)
             d1 = os.listdir("tests/.nvtest/batch")[0]
             d2 = os.listdir(os.path.join("tests/.nvtest/batch", d1))[0]
@@ -71,7 +69,6 @@ def test_session_fail_fast(tmpdir):
         s = session.Session("tests", mode="w", force=True)
         s.add_search_paths(os.path.join(p.examples, "status"))
         s.discover()
-        s.lock()
-        cases = s.populate()
+        cases = s.lock()
         rc = s.run(cases, fail_fast=True)
         assert rc != 0

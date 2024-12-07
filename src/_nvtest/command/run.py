@@ -58,9 +58,7 @@ class Run(Command):
             "(v)verbose: show start/finish/status of each test case as it occurs; "
             "(b)ar: show progress bar as tests progress. [default: v]",
         )
-        parser.add_argument(
-            "-u", "--until", choices=("discover", "lock", "populate"), help=argparse.SUPPRESS
-        )
+        parser.add_argument("-u", "--until", choices=("discover", "lock"), help=argparse.SUPPRESS)
         parser.add_argument(
             "--fail-fast",
             action="store_true",
@@ -107,7 +105,7 @@ class Run(Command):
             session = Session(path, mode=args.mode, force=args.wipe)
             session.add_search_paths(args.paths)
             s = ", ".join(os.path.relpath(p, os.getcwd()) for p in session.search_paths)
-            logging.emit(colorize("@*{Searching} for tests in %s\n" % s))
+            logging.info(colorize("@*{Searching} for tests in %s" % s))
             session.discover(pedantic=args.P == "pedantic")
             if args.until is not None:
                 generators = session.generators
@@ -120,8 +118,8 @@ class Run(Command):
                 if args.until == "discover":
                     logging.info("Done with test discovery")
                     return 0
-            logging.emit(colorize("@*{Generating} test cases from test files\n"))
-            session.lock(
+            logging.info(colorize("@*{Generating} test cases from test files"))
+            cases = session.lock(
                 keyword_expr=args.keyword_expr,
                 parameter_expr=args.parameter_expr,
                 on_options=args.on_options,
@@ -130,7 +128,7 @@ class Run(Command):
             )
             if args.until is not None:
                 unmasked_cases = [case for case in session.cases if not case.mask]
-                n, N = len(unmasked_cases), len([case.file for case in unmasked_cases])
+                n, N = len(unmasked_cases), len({case.file for case in unmasked_cases})
                 s, S = "" if n == 1 else "s", "" if N == 1 else "s"
                 logging.info(colorize("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S)))
                 graph.print(unmasked_cases, file=sys.stdout)
@@ -139,10 +137,6 @@ class Run(Command):
                     return 0
             if not args.no_header:
                 logging.emit(session.overview(session.cases))
-            cases = session.populate(copy_all_resources=args.copy_all_resources)
-            if args.until == "populate":
-                logging.info("Done populating worktree")
-                return 0
         elif args.mode == "a":
             session = Session(args.work_tree, mode=args.mode)
             cases = session.filter(

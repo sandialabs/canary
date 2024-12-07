@@ -123,9 +123,8 @@ class CTestTestFile(AbstractTestGenerator):
                     for fixture in cleanup_fixtures[fixture_name]:
                         fixture.add_dependency(case)
 
-    @staticmethod
-    def resolve_inter_dependencies(cases: list["CTestTestCase"]) -> None:
-        logging.debug("Resolving dependencies in test file")
+    def resolve_inter_dependencies(self, cases: list["CTestTestCase"]) -> None:
+        logging.debug(f"Resolving dependencies in {self}")
         for case in cases:
             while True:
                 if not case.unresolved_dependencies:
@@ -338,8 +337,8 @@ class CTestTestCase(TestCase):
                     values.append(f"id:{lid},slots:{item['slots']}")
                 os.environ[key] = ";".join(values)
 
-    def setup(self, work_tree: str, copy_all_resources: bool = False, clean: bool = True) -> None:
-        super().setup(work_tree, copy_all_resources=copy_all_resources, clean=False)
+    def setup(self, clean: bool = True) -> None:
+        super().setup()
         with nvtest.filesystem.working_dir(self.cache_directory):
             with open("ctest-command.txt", "w") as fh:
                 command = " ".join(self.command())
