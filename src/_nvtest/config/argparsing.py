@@ -297,6 +297,12 @@ def make_argument_parser(**kwargs):
     )
     group = parser.add_argument_group("runtime configuration")
     group.add_argument(
+        "-f",
+        dest="config_file",
+        metavar="file",
+        help="Read local configuration settings from this file",
+    )
+    group.add_argument(
         "-c",
         dest="config_mods",
         action=ConfigMods,
