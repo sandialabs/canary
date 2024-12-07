@@ -48,7 +48,7 @@ coverage-test:
   - coverage report
   - coverage xml
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
   coverage: '/TOTAL.*? (100(?:\.0+)?\%\|[1-9]?\d(?:\.\d+)?\%)$/'
   artifacts:
@@ -70,7 +70,7 @@ lint-changed-files:
   - ./bin/ci/ruff-check --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" --output-format=junit --output-file=ruff.xml
   - cat ruff.xml
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
   artifacts:
     when: always
@@ -88,7 +88,7 @@ format-changed-files:
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
   - ./bin/ci/ruff-format --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" --check
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
 
 
@@ -102,14 +102,14 @@ mypy:
   - mypy ./src --no-error-summary > mypy-out.txt || true
   - mypy-gitlab-code-quality < mypy-out.txt > codequality.json
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
   artifacts:
     when: always
     reports:
       codequality: codequality.json
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
 
 
@@ -164,7 +164,7 @@ pages:
 mr-pages:
   extends: .pages
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     changes:
     - src/nvtest/directives.py
     - src/_nvtest/plugins/commands/*.py

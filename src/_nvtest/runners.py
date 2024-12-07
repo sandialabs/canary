@@ -1,5 +1,6 @@
 import abc
 import io
+import json
 import os
 import shlex
 import signal
@@ -396,9 +397,17 @@ class BatchRunner(AbstractTestRunner):
         node_count = config.resource_pool.node_count(arg)
         cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
         gpus_per_node = config.resource_pool.pinfo("gpus_per_node")
-        fp.write(f"-c machine:node_count:{node_count} ")
-        fp.write(f"-c machine:cpus_per_node:{cpus_per_node} ")
-        fp.write(f"-c machine:gpus_per_node:{gpus_per_node} ")
+        if isinstance(arg, TestBatch):
+            cfg: dict[str, Any] = {}
+            machine_cfg = cfg.setdefault("machine", {})
+            machine_cfg["node_count"] = node_count
+            machine_cfg["cpus_per_node"] = cpus_per_node
+            machine_cfg["gpus_per_node"] = gpus_per_node
+            batch_stage = arg.stage(arg.id)
+            config_file = os.path.join(batch_stage, "config")
+            with open(config_file, "w") as fh:
+                json.dump(cfg, fh, indent=2)
+            fp.write(f"-f {config_file} ")
         fp.write(f"-C {config.session.work_tree} run -rv --stage={stage} ")
         if getattr(config.options, "fail_fast", False):
             fp.write("--fail-fast ")

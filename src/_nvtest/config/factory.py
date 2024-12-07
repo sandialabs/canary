@@ -690,6 +690,11 @@ class Config:
             schema = section_schemas[section]
             config_mods[section] = schema.validate({section: section_data})[section]
 
+        if args.config_file:
+            file_data = self.read_config(args.config_file)
+            for section, section_data in file_data.items():
+                config_mods[section] = merge(config_mods.get(section, {}), section_data)
+
         if errors:
             raise ValueError("Stopping due to previous errors")
 
@@ -756,7 +761,7 @@ class Config:
             except SchemaError as e:
                 msg = f"Schema error encountered in {file}: {e.args[0]}"
                 raise ValueError(msg) from None
-            config[section] = validated
+            config[section] = validated[section]
         return config
 
     @staticmethod
