@@ -58,13 +58,7 @@ class Run(Command):
             "(v)verbose: show start/finish/status of each test case as it occurs; "
             "(b)ar: show progress bar as tests progress. [default: v]",
         )
-<<<<<<< HEAD
         parser.add_argument("-u", "--until", choices=("discover", "lock"), help=argparse.SUPPRESS)
-=======
-        parser.add_argument(
-            "-u", "--until", choices=("discover", "lock"), help=argparse.SUPPRESS
-        )
->>>>>>> a7f46ace (lazily perform setup to speed startup)
         parser.add_argument(
             "--fail-fast",
             action="store_true",
