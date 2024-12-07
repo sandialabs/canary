@@ -8,6 +8,7 @@ from . import config
 from . import plugin
 from . import when
 from .generator import AbstractTestGenerator
+from .generator import StopRecursion
 from .test.case import TestCase
 from .third_party.colify import colified
 from .third_party.color import colorize
@@ -107,24 +108,31 @@ class Finder:
                 return True
             return False
 
+        paths: list[tuple[str, str]] = []
         start = root if subdir is None else os.path.join(root, subdir)
-        errors: int = 0
-        generators: list[AbstractTestGenerator] = []
         for dirname, dirs, files in os.walk(start):
             if skip(dirname):
                 del dirs[:]
                 continue
             for f in files:
-                path = os.path.relpath(os.path.join(dirname, f), root)
-                for gen_type in AbstractTestGenerator.REGISTRY:
-                    if gen_type.always_matches(root if path is None else path):
-                        try:
-                            generator = gen_type(root, path=path)
-                        except Exception as e:
-                            errors += 1
-                            logging.exception(f"Failed to parse {root}/{path}", e)
-                        else:
-                            generators.append(generator)
+                file = os.path.join(dirname, f)
+                try:
+                    if any(gen_type.matches(file) for gen_type in plugin.generators()):
+                        paths.append((root, os.path.relpath(file, root)))
+                except StopRecursion:
+                    paths.append((root, os.path.relpath(file, root)))
+                    del dirs[:]
+                    break
+        errors: int = 0
+        generators: list[AbstractTestGenerator] = []
+        for p in paths:
+            try:
+                generator = AbstractTestGenerator.factory(*p)
+            except Exception as e:
+                errors += 1
+                logging.exception(f"Failed to parse {p[0]}/{p[1]}", e)
+            else:
+                generators.append(generator)
         return generators, errors
 
     @property
