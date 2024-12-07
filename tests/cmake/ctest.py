@@ -101,10 +101,11 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
         [case] = file.lock()
         runner = xTestCaseRunner()
         mkdirp("./foo")
-        case.setup(work_tree=f"{os.getcwd()}/foo")
-        runner.run(case)
-        assert case.returncode == 0
-        assert case.status == "failed"
+        with nvtest.config.override():
+            nvtest.config.session.work_tree = f"{os.getcwd()}/foo"
+            runner.run(case)
+            assert case.returncode == 0
+            assert case.status == "failed"
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -124,8 +125,9 @@ set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test shoul
         [case] = file.lock()
         runner = xTestCaseRunner()
         mkdirp("./foo")
-        case.setup(work_tree=f"{os.getcwd()}/foo")
-        runner.run(case)
+        with nvtest.config.override():
+            nvtest.config.session.work_tree = f"{os.getcwd()}/foo"
+            runner.run(case)
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -145,8 +147,9 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
         [case] = file.lock()
         runner = xTestCaseRunner()
         mkdirp("./foo")
-        case.setup(work_tree=f"{os.getcwd()}/foo")
-        runner.run(case)
+        with nvtest.config.override():
+            nvtest.config.session.work_tree = f"{os.getcwd()}/foo"
+            runner.run(case)
         assert case.status == "success"
         assert case.returncode == 1
 

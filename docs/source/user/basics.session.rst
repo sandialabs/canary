@@ -17,9 +17,6 @@ A test session consists of the following phases:
   "Lock" test files into test cases based on :ref:`filtering<usage-filter>` criteria and
   :ref:`parameterizations<usage-parameterize>`.
 
-:ref:`Populate<populate>`:
-  Create unique execution directories for each test case and :ref:`copy/link <basics-copy-and-link>` necessary resources into the execution directory.
-
 :ref:`Batch<batch>`:
   For :ref:`batched<usage-run-batched>` sessions, group test cases into batches to run in a batch runner.
 
@@ -65,27 +62,6 @@ During the ``lock`` stage, test files are :ref:`filtered <usage-filter>`, ``para
    :cwd: /examples
    :extraargs: -rv -w --no-header
    :setup: rm -rf TestResults
-
-.. _populate:
-
-Populate
-........
-
-During the ``populate`` stage, the test execution directories are made and populated with test assets:
-
-.. command-output:: nvtest run --until=populate -k centered_space .
-   :cwd: /examples
-   :extraargs: -rv -w
-   :setup: rm -rf TestResults
-
-The resultant test session directory, shown below, will be populated with test execution directories that have the following naming convention: ``[relpath/]testname[.key=val[...]]``.  ``relpath`` is the relative path from the search path root to the test file ``testname.pyt`` and the ``key``\ s are the name of the test cases parameters (if any) with associated ``val``\ s.  The test script is symbolically linked into the execution directory.
-
-.. image:: /images/Session0.png
-   :align: center
-
-.. warning::
-
-  The test directory naming scheme is an implementation detail and may change in the future.  Do not write tests that rely on this naming scheme.
 
 .. _batch:
 

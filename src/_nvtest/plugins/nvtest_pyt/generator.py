@@ -227,11 +227,10 @@ class PYTTestFile(AbstractTestGenerator):
         self.resolve_inter_dependencies(testcases, dependencies)
         return testcases
 
-    @staticmethod
     def resolve_inter_dependencies(
-        cases: list[TestCase], dependencies: dict[str, list[DependencyPatterns]]
+        self, cases: list[TestCase], dependencies: dict[str, list[DependencyPatterns]]
     ) -> None:
-        logging.debug("Resolving dependencies in test file")
+        logging.debug(f"Resolving dependencies in test {self}")
         for case in cases:
             if case.id not in dependencies:
                 continue

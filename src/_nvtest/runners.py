@@ -83,8 +83,8 @@ class TestCaseRunner(AbstractTestRunner):
         try:
             metrics: dict[str, Any] | None = None
             case.start = timestamp()
-            case.status.set("running")
             case.prepare_for_launch(stage=stage)
+            case.status.set("running")
             timeout = case.timeout
             if timeoutx := config.getoption("timeout_multiplier"):
                 timeout *= timeoutx

@@ -14,7 +14,6 @@ from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
 from datetime import datetime
 from functools import partial
-from itertools import repeat
 from typing import IO
 from typing import Any
 from typing import Generator
@@ -45,7 +44,6 @@ from .third_party.lock import WriteTransaction
 from .util import glyphs
 from .util import keyboard
 from .util import logging
-from .util import parallel
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
@@ -404,7 +402,7 @@ class Session:
         owners: set[str] | None = None,
         env_mods: dict[str, str] | None = None,
         regex: str | None = None,
-    ) -> None:
+    ) -> list[TestCase]:
         """Lock test files into concrete (parameterized) test cases
 
         Args:
@@ -441,47 +439,14 @@ class Session:
         with self.db.open("cases", "w") as record:
             self.dump_testcases(record)
         logging.debug(f"Collected {len(self.cases)} test cases from {len(self.generators)} files")
-
-    def populate(self, copy_all_resources: bool = False) -> list[TestCase]:
-        """Populate the work tree with test case assets and return the list of cases ready to run"""
-        logging.debug("Populating test case directories")
-        with self.rc_environ():
-            with working_dir(self.work_tree):
-                self.setup_testcases(copy_all_resources=copy_all_resources)
-        return [case for case in self.cases if case.status.satisfies(("pending", "ready"))]
-
-    def setup_testcases(self, copy_all_resources: bool = False) -> None:
-        """Setup the test cases and take a snapshot"""
-        logging.debug("Setting up test cases")
-        cases = [case for case in self.cases if not case.mask]
-        ts: TopologicalSorter = TopologicalSorter()
-        for case in cases:
-            ts.add(case, *case.dependencies)
-        ts.prepare()
-        errors = 0
-        while ts.is_active():
-            group = ts.get_ready()
-            args = zip(group, repeat(self.work_tree), repeat(copy_all_resources))
-            if config.debug:
-                for a in args:
-                    setup_individual_case(*a)
-            else:
-                parallel.starmap(setup_individual_case, list(args))
-            for case in group:
-                # Since setup is run in a multiprocessing pool, the internal
-                # state is lost and needs to be updated
-                case.refresh()
-                assert case.status.satisfies(("skipped", "ready", "pending"))
-                if case.work_tree is None:
-                    errors += 1
-                    logging.error(f"{case}: work_tree not set after setup")
-            ts.done(*group)
+        for case in cases_to_run:
+            case.status.set("ready" if not case.dependencies else "pending")
+            case.save()
         with self.db.open("snapshots", "a") as record:
             self.dump_snapshots(record)
         with self.db.open("cases", "w") as record:
             self.dump_testcases(record)
-        if errors:
-            raise ValueError("Stopping due to previous errors")
+        return cases_to_run
 
     def filter(
         self,
@@ -863,8 +828,8 @@ class Session:
                 case.save()
             elif not case.status.satisfies(("ready", "pending")):
                 raise ValueError(f"{case}: case is not ready or pending")
-            elif case.work_tree is None:
-                raise ValueError(f"{case}: exec root is not set")
+            # elif case.work_tree is None:
+            #    raise ValueError(f"{case}: exec root is not set")
         queue.put(*[case for case in cases if case.status.satisfies(("ready", "pending"))])
         queue.prepare(**kwds)
         if queue.empty():
@@ -1114,13 +1079,6 @@ class Database:
         with transaction_type(self.lock):
             with open(path, mode) as fh:
                 yield fh
-
-
-def setup_individual_case(case, work_tree, copy_all_resources):
-    """Set up the test case.  This is done in a free function so that it can
-    more easily be parallelized in a multiprocessor Pool"""
-    logging.debug(f"Setting up {case}")
-    case.setup(work_tree, copy_all_resources=copy_all_resources)
 
 
 def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
