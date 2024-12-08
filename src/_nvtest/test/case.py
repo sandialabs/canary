@@ -16,7 +16,6 @@ from typing import Type
 
 from .. import config
 from .. import plugin
-from ..atc import AbstractTestCase
 from ..paramset import ParameterSet
 from ..status import Status
 from ..third_party.color import colorize
@@ -33,6 +32,7 @@ from ..util.module import load_module
 from ..util.shell import source_rcfile
 from ..util.time import hhmmss
 from ..when import match_any
+from .atc import AbstractTestCase
 
 
 def stringify(arg: Any, float_fmt: str | None = None) -> str:
@@ -858,7 +858,7 @@ class TestCase(AbstractTestCase):
                 cpus = int(self.parameters["np"])
             elif "nodes" in self.parameters:
                 nodes = int(self.parameters["nodes"])
-                cpus = nodes * config.machine.cpus_per_node
+                cpus = nodes * config.resource_pool.pinfo("cpus_per_node")
         return cpus
 
     @property
@@ -869,7 +869,7 @@ class TestCase(AbstractTestCase):
             if "nodes" in self.parameters:
                 nodes = int(self.parameters["nodes"])  # type: ignore
             else:
-                cpus_per_node = config.machine.cpus_per_node
+                cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
                 nodes = math.ceil(self.cpus / cpus_per_node)
         return nodes
 
@@ -884,7 +884,7 @@ class TestCase(AbstractTestCase):
                 gpus = int(self.parameters["ndevice"])  # type: ignore
             elif "nodes" in self.parameters:
                 nodes = int(self.parameters["nodes"])
-                gpus = nodes * config.machine.get("gpus_per_node")
+                gpus = nodes * config.resource_pool.pinfo("gpus_per_node")
         return gpus
 
     @property

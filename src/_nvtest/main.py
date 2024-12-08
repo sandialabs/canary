@@ -141,12 +141,11 @@ def setup_hpc_connect(args: argparse.Namespace) -> None:
         log(f"  HPC connect: node count: {hpc_connect.scheduler.config.node_count}")
         log(f"  HPC connect: CPUs per node: {hpc_connect.scheduler.config.cpus_per_node}")
         log(f"  HPC connect: GPUs per node: {hpc_connect.scheduler.config.gpus_per_node}")
-        config.machine.update(
+        config.resource_pool.fill_uniform(
             node_count=hpc_connect.scheduler.config.node_count,
             cpus_per_node=hpc_connect.scheduler.config.cpus_per_node,
             gpus_per_node=hpc_connect.scheduler.config.gpus_per_node,
         )
-        config.update_resource_counts()
 
 
 def invoke_command(command: "Command", args: argparse.Namespace) -> int:

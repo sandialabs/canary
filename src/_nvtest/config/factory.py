@@ -4,7 +4,6 @@ import dataclasses
 import json
 import math
 import os
-import re
 from string import Template
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -23,11 +22,12 @@ from .schemas import batch_schema
 from .schemas import build_schema
 from .schemas import config_schema
 from .schemas import machine_schema
+from .schemas import resource_schema
 from .schemas import test_schema
 from .schemas import variables_schema
 
 if TYPE_CHECKING:
-    from ..atc import AbstractTestCase
+    from ..test.atc import AbstractTestCase
 
 section_schemas: dict[str, Schema] = {
     "build": build_schema,
@@ -35,6 +35,7 @@ section_schemas: dict[str, Schema] = {
     "config": config_schema,
     "machine": machine_schema,
     "variables": variables_schema,
+    "resource_pool": resource_schema,
     "test": test_schema,
 }
 
@@ -77,7 +78,7 @@ class ResourcePool:
     .. code-block:: yaml
 
         local:
-          str:
+          <resource name>:
           - id: str
             slots: int
 
@@ -96,54 +97,49 @@ class ResourcePool:
           - id: "04"
             slots: 1
 
-    nvtest adopts a similar layout to work on multi-node systems by allowing for a list of ``local``
-    objects and giving each ``local`` object its own ``id``:
+    nvtest adopts a similar layout to work on multi-node systems by allowing for a list of
+    objects (similar to ctest's ``local``) each with its own ``id``:
 
     .. code-block:: yaml
 
         resource_pool:
-        - local:
-            .id: str
-            str:
-            - id: str
-              slots: int
-
-    where ``local:id`` is the ID of the ith entry in ``pool``
+        - id: str
+          <resource name>:
+          - id: str
+            slots: int
 
     For example, a machine having 2 nodes with 4 GPUs per node may have
 
     .. code-block:: yaml
 
         resource_pool:
-        - local:
-            .id: "01"
-            gpus:
-            - .id: "01"
-              slots: 1
-            - id: "02"
-              slots: 1
-            - id: "03"
-              slots: 1
-            - id: "04"
-              slots: 1
-        - local:
-            .id: "02"
-            gpus:
-            - id: "01"
-                slots: 1
-            - id: "02"
-                slots: 1
-            - id: "03"
-                slots: 1
-            - id: "04"
-                slots: 1
+        - id: "01"
+          gpus:
+          - id: "01"
+            slots: 1
+          - id: "02"
+            slots: 1
+          - id: "03"
+            slots: 1
+          - id: "04"
+            slots: 1
+        - id: "02"
+          gpus:
+          - id: "01"
+            slots: 1
+          - id: "02"
+            slots: 1
+          - id: "03"
+            slots: 1
+          - id: "04"
+            slots: 1
 
     Resource allocation
     -------------------
 
-    Resources are allocated from a global resource pool that is generated from the list of ``local``
+    Resources are allocated from a global resource pool that is generated from the list of ``node``
     resource specifications.  A global-to-local mapping is maintained which maps the global resource
-    ID understood by ``nvtest`` to the local resource ID given in the ``local`` resource spec.
+    ID understood by ``nvtest`` to the local resource ID given in the ``node`` resource spec.
     E.g., ``gid = map[type][(pid, lid)]``.
 
     Internal representation
@@ -154,67 +150,65 @@ class ResourcePool:
 
     .. code-block:: python
 
-       pool = {
-           "01": {
-             "gpus": [
-               {"id": "01", "slots": 1},
-               {"id": "02", "slots": 1},
-               {"id": "03", "slots": 1},
-               {"id": "04", "slots": 1},
-             ]
-           }
-       }
+       pool = [
+         {
+           "id": "01",
+           "gpus": [
+             {"id": "01", "slots": 1},
+             {"id": "02", "slots": 1},
+             {"id": "03", "slots": 1},
+             {"id": "04", "slots": 1},
+           ]
+         }
+       ]
 
     """
 
     def __init__(self, pool: list[dict[str, Any]] | None = None) -> None:
         self.map: dict[str, dict[tuple[str, str], int]] = {}
-        self.pool: dict[str, Any] = {}
+        self.pool: list[dict[str, Any]] = []
         self.types: set[str] = set()
         if pool:
             self.fill(pool)
 
+    def update(self, *args: Any, **kwargs: Any) -> None:
+        self.fill(args[0])
+
     def fill(self, pool: list[dict[str, Any]]) -> None:
         self.clear()
         gids: dict[str, int] = {}
-        for i, item in enumerate(pool):
-            local = item["local"]
-            pid = str(local.pop(".id", i))
-            for type, instances in local.items():
-                if type.startswith("."):
-                    continue
+        for i, spec in enumerate(pool):
+            pid = str(spec.pop("id", i))
+            for type, instances in spec.items():
                 self.types.add(type)
                 for instance in instances:
                     lid = instance["id"]
                     gid = gids.setdefault(type, 0)
                     self.map.setdefault(type, {})[(pid, lid)] = gid
                     gids[type] += 1
-            self.pool[pid] = local
+            spec["id"] = pid
+            self.pool.append(spec)
 
     def pinfo(self, item: str) -> Any:
         if item == "node_count":
             return len(self.pool)
         if item.endswith("_per_node"):
             key = item[:-9]
-            for local in self.pool.values():
-                if key in local:
-                    return len(local[key])
+            for spec in self.pool:
+                if key in spec:
+                    return len(spec[key])
             return 0
         if item.endswith("_count"):
             key = item[:-6] + "s"
             count = 0
-            for local in self.pool.values():
-                if key in local:
-                    count += len(local[key])
+            for spec in self.pool:
+                if key in spec:
+                    count += len(spec[key])
             return 0
         raise KeyError(item)
 
     def getstate(self) -> list[dict[str, Any]]:
-        pool: list[dict[str, Any]] = []
-        for pid, spec in self.pool.items():
-            local = {".id": pid} | spec
-            pool.append({"local": local})
-        return pool
+        return copy.deepcopy(self.pool)
 
     def gid(self, type: str, pid: str, lid: str) -> int:
         return self.map[type][(pid, lid)]
@@ -228,14 +222,14 @@ class ResourcePool:
     def node_count(self, obj: "AbstractTestCase") -> int:
         """Determine the number of nodes required by ``obj``"""
         node_count: int = 1
-        local = next(iter(self.pool.values()))
+        spec = self.pool[0]
         if "cpus" in self.types:
             # always should be
-            cpus_per_node = len(local["cpus"])
+            cpus_per_node = len(spec["cpus"])
             cpus = max(_.cpus for _ in obj)
             node_count = math.ceil(cpus / cpus_per_node)
         if "gpus" in self.types:
-            gpus_per_node = len(local["gpus"])
+            gpus_per_node = len(spec["gpus"])
             gpus = max(_.gpus for _ in obj)
             node_count = max(math.ceil(gpus / gpus_per_node))
         return node_count
@@ -248,15 +242,15 @@ class ResourcePool:
     def fill_uniform(self, *, node_count: int, cpus_per_node: int, **kwds: int) -> None:
         pool: list[dict[str, Any]] = []
         for i in range(node_count):
-            local: dict[str, Any] = {}
+            spec: dict[str, Any] = {}
             for j in range(cpus_per_node):
-                local.setdefault("cpus", []).append({"id": str(j), "slots": 1})
+                spec.setdefault("cpus", []).append({"id": str(j), "slots": 1})
             for name, count in kwds.items():
                 if name.endswith("_per_node"):
                     for j in range(count):
-                        local.setdefault(name[:-9], []).append({"id": str(j), "slots": 1})
-            local[".id"] = str(i)
-            pool.append({"local": local})
+                        spec.setdefault(name[:-9], []).append({"id": str(j), "slots": 1})
+            spec["id"] = str(i)
+            pool.append(spec)
         self.fill(pool)
 
     def validate(self, obj: "AbstractTestCase") -> None:
@@ -276,16 +270,16 @@ class ResourcePool:
                         raise ResourceUnsatisfiable(msg) from None
         finally:
             self.pool.clear()
-            self.pool.update(save)
+            self.pool.extend(save)
 
     def _get_from_pool(self, type: str, slots: int) -> dict[str, Any]:
-        for pid, local in self.pool.items():
-            for name, instances in local.items():
+        for spec in self.pool:
+            for name, instances in spec.items():
                 if type == name:
                     for instance in sorted(instances, key=lambda x: x["slots"]):
                         if slots <= instance["slots"]:
                             instance["slots"] -= slots
-                            gid = self.gid(type, pid, instance["id"])
+                            gid = self.gid(type, spec["id"], instance["id"])
                             return {"gid": gid, "slots": slots}
         raise ResourceUnavailable
 
@@ -303,7 +297,7 @@ class ResourcePool:
             )
         resource_specs: list[dict[str, list[dict]]] = []
         try:
-            saved = copy.deepcopy(self.pool)
+            save = copy.deepcopy(self.pool)
             for group in required:
                 # {type: [{gid: ..., slots: ...}]}
                 spec: dict[str, list[dict]] = {}
@@ -318,26 +312,30 @@ class ResourcePool:
                 resource_specs.append(spec)
         except Exception:
             self.pool.clear()
-            self.pool.update(saved)
+            self.pool.extend(save)
             raise
         if logging.LEVEL == logging.DEBUG:
             for type, n in totals.items():
-                N = sum([_["slots"] for local in self.pool.values() for _ in local[type]]) + n
+                N = sum([_["slots"] for spec in self.pool for _ in spec[type]]) + n
                 logging.debug(f"Acquiring {n} {type} from {N} available")
         obj.resources = resource_specs
         return
 
     def reclaim(self, obj: "AbstractTestCase") -> None:
-        for resource in obj.resources:  # list[dict[str, list[dict]]]) -> None:
-            for type, items in resource.items():
-                for item in items:
-                    pid, lid = self.local_ids(type, item["gid"])
-                    for instance in self.pool[pid][type]:
+        def _reclaim(type, rspec):
+            pid, lid = self.local_ids(type, rspec["gid"])
+            for spec in self.pool:
+                if spec["id"] == pid:
+                    for instance in spec[type]:
                         if instance["id"] == lid:
-                            instance["slots"] += item["slots"]
-                            break
-                    else:
-                        raise ValueError("Attempting to reclaim a resource whose ID is unknown")
+                            instance["slots"] += rspec["slots"]
+                            return
+            raise ValueError(f"Attempting to reclaim a resource whose ID is unknown: {rspec!r}")
+
+        for resource in obj.resources:  # list[dict[str, list[dict]]]) -> None:
+            for type, rspecs in resource.items():
+                for rspec in rspecs:
+                    _reclaim(type, rspec)
         obj.resources.clear()
 
 
@@ -383,59 +381,18 @@ class Test:
                 setattr(self, key, value)
 
 
+@dataclasses.dataclass
 class Machine:
-    """Resources available on this machine
+    cpu_count: int
+    gpu_count: int
 
-    Args:
-      node_count: number of compute nodes
-      *_per_node: number of **compute** '*' per node
-
-    """
-
-    def __init__(self, node_count: int, cpus_per_node: int, **kwds: int) -> None:
-        if node_count < 1:
-            raise ValueError(f"node count must be >= 1 ({node_count=})")
-        self.node_count = node_count
-
-        if cpus_per_node < 1:
-            raise ValueError(f"cpus per node must be >= 1 ({cpus_per_node=})")
-        self.cpus_per_node = cpus_per_node
-
-        for key, value in kwds.items():
-            if key.endswith("_per_node"):
-                if value < 0:
-                    raise ValueError(f"{key} must be > 0 ({key}={value})")
-                setattr(self, key, value)
-            else:
-                raise TypeError(f"Machine() got an unexpected keyword argument {key!r}")
-
-    def __repr__(self) -> str:
-        return "Machine(%s)" % ", ".join(f"{k}={v}" for k, v in vars(self).items())
-
-    def get(self, name: str) -> int:
-        if hasattr(self, name):
-            return getattr(self, name)
-        if name.endswith("_per_node"):
-            return 0
-        raise TypeError(f"Machine.get() got an unexpected keyword argument {name!r}")
-
-    def count(self, item: str) -> int:
-        for key, value in self.__dict__.items():
-            if key == f"{item}s_per_node" or key == f"{item}_per_node":
-                return self.node_count * value
-        return 0
-
-    def update(self, *args: Any, **kwargs: Any) -> None:
-        if len(args) > 1:
-            raise TypeError(f"Machine.update() expected at most 1 argument, got {len(args)}")
-        data = dict(*args) | kwargs
-        for key, value in data.items():
-            if not re.search("(node_count)|([a-z_][a-z0-9_]*s_per_node)", key):
-                raise TypeError(f"Machine.update() got an unexpected keyword argument {key!r}")
-            setattr(self, key, value)
-
-    def getstate(self) -> dict[str, int]:
-        return dict(vars(self))
+    def __post_init__(
+        self,
+    ) -> None:
+        if self.cpu_count < 1:
+            raise ValueError(f"cpu_count must be >= 1 ({self.cpu_count=})")
+        if self.gpu_count < 0:
+            raise ValueError(f"gpu_count must be >= 0 ({self.gpu_count=})")
 
 
 @dataclasses.dataclass(init=False, slots=True)
@@ -572,13 +529,11 @@ class Config:
             kwds["build"] = Build(**kwds["build"])
 
         kwds["resource_pool"] = ResourcePool()
-        kwds["resource_pool"].fill_uniform(**vars(m))
+        kwds["resource_pool"].fill_uniform(
+            node_count=1, cpus_per_node=m.cpu_count, gpus_per_node=m.gpu_count
+        )
 
         return cls(**kwds)
-
-    def update_resource_counts(self) -> None:
-        kwds = vars(self.machine)
-        self.resource_pool.fill_uniform(**kwds)
 
     def restore_from_snapshot(self, fh: TextIO) -> None:
         snapshot = json.load(fh)
@@ -703,16 +658,13 @@ class Config:
             if hasattr(obj, "update"):
                 obj.update(section_data)
 
-        if "machine" in config_mods:
-            self.update_resource_counts()
-
         if n := getattr(args, "workers", None):
-            if n > os.cpu_count():
-                raise ValueError(f"workers={n} > cpu_count={os.cpu_count()}")
+            if n > self.machine.cpu_count:
+                raise ValueError(f"workers={n} > cpu_count={self.machine.cpu_count}")
         if b := getattr(args, "batch", None):
             if n := b.get("workers"):
-                if n > os.cpu_count():
-                    raise ValueError(f"batch:workers={n} > cpu_count={os.cpu_count()}")
+                if n > self.machine.cpu_count:
+                    raise ValueError(f"batch:workers={n} > cpu_count={self.machine.cpu_count}")
 
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The

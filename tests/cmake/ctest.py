@@ -4,6 +4,7 @@ import threading
 import pytest
 
 import nvtest
+from _nvtest.config.schemas import resource_schema
 from _nvtest.plugins.nvtest_ctest.generator import CTestTestFile
 from _nvtest.queues import DirectResourceQueue
 from _nvtest.runners import TestCaseRunner as xTestCaseRunner
@@ -235,29 +236,27 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
 """
             )
 
-        pool = [
-            {
-                "local": {
-                    ".id": "1",
-                    "cpus": [
-                        {"id": "0", "slots": 1},
-                        {"id": "1", "slots": 1},
-                        {"id": "2", "slots": 1},
-                        {"id": "3", "slots": 1},
-                        {"id": "4", "slots": 1},
-                    ],
-                    "gpus": [
-                        {"id": "0", "slots": 2},
-                        {"id": "1", "slots": 4},
-                        {"id": "2", "slots": 2},
-                        {"id": "3", "slots": 1},
-                    ],
-                    "crypto_chips": [{"id": "card0", "slots": 4}],
-                }
+        pool = {
+            "local": {
+                "cpus": [
+                    {"id": "0", "slots": 1},
+                    {"id": "1", "slots": 1},
+                    {"id": "2", "slots": 1},
+                    {"id": "3", "slots": 1},
+                    {"id": "4", "slots": 1},
+                ],
+                "gpus": [
+                    {"id": "0", "slots": 2},
+                    {"id": "1", "slots": 4},
+                    {"id": "2", "slots": 2},
+                    {"id": "3", "slots": 1},
+                ],
+                "crypto_chips": [{"id": "card0", "slots": 4}],
             }
-        ]
+        }
         with nvtest.config.override():
-            nvtest.config.resource_pool.fill(pool)
+            validated = resource_schema.validate(pool)
+            nvtest.config.resource_pool.fill(validated["resource_pool"])
             file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
             [case] = file.lock()
             nvtest.config.resource_pool.validate(case)

@@ -77,9 +77,11 @@ def test_config_args():
             "-c",
             "config:debug:true",
             "-c",
-            "machine:cpus_per_node:8",
+            "resource_pool:nodes:1",
             "-c",
-            "machine:gpus_per_node:4",
+            "resource_pool:cpus_per_node:8",
+            "-c",
+            "resource_pool:gpus_per_node:4",
             "-e",
             "SPAM=EGGS",
         ]
@@ -87,8 +89,8 @@ def test_config_args():
     config = Config.factory()
     config.set_main_options(args)
     assert config.debug is True
-    assert config.machine.cpus_per_node == 8
-    assert config.machine.gpus_per_node == 4
+    assert config.resource_pool.pinfo("cpus_per_node") == 8
+    assert config.resource_pool.pinfo("gpus_per_node") == 4
     assert config.variables["SPAM"] == "EGGS"
     assert os.environ["SPAM"] == "EGGS"
     os.environ.pop("SPAM")

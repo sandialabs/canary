@@ -18,9 +18,9 @@ except ImportError:
 
 from . import config
 from . import plugin
-from .atc import AbstractTestCase
 from .error import diff_exit_status
 from .status import Status
+from .test.atc import AbstractTestCase
 from .test.batch import TestBatch
 from .test.case import TestCase
 from .third_party.color import colorize
@@ -399,10 +399,10 @@ class BatchRunner(AbstractTestRunner):
         gpus_per_node = config.resource_pool.pinfo("gpus_per_node")
         if isinstance(arg, TestBatch):
             cfg: dict[str, Any] = {}
-            machine_cfg = cfg.setdefault("machine", {})
-            machine_cfg["node_count"] = node_count
-            machine_cfg["cpus_per_node"] = cpus_per_node
-            machine_cfg["gpus_per_node"] = gpus_per_node
+            pool = cfg.setdefault("resource_pool", {})
+            pool["nodes"] = node_count
+            pool["cpus_per_node"] = cpus_per_node
+            pool["gpus_per_node"] = gpus_per_node
             batch_stage = arg.stage(arg.id)
             config_file = os.path.join(batch_stage, "config")
             with open(config_file, "w") as fh:
