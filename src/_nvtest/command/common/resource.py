@@ -1,6 +1,5 @@
 import argparse
 import re
-import shlex
 from typing import Any
 
 from _nvtest.third_party.color import colorize
@@ -70,8 +69,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • scheme=S: Partition tests into batches using the scheme {duration, count, isolate} [default: None]\n\n
 • scheduler=S: Submit test batches to scheduler 'S'.\n\n
 • workers=N: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
-• scheduler_args=A: Any additional args 'A' are passed directly to the scheduler,
-  for example, scheduler_args=--account=ABC will pass --account=ABC to the scheduler
+• option=option: Pass *option* to the scheduler.  If *option* contains commas, it is split into multiple options at the commas.
 """ % {"r_form": _bold("type=value"), "r_arg": _bold(f"{flag} resource")}
         return text
 
@@ -96,9 +94,9 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         elif match := re.search(r"^(runner|scheduler|type)[:=](\w+)$", arg):
             raw = match.group(2)
             return ("scheduler", raw)
-        elif match := re.search(r"^(args|runner_args|scheduler_args)[:=](.*)$", arg):
+        elif match := re.search(r"^(option|args|scheduler_args)[:=](.*)$", arg):
             raw = strip_quotes(match.group(2))
-            return ("scheduler_args", shlex.split(raw))
+            return ("options", [_.strip() for _ in raw.split(",") if _.split()])
         else:
             raise ValueError(f"invalid resource arg: {arg!r}")
 

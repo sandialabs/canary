@@ -12,7 +12,7 @@ def strip_quotes(arg: str) -> str:
     s_quote, d_quote = "'''", '"""'
     tokens = get_tokens(arg)
     token = next(tokens)
-    while token.type == tokenize.ENCODING:
+    while token.type in (tokenize.ENCODING,):
         token = next(tokens)
     s = token.string
     if token.type == tokenize.STRING:

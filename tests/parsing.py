@@ -10,27 +10,26 @@ def test_batch_args_backward():
     args = parser.parse_args(
         [
             "-l",
-            "batch:args=--account=XYZ123",
+            "batch:option=--account=XYZ123",
             "-l",
-            "batch:args=--licenses=pscratch",
+            "batch:option=--licenses=pscratch",
             "-l",
-            "batch:args=--foo=bar --baz=spam",
+            "batch:option=--foo=bar,--baz=spam",
             "-l",
-            "batch:args='--a=b -c d'",
+            "batch:option=--a=b,-c d",
         ]
     )
-    assert args.batch["scheduler_args"] == [
+    assert args.batch["options"] == [
         "--account=XYZ123",
         "--licenses=pscratch",
         "--foo=bar",
         "--baz=spam",
         "--a=b",
-        "-c",
-        "d",
+        "-c d",
     ]
 
 
-def test_batch_args():
+def test_batch_options():
     import _nvtest.command.common as common
 
     parser = argparse.ArgumentParser()
@@ -38,23 +37,22 @@ def test_batch_args():
     args = parser.parse_args(
         [
             "-b",
-            "args=--account=XYZ123",
+            "option=--account=XYZ123",
             "-b",
-            "args=--licenses=pscratch",
+            "option=--licenses=pscratch",
             "-b",
-            "args=--foo=bar --baz=spam",
+            "option=--foo=bar,--baz=spam",
             "-b",
-            "args='--a=b -c d'",
+            "option=--a=b,-c d",
         ]
     )
-    assert args.batch["scheduler_args"] == [
+    assert args.batch["options"] == [
         "--account=XYZ123",
         "--licenses=pscratch",
         "--foo=bar",
         "--baz=spam",
         "--a=b",
-        "-c",
-        "d",
+        "-c d",
     ]
 
 

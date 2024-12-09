@@ -269,7 +269,7 @@ class BatchRunner(AbstractTestRunner):
         self.scheduler = hpc_connect.scheduler  # type: ignore
         if varargs := os.getenv("NVTEST_BATCH_ARGS"):
             self.scheduler.add_default_args(*shlex.split(varargs))
-        if args := batchopts.get("scheduler_args"):
+        if args := batchopts.get("options"):
             self.scheduler.add_default_args(*args)
 
     def run(self, batch: AbstractTestCase, stage: str = "run") -> None:
