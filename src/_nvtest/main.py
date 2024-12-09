@@ -134,7 +134,6 @@ def setup_hpc_connect(args: argparse.Namespace) -> None:
         return
     if scheduler := batchopts.get("scheduler"):
         if scheduler == "null":
-            batchopts.clear()
             return
         log(f"Setting up HPC Connect for {scheduler}")
         hpc_connect.set(scheduler=scheduler)  # type: ignore

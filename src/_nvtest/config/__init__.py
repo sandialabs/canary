@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     options = _config.options
     resource_pool = _config.resource_pool
     cache_runtimes = _config.cache_runtimes
-    resource_params = _config.resource_params
     debug = _config.debug
     getoption = _config.getoption
     variables = _config.variables

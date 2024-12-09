@@ -23,7 +23,6 @@ Useful Python utilities.
    misc
    module
    parallel
-   partition
    progress
    returncode
    scalar

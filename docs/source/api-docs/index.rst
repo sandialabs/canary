@@ -6,7 +6,6 @@ All modules and packages live in the ``_nvtest`` namespace.
 .. toctree::
    :maxdepth: 1
 
-   atc
    command/index
    config/index
    enums
@@ -17,6 +16,7 @@ All modules and packages live in the ``_nvtest`` namespace.
    hpc_connect/index
    main
    paramset
+   partition
    plugin
    plugins/index
    queues

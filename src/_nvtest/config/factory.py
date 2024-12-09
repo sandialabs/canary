@@ -167,7 +167,7 @@ class ResourcePool:
     def __init__(self, pool: list[dict[str, Any]] | None = None) -> None:
         self.map: dict[str, dict[tuple[str, str], int]] = {}
         self.pool: list[dict[str, Any]] = []
-        self.types: set[str] = set()
+        self.types: set[str] = {"cpus", "gpus"}
         if pool:
             self.fill(pool)
 
@@ -179,6 +179,10 @@ class ResourcePool:
         gids: dict[str, int] = {}
         for i, spec in enumerate(pool):
             pid = str(spec.pop("id", i))
+            if "cpus" not in spec:
+                raise TypeError(f"required resource 'cpus' not defined in pool instance {i}")
+            if "gpus" not in spec:
+                spec["gpus"] = []
             for type, instances in spec.items():
                 self.types.add(type)
                 for instance in instances:
@@ -219,19 +223,20 @@ class ResourcePool:
                 return key[0], key[1]
         raise KeyError((type, arg_gid))
 
-    def node_count(self, obj: "AbstractTestCase") -> int:
+    def min_nodes_required(self, obj: "AbstractTestCase") -> int:
         """Determine the number of nodes required by ``obj``"""
         node_count: int = 1
-        spec = self.pool[0]
-        if "cpus" in self.types:
-            # always should be
-            cpus_per_node = len(spec["cpus"])
-            cpus = max(_.cpus for _ in obj)
-            node_count = math.ceil(cpus / cpus_per_node)
-        if "gpus" in self.types:
-            gpus_per_node = len(spec["gpus"])
-            gpus = max(_.gpus for _ in obj)
-            node_count = max(math.ceil(gpus / gpus_per_node))
+        for case in obj:
+            required = case.required_resources()
+            for group in required:
+                for type in self.types:
+                    count: int = 0
+                    count_per_node = len(self.pool[0][type])
+                    for item in group:
+                        if item["type"] == type:
+                            count += item["slots"]
+                    if count_per_node and count:
+                        node_count = max(math.ceil(count / count_per_node), node_count)
         return node_count
 
     def clear(self) -> None:
@@ -261,12 +266,14 @@ class ResourcePool:
             for group in required:
                 for item in group:
                     if item["type"] not in self.types:
-                        msg = f"resource type {item['type']!r} is not registered with nvtest"
+                        t = item["type"]
+                        msg = f"{obj}: required resource type {t!r} is not registered with nvtest"
                         raise ResourceUnsatisfiable(msg)
                     try:
                         self._get_from_pool(item["type"], item["slots"])
                     except ResourceUnavailable:
-                        msg = f"insufficient slots of {item['type']!r} available"
+                        t = item["type"]
+                        msg = f"{obj}: insufficient slots of {t!r} available"
                         raise ResourceUnsatisfiable(msg) from None
         finally:
             self.pool.clear()
@@ -479,13 +486,6 @@ class Config:
     build: Build = dataclasses.field(default_factory=Build)
     options: argparse.Namespace = dataclasses.field(default_factory=argparse.Namespace)
     resource_pool: ResourcePool = dataclasses.field(default_factory=ResourcePool)
-    resource_params: list[str] = dataclasses.field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        if "cpus" not in self.resource_params:
-            self.resource_params.append("cpus")
-        if "gpus" not in self.resource_params:
-            self.resource_params.append("gpus")
 
     @classmethod
     def factory(cls) -> "Config":
@@ -578,8 +578,6 @@ class Config:
                     config["cache_runtimes"] = bool(items["cache_runtimes"])
                 if "log_level" in items:
                     config["log_level"] = items["log_level"]
-                if "resource_params" in items:
-                    config["resource_params"] = list(items["resource_params"])
             elif key == "test":
                 for name in ("fast", "long", "default"):
                     if name in items.get("timeout", {}):
@@ -610,8 +608,6 @@ class Config:
                 logging.set_level(logging.DEBUG)
         if "cache_runtimes" in data:
             self.cache_runtimes = boolean(data["cache_runtimes"])
-        if "resource_params" in data:
-            self.resource_params = list(data["resource_params"])
         if "log_level" in data:
             self.log_level = data["log_level"].upper()
             level = logging.get_level(self.log_level)
@@ -672,12 +668,17 @@ class Config:
         # running tests inside an existing test session and no batch arguments are given, we want
         # to use the original batch arguments.
         if os.getenv("NVTEST_LEVEL") == "1":
-            # no batching
             args.batch = {}
-        else:
-            current = getattr(args, "batch", None) or {}
-            old = getattr(self.options, "batch", None) or {}
-            args.batch = merge(old, current)
+        elif hasattr(args, "batch"):
+            args.batch = args.batch or {}
+            if args.batch.get("scheduler") == "null":
+                # no batching
+                args.batch.clear()
+            else:
+                old = getattr(self.options, "batch", None) or {}
+                args.batch = merge(old, args.batch)
+        elif getattr(self.options, "batch", None):
+            args.batch = self.options.batch
         self.options = args
 
     @classmethod

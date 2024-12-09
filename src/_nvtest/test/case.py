@@ -412,7 +412,7 @@ class TestCase(AbstractTestCase):
     def size(self) -> float:
         vec: list[float | int] = [self.timeout]
         for name, value in self.parameters.items():
-            if name in config.resource_params:
+            if name in config.resource_pool.types:
                 assert isinstance(value, int)
                 vec.append(value)
         return math.sqrt(sum(_**2 for _ in vec))
@@ -421,7 +421,7 @@ class TestCase(AbstractTestCase):
         group: list[dict[str, Any]] = []
         parameters = self.parameters | self.implicit_parameters
         for name, value in parameters.items():
-            if name in config.resource_params:
+            if name.lower() in config.resource_pool.types:
                 assert isinstance(value, int)
                 group.extend([{"type": name, "slots": 1} for _ in range(value)])
         # by default, only one resource group is returned
@@ -1166,8 +1166,11 @@ class TestCase(AbstractTestCase):
             elif action == "append-path":
                 variables[name] = f"{variables.get(name, '')}{sep}{value}"
         vars = {}
-        vars["cpu_ids"] = variables["NVTEST_CPU_IDS"] = ",".join(map(str, self.cpu_ids))
-        vars["gpu_ids"] = variables["NVTEST_GPU_IDS"] = ",".join(map(str, self.gpu_ids))
+        for group in self.resources:
+            for type, instances in group.items():
+                varname = type[:-1] if type[-1] == "s" else type
+                ids: list[str] = [str(_["gid"]) for _ in instances]
+                vars[f"{varname}_ids"] = variables[f"NVTEST_{varname.upper()}"] = ",".join(ids)
         for key, value in variables.items():
             try:
                 variables[key] = value % vars

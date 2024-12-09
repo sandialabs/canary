@@ -138,7 +138,7 @@ local_resource_pool_schema = Schema(
             Forbidden("nodes"): object,
             Optional("cpus", default=cpu_count()): positive_int,
             # local schema disallows *_per_node
-            Optional(Regex("^[a-z_][a-z0-9_]*?(?<!_per_node)$")): positive_int,
+            Optional(Regex("^[a-z_][a-z0-9_]*?(?<!_per_node)$")): nonnegative_int,
         }
     }
 )
@@ -199,9 +199,11 @@ class ResourceSchema(Schema):
                     x[name[:-9]] = self.uniform_pool_object(count)
                 rp.append(x)
             return {"resource_pool": rp}
-        if isinstance(resource_pool, dict) and "cpus" in resource_pool:
+        if isinstance(resource_pool, dict):
             # uniform resource pool, single node
             validated = self.schemas["local"].validate(data)
+            if "cpus" not in validated["resource_pool"]:
+                validated["resource_pool"]["cpus"] = cpu_count()
             rp = {"id": "0"}
             for name, count in validated["resource_pool"].items():
                 rp[name] = self.uniform_pool_object(count)

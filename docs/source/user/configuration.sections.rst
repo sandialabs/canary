@@ -59,9 +59,7 @@ Set machine settings.
 .. code-block:: yaml
 
    machine:
-     cpus_per_node: N  # (int) default determined from system probe
-     gpus_per_node: N  # (int) default is 0
-     node_count: N  # (int) default determined from system probe
+     cpu_count: N  # (int) default determined from system probe
 
 build
 -----
