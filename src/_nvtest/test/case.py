@@ -836,7 +836,12 @@ class TestCase(AbstractTestCase):
         if not self._id:
             unique_str = io.StringIO()
             unique_str.write(self.name)
-            unique_str.write(open(self.file).read())
+            # prefer not to use file_path (since it makes the ID dependent on the search path used
+            # when nvtest was invoked) but some tests use duplicated files, # just in different
+            # directories.  Another idea is to has contents of this file's assets into the ID, but
+            # some of the assets are large and slow to read.  Alas, using the file_path is fast and
+            # semi-robust against ID collision.
+            unique_str.write(self.file_path)
             for k in sorted(self.parameters):
                 unique_str.write(f",{k}={stringify(self.parameters[k], float_fmt='%.16e')}")
             self._id = hashit(unique_str.getvalue(), length=20)
