@@ -17,7 +17,6 @@ except ImportError:
 
 
 from . import config
-from . import plugin
 from .error import diff_exit_status
 from .status import Status
 from .test.atc import AbstractTestCase
@@ -93,7 +92,7 @@ class TestCaseRunner(AbstractTestRunner):
                 with open(case.logfile(stage), "w") as fh:
                     cmd = case.command(stage=stage)
                     case.cmd_line = " ".join(cmd)
-                    fh.write(f"==> Running {case.display_name}\n")
+                    fh.write(f"==> Running {case.display_name} in {case.working_directory}\n")
                     fh.write(f"==> Command line: {case.cmd_line}\n")
                     if timeoutx:
                         fh.write(f"==> Timeout multiplier: {timeoutx}\n")
@@ -146,9 +145,7 @@ class TestCaseRunner(AbstractTestRunner):
             if metrics is not None:
                 case.add_measurement(**metrics)
             case.finish = timestamp()
-            for hook in plugin.hooks():
-                hook.test_after_run(case)
-            case.finalize(stage)
+            case.finalize(stage=stage)
         return
 
     def baseline(self, case: "TestCase") -> None:

@@ -1298,7 +1298,10 @@ class TestCase(AbstractTestCase):
                     fh.write(open(file).read())
 
     def finalize(self, stage: str = "run") -> None:
-        self.cache_runtime()
+        if stage == "run":
+            for hook in plugin.hooks():
+                hook.test_after_run(self)
+            self.cache_runtime()
         self.concatenate_logs()
         self.save()
 

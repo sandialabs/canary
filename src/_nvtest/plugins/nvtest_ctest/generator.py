@@ -11,6 +11,7 @@ from typing import Generator
 
 import nvtest
 from _nvtest import config
+from _nvtest import plugin
 from _nvtest.generator import AbstractTestGenerator
 from _nvtest.generator import StopRecursion
 from _nvtest.test.case import DependencyPatterns
@@ -351,6 +352,12 @@ class CTestTestCase(TestCase):
         """CMake sets up the working (binary) directory"""
 
     def finalize(self, stage: str = "run") -> None:
+        if stage != "run":
+            return
+
+        for hook in plugin.hooks():
+            hook.test_after_run(self)
+
         self.cache_runtime()
         self.concatenate_logs()
         file = self.logfile(stage)

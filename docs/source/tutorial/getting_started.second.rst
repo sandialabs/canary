@@ -19,6 +19,9 @@ This test introduces two new features:
 * :func:`nvtest.directives.link`: links ``add.py`` into the execution directory (see :ref:`test-directives` for more directives); and
 * :class:`~_nvtest.util.executable.Executable`: creates a callable wrapper around executable scripts.
 
+Running the test
+----------------
+
 To run the test, navigate to the examples folder and run:
 
 .. command-output:: nvtest run -k second ./basic
