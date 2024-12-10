@@ -20,7 +20,7 @@ A first test
 
 The test file ``first.pyt`` defines a function that adds two numbers and verifies it for correctness:
 
-.. literalinclude:: /examples/basic/first.pyt
+.. literalinclude:: /examples/basic/first/first.pyt
    :language: python
 
 To run the test, navigate to the examples directory and run ``nvtest run -k first ./basic`` which tells ``nvtest`` to run tests found in the path ``./basic`` and to filter tests to include only those tests with the keyword ``first``:
@@ -53,12 +53,12 @@ A second test
 
 In this second example, the external program "``add.py``" adds two numbers and writes the result to the console's stdout is tested.
 
-.. literalinclude:: /examples/basic/add.py
+.. literalinclude:: /examples/basic/second/add.py
    :language: python
 
 In the test, ``add.py`` is linked to the execution directory, is executed, and output verified for correctness:
 
-.. literalinclude:: /examples/basic/second.pyt
+.. literalinclude:: /examples/basic/second/second.pyt
    :language: python
 
 This test introduces two new features:

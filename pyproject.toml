@@ -36,6 +36,7 @@ version = {attr = "_nvtest.util.generate_version.__generate_dynamic_version__"}
 
 [tool.mypy]
 exclude = [
+    "src/nvtest/examples/*",
     "src/_nvtest/third_party/distro.py",
     "src/_nvtest/third_party/programoutput/*",
     "src/_nvtest/third_party/monkeypatch.py",

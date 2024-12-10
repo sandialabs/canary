@@ -10,6 +10,7 @@ from . import autodoc
 from . import config
 from . import describe
 from . import edit
+from . import fetch_examples
 from . import find
 from . import help
 from . import info

@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "--- centered_space ------------\nFile: /opt/alegranevada/team/x/darwin/src/nvtest/src/nvtest/examples/centered_space/centered_space.pyt\nKeywords: centered_space\n10 test cases:\n\u2514\u2500\u2500 centered_space\n\u2502   \u251c\u2500\u2500 centered_space[a=0,b=0]\n\u2502   \u251c\u2500\u2500 centered_space[a=-10,b=0]\n\u2502   \u251c\u2500\u2500 centered_space[a=-5,b=0]\n\u2502   \u251c\u2500\u2500 centered_space[a=5,b=0]\n\u2502   \u251c\u2500\u2500 centered_space[a=10,b=0]\n\u2502   \u251c\u2500\u2500 centered_space[a=0,b=-2]\n\u2502   \u251c\u2500\u2500 centered_space[a=0,b=-1]\n\u2502   \u251c\u2500\u2500 centered_space[a=0,b=1]\n\u2502   \u2514\u2500\u2500 centered_space[a=0,b=2]"
+}

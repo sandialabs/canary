@@ -1,0 +1,4 @@
+{
+  "returncode": 4,
+  "output": " #     #  #     #  #######  #######  #######  ####### \n ##    #  #     #     #     #        #           #    \n # ### #   #   #      #     ####     #######     #    \n #    ##    # #       #     #              #     #    \n #     #     #        #     #######  #######     #\n==> Searching for tests in xstatus\n==> Generating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting b3395e2: xfail-fail\n==> Finished b3395e2: xfail-fail FAIL\nShort test summary info\n\u2717 FAIL b3395e2 xfail-fail (00:00:00.00) fail reason: expected xfail-fail to exit with code != 0\n\n\ud83d\udca5\ud83d\udca5 Session done -- 1 total, 1 fail in 00:00:00.00"
+}

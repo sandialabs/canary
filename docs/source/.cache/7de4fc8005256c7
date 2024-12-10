@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "examples/basic/first/TestResults\n\u2514\u2500\u2500 first\n    \u251c\u2500\u2500 first.pyt@\n    \u251c\u2500\u2500 nvtest-out.txt\n    \u251c\u2500\u2500 nvtest-run-out.txt\n    \u251c\u2500\u2500 nvtest-setup-out.txt\n    \u2514\u2500\u2500 testcase.lock@"
+}

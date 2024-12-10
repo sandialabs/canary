@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "--- execute_and_analyze ------------\nFile: /opt/alegranevada/team/x/darwin/src/nvtest/src/nvtest/examples/execute_and_analyze/execute_and_analyze.pyt\nKeywords: \n4 test cases:\n\u2514\u2500\u2500 execute_and_analyze\n\u2502   \u251c\u2500\u2500 execute_and_analyze[a=1]\n\u2502   \u251c\u2500\u2500 execute_and_analyze[a=2]\n\u2502   \u2514\u2500\u2500 execute_and_analyze[a=3]"
+}

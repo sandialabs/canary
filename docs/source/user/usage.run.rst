@@ -63,7 +63,7 @@ Run a file directly
 
 Test files can be run directly by passing their paths to ``nvtest run``
 
-.. command-output:: nvtest run ./basic/first.pyt
+.. command-output:: nvtest run ./basic/first/first.pyt
     :nocache:
     :extraargs: -w -rv
     :cwd: /examples
@@ -75,7 +75,7 @@ Test files can be run directly by passing their paths to ``nvtest run``
 
 If a path separator is replaced with a colon ``:``, the path is interpreted as ``root:path``.  ie, path segments after the ``:`` are used as the relative path to the test execution directory:
 
-.. command-output:: nvtest run .:basic/first.pyt
+.. command-output:: nvtest run .:basic/first/first.pyt
     :nocache:
     :cwd: /examples
     :extraargs: -w -rv

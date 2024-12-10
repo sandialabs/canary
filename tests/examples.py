@@ -7,7 +7,7 @@ import pytest
 from _nvtest.util.filesystem import working_dir
 
 this_dir = os.path.dirname(__file__)
-examples_dir = os.path.abspath(os.path.join(this_dir, "../examples"))
+examples_dir = os.path.abspath(os.path.join(this_dir, "../src/nvtest/examples"))
 
 if not os.path.exists(examples_dir):
     pytestmark = pytest.mark.skip

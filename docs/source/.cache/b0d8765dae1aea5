@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "    dMMMMb   dMP dMP  dMMMMMMP     dMMMMMP    .dMMMb  dMMMMMMP \n   dMP dMP  dMP dMP     dMP       dMP        dMP\" VP    dMP    \n  dMP dMP  dMP dMP     dMP       dMMMP       VMMMb     dMP     \n dMP dMP   YMvAP\"     dMP       dMP        dP .dMP    dMP      \ndMP dMP     VP\"      dMP       dMMMMMP     VMMMP\"    dMP\n==> Searching for tests in basic\n==> Generating test cases from test files\ncollected 2 tests from 2 files\nselected 2 tests from 2 files\n==> Starting 11bc177: second\n==> Starting f1eb59c: first\n==> Finished f1eb59c: first PASS\n==> Finished 11bc177: second PASS\n\u26a1\u26a1 Session done -- 2 total, 2 pass in 00:00:00.00"
+}

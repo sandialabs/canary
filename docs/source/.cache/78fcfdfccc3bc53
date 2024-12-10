@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": " #### ##  ### ###  #######  #######   #####   ####### \n #### ##  ### ###    ###    ####     ### ###    ###   \n #######  ### ###    ###    ######    ###       ###   \n #######  ### ###    ###    ####        ###     ###   \n ### ###   #####     ###    ####     ### ###    ###   \n ### ###    ###      ###    #######   #####     ###\ncollected 3 tests from 1 file\nselected 3 tests from 1 file\n==> Starting 4f13562: staged[cpus=1]\n==> Starting a6c5e2b: staged[cpus=4]\n==> Finished 4f13562: staged[cpus=1] PASS\n==> Finished a6c5e2b: staged[cpus=4] PASS\n==> Starting 8cbddf1: staged[cpus=8]\n==> Finished 8cbddf1: staged[cpus=8] PASS\n\u26a1\u26a1 Session done -- 3 total, 3 pass in 00:00:00.00"
+}

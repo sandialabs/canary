@@ -11,8 +11,8 @@ cd $SCRIPT_DIR/..
 echo "========================="
 echo "ruff: formatting examples"
 echo "========================="
-find examples -name "*.pyt" | xargs ruff format
-ruff format examples
+find src/nvtest/examples -name "*.pyt" | xargs ruff format
+ruff format src/nvtest/examples
 
 echo ""
 echo "======================"
@@ -31,8 +31,8 @@ echo ""
 echo "======================="
 echo "ruff: checking examples"
 echo "======================="
-find examples -name "*.pyt" | xargs ruff check --fix
-ruff check --fix examples
+find src/nvtest/examples -name "*.pyt" | xargs ruff check --fix
+ruff check --fix src/nvtest/examples
 
 echo ""
 echo "===================="
