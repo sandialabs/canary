@@ -857,10 +857,6 @@ def get_config_dir() -> str | None:
     if config_home in (os.devnull, "null"):
         return None
     config_dir = os.path.join(config_home, "nvtest")
-    try:
-        os.makedirs(config_dir, exist_ok=True)
-    except Exception:
-        return None
     return config_dir
 
 

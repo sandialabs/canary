@@ -9,6 +9,7 @@ import re
 import sys
 from contextlib import contextmanager
 from copy import deepcopy
+from types import SimpleNamespace
 from typing import IO
 from typing import Any
 from typing import Generator
@@ -511,7 +512,8 @@ class TestCase(AbstractTestCase):
         """
         if self._runtimes[0] is None:
             self._runtimes.clear()
-            self._runtimes.extend(self.load_runtimes())
+            rt = self.load_runtimes()
+            self._runtimes.extend([rt.mean, rt.min, rt.max])
         return self._runtimes
 
     @runtimes.setter
@@ -939,21 +941,30 @@ class TestCase(AbstractTestCase):
             timeout = config.test.timeout_default
         self._timeout = float(timeout)
 
-    def load_runtimes(self) -> list[float | None]:
+    def load_runtimes(self) -> SimpleNamespace:
         # return mean, min, max runtimes
         file = self.timing_cache()
+        result = SimpleNamespace(n=None, mean=None, min=None, max=None)
         if file is None:
-            return [None, None, None]
+            return result
         elif not os.path.exists(file):
-            return [None, None, None]
+            return result
         tries = 0
         while tries < 3:
             try:
-                _, mean, minimum, maximum = json.load(open(file))
-                return [mean, minimum, maximum]
+                data = json.load(open(file))
+                if "timing" not in data:
+                    fs.force_remove(file)
+                    return result
+                timing = data["timing"]
+                result.n = timing["n"]
+                result.min = timing["min"]
+                result.mean = timing["mean"]
+                result.max = timing["max"]
+                return result
             except json.decoder.JSONDecodeError:
                 tries += 1
-        return [None, None, None]
+        return result
 
     def timing_cache(self) -> str | None:
         cache_dir = config.cache_dir
@@ -973,7 +984,8 @@ class TestCase(AbstractTestCase):
             mean = minimum = maximum = self.duration
         else:
             try:
-                n, mean, minimum, maximum = json.load(open(file))
+                rt = self.load_runtimes()
+                n, mean, minimum, maximum = rt.n, rt.mean, rt.min, rt.max
             except json.decoder.JSONDecodeError:
                 n = 0
                 mean = minimum = maximum = self.duration
@@ -983,10 +995,11 @@ class TestCase(AbstractTestCase):
                 maximum = max(maximum, self.duration)
         mkdirp(os.path.dirname(file))
         tries = 0
+        data = {"name": self.name, "n": n + 1, "mean": mean, "min": minimum, "max": maximum}
         while tries < 3:
             try:
                 with open(file, "w") as fh:
-                    json.dump([n + 1, mean, minimum, maximum], fh)
+                    json.dump({"timing": data}, fh)
                 break
             except Exception:
                 tries += 1
