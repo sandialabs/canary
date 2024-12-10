@@ -765,7 +765,7 @@ class Config:
         d: dict[str, Any] = {}
         for key, value in vars(self).items():
             if dataclasses.is_dataclass(value):
-                d[key] = dataclasses.asdict(value)
+                d[key] = dataclasses.asdict(value)  # type: ignore
                 if key == "system":
                     d[key]["os"] = vars(d[key]["os"])
             elif hasattr(value, "getstate"):

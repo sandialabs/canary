@@ -264,14 +264,17 @@ class CTestTestCase(TestCase):
     def required_resources(self) -> list[list[dict[str, Any]]]:
         required = copy.deepcopy(self.resource_groups)
         if not required:
-            return [[{"type": "cpus", "slots": 1}]]
+            cpus = self.parameters.get("cpus", 1)
+            group = [{"type": "cpus", "slots": 1} for _ in range(cpus)]
+            return [group]
         for group in required:
             for item in group:
                 if item["type"] == "cpus":
                     break
             else:
-                slots = self.parameters.get("cpus", 1)
-                group.append({"type": "cpus", "slots": slots})
+                # fill in default cpus required
+                cpus = self.parameters.get("cpus", 1)
+                group.extend([{"type": "cpus", "slots": 1} for _ in range(cpus)])
         return required
 
     @property
