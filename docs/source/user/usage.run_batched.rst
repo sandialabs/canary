@@ -33,7 +33,7 @@ Batch scheduler
 ...............
 
 * ``-b scheduler=S``: use scheduler ``S`` to run batches.
-* ``-b args=S``: pass args ``S`` directly to the scheduler.  Eg, ``-b args=--account=XYZ`` will pass ``--account=XYZ`` directly to the scheduler.
+* ``-b option=option``: pass *option* to the scheduler. If *option* contains commas, it is split into multiple options at the commas.  Eg, ``-b option="-q debug,-A ABC123"`` passes ``-q debug`` and ``-ABC123`` directly to the scheduler.
 
 The following schedulers are supported:
 
