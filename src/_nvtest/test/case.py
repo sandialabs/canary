@@ -19,7 +19,6 @@ from .. import plugin
 from ..paramset import ParameterSet
 from ..status import Status
 from ..third_party.color import colorize
-from ..util import cache
 from ..util import filesystem as fs
 from ..util import logging
 from ..util.compression import compress_str
@@ -37,10 +36,10 @@ from .atc import AbstractTestCase
 
 def stringify(arg: Any, float_fmt: str | None = None) -> str:
     """Turn the thing into a string"""
-    if isinstance(arg, float) and float_fmt is not None:
-        return float_fmt % arg
     if hasattr(arg, "string"):
         return arg.string
+    if isinstance(arg, float) and float_fmt is not None:
+        return float_fmt % arg
     elif isinstance(arg, float):
         return f"{arg:g}"
     elif isinstance(arg, int):
@@ -835,7 +834,7 @@ class TestCase(AbstractTestCase):
         if not self._id:
             unique_str = io.StringIO()
             unique_str.write(self.name)
-            unique_str.write(f",{self.file_path}")
+            unique_str.write(open(self.file).read())
             for k in sorted(self.parameters):
                 unique_str.write(f",{k}={stringify(self.parameters[k], float_fmt='%.16e')}")
             self._id = hashit(unique_str.getvalue(), length=20)
@@ -942,11 +941,10 @@ class TestCase(AbstractTestCase):
 
     def load_runtimes(self) -> list[float | None]:
         # return mean, min, max runtimes
-        if not config.cache_runtimes:
+        file = self.timing_cache()
+        if file is None:
             return [None, None, None]
-        global_cache = cache.get_cache_dir(self.file_root)
-        file = self.cache_file(global_cache)
-        if not os.path.exists(file):
+        elif not os.path.exists(file):
             return [None, None, None]
         tries = 0
         while tries < 3:
@@ -957,19 +955,19 @@ class TestCase(AbstractTestCase):
                 tries += 1
         return [None, None, None]
 
-    def cache_file(self, path):
-        return os.path.join(path, f"timing/{self.id[:2]}/{self.id[2:]}.json")
+    def timing_cache(self) -> str | None:
+        cache_dir = config.cache_dir
+        if cache_dir is None:
+            return None
+        return os.path.join(cache_dir, f"timing/{self.id[:2]}/{self.id[2:]}.json")
 
     def cache_runtime(self) -> None:
         """store mean, min, max runtimes"""
-        if not config.cache_runtimes:
-            return
         if self.status.value not in ("success", "diffed"):
             return
-        global_cache = cache.create_cache_dir(self.file_root)
-        if global_cache is None:
+        file = self.timing_cache()
+        if file is None:
             return
-        file = self.cache_file(global_cache)
         if not os.path.exists(file):
             n = 0
             mean = minimum = maximum = self.duration

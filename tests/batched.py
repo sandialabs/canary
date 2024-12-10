@@ -6,12 +6,15 @@ from _nvtest.util.filesystem import working_dir
 
 
 def test_batched(tmpdir):
+    # add long keyword so that batches have a length to minimize when partitioning
     with working_dir(tmpdir.strpath, create=True):
         for i in range(12):
             with open(f"test_{i}.pyt", "w") as fh:
                 fh.write(
                     """\
 import sys
+import nvtest
+nvtest.directives.keywords('long')
 def test():
     pass
 if __name__ == '__main__':
@@ -34,12 +37,15 @@ if __name__ == '__main__':
 
 
 def test_batched_extra_args(tmpdir):
+    # add long keyword so that batches have a length to minimize when partitioning
     with working_dir(tmpdir.strpath, create=True):
         for i in range(12):
             with open(f"test_{i}.pyt", "w") as fh:
                 fh.write(
                     """\
 import sys
+import nvtest
+nvtest.directives.keywords('long')
 def test():
     pass
 if __name__ == '__main__':

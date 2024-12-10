@@ -926,6 +926,7 @@ def parameterize(
     when: WhenType | None = None,
     type: enums.enums = enums.list_parameter_space,
     samples: int = 10,
+    random_seed: float = 1234.0,
 ) -> None:
     """Add new invocations to the test using the list of argvalues for the given
     argnames.

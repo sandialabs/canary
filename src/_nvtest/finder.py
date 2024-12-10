@@ -104,6 +104,8 @@ class Finder:
         def skip(directory):
             if os.path.basename(directory).startswith("."):
                 return True
+            elif os.path.basename(directory) in self.skip_dirs:
+                return True
             if os.path.exists(os.path.join(directory, ".nvtest/SESSION.TAG")):
                 return True
             return False

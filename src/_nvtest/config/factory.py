@@ -479,8 +479,9 @@ class Config:
     test: Test
     invocation_dir: str = os.getcwd()
     debug: bool = False
-    cache_runtimes: bool = True
     log_level: str = "INFO"
+    _cache_dir: str | None = None
+    _config_dir: str | None = None
     variables: Variables = dataclasses.field(default_factory=Variables)
     batch: Batch = dataclasses.field(default_factory=Batch)
     build: Build = dataclasses.field(default_factory=Build)
@@ -535,6 +536,18 @@ class Config:
 
         return cls(**kwds)
 
+    @property
+    def cache_dir(self) -> str | None:
+        if self._cache_dir is None:
+            self._cache_dir = get_cache_dir()
+        return self._cache_dir
+
+    @property
+    def config_dir(self) -> str | None:
+        if self._config_dir is None:
+            self._config_dir = get_config_dir()
+        return self._config_dir
+
     def restore_from_snapshot(self, fh: TextIO) -> None:
         snapshot = json.load(fh)
         self.system = System(snapshot["system"])
@@ -574,8 +587,10 @@ class Config:
             if key == "config":
                 if "debug" in items:
                     config["debug"] = bool(items["debug"])
-                if "cache_runtimes" in items:
-                    config["cache_runtimes"] = bool(items["cache_runtimes"])
+                if "_cache_dir" in items:
+                    config["_cache_dir"] = items["_cache_dir"]
+                if "_config_dir" in items:
+                    config["_config_dir"] = items["_config_dir"]
                 if "log_level" in items:
                     config["log_level"] = items["log_level"]
             elif key == "test":
@@ -606,8 +621,10 @@ class Config:
             if self.debug:
                 self.log_level = logging.get_level_name(log_levels[3])
                 logging.set_level(logging.DEBUG)
-        if "cache_runtimes" in data:
-            self.cache_runtimes = boolean(data["cache_runtimes"])
+        if "_cache_dir" in data:
+            self._cache_dir = data["_cache_dir"]
+        if "_config_dir" in data:
+            self._config_dir = data["_config_dir"]
         if "log_level" in data:
             self.log_level = data["log_level"].upper()
             level = logging.get_level(self.log_level)
@@ -679,6 +696,7 @@ class Config:
                 args.batch = merge(old, args.batch)
         elif getattr(self.options, "batch", None):
             args.batch = self.options.batch
+
         self.options = args
 
     @classmethod
@@ -720,11 +738,9 @@ class Config:
     @staticmethod
     def config_file(scope: str) -> str | None:
         if scope == "global":
-            if "NVTEST_GLOBAL_CONFIG" in os.environ:
-                return os.environ["NVTEST_GLOBAL_CONFIG"]
-            elif "HOME" in os.environ:
-                home = os.environ["HOME"]
-                return os.path.join(home, ".nvtest")
+            config_dir = get_config_dir()
+            if config_dir is not None:
+                return os.path.join(config_dir, "config.yaml")
         elif scope == "local":
             return os.path.abspath("./nvtest.yaml")
         return None
@@ -802,6 +818,50 @@ def expandvars(arg: Any, mapping: dict) -> Any:
         t = Template(arg)
         return t.safe_substitute(mapping)
     return arg
+
+
+def get_cache_dir() -> str | None:
+    cache_home: str
+    if "NVTEST_CACHE_HOME" in os.environ:
+        cache_home = os.environ["NVTEST_CACHE_HOME"]
+    elif "XDG_CACHE_HOME" in os.environ:
+        cache_home = os.environ["XDG_CACHE_HOME"]
+    else:
+        cache_home = os.path.expanduser("~/.cache")
+    if cache_home in (os.devnull, "null"):
+        return None
+    cache_dir = os.path.join(cache_home, "nvtest")
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+    except Exception:
+        return None
+    file = os.path.join(cache_dir, "CACHEDIR.TAG")
+    if not os.path.exists(file):
+        with open(file, "w") as fh:
+            fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
+            fh.write("# This file is a cache directory tag automatically created by nvtest.\n")
+            fh.write(
+                "# For information about cache directory tags see https://bford.info/cachedir/\n"
+            )
+    return cache_dir
+
+
+def get_config_dir() -> str | None:
+    config_home: str
+    if "NVTEST_CONFIG_HOME" in os.environ:
+        config_home = os.environ["NVTEST_CONFIG_HOME"]
+    elif "XDG_CONFIG_HOME" in os.environ:
+        config_home = os.environ["XDG_CONFIG_HOME"]
+    else:
+        config_home = os.path.expanduser("~/.config")
+    if config_home in (os.devnull, "null"):
+        return None
+    config_dir = os.path.join(config_home, "nvtest")
+    try:
+        os.makedirs(config_dir, exist_ok=True)
+    except Exception:
+        return None
+    return config_dir
 
 
 def safe_loads(arg):

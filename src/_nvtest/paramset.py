@@ -52,7 +52,7 @@ class ParameterSet:
         file: str | None = None,
     ) -> "ParameterSet":
         """
-        Create a ParamterSet
+        Create a ParameterSet
 
         Args:
           argnames: comma-separated string denoting one or more parameter names,
@@ -203,9 +203,11 @@ class ParameterSet:
         argnames: str | Sequence[str],
         argvalues: list[Sequence[Any] | Any],
         samples: int = 10,
+        random_seed: float = 1234.0,
         file: str | None = None,
     ) -> "ParameterSet":
         """Generate random parameter space"""
+        random.seed(random_seed)
         names: list[str] = []
         if isinstance(argnames, str):
             names.extend([x.strip() for x in argnames.split(",") if x.strip()])

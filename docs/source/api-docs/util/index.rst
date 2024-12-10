@@ -7,7 +7,6 @@ Useful Python utilities.
    :maxdepth: 1
 
    banner
-   cache
    cdash
    collections
    compression

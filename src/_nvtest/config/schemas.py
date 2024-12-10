@@ -56,7 +56,6 @@ config_schema = Schema(
     {
         "config": {
             Optional("debug"): Use(boolean),
-            Optional("cache_runtimes"): Use(boolean),
             Optional("log_level"): log_levels,
         }
     }
