@@ -7,7 +7,6 @@ Useful Python utilities.
    :maxdepth: 1
 
    banner
-   cache
    cdash
    collections
    compression
@@ -23,7 +22,6 @@ Useful Python utilities.
    misc
    module
    parallel
-   partition
    progress
    returncode
    scalar

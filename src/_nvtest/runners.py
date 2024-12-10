@@ -1,5 +1,6 @@
 import abc
 import io
+import json
 import os
 import shlex
 import signal
@@ -17,9 +18,9 @@ except ImportError:
 
 from . import config
 from . import plugin
-from .atc import AbstractTestCase
 from .error import diff_exit_status
 from .status import Status
+from .test.atc import AbstractTestCase
 from .test.batch import TestBatch
 from .test.case import TestCase
 from .third_party.color import colorize
@@ -268,7 +269,7 @@ class BatchRunner(AbstractTestRunner):
         self.scheduler = hpc_connect.scheduler  # type: ignore
         if varargs := os.getenv("NVTEST_BATCH_ARGS"):
             self.scheduler.add_default_args(*shlex.split(varargs))
-        if args := batchopts.get("scheduler_args"):
+        if args := batchopts.get("options"):
             self.scheduler.add_default_args(*args)
 
     def run(self, batch: AbstractTestCase, stage: str = "run") -> None:
@@ -393,12 +394,20 @@ class BatchRunner(AbstractTestRunner):
                 fp.write(f"-p {p} ")
 
         # The batch will be run in a compute node, so hpc_connect won't set the machine limits
-        node_count = config.resource_pool.node_count(arg)
+        node_count = config.resource_pool.min_nodes_required(arg)
         cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
         gpus_per_node = config.resource_pool.pinfo("gpus_per_node")
-        fp.write(f"-c machine:node_count:{node_count} ")
-        fp.write(f"-c machine:cpus_per_node:{cpus_per_node} ")
-        fp.write(f"-c machine:gpus_per_node:{gpus_per_node} ")
+        if isinstance(arg, TestBatch):
+            cfg: dict[str, Any] = {}
+            pool = cfg.setdefault("resource_pool", {})
+            pool["nodes"] = node_count
+            pool["cpus_per_node"] = cpus_per_node
+            pool["gpus_per_node"] = gpus_per_node
+            batch_stage = arg.stage(arg.id)
+            config_file = os.path.join(batch_stage, "config")
+            with open(config_file, "w") as fh:
+                json.dump(cfg, fh, indent=2)
+            fp.write(f"-f {config_file} ")
         fp.write(f"-C {config.session.work_tree} run -rv --stage={stage} ")
         if getattr(config.options, "fail_fast", False):
             fp.write("--fail-fast ")

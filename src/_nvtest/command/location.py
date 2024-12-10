@@ -42,7 +42,7 @@ Note: this command must be run from inside of a test session directory.
             dest="show_working_directory",
             action="store_true",
             default=False,
-            help="Show the location of the test's execution directory",
+            help="Show the location of the test's working directory",
         )
         group.add_argument(
             "-c",

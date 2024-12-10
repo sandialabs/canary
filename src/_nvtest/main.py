@@ -134,19 +134,17 @@ def setup_hpc_connect(args: argparse.Namespace) -> None:
         return
     if scheduler := batchopts.get("scheduler"):
         if scheduler == "null":
-            batchopts.clear()
             return
         log(f"Setting up HPC Connect for {scheduler}")
         hpc_connect.set(scheduler=scheduler)  # type: ignore
         log(f"  HPC connect: node count: {hpc_connect.scheduler.config.node_count}")
         log(f"  HPC connect: CPUs per node: {hpc_connect.scheduler.config.cpus_per_node}")
         log(f"  HPC connect: GPUs per node: {hpc_connect.scheduler.config.gpus_per_node}")
-        config.machine.update(
+        config.resource_pool.fill_uniform(
             node_count=hpc_connect.scheduler.config.node_count,
             cpus_per_node=hpc_connect.scheduler.config.cpus_per_node,
             gpus_per_node=hpc_connect.scheduler.config.gpus_per_node,
         )
-        config.update_resource_counts()
 
 
 def invoke_command(command: "Command", args: argparse.Namespace) -> int:

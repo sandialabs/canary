@@ -1,3 +1,5 @@
+.. _hpc-connect:
+
 HPC Connect
 ===========
 

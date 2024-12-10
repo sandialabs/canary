@@ -50,4 +50,4 @@ def system_config() -> dict:
 
 
 def machine_config() -> dict[str, Any]:
-    return dict(node_count=1, gpus_per_node=0, cpus_per_node=cpu_count())
+    return dict(gpu_count=0, cpu_count=cpu_count())

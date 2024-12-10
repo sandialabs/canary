@@ -2,7 +2,7 @@ import abc
 from typing import Any
 from typing import Generator
 
-from .status import Status
+from ..status import Status
 
 
 class AbstractTestCase(abc.ABC):

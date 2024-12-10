@@ -253,7 +253,7 @@
 <!-- batch_cases -->
 <g id="node17" class="node">
 <title>batch_cases</title>
-<g id="a_node17"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/util/partition.py?ref_type=heads#L53" title="Batch test cases\nusing tiling\nalgorithm">
+<g id="a_node17"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/partition.py?ref_type=heads#L53" title="Batch test cases\nusing tiling\nalgorithm">
 <polygon fill="none" stroke="black" points="340,-645 133,-645 133,-565 340,-565 340,-645"/>
 <text text-anchor="middle" x="236.5" y="-622" font-family="Monaco" font-size="20.00">Batch test cases</text>
 <text text-anchor="middle" x="236.5" y="-600" font-family="Monaco" font-size="20.00">using tiling</text>

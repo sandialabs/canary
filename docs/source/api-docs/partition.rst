@@ -1,7 +1,7 @@
-atc
-===
+partition
+=========
 
-.. automodule:: _nvtest.atc
+.. automodule:: _nvtest.partition
    :members:
    :undoc-members:
    :show-inheritance:

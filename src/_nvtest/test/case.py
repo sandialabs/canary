@@ -16,11 +16,9 @@ from typing import Type
 
 from .. import config
 from .. import plugin
-from ..atc import AbstractTestCase
 from ..paramset import ParameterSet
 from ..status import Status
 from ..third_party.color import colorize
-from ..util import cache
 from ..util import filesystem as fs
 from ..util import logging
 from ..util.compression import compress_str
@@ -33,14 +31,15 @@ from ..util.module import load_module
 from ..util.shell import source_rcfile
 from ..util.time import hhmmss
 from ..when import match_any
+from .atc import AbstractTestCase
 
 
 def stringify(arg: Any, float_fmt: str | None = None) -> str:
     """Turn the thing into a string"""
-    if isinstance(arg, float) and float_fmt is not None:
-        return float_fmt % arg
     if hasattr(arg, "string"):
         return arg.string
+    if isinstance(arg, float) and float_fmt is not None:
+        return float_fmt % arg
     elif isinstance(arg, float):
         return f"{arg:g}"
     elif isinstance(arg, int):
@@ -412,7 +411,7 @@ class TestCase(AbstractTestCase):
     def size(self) -> float:
         vec: list[float | int] = [self.timeout]
         for name, value in self.parameters.items():
-            if name in config.resource_params:
+            if name in config.resource_pool.types:
                 assert isinstance(value, int)
                 vec.append(value)
         return math.sqrt(sum(_**2 for _ in vec))
@@ -421,7 +420,7 @@ class TestCase(AbstractTestCase):
         group: list[dict[str, Any]] = []
         parameters = self.parameters | self.implicit_parameters
         for name, value in parameters.items():
-            if name in config.resource_params:
+            if name.lower() in config.resource_pool.types:
                 assert isinstance(value, int)
                 group.extend([{"type": name, "slots": 1} for _ in range(value)])
         # by default, only one resource group is returned
@@ -835,7 +834,7 @@ class TestCase(AbstractTestCase):
         if not self._id:
             unique_str = io.StringIO()
             unique_str.write(self.name)
-            unique_str.write(f",{self.file_path}")
+            unique_str.write(open(self.file).read())
             for k in sorted(self.parameters):
                 unique_str.write(f",{k}={stringify(self.parameters[k], float_fmt='%.16e')}")
             self._id = hashit(unique_str.getvalue(), length=20)
@@ -858,7 +857,7 @@ class TestCase(AbstractTestCase):
                 cpus = int(self.parameters["np"])
             elif "nodes" in self.parameters:
                 nodes = int(self.parameters["nodes"])
-                cpus = nodes * config.machine.cpus_per_node
+                cpus = nodes * config.resource_pool.pinfo("cpus_per_node")
         return cpus
 
     @property
@@ -869,7 +868,7 @@ class TestCase(AbstractTestCase):
             if "nodes" in self.parameters:
                 nodes = int(self.parameters["nodes"])  # type: ignore
             else:
-                cpus_per_node = config.machine.cpus_per_node
+                cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
                 nodes = math.ceil(self.cpus / cpus_per_node)
         return nodes
 
@@ -884,7 +883,7 @@ class TestCase(AbstractTestCase):
                 gpus = int(self.parameters["ndevice"])  # type: ignore
             elif "nodes" in self.parameters:
                 nodes = int(self.parameters["nodes"])
-                gpus = nodes * config.machine.get("gpus_per_node")
+                gpus = nodes * config.resource_pool.pinfo("gpus_per_node")
         return gpus
 
     @property
@@ -942,11 +941,10 @@ class TestCase(AbstractTestCase):
 
     def load_runtimes(self) -> list[float | None]:
         # return mean, min, max runtimes
-        if not config.cache_runtimes:
+        file = self.timing_cache()
+        if file is None:
             return [None, None, None]
-        global_cache = cache.get_cache_dir(self.file_root)
-        file = self.cache_file(global_cache)
-        if not os.path.exists(file):
+        elif not os.path.exists(file):
             return [None, None, None]
         tries = 0
         while tries < 3:
@@ -957,19 +955,19 @@ class TestCase(AbstractTestCase):
                 tries += 1
         return [None, None, None]
 
-    def cache_file(self, path):
-        return os.path.join(path, f"timing/{self.id[:2]}/{self.id[2:]}.json")
+    def timing_cache(self) -> str | None:
+        cache_dir = config.cache_dir
+        if cache_dir is None:
+            return None
+        return os.path.join(cache_dir, f"timing/{self.id[:2]}/{self.id[2:]}.json")
 
     def cache_runtime(self) -> None:
         """store mean, min, max runtimes"""
-        if not config.cache_runtimes:
-            return
         if self.status.value not in ("success", "diffed"):
             return
-        global_cache = cache.create_cache_dir(self.file_root)
-        if global_cache is None:
+        file = self.timing_cache()
+        if file is None:
             return
-        file = self.cache_file(global_cache)
         if not os.path.exists(file):
             n = 0
             mean = minimum = maximum = self.duration
@@ -1166,8 +1164,11 @@ class TestCase(AbstractTestCase):
             elif action == "append-path":
                 variables[name] = f"{variables.get(name, '')}{sep}{value}"
         vars = {}
-        vars["cpu_ids"] = variables["NVTEST_CPU_IDS"] = ",".join(map(str, self.cpu_ids))
-        vars["gpu_ids"] = variables["NVTEST_GPU_IDS"] = ",".join(map(str, self.gpu_ids))
+        for group in self.resources:
+            for type, instances in group.items():
+                varname = type[:-1] if type[-1] == "s" else type
+                ids: list[str] = [str(_["gid"]) for _ in instances]
+                vars[f"{varname}_ids"] = variables[f"NVTEST_{varname.upper()}"] = ",".join(ids)
         for key, value in variables.items():
             try:
                 variables[key] = value % vars

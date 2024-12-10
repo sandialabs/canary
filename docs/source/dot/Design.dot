@@ -100,7 +100,7 @@ plug_test_setup [
   ]
   batch_cases [
     label="Batch test cases\nusing tiling\nalgorithm",
-    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/util/partition.py?ref_type=heads#L53"
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/partition.py?ref_type=heads#L53"
 
   ]
   run_batch [

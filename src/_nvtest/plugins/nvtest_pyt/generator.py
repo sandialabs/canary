@@ -601,6 +601,7 @@ class PYTTestFile(AbstractTestGenerator):
         when: WhenType | None = None,
         type: enums.enums | None = None,
         samples: int = 10,
+        random_seed: float = 1234.0,
     ) -> None:
         type = type or enums.list_parameter_space
         if not isinstance(type, enums.enums):
@@ -612,7 +613,7 @@ class PYTTestFile(AbstractTestGenerator):
             pset = ParameterSet.centered_parameter_space(argnames, argvalues, file=self.file)
         elif type is enums.random_parameter_space:
             pset = ParameterSet.random_parameter_space(
-                argnames, argvalues, samples=samples, file=self.file
+                argnames, argvalues, samples=samples, random_seed=random_seed, file=self.file
             )
         else:
             pset = ParameterSet.list_parameter_space(

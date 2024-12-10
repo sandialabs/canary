@@ -6,11 +6,11 @@ from typing import Any
 from typing import Sequence
 
 from .. import config
-from ..atc import AbstractTestCase
 from ..status import Status
 from ..util import logging
 from ..util.filesystem import mkdirp
 from ..util.hash import hashit
+from .atc import AbstractTestCase
 from .case import TestCase
 
 
