@@ -18,7 +18,7 @@ class Fetch(Command):
         return False
 
     def setup_parser(self, parser: Parser):
-        parser.add_argument("what", choices=("examples",))
+        parser.add_argument("what", choices=("examples", "nvtest.cmake"), type=str.lower)
 
     def execute(self, args: argparse.Namespace) -> int:
         if args.what == "examples":
@@ -26,6 +26,10 @@ class Fetch(Command):
             if os.path.exists("examples"):
                 raise ValueError(f"A folder named 'examples' already exists at {os.getcwd()}")
             force_copy(path, os.path.basename(path))
+        elif args.what.lower() == "nvtest.cmake":
+            path = str(ir.files("nvtest").joinpath("tools/NVTest.cmake"))
+            with open(os.path.basename(path), "w") as fh:
+                fh.write(open(path).read())
         else:
             raise ValueError(f"Unknown option to fetch {args.what!r}")
         return 0
