@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+
+import argparse
+import datetime
+import io
+import json
+import logging
+import sys
+from pathlib import Path
+from typing import Generator
+from urllib.parse import urlencode
+from urllib.request import Request
+from urllib.request import urlopen
+
+
+def main() -> int:
+    parser = make_argument_parser()
+    args = parser.parse_args()
+
+    f = Path(args.name_map)
+    if not f.exists():
+        raise ValueError(f"namemap {f} not found!")
+    namemap = json.load(open(f))
+
+    df = datetime.datetime.strptime(args.date_from, "%Y-%m-%d")
+    dt = datetime.datetime.strptime(args.date_to, "%Y-%m-%d")
+
+    logging.debug(f"Reading merge requests for {args.project}")
+    merge_requests: list[dict] = []
+    for mr in get_merge_requests(
+        project_id=args.project_id,
+        access_token=args.access_token,
+        api_v4_url=args.api_v4_url,
+        state="merged",
+    ):
+        dm = datetime.datetime.fromisoformat(mr["merged_at"])
+        if date_in_range(dm, df, dt):
+            merge_requests.append(mr)
+
+    logging.debug(f"Reading issues for {args.project}")
+    issues: list[dict] = []
+    for issue in get_issues(
+        project_id=args.project_id,
+        access_token=args.access_token,
+        api_v4_url=args.api_v4_url,
+        state="closed",
+    ):
+        dc = datetime.datetime.fromisoformat(issue["closed_at"])
+        if date_in_range(dc, df, dt):
+            issues.append(issue)
+
+    logging.debug(f"Reading commits for {args.project}")
+    commits: list[dict] = []
+    for commit in get_commits(
+        project_id=args.project_id, access_token=args.access_token, api_v4_url=args.api_v4_url
+    ):
+        dc = datetime.datetime.fromisoformat(commit["authored_date"])
+        if date_in_range(dc, df, dt):
+            commits.append(commit)
+
+    authors: dict[tuple[str, str], int] = {}
+    for commit in commits:
+        author = commit["author_name"]
+        for nm in namemap:
+            if nm["name"] == author:
+                break
+            elif nm["username"] == author or author in nm["aliases"]:
+                author = nm["name"]
+                break
+        first, *middle, last = author.split()
+        authors.setdefault((first, last), 0)
+        authors[(first, last)] += 1
+
+    write_changelog(
+        commits=commits,
+        issues=issues,
+        merge_requests=merge_requests,
+        authors=authors,
+        project=args.project,
+        version=args.version,
+        output=args.output,
+    )
+
+
+def write_changelog(
+    *,
+    commits: list[dict],
+    issues: list[dict],
+    merge_requests: list[dict],
+    authors: dict[tuple[str, str], int],
+    project: str = "nvtest",
+    version: str | None = None,
+    output: str | None = None,
+) -> None:
+    version = version or "UNKNOWN-VERSION"
+    file = io.StringIO()
+    title = f"{project} {version} release notes"
+    file.write("{title}\n{rule}\n\n".format(title=title, rule="=" * len(title)))
+    file.write(".. contents::\n\n")
+    file.write("SYNOPSIS\n\n")
+    file.write("Authors\n-------\n\n")
+    for author in sorted(authors, key=lambda x: x[1]):
+        first, last = author
+        count = authors[author]
+        file.write(f"* {first} {last} ({count})\n")
+
+    file.write(f"\nA total of {len(authors)} authors contributed {len(commits)} ")
+    file.write("commits to this release.\n")
+
+    title = f"Issues closed for {version}"
+    file.write("\n{title}\n{rule}\n\n".format(title=title, rule="-" * len(title)))
+    for issue in sorted(issues, key=lambda x: x["iid"]):
+        fmt = "* `#{iid} <{url}>`__: {title}\n"
+        file.write(fmt.format(iid=issue["iid"], url=issue["web_url"], title=issue["title"]))
+
+    title = f"Merge requests for {version}"
+    file.write("\n{title}\n{rule}\n\n".format(title=title, rule="-" * len(title)))
+    for mr in sorted(merge_requests, key=lambda x: x["iid"]):
+        fmt = "* `!{iid} <{url}>`__: {title}\n"
+        file.write(fmt.format(iid=mr["iid"], url=mr["web_url"], title=mr["title"]))
+
+    if output is None:
+        print(file.getvalue())
+    else:
+        with open(output, "w") as fh:
+            fh.write(file.getvalue())
+
+    return 0
+
+
+def make_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Generate RST change log for a gitlab project")
+    parser.add_argument(
+        "--from",
+        dest="date_from",
+        required=True,
+        help="Generate changelog from this date forward, use YYYY-MM-DD",
+    )
+    parser.add_argument(
+        "--to",
+        dest="date_to",
+        required=True,
+        help="Generate changelog up to this date, use YYYY-MM-DD",
+    )
+    parser.add_argument(
+        "--project",
+        default="nvtest",
+        help="The GitLab project name [default: %(default)s]",
+    )
+    parser.add_argument(
+        "--api-v4-url",
+        default="https://cee-gitlab.sandia.gov/api/v4",
+        help="The GitLab API v4 root URL [default: %(default)s]",
+    )
+    parser.add_argument(
+        "--project-id",
+        default=49982,
+        type=int,
+        help="The GitLab ID of the project [default: %(default)s]",
+    )
+    parser.add_argument(
+        "-A",
+        "--access-token",
+        default="pzQ82ejiS1DrmRYmPKu3",
+        help="The GitLab API access token [default: %(default)s]",
+    )
+    parser.add_argument("-o", dest="output", help="Write output to this file")
+    parser.add_argument("--version", help="Generate changelog for this version")
+    parser.add_argument(
+        "--name-map",
+        default=Path(__file__).parent / "../.namemap",
+        help="Author name map [default: %(default)s]",
+    )
+    return parser
+
+
+def get_merge_requests(
+    *, project_id: int, access_token: str, api_v4_url: str, state: str | None = None
+) -> Generator[list[dict], None, None]:
+    """Get merge_requests for this project"""
+    header = {"PRIVATE-TOKEN": access_token}
+    page = 1
+    baseurl = f"{api_v4_url}/projects/{project_id}/merge_requests"
+    while True:
+        params = {"page": str(page), "per_page": "50"}
+        if state is not None:
+            params["state"] = state
+        params = urlencode(params)
+        url = f"{baseurl}?{params}"
+        logging.debug(url)
+        request = Request(url=url, headers=header)
+        payload = json.load(urlopen(request))
+        if not payload:
+            break
+        yield from payload
+        page += 1
+    return
+
+
+def get_issues(
+    *, project_id: int, access_token: str, api_v4_url: str, state: str | None = None
+) -> Generator[dict, None, None]:
+    """Get issues for this project"""
+    header = {"PRIVATE-TOKEN": access_token}
+    page = 1
+    baseurl = f"{api_v4_url}/projects/{project_id}/issues"
+    while True:
+        params = {"page": str(page), "per_page": "100"}
+        if state is not None:
+            params["state"] = state
+        params = urlencode(params)
+        url = f"{baseurl}?{params}"
+        logging.debug(url)
+        request = Request(url=url, headers=header)
+        payload = json.load(urlopen(request))
+        if not payload:
+            break
+        yield from payload
+        page += 1
+    return
+
+
+def get_commits(
+    *, project_id: int, access_token: str, api_v4_url: str
+) -> Generator[list[dict], None, None]:
+    """Get issues for this project"""
+    header = {"PRIVATE-TOKEN": access_token}
+    page = 1
+    baseurl = f"{api_v4_url}/projects/{project_id}/repository/commits"
+    while True:
+        params = {"page": str(page), "per_page": "100"}
+        params = urlencode(params)
+        url = f"{baseurl}?{params}"
+        logging.debug(url)
+        request = Request(url=url, headers=header)
+        payload = json.load(urlopen(request))
+        if not payload:
+            break
+        yield from payload
+        page += 1
+    return
+
+
+def date_in_range(date: datetime.datetime, start: datetime.datetime, end: datetime.datetime) -> bool:
+    if (date.year, date.month, date.day) < (start.year, start.month, start.day):
+        return False
+    if (date.year, date.month, date.day) > (end.year, end.month, end.day):
+        return False
+    return True
+
+
+if __name__ == "__main__":
+    sys.exit(main())

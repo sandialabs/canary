@@ -466,7 +466,7 @@ class group(repo):
     def build_api_url(self, *, path, query=None):
         url = f"{self.api_url}/{path}"
         if query is not None:
-            url = f"{url}?{path}"
+            url = f"{url}?{query}"
         return url
 
     def clone_url(self, protocol):

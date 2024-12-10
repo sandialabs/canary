@@ -205,6 +205,15 @@ class Finder:
         concrete_test_groups = [f.lock(on_options=on_options) for f in files]
         cases: list[TestCase] = [case for group in concrete_test_groups for case in group if case]
 
+        duplicates = Finder.find_duplicates(cases)
+        if duplicates:
+            logging.error("Duplicate test IDs generated for the following test cases")
+            for id, dcases in duplicates.items():
+                logging.error(f"{id}:")
+                for case in dcases:
+                    logging.emit(f"  - {case.display_name}: {case.file_path}\n")
+            raise ValueError("Duplicate test IDs in test suite")
+
         # this sanity check should not be necessary
         if any(case.status.value != "created" for case in cases if not case.mask):
             raise ValueError("One or more test cases is not in created state")
@@ -290,6 +299,15 @@ class Finder:
                             "deselected due to @*{re.search(%r) is None} evaluated to True" % regex
                         )
                         case.mask = colorize(msg)
+
+    @staticmethod
+    def find_duplicates(cases: list[TestCase]) -> dict[str, list[TestCase]]:
+        ids = [case.id for case in cases]
+        duplicate_ids = {id for id in ids if ids.count(id) > 1}
+        duplicates: dict[str, list[TestCase]] = {}
+        for id in duplicate_ids:
+            duplicates.setdefault(id, []).extend([_ for _ in cases if _.id == id])
+        return duplicates
 
     @staticmethod
     def pprint_paths(cases: list[TestCase], file: TextIO = sys.stdout) -> None:

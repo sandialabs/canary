@@ -1,5 +1,5 @@
-nvtest 2024.10.22 Release Notes
-===============================
+nvtest 24.10.22 Release Notes
+=============================
 
 .. contents::
 

@@ -6,4 +6,6 @@ For full details, refer to the `commit logs <https://cee-gitlab.sandia.gov/ascic
 .. toctree::
     :maxdepth: 1
 
+    pre.rst
     2024.10.22.rst
+    2024.12.10.rst

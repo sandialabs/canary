@@ -7,7 +7,6 @@ if TYPE_CHECKING:
 
 # The act of importing command modules will register the commands
 from . import autodoc
-from . import changelog
 from . import config
 from . import describe
 from . import edit

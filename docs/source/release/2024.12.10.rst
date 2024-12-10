@@ -1,0 +1,73 @@
+nvtest 24.12.10 release notes
+=============================
+
+.. contents::
+
+Authors
+-------
+
+* Tim Fuller (201)
+* Scot Swan (4)
+
+A total of 2 authors contributed 205 commits to this release.
+
+Issues closed for 24.12.10
+--------------------------
+
+* `#1 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/1>`__: load module directive
+* `#2 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/2>`__: source script directive
+* `#5 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/5>`__: Provide an abstraction for 'launch'
+* `#6 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/6>`__: missing vvtest_util objects
+* `#7 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/7>`__: problem parsing CTestfile.cmake for charon
+* `#8 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/8>`__: Feature: better error messages for parsing errors
+* `#9 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/9>`__: Feature: include and insert directive file
+* `#10 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/10>`__: DEPDIRS and DEPDIRMAP should always be set
+* `#11 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/11>`__: Improve vvtest parameterize support
+* `#13 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/13>`__: Ability to condition directives based on parametrization
+* `#14 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/14>`__: Convert Union to |
+* `#15 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/15>`__: Convert Optional to | None
+* `#16 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/16>`__: Improve nvtest status output
+* `#17 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/17>`__: Don'f filter test cases in Generator.lock
+* `#18 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/18>`__: Add support for more ctest properties
+* `#19 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/19>`__: replace nvtest's hard to follow configuration with dataclasses
+* `#20 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/20>`__: vvtest Dependencies
+* `#21 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/21>`__: link (rename) doesn't look relative to the file with the directive
+* `#22 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/22>`__: not_run status returns an exit code of 0
+* `#23 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/23>`__: Bug: ctest wrapper blows away CMakeLists.txt
+* `#24 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/24>`__: timeout controls are lacking
+* `#25 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/25>`__: Test execution directory name length
+* `#26 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/26>`__: Error parsing ctest properties that have newline character
+* `#27 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/27>`__: Use ctest --show-only to parse ctest files
+* `#28 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/28>`__: Add new batching scheme
+* `#29 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/29>`__: Modify hpc_connect interface to use hpc_connect.Job
+* `#33 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/33>`__: Document ctest features
+* `#34 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/34>`__: Simplify test batches by removing batch lot number
+* `#36 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/36>`__: add modify_env method to TestCase
+* `#38 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/issues/38>`__: batch args parsing error
+
+Merge requests for 24.12.10
+---------------------------
+
+* `!3 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/3>`__: adding coverage MR report
+* `!4 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/4>`__: load module
+* `!6 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/6>`__: prototype of hpc-scheduler/submit/launch system
+* `!7 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/7>`__: Resolve "missing vvtest_util objects"
+* `!8 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/8>`__: Update generator.py to fix issue splitting cmake environment variables.
+* `!9 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/9>`__: Resolve "DEPDIRS and DEPDIRMAP should always be set"
+* `!10 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/10>`__: Resolve "Feature: include and insert directive file"
+* `!11 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/11>`__: Improve parameterize support for vvt files
+* `!12 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/12>`__: Resolve "Feature: better error messages for parsing errors"
+* `!13 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/13>`__: Resolve "Convert Optional to | None"
+* `!14 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/14>`__: Resolve "Don'f filter test cases in Generator.lock"
+* `!15 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/15>`__: Resolve "Add support for more ctest properties"
+* `!16 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/16>`__: Resolve "replace nvtest's hard to follow configuration with dataclasses"
+* `!17 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/17>`__: Resolve "vvtest Dependencies"
+* `!18 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/18>`__: Updating test path scheme
+* `!19 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/19>`__: Resolve "Error parsing ctest properties that have newline character"
+* `!20 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/20>`__: Resolve "Add new batching scheme"
+* `!21 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/21>`__: Resolve "Document ctest features"
+* `!22 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/22>`__: move to a more generalized resource queue
+* `!23 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/23>`__: Resolve "add modify_env method to TestCase"
+* `!24 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/24>`__: Lazily setup
+* `!26 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/26>`__: add -f flag to read config file from command line and use it for batches
+* `!27 <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/merge_requests/27>`__: update to resource config
