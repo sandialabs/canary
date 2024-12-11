@@ -7,11 +7,8 @@ def version_components_from_git(full: bool = False) -> tuple[int, int, int, str]
     try:
         save_cwd = os.getcwd()
         os.chdir(os.path.join(os.path.dirname(__file__), "../../.."))
-        proc = subprocess.Popen(
-            ["git", "log", "--pretty=format:%ad %h", "--date=short", "HEAD^..HEAD"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        args = ["git", "log", "-1", "--pretty=format:%ad %h", "--date=short"]
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         proc.wait()
         out, _ = [_.decode("utf-8") for _ in proc.communicate()]
         date, local, *_ = out.split()

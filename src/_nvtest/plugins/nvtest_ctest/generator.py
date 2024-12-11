@@ -13,7 +13,6 @@ import nvtest
 from _nvtest import config
 from _nvtest import plugin
 from _nvtest.generator import AbstractTestGenerator
-from _nvtest.generator import StopRecursion
 from _nvtest.test.case import DependencyPatterns
 from _nvtest.test.case import TestCase
 from _nvtest.util import graph
@@ -45,23 +44,15 @@ class CTestTestFile(AbstractTestGenerator):
     def matches(cls, path: str) -> bool:
         matches = cls.always_matches(path)
         if matches:
-            if not config.getoption("recurse_cmake"):
-                raise StopRecursion
             dir = os.path.dirname(os.path.abspath(path))
-            cmakecache = os.path.join(dir, "CMakeCache.txt")
-            if os.path.exists(cmakecache):
-                # This file is in the root of the binary directory, we don't need to recurse any
-                # further since CTest will do that
-                CTestTestFile.no_recurse_dirs.add(dir)
-                logging.debug(f"CTest: marked {dir} to skip recursion")
-                return True
-            else:
-                for no_recurse_dir in CTestTestFile.no_recurse_dirs:
-                    if dir.startswith(no_recurse_dir):
-                        # tests in this file should have already been added by cmake
-                        logging.debug(f"CTest: skipping {path} due to skipped recursion")
-                        return False
-                return True
+            for no_recurse_dir in CTestTestFile.no_recurse_dirs:
+                if dir.startswith(no_recurse_dir):
+                    # ctest does its own recursion, following add_directory(...) commands
+                    logging.debug(f"CTest: skipping {path} due to ctest recursion")
+                    return False
+            CTestTestFile.no_recurse_dirs.add(dir)
+            logging.debug(f"CTest: marked {dir} to skip recursion")
+            return True
         return False
 
     @classmethod
@@ -77,17 +68,9 @@ class CTestTestFile(AbstractTestGenerator):
         if not tests:
             return []
         cases: list[CTestTestCase] = []
-        cmakefiles = sorted([td["file"] for td in tests.values()], key=lambda x: len(x))
-        root = os.path.dirname(os.path.abspath(cmakefiles[0]))
-        for family, td in tests.items():
-            cmakefile = td["file"]
-            if os.path.exists(cmakefile):
-                path = os.path.relpath(cmakefile, root)
-                case = CTestTestCase(file_root=root, file_path=path, family=family, **td)
-            else:
-                # This happens in unit tests where we use a CTestTestfile.cmake without an
-                # associated CMake file
-                case = CTestTestCase(file_root=self.root, file_path=self.path, family=family, **td)
+        for family, details in tests.items():
+            path = os.path.relpath(details["ctestfile"], self.root)
+            case = CTestTestCase(file_root=self.root, file_path=path, family=family, **details)
             cases.append(case)
         self.resolve_inter_dependencies(cases)
         self.resolve_fixtures(cases)
@@ -174,6 +157,8 @@ class CTestTestCase(TestCase):
         will_fail: bool | None = None,
         working_directory: str | None = None,
         backtrace_triples: list[str] | None = None,
+        cmakelists: str | None = None,
+        ctestfile: str | None = None,
         **kwds,
     ) -> None:
         super().__init__(
@@ -187,7 +172,12 @@ class CTestTestCase(TestCase):
         self._resource_groups: list[list[dict[str, Any]]] | None = None
         self._required_files: list[str] | None = None
         self._will_fail: bool = will_fail or False
-        self.working_directory = working_directory or self.file_dir
+        self.cmakelists = cmakelists
+        self.ctestfile = ctestfile
+        if working_directory is not None:
+            self.working_directory = working_directory
+        elif self.ctestfile and os.path.exists(self.ctestfile):
+            self.working_directory = os.path.dirname(self.ctestfile)
 
         if command is not None:
             with nvtest.filesystem.working_dir(self.working_directory):
@@ -261,6 +251,13 @@ class CTestTestCase(TestCase):
             warn_unsupported_ctest_option("timeout_signal_grace_period")
         if timeout_signal_name is not None:
             warn_unsupported_ctest_option("timeout_signal_name")
+
+    @property
+    def file(self) -> str:
+        if self.cmakelists and os.path.exists(self.cmakelists):
+            return self.cmakelists
+        assert self.ctestfile is not None
+        return self.ctestfile
 
     def required_resources(self) -> list[list[dict[str, Any]]]:
         required = copy.deepcopy(self.resource_groups)
@@ -502,13 +499,39 @@ def load(file: str) -> dict[str, Any]:
             t = tests.setdefault(test["name"], {})
             t["properties"] = test["properties"]
             t["command"] = test["command"]
+            t["file"] = os.path.abspath(file)
             if nodes:
                 node = nodes[test["backtrace"]]
-                t["file"] = files[node["file"]]
+                t["cmakelists"] = os.path.abspath(files[node["file"]])
             else:
-                t["file"] = os.path.abspath(file)
+                t["cmakelists"] = None
     logging.debug(f"Found {len(tests)} in {file}")
     return tests
+
+
+def find_project_binary_dir(file: str) -> str:
+    dirname = os.path.dirname(file)
+    while True:
+        cmakecache = os.path.join(dirname, "CMakeCache.txt")
+        if os.path.exists(cmakecache):
+            return dirname
+        dirname = os.path.dirname(dirname)
+        if dirname == os.path.sep:
+            break
+    return os.path.dirname(file)
+
+
+def find_project_source_dir(file: str) -> str:
+    dirname, basename = os.path.split(os.path.abspath(file))
+    assert basename == "CMakeLists.txt"
+    while True:
+        parent = os.path.dirname(dirname)
+        if not os.path.exists(os.path.join(parent, basename)):
+            return dirname
+        dirname = parent
+        if dirname == os.path.sep:
+            break
+    return os.path.dirname(os.path.abspath(file))
 
 
 def transform(tests: dict[str, Any]) -> None:
@@ -524,7 +547,25 @@ def transform(tests: dict[str, Any]) -> None:
 
     """
     for name, data in tests.items():
-        transformed = {"command": data["command"], "file": data["file"]}
+        transformed: dict[str, Any] = {"command": data["command"]}
+        file = data["file"]
+        if data["cmakelists"] is not None:
+            cmakelists = data["cmakelists"]
+            project_binary_dir = find_project_binary_dir(file)
+            project_source_dir = find_project_source_dir(cmakelists)
+            reldir = os.path.relpath(os.path.dirname(cmakelists), project_source_dir)
+            transformed["project_binary_dir"] = project_binary_dir
+            transformed["project_source_dir"] = project_source_dir
+            transformed["binary_dir"] = os.path.join(project_binary_dir, reldir)
+            transformed["ctestfile"] = os.path.join(
+                transformed["binary_dir"], os.path.basename(file)
+            )
+            transformed["cmakelists"] = cmakelists
+            transformed["source_dir"] = os.path.dirname(cmakelists)
+        else:
+            transformed["ctestfile"] = transformed["cmakelists"] = file
+            transformed["project_binary_dir"] = transformed["binary_dir"] = os.path.dirname(file)
+            transformed["project_source_dir"] = transformed["source_dir"] = os.path.dirname(file)
         for prop in data["properties"]:
             prop_name, prop_value = prop["name"], prop["value"]
             if prop_name == "ENVIRONMENT":

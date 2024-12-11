@@ -335,14 +335,19 @@ class ResourcePool:
                 if spec["id"] == pid:
                     for instance in spec[type]:
                         if instance["id"] == lid:
-                            instance["slots"] += rspec["slots"]
-                            return
+                            slots = rspec["slots"]
+                            instance["slots"] += slots
+                            return slots
             raise ValueError(f"Attempting to reclaim a resource whose ID is unknown: {rspec!r}")
 
+        types: dict[str, int] = {}
         for resource in obj.resources:  # list[dict[str, list[dict]]]) -> None:
             for type, rspecs in resource.items():
                 for rspec in rspecs:
-                    _reclaim(type, rspec)
+                    n = _reclaim(type, rspec)
+                    types[type] = types.setdefault(type, 0) + n
+        for type, n in types.items():
+            logging.debug(f"Reclaimed {n} {type}")
         obj.resources.clear()
 
 
