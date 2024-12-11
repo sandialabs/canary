@@ -6,7 +6,7 @@ Time resources
 Runtime
 -------
 
-Test runtimes are written to ``<root>/.nvtest_cache/timing``, where ``<root>`` is the root test search directory.  This cache is automatically created when a session is run and can be ignored from source control.  However, if the timing cache is kept and updated, the data contained therein can aid in speeding up :ref:`batched <usage-run-batched>` test runs by allowing more accurate determinations of batch sizes.
+Test runtimes are written to ``<root>/.nvtest_cache/timing``, where ``<root>`` is the the test's project root (as determined by the presence of a ``.git`` directory) or the test's root test search directory if the project root could not be determined.  This cache is automatically created when a session is run and can be ignored from source control.  However, if the timing cache is kept and updated, the data contained therein can aid in speeding up :ref:`batched <usage-run-batched>` test runs by allowing more accurate determinations of batch sizes.
 
 Timeout
 -------
@@ -28,16 +28,17 @@ These values are configurable in the ``test:timeout`` :ref:`configuration settin
 
 .. code-block:: ini
 
-   [test:timeout]
-   fast = 30s
-   long = 10m
-   default = 5m
+   test:
+     timeout:
+       fast = 30s
+       long = 10m
+       default = 5m
 
 which can also be set from the command line, eg:
 
 .. code-block:: console
 
-   nvtest -c test:timeout_fast:60s ...
+   nvtest -c test:timeout:fast:60s ...
 
 Timeout multiplier
 ------------------

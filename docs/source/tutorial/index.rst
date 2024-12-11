@@ -5,4 +5,5 @@ Tutorial
     :maxdepth: 1
 
     Introduction <intro>
-    Getting started <getting_started>
+    Getting started <basic>
+    Parameterizing tests <parameterize>

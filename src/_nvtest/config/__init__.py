@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     build = _config.build
     options = _config.options
     resource_pool = _config.resource_pool
-    cache_dir = _config.cache_dir
     config_dir = _config.config_dir
     debug = _config.debug
     getoption = _config.getoption

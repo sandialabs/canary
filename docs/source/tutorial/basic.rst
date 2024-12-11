@@ -14,5 +14,5 @@ The remainder of this tutorial uses examples shipped with ``nvtest``.  To obtain
 .. toctree::
     :maxdepth: 1
 
-    A first test <getting_started.first>
-    A second test <getting_started.second>
+    A first test <basic.first>
+    A second test <basic.second>

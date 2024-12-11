@@ -485,7 +485,6 @@ class Config:
     invocation_dir: str = os.getcwd()
     debug: bool = False
     log_level: str = "INFO"
-    _cache_dir: str | None = None
     _config_dir: str | None = None
     variables: Variables = dataclasses.field(default_factory=Variables)
     batch: Batch = dataclasses.field(default_factory=Batch)
@@ -542,12 +541,6 @@ class Config:
         return cls(**kwds)
 
     @property
-    def cache_dir(self) -> str | None:
-        if self._cache_dir is None:
-            self._cache_dir = get_cache_dir()
-        return self._cache_dir
-
-    @property
     def config_dir(self) -> str | None:
         if self._config_dir is None:
             self._config_dir = get_config_dir()
@@ -592,8 +585,6 @@ class Config:
             if key == "config":
                 if "debug" in items:
                     config["debug"] = bool(items["debug"])
-                if "_cache_dir" in items:
-                    config["_cache_dir"] = items["_cache_dir"]
                 if "_config_dir" in items:
                     config["_config_dir"] = items["_config_dir"]
                 if "log_level" in items:
@@ -626,8 +617,6 @@ class Config:
             if self.debug:
                 self.log_level = logging.get_level_name(log_levels[3])
                 logging.set_level(logging.DEBUG)
-        if "_cache_dir" in data:
-            self._cache_dir = data["_cache_dir"]
         if "_config_dir" in data:
             self._config_dir = data["_config_dir"]
         if "log_level" in data:
@@ -825,43 +814,16 @@ def expandvars(arg: Any, mapping: dict) -> Any:
     return arg
 
 
-def get_cache_dir() -> str | None:
-    cache_home: str
-    if "NVTEST_CACHE_HOME" in os.environ:
-        cache_home = os.environ["NVTEST_CACHE_HOME"]
-    elif "XDG_CACHE_HOME" in os.environ:
-        cache_home = os.environ["XDG_CACHE_HOME"]
-    else:
-        cache_home = os.path.expanduser("~/.cache")
-    if cache_home in (os.devnull, "null"):
-        return None
-    cache_dir = os.path.join(cache_home, "nvtest")
-    try:
-        os.makedirs(cache_dir, exist_ok=True)
-    except Exception:
-        return None
-    file = os.path.join(cache_dir, "CACHEDIR.TAG")
-    if not os.path.exists(file):
-        with open(file, "w") as fh:
-            fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
-            fh.write("# This file is a cache directory tag automatically created by nvtest.\n")
-            fh.write(
-                "# For information about cache directory tags see https://bford.info/cachedir/\n"
-            )
-    return cache_dir
-
-
 def get_config_dir() -> str | None:
-    config_home: str
-    if "NVTEST_CONFIG_HOME" in os.environ:
-        config_home = os.environ["NVTEST_CONFIG_HOME"]
+    config_dir: str
+    if "NVTEST_CONFIG_DIR" in os.environ:
+        config_dir = os.environ["NVTEST_CONFIG_DIR"]
     elif "XDG_CONFIG_HOME" in os.environ:
-        config_home = os.environ["XDG_CONFIG_HOME"]
+        config_dir = os.path.join(os.environ["XDG_CONFIG_HOME"], "nvtest")
     else:
-        config_home = os.path.expanduser("~/.config")
-    if config_home in (os.devnull, "null"):
+        config_dir = os.path.expanduser("~/.config/nvtest")
+    if config_dir in (os.devnull, "null"):
         return None
-    config_dir = os.path.join(config_home, "nvtest")
     return config_dir
 
 

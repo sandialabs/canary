@@ -1,4 +1,5 @@
 import dataclasses
+import datetime
 import fnmatch
 import io
 import itertools
@@ -511,9 +512,10 @@ class TestCase(AbstractTestCase):
 
         """
         if self._runtimes[0] is None:
-            self._runtimes.clear()
-            rt = self.load_runtimes()
-            self._runtimes.extend([rt.mean, rt.min, rt.max])
+            runtimes = self.load_runtimes()
+            if runtimes is not None:
+                self._runtimes.clear()
+                self._runtimes.extend([runtimes.mean, runtimes.min, runtimes.max])
         return self._runtimes
 
     @runtimes.setter
@@ -946,68 +948,63 @@ class TestCase(AbstractTestCase):
             timeout = config.test.timeout_default
         self._timeout = float(timeout)
 
-    def load_runtimes(self) -> SimpleNamespace:
-        # return mean, min, max runtimes
-        file = self.timing_cache()
-        result = SimpleNamespace(n=None, mean=None, min=None, max=None)
-        if file is None:
-            return result
-        elif not os.path.exists(file):
-            return result
-        tries = 0
-        while tries < 3:
-            try:
-                data = json.load(open(file))
-                if "timing" not in data:
-                    fs.force_remove(file)
-                    return result
-                timing = data["timing"]
-                result.n = timing["n"]
-                result.min = timing["min"]
-                result.mean = timing["mean"]
-                result.max = timing["max"]
-                return result
-            except json.decoder.JSONDecodeError:
-                tries += 1
-        return result
-
-    def timing_cache(self) -> str | None:
-        cache_dir = config.cache_dir
+    def load_runtimes(self) -> SimpleNamespace | None:
+        """Return mean, min, and max runtimes"""
+        cache_dir = find_cache_dir(self.file_root)
         if cache_dir is None:
             return None
-        return os.path.join(cache_dir, f"timing/{self.id[:2]}/{self.id[2:]}.json")
+        file = os.path.join(cache_dir, f"timing/{self.id[:2]}/{self.id[2:]}.json")
+        if not os.path.exists(file):
+            return None
+        try:
+            data = json.load(open(file))
+            if "timing" not in data:
+                fs.force_remove(file)
+                return None
+            version = data["timing"].get("version")
+            if version != {"major": 1, "minor": 0}:
+                fs.force_remove(file)
+                return None
+            return SimpleNamespace(**data["timing"]["local"])
+        except Exception:
+            fs.force_remove(file)
+        return None
 
-    def cache_runtime(self) -> None:
+    def save_runtime(self) -> None:
         """store mean, min, max runtimes"""
         if self.status.value not in ("success", "diffed"):
             return
-        file = self.timing_cache()
-        if file is None:
+        if self.duration < 0:
             return
-        if not os.path.exists(file):
+        runtimes = self.load_runtimes()
+        if runtimes is not None:
+            n = runtimes.count
+            mean = (self.duration + runtimes.mean * runtimes.count) / (runtimes.count + 1)
+            minimum = min(runtimes.min, self.duration)
+            maximum = max(runtimes.max, self.duration)
+        else:
             n = 0
             mean = minimum = maximum = self.duration
-        else:
-            try:
-                rt = self.load_runtimes()
-                n, mean, minimum, maximum = rt.n, rt.mean, rt.min, rt.max
-            except json.decoder.JSONDecodeError:
-                n = 0
-                mean = minimum = maximum = self.duration
-            finally:
-                mean = (self.duration + mean * n) / (n + 1)
-                minimum = min(minimum, self.duration)
-                maximum = max(maximum, self.duration)
-        mkdirp(os.path.dirname(file))
-        tries = 0
-        data = {"name": self.name, "n": n + 1, "mean": mean, "min": minimum, "max": maximum}
-        while tries < 3:
-            try:
-                with open(file, "w") as fh:
-                    json.dump({"timing": data}, fh)
-                break
-            except Exception:
-                tries += 1
+        cache_dir = find_cache_dir(self.file_root, create=True)
+        if cache_dir is None:
+            return
+        file = os.path.join(cache_dir, f"timing/{self.id[:2]}/{self.id[2:]}.json")
+        local = {
+            "name": self.display_name,
+            "path": os.path.relpath(self.file, os.path.dirname(cache_dir)),
+            "last_run": datetime.datetime.fromtimestamp(self.start).strftime("%c"),
+            "count": n + 1,
+            "mean": mean,
+            "min": minimum,
+            "max": maximum,
+        }
+        try:
+            fs.mkdirp(os.path.dirname(file))
+            with open(file, "w") as fh:
+                timing = {"timing": {"version": {"major": 1, "minor": 0}, "local": local}}
+                json.dump(timing, fh, indent=2)
+        except Exception:
+            fs.force_remove(file)
 
     def set_attribute(self, name: str, value: Any) -> None:
         if name in self.__dict__:
@@ -1301,7 +1298,7 @@ class TestCase(AbstractTestCase):
         if stage == "run":
             for hook in plugin.hooks():
                 hook.test_after_run(self)
-            self.cache_runtime()
+            self.save_runtime()
         self.concatenate_logs()
         self.save()
 
@@ -1522,6 +1519,42 @@ def clean_out_folder(folder: str) -> None:
         with fs.working_dir(folder):
             for f in os.listdir("."):
                 fs.force_remove(f)
+
+
+def find_cache_dir(start: str, create: bool = False) -> str | None:
+    cache_dir: str
+    if "NVTEST_CACHE_DIR" in os.environ:
+        cache_dir = os.environ["NVTEST_CACHE_DIR"]
+        if cache_dir in (os.devnull, "null"):
+            return None
+    else:
+        dirname = start
+        pjoin = os.path.join
+        while True:
+            if os.path.exists(pjoin(dirname, ".nvtest_cache/CACHEDIR.TAG")):
+                break
+            elif os.path.isdir(pjoin(dirname, ".git")) or os.path.isdir(pjoin(dirname, ".hg")):
+                # cache data at the project's root
+                break
+            dirname = os.path.dirname(dirname)
+            if dirname == os.path.sep:
+                dirname = start
+                break
+        cache_dir = pjoin(dirname, ".nvtest_cache")
+    if create:
+        make_cache_dir(cache_dir)
+    return cache_dir
+
+
+def make_cache_dir(dirname: str) -> None:
+    fs.mkdirp(dirname)
+    file = os.path.join(dirname, "CACHEDIR.TAG")
+    if not os.path.exists(file):
+        with open(file, "w") as fh:
+            fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
+            fh.write("# This file is a cache directory tag automatically created by nvtest.\n")
+            fh.write("# For information about cache directory tags ")
+            fh.write("see https://bford.info/cachedir/\n")
 
 
 class MissingSourceError(Exception):

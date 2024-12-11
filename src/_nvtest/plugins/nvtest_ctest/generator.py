@@ -355,7 +355,7 @@ class CTestTestCase(TestCase):
         for hook in plugin.hooks():
             hook.test_after_run(self)
 
-        self.cache_runtime()
+        self.save_runtime()
         self.concatenate_logs()
         file = self.logfile(stage)
 

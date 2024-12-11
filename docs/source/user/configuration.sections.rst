@@ -42,7 +42,7 @@ Set test timeouts.
 variables
 ---------
 
-Set environment variables that will be set during runtime.
+Set environment variables that will be set during test execution.
 
 .. code-block:: yaml
 
