@@ -663,6 +663,7 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "run") -> dict:
         vendor = config.build.compiler.vendor
         version = config.build.compiler.version
         compiler_spec = f"{vendor}@{version}"
+    attrs["CASEID"] = case.id
     attrs["NAME"] = case.family
     attrs["TESTID"] = case.fullname
     attrs["PLATFORM"] = sys.platform.lower()

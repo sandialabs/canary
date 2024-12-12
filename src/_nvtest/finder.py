@@ -15,6 +15,7 @@ from .third_party.color import colorize
 from .util import filesystem as fs
 from .util import graph
 from .util import logging
+from .util.parallel import starmap
 from .util.term import terminal_size
 from .util.time import hhmmss
 
@@ -202,8 +203,12 @@ class Finder:
             f"    keywords={keyword_expr}\n"
             f"    parameters={parameter_expr}"
         )
-        concrete_test_groups = [f.lock(on_options=on_options) for f in files]
-        cases: list[TestCase] = [case for group in concrete_test_groups for case in group if case]
+        locked: list[list[TestCase]]
+        if config.debug:
+            locked = [f.lock(on_options) for f in files]
+        else:
+            locked = starmap(lock_file, [(f, on_options) for f in files])
+        cases: list[TestCase] = [case for group in locked for case in group if case]
 
         duplicates = Finder.find_duplicates(cases)
         if duplicates:
@@ -370,3 +375,7 @@ def find(path: str) -> AbstractTestGenerator:
 
 class FinderError(Exception):
     pass
+
+
+def lock_file(file: AbstractTestGenerator, on_options: list[str] | None):
+    return file.lock(on_options=on_options)

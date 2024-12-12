@@ -1,6 +1,7 @@
 import dataclasses
 import datetime
 import fnmatch
+import hashlib
 import io
 import itertools
 import json
@@ -28,7 +29,6 @@ from ..util.executable import Executable
 from ..util.filesystem import copyfile
 from ..util.filesystem import max_name_length
 from ..util.filesystem import mkdirp
-from ..util.hash import hashit
 from ..util.module import load_module
 from ..util.shell import source_rcfile
 from ..util.time import hhmmss
@@ -836,17 +836,7 @@ class TestCase(AbstractTestCase):
     @property
     def id(self) -> str:
         if not self._id:
-            unique_str = io.StringIO()
-            unique_str.write(self.name)
-            # prefer not to use file_path (since it makes the ID dependent on the search path used
-            # when nvtest was invoked) but some tests use duplicated files, # just in different
-            # directories.  Another idea is to has contents of this file's assets into the ID, but
-            # some of the assets are large and slow to read.  Alas, using the file_path is fast and
-            # semi-robust against ID collision.
-            unique_str.write(self.file_path)
-            for k in sorted(self.parameters):
-                unique_str.write(f",{k}={stringify(self.parameters[k], float_fmt='%.16e')}")
-            self._id = hashit(unique_str.getvalue(), length=20)
+            self._id = self.generate_id()
         assert isinstance(self._id, str)
         return self._id
 
@@ -854,6 +844,46 @@ class TestCase(AbstractTestCase):
     def id(self, arg: str) -> None:
         assert isinstance(arg, str)
         self._id = arg
+
+    def chain(self) -> str:
+        dirname = os.path.dirname(self.file)
+        while True:
+            if os.path.isdir(os.path.join(dirname, ".git")):
+                return os.path.relpath(self.file, dirname)
+            dirname = os.path.dirname(dirname)
+            if dirname == os.path.sep:
+                break
+        return self.path
+
+    def generate_id(self) -> str:
+        """The test ID is built up from the test name, parameters, and contents of auxiliary files.
+        It is slow, but it gives a unique and repeatable ID.
+        """
+        hasher = hashlib.sha256()
+        hasher.update(self.name.encode())
+        for key in sorted(self.parameters):
+            hasher.update(f"{key}={stringify(self.parameters[key], float_fmt='%.16e')}".encode())
+        gb: int = 1024 * 1024 * 1024
+        byte_limit = int(os.getenv("NVTEST_HASH_BYTE_LIMIT", gb))
+        files: list[str] = [self.file]
+        if byte_limit:
+            accept = lambda f: os.path.isfile(f) and os.path.getsize(f) <= byte_limit
+            files.extend([asset.src for asset in self.assets if accept(asset.src)])
+        else:
+            hasher.update(self.chain().encode())
+        files.sort()
+        buffer = bytearray(4096)
+        view = memoryview(buffer)
+        update = hasher.update
+        for file in files:
+            size = os.path.getsize(file)
+            with open(file, "rb") as fh:
+                readinto = fh.readinto
+                while size:
+                    bytes_read = readinto(buffer)
+                    update(view[:bytes_read])
+                    size -= bytes_read
+        return hasher.hexdigest()[:20]
 
     @property
     def cpus(self) -> int:
