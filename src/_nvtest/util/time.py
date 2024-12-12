@@ -109,9 +109,7 @@ class Duration:
             sign = -1 if duration[0] == "-" else 1
             duration = duration[1:]
 
-        if re.search(
-            r"(?xm)(?:\s|^)([-+]*(?:\d+\.\d*|\.?\d+)(?:[eE][-+]?\d+)?)(?=\s|$)", duration
-        ):
+        if re.search(r"(?xm)(?:\s|^)([-+]*(?:\d+\.\d*|\.?\d+)(?:[eE][-+]?\d+)?)(?=\s|$)", duration):
             return timedelta(seconds=sign * float(duration))
         elif re.search(r"^\d{1,2}:\d{1,2}:\d{1,2}(\.\d+)?$", duration):
             hours, minutes, seconds = [float(_) for _ in duration.split(":")]

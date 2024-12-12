@@ -258,9 +258,7 @@ def autopartition(cases: Sequence[TestCase], t: float = 60 * 30) -> list[TestBat
             timeout = max(block.size[1] for block in unfit)
             height = int(max(timeout, t))
             packer.pack(unfit, width, height)
-            partitions.append(
-                TestBatch([map[b.id] for b in unfit if b.fit], runtime=float(height))
-            )
+            partitions.append(TestBatch([map[b.id] for b in unfit if b.fit], runtime=float(height)))
             tmp = [block for block in unfit if not block.fit]
             if len(tmp) == len(unfit):
                 raise RuntimeError("Unable to partition blocks")

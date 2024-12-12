@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import time
 from typing import Any
 from typing import TextIO
 
@@ -13,6 +14,7 @@ from .test.case import TestCase
 from .third_party.colify import colified
 from .third_party.color import colorize
 from .util import filesystem as fs
+from .util import glyphs
 from .util import graph
 from .util import logging
 from .util.parallel import starmap
@@ -55,7 +57,9 @@ class Finder:
             raise ValueError("Cannot call discover() before calling prepare()")
         errors = 0
         for root, paths in self.roots.items():
-            logging.debug(f"Searching {root} for test files")
+            start = time.monotonic()
+            relroot = os.path.relpath(root, config.invocation_dir)
+            logging.info(colorize("@*{Searching} %s for test generators..." % relroot), end="")
             if os.path.isfile(root):
                 try:
                     f = AbstractTestGenerator.factory(root)
@@ -90,6 +94,11 @@ class Finder:
                 p_generators, p_errors = self.rfind(root)
                 generators.update(p_generators)
                 errors += p_errors
+            dt = time.monotonic() - start
+            logging.info(
+                colorize("@*{Searching} %s for test generators... done (%.2fs.)" % (relroot, dt)),
+                rewind=True,
+            )
             logging.debug(f"Found {len(generators)} test files in {root}")
         n = sum([len(_) for _ in tree.values()])
         nr = len(tree)
@@ -144,7 +153,8 @@ class Finder:
 
     @staticmethod
     def resolve_dependencies(cases: list[TestCase]) -> None:
-        logging.debug("Resolving dependencies across test suite")
+        start = time.monotonic()
+        logging.info(colorize("@*{Resolving} test case dependencies..."), end="")
         for case in cases:
             while True:
                 if not case.unresolved_dependencies:
@@ -165,11 +175,15 @@ class Finder:
                 for match in matches:
                     assert isinstance(match, TestCase)
                     case.add_dependency(match, dep.result)
-        logging.debug("Done resolving dependencies across test suite")
+        dt = time.monotonic() - start
+        logging.info(
+            colorize("@*{Resolving} test case dependencies... done (%.2fs.)" % dt), rewind=True
+        )
 
     @staticmethod
     def check_for_skipped_dependencies(cases: list[TestCase]) -> None:
-        logging.debug("Validating test cases")
+        start = time.monotonic()
+        logging.info(colorize("@*{Checking} for skipped dependencies..."), end="")
         missing = 0
         ids = [id(case) for case in cases]
         for case in cases:
@@ -180,15 +194,18 @@ class Finder:
                     logging.error(f"ID of {dep!r} is not in test cases")
                     missing += 1
                 if dep.mask:
-                    case.mask = "deselected due to skipped dependency"
+                    case.mask = "one or more skipped dependency"
                     logging.debug(f"Dependency {dep!r} of {case!r} is marked to be skipped")
         if missing:
             raise ValueError("Missing dependencies")
-        logging.debug("Done validating test cases")
+        dt = time.monotonic() - start
+        logging.info(
+            colorize("@*{Checking} for skipped dependencies... done (%.2fs)" % dt), rewind=True
+        )
 
     @staticmethod
     def lock_and_filter(
-        files: list[AbstractTestGenerator],
+        generators: list[AbstractTestGenerator],
         keyword_expr: str | None = None,
         parameter_expr: str | None = None,
         on_options: list[str] | None = None,
@@ -196,19 +213,18 @@ class Finder:
         env_mods: dict[str, str] | None = None,
         regex: str | None = None,
     ) -> list[TestCase]:
-        o = ",".join(on_options or [])
-        logging.debug(
-            "Creating concrete test cases using\n"
-            f"    options={o}\n"
-            f"    keywords={keyword_expr}\n"
-            f"    parameters={parameter_expr}"
-        )
+        logging.info(colorize("@*{Generating} test cases..."), end="")
         locked: list[list[TestCase]]
+        start = time.monotonic()
         if config.debug:
-            locked = [f.lock(on_options) for f in files]
+            locked = [f.lock(on_options) for f in generators]
         else:
-            locked = starmap(lock_file, [(f, on_options) for f in files])
+            locked = starmap(lock_file, [(f, on_options) for f in generators])
         cases: list[TestCase] = [case for group in locked for case in group if case]
+        dt = time.monotonic() - start
+        nc, ng = len(cases), len(generators)
+        logging.info(colorize("@*{Generating} test cases... done (%.2fs.)" % dt), rewind=True)
+        logging.info(colorize("@*{Generated} %d test cases from %d generators" % (nc, ng)))
 
         duplicates = Finder.find_duplicates(cases)
         if duplicates:
@@ -241,7 +257,20 @@ class Finder:
             for case in cases:
                 p.test_discovery(case)
 
-        logging.debug("Done creating test cases")
+        masked = [case for case in cases if case.mask]
+        logging.info(colorize("@*{Selected} %d test cases" % (len(cases) - len(masked))))
+        if masked:
+            logging.info(
+                colorize("@*{Skipping} %d test cases for the following reasons:" % len(masked))
+            )
+            masked_reasons: dict[str, int] = {}
+            for case in cases:
+                if case.mask:
+                    masked_reasons[case.mask] = masked_reasons.get(case.mask, 0) + 1
+            reasons = sorted(masked_reasons, key=lambda x: masked_reasons[x])
+            for reason in reversed(reasons):
+                logging.emit(f"{glyphs.bullet} {masked_reasons[reason]}: {reason.lstrip()}\n")
+
         return cases
 
     @staticmethod
@@ -257,18 +286,20 @@ class Finder:
             logging.warning("Regular expression search can be slow for large test suites")
             rx = re.compile(regex)
 
+        start = time.monotonic()
+        logging.info(colorize("@*{Selecting} test cases based on filtering criteria..."), end="")
         owners = set(owners or [])
         for case in cases:
             try:
                 config.resource_pool.validate(case)
             except config.ResourceUnsatisfiable as e:
                 if case.mask is None:
-                    s = "deselected due to @*{ResourceUnsatisfiable}(%r)" % e.args[0]
+                    s = "@*{ResourceUnsatisfiable}(%r)" % e.args[0]
                     case.mask = colorize(s)
 
             if case.mask is None and owners:
                 if not owners.intersection(case.owners):
-                    case.mask = colorize("deselected by @*b{owner expression}")
+                    case.mask = colorize("not owned by @*{%r}" % case.owners)
 
             if case.mask is None and keyword_expr is not None:
                 kwds = set(case.keywords)
@@ -277,10 +308,10 @@ class Finder:
                 kwds.update(case.parameters.keys())
                 match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
                 if not match:
-                    case.mask = colorize("deselected by @*b{keyword expression}")
+                    case.mask = colorize("keyword expression @*{%r} did not match" % keyword_expr)
 
             if case.mask is None and ("TDD" in case.keywords or "tdd" in case.keywords):
-                case.mask = colorize("deselected due to @*b{TDD keyword}")
+                case.mask = colorize("test marked as @*{TDD}")
 
             if case.mask is None and parameter_expr:
                 match = when.when(
@@ -288,10 +319,12 @@ class Finder:
                     parameters=case.parameters | case.implicit_parameters,
                 )
                 if not match:
-                    case.mask = colorize("deselected due to @*b{parameter expression}")
+                    case.mask = colorize(
+                        "parameter expression @*{%s} did not match" % parameter_expr
+                    )
 
             if case.mask is None and any(dep.mask for dep in case.dependencies):
-                case.mask = colorize("deselected due to @*b{skipped dependencies}")
+                case.mask = colorize("one or more skipped dependencies")
 
             if case.mask is None and rx is not None:
                 if not fs.grep(rx, case.file):
@@ -300,10 +333,14 @@ class Finder:
                             if fs.grep(rx, asset.src):
                                 break
                     else:
-                        msg = (
-                            "deselected due to @*{re.search(%r) is None} evaluated to True" % regex
-                        )
+                        msg = "@*{re.search(%r) is None} evaluated to @*g{True}" % regex
                         case.mask = colorize(msg)
+
+        dt = time.monotonic() - start
+        logging.info(
+            colorize("@*{Selecting} test cases based on filtering criteria... done (%.2fs.)" % dt),
+            rewind=True,
+        )
 
     @staticmethod
     def find_duplicates(cases: list[TestCase]) -> dict[str, list[TestCase]]:
@@ -358,8 +395,7 @@ class Finder:
             cols = colified(lines, indent=2, width=max_width)
             label = colorize("@m{%s}" % root)
             logging.hline(label, max_width=max_width, file=file)
-            file.write(" " + cols + "\n")
-            file.write(f"found {len(lines)} test cases\n")
+            file.write(cols + "\n")
 
 
 def is_test_file(file: str) -> bool:

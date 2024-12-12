@@ -40,9 +40,7 @@ class AbstractTestRunner:
         qsize = kwargs.get("qsize")
         qrank = kwargs.get("qrank")
         if not progress_bar:
-            logging.emit(
-                "%s%s\n" % (prefix, self.start_msg(case, stage, qsize=qsize, qrank=qrank))
-            )
+            logging.emit("%s%s\n" % (prefix, self.start_msg(case, stage, qsize=qsize, qrank=qrank)))
         self.run(case, stage)
         if not progress_bar:
             logging.emit("%s%s\n" % (prefix, self.end_msg(case, stage, qsize=qsize, qrank=qrank)))

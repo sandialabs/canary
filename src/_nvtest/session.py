@@ -48,7 +48,6 @@ from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
-from .util.misc import partition
 from .util.returncode import compute_returncode
 from .util.time import hhmmss
 from .util.time import timestamp
@@ -422,6 +421,7 @@ class Session:
           env_mods: Environment variables to be defined in a tests execution environment.
 
         """
+
         self.cases = Finder.lock_and_filter(
             self.generators,
             keyword_expr=keyword_expr,
@@ -431,14 +431,13 @@ class Session:
             env_mods=env_mods,
             regex=regex,
         )
-        cases_to_run = [case for case in self.cases if not case.mask]
+        cases_to_run = [case for case in self.cases if not case.mask and not case.skipped]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
         with self.db.open("snapshots", "w") as record:
             self.dump_snapshots(record)
         with self.db.open("cases", "w") as record:
             self.dump_testcases(record)
-        logging.debug(f"Collected {len(self.cases)} test cases from {len(self.generators)} files")
         for case in cases_to_run:
             case.status.set("ready" if not case.dependencies else "pending")
             case.save()
@@ -485,14 +484,14 @@ class Session:
                 if any(case.matches(_) for _ in case_specs):
                     case.status.set("ready")
                 else:
-                    case.mask = color.colorize("deselected by @*b{testspec expression}")
+                    expr = ",".join(case_specs)
+                    case.mask = color.colorize("testspec expression @*{%s} did not match" % expr)
                 continue
 
             try:
                 config.resource_pool.validate(case)
             except config.ResourceUnsatisfiable as e:
-                s = "deselected due to @*{ResourceUnsatisfiable}(%r)" % e.args[0]
-                case.mask = color.colorize(s)
+                case.mask = color.colorize("@*{ResourceUnsatisfiable}(%r)" % e.args[0])
                 continue
 
             when_expr: dict[str, str] = {}
@@ -518,9 +517,11 @@ class Session:
                 if match:
                     case.status.set("ready" if not case.dependencies else "pending")
                 elif case.status != "ready":
-                    case.mask = f"deselected due to previous status: {case.status.cname}"
+                    case.mask = f"previous status {case.status.cname!r} is not 'ready'"
                 else:
-                    case.mask = color.colorize("deselected by @*b{when expression}")
+                    case.mask = color.colorize(
+                        "when expression @*b{%s} evaluated to @*r{False}" % when_expr
+                    )
 
         cases: list[TestCase] = []
         for case in self.cases:
@@ -528,7 +529,7 @@ class Session:
                 for dep in case.dependencies:
                     # FIXME: CHECK OTHER CODES AS REQUIRED BY THE TEST
                     if not dep.status.satisfies(("pending", "ready", "success", "diff")):
-                        case.mask = color.colorize("deselected due to @*b{dependency status}")
+                        case.mask = color.colorize("one or more dependencies failed")
                         break
                 else:
                     cases.append(case)
@@ -601,6 +602,9 @@ class Session:
             with working_dir(self.work_tree):
                 cleanup_queue = True
                 try:
+                    queue_size = len(queue)
+                    what = "batches" if hasattr(queue, "batch_scheme") else "test cases"
+                    logging.info(color.colorize("@*{Running} %d %s" % (queue_size, what)))
                     self.start = timestamp()
                     self.finish = -1.0
                     self.process_queue(
@@ -636,6 +640,12 @@ class Session:
                 finally:
                     queue.close(cleanup=cleanup_queue)
                     self.finish = timestamp()
+                    dt = self.finish - self.start
+                    logging.info(
+                        color.colorize(
+                            "@*{Finished} running %d %s (%.2fs.)\n" % (queue_size, what, dt)
+                        )
+                    )
                 for hook in plugin.hooks():
                     hook.session_finish(self)
         self.exitstatus = self.returncode
@@ -851,37 +861,6 @@ class Session:
             if case.matches(spec):
                 return True
         return False
-
-    @staticmethod
-    def overview(cases: list[TestCase]) -> str:
-        """Return an overview of the test session"""
-
-        def unreachable(c):
-            return c.status == "skipped" and c.status.details.startswith("Unreachable")
-
-        string = io.StringIO()
-        files = {case.file for case in cases}
-        _, cases = partition(cases, lambda c: unreachable(c))
-        fmt = "@*%s{%s} %d test%s from %d file%s\n"
-        n, N = len(cases), len(files)
-        s, S = "s" if n > 1 else "", "s" if N > 1 else ""
-        string.write(color.colorize(fmt % ("c", "collected", n, s, N, S)))
-        cases_to_run = [case for case in cases if not case.mask and not case.skipped]
-        files = {case.file for case in cases_to_run}
-        n, N = len(cases_to_run), len(files)
-        s, S = "s" if n > 1 else "", "s" if N > 1 else ""
-        string.write(color.colorize(fmt % ("g", "selected", n, s, N, S)))
-        skipped = [case for case in cases if case.mask]
-        skipped_reasons: dict[str, int] = {}
-        for case in skipped:
-            assert case.mask is not None
-            skipped_reasons[case.mask] = skipped_reasons.get(case.mask, 0) + 1
-        if skipped:
-            string.write(color.colorize("@*b{skipping} %d test cases" % len(skipped)) + "\n")
-            reasons = sorted(skipped_reasons, key=lambda x: skipped_reasons[x])
-            for reason in reversed(reasons):
-                string.write(f"{glyphs.bullet} {skipped_reasons[reason]} {reason.lstrip()}\n")
-        return string.getvalue()
 
     @staticmethod
     def summary(cases: list[TestCase], include_pass: bool = True) -> str:

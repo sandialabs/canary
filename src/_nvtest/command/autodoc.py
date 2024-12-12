@@ -40,11 +40,7 @@ class Autodoc(Command):
         all_directives = []
         for name in dir(nvtest.directives):
             attr = getattr(nvtest.directives, name)
-            if (
-                isinstance(attr, types.FunctionType)
-                and attr.__doc__
-                and attr not in all_directives
-            ):
+            if isinstance(attr, types.FunctionType) and attr.__doc__ and attr not in all_directives:
                 all_directives.append(attr)
         names = sorted([fun.__name__ for fun in all_directives])
         with open(os.path.join(self.dest, "directives.rst"), "w") as fh:

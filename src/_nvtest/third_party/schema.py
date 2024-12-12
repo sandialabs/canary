@@ -446,9 +446,7 @@ class Schema(object):
                 raise SchemaWrongKeyError(message, e.format(data) if e else None)
 
             # Apply default-having optionals that haven't been used:
-            defaults = (
-                set(k for k in s if type(k) is Optional and hasattr(k, "default")) - coverage
-            )
+            defaults = set(k for k in s if type(k) is Optional and hasattr(k, "default")) - coverage
             for default in defaults:
                 new[default.key] = (
                     default.default() if callable(default.default) else default.default
@@ -586,9 +584,7 @@ class Schema(object):
 
                 return_schema["type"] = "array"
                 if len(s) == 1:
-                    return_schema["items"] = _json_schema(
-                        _to_schema(s[0], i), is_main_schema=False
-                    )
+                    return_schema["items"] = _json_schema(_to_schema(s[0], i), is_main_schema=False)
                 elif len(s) > 1:
                     return_schema["items"] = _json_schema(Schema(Or(*s)), is_main_schema=False)
             elif isinstance(s, Or):

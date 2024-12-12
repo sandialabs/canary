@@ -3,7 +3,6 @@ import os
 
 from _nvtest.config.argparsing import Parser
 from _nvtest.finder import Finder
-from _nvtest.session import Session
 from _nvtest.util import logging
 from _nvtest.util.banner import banner
 
@@ -32,6 +31,8 @@ class Find(Command):
         PathSpec.setup_parser(parser)
 
     def execute(self, args: argparse.Namespace) -> int:
+        if args.print_files:
+            logging.set_level(logging.ERROR)
         logging.emit(banner() + "\n")
         search_paths = self.parse_search_paths(args)
         finder = Finder()
@@ -50,8 +51,6 @@ class Find(Command):
         )
         cases_to_run = [case for case in cases if not case.mask]
         cases_to_run.sort(key=lambda x: x.name)
-        if not args.print_files:
-            logging.emit(Session.overview(cases))
         if args.print_keywords:
             Finder.pprint_keywords(cases_to_run)
         elif args.print_paths:

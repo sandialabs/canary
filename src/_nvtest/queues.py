@@ -31,6 +31,9 @@ class ResourceQueue(abc.ABC):
         self.lock = lock
         self.exclusive_lock: bool = False
 
+    def __len__(self) -> int:
+        return len(self.buffer)
+
     @abc.abstractmethod
     def iter_keys(self) -> list[int]: ...
 

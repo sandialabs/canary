@@ -49,9 +49,7 @@ class BatchResourceSetter(argparse.Action):
             batch["scheme"] = "duration"
         elif key == "count":
             batch["scheme"] = "count"
-        BatchResourceSetter.check_for_mutually_exclusive_arguments(
-            batch, key, value, option_string
-        )
+        BatchResourceSetter.check_for_mutually_exclusive_arguments(batch, key, value, option_string)
         if isinstance(value, list):
             old = batch.get(key, [])
             old.extend(value)

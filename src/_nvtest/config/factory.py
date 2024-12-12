@@ -267,13 +267,13 @@ class ResourcePool:
                 for item in group:
                     if item["type"] not in self.types:
                         t = item["type"]
-                        msg = f"{obj}: required resource type {t!r} is not registered with nvtest"
+                        msg = f"required resource type {t!r} is not registered with nvtest"
                         raise ResourceUnsatisfiable(msg)
                     try:
                         self._get_from_pool(item["type"], item["slots"])
                     except ResourceUnavailable:
                         t = item["type"]
-                        msg = f"{obj}: insufficient slots of {t!r} available"
+                        msg = f"insufficient slots of {t!r} available"
                         raise ResourceUnsatisfiable(msg) from None
         finally:
             self.pool.clear()
@@ -299,9 +299,7 @@ class ResourcePool:
         totals: dict[str, int] = {}
         required = obj.required_resources()
         if not required:
-            raise ValueError(
-                f"{obj}: no resources requested, a test should require at least 1 cpu"
-            )
+            raise ValueError(f"{obj}: no resources requested, a test should require at least 1 cpu")
         resource_specs: list[dict[str, list[dict]]] = []
         try:
             save = copy.deepcopy(self.pool)

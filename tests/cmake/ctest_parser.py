@@ -104,9 +104,7 @@ def test_parse_ctesttestfile_environment_modification(loadtestfile):
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
 def test_parse_ctesttestfile_fail_regular_expression(loadtestfile):
     test = loadtestfile["fail_regular_expression"]
-    assert find_property(test["properties"], "FAIL_REGULAR_EXPRESSION") == [
-        "This test should fail"
-    ]
+    assert find_property(test["properties"], "FAIL_REGULAR_EXPRESSION") == ["This test should fail"]
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")

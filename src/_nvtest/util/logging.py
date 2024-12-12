@@ -111,6 +111,7 @@ def format_message(
     end: str = "\n",
     prefix: str | None = None,
     format: str | None = None,
+    rewind: bool = False,
 ) -> str:
     if format == "center":
         _, width = terminal_size()
@@ -121,6 +122,8 @@ def format_message(
     kwds = {"prefix": prefix or "", "timestamp": get_timestamp(), "message": cescape(str(message))}
     text = (format or FORMAT) % kwds
     file = StringIO()
+    if rewind:
+        file.write("\r")
     cprint(text, stream=file, end=end)
     file.flush()
     return file.getvalue()
@@ -135,9 +138,10 @@ def log(
     end: str = "\n",
     format: str | None = None,
     ex: Any | None = None,
+    rewind: bool = False,
 ) -> None:
     if level >= LEVEL:
-        text = format_message(message, end=end, prefix=prefix, format=format)
+        text = format_message(message, end=end, prefix=prefix, format=format, rewind=rewind)
         emit(text, file=file)
     if ex is not None:
         exc, tb = ex.__class__, ex.__traceback__
@@ -150,31 +154,37 @@ def emit(message: str, *, file: TextIO = sys.stdout) -> None:
     file.flush()
 
 
-def trace(message: str, *, file: TextIO = sys.stdout, end="\n") -> None:
+def trace(message: str, *, file: TextIO = sys.stdout, end: str = "\n") -> None:
     log(TRACE, message, file=file, prefix="@*c{==>} ", end=end)
 
 
-def debug(message: str, *, file: TextIO = sys.stdout, end="\n") -> None:
-    log(DEBUG, message, file=file, prefix="@*g{==>} ", end=end)
+def debug(
+    message: str, *, file: TextIO = sys.stdout, end: str = "\n", rewind: bool = False
+) -> None:
+    log(DEBUG, message, file=file, prefix="@*g{==>} ", end=end, rewind=rewind)
 
 
-def info(message: str, *, file: TextIO = sys.stdout, end="\n") -> None:
-    log(INFO, message, file=file, prefix="@*b{==>} ", end=end)
+def info(message: str, *, file: TextIO = sys.stdout, end: str = "\n", rewind: bool = False) -> None:
+    log(INFO, message, file=file, prefix="@*b{==>} ", end=end, rewind=rewind)
 
 
-def warning(message: str, *, file: TextIO = sys.stderr, end="\n") -> None:
+def warning(message: str, *, file: TextIO = sys.stderr, end: str = "\n") -> None:
     log(WARNING, message, file=file, prefix="@*Y{==>} Warning: ", end=end)
 
 
-def error(message: str, *, file: TextIO = sys.stderr, end="\n", ex: Any | None = None) -> None:
+def error(
+    message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Any | None = None
+) -> None:
     log(ERROR, message, file=file, prefix="@*r{==>} Error: ", end=end, ex=ex)
 
 
-def exception(message: str, ex: Exception, *, file: TextIO = sys.stderr, end="\n") -> None:
+def exception(message: str, ex: Exception, *, file: TextIO = sys.stderr, end: str = "\n") -> None:
     log(ERROR, message, file=file, prefix="@*r{==>} Error: ", end=end, ex=ex)
 
 
-def fatal(message: str, *, file: TextIO = sys.stderr, end="\n", ex: Any | None = None) -> None:
+def fatal(
+    message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Any | None = None
+) -> None:
     log(FATAL, message, file=file, prefix="@*r{==>} Fatal: ", end=end, ex=ex)
 
 
@@ -226,7 +236,7 @@ def hline(
     char: str = "-",
     max_width: int = 64,
     file: TextIO = sys.stdout,
-    end="\n",
+    end: str = "\n",
 ) -> None:
     """Draw a labeled horizontal line.
 

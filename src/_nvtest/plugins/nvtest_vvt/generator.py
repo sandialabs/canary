@@ -580,7 +580,7 @@ def p_SKIPIF(arg: SimpleNamespace) -> tuple[bool, str]:
     if not skip:
         return False, ""
     if not reason:
-        reason = colorize("deselected due to @*b{skipif=%s} evaluating to @*g{True}" % expression)
+        reason = colorize("skipif expression @*b{%s} evaluating to @*g{True}" % expression)
     return True, reason
 
 
@@ -592,9 +592,7 @@ def unique(sequence: list[str]) -> list[str]:
     return result
 
 
-def to_seconds(
-    arg: str | int | float, round: bool = False, negatives: bool = False
-) -> int | float:
+def to_seconds(arg: str | int | float, round: bool = False, negatives: bool = False) -> int | float:
     if isinstance(arg, (int, float)):
         return arg
     units = {

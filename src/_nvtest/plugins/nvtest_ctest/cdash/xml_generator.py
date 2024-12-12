@@ -126,9 +126,7 @@ class CDashXMLReporter:
             )
         if upload_errors:
             logging.warning(f"{upload_errors} files failed to upload to CDash")
-        buildid = server.buildid(
-            sitename=ns.site, buildname=ns.buildname, buildstamp=ns.buildstamp
-        )
+        buildid = server.buildid(sitename=ns.site, buildname=ns.buildname, buildstamp=ns.buildstamp)
         if buildid is None:
             return None
         return f"{url}/buildSummary.php?buildid={buildid}"

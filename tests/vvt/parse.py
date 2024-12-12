@@ -129,9 +129,7 @@ def test_parse_link_rename_1():
     assert commands[0].command == "link"
     assert commands[0].options == [("rename", True)]
     file_pairs = vvtest.csplit(commands[0].argument)
-    assert file_pairs == [
-        ["multiblock_rectangle_pml.exo", "multiblock_rectangle_pml.prebuilt.exo"]
-    ]
+    assert file_pairs == [["multiblock_rectangle_pml.exo", "multiblock_rectangle_pml.prebuilt.exo"]]
 
 
 def test_parse_parameterize_gen(tmpdir):

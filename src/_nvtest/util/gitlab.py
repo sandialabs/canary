@@ -346,9 +346,7 @@ class repo:
             header = {"PRIVATE-TOKEN": self.access_token}
             page = 1
             while True:
-                base_url = self.build_api_url(
-                    path=f"projects/{self.project_id}/repository/commits"
-                )
+                base_url = self.build_api_url(path=f"projects/{self.project_id}/repository/commits")
                 params = {"page": str(page), "per_page": "100"}
                 params = urlencode(params)
                 url = f"{base_url}?{params}"

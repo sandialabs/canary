@@ -118,7 +118,6 @@ class Run(Command):
                 if args.until == "discover":
                     logging.info("Done with test discovery")
                     return 0
-            logging.info(colorize("@*{Generating} test cases from test files"))
             cases = session.lock(
                 keyword_expr=args.keyword_expr,
                 parameter_expr=args.parameter_expr,
@@ -135,8 +134,6 @@ class Run(Command):
                 if args.until == "lock":
                     logging.info("Done freezing test cases")
                     return 0
-            if not args.no_header:
-                logging.emit(session.overview(session.cases))
         elif args.mode == "a":
             session = Session(args.work_tree, mode=args.mode)
             cases = session.filter(
@@ -145,8 +142,6 @@ class Run(Command):
                 parameter_expr=args.parameter_expr,
                 stage=stage,
             )
-            if not args.no_header:
-                logging.emit(session.overview(cases))
         else:
             assert args.mode == "b"
             session = Session(args.work_tree, mode="a")

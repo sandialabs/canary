@@ -52,9 +52,7 @@ class FilterNamespace:
         on_options: list[str] | None = None,
         parameters: dict[str, Any] | None = None,
     ) -> bool:
-        result = self.when.evaluate(
-            testname=testname, on_options=on_options, parameters=parameters
-        )
+        result = self.when.evaluate(testname=testname, on_options=on_options, parameters=parameters)
         return result.value
 
 
@@ -128,7 +126,7 @@ class PYTTestFile(AbstractTestGenerator):
             test_mask = self.skipif_reason
             enabled, reason = self.enable(testname=name, on_options=on_options)
             if not enabled and test_mask is None:
-                test_mask = f"deselected due to {reason}"
+                test_mask = reason
                 logging.debug(f"{self}::{name} has been disabled")
 
             cases: list[TestCase] = []
@@ -742,13 +740,9 @@ class PYTTestFile(AbstractTestGenerator):
         ns: FilterNamespace
         if (src is not None) or (dst is not None):
             if src is None:
-                raise TypeError(
-                    "PYTTestFile.baseline: missing required positional argument: `src`"
-                )
+                raise TypeError("PYTTestFile.baseline: missing required positional argument: `src`")
             if dst is None:
-                raise TypeError(
-                    "PYTTestFile.baseline: missing required positional argument: `dst`"
-                )
+                raise TypeError("PYTTestFile.baseline: missing required positional argument: `dst`")
             if flag is not None:
                 raise ValueError(
                     "PYTTestFile.baseline: 'src/dst' and 'flag' keyword arguments are mutually exclusive"

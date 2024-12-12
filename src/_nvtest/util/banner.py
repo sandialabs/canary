@@ -1,25 +1,27 @@
 import random
 from itertools import cycle
 
+from .. import version
 from ..third_party.color import colorize
 from . import logging
 
 
 def banner(color: bool = True) -> str:
     info = random.choice(banners)
-    a = info["banner"]
+    banner = info["banner"]
     logging.debug(f"banner font: {info['font']}")
     if not color:
-        return a
+        return banner + f"\nversion: {version.version}"
     colors = cycle(["c", "c", "b", "b", "m", "m", "G", "G"])
     lines: list[str] = []
-    for line in a.splitlines():
+    for line in banner.splitlines():
         if not line.split() and not lines:
             continue
         elif line.split():
             line = colorize("@*%s{%s}" % (next(colors), line))
         lines.append(line)
-    return "\n".join(lines).rstrip()
+    banner = "\n".join(lines).rstrip()
+    return banner + f"\nversion: {version.version}"
 
 
 banners: list[dict[str, str]] = [

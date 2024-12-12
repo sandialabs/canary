@@ -68,9 +68,7 @@ g_fp = g_path = None
 def _container_wrapper(directive, literal_node, caption):
     container_node = nodes.container("", literal_block=True, classes=["literal-block-wrapper"])
     parsed = nodes.Element()
-    directive.state.nested_parse(
-        StringList([caption], source=""), directive.content_offset, parsed
-    )
+    directive.state.nested_parse(StringList([caption], source=""), directive.content_offset, parsed)
     if isinstance(parsed[0], nodes.system_message):  # pragma: no cover
         # TODO: Figure out if this is really possible and how to produce
         # it in a test case.
