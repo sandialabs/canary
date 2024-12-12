@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "              #                 #   \n ###   #  #  ####   ##    ###  #### \n #  #  #  #   #    #  #  #      #   \n #  #  #  #   #    ####   ##    #   \n #  #   ##    #    #        #   #   \n #  #   ##     ##   ##   ###     ##\nversion: 24.12.12+022ed96-dirty\n==> Running 3 test cases\n==> Starting 8afb5b6: staged[cpus=1]\n==> Starting 8ca4d61: staged[cpus=4]\n==> Finished 8ca4d61: staged[cpus=4] PASS\n==> Finished 8afb5b6: staged[cpus=1] PASS\n==> Starting 7e77553: staged[cpus=8]\n==> Finished 7e77553: staged[cpus=8] PASS\n==> Finished running 3 test cases (1.00s.)\n\n\ud83d\udca5\ud83d\udca5 Session done -- 3 total, 3 pass in 00:00:01.00"
+}

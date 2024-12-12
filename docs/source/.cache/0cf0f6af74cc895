@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "/Users/tjfulle/Workspace/Projects/Alegra/Builds/Master/Tools/src/nvtest/src/nvtest/examples/TestResults/second/second/nvtest-out.txt:\n==> Running second in /Users/tjfulle/Workspace/Projects/Alegra/Builds/Master/Tools/src/nvtest/src/nvtest/examples/TestResults/second/second\n==> Command line: /Users/tjfulle/Workspace/Projects/Alegra/Builds/Master/Tools/bin/python3 second.pyt --stage=run\nVerifying that 2 + 3 = 5\nTest passed!"
+}

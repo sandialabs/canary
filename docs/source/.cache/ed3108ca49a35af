@@ -1,0 +1,4 @@
+{
+  "returncode": 0,
+  "output": "--- parameterize3 ------------\nFile: /Users/tjfulle/Workspace/Projects/Alegra/Builds/Master/Tools/src/nvtest/src/nvtest/examples/parameterize/parameterize3.pyt\nKeywords: \n6 test cases:\n\u251c\u2500\u2500 parameterize3[a=1,b=100000]\n\u251c\u2500\u2500 parameterize3[a=1,b=1e+06]\n\u251c\u2500\u2500 parameterize3[a=1,b=1e+07]\n\u251c\u2500\u2500 parameterize3[a=4,b=100000]\n\u251c\u2500\u2500 parameterize3[a=4,b=1e+06]\n\u2514\u2500\u2500 parameterize3[a=4,b=1e+07]"
+}
