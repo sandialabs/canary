@@ -11,9 +11,9 @@ Files ending in ``.pyt`` are ``nvtest``'s "native" test file format.  ``pyt`` fi
 nvtest directives
 -----------------
 
-Test directives are python function calls that communicate information to the test generator about
-the test file.  For example, the :ref:`keywords <directive-keywords>` directive assigns keywords
-(labels) to the test which can be used in filtering operations:
+:ref:`Test directives <test-directives>` are python function calls that communicate information to
+the test generator about the test file.  For example, the :ref:`keywords <directive-keywords>`
+directive assigns keywords (labels) to the test which can be used in filtering operations:
 
 .. code-block:: python
 
@@ -29,6 +29,7 @@ Test body
 The test body verifies particular functionalities to ensure they align with the specified requirements. Since test files are imported to assess their directives, the test body should be encapsulated within a function and executed only when the file is run, as in the following example:
 
 .. code-block:: python
+    :emphasize-lines: 3-5
 
     import sys
 
@@ -48,6 +49,7 @@ The test instance
 When a test is run, a :class:`~_nvtest.test.instance.TestInstance` object is made available by :func:`nvtest.get_instance`.  The test instance contains relevant information about the test case being executed.  For example:
 
 .. code-block:: python
+    :emphasize-lines: 6
 
     import sys
     import nvtest

@@ -10,3 +10,4 @@ Test dependencies
     dependencies.result
     dependencies.param
     dependencies.multi
+    dependencies.basecase

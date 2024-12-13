@@ -7,4 +7,5 @@ Tutorial
     Introduction <intro>
     Getting started <basic>
     Parameterizing tests <parameterize>
+    assets
     Test dependencies <dependencies>
