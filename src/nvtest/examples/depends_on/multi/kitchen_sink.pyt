@@ -1,7 +1,9 @@
 import sys
+
 import nvtest
 
 nvtest.directives.depends_on("ingredients.type=*")
+
 
 def blt() -> int:
     instance = nvtest.get_instance()

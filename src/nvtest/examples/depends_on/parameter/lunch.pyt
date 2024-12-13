@@ -1,7 +1,9 @@
 import sys
+
 import nvtest
 
 nvtest.directives.depends_on("breakfast.dish=spam")
+
 
 def lunch() -> int:
     instance = nvtest.get_instance()

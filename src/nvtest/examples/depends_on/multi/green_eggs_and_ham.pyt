@@ -1,8 +1,10 @@
 import sys
+
 import nvtest
 
 nvtest.directives.depends_on("ingredients.type=eggs")
 nvtest.directives.depends_on("ingredients.type=ham")
+
 
 def green_eggs_and_ham() -> int:
     instance = nvtest.get_instance()

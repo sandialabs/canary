@@ -1,7 +1,9 @@
 import sys
+
 import nvtest
 
 nvtest.directives.depends_on("willfail", result="failed")
+
 
 def depends_on_willfail() -> int:
     instance = nvtest.get_instance()

@@ -1,9 +1,11 @@
 import sys
+
 import nvtest
 
 nvtest.directives.depends_on("ingredients.type=bacon")
 nvtest.directives.depends_on("ingredients.type=lettuce")
 nvtest.directives.depends_on("ingredients.type=tomato")
+
 
 def blt() -> int:
     instance = nvtest.get_instance()

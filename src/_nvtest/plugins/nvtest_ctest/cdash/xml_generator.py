@@ -41,7 +41,7 @@ class CDashXMLReporter:
             for name, value in state["properties"].items():
                 if name == "dependencies":
                     dependencies = value
-                    dep_ids = [v for d, v in dependencies.items() if d == "id"]
+                    dep_ids = [d["id"] for d in dependencies]
                     ts.add(id, *dep_ids)
                     break
         cases: dict[str, TestCase] = {}

@@ -1,4 +1,5 @@
 import sys
+
 import nvtest
 
 nvtest.directives.depends_on("a")
