@@ -9,3 +9,4 @@ Test dependencies
     dependencies.basic
     dependencies.result
     dependencies.param
+    dependencies.multi
