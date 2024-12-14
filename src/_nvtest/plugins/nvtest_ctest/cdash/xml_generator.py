@@ -54,7 +54,7 @@ class CDashXMLReporter:
             cases[id] = case
         for case in cases.values():
             if not case.mask:
-                case.refresh()
+                # case.refresh()
                 self.data.add_test(case)
         return self
 
