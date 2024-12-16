@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import shlex
 import subprocess
 from contextlib import contextmanager
 from typing import Any
@@ -174,13 +175,10 @@ class CTestTestCase(TestCase):
         self._will_fail: bool = will_fail or False
         self.cmakelists = cmakelists
         self.ctestfile = ctestfile
-        if working_directory is not None:
-            self.working_directory = working_directory
-        elif self.ctestfile and os.path.exists(self.ctestfile):
-            self.working_directory = os.path.dirname(self.ctestfile)
+        self.ctest_working_directory = working_directory
 
         if command is not None:
-            with nvtest.filesystem.working_dir(self.working_directory):
+            with nvtest.filesystem.working_dir(self.exec_dir):
                 ns = parse_test_args(command)
 
             self.assets = []
@@ -259,6 +257,17 @@ class CTestTestCase(TestCase):
         assert self.ctestfile is not None
         return self.ctestfile
 
+    @property
+    def exec_dir(self) -> str:
+        if self.ctest_working_directory is not None:
+            return self.ctest_working_directory
+        return self.binary_dir
+
+    @property
+    def binary_dir(self) -> str:
+        assert self.ctestfile is not None
+        return os.path.dirname(self.ctestfile)
+
     def required_resources(self) -> list[list[dict[str, Any]]]:
         required = copy.deepcopy(self.resource_groups)
         if not required:
@@ -285,13 +294,16 @@ class CTestTestCase(TestCase):
         return list(kwds)
 
     def command(self, stage: str = "run") -> list[str]:
-        cmd: list[str] = []
+        return [os.path.join(self.working_directory, "runtest")]
+
+    def _command(self) -> list[str]:
+        command: list[str] = []
         if self.launcher:
-            cmd.append(self.launcher)
-            cmd.extend(self.preflags or [])
-        cmd.append(self.exe)
-        cmd.extend(self.postflags or [])
-        return cmd
+            command.append(self.launcher)
+            command.extend(self.preflags or [])
+        command.append(self.exe)
+        command.extend(self.postflags or [])
+        return command
 
     def apply_environment_modifications(self, mods: list[dict[str, str]]) -> None:
         for em in mods:
@@ -340,13 +352,13 @@ class CTestTestCase(TestCase):
 
     def setup(self, clean: bool = True) -> None:
         super().setup()
-        with nvtest.filesystem.working_dir(self.cache_directory):
-            with open("ctest-command.txt", "w") as fh:
-                command = " ".join(self.command())
-                fh.write(f"cd {self.working_directory} && {command}")
-
-    def setup_working_directory(self, copy_all_resources: bool = False) -> None:
-        """CMake sets up the working (binary) directory"""
+        with nvtest.filesystem.working_dir(self.working_directory):
+            sh = nvtest.filesystem.which("sh")
+            with open("runtest", "w") as fh:
+                fh.write(f"#!{sh}\n")
+                fh.write(f"cd {self.exec_dir}\n")
+                fh.write(shlex.join(self._command()))
+            nvtest.filesystem.set_executable("runtest")
 
     def finalize(self, stage: str = "run") -> None:
         if stage != "run":
@@ -355,7 +367,7 @@ class CTestTestCase(TestCase):
         for hook in plugin.hooks():
             hook.test_after_run(self)
 
-        self.save_runtime()
+        self.update_run_stats()
         self.concatenate_logs()
         file = self.logfile(stage)
 

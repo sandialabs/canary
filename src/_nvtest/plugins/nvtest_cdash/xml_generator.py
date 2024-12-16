@@ -1,4 +1,5 @@
 import argparse
+import importlib.resources as ir
 import json
 import os
 import time
@@ -13,6 +14,7 @@ from _nvtest.test.case import factory as testcase_factory
 from _nvtest.util import cdash
 from _nvtest.util import logging
 from _nvtest.util.filesystem import mkdirp
+from _nvtest.util.filesystem import working_dir
 from _nvtest.util.time import strftimestamp
 from _nvtest.util.time import timestamp
 from _nvtest.version import version as nvtest_version
@@ -210,7 +212,7 @@ class CDashXMLReporter:
             elif case.status == "not_run":
                 status = "failed"
                 exit_code = "Not Run"
-                completion_status = "notrun"
+                completion_status = "Completed"
                 fail_reason = "Not run due to failed dependency"
             else:
                 status = "failed"
@@ -251,10 +253,11 @@ class CDashXMLReporter:
             )
             test_node.appendChild(results)
 
-            labels = doc.createElement("Labels")
-            for keyword in case.keywords:
-                add_text_node(labels, "Label", keyword)
-            test_node.appendChild(labels)
+            if case.keywords:
+                labels = doc.createElement("Labels")
+                for keyword in case.keywords:
+                    add_text_node(labels, "Label", keyword)
+                test_node.appendChild(labels)
 
             l1.appendChild(test_node)
 
@@ -263,9 +266,14 @@ class CDashXMLReporter:
 
         with open(filename, "w") as fh:
             self.dump_xml(doc, fh)
+
+        self.validate_xml(filename, schema="Test.xsd")
+
         return filename
 
-    def write_notes_xml(self) -> str:
+    def write_notes_xml(self) -> str | None:
+        if not self.notes:
+            return None
         filename = unique_file(self.xml_dir, "Notes", ".xml")
         f = os.path.relpath(filename, config.invocation_dir)
         logging.log(logging.INFO, f"WRITING: Notes.xml to {f}", prefix=None)
@@ -285,10 +293,21 @@ class CDashXMLReporter:
         doc.appendChild(root)
         with open(filename, "w") as fh:
             self.dump_xml(doc, fh)
+        self.validate_xml(filename, schema="Notes.xsd")
         return filename
 
     def dump_xml(self, document, stream):
         stream.write(document.toprettyxml(indent="", newl=""))
+
+    def validate_xml(self, file: str, *, schema: str) -> None:
+        try:
+            import xmlschema
+        except ImportError:
+            return
+        dir = str(ir.files("_nvtest").joinpath("plugins/nvtest_cdash/validators"))
+        with working_dir(dir):
+            xml_schema = xmlschema.XMLSchema(schema)
+            xml_schema.validate(file)
 
 
 def add_text_node(parent_node, child_name, content, **attrs):

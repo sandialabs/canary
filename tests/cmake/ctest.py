@@ -44,7 +44,7 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         assert "foo" in case.keywords
         assert "baz" in case.keywords
         assert case.launcher is None
-        command = case.command()
+        command = case._command()
         command[0] = os.path.basename(command[0])
         assert command == ["script.sh", "some-exe"]
         assert case.variables["CTEST_NUM_RANKS"] == "5"
@@ -52,7 +52,7 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
 
         case = cases[1]
         assert case.launcher.endswith("mpiexec")
-        command = case.command()
+        command = case._command()
         command[0] = os.path.basename(command[0])
         assert command == ["mpiexec", "-n", "4", "some-exe"]
         assert case.cpus == 4
@@ -256,6 +256,7 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
         }
         with nvtest.config.override():
             validated = resource_schema.validate(pool)
+            nvtest.config.session.work_tree = f"{os.getcwd()}/foo"
             nvtest.config.resource_pool.fill(validated["resource_pool"])
             file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
             [case] = file.lock()

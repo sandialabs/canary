@@ -746,7 +746,7 @@ def prelaunch(case: "TestCase", stage: str = "run") -> None:
         return
     write_vvtest_util(case, stage=stage)
     # symlink the test file before test is run for tests needing it
-    f = os.path.join(case.cache_directory, "execute.log")
+    f = os.path.join(case.working_directory, "execute.log")
     nvtest.filesystem.force_symlink(case.logfile(stage), f)
 
 
@@ -754,7 +754,7 @@ def prelaunch(case: "TestCase", stage: str = "run") -> None:
 def write_execute_log(case: "TestCase") -> None:
     if not case.file_path.endswith(".vvt"):
         return
-    f = os.path.join(case.cache_directory, "execute.log")
+    f = os.path.join(case.working_directory, "execute.log")
     nvtest.filesystem.force_symlink(case.logfile(), f)
 
 

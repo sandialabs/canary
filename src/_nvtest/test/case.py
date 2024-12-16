@@ -35,6 +35,8 @@ from ..util.time import hhmmss
 from ..when import match_any
 from .atc import AbstractTestCase
 
+stats_version_info = (2, 0)
+
 
 def stringify(arg: Any, float_fmt: str | None = None) -> str:
     """Turn the thing into a string"""
@@ -304,7 +306,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def path(self) -> str:
-        """The relative path from ``self.work_tree`` to ``self.cache_directory``"""
+        """The relative path from ``self.work_tree`` to ``self.working_directory``"""
         if self._path is None:
             work_tree = config.session.work_tree or config.invocation_dir
             dirname, basename = os.path.split(self.file_path)
@@ -324,27 +326,22 @@ class TestCase(AbstractTestCase):
     # backward compatibility
     exec_path = path
 
-    @property
-    def cache_directory(self) -> str:
-        """Directory where output and lock files are written"""
-        work_tree = self.work_tree
-        if not work_tree:
-            work_tree = config.session.work_tree
-        if not work_tree:
-            raise ValueError("work_tree must be set during set up") from None
-        return os.path.normpath(os.path.join(work_tree, self.path))
-
     def logfile(self, stage: str | None = None) -> str:
         if stage is None:
-            return os.path.join(self.cache_directory, "nvtest-out.txt")
-        return os.path.join(self.cache_directory, f"nvtest-{stage}-out.txt")
+            return os.path.join(self.working_directory, "nvtest-out.txt")
+        return os.path.join(self.working_directory, f"nvtest-{stage}-out.txt")
 
     @property
     def working_directory(self) -> str:
-        """Directory where the test is executed.  Usually the same as the cache_directory.  For
-        CTests, the working_directory is set to the tests binary directory"""
+        """Directory where the test is executed."""
         if self._working_directory is None:
-            self._working_directory = self.cache_directory
+            work_tree = self.work_tree
+            if not work_tree:
+                work_tree = config.session.work_tree
+            if not work_tree:
+                raise ValueError("work_tree must be set during set up") from None
+            self._working_directory = os.path.normpath(os.path.join(work_tree, self.path))
+        assert self._working_directory is not None
         return self._working_directory
 
     @working_directory.setter
@@ -512,7 +509,7 @@ class TestCase(AbstractTestCase):
 
         """
         if self._runtimes[0] is None:
-            runtimes = self.load_runtimes()
+            runtimes = self.load_run_stats()
             if runtimes is not None:
                 self._runtimes.clear()
                 self._runtimes.extend([runtimes.mean, runtimes.min, runtimes.max])
@@ -978,8 +975,8 @@ class TestCase(AbstractTestCase):
             timeout = config.test.timeout_default
         self._timeout = float(timeout)
 
-    def load_runtimes(self) -> SimpleNamespace | None:
-        """Return mean, min, and max runtimes"""
+    def load_run_stats(self) -> SimpleNamespace | None:
+        """Return statistics kept for this test"""
         cache_dir = find_cache_dir(self.file_root)
         if cache_dir is None:
             return None
@@ -992,7 +989,7 @@ class TestCase(AbstractTestCase):
                 fs.force_remove(file)
                 return None
             version = data["timing"].get("version")
-            if version != {"major": 1, "minor": 0}:
+            if version != {"major": stats_version_info[0], "minor": stats_version_info[1]}:
                 fs.force_remove(file)
                 return None
             return SimpleNamespace(**data["timing"]["local"])
@@ -1000,20 +997,28 @@ class TestCase(AbstractTestCase):
             fs.force_remove(file)
         return None
 
-    def save_runtime(self) -> None:
-        """store mean, min, max runtimes"""
+    def update_run_stats(self) -> None:
+        """store runtime statistics"""
         if self.status.value not in ("success", "diffed"):
             return
         if self.duration < 0:
             return
-        runtimes = self.load_runtimes()
-        if runtimes is not None:
-            n = runtimes.count
-            mean = (self.duration + runtimes.mean * runtimes.count) / (runtimes.count + 1)
-            minimum = min(runtimes.min, self.duration)
-            maximum = max(runtimes.max, self.duration)
+        stats = self.load_run_stats()
+        if stats is not None:
+            # Welford's single pass online algorithm to update statistics
+            count, mean, variance = stats.count, stats.mean, stats.variance
+            delta = self.duration - mean
+            mean += delta / (count + 1)
+            if count > 0:
+                M2 = variance * count
+                delta2 = self.duration - mean
+                M2 += delta * delta2
+                variance = M2 / (count + 1)
+            minimum = min(stats.min, self.duration)
+            maximum = max(stats.max, self.duration)
         else:
-            n = 0
+            count = 0
+            variance = 0.0
             mean = minimum = maximum = self.duration
         cache_dir = find_cache_dir(self.file_root, create=True)
         if cache_dir is None:
@@ -1021,17 +1026,19 @@ class TestCase(AbstractTestCase):
         file = os.path.join(cache_dir, f"timing/{self.id[:2]}/{self.id[2:]}.json")
         local = {
             "name": self.display_name,
-            "path": os.path.relpath(self.file, os.path.dirname(cache_dir)),
+            "path": os.path.relpath(self.file, os.path.dirname(file)),
             "last_run": datetime.datetime.fromtimestamp(self.start).strftime("%c"),
-            "count": n + 1,
+            "count": count + 1,
             "mean": mean,
             "min": minimum,
             "max": maximum,
+            "variance": variance,
         }
         try:
             fs.mkdirp(os.path.dirname(file))
+            version = {"major": stats_version_info[0], "minor": stats_version_info[1]}
             with open(file, "w") as fh:
-                timing = {"timing": {"version": {"major": 1, "minor": 0}, "local": local}}
+                timing = {"timing": {"version": version, "local": local}}
                 json.dump(timing, fh, indent=2)
         except Exception:
             fs.force_remove(file)
@@ -1166,7 +1173,7 @@ class TestCase(AbstractTestCase):
         mkdirp(os.path.dirname(lockfile))
         with open(lockfile, "w") as fh:
             self.dump(fh)
-        file = os.path.join(self.cache_directory, self._lockfile)
+        file = os.path.join(self.working_directory, self._lockfile)
         mkdirp(os.path.dirname(file))
         fs.force_symlink(lockfile, file)
 
@@ -1249,8 +1256,8 @@ class TestCase(AbstractTestCase):
             raise ValueError("Inconsistent dependency/dep_done_criteria lists")
         logging.debug(f"Setting up {self}")
         self.work_tree = config.session.work_tree
-        fs.mkdirp(self.cache_directory)
-        clean_out_folder(self.cache_directory)
+        fs.mkdirp(self.working_directory)
+        clean_out_folder(self.working_directory)
         with fs.working_dir(self.working_directory, create=True):
             self.setup_working_directory()
             self._status.set("ready" if not self.dependencies else "pending")
@@ -1328,7 +1335,7 @@ class TestCase(AbstractTestCase):
         if stage == "run":
             for hook in plugin.hooks():
                 hook.test_after_run(self)
-            self.save_runtime()
+            self.update_run_stats()
         self.concatenate_logs()
         self.save()
 

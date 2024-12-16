@@ -6,9 +6,9 @@ from _nvtest.reporter import Reporter
 from _nvtest.session import Session
 from _nvtest.util import logging
 
-from .cdash.cdash_html_summary import cdash_summary
-from .cdash.gitlab_issue_generator import create_issues_from_failed_tests
-from .cdash.xml_generator import CDashXMLReporter
+from .cdash_html_summary import cdash_summary
+from .gitlab_issue_generator import create_issues_from_failed_tests
+from .xml_generator import CDashXMLReporter
 
 
 class CDashReporter(Reporter):
