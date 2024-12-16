@@ -9,3 +9,4 @@ Tutorial
     Parameterizing tests <parameterize>
     assets
     Test dependencies <dependencies>
+    Resource allocation <resource>
