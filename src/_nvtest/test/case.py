@@ -842,17 +842,17 @@ class TestCase(AbstractTestCase):
         assert isinstance(arg, str)
         self._id = arg
 
-    def chain(self) -> str:
+    def chain(self, anchor: str = ".git") -> str:
         dirname = os.path.dirname(self.file)
         while True:
-            if os.path.isdir(os.path.join(dirname, ".git")):
+            if os.path.isdir(os.path.join(dirname, anchor)):
                 return os.path.relpath(self.file, dirname)
             dirname = os.path.dirname(dirname)
             if dirname == os.path.sep:
                 break
         return self.path
 
-    def generate_id(self) -> str:
+    def generate_id(self, byte_limit: int | None = None) -> str:
         """The test ID is built up from the test name, parameters, and contents of auxiliary files.
         It is slow, but it gives a unique and repeatable ID.
         """
@@ -860,8 +860,10 @@ class TestCase(AbstractTestCase):
         hasher.update(self.name.encode())
         for key in sorted(self.parameters):
             hasher.update(f"{key}={stringify(self.parameters[key], float_fmt='%.16e')}".encode())
-        gb: int = 1024 * 1024 * 1024
-        byte_limit = int(os.getenv("NVTEST_HASH_BYTE_LIMIT", gb))
+        if byte_limit is None:
+            gb: int = 1024 * 1024 * 1024
+            byte_limit = int(os.getenv("NVTEST_HASH_BYTE_LIMIT", gb))
+        assert byte_limit is not None
         files: list[str] = [self.file]
         if byte_limit:
             accept = lambda f: os.path.isfile(f) and os.path.getsize(f) <= byte_limit
