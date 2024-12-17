@@ -852,7 +852,7 @@ class TestCase(AbstractTestCase):
                 break
         return self.path
 
-    def generate_id(self, byte_limit: int | None = None) -> str:
+    def generate_id(self, byte_limit: int | None = None, **kwds: str) -> str:
         """The test ID is built up from the test name, parameters, and contents of auxiliary files.
         It is slow, but it gives a unique and repeatable ID.
         """
@@ -860,6 +860,8 @@ class TestCase(AbstractTestCase):
         hasher.update(self.name.encode())
         for key in sorted(self.parameters):
             hasher.update(f"{key}={stringify(self.parameters[key], float_fmt='%.16e')}".encode())
+        for key in sorted(kwds):
+            hasher.update(f"{key}={stringify(kwds[key], float_fmt='%.16e')}".encode())
         if byte_limit is None:
             gb: int = 1024 * 1024 * 1024
             byte_limit = int(os.getenv("NVTEST_HASH_BYTE_LIMIT", gb))

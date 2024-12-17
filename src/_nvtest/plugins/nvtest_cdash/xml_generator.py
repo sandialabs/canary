@@ -301,7 +301,7 @@ class CDashXMLReporter:
 
     def validate_xml(self, file: str, *, schema: str) -> None:
         try:
-            import xmlschema
+            import xmlschema  # type: ignore
         except ImportError:
             return
         dir = str(ir.files("_nvtest").joinpath("plugins/nvtest_cdash/validators"))
