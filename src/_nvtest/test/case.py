@@ -1230,8 +1230,8 @@ class TestCase(AbstractTestCase):
                 variables[key] = value % vars
             except Exception:
                 pass
-        variables["PYTHONPATH"] = f"{self.pythonpath}:{os.getenv('PYTHONPATH', '')}"
-        variables["PATH"] = f"{self.working_directory}:{os.environ['PATH']}"
+        variables["PYTHONPATH"] = f"{self.pythonpath}:{variables.get('PYTHONPATH', '')}"
+        variables["PATH"] = f"{self.working_directory}:{variables['PATH']}"
         try:
             os.environ.clear()
             os.environ.update(variables)
