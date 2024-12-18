@@ -65,6 +65,8 @@ class PathSpec:
                 args.paths.setdefault(root, []).append(name)
             elif os.path.isdir(path):
                 args.paths.setdefault(path, [])
+            elif path.startswith(("git@", "repo@")) and os.path.isdir(path.partition("@")[2]):
+                args.paths.setdefault(path, [])
             elif os.pathsep in path and os.path.exists(path.replace(os.pathsep, os.path.sep)):
                 # allow specifying as root:name
                 root, name = path.split(os.pathsep, 1)

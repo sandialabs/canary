@@ -42,7 +42,7 @@ exclude = [
     "src/_nvtest/third_party/monkeypatch.py",
     "src/_nvtest/third_party/cloudpickle.py",
     "src/_nvtest/third_party/docstring_parser/*",
-    "src/_nvtest/third_party/imagesvg/*",
+    "src/_nvtest/third_party/imagesvg/*"
 ]
 
 [[tool.mypy.overrides]]
@@ -100,6 +100,10 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "psutil"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["_nvtest.third_party.*"]
+ignore_errors = true
 
 # check-wheel-contents is executed by the build-and-inspect-python-package action.
 [tool.check-wheel-contents]

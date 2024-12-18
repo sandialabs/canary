@@ -1,5 +1,4 @@
 import argparse
-import os
 
 from _nvtest.config.argparsing import Parser
 from _nvtest.finder import Finder
@@ -34,9 +33,9 @@ class Find(Command):
         if args.print_files:
             logging.set_level(logging.ERROR)
         logging.emit(banner() + "\n")
-        search_paths = self.parse_search_paths(args)
+        self.parse_search_paths(args)
         finder = Finder()
-        for root, paths in search_paths.items():
+        for root, paths in args.paths.items():
             finder.add(root, *paths, tolerant=True)
         finder.prepare()
         generators = finder.discover()
@@ -70,21 +69,14 @@ class Find(Command):
         kwargs = dict(dest=f"print_{name}", action="store_true", default=False, help=help_string)
         group.add_argument(*args, **kwargs)
 
-    def parse_search_paths(self, args: argparse.Namespace) -> dict[str, list[str]]:
-        PathSpec.parse(args)
-        parsed: dict[str, list[str]] = {}
-        if isinstance(args.paths, list):
-            args.paths = {path: [] for path in args.paths}
-        errors = 0
-        for root, paths in args.paths.items():
-            if not root:
-                root = os.getcwd()
-            if not os.path.isdir(root):
-                errors += 1
-                logging.warning(f"{root}: directory does not exist and will not be searched")
+    def parse_search_paths(self, args: argparse.Namespace) -> None:
+        on_options: list[str] = []
+        pathspec: list[str] = []
+        for item in args.pathspec:
+            if item.startswith("+"):
+                on_options.append(item[1:])
             else:
-                root = os.path.abspath(root)
-                parsed[root] = paths
-        if errors:
-            logging.warning("one or more search paths does not exist")
-        return parsed
+                pathspec.append(item)
+        args.pathspec = pathspec
+        args.on_options.extend(on_options)
+        PathSpec.parse_new_session(args)
