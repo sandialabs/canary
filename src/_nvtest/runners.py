@@ -284,6 +284,7 @@ class BatchRunner(AbstractTestRunner):
             if scheme == "isolate" and self.scheduler.supports_subscheduling:
                 scriptdir = os.path.dirname(batch.submission_script_filename())
                 timeoutx = config.getoption("timeout_multiplier", 1.0)
+                variables.pop("NVTEST_BATCH_ID", None)
                 for case in batch:
                     nvtest_invocation = self.nvtest_invocation(case, stage=stage)
                     job = hpc_connect.Job(

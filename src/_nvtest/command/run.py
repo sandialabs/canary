@@ -141,6 +141,7 @@ class Run(Command):
                 keyword_expr=args.keyword_expr,
                 parameter_expr=args.parameter_expr,
                 stage=stage,
+                case_specs=getattr(args, "case_specs", None),
             )
         else:
             assert args.mode == "b"

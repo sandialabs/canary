@@ -525,6 +525,8 @@ class Session:
 
         cases: list[TestCase] = []
         for case in self.cases:
+            if case.mask:
+                continue
             if case.status.satisfies(("pending", "ready")):
                 for dep in case.dependencies:
                     # FIXME: CHECK OTHER CODES AS REQUIRED BY THE TEST
