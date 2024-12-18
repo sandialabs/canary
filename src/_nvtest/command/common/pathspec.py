@@ -65,7 +65,10 @@ class PathSpec:
                 args.paths.setdefault(root, []).append(name)
             elif os.path.isdir(path):
                 args.paths.setdefault(path, [])
-            elif path.startswith(("git@", "repo@")) and os.path.isdir(path.partition("@")[2]):
+            elif path.startswith(("git@", "repo@")):
+                if not os.path.isdir(path.partition("@")[2]):
+                    p = path.partition("@")[2]
+                    raise ValueError(f"{p}: no such file or directory")
                 args.paths.setdefault(path, [])
             elif os.pathsep in path and os.path.exists(path.replace(os.pathsep, os.path.sep)):
                 # allow specifying as root:name
@@ -179,7 +182,10 @@ For %(new)s test sessions, the %(pathspec)s argument is scanned for test files t
 to the session.  %(pathspec)s can be one (or more) of the following types:
 
 • directory name: the directory is recursively searched for recognized test file extensions;
-• specific test files; and
+• VCS@directory name: find tests under version control; and
+• specific test files.
+
+VCS should be one of 'git' or 'repo'.  This method can potentially much faster than the default recursive search.
 
 For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests to rerun.
 %(pathspec)s can be one (or more) of the following types:
