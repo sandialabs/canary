@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "usage: nvtest location [-h] [-i | -l | -x | -c | -s] testspec\n\nPrint locations of test files and directories\n\npositional arguments:\n  testspec    Test name or test id\n\noptions:\n  -h, --help  show this help message and exit\n  -i          Show the location of the test's input file\n  -l          Show the location of the test's log file\n  -x          Show the location of the test's working directory\n  -c          Show the location of the test's execution directory\n  -s          Show the location of the test's source directory\n\nIf no options are give, -x is assumed.\n\nNote: this command must be run from inside of a test session directory."
-}

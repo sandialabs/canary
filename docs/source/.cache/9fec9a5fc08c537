@@ -1,4 +1,0 @@
-{
-  "returncode": 2,
-  "output": " #### ##  ### ###  #######  #######   #####   ####### \n #### ##  ### ###    ###    # ##     ### ###    ###   \n #######  ### ###    ###    ######    ###       ###   \n #######  ### ###    ###    ####        ###     ###   \n ### ###   #####     ###    ####     ### ###    ###   \n ### ###    ###      ###    #######   #####     ###\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting 59c05a7: diff\n==> Finished 59c05a7: diff DIFF\nShort test summary info\n\u2717 DIFF 59c05a7 diff (00:00:00.00) diff reason: a diff exit status was returned\n\n\u26a1\u26a1 Session done -- 1 total, 1 diff in 00:00:00.00"
-}

@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "                      O~~                     O~~  \n                      O~~                     O~~  \nO~~ O~~  O~~     O~~O~O~ O~   O~~     O~~~~ O~O~ O~\n O~~  O~~ O~~   O~~   O~~   O~   O~~ O~~      O~~  \n O~~  O~~  O~~ O~~    O~~  O~~~~~ O~~  O~~~   O~~  \n O~~  O~~   O~O~~     O~~  O~            O~~  O~~  \nO~~~  O~~    O~~       O~~   O~~~~   O~~ O~~   O~~\n==> Searching for tests in .\n==> Generating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting 9639e5c: first\n==> Finished 9639e5c: first PASS\n\ud83d\udca5\ud83d\udca5 Session done -- 1 total, 1 pass in 00:00:00.00"
-}

@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": " ##  ##   ##  ##   ######    #####    #####   ######  \n ### ##   ##  ##     ##     ##       ##         ##    \n ######   ##  ##     ##     ####      ####      ##    \n ## ###   ##  ##     ##     ##           ##     ##    \n ##  ##    ####      ##     ##           ##     ##    \n ##  ##     ##       ##      #####   #####      ##\n==> Searching for tests in .\n==> Collected 28 files from 1 root\n==> Done with test discovery"
-}

@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": " ##  ##   ##  ##   ######   ######   ######   ######  \n ### ##   ##  ##   ######   ##       ### ##   ######  \n ######   ##  ##     ##     ####     ###        ##    \n ######   ######     ##     ###      ######     ##    \n ### ##    ####      ##     ###         ###     ##    \n ### ##     ##       ##     ######   ######     ##\nversion: 24.12.12+022ed96-dirty\n==> Running 4 test cases\n==> Starting 1aadce4: execute_and_analyze\n==> Starting 800ee56: execute_and_analyze[a=1]\n==> Starting 1db4b43: execute_and_analyze[a=2]\n==> Starting 37789bf: execute_and_analyze[a=3]\n==> Finished 1db4b43: execute_and_analyze[a=2] PASS\n==> Finished 37789bf: execute_and_analyze[a=3] PASS\n==> Finished 1aadce4: execute_and_analyze PASS\n==> Finished 800ee56: execute_and_analyze[a=1] PASS\n==> Finished running 4 test cases (0.00s.)\n\n\u2728\u2728 Session done -- 4 total, 4 pass in 00:00:00.00"
-}

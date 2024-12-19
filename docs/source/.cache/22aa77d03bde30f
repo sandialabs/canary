@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "--- parameterize2 ------------\nFile: /opt/alegranevada/team/x/darwin/src/nvtest/examples/parameterize/parameterize2.pyt\nKeywords: \n2 test cases:\n\u251c\u2500\u2500 parameterize2[a=1,b=2]\n\u2514\u2500\u2500 parameterize2[a=5,b=6]"
-}

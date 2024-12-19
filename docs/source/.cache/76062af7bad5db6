@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "     dBBBBb   dBP dP  dBBBBBBP     dBBBP   .dBBBBP  dBBBBBBP\n        dBP                                BP               \n   dBP dBP  dB .BP     dBP       dBBP      `BBBBb    dBP    \n  dBP dBP   BB.BP     dBP       dBP           dBP   dBP     \n dBP dBP    BBBP     dBP       dBBBBP    dBBBBP'   dBP\nsearching for tests in basic\ngenerating test cases from test files\ncollected 2 tests from 2 files\nselected 1 test from 1 file\nskipping 1 test cases\n\u2022 1 deselected by keyword expression\n==> Starting 63f2de8: first\n==> Finished 63f2de8: first PASS\n\u26a1\u26a1 Session done -- 1 total, 1 pass in 00:00:00.00"
-}

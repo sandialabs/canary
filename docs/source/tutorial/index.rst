@@ -10,3 +10,4 @@ Tutorial
     assets
     Test dependencies <dependencies>
     Resource allocation <resource>
+    batch

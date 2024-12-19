@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "--- parameterize1 ------------\nFile: /Users/tjfulle/Workspace/Projects/Alegra/Builds/Master/Tools/src/nvtest/src/nvtest/examples/parameterize/parameterize1.pyt\nKeywords: \n2 test cases:\n\u251c\u2500\u2500 parameterize1[a=1]\n\u2514\u2500\u2500 parameterize1[a=4]"
-}

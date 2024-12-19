@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": " _____  ___    ___      ___  ___________    _______    ________   ___________  \n(\\\"   \\|\"  \\  |\"  \\    /\"  |(\"     _   \")  /\"     \"|  /\"       ) (\"     _   \") \n|.\\\\   \\    |  \\   \\  //  /  )__/  \\\\__/  (: ______) (:   \\___/   )__/  \\\\__/  \n|: \\.   \\\\  |   \\\\  \\/. ./      \\\\_ /      \\/    |    \\___  \\        \\\\_ /     \n|.  \\    \\. |    \\.    //       |.  |      // ___)_    __/  \\\\       |.  |     \n|    \\    \\ |     \\\\   /        \\:  |     (:      \"|  /\" \\   :)      \\:  |     \n \\___|\\____\\)      \\__/          \\__|      \\_______) (_______/        \\__|\n==> Searching for tests in copy_and_link\n==> Generating test cases from test files\ncollected 1 test from 1 file\nselected 1 test from 1 file\n==> Starting 2df9ab6: copy_and_link\n==> Finished 2df9ab6: copy_and_link PASS\n\u2728\u2728 Session done -- 1 total, 1 pass in 00:00:00.00"
-}

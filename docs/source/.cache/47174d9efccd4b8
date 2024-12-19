@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "--- parameterize4 ------------\nFile: /Users/tjfulle/Workspace/Projects/Alegra/Builds/Master/Tools/src/nvtest/src/nvtest/examples/parameterize/parameterize4.pyt\nKeywords: \n6 test cases:\n\u251c\u2500\u2500 parameterize4[a=1,b=100000,cpus=4]\n\u251c\u2500\u2500 parameterize4[a=1,b=100000,cpus=8]\n\u251c\u2500\u2500 parameterize4[a=2,b=1e+06,cpus=4]\n\u251c\u2500\u2500 parameterize4[a=2,b=1e+06,cpus=8]\n\u251c\u2500\u2500 parameterize4[a=3,b=1e+07,cpus=4]\n\u2514\u2500\u2500 parameterize4[a=3,b=1e+07,cpus=8]"
-}

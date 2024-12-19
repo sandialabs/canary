@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": " __   __     __   __   ______   ______     ______     ______  \n/\\ \"-.\\ \\   /\\ \\ / /  /\\__  _\\ /\\  ___\\   /\\  ___\\   /\\__  _\\ \n\\ \\ \\-.  \\  \\ \\ \\'/   \\/_/\\ \\/ \\ \\  __\\   \\ \\___  \\  \\/_/\\ \\/ \n \\ \\_\\\\\"\\_\\  \\ \\__|      \\ \\_\\  \\ \\_____\\  \\/\\_____\\    \\ \\_\\ \n  \\/_/ \\/_/   \\/_/        \\/_/   \\/_____/   \\/_____/     \\/_/\n==> Searching for tests in basic\n==> Generating test cases from test files\ncollected 2 tests from 2 files\nselected 1 test from 1 file\nskipping 1 test cases\n\u2022 1 deselected by keyword expression\n==> Starting 11bc177: second\n==> Finished 11bc177: second PASS\n\ud83d\udca5\ud83d\udca5 Session done -- 1 total, 1 pass in 00:00:00.00"
-}

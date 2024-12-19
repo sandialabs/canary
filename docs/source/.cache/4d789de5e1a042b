@@ -1,4 +1,0 @@
-{
-  "returncode": 2,
-  "output": "             _               _   \n._ _  _ _  _| |_  ___  ___ _| |_ \n| ' || | |  | |  / ._><_-<  | |  \n|_|_||__/   |_|  \\___./__/  |_|\nversion: 24.12.12+022ed96-dirty\n==> Running 1 test cases\n==> Starting e8fae12: diff\n==> Finished e8fae12: diff DIFF\n==> Finished running 1 test cases (1.00s.)\n\nShort test summary info\n\u2717 DIFF e8fae12 diff (00:00:01.00) diff reason: a diff exit status was returned\n\n\ud83d\udca5\ud83d\udca5 Session done -- 1 total, 1 diff in 00:00:01.00"
-}

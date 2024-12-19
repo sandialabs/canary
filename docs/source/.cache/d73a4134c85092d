@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "\u2717 FAIL b842fc2 fail (00:00:00.00) fail reason: a non-zero exit status was returned\n\u2717 FAIL 5d4fc74 xdiff-fail (00:00:00.00) fail reason: expected xdiff-fail to diff\n\u2717 FAIL f205478 xfail-fail (00:00:00.00) fail reason: expected xfail-fail to exit with code != 0\n\n\ud83d\udca5\ud83d\udca5 Summary -- 65 total, 55 pass, 2 xfail, 1 xdiff, 1 skipped, 1 diff, 3 fail, 2 timeout in 00:00:04"
-}

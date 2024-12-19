@@ -42,24 +42,3 @@ The test body verifies particular functionalities to ensure they align with the 
         sys.exit(test())
 
 A test exiting with code ``0`` is considered successful.  Otherwise, a failure :ref:`status <basics-status>` is assigned, depending on the exit code.
-
-The test instance
-~~~~~~~~~~~~~~~~~
-
-When a test is run, a :class:`~_nvtest.test.instance.TestInstance` object is made available by :func:`nvtest.get_instance`.  The test instance contains relevant information about the test case being executed.  For example:
-
-.. code-block:: python
-    :emphasize-lines: 6
-
-    import sys
-    import nvtest
-    nvtest.directives.keywords("spam")
-
-    def test() -> int:
-        instance = nvtest.get_instance()
-        assert "spam" in instance.keywords
-        return 0
-
-
-    if __name__ == "__main__":
-        sys.exit(test())

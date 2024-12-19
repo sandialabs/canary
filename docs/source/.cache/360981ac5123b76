@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "\u2717 SKIPPED cf6ff4b skip (00:00:00.00) skip reason: a skip exit status was returned\n\u2717 DIFF e8fae12 diff (00:00:00.00) diff reason: a diff exit status was returned\n\u2717 FAIL b842fc2 fail (00:00:00.00) fail reason: a non-zero exit status was returned\n\u2717 FAIL 5d4fc74 xdiff-fail (00:00:00.00) fail reason: expected xdiff-fail to diff\n\u2717 FAIL f205478 xfail-fail (00:00:00.00) fail reason: expected xfail-fail to exit with code != 0\n\u2717 TIMEOUT 73c6074 timeout (00:00:01.00)\n\u2717 TIMEOUT c2b81f2 timeout (00:00:01.00)\n\n\ud83d\udc22\ud83d\udc22 Slowest 5 durations \ud83d\udc22\ud83d\udc22\n    1.00   73c6074    timeout\n    1.00   c2b81f2    timeout\n\n\n\ud83d\udca5\ud83d\udca5 Summary -- 65 total, 55 pass, 2 xfail, 1 xdiff, 1 skipped, 1 diff, 3 fail, 2 timeout in 00:00:04"
-}

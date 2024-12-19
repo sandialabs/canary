@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "--- random_space ------------\nFile: /opt/alegranevada/team/x/darwin/src/nvtest/examples/random_space/random_space.pyt\nKeywords: \n4 test cases:\n\u251c\u2500\u2500 random_space[a=0.54393,b=8.1637]\n\u251c\u2500\u2500 random_space[a=2.14622,b=7.78912]\n\u251c\u2500\u2500 random_space[a=0.336671,b=6.68507]\n\u2514\u2500\u2500 random_space[a=0.750828,b=9.99689]"
-}

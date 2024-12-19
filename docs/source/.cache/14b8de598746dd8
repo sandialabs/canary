@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "                |                |   \n __ \\  \\ \\   /  __|   _ \\   __|  __| \n |   |  \\ \\ /   |     __/ \\__ \\  |   \n_|  _|   \\_/   \\__| \\___| ____/ \\__|\n==> Searching for tests in basic\n==> Generating test cases from test files\ncollected 2 tests from 2 files\nselected 2 tests from 2 files\n==> Starting 11bc177: second\n==> Starting f1eb59c: first\n==> Finished f1eb59c: first PASS\n==> Finished 11bc177: second PASS\n\u2728\u2728 Session done -- 2 total, 2 pass in 00:00:01.00"
-}

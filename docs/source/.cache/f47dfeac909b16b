@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "/opt/alegranevada/team/x/darwin/src/nvtest/src/nvtest/examples/TestResults/second/second/nvtest-out.txt:\n==> Running second\n==> Command line: /opt/alegranevada/team/x/darwin/bin/python3 second.pyt --stage=run\nVerifying that 2 + 3 = 5\nTest passed!"
-}

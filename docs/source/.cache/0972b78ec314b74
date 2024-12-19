@@ -1,4 +1,0 @@
-{
-  "returncode": 0,
-  "output": "usage: nvtest log [-h] testspec\n\nShow the test case's log file\n\npositional arguments:\n  testspec    Test name, /TEST_ID, or ^BATCH_ID\n\noptions:\n  -h, --help  show this help message and exit\n\nNote: this command must be run from inside of a test session directory."
-}
