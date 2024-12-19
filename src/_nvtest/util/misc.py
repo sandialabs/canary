@@ -5,13 +5,13 @@ from typing import Callable
 from typing import Sequence
 
 
-def boolean(arg):
+def boolean(arg: Any) -> bool:
     if arg is None:
         return False
     elif isinstance(arg, bool):
         return arg
     elif isinstance(arg, str):
-        return arg.lower() in ("1", "on", "true", "yes")
+        return arg.lower() not in ("0", "off", "false", "no")
     return bool(arg)
 
 

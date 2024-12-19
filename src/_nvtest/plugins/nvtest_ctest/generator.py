@@ -173,12 +173,12 @@ class CTestTestCase(TestCase):
         self._resource_groups: list[list[dict[str, Any]]] | None = None
         self._required_files: list[str] | None = None
         self._will_fail: bool = will_fail or False
-        self.cmakelists = cmakelists
-        self.ctestfile = ctestfile
+        self._cmakelists = cmakelists
+        self._ctestfile = ctestfile
         self.ctest_working_directory = working_directory
 
         if command is not None:
-            with nvtest.filesystem.working_dir(self.exec_dir):
+            with nvtest.filesystem.working_dir(self.execution_directory):
                 ns = parse_test_args(command)
 
             self.assets = []
@@ -254,18 +254,36 @@ class CTestTestCase(TestCase):
     def file(self) -> str:
         if self.cmakelists and os.path.exists(self.cmakelists):
             return self.cmakelists
-        assert self.ctestfile is not None
         return self.ctestfile
 
     @property
-    def exec_dir(self) -> str:
+    def ctestfile(self) -> str:
+        assert self._ctestfile is not None
+        return self._ctestfile
+
+    @ctestfile.setter
+    def ctestfile(self, arg: str) -> None:
+        self._ctestfile = arg
+
+    @property
+    def cmakelists(self) -> str | None:
+        return self._cmakelists
+
+    @cmakelists.setter
+    def cmakelists(self, arg: str) -> None:
+        self._cmakelists = arg
+
+    def chain(self, start: str | None = None, anchor: str = ".git") -> str:
+        return super().chain(start=self.ctestfile, anchor="CMakeFiles")
+
+    @property
+    def execution_directory(self) -> str:
         if self.ctest_working_directory is not None:
             return self.ctest_working_directory
         return self.binary_dir
 
     @property
     def binary_dir(self) -> str:
-        assert self.ctestfile is not None
         return os.path.dirname(self.ctestfile)
 
     def required_resources(self) -> list[list[dict[str, Any]]]:
@@ -356,7 +374,7 @@ class CTestTestCase(TestCase):
             sh = nvtest.filesystem.which("sh")
             with open("runtest", "w") as fh:
                 fh.write(f"#!{sh}\n")
-                fh.write(f"cd {self.exec_dir}\n")
+                fh.write(f"cd {self.execution_directory}\n")
                 fh.write(shlex.join(self._command()))
             nvtest.filesystem.set_executable("runtest")
 
@@ -537,7 +555,6 @@ def find_project_source_dir(file: str) -> str:
     dirname, basename = os.path.split(os.path.abspath(file))
     if basename not in ("CMakeLists.txt", "CTestTestfile.cmake"):
         logging.warning(f"Unrecognized file name {basename!r}")
-    assert basename == "CMakeLists.txt"
     while True:
         parent = os.path.dirname(dirname)
         if not os.path.exists(os.path.join(parent, basename)):

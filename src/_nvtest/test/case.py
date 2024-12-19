@@ -29,6 +29,7 @@ from ..util.executable import Executable
 from ..util.filesystem import copyfile
 from ..util.filesystem import max_name_length
 from ..util.filesystem import mkdirp
+from ..util.misc import boolean
 from ..util.module import load_module
 from ..util.shell import source_rcfile
 from ..util.time import hhmmss
@@ -842,8 +843,8 @@ class TestCase(AbstractTestCase):
         assert isinstance(arg, str)
         self._id = arg
 
-    def chain(self, anchor: str = ".git") -> str:
-        dirname = os.path.dirname(self.file)
+    def chain(self, start: str | None = None, anchor: str = ".git") -> str:
+        dirname = os.path.dirname(start or self.file)
         while True:
             if os.path.isdir(os.path.join(dirname, anchor)):
                 return os.path.relpath(self.file, dirname)
@@ -853,8 +854,15 @@ class TestCase(AbstractTestCase):
         return self.path
 
     def generate_id(self, byte_limit: int | None = None, **kwds: str) -> str:
-        """The test ID is built up from the test name, parameters, and contents of auxiliary files.
-        It is slow, but it gives a unique and repeatable ID.
+        """The test ID is a hash built up from the test name, parameters, and additional keywords.
+        *If* the test is in a git project directory, the path relative to the project directory is
+        included, otherwise the test case's path relative to the search root is hashed.  This
+        latter case is potentially not unique.
+
+        If the variable NVTEST_INCLUSIVE_CASE_ID is defined, the case id's hash will also include
+        contents of auxiliary files.  This is expensive, but causes the ID to change if any of the
+        test's auxiliary files change, which may be beneficial.
+
         """
         hasher = hashlib.sha256()
         hasher.update(self.name.encode())
@@ -862,11 +870,21 @@ class TestCase(AbstractTestCase):
             hasher.update(f"{key}={stringify(self.parameters[key], float_fmt='%.16e')}".encode())
         for key in sorted(kwds):
             hasher.update(f"{key}={stringify(kwds[key], float_fmt='%.16e')}".encode())
+        hasher.update(open(self.file, "rb").read())
+        hasher.update(self.chain().encode())
+        inclusive_case_id = boolean(os.getenv("NVTEST_INCLUSIVE_CASE_ID"))
+        if inclusive_case_id:
+            self._include_auxiliary_contents_in_id(hasher, byte_limit=byte_limit)
+        return hasher.hexdigest()[:20]
+
+    def _include_auxiliary_contents_in_id(
+        self, hasher: "hashlib._Hash", byte_limit: int | None = None
+    ) -> None:
         if byte_limit is None:
             gb: int = 1024 * 1024 * 1024
             byte_limit = int(os.getenv("NVTEST_HASH_BYTE_LIMIT", gb))
         assert byte_limit is not None
-        files: list[str] = [self.file]
+        files: list[str] = []
         if byte_limit:
             accept = lambda f: os.path.isfile(f) and os.path.getsize(f) <= byte_limit
             files.extend([asset.src for asset in self.assets if accept(asset.src)])
@@ -884,7 +902,6 @@ class TestCase(AbstractTestCase):
                     bytes_read = readinto(buffer)
                     update(view[:bytes_read])
                     size -= bytes_read
-        return hasher.hexdigest()[:20]
 
     @property
     def cpus(self) -> int:
