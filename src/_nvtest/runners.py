@@ -327,7 +327,10 @@ class BatchRunner(AbstractTestRunner):
             batch.total_duration = time.monotonic() - start
             batch.refresh()
             for case in batch.cases:
-                if case.status == "ready":
+                if case.start > 0 and case.finish < 0:
+                    case.status.set("cancelled", "batch cancelled")
+                    case.save()
+                elif case.status == "ready":
                     case.status.set("not_run", "case failed to start")
                     case.save()
                 elif case.status == "running":
