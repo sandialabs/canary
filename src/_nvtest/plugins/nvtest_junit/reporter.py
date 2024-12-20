@@ -1,6 +1,5 @@
 import os
 import re
-import sys
 import xml.dom.minidom as xdom
 import xml.sax.saxutils
 from datetime import datetime
@@ -130,7 +129,12 @@ class JunitDocument(xdom.Document):
 
 def gather_statistics(cases: list[TestCase]) -> SimpleNamespace:
     stats = SimpleNamespace(
-        num_skipped=0, num_failed=0, num_error=0, num_tests=0, start=sys.maxsize, finish=-1
+        num_skipped=0,
+        num_failed=0,
+        num_error=0,
+        num_tests=0,
+        start=datetime.now().timestamp(),
+        finish=-1,
     )
     for case in cases:
         if case.mask:

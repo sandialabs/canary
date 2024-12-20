@@ -181,7 +181,7 @@ class CDashXMLReporter:
         for case in cases:
             add_text_node(testlist, "Test", f"./{case.fullname}")
         l1.appendChild(testlist)
-        not_done = ("retry", "created", "pending", "ready", "running", "cancelled", "skipped")
+        not_done = ("retry", "created", "pending", "ready", "running", "skipped")
         success = ("success", "xfail", "xdiff")
 
         status: str
@@ -213,7 +213,12 @@ class CDashXMLReporter:
                 status = "failed"
                 exit_code = "Not Run"
                 completion_status = "Completed"
-                fail_reason = "Not run due to failed dependency"
+                fail_reason = "Test case was unexpectedly not run"
+            elif case.status == "cancelled":
+                status = "failed"
+                exit_code = "Cancelled"
+                completion_status = "Completed"
+                fail_reason = "Test case was cancelled"
             else:
                 status = "failed"
                 exit_code = "No Status"
