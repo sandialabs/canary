@@ -1192,8 +1192,12 @@ class TestCase(AbstractTestCase):
     def save(self):
         lockfile = self.lockfile
         mkdirp(os.path.dirname(lockfile))
-        with open(lockfile, "w") as fh:
-            self.dump(fh)
+        try:
+            with open(lockfile + ".tmp", "w") as fh:
+                self.dump(fh)
+            fs.force_copy(lockfile + ".tmp", lockfile)
+        finally:
+            fs.force_remove(lockfile + ".tmp")
         file = os.path.join(self.working_directory, self._lockfile)
         mkdirp(os.path.dirname(file))
         fs.force_symlink(lockfile, file)
