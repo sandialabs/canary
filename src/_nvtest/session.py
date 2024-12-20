@@ -6,6 +6,7 @@ import multiprocessing
 import os
 import random
 import signal
+import sys
 import threading
 import time
 import traceback
@@ -655,6 +656,8 @@ class Session:
         try:
             context = multiprocessing.get_context("spawn")
             with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
+                if multiprocessing.parent_process() is None:
+                    signal.signal(signal.SIGINT, handle_sigint)
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
@@ -686,10 +689,7 @@ class Session:
         except BaseException:
             if ppe is None:
                 raise ProcessPoolExecutorFailedToStart
-            if ppe._processes:
-                for proc in ppe._processes:
-                    os.kill(proc, signal.SIGINT)
-            ppe.shutdown(wait=True)
+            kill_session()
             raise
 
     def heartbeat(self, queue: ResourceQueue) -> None:
@@ -1014,6 +1014,20 @@ def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
     if cases and isinstance(getattr(cases[0], field), str):
         return sorted(cases, key=lambda case: getattr(case, field).lower())
     return sorted(cases, key=lambda case: getattr(case, field))
+
+
+def kill_session():
+    # send SIGTERM to children so they can clean up and then send SIGKILL after a delay
+    for proc in multiprocessing.active_children():
+        os.kill(proc.pid, signal.SIGTERM)
+    time.sleep(0.5)
+    for proc in multiprocessing.active_children():
+        os.kill(proc.pid, signal.SIGKILL)
+
+
+def handle_sigint(sig, frame):
+    kill_session()
+    sys.exit(signal.SIGINT.value)
 
 
 class DirectoryExistsError(Exception):
