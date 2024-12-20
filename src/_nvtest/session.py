@@ -2,6 +2,7 @@
 
 import io
 import json
+import multiprocessing
 import os
 import random
 import signal
@@ -207,33 +208,6 @@ class Session:
         for var, value in attrs.items():
             setattr(self, var, value)
 
-    def dump_snapshots(self, file: IO[Any]) -> None:
-        """Dump a snapshot of for every case in this session to ``file``"""
-        logging.debug("Dumping test case snapshots")
-        for case in self.cases:
-            self.dump_snapshot(case, file)
-
-    def load_snapshots(self, file: IO[Any]) -> dict[str, dict]:
-        """Load snapshots for every case in this session"""
-        logging.debug("Loading test case snapshots")
-        snapshots: dict[str, dict] = {}
-        for line in file:
-            snapshot = json.loads(line)
-            snapshots[snapshot["id"]] = snapshot
-        return snapshots
-
-    def dump_snapshot(self, case: TestCase, file: IO[Any]) -> None:
-        """Dump a snapshot of a single case ``case`` to ``file``"""
-        snapshot = {
-            "id": case.id,
-            "start": case.start,
-            "finish": case.finish,
-            "status": {"value": case.status.value, "details": case.status.details},
-            "returncode": case.returncode,
-            "dependencies": [dep.id for dep in case.dependencies],
-        }
-        file.write(json.dumps(snapshot) + "\n")
-
     def dump_testcases(self, file: IO[Any]) -> None:
         """Dump each case's state in this session to ``file`` in json format"""
         logging.debug("Dumping test cases")
@@ -271,14 +245,6 @@ class Session:
             if not case.mask:
                 case.refresh(propagate=False)
 
-        logging.debug("Updating test case state to latest snapshot")
-        with self.db.open("snapshots", "r") as record:
-            snapshots = self.load_snapshots(record)
-        for case in cases.values():
-            snapshot = snapshots.get(case.id)
-            if snapshot is not None:
-                case.update(**snapshot)
-
         logging.debug("Finished loading test cases")
         return list(cases.values())
 
@@ -298,7 +264,6 @@ class Session:
         """Load an existing test session:
 
         * load test files and cases from the database;
-        * update test cases based on their latest snapshots;
         * update each test case's dependencies; and
         * set configuration values.
 
@@ -434,15 +399,11 @@ class Session:
         cases_to_run = [case for case in self.cases if not case.mask and not case.skipped]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
-        with self.db.open("snapshots", "w") as record:
-            self.dump_snapshots(record)
         with self.db.open("cases", "w") as record:
             self.dump_testcases(record)
         for case in cases_to_run:
             case.status.set("ready" if not case.dependencies else "pending")
             case.save()
-        with self.db.open("snapshots", "a") as record:
-            self.dump_snapshots(record)
         with self.db.open("cases", "w") as record:
             self.dump_testcases(record)
         return cases_to_run
@@ -692,7 +653,8 @@ class Session:
         qsize = queue.qsize
         qrank = 0
         try:
-            with ProcessPoolExecutor(max_workers=queue.workers) as ppe:
+            context = multiprocessing.get_context("spawn")
+            with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
@@ -790,8 +752,6 @@ class Session:
             return
         obj.refresh()
         if isinstance(obj, TestCase):
-            with self.db.open("snapshots", "a") as record:
-                self.dump_snapshot(obj, record)
             if fail_fast and obj.status != "success":
                 code = compute_returncode([obj])
                 raise FailFast(str(obj), code)
@@ -800,12 +760,7 @@ class Session:
             if all(case.status == "retry" for case in obj):
                 queue.retry(iid)
                 return
-            with self.db.open("snapshots") as record:
-                snapshots = self.load_snapshots(record)
             for case in obj:
-                if case.id not in snapshots:
-                    logging.error(f"case ID {case.id} not in batch {obj.id}")
-                    continue
                 if case.status == "running":
                     # Job was cancelled
                     case.status.set("cancelled", "batch cancelled")
@@ -813,15 +768,8 @@ class Session:
                     pass
                 elif case.status == "ready":
                     case.status.set("skipped", "test skipped for unknown reasons")
-                elif case.status != snapshots[case.id]["status"]["value"]:
-                    if config.debug:
-                        fs = case.status.value
-                        ss = snapshots[case.id]["status"]["value"]
-                        logging.warning(
-                            f"batch {obj.id}, {case}: "
-                            f"expected status of future.result to be {ss}, not {fs}"
-                        )
-                        case.status.set("failed", "unknown failure")
+                elif case.start > 0 and case.finish < 0:
+                    case.status.set("cancelled", "test case cancelled")
             if fail_fast and any(_.status != "success" for _ in obj):
                 code = compute_returncode(obj.cases)
                 raise FailFast(str(obj), code)
