@@ -21,25 +21,21 @@ def groupby_dep(cases: Sequence[TestCase]) -> list[set[TestCase]]:
     """Group cases such that a case and any of its dependencies are in the same
     group
     """
+    sets = [{case} | set(case.dependencies) for case in cases]
     groups: list[set[TestCase]] = []
-    for case in cases:
-        if case.dependencies:
-            buffer = {case} | set(case.dependencies)
-            for group in groups:
-                if any(c in group for c in buffer):
-                    group.update(buffer)
-                    break
-            else:
-                groups.append(buffer)
-    unassigned: set[TestCase] = set()
-    for case in cases:
-        if not case.dependencies:
-            for group in groups:
-                if case in group:
-                    break
-            else:
-                unassigned.add(case)
-    groups.extend([{case} for case in unassigned])
+    while sets:
+        first, *rest = sets
+        combined = True
+        while combined:
+            combined = False
+            for s in rest:
+                if first & s:
+                    first |= s
+                    s.clear()
+                    combined = True
+        groups.append(first)
+        sets = rest
+    groups = [_ for _ in groups if _]
     if len(cases) != sum([len(group) for group in groups]):
         raise ValueError("Incorrect partition lengths!")
     return groups
