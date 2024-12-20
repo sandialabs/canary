@@ -1018,6 +1018,8 @@ def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
 
 def kill_session():
     # send SIGTERM to children so they can clean up and then send SIGKILL after a delay
+    if multiprocessing.parent_process() is not None:
+        return
     for proc in multiprocessing.active_children():
         os.kill(proc.pid, signal.SIGTERM)
     time.sleep(0.5)
