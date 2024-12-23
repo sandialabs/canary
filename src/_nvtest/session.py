@@ -451,7 +451,7 @@ class Session:
                 continue
 
             try:
-                config.resource_pool.validate(case)
+                config.resource_pool.satisfiable(case)
             except config.ResourceUnsatisfiable as e:
                 case.mask = color.colorize("@*{ResourceUnsatisfiable}(%r)" % e.args[0])
                 continue

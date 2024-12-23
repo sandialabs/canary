@@ -184,7 +184,7 @@ class DirectResourceQueue(ResourceQueue):
         for case in cases:
             if config.debug:
                 # The case should have already been validated
-                config.resource_pool.validate(case)
+                config.resource_pool.satisfiable(case)
             super().put(case)
 
     def skip(self, obj_no: int) -> None:
@@ -269,7 +269,7 @@ class BatchResourceQueue(ResourceQueue):
     def put(self, *cases: Any) -> None:
         for case in cases:
             if config.debug:
-                config.resource_pool.validate(case)
+                config.resource_pool.satisfiable(case)
             self.tmp_buffer.append(case)
 
     def skip(self, obj_no: int) -> None:

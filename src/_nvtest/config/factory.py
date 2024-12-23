@@ -4,6 +4,7 @@ import dataclasses
 import json
 import math
 import os
+import pickle
 from string import Template
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -164,10 +165,13 @@ class ResourcePool:
 
     """
 
+    __slots__ = ("map", "pool", "types", "_stash")
+
     def __init__(self, pool: list[dict[str, Any]] | None = None) -> None:
         self.map: dict[str, dict[tuple[str, str], int]] = {}
         self.pool: list[dict[str, Any]] = []
         self.types: set[str] = {"cpus", "gpus"}
+        self._stash: bytes | None = None
         if pool:
             self.fill(pool)
 
@@ -258,11 +262,21 @@ class ResourcePool:
             pool.append(spec)
         self.fill(pool)
 
-    def validate(self, obj: "AbstractTestCase") -> None:
+    def stash(self) -> None:
+        # pickling faster than taking a deep copy of the pool
+        self._stash = pickle.dumps(self.pool)
+
+    def unstash(self) -> None:
+        assert self._stash is not None
+        self.pool.clear()
+        self.pool.extend(pickle.loads(self._stash))
+        self._stash = None
+
+    def satisfiable(self, obj: "AbstractTestCase") -> None:
         """determine if the resources for this test are satisfiable"""
         required = obj.required_resources()
         try:
-            save = copy.deepcopy(self.pool)
+            self.stash()
             for group in required:
                 for item in group:
                     if item["type"] not in self.types:
@@ -276,8 +290,7 @@ class ResourcePool:
                         msg = f"insufficient slots of {t!r} available"
                         raise ResourceUnsatisfiable(msg) from None
         finally:
-            self.pool.clear()
-            self.pool.extend(save)
+            self.unstash()
 
     def _get_from_pool(self, type: str, slots: int) -> dict[str, Any]:
         for spec in self.pool:
@@ -302,7 +315,7 @@ class ResourcePool:
             raise ValueError(f"{obj}: no resources requested, a test should require at least 1 cpu")
         resource_specs: list[dict[str, list[dict]]] = []
         try:
-            save = copy.deepcopy(self.pool)
+            self.stash()
             for group in required:
                 # {type: [{gid: ..., slots: ...}]}
                 spec: dict[str, list[dict]] = {}
@@ -316,9 +329,10 @@ class ResourcePool:
                     totals[type] = totals.get(type, 0) + slots
                 resource_specs.append(spec)
         except Exception:
-            self.pool.clear()
-            self.pool.extend(save)
+            self.unstash()
             raise
+        else:
+            self._stash = None
         if logging.LEVEL == logging.DEBUG:
             for type, n in totals.items():
                 N = sum([_["slots"] for spec in self.pool for _ in spec[type]]) + n
@@ -350,6 +364,8 @@ class ResourcePool:
 
 
 class Session:
+    __slots__ = ("work_tree", "stage", "level")
+
     def __init__(
         self,
         *,
@@ -366,7 +382,8 @@ class Session:
         return "{}({})".format(type(self).__name__, ", ".join(kwds))
 
     def getstate(self) -> dict[str, Any]:
-        d = dict(vars(self))
+        d: dict[str, str | int | None] = {}
+        d["work_tree"] = self.work_tree
         # these are set during the process
         d["stage"] = None
         d["level"] = None
