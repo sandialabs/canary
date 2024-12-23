@@ -3,10 +3,10 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
 
-from .factory import Config
-from .factory import ResourcePool  # noqa: F401
-from .factory import ResourceUnavailable  # noqa: F401
-from .factory import ResourceUnsatisfiable  # noqa: F401
+from .config import Config
+from .resource_pool import ResourcePool  # noqa: F401
+from .resource_pool import ResourceUnavailable  # noqa: F401
+from .resource_pool import ResourceUnsatisfiable  # noqa: F401
 
 if TYPE_CHECKING:
     _config = Config.factory()
