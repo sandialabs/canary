@@ -109,7 +109,11 @@ class ResourceQueue(abc.ABC):
                     try:
                         if obj.exclusive and self.busy():
                             continue
-                        config.resource_pool.acquire(obj)
+                        required = obj.required_resources()
+                        if not required:
+                            raise ValueError(f"{obj}: a test should require at least 1 cpu")
+                        acquired = config.resource_pool.acquire(required)
+                        obj.assign_resources(acquired)
                     except config.ResourceUnavailable:
                         continue
                     else:
@@ -184,7 +188,7 @@ class DirectResourceQueue(ResourceQueue):
         for case in cases:
             if config.debug:
                 # The case should have already been validated
-                config.resource_pool.satisfiable(case)
+                config.resource_pool.satisfiable(case.required_resources())
             super().put(case)
 
     def skip(self, obj_no: int) -> None:
@@ -199,7 +203,8 @@ class DirectResourceQueue(ResourceQueue):
             if obj_no not in self._busy:
                 raise RuntimeError(f"case {obj_no} is not running")
             obj = self._finished[obj_no] = self._busy.pop(obj_no)
-            config.resource_pool.reclaim(obj)
+            config.resource_pool.reclaim(obj.resources)
+            obj.free_resources()
             if obj.exclusive:
                 self.exclusive_lock = False
             for case in self.buffer.values():
@@ -269,7 +274,7 @@ class BatchResourceQueue(ResourceQueue):
     def put(self, *cases: Any) -> None:
         for case in cases:
             if config.debug:
-                config.resource_pool.satisfiable(case)
+                config.resource_pool.satisfiable(case.required_resources())
             self.tmp_buffer.append(case)
 
     def skip(self, obj_no: int) -> None:
@@ -286,7 +291,8 @@ class BatchResourceQueue(ResourceQueue):
             if obj_no not in self._busy:
                 raise RuntimeError(f"batch {obj_no} is not running")
             obj = self._finished[obj_no] = self._busy.pop(obj_no)
-            config.resource_pool.reclaim(obj)
+            config.resource_pool.reclaim(obj.resources)
+            obj.free_resources()
             completed = dict([(_.id, _) for _ in self.finished()])
             for batch in self.buffer.values():
                 for case in batch:

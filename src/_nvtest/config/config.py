@@ -16,7 +16,7 @@ from ..third_party.schema import SchemaError
 from ..util import logging
 from ..util.collections import merge
 from . import _machine
-from .resource_pool import ResourcePool
+from .rpool import ResourcePool
 from .schemas import batch_schema
 from .schemas import build_schema
 from .schemas import config_schema

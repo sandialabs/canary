@@ -132,8 +132,8 @@ def test_resource_pool_acquire():
     case = Case()
     with nvtest.config.override():
         nvtest.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=4, gpus_per_node=4)
-        nvtest.config.resource_pool.acquire(case)
-        assert case.resources == [
+        resources = nvtest.config.resource_pool.acquire(case.required_resources())
+        assert resources == [
             {
                 "cpus": [{"gid": 0, "slots": 1}, {"gid": 1, "slots": 1}],
                 "gpus": [{"gid": 0, "slots": 1}, {"gid": 1, "slots": 1}],

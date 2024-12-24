@@ -393,13 +393,17 @@ class BatchRunner(AbstractTestRunner):
                 fp.write(f"-p {p} ")
 
         # The batch will be run in a compute node, so hpc_connect won't set the machine limits
-        node_count = config.resource_pool.min_nodes_required(arg)
+        nodes: int
+        if isinstance(arg, TestCase):
+            nodes = config.resource_pool.nodes_required(arg.required_resources())
+        else:
+            nodes = max(config.resource_pool.nodes_required(c.required_resources()) for c in arg)
         cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
         gpus_per_node = config.resource_pool.pinfo("gpus_per_node")
         if isinstance(arg, TestBatch):
             cfg: dict[str, Any] = {}
             pool = cfg.setdefault("resource_pool", {})
-            pool["nodes"] = node_count
+            pool["nodes"] = nodes
             pool["cpus_per_node"] = cpus_per_node
             pool["gpus_per_node"] = gpus_per_node
             batch_stage = arg.stage(arg.id)

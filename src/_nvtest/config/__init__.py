@@ -4,9 +4,9 @@ from typing import Any
 from typing import Generator
 
 from .config import Config
-from .resource_pool import ResourcePool  # noqa: F401
-from .resource_pool import ResourceUnavailable  # noqa: F401
-from .resource_pool import ResourceUnsatisfiable  # noqa: F401
+from .rpool import ResourcePool  # noqa: F401
+from .rpool import ResourceUnavailable  # noqa: F401
+from .rpool import ResourceUnsatisfiable  # noqa: F401
 
 if TYPE_CHECKING:
     _config = Config.factory()

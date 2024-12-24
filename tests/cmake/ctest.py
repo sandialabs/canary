@@ -260,7 +260,7 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
             nvtest.config.resource_pool.fill(validated["resource_pool"])
             file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
             [case] = file.lock()
-            nvtest.config.resource_pool.validate(case)
+            nvtest.config.resource_pool.satisfiable(case.required_resources())
             case.status.set("ready")
             queue = DirectResourceQueue(threading.Lock())
             queue.put(case)

@@ -322,7 +322,7 @@ class Finder:
         owners = set(owners or [])
         for case in cases:
             try:
-                config.resource_pool.satisfiable(case)
+                config.resource_pool.satisfiable(case.required_resources())
             except config.ResourceUnsatisfiable as e:
                 if case.mask is None:
                     s = "@*{ResourceUnsatisfiable}(%r)" % e.args[0]

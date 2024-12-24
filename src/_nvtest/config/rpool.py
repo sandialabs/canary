@@ -1,13 +1,9 @@
 import copy
 import math
 import pickle
-from typing import TYPE_CHECKING
 from typing import Any
 
 from ..util import logging
-
-if TYPE_CHECKING:
-    from ..test.atc import AbstractTestCase
 
 
 class ResourcePool:
@@ -126,37 +122,39 @@ class ResourcePool:
     def fill(self, pool: list[dict[str, Any]]) -> None:
         self.clear()
         gids: dict[str, int] = {}
-        for i, spec in enumerate(pool):
-            pid = str(spec.pop("id", i))
-            if "cpus" not in spec:
+        for i, local in enumerate(pool):
+            pid = str(local.pop("id", i))
+            if "cpus" not in local:
                 raise TypeError(f"required resource 'cpus' not defined in pool instance {i}")
-            if "gpus" not in spec:
-                spec["gpus"] = []
-            for type, instances in spec.items():
+            if "gpus" not in local:
+                local["gpus"] = []
+            # fraction usable
+            for type, instances in local.items():
                 self.types.add(type)
                 for instance in instances:
                     lid = instance["id"]
                     gid = gids.setdefault(type, 0)
+                    slots = instance["slots"]
                     self.map.setdefault(type, {})[(pid, lid)] = gid
                     gids[type] += 1
-            spec["id"] = pid
-            self.pool.append(spec)
+            local["id"] = pid
+            self.pool.append(local)
 
     def pinfo(self, item: str) -> Any:
         if item == "node_count":
             return len(self.pool)
         if item.endswith("_per_node"):
             key = item[:-9]
-            for spec in self.pool:
-                if key in spec:
-                    return len(spec[key])
+            for local in self.pool:
+                if key in local:
+                    return len(local[key])
             return 0
         if item.endswith("_count"):
             key = item[:-6] + "s"
             count = 0
-            for spec in self.pool:
-                if key in spec:
-                    count += len(spec[key])
+            for local in self.pool:
+                if key in local:
+                    count += len(local[key])
             return 0
         raise KeyError(item)
 
@@ -172,20 +170,18 @@ class ResourcePool:
                 return key[0], key[1]
         raise KeyError((type, arg_gid))
 
-    def min_nodes_required(self, obj: "AbstractTestCase") -> int:
+    def nodes_required(self, required: list[list[dict[str, Any]]]) -> int:
         """Determine the number of nodes required by ``obj``"""
         node_count: int = 1
-        for case in obj:
-            required = case.required_resources()
-            for group in required:
-                for type in self.types:
-                    count: int = 0
-                    count_per_node = len(self.pool[0][type])
-                    for item in group:
-                        if item["type"] == type:
-                            count += item["slots"]
-                    if count_per_node and count:
-                        node_count = max(math.ceil(count / count_per_node), node_count)
+        for group in required:
+            for type in self.types:
+                count: int = 0
+                count_per_node = len(self.pool[0][type])
+                for item in group:
+                    if item["type"] == type:
+                        count += item["slots"]
+                if count_per_node and count:
+                    node_count = max(math.ceil(count / count_per_node), node_count)
         return node_count
 
     def clear(self) -> None:
@@ -196,15 +192,15 @@ class ResourcePool:
     def fill_uniform(self, *, node_count: int, cpus_per_node: int, **kwds: int) -> None:
         pool: list[dict[str, Any]] = []
         for i in range(node_count):
-            spec: dict[str, Any] = {}
+            local: dict[str, Any] = {}
             for j in range(cpus_per_node):
-                spec.setdefault("cpus", []).append({"id": str(j), "slots": 1})
+                local.setdefault("cpus", []).append({"id": str(j), "slots": 1})
             for name, count in kwds.items():
                 if name.endswith("_per_node"):
                     for j in range(count):
-                        spec.setdefault(name[:-9], []).append({"id": str(j), "slots": 1})
-            spec["id"] = str(i)
-            pool.append(spec)
+                        local.setdefault(name[:-9], []).append({"id": str(j), "slots": 1})
+            local["id"] = str(i)
+            pool.append(local)
         self.fill(pool)
 
     def stash(self) -> None:
@@ -217,9 +213,18 @@ class ResourcePool:
         self.pool.extend(pickle.loads(self._stash))
         self._stash = None
 
-    def satisfiable(self, obj: "AbstractTestCase") -> None:
+    def _get_from_pool(self, type: str, slots: int) -> dict[str, Any]:
+        for local in self.pool:
+            instances = sorted(local[type], key=lambda x: x["slots"])
+            for instance in instances:
+                if slots <= instance["slots"]:
+                    instance["slots"] -= slots
+                    gid = self.gid(type, local["id"], instance["id"])
+                    return {"gid": gid, "slots": slots}
+        raise ResourceUnavailable
+
+    def satisfiable(self, required: list[list[dict[str, Any]]]) -> None:
         """determine if the resources for this test are satisfiable"""
-        required = obj.required_resources()
         try:
             self.stash()
             for group in required:
@@ -237,42 +242,28 @@ class ResourcePool:
         finally:
             self.unstash()
 
-    def _get_from_pool(self, type: str, slots: int) -> dict[str, Any]:
-        for spec in self.pool:
-            for name, instances in spec.items():
-                if type == name:
-                    for instance in sorted(instances, key=lambda x: x["slots"]):
-                        if slots <= instance["slots"]:
-                            instance["slots"] -= slots
-                            gid = self.gid(type, spec["id"], instance["id"])
-                            return {"gid": gid, "slots": slots}
-        raise ResourceUnavailable
-
-    def acquire(self, obj: "AbstractTestCase") -> None:
+    def acquire(self, required: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
         """Returns resources available to the test
 
-        specs[i] = {<type>: [{'gid': <gid>, 'slots': <slots>}, ...], ... }
+        local[i] = {<type>: [{'gid': <gid>, 'slots': <slots>}, ...], ... }
 
         """
         totals: dict[str, int] = {}
-        required = obj.required_resources()
-        if not required:
-            raise ValueError(f"{obj}: no resources requested, a test should require at least 1 cpu")
-        resource_specs: list[dict[str, list[dict]]] = []
+        acquired: list[dict[str, list[dict]]] = []
         try:
             self.stash()
             for group in required:
                 # {type: [{gid: ..., slots: ...}]}
-                spec: dict[str, list[dict]] = {}
+                local: dict[str, list[dict]] = {}
                 for item in group:
                     type, slots = item["type"], item["slots"]
                     if type not in self.types:
                         raise TypeError(f"unknown resource requirement type {type!r}")
                     r = self._get_from_pool(item["type"], item["slots"])
-                    items = spec.setdefault(type, [])
+                    items = local.setdefault(type, [])
                     items.append(r)
                     totals[type] = totals.get(type, 0) + slots
-                resource_specs.append(spec)
+                acquired.append(local)
         except Exception:
             self.unstash()
             raise
@@ -280,17 +271,16 @@ class ResourcePool:
             self._stash = None
         if logging.LEVEL == logging.DEBUG:
             for type, n in totals.items():
-                N = sum([_["slots"] for spec in self.pool for _ in spec[type]]) + n
+                N = sum([_["slots"] for local in self.pool for _ in local[type]]) + n
                 logging.debug(f"Acquiring {n} {type} from {N} available")
-        obj.resources = resource_specs
-        return
+        return acquired
 
-    def reclaim(self, obj: "AbstractTestCase") -> None:
+    def reclaim(self, resources: list[dict[str, list[dict]]]) -> None:
         def _reclaim(type, rspec):
             pid, lid = self.local_ids(type, rspec["gid"])
-            for spec in self.pool:
-                if spec["id"] == pid:
-                    for instance in spec[type]:
+            for local in self.pool:
+                if local["id"] == pid:
+                    for instance in local[type]:
                         if instance["id"] == lid:
                             slots = rspec["slots"]
                             instance["slots"] += slots
@@ -298,14 +288,13 @@ class ResourcePool:
             raise ValueError(f"Attempting to reclaim a resource whose ID is unknown: {rspec!r}")
 
         types: dict[str, int] = {}
-        for resource in obj.resources:  # list[dict[str, list[dict]]]) -> None:
+        for resource in resources:  # list[dict[str, list[dict]]]) -> None:
             for type, rspecs in resource.items():
                 for rspec in rspecs:
                     n = _reclaim(type, rspec)
                     types[type] = types.setdefault(type, 0) + n
         for type, n in types.items():
             logging.debug(f"Reclaimed {n} {type}")
-        obj.resources.clear()
 
 
 class ResourceUnsatisfiable(Exception):
