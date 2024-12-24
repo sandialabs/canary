@@ -263,6 +263,7 @@ class BatchRunner(AbstractTestRunner):
             hpc_connect.set(scheduler=scheduler)  # type: ignore
         self.scheduler = hpc_connect.scheduler  # type: ignore
         if varargs := os.getenv("NVTEST_BATCH_ARGS"):
+            logging.info(f"Using batch arguments from environment: {varargs}")
             self.scheduler.add_default_args(*shlex.split(varargs))
         if args := batchopts.get("options"):
             self.scheduler.add_default_args(*args)
