@@ -134,11 +134,25 @@ class ResourcePool:
                 for instance in instances:
                     lid = instance["id"]
                     gid = gids.setdefault(type, 0)
-                    slots = instance["slots"]
                     self.map.setdefault(type, {})[(pid, lid)] = gid
                     gids[type] += 1
             local["id"] = pid
             self.pool.append(local)
+
+    def apply_limiter(self, type: str, limit: float) -> None:
+        assert limit >= 0 and limit <= 1
+        for local in self.pool:
+            if type not in local:
+                continue
+            instances = sorted(local[type], key=lambda x: x["slots"])
+            avail = sum([instance["slots"] for instance in instances])
+            used = 0
+            for instance in instances:
+                used += instance["slots"]
+                if used > limit * avail:
+                    instance["slots"] = 0
+                else:
+                    used += instance["slots"]
 
     def pinfo(self, item: str) -> Any:
         if item == "node_count":

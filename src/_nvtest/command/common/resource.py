@@ -8,6 +8,26 @@ from _nvtest.util.string import strip_quotes
 from _nvtest.util.time import time_in_seconds
 
 
+class ResourceLimit(argparse.Action):
+    def __call__(self, parser, args, values, option_string=None):
+        pattern = r"([a-z][a-z0-9_]+)[:=](.*)"
+        match = re.search(pattern, values)
+        if not match:
+            parser.error(f"resource limit must be of form type=value, got {values}")
+        else:
+            resource_limits = getattr(args, self.dest, None) or {}
+            type = match.group(1)
+            value = match.group(2)
+            if value.endswith("%"):
+                value = float(value[:-1]) / 100.0
+            else:
+                value = float(value)
+            if value < 0 or value > 1:
+                parser.error(f"resource limit must be between 0 and 1, got {value}")
+            resource_limits[type] = value
+            setattr(args, self.dest, resource_limits)
+
+
 class DeprecatedResourceSetter(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
         prefix = f"[OPTION REMOVED]: '{option_string or '-l'} {values}'"

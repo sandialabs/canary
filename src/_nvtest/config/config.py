@@ -383,10 +383,15 @@ class Config:
         if n := getattr(args, "workers", None):
             if n > self.machine.cpu_count:
                 raise ValueError(f"workers={n} > cpu_count={self.machine.cpu_count}")
+
         if b := getattr(args, "batch", None):
             if n := b.get("workers"):
                 if n > self.machine.cpu_count:
                     raise ValueError(f"batch:workers={n} > cpu_count={self.machine.cpu_count}")
+
+        if limiters := getattr(args, "resource_limits", None):
+            for name, value in limiters.items():
+                self.resource_pool.apply_limiter(name, value)
 
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The
