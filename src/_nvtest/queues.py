@@ -274,6 +274,7 @@ class BatchResourceQueue(ResourceQueue):
     def put(self, *cases: Any) -> None:
         for case in cases:
             if config.debug:
+                # The case should have already been validated
                 config.resource_pool.satisfiable(case.required_resources())
             self.tmp_buffer.append(case)
 
