@@ -420,12 +420,15 @@ class BatchRunner(AbstractTestRunner):
         if p := getattr(config.options, "P", None):
             if p != "pedantic":
                 fp.write(f"-P{p} ")
-        batchopts = config.getoption("batch", {})
-        workers = batchopts.get("workers")
-        if isinstance(arg, TestBatch) and workers is not None:
-            fp.write(f"-l workers={workers} ")
+        if isinstance(arg, TestBatch):
+            batchopts = config.getoption("batch", {})
+            if workers := batchopts.get("workers"):
+                fp.write(f"--workers={workers} ")
         if timeoutx := config.getoption("timeout_multiplier"):
             fp.write(f"--timeout-multiplier={timeoutx} ")
+        if limiters := config.getoption("resource_limits"):
+            for name, value in limiters.items():
+                fp.write(f"--resource-cap={name}={value} ")
         fp.write("-b scheduler=null ")  # guard against infinite batch recursion
         sigil = "^" if isinstance(arg, TestBatch) else "/"
         fp.write(f"{sigil}{arg.id}")

@@ -11,3 +11,4 @@ Tutorial
     Test dependencies <dependencies>
     Resource allocation <resource>
     batch
+    workflows
