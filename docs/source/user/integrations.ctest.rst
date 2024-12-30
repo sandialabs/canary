@@ -67,7 +67,7 @@ The CTest `DEPENDS <https://cmake.org/cmake/help/git-master/prop_test/DEPENDS.ht
 RESOURCE_GROUPS
 ~~~~~~~~~~~~~~~
 
-``nvtest`` does not currently read in a `CTest resource specification file <https://cmake.org/cmake/help/latest/manual/ctest.1.html#resource-specification-file>`_ and only recognizes the ``gpus`` `resource group <https://cmake.org/cmake/help/git-master/prop_test/RESOURCE_GROUPS.html>`_.  Eg, ``set_tests_properties(name PROPERTIES RESOURCE_GROUPS N:gpus,n)``
+``nvtest`` supports the `CTest resource specification file <https://cmake.org/cmake/help/latest/manual/ctest.1.html#resource-specification-file>`_.  See :ref:`basics-resource`.
 
 \*_REGULAR_EXPRESSION behavior
 ------------------------------
