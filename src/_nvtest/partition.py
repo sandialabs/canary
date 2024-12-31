@@ -94,6 +94,22 @@ class Block:
     def norm(self) -> float:
         return math.sqrt(self.size[0] ** 2 + self.size[1] ** 2)
 
+    @property
+    def width(self) -> int:
+        return self.size[0]
+
+    @width.setter
+    def width(self, arg: int) -> None:
+        self.size = (arg, self.height)
+
+    @property
+    def height(self) -> int:
+        return self.size[1]
+
+    @height.setter
+    def height(self, arg: int) -> None:
+        self.size = (self.width, arg)
+
 
 class Node:
     """
@@ -242,6 +258,9 @@ def autopartition(cases: Sequence[TestCase], t: float = 60 * 30) -> list[TestBat
         cpus = max(block.size[0] for block in blocks)
         nodes = integer(cpus / cpus_per_node)
         width = nodes * cpus_per_node
+        for i, block in enumerate(blocks):
+            if ready[i].exclusive:
+                block.width = width
         timeout = max(block.size[1] for block in blocks)
         height = int(max(timeout, t))
         packer.pack(blocks, width, height)
@@ -273,6 +292,9 @@ def packed_perimeter(cases: Sequence[TestCase]) -> size_t:
     nodes = integer(cpus / cpus_per_node)
     width = nodes * cpus_per_node
     blocks = [Block(case.id, case.cpus, integer(case.timeout)) for case in cases]
+    for i, block in enumerate(blocks):
+        if cases[i].exclusive:
+            block.width = width
     packer = Packer()
     packer.pack(blocks, width=width)
     return perimeter(blocks)
