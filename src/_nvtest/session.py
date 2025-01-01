@@ -400,8 +400,6 @@ class Session:
         cases_to_run = [case for case in self.cases if not case.mask and not case.skipped]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
-        with self.db.open("cases", "w") as record:
-            self.dump_testcases(record)
         for case in cases_to_run:
             case.status.set("ready" if not case.dependencies else "pending")
             case.save()

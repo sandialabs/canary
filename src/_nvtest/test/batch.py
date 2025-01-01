@@ -152,7 +152,7 @@ class TestBatch(AbstractTestCase):
 
     @property
     def path(self) -> str:
-        return os.path.join(".nvtest/batch", self.id[:2], self.id[2:])
+        return os.path.join(".nvtest/batches", self.id[:2], self.id[2:])
 
     def save(self):
         f = os.path.join(self.stage(self.id), "index")
@@ -177,14 +177,14 @@ class TestBatch(AbstractTestCase):
     def stage(batch_id: str) -> str:
         work_tree = config.session.work_tree
         assert work_tree is not None
-        return os.path.join(work_tree, ".nvtest/batch", batch_id[:2], f"{batch_id[2:]}")
+        return os.path.join(work_tree, ".nvtest/batches", batch_id[:2], f"{batch_id[2:]}")
 
     @staticmethod
     def find(batch_id: str) -> str:
         """Find the full batch ID from batch_id"""
         work_tree = config.session.work_tree
         assert work_tree is not None
-        pattern = os.path.join(work_tree, ".nvtest/batch", batch_id[:2], f"{batch_id[2:]}*")
+        pattern = os.path.join(work_tree, ".nvtest/batches", batch_id[:2], f"{batch_id[2:]}*")
         candidates = glob.glob(pattern)
         if not candidates:
             raise BatchNotFound(f"cannot find stage for batch {batch_id}")

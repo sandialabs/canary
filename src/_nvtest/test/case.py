@@ -9,6 +9,7 @@ import math
 import os
 import re
 import sys
+import time
 from contextlib import contextmanager
 from copy import deepcopy
 from types import SimpleNamespace
@@ -1204,10 +1205,16 @@ class TestCase(AbstractTestCase):
 
     def refresh(self, propagate: bool = True) -> None:
         file = self.lockfile
-        if not os.path.exists(file):
-            raise FileNotFoundError(file)
-        with open(file, "r") as fh:
-            state = json.load(fh)
+        start = time.monotonic()
+        while True:
+            # Guard against race condition when multiple batches are running at once
+            try:
+                with open(file, "r") as fh:
+                    state = json.load(fh)
+                break
+            except Exception:
+                if time.monotonic() - start > 10:
+                    raise
         keep = (
             "start",
             "finish",
