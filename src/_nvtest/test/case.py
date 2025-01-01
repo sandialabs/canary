@@ -1206,6 +1206,7 @@ class TestCase(AbstractTestCase):
     def refresh(self, propagate: bool = True) -> None:
         file = self.lockfile
         start = time.monotonic()
+        tries = 0
         while True:
             # Guard against race condition when multiple batches are running at once
             try:
@@ -1213,7 +1214,9 @@ class TestCase(AbstractTestCase):
                     state = json.load(fh)
                 break
             except Exception:
-                if time.monotonic() - start > 10:
+                tries += 1
+                if time.monotonic() - start > 30:
+                    logging.error(f"Failed to load {file} after {tries} attempts in 30 seconds")
                     raise
         keep = (
             "start",

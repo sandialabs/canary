@@ -397,7 +397,7 @@ class Session:
             env_mods=env_mods,
             regex=regex,
         )
-        cases_to_run = [case for case in self.cases if not case.mask and not case.skipped]
+        cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
         for case in cases_to_run:

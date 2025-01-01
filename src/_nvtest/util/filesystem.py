@@ -179,7 +179,7 @@ def remove(file_or_dir: pathlib.Path | str) -> None:
     """Removes file or directory ``file_or_dir``"""
     path = pathlib.Path(file_or_dir)
     if path.is_symlink():
-        os.remove(path)
+        os.unlink(path)
     elif path.is_dir():
         rmtree2(path)
     elif path.exists():
