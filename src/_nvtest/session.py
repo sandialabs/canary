@@ -195,70 +195,76 @@ class Session:
                 break
         return None
 
-    def dump_attrs(self, file: IO[Any]) -> None:
+    def dump_attrs(self) -> None:
         """Dump this session attributes to ``file`` as ``json``"""
         attrs: dict[str, Any] = {}
         for var, value in vars(self).items():
             if var not in ("generators", "cases", "db"):
                 attrs[var] = value
-        json.dump(attrs, file, indent=2)
+        with self.db.open("session", "w") as file:
+            json.dump(attrs, file, indent=2)
 
-    def load_attrs(self, file: IO[Any]) -> None:
+    def load_attrs(self) -> None:
         """Load attributes, previously dumped by ``dump_attrs``, from ``file``"""
-        attrs = json.load(file)
+        with self.db.open("session", "r") as file:
+            attrs = json.load(file)
         for var, value in attrs.items():
             setattr(self, var, value)
 
-    def dump_testcases(self, file: IO[Any]) -> None:
+    def dump_testcases(self) -> None:
         """Dump each case's state in this session to ``file`` in json format"""
-        logging.debug("Dumping test cases")
-        states: list[dict] = []
+        index: dict[str, list[str]] = {}
         for case in self.cases:
-            state = case.getstate()
-            props = state["properties"]
-            props["dependencies"] = [dep["properties"]["id"] for dep in props["dependencies"]]
-            props.pop("work_tree", None)
-            states.append(state)
-        json.dump(states, file, indent=2)
+            index[case.id] = [dep.id for dep in case.dependencies]
+            if not case.mask:
+                case.status.set("ready" if not case.dependencies else "pending")
+            case.save()
+        with self.db.open("cases/index", "w") as fh:
+            json.dump({"index": index}, fh, indent=2)
 
-    def load_testcases(self, file: IO[Any]) -> list[TestCase | TestMultiCase]:
+    def load_testcases(self) -> list[TestCase | TestMultiCase]:
         """Load test cases previously dumpped by ``dump_testcases``.  Dependency resolution is also
         performed
         """
         logging.debug("Loading test cases")
-        states = json.load(file)
+        with self.db.open("cases/index", "r") as fh:
+            index = json.load(fh)["index"]
         ts: TopologicalSorter = TopologicalSorter()
-        mapping: dict[str, dict] = {}
-        for state in states:
-            case_id = state["properties"]["id"]
-            ts.add(case_id, *state["properties"]["dependencies"])
-            mapping[case_id] = state
-        cases: dict[str, TestCase] = {}
-
+        cases: dict[str, TestCase | TestMultiCase] = {}
+        for id, deps in index.items():
+            ts.add(id, *deps)
         logging.debug("Resolving test case dependencies")
-        for case_id in ts.static_order():
-            state = mapping[case_id]
-            dependency_ids = state["properties"].pop("dependencies", [])
+        for id in ts.static_order():
+            # see TestCase.lockfile for file pattern
+            file = self.db.join_path("cases", id[:2], id[2:], TestCase._lockfile)
+            with self.db.open(file) as fh:
+                state = json.load(fh)
             state["properties"]["work_tree"] = self.work_tree
+            # update dependencies manually so that the dependencies are consistent across the suite
+            dependency_states = state["properties"].pop("dependencies", [])
+            dep_done_criteria = state["properties"].pop("dep_done_criteria", [])
             case = testcase_from_state(state)
-            case.dependencies = [cases[dep_id] for dep_id in dependency_ids]
+            case.dependencies.clear()
+            case.dep_done_criteria.clear()
+            for i, dep_state in enumerate(dependency_states):
+                dep = cases[dep_state["properties"]["id"]]
+                case.add_dependency(dep, dep_done_criteria[i])
             cases[case.id] = case
-            if not case.mask:
-                case.refresh(propagate=False)
-
         logging.debug("Finished loading test cases")
         return list(cases.values())
 
-    def dump_testfiles(self, file: IO[Any]) -> None:
+    def dump_testfiles(self) -> None:
         """Dump each test file (test generator) in this session to ``file`` in json format"""
         logging.debug("Dumping test case generators")
         testfiles = [f.getstate() for f in self.generators]
-        json.dump(testfiles, file, indent=2)
+        with self.db.open("files", mode="w") as file:
+            json.dump(testfiles, file, indent=2)
 
-    def load_testfiles(self, file: IO[Any]) -> list[AbstractTestGenerator]:
+    def load_testfiles(self) -> list[AbstractTestGenerator]:
         """Load test files (test generators) previously dumped by ``dump_testfiles``"""
         logging.debug("Loading test case generators")
-        testfiles = [AbstractTestGenerator.from_state(state) for state in json.load(file)]
+        with self.db.open("files", "r") as file:
+            testfiles = [AbstractTestGenerator.from_state(state) for state in json.load(file)]
         return testfiles
 
     def load(self) -> None:
@@ -271,20 +277,11 @@ class Session:
         """
         logging.debug(f"Loading test session in {self.work_tree}")
         if config.session.work_tree != self.work_tree:
-            raise RuntimeError(
-                f"Configuration failed to load correctly, expected "
-                f"config.session.work_tree={self.work_tree!r} but got {config.session.work_tree}"
-            )
-
-        with self.db.open("files", "r") as record:
-            self.generators = self.load_testfiles(record)
-
-        with self.db.open("cases", "r") as record:
-            self.cases = self.load_testcases(record)
-
-        with self.db.open("session", "r") as record:
-            self.load_attrs(record)
-
+            msg = "Expected config.session.work_tree=%r but got %s"
+            raise RuntimeError(msg % (self.work_tree, config.session.work_tree))
+        self.generators = self.load_testfiles()
+        self.cases = self.load_testcases()
+        self.load_attrs()
         self.set_config_values()
 
     def initialize(self) -> None:
@@ -308,8 +305,7 @@ class Session:
 
     def save(self, ini: bool = False) -> None:
         """Save session data, excluding data that is stored separately in the database"""
-        with self.db.open("session", "w") as record:
-            self.dump_attrs(record)
+        self.dump_attrs()
         if ini:
             file = os.path.join(self.config_dir, "config")
             with open(file, "w") as fh:
@@ -355,8 +351,7 @@ class Session:
             hook.session_discovery(finder)
         finder.prepare()
         self.generators = finder.discover(pedantic=pedantic)
-        with self.db.open("files", "w") as record:
-            self.dump_testfiles(record)
+        self.dump_testfiles()
         logging.debug(f"Discovered {len(self.generators)} test files")
 
     def lock(
@@ -400,11 +395,7 @@ class Session:
         cases_to_run = [case for case in self.cases if not case.mask]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
-        for case in cases_to_run:
-            case.status.set("ready" if not case.dependencies else "pending")
-            case.save()
-        with self.db.open("cases", "w") as record:
-            self.dump_testcases(record)
+        self.dump_testcases()
         return cases_to_run
 
     def filter(
@@ -991,11 +982,11 @@ class Database:
             with self.open("DB.TAG", "w") as fh:
                 fh.write(datetime.today().strftime("%c"))
 
-    def exists(self, name: str) -> bool:
-        return os.path.exists(self.join_path(name))
+    def exists(self, *p: str) -> bool:
+        return os.path.exists(self.join_path(*p))
 
-    def join_path(self, name: str) -> str:
-        return os.path.join(self.home, name)
+    def join_path(self, *p: str) -> str:
+        return os.path.join(self.home, *p)
 
     @contextmanager
     def open(self, name: str, mode: str = "r") -> Generator[IO, None, None]:

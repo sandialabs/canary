@@ -27,11 +27,11 @@ if __name__ == '__main__':
         dirs = os.listdir("TestResults")
         expected = [".nvtest"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        batch_assets = sorted(os.listdir("TestResults/.nvtest/batch"))
+        batch_assets = sorted(os.listdir("TestResults/.nvtest/batches"))
         assert len(batch_assets) == 4
-        files = glob.glob("TestResults/.nvtest/batch/**/nvtest-inp.sh", recursive=True)
+        files = glob.glob("TestResults/.nvtest/batches/**/nvtest-inp.sh", recursive=True)
         assert len(files) == 4
-        files = glob.glob("TestResults/.nvtest/batch/**/nvtest-out.txt", recursive=True)
+        files = glob.glob("TestResults/.nvtest/batches/**/nvtest-out.txt", recursive=True)
         assert len(files) == 4
         assert rc == 0
 
@@ -61,9 +61,9 @@ if __name__ == '__main__':
         dirs = os.listdir("TestResults")
         expected = [".nvtest"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        batch_assets = sorted(os.listdir("TestResults/.nvtest/batch"))
+        batch_assets = sorted(os.listdir("TestResults/.nvtest/batches"))
         assert len(batch_assets) == 4
-        files = glob.glob("TestResults/.nvtest/batch/**/nvtest-inp.sh", recursive=True)
+        files = glob.glob("TestResults/.nvtest/batches/**/nvtest-inp.sh", recursive=True)
         found = 0
         for line in open(files[0]):
             if line.strip() == "# BASH: -l place=scatter:excl":
@@ -73,7 +73,11 @@ if __name__ == '__main__':
             elif line.strip() == "# BASH: -A XYZ123":
                 found += 1
         assert found == 3
+        if rc != 0:
+            print(open(files[0], "r").read())
         assert len(files) == 4
-        files = glob.glob("TestResults/.nvtest/batch/**/nvtest-out.txt", recursive=True)
+        files = glob.glob("TestResults/.nvtest/batches/**/nvtest-out.txt", recursive=True)
         assert len(files) == 4
+        if rc != 0:
+            print(open(files[0], "r").read())
         assert rc == 0

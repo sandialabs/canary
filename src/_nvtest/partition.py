@@ -252,9 +252,10 @@ def autopartition(cases: Sequence[TestCase], t: float = 60 * 30) -> list[TestBat
     ts.prepare()
     packer = Packer()
     partitions: list[TestBatch] = []
+    timeoutx = int(config.getoption("timeout_multiplier", 1.0))
     while ts.is_active():
         ready = sorted(ts.get_ready(), key=lambda c: c.size(), reverse=True)
-        blocks = [Block(case.id, case.cpus, int(case.timeout)) for case in ready]
+        blocks = [Block(case.id, case.cpus, timeoutx * int(case.timeout)) for case in ready]
         cpus = max(block.size[0] for block in blocks)
         nodes = integer(cpus / cpus_per_node)
         width = nodes * cpus_per_node

@@ -52,8 +52,8 @@ def test_session_bfilter(tmpdir):
             s.discover()
             cases = s.lock()
             s.run(cases)
-            d1 = os.listdir("tests/.nvtest/batch")[0]
-            d2 = os.listdir(os.path.join("tests/.nvtest/batch", d1))[0]
+            d1 = os.listdir("tests/.nvtest/batches")[0]
+            d2 = os.listdir(os.path.join("tests/.nvtest/batches", d1))[0]
             id = d1 + d2
             f1 = s.batch_logfile(id)
             with working_dir("tests"):

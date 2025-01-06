@@ -1,7 +1,5 @@
 import datetime
 import io
-import os
-import time
 from getpass import getuser
 
 import nvtest
@@ -19,8 +17,7 @@ def setup_parser(parser: nvtest.Parser) -> None:
     )
     parser.add_argument(
         "--mail-from",
-        default=f"{user}@sandia.gov",
-        help="Send mail from this user [default: %(default)s] summary of test session",
+        help="Send mail from this user",
         command="run",
     )
 
@@ -30,9 +27,11 @@ def send_email_summary(session: nvtest.Session) -> None:
     mail_to = nvtest.config.getoption("mail_to")
     if mail_to is None:
         return
+    sendaddr = nvtest.config.getoption("mail_from")
+    if sendaddr is None:
+        raise RuntimeError("missing required argument --mail-from")
     recvaddrs = [_.strip() for _ in mail_to.split(",") if _.split()]
     html_report = generate_html_report(session)
-    sendaddr = nvtest.config.getoption("mail_from")
     date = datetime.datetime.fromtimestamp(session.start)
     st_time = date.strftime("%m/%d/%Y")
     subject = f"NVTest Summary for {st_time}"

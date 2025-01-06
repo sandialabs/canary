@@ -2,7 +2,6 @@ import json
 import os
 
 from _nvtest.reporter import Reporter
-from _nvtest.test.case import getstate as get_testcase_state
 
 
 class JSONReporter(Reporter):
@@ -16,6 +15,6 @@ class JSONReporter(Reporter):
         file = os.path.abspath(o)
         data: dict = {}
         for case in self.data.cases:
-            data[case.id] = get_testcase_state(case)
+            data[case.id] = case.getstate()
         with open(file, "w") as fh:
             json.dump(data, fh, indent=2)

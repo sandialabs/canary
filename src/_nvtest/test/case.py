@@ -257,9 +257,9 @@ class TestCase(AbstractTestCase):
     @property
     def lockfile(self) -> str:
         """Path to lock file containing information needed to generate this case at runtime"""
-        work_tree = config.session.work_tree
-        assert work_tree is not None
-        return os.path.join(work_tree, ".nvtest/cases", self.id[:2], self.id[2:], self._lockfile)
+        dir = config.session.work_tree
+        assert dir is not None
+        return os.path.join(dir, ".nvtest/objects/cases", self.id[:2], self.id[2:], self._lockfile)
 
     @property
     def file_root(self) -> str:
@@ -1192,32 +1192,35 @@ class TestCase(AbstractTestCase):
 
     def save(self):
         lockfile = self.lockfile
-        mkdirp(os.path.dirname(lockfile))
+        dirname, basename = os.path.split(lockfile)
+        tmp = os.path.join(dirname, f".{basename}.tmp")
+        mkdirp(dirname)
         try:
-            with open(lockfile + ".tmp", "w") as fh:
+            with open(tmp, "w") as fh:
                 self.dump(fh)
-            fs.force_copy(lockfile + ".tmp", lockfile)
+            os.replace(tmp, lockfile)
         finally:
-            fs.force_remove(lockfile + ".tmp")
+            if os.path.exists(tmp):
+                os.remove(tmp)
         file = os.path.join(self.working_directory, self._lockfile)
         mkdirp(os.path.dirname(file))
         fs.force_symlink(lockfile, file)
 
-    def refresh(self, propagate: bool = True) -> None:
+    def _load_lockfile(self, tries: int = 8) -> dict[str, Any]:
+        delay = 0.5
         file = self.lockfile
-        start = time.monotonic()
-        tries = 0
-        while True:
+        for _ in range(tries):
             # Guard against race condition when multiple batches are running at once
             try:
                 with open(file, "r") as fh:
-                    state = json.load(fh)
-                break
+                    return json.load(fh)
             except Exception:
-                tries += 1
-                if time.monotonic() - start > 30:
-                    logging.error(f"Failed to load {file} after {tries} attempts in 30 seconds")
-                    raise
+                time.sleep(delay)
+                delay *= 2
+        raise ValueError(f"Failed to load {file} after {tries} attempts")
+
+    def refresh(self, propagate: bool = True) -> None:
+        state = self._load_lockfile()
         keep = (
             "start",
             "finish",
@@ -1569,15 +1572,6 @@ def factory(type: str, **kwargs: Any) -> TestCase | TestMultiCase:
         else:
             raise ValueError(type)
     return case
-
-
-def getstate(case: TestCase | TestMultiCase) -> dict[str, Any]:
-    """Return a serializable dictionary from which the test case can be later loaded"""
-    return case.getstate()
-
-
-def dump(case: TestCase | TestMultiCase, fname: str | IO[Any]) -> None:
-    case.dump(fname)
 
 
 def from_state(state: dict[str, Any]) -> TestCase | TestMultiCase:
