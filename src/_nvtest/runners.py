@@ -436,7 +436,7 @@ class BatchRunner(AbstractTestRunner):
 
     def qtime(self, batch: TestBatch) -> float:
         if len(batch.cases) == 1:
-            return batch.cases[0].timeout
+            return batch.cases[0].runtime
         total_runtime = batch.runtime
         if total_runtime < 100.0:
             total_runtime = 300.0
@@ -449,7 +449,7 @@ class BatchRunner(AbstractTestRunner):
         elif total_runtime < 3600.0:
             total_runtime = 5000.0
         else:
-            total_runtime *= 1.1
+            total_runtime *= 1.25
         return total_runtime
 
 

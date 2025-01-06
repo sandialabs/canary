@@ -361,16 +361,14 @@ def anymatch(items: AbstractSet[str], pattern: str, case_sensitive: bool = True)
 
 
 def remove_surrounding_quotes(arg: str) -> str:
-    s_quote, d_quote = "'''", '"""'
-    tokens = get_tokens(arg)
-    token = next(tokens)
-    while token.type == tokenize.ENCODING:
-        token = next(tokens)
-    s = token.string
-    if token.type == tokenize.STRING:
-        if s.startswith((s_quote, d_quote)):
-            return s[3:-3]
-        return s[1:-1]
+    if arg[:3] == '"""' and arg[-3:] == '"""':
+        return remove_surrounding_quotes(arg[3:-3])
+    elif arg[:3] == "'''" and arg[-3:] == "'''":
+        return remove_surrounding_quotes(arg[3:-3])
+    elif arg[:1] == "'" and arg[-1:] == "'":
+        return remove_surrounding_quotes(arg[1:-1])
+    elif arg[:1] == '"' and arg[-1:] == '"':
+        return remove_surrounding_quotes(arg[1:-1])
     return arg
 
 

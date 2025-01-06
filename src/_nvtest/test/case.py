@@ -514,7 +514,8 @@ class TestCase(AbstractTestCase):
             runtimes = self.load_run_stats()
             if runtimes is not None:
                 self._runtimes.clear()
-                self._runtimes.extend([runtimes.mean, runtimes.min, runtimes.max])
+                rt = runtimes.mean + math.sqrt(runtimes.variance)
+                self._runtimes.extend([rt, runtimes.min, runtimes.max])
         return self._runtimes
 
     @runtimes.setter

@@ -149,10 +149,10 @@ class Packer:
         self.auto.extend((False, False))
         if width is None:
             self.auto[0] = True
-            width = integer(1.5 * max(block.size[0] for block in blocks))
+            width = math.ceil(1.5 * max(block.size[0] for block in blocks))
         if height is None:
             self.auto[1] = True
-            height = integer(1.5 * max(block.size[1] for block in blocks))
+            height = math.ceil(1.5 * max(block.size[1] for block in blocks))
         self.root = Node((0, 0), (width, height))
         for block in blocks:
             node = self.find_node(self.root, block.size)
@@ -252,27 +252,26 @@ def autopartition(cases: Sequence[TestCase], t: float = 60 * 30) -> list[TestBat
     ts.prepare()
     packer = Packer()
     partitions: list[TestBatch] = []
-    timeoutx = int(config.getoption("timeout_multiplier", 1.0))
     while ts.is_active():
         ready = sorted(ts.get_ready(), key=lambda c: c.size(), reverse=True)
-        blocks = [Block(case.id, case.cpus, timeoutx * int(case.timeout)) for case in ready]
+        blocks = [Block(case.id, case.cpus, math.ceil(case.runtime)) for case in ready]
         cpus = max(block.size[0] for block in blocks)
-        nodes = integer(cpus / cpus_per_node)
+        nodes = math.ceil(cpus / cpus_per_node)
         width = nodes * cpus_per_node
         for i, block in enumerate(blocks):
             if ready[i].exclusive:
                 block.width = width
-        timeout = max(block.size[1] for block in blocks)
-        height = int(max(timeout, t))
+        max_height = max(block.size[1] for block in blocks)
+        height = int(max(max_height, t))
         packer.pack(blocks, width, height)
         partitions.append(TestBatch([map[b.id] for b in blocks if b.fit], runtime=float(height)))
         unfit = [block for block in blocks if not block.fit]
         while unfit:
             cpus = max(block.size[0] for block in unfit)
-            nodes = integer(cpus / cpus_per_node)
+            nodes = math.ceil(cpus / cpus_per_node)
             width = nodes * cpus_per_node
-            timeout = max(block.size[1] for block in unfit)
-            height = int(max(timeout, t))
+            max_height = max(block.size[1] for block in unfit)
+            height = int(max(max_height, t))
             packer.pack(unfit, width, height)
             partitions.append(TestBatch([map[b.id] for b in unfit if b.fit], runtime=float(height)))
             tmp = [block for block in unfit if not block.fit]
@@ -290,19 +289,15 @@ def packed_perimeter(cases: Sequence[TestCase]) -> size_t:
     cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
     cases = sorted(cases, key=lambda c: c.size(), reverse=True)
     cpus = max(case.cpus for case in cases)
-    nodes = integer(cpus / cpus_per_node)
+    nodes = math.ceil(cpus / cpus_per_node)
     width = nodes * cpus_per_node
-    blocks = [Block(case.id, case.cpus, integer(case.timeout)) for case in cases]
+    blocks = [Block(case.id, case.cpus, math.ceil(case.runtime)) for case in cases]
     for i, block in enumerate(blocks):
         if cases[i].exclusive:
             block.width = width
     packer = Packer()
     packer.pack(blocks, width=width)
     return perimeter(blocks)
-
-
-def integer(a: int | float) -> int:
-    return int(math.ceil(a))
 
 
 def tile(cases: Sequence[TestCase], width: int) -> list[list[TestCase]]:
