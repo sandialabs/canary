@@ -514,8 +514,8 @@ class TestCase(AbstractTestCase):
             runtimes = self.load_run_stats()
             if runtimes is not None:
                 self._runtimes.clear()
-                rt = runtimes.mean + math.sqrt(runtimes.variance)
-                self._runtimes.extend([rt, runtimes.min, runtimes.max])
+                slop = min(math.sqrt(runtimes.variance), .25 * runtimes.mean)
+                self._runtimes.extend([runtimes.mean + slop, runtimes.min, runtimes.max])
         return self._runtimes
 
     @runtimes.setter
@@ -1026,6 +1026,9 @@ class TestCase(AbstractTestCase):
             return
         if self.duration < 0:
             return
+        cache_dir = find_cache_dir(self.file_root, create=True)
+        if cache_dir is None:
+            return
         stats = self.load_run_stats()
         if stats is not None:
             # Welford's single pass online algorithm to update statistics
@@ -1043,9 +1046,6 @@ class TestCase(AbstractTestCase):
             count = 0
             variance = 0.0
             mean = minimum = maximum = self.duration
-        cache_dir = find_cache_dir(self.file_root, create=True)
-        if cache_dir is None:
-            return
         file = os.path.join(cache_dir, f"timing/{self.id[:2]}/{self.id[2:]}.json")
         local = {
             "name": self.display_name,
