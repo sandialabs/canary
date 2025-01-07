@@ -1484,7 +1484,7 @@ class TestMultiCase(TestCase):
             stages=stages,
         )
         if "analyze" not in self.stages:
-            self.stages.extend("analyze")
+            self.stages.append("analyze")
         if flag.startswith("-"):
             # for the base case, call back on the test file with ``flag`` on the command line
             self.launcher = sys.executable
