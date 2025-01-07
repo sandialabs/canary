@@ -195,8 +195,7 @@ class TestCase(AbstractTestCase):
         self._dependencies: list["TestCase"] = []
         self._dep_done_criteria: list[str] = []
 
-        # mean, min, max runtimes
-        self._runtimes: list[float | None] = [None, None, None]
+        self._stats: SimpleNamespace | None = None
 
         self._launcher: str | None = None
         self._preflags: list[str] | None = None
@@ -499,28 +498,18 @@ class TestCase(AbstractTestCase):
         self._dependencies = arg
 
     @property
-    def runtimes(self) -> list[float | None]:
+    def stats(self) -> SimpleNamespace | None:
         """Basic running time information.  If run continually in the same session, this data can
         be used in optimizing test submission.
 
-        Returns:
-          runtimes: Running time metrics
-            ``runtimes[0]``: minimum time recorded
-            ``runtimes[1]``: mean time recorded
-            ``runtimes[2]``: maximum time recorded
-
         """
-        if self._runtimes[0] is None:
-            runtimes = self.load_run_stats()
-            if runtimes is not None:
-                self._runtimes.clear()
-                slop = min(math.sqrt(runtimes.variance), .25 * runtimes.mean)
-                self._runtimes.extend([runtimes.mean + slop, runtimes.min, runtimes.max])
-        return self._runtimes
+        if self._stats is None:
+            self._stats = self.load_run_stats()
+        return self._stats
 
-    @runtimes.setter
-    def runtimes(self, arg: list[float | None]) -> None:
-        self._runtimes = arg
+    @stats.setter
+    def stats(self, arg: dict[str, float]) -> None:
+        self._stats = SimpleNamespace(**arg)
 
     @property
     def timeout(self) -> float:
@@ -951,9 +940,9 @@ class TestCase(AbstractTestCase):
 
     @property
     def runtime(self) -> float | int:
-        if self.runtimes[0] is None:
+        if self.stats is None:
             return self.timeout
-        return self.runtimes[0]
+        return self.stats.mean
 
     @property
     def pythonpath(self):
@@ -978,8 +967,8 @@ class TestCase(AbstractTestCase):
         """Sets the default timeout.  If runtime statistics have been collected those will be used,
         otherwise the timeout will be based on the presence of the long or fast keywords
         """
-        if self.runtimes[2] is not None:
-            max_runtime = self.runtimes[2]
+        if self.stats is not None:
+            max_runtime = self.stats.max
             if max_runtime < 5.0:
                 timeout = 120.0
             elif max_runtime < 120.0:
@@ -989,7 +978,7 @@ class TestCase(AbstractTestCase):
             elif max_runtime < 600.0:
                 timeout = 1800.0
             else:
-                timeout = 2.0 * self.runtimes[2]
+                timeout = 2.0 * max_runtime
         elif "fast" in self.keywords:
             timeout = config.test.timeout_fast
         elif "long" in self.keywords:
@@ -1414,6 +1403,8 @@ class TestCase(AbstractTestCase):
                 value = {"value": value.value, "details": value.details}
             elif name == "paramsets":
                 value = [{"keys": p.keys, "values": p.values} for p in value]
+            elif isinstance(value, SimpleNamespace):
+                value = vars(value)
             elif isinstance(value, (list, dict)):
                 value = value
             else:

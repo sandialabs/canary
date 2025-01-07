@@ -326,6 +326,10 @@ class PlatformMatcher:
         self.own_platform_names = {sys.platform, sys.platform.lower()}
         if "SNLSYSTEM" in os.environ:
             self.own_platform_names.add(os.environ["SNLSYSTEM"])
+        if "SNLCLUSTER" in os.environ:
+            self.own_platform_names.add(os.environ["SNLCLUSTER"])
+        if "SNLOS" in os.environ:
+            self.own_platform_names.add(os.environ["SNLOS"])
         if "NVTEST_PLATFORM" in os.environ:
             platforms = os.environ["NVTEST_PLATFORM"].split(",")
             self.own_platform_names.update(platforms)

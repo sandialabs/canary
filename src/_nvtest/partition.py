@@ -241,6 +241,25 @@ def perimeter(blocks: list[Block]) -> size_t:
     return max_x, max_y
 
 
+def runtime(case: TestCase) -> float:
+    t: float
+    if case.stats is None:
+        t = case.timeout
+    else:
+        t = (case.stats.mean + case.stats.max) / 2.0
+    if t <= 5.0:
+        return 5.0 * t
+    elif t <= 10.0:
+        return 4.0 * t
+    elif t <= 30.0:
+        return 3.0 * t
+    elif t <= 90.0:
+        return 2.0 * t
+    elif t <= 300.0:
+        return 2.0 * t
+    return 1.25 * t
+
+
 def autopartition(cases: Sequence[TestCase], t: float = 60 * 30) -> list[TestBatch]:
     logging.debug(f"Partitioning {len(cases)} test cases")
     cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
@@ -254,7 +273,7 @@ def autopartition(cases: Sequence[TestCase], t: float = 60 * 30) -> list[TestBat
     partitions: list[TestBatch] = []
     while ts.is_active():
         ready = sorted(ts.get_ready(), key=lambda c: c.size(), reverse=True)
-        blocks = [Block(case.id, case.cpus, math.ceil(case.runtime)) for case in ready]
+        blocks = [Block(case.id, case.cpus, math.ceil(runtime(case))) for case in ready]
         cpus = max(block.size[0] for block in blocks)
         nodes = math.ceil(cpus / cpus_per_node)
         width = nodes * cpus_per_node
@@ -291,7 +310,7 @@ def packed_perimeter(cases: Sequence[TestCase]) -> size_t:
     cpus = max(case.cpus for case in cases)
     nodes = math.ceil(cpus / cpus_per_node)
     width = nodes * cpus_per_node
-    blocks = [Block(case.id, case.cpus, math.ceil(case.runtime)) for case in cases]
+    blocks = [Block(case.id, case.cpus, math.ceil(runtime(case))) for case in cases]
     for i, block in enumerate(blocks):
         if cases[i].exclusive:
             block.width = width
