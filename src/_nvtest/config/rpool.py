@@ -4,6 +4,7 @@ import pickle
 from typing import Any
 
 from ..util import logging
+from ..util.rprobe import cpu_count
 
 
 class ResourcePool:
@@ -115,6 +116,8 @@ class ResourcePool:
         self._stash: bytes | None = None
         if pool:
             self.fill(pool)
+        else:
+            self.fill_uniform(node_count=1, cpus_per_node=cpu_count(), gpus_per_node=0)
 
     def update(self, *args: Any, **kwargs: Any) -> None:
         self.fill(args[0])

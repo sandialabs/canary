@@ -15,12 +15,12 @@ from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
 from ..util import logging
 from ..util.collections import merge
+from ..util.rprobe import cpu_count
 from . import _machine
 from .rpool import ResourcePool
 from .schemas import batch_schema
 from .schemas import build_schema
 from .schemas import config_schema
-from .schemas import machine_schema
 from .schemas import resource_schema
 from .schemas import test_schema
 from .schemas import variables_schema
@@ -32,7 +32,6 @@ section_schemas: dict[str, Schema] = {
     "build": build_schema,
     "batch": batch_schema,
     "config": config_schema,
-    "machine": machine_schema,
     "variables": variables_schema,
     "resource_pool": resource_schema,
     "test": test_schema,
@@ -108,20 +107,6 @@ class Test:
                 setattr(self, key, value)
 
 
-@dataclasses.dataclass
-class Machine:
-    cpu_count: int
-    gpu_count: int
-
-    def __post_init__(
-        self,
-    ) -> None:
-        if self.cpu_count < 1:
-            raise ValueError(f"cpu_count must be >= 1 ({self.cpu_count=})")
-        if self.gpu_count < 0:
-            raise ValueError(f"gpu_count must be >= 0 ({self.gpu_count=})")
-
-
 @dataclasses.dataclass(init=False, slots=True)
 class System:
     node: str
@@ -171,6 +156,8 @@ class Build:
             raise TypeError(f"Build.update() expected at most 1 argument, got {len(args)}")
         data = dict(*args) | kwargs
         if compiler := data.pop("compiler", None):
+            if "paths" in compiler:
+                compiler.update(compiler.pop("paths"))
             for key, value in compiler.items():
                 setattr(self.compiler, key, value)
         for key, value in data.items():
@@ -193,14 +180,13 @@ class Batch:
 class Config:
     """Access to configuration values"""
 
-    system: System
-    machine: Machine
-    session: Session
-    test: Test
     invocation_dir: str = os.getcwd()
     debug: bool = False
     log_level: str = "INFO"
     _config_dir: str | None = None
+    system: System = dataclasses.field(default_factory=System)
+    session: Session = dataclasses.field(default_factory=Session)
+    test: Test = dataclasses.field(default_factory=Test)
     variables: Variables = dataclasses.field(default_factory=Variables)
     batch: Batch = dataclasses.field(default_factory=Batch)
     build: Build = dataclasses.field(default_factory=Build)
@@ -226,34 +212,18 @@ class Config:
 
     @classmethod
     def create(cls) -> "Config":
-        config: dict[str, Any] = {}
-        cls.load_config("global", config)
-        cls.load_config("local", config)
-
-        kwds: dict[str, Any] = config.get("config", {})
-        kwds["system"] = System()
-
-        mc = _machine.machine_config()
-        mc.update(config.get("machine", {}))
-        kwds["machine"] = m = Machine(**mc)
-
-        kwds["session"] = Session()
-
-        kwds["test"] = Test()
-
-        if "build" in kwds:
-            c = kwds["build"]["compiler"]
-            if "paths" in c:
-                c.update(c.pop("paths"))
-            kwds["build"]["compiler"] = Compiler(**c)
-            kwds["build"] = Build(**kwds["build"])
-
-        kwds["resource_pool"] = ResourcePool()
-        kwds["resource_pool"].fill_uniform(
-            node_count=1, cpus_per_node=m.cpu_count, gpus_per_node=m.gpu_count
-        )
-
-        return cls(**kwds)
+        user_defined_config: dict[str, Any] = {}
+        cls.load_config("global", user_defined_config)
+        cls.load_config("local", user_defined_config)
+        kwds: dict[str, Any] = user_defined_config.pop("config", {})
+        self = cls(**kwds)
+        for section, items in user_defined_config.items():
+            if not hasattr(self, section):
+                continue
+            obj = getattr(self, section)
+            if hasattr(obj, "update"):
+                obj.update(items)
+        return self
 
     @property
     def config_dir(self) -> str | None:
@@ -264,7 +234,6 @@ class Config:
     def restore_from_snapshot(self, fh: TextIO) -> None:
         snapshot = json.load(fh)
         self.system = System(snapshot["system"])
-        self.machine = Machine(**snapshot["machine"])
         self.variables.clear()
         self.variables.update(snapshot["variables"])
         self.session = Session(**snapshot["session"])
@@ -272,7 +241,7 @@ class Config:
         compiler = Compiler(**snapshot["build"].pop("compiler"))
         self.build = Build(compiler=compiler, **snapshot["build"])
         self.resource_pool = ResourcePool()
-        self.resource_pool.fill(snapshot["resource_pool"])
+        self.resource_pool.update(snapshot["resource_pool"])
         for key, val in snapshot["config"].items():
             setattr(self, key, val)
         self.batch = Batch(**snapshot["batch"])
@@ -295,6 +264,7 @@ class Config:
         file = cls.config_file(scope)
         if file is None or not os.path.exists(file):
             return
+        logging.debug(f"Reading configuration from {file}")
         file_data = cls.read_config(file)
         for key, items in file_data.items():
             if key == "config":
@@ -308,19 +278,12 @@ class Config:
                 for name in ("fast", "long", "default"):
                     if name in items.get("timeout", {}):
                         config[f"test_timeout_{name}"] = items["timeout"][name]
-            elif key == "machine":
-                if "node_count" in items:
-                    config["node_count"] = items["node_count"]
-                if "cpus_per_node" in items:
-                    config["cpus_per_node"] = items["cpus_per_node"]
-                if "gpus_per_node" in items:
-                    config["gpus_per_node"] = items["gpus_per_node"]
             elif key == "batch":
                 if "duration" in items:
                     config["batch_duration"] = items["duration"]
                 elif "length" in items:
                     config["batch_duration"] = items["length"]
-            elif key in ("variables", "build"):
+            elif key in section_schemas:
                 config[key] = items
 
     def update(self, *args: Any, **kwargs: Any) -> None:
@@ -381,13 +344,13 @@ class Config:
                 obj.update(section_data)
 
         if n := getattr(args, "workers", None):
-            if n > self.machine.cpu_count:
-                raise ValueError(f"workers={n} > cpu_count={self.machine.cpu_count}")
+            if n > cpu_count():
+                raise ValueError(f"workers={n} > cpu_count={cpu_count()}")
 
         if b := getattr(args, "batch", None):
             if n := b.get("workers"):
-                if n > self.machine.cpu_count:
-                    raise ValueError(f"batch:workers={n} > cpu_count={self.machine.cpu_count}")
+                if n > cpu_count():
+                    raise ValueError(f"batch:workers={n} > cpu_count={cpu_count()}")
 
         if limiters := getattr(args, "resource_limits", None):
             for name, value in limiters.items():

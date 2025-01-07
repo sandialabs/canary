@@ -10,7 +10,6 @@ from .rpool import ResourceUnsatisfiable  # noqa: F401
 
 if TYPE_CHECKING:
     _config = Config.factory()
-    machine = _config.machine
     batch = _config.batch
     system = _config.system
     session = _config.session

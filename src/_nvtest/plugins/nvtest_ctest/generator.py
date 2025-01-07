@@ -554,7 +554,7 @@ def find_project_binary_dir(file: str) -> str:
 def find_project_source_dir(file: str) -> str:
     dirname, basename = os.path.split(os.path.abspath(file))
     if basename not in ("CMakeLists.txt", "CTestTestfile.cmake"):
-        logging.warning(f"Unrecognized file name {basename!r}")
+        logging.debug(f"Unrecognized file name {basename!r}")
     while True:
         parent = os.path.dirname(dirname)
         if not os.path.exists(os.path.join(parent, basename)):
