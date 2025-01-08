@@ -117,6 +117,8 @@ class When:
                 token = next(tokens)
             except StopIteration:
                 break
+            except tokenize.TokenError:
+                raise InvalidSyntax(token) from None
             if token.type == tokenize.ENDMARKER:
                 break
 
@@ -143,6 +145,8 @@ class When:
             try:
                 token = next(tokens)
             except StopIteration:
+                raise InvalidSyntax(token)
+            except tokenize.TokenError:
                 raise InvalidSyntax(token)
 
             if token.type not in (tokenize.NAME, tokenize.STRING, tokenize.NEWLINE):

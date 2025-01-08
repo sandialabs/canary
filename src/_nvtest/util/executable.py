@@ -173,7 +173,7 @@ class Executable:
             return result
 
         except OSError as e:
-            result.returncode = self.returncode = e.errno
+            result.returncode = self.returncode = e.errno  # type: ignore
             msg = f"{self.file}: {e.strerror}"
             if fail_on_error:
                 raise ProcessError(msg)

@@ -281,6 +281,10 @@ class ParameterExpression:
                 string = token.string
                 if string == "=":
                     string = "=="
+                elif string == "!":
+                    token = next(tokens)
+                    assert token.type == tokenize.NAME
+                    string = f"not_defined({token.string!r})"
                 parts.append(string)
             elif token.type == tokenize.ERRORTOKEN and token.string == "!":
                 token = next(tokens)
