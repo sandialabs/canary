@@ -1639,7 +1639,7 @@ class MissingSourceError(Exception):
 class InvalidTypeError(Exception):
     def __init__(self, name, value):
         class_name = value.__class__.__name__
-        super().__init__(f"expected type({name})=type({value})=int, not {class_name}")
+        super().__init__(f"expected type({name})=type({value!r})=int, not {class_name}")
 
 
 class MutuallyExclusiveParametersError(Exception):
