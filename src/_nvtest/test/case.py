@@ -102,6 +102,55 @@ class DependencyPatterns:
         return list(matches)
 
 
+class Parameters(dict):
+    """Subclass of dict that validates resource parameters on insertion"""
+
+    def update(self, _E=None, /, **kwargs):
+        if _E:
+            if hasattr(_E, "keys"):
+                for key in _E.keys():
+                    self[key] = _E[key]
+            else:
+                for key, value in _E:
+                    self[key] = value
+        for key, value in kwargs.items():
+            self[key] = value
+
+    def __setitem__(self, key, value):
+        self.validate_known_resource_types(key, value)
+        super().__setitem__(key, value)
+
+    def validate_known_resource_types(self, key: str, value: Any) -> None:
+        if key.lower() in config.resource_pool.types:
+            if not isinstance(value, int):
+                raise InvalidTypeError(key, value)
+        if key in ("cpus", "np"):
+            if not isinstance(value, int):
+                raise InvalidTypeError(key, value)
+            other = "cpus" if key == "np" else "np"
+            if other in self and value != self[other]:
+                raise MutuallyExclusiveParametersError(key, other)
+            if "nodes" in self:
+                raise MutuallyExclusiveParametersError(key, "nodes")
+        if key in ("gpus", "ndevice"):
+            if not isinstance(value, int):
+                raise InvalidTypeError(key, value)
+            other = "gpus" if key == "ndevice" else "ndevice"
+            if other in self and value != self[other]:
+                raise MutuallyExclusiveParametersError(key, other)
+            if "nodes" in self:
+                raise MutuallyExclusiveParametersError(key, "nodes")
+        if key in ("nodes", "nnode"):
+            if not isinstance(value, int):
+                raise InvalidTypeError(key, value)
+            other = "nodes" if key == "nnode" else "nnode"
+            if other in self and value != self[other]:
+                raise MutuallyExclusiveParametersError(key, other)
+            for other in ("cpus", "np", "gpus", "ndevice"):
+                if other in self:
+                    raise MutuallyExclusiveParametersError("nodes", other)
+
+
 class TestCase(AbstractTestCase):
     """Manages the configuration, execution, and dependencies of a test case.
 
@@ -163,7 +212,7 @@ class TestCase(AbstractTestCase):
         self._family: str = ""
         self._classname: str | None = None
         self._keywords: list[str] = []
-        self._parameters: dict[str, Any] = {}
+        self._parameters: Parameters = Parameters()
         self._timeout: float | None = None
         self._baseline: list[str | tuple[str, str]] = []
         self._assets: list[Asset] = []
@@ -221,7 +270,7 @@ class TestCase(AbstractTestCase):
         if keywords is not None:
             self.keywords = keywords
         if parameters is not None:
-            self.parameters = parameters
+            self.parameters.update(parameters)
         if timeout is not None:
             self.timeout = float(timeout)
         if baseline is not None:
@@ -388,24 +437,23 @@ class TestCase(AbstractTestCase):
     def implicit_parameters(self) -> dict[str, int | float]:
         # backward compatibility with vvtest
         parameters: dict[str, int | float] = {}
-        if "np" in self.parameters:
-            parameters["cpus"] = self.parameters["np"]
-        elif "cpus" in self.parameters:
-            parameters["np"] = self.parameters["cpus"]
-        else:
-            parameters["np"] = parameters["cpus"] = 1
-        if "ndevice" in self.parameters:
-            parameters["gpus"] = self.parameters["ndevice"]
-        elif "gpus" in self.parameters:
-            parameters["ndevice"] = self.parameters["gpus"]
-        else:
-            parameters["ndevice"] = parameters["gpus"] = 0
+        parameters["runtime"] = self.runtime
         if "nodes" in self.parameters:
             nodes = self.parameters["nodes"]
             pinfo = config.resource_pool.pinfo
             parameters["cpus"] = parameters["np"] = nodes * pinfo("cpus_per_node")
             parameters["gpus"] = parameters["ndevice"] = nodes * pinfo("gpus_per_node")
-        parameters["runtime"] = self.runtime
+        else:
+            P, S, default = "cpus", "np", 1
+            if P not in self.parameters:
+                parameters[P] = default if S not in self.parameters else self.parameters[S]
+            if S not in self.parameters:
+                parameters[S] = self.parameters[P] if P in self.parameters else parameters[P]
+            P, S, default = "gpus", "ndevice", 0
+            if P not in self.parameters:
+                parameters[P] = default if S not in self.parameters else self.parameters[S]
+            if S not in self.parameters:
+                parameters[S] = self.parameters[P] if P in self.parameters else parameters[P]
         return parameters
 
     def size(self) -> float:
@@ -427,43 +475,12 @@ class TestCase(AbstractTestCase):
         return [group]
 
     @property
-    def parameters(self) -> dict[str, Any]:
+    def parameters(self) -> Parameters:
         """This test's parameters"""
         return self._parameters
 
     @parameters.setter
     def parameters(self, arg: dict[str, Any]) -> None:
-        if "cpus" in arg and "np" in arg and arg["cpus"] != arg["np"]:
-            raise ValueError("parameters cpus and np are mutually exclusive")
-        for key in ("cpus", "np"):  # np is for vvtest backward compatibility
-            if key in arg:
-                if not isinstance(arg[key], int):
-                    class_name = arg[key].__class__.__name__
-                    raise ValueError(
-                        f"{self.family}: expected {key}={arg[key]} to be an int, not {class_name}"
-                    )
-        if "gpus" in arg and "ndevice" in arg and arg["gpus"] != arg["ndevice"]:
-            raise ValueError("parameters gpus and ndevice are mutually exclusive")
-        for key in ("gpus", "ndevice"):  # ndevice is for vvtest backward compatibility
-            if key in arg:
-                if not isinstance(arg[key], int) and arg[key] is not None:
-                    class_name = arg[key].__class__.__name__
-                    raise ValueError(
-                        f"{self.family}: expected {key}={arg[key]} to be an int, not {class_name}"
-                    )
-        if "nodes" in arg and "nnode" in arg and arg["nodes"] != arg["nnode"]:
-            raise ValueError("parameters nodes and nnode are mutually exclusive")
-        for key in ("nodes", "nnode"):  # nnode is for vvtest backward compatibility
-            if key in arg:
-                if not isinstance(arg[key], int) and arg[key] is not None:
-                    class_name = arg[key].__class__.__name__
-                    raise ValueError(
-                        f"{self.family}: expected {key}={arg[key]} to be an int, not {class_name}"
-                    )
-                disallowed = {"cpus", "np", "gpus", "ndevice"} & arg.keys()
-                if disallowed:
-                    s = ", ".join(f"{key} and {_}" for _ in disallowed)
-                    raise ValueError(f"parameters {s} are mutually exclusive")
         self._parameters.clear()
         self._parameters.update(arg)
 
@@ -1617,3 +1634,14 @@ def make_cache_dir(dirname: str) -> None:
 
 class MissingSourceError(Exception):
     pass
+
+
+class InvalidTypeError(Exception):
+    def __init__(self, name, value):
+        class_name = value.__class__.__name__
+        super().__init__(f"expected type({name})=type({value})=int, not {class_name}")
+
+
+class MutuallyExclusiveParametersError(Exception):
+    def __init__(self, name1, name2):
+        super().__init__(f"{name1} and {name2} are mutually exclusive parameters")
