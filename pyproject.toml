@@ -14,9 +14,9 @@ nvtest = "nvtest:console_main"
 requests = ["requests"]
 dev = ["ruff", "mypy", "pytest", "sphinx", "pydata-sphinx-theme", "sphinx_design", "coverage", "xmlschema"]
 psutil = ["psutil"]
-flux = ["hpcc-flux=0.1.0"]
-slurm = ["hpcc-slurm=0.1.0"]
-pbs = ["hpcc-pbs=0.1.0"]
+flux = ["hpcc-flux==0.1.0"]
+slurm = ["hpcc-slurm==0.1.0"]
+pbs = ["hpcc-pbs==0.1.0"]
 
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
