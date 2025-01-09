@@ -19,9 +19,11 @@ import hpc_connect
 
 from . import config
 from .error import diff_exit_status
+from .error import skip_exit_status
 from .status import Status
 from .test.atc import AbstractTestCase
 from .test.batch import TestBatch
+from .test.case import MissingSourceError
 from .test.case import TestCase
 from .third_party.color import colorize
 from .util import logging
@@ -109,6 +111,9 @@ class TestCaseRunner(AbstractTestRunner):
                                 os.kill(proc.pid, signal.SIGINT)
                                 raise TimeoutError
                             time.sleep(0.05)
+        except MissingSourceError as e:
+            case.returncode = skip_exit_status
+            case.status.set("skipped", f"{case}: resource file {e.args[0]} not found")
         except KeyboardInterrupt:
             case.returncode = 2
             case.status.set("cancelled", "keyboard interrupt")
@@ -141,9 +146,10 @@ class TestCaseRunner(AbstractTestRunner):
             else:
                 case.status.set_from_code(case.returncode)
         finally:
-            if metrics is not None:
-                case.add_measurement(**metrics)
-            case.finish = timestamp()
+            if case.status != "skipped":
+                if metrics is not None:
+                    case.add_measurement(**metrics)
+                case.finish = timestamp()
             case.finalize(stage=stage)
         return
 

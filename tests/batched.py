@@ -27,8 +27,6 @@ if __name__ == '__main__':
         dirs = os.listdir("TestResults")
         expected = [".nvtest"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        batch_assets = sorted(os.listdir("TestResults/.nvtest/batches"))
-        assert len(batch_assets) == 4
         files = glob.glob("TestResults/.nvtest/batches/**/nvtest-inp.sh", recursive=True)
         assert len(files) == 4
         files = glob.glob("TestResults/.nvtest/batches/**/nvtest-out.txt", recursive=True)
@@ -61,8 +59,8 @@ if __name__ == '__main__':
         dirs = os.listdir("TestResults")
         expected = [".nvtest"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        batch_assets = sorted(os.listdir("TestResults/.nvtest/batches"))
-        assert len(batch_assets) == 4
+        files = glob.glob("TestResults/.nvtest/batches/**/nvtest-inp.sh", recursive=True)
+        assert len(files) == 4
         files = glob.glob("TestResults/.nvtest/batches/**/nvtest-inp.sh", recursive=True)
         found = 0
         print(open(files[0]).read())

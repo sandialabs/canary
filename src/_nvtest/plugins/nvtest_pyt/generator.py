@@ -496,12 +496,15 @@ class PYTTestFile(AbstractTestGenerator):
                 if os.path.exists(src):
                     file = os.path.relpath(src, dirname)
                     sources.setdefault(ns.action, []).append((file, None))
-                else:
-                    files = glob.glob(src)
+                elif files := glob.glob(src):
                     for file in files:
                         # keep paths relative to dirname
                         file = os.path.relpath(file, dirname)
                         sources.setdefault(ns.action, []).append((file, None))
+                else:
+                    # Source does not exist, we'll store it for now and raise an error lazily
+                    file = os.path.relpath(src, dirname)
+                    sources.setdefault(ns.action, []).append((file, None))
             else:
                 dst = self.safe_substitute(dst, **kwds)
                 file = os.path.relpath(src, dirname)

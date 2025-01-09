@@ -1184,8 +1184,7 @@ class TestCase(AbstractTestCase):
             if asset.action not in ("copy", "link"):
                 continue
             if not os.path.exists(asset.src):
-                s = f"{self.file}: {asset.action} resource file {asset.src} not found"
-                raise MissingSourceError(s)
+                raise MissingSourceError(asset.src)
             dst: str
             if asset.dst is None:
                 dst = os.path.join(self.working_directory, os.path.basename(asset.src))
