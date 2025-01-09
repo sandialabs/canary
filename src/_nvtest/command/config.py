@@ -97,7 +97,7 @@ def get_active_plugin_description() -> str:
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))
         table.append(row)
-    for scheduler_type in hpc_connect.schedulers():  # type: ignore
+    for scheduler_type in hpc_connect.schedulers().values():  # type: ignore
         row = _get_plugin_info(scheduler_type)
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))

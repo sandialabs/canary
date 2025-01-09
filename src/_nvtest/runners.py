@@ -15,6 +15,7 @@ try:
 except ImportError:
     HAVE_PSUTIL = False
 
+import hpc_connect
 
 from . import config
 from .error import diff_exit_status
@@ -251,26 +252,24 @@ class BatchRunner(AbstractTestRunner):
     command_name = "batch-runner"
 
     def __init__(self) -> None:
-        import hpc_connect
-
         super().__init__()
 
         # by this point, hpc_connect should have already be set up
-        batchopts = config.getoption("batch", {})
-        if hpc_connect.backend._scheduler is None:  # type: ignore
-            scheduler = batchopts.get("scheduler")
-            assert scheduler is not None
-            hpc_connect.set(scheduler=scheduler)  # type: ignore
-        self.scheduler = hpc_connect.scheduler  # type: ignore
+        assert config.scheduler is not None
+        # a reference to config.scheduler needs to be made since session.run spawns new processes.
+        # Otherwise, if we just referenced config.scheduler throughout, the modifications to the
+        # scheduler (eg, add_default_args) are lost in spawned uses of config.scheduler.
+        self.scheduler: hpc_connect.HPCScheduler = config.scheduler
+        batch_options: list[str] = []
         if varargs := os.getenv("NVTEST_BATCH_ARGS"):
-            logging.info(f"Using batch arguments from environment: {varargs}")
-            self.scheduler.add_default_args(*shlex.split(varargs))
+            logging.debug(f"Using batch arguments from environment: {varargs}")
+            batch_options.extend(shlex.split(varargs))
+        batchopts = config.getoption("batch", {})
         if args := batchopts.get("options"):
-            self.scheduler.add_default_args(*args)
+            batch_options.extend(args)
+        self.scheduler.add_default_args(*batch_options)
 
     def run(self, batch: AbstractTestCase, stage: str = "run") -> None:
-        import hpc_connect
-
         assert isinstance(batch, TestBatch)
         try:
             logging.debug(f"Running batch {batch.id[:7]}")
@@ -426,9 +425,6 @@ class BatchRunner(AbstractTestRunner):
                 fp.write(f"--workers={workers} ")
         if timeoutx := config.getoption("timeout_multiplier"):
             fp.write(f"--timeout-multiplier={timeoutx} ")
-        if limiters := config.getoption("resource_limits"):
-            for name, value in limiters.items():
-                fp.write(f"--resource-cap={name}={value} ")
         fp.write("-b scheduler=null ")  # guard against infinite batch recursion
         sigil = "^" if isinstance(arg, TestBatch) else "/"
         fp.write(f"{sigil}{arg.id}")
@@ -455,7 +451,7 @@ class BatchRunner(AbstractTestRunner):
 
 def factory() -> "AbstractTestRunner":
     runner: "AbstractTestRunner"
-    if config.getoption("batch", {}).get("scheduler") is None:
+    if config.scheduler is None:
         runner = TestCaseRunner()
     else:
         runner = BatchRunner()

@@ -1,6 +1,8 @@
 import os
 import types
 
+import hpc_connect
+
 import _nvtest.config as config
 import _nvtest.session as session
 from _nvtest.util.filesystem import working_dir
@@ -47,6 +49,7 @@ def test_session_bfilter(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         with config.override():
             config.options.batch = {"scheduler": "none", "count": 2, "scheme": "count"}
+            config.scheduler = hpc_connect.scheduler("none")
             s = session.Session("tests", mode="w", force=True)
             s.add_search_paths([os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")])
             s.discover()

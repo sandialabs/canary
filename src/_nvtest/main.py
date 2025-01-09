@@ -7,8 +7,6 @@ import traceback
 from typing import TYPE_CHECKING
 from typing import Sequence
 
-import hpc_connect
-
 from . import config
 from . import plugin
 from .config.argparsing import make_argument_parser
@@ -46,7 +44,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/nvtest")] + [_ for _ in m.argv if _ != "--echo"]
             logging.emit(shlex.join(a) + "\n")
-        setup_hpc_connect(args)
         config.set_main_options(args)
         command = parser.get_command(args.command)
         if command is None:
@@ -106,7 +103,6 @@ class NVTestCommand:
             parser.add_command(self.command)
             argv = [self.command.cmd_name()] + list(args_in)
             args = parser.parse_args(argv)
-            setup_hpc_connect(args)
             config.set_main_options(args)
             load_plugins(args.plugin_dirs or [])
             rc = self.command.execute(args)
@@ -119,32 +115,6 @@ class NVTestCommand:
             if save_debug is not None:
                 config.debug = save_debug
         return self.returncode
-
-
-def setup_hpc_connect(args: argparse.Namespace) -> None:
-    """Set the hpc_connect library"""
-    debug = getattr(args, "debug", False)
-    # main options have not been set, fake the logger to print output
-    level = logging.FATAL if debug else logging.TRACE
-    log = lambda message: logging.log(level, message, prefix="@*g{==>}")
-    # main options have not yet been set, but we want to start up hpc_connect and get its machine
-    # configuration, if any
-    batchopts = getattr(args, "batch", {})
-    if not batchopts:
-        return
-    if scheduler := batchopts.get("scheduler"):
-        if scheduler == "null":
-            return
-        log(f"Setting up HPC Connect for {scheduler}")
-        hpc_connect.set(scheduler=scheduler)  # type: ignore
-        log(f"  HPC connect: node count: {hpc_connect.scheduler.config.node_count}")
-        log(f"  HPC connect: CPUs per node: {hpc_connect.scheduler.config.cpus_per_node}")
-        log(f"  HPC connect: GPUs per node: {hpc_connect.scheduler.config.gpus_per_node}")
-        config.resource_pool.fill_uniform(
-            node_count=hpc_connect.scheduler.config.node_count,
-            cpus_per_node=hpc_connect.scheduler.config.cpus_per_node,
-            gpus_per_node=hpc_connect.scheduler.config.gpus_per_node,
-        )
 
 
 def invoke_command(command: "Command", args: argparse.Namespace) -> int:

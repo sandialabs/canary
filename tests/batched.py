@@ -65,6 +65,7 @@ if __name__ == '__main__':
         assert len(batch_assets) == 4
         files = glob.glob("TestResults/.nvtest/batches/**/nvtest-inp.sh", recursive=True)
         found = 0
+        print(open(files[0]).read())
         for line in open(files[0]):
             if line.strip() == "# BASH: -l place=scatter:excl":
                 found += 1

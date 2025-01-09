@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
 
+import hpc_connect
 import yaml
 
 from ..third_party import color
@@ -184,6 +185,7 @@ class Config:
     debug: bool = False
     log_level: str = "INFO"
     _config_dir: str | None = None
+    scheduler: hpc_connect.HPCScheduler | None = None
     system: System = dataclasses.field(default_factory=System)
     session: Session = dataclasses.field(default_factory=Session)
     test: Test = dataclasses.field(default_factory=Test)
@@ -242,6 +244,7 @@ class Config:
         self.build = Build(compiler=compiler, **snapshot["build"])
         self.resource_pool = ResourcePool()
         self.resource_pool.update(snapshot["resource_pool"])
+        self.setup_hpc_connect(snapshot["scheduler"])
         for key, val in snapshot["config"].items():
             setattr(self, key, val)
         self.batch = Batch(**snapshot["batch"])
@@ -320,6 +323,22 @@ class Config:
         if "session" in args.env_mods:
             self.variables.update(args.env_mods["session"])
 
+        # We need to be careful when restoring the batch configuration.  If this session is being
+        # restored while running a batch, restoring the batch can lead to infinite recursion.  The
+        # batch runner sets the variable NVTEST_LEVEL=1 to guard against this case.  But, if we are
+        # running tests inside an existing test session and no batch arguments are given, we want
+        # to use the original batch arguments.
+        batchopts = getattr(args, "batch", None) or {}
+        if os.getenv("NVTEST_LEVEL") == "1":
+            batchopts = {}
+        if cached_batchopts := getattr(self.options, "batch", None):
+            batchopts = merge(cached_batchopts, batchopts)
+        scheduler = batchopts.get("scheduler")
+        self.setup_hpc_connect(scheduler)
+        if self.scheduler is None:
+            batchopts.clear()
+        args.batch = batchopts
+
         errors: int = 0
         config_mods = args.config_mods or {}
         for section, section_data in config_mods.items():
@@ -352,29 +371,24 @@ class Config:
                 if n > cpu_count():
                     raise ValueError(f"batch:workers={n} > cpu_count={cpu_count()}")
 
-        if limiters := getattr(args, "resource_limits", None):
-            for name, value in limiters.items():
-                self.resource_pool.apply_limiter(name, value)
-
-        # We need to be careful when restoring the batch configuration.  If this session is being
-        # restored while running a batch, restoring the batch can lead to infinite recursion.  The
-        # batch runner sets the variable NVTEST_LEVEL=1 to guard against this case.  But, if we are
-        # running tests inside an existing test session and no batch arguments are given, we want
-        # to use the original batch arguments.
-        if os.getenv("NVTEST_LEVEL") == "1":
-            args.batch = {}
-        elif hasattr(args, "batch"):
-            args.batch = args.batch or {}
-            if args.batch.get("scheduler") == "null":
-                # no batching
-                args.batch.clear()
-            else:
-                old = getattr(self.options, "batch", None) or {}
-                args.batch = merge(old, args.batch)
-        elif getattr(self.options, "batch", None):
-            args.batch = self.options.batch
-
         self.options = args
+
+    def setup_hpc_connect(self, name: str | None) -> None:
+        """Set the hpc_connect library"""
+        if name in ("null", None):
+            self.scheduler = None
+        else:
+            logging.debug(f"Setting up HPC Connect for {name}")
+            assert name is not None
+            self.scheduler = hpc_connect.scheduler(name)
+            logging.debug(f"  HPC connect: node count: {self.scheduler.config.node_count}")
+            logging.debug(f"  HPC connect: CPUs per node: {self.scheduler.config.cpus_per_node}")
+            logging.debug(f"  HPC connect: GPUs per node: {self.scheduler.config.gpus_per_node}")
+            self.resource_pool.fill_uniform(
+                node_count=self.scheduler.config.node_count,
+                cpus_per_node=self.scheduler.config.cpus_per_node,
+                gpus_per_node=self.scheduler.config.gpus_per_node,
+            )
 
     @classmethod
     def read_config(cls, file: str) -> dict:
@@ -449,6 +463,8 @@ class Config:
                 d[key] = value.getstate()
             elif isinstance(value, (argparse.Namespace, SimpleNamespace)):
                 d[key] = vars(value)
+            elif key == "scheduler":
+                d[key] = getattr(value, "name", None)
             elif isinstance(value, Variables):
                 d[key] = dict(value)
             else:

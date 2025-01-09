@@ -233,11 +233,9 @@ class BatchResourceQueue(ResourceQueue):
     def __init__(self, lock: threading.Lock) -> None:
         workers = int(config.getoption("workers", -1))
         super().__init__(lock=lock, workers=5 if workers < 0 else workers)
-        batchopts = config.getoption("batch", {})
-        if scheduler := batchopts.get("scheduler"):
-            self.scheduler = scheduler
-        else:
+        if config.scheduler is None:
             raise ValueError("BatchResourceQueue requires a batch:scheduler")
+        batchopts = config.getoption("batch", {})
         scheme: str
         if scheme := batchopts.get("scheme"):
             if scheme == "count":
@@ -364,11 +362,10 @@ def factory(lock: threading.Lock) -> ResourceQueue:
 
     """
     queue: ResourceQueue
-    batchopts = config.getoption("batch", {})
-    if batchopts.get("scheduler"):
-        queue = BatchResourceQueue(lock)
-    else:
+    if config.scheduler is None:
         queue = DirectResourceQueue(lock)
+    else:
+        queue = BatchResourceQueue(lock)
     return queue
 
 

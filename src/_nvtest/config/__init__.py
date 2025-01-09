@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     batch = _config.batch
     system = _config.system
     session = _config.session
+    scheduler = _config.scheduler
     test = _config.test
     build = _config.build
     options = _config.options

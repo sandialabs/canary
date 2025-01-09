@@ -83,7 +83,6 @@ def add_work_tree_arguments(parser: "Parser") -> None:
 def add_resource_arguments(parser: "Parser") -> None:
     from .resource import BatchResourceSetter
     from .resource import DeprecatedResourceSetter
-    from .resource import ResourceLimit
 
     group = parser.add_argument_group("resource control")
     group.add_argument("-l", help=argparse.SUPPRESS, action=DeprecatedResourceSetter)
@@ -105,14 +104,6 @@ def add_resource_arguments(parser: "Parser") -> None:
         metavar="X",
         type=time_in_seconds,
         help="Set a timeout multiplier for all tests [default: 1.0]",
-    )
-    group.add_argument(
-        "--resource-cap",
-        metavar="type=X",
-        dest="resource_limits",
-        action=ResourceLimit,
-        help="Set a resource cap for resource 'type'.  "
-        "X must be a number between 0 and 1 or a percentage [default: 1.0]",
     )
 
     group = parser.add_argument_group("batch control")
