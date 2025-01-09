@@ -24,6 +24,8 @@ Python 3.10+
 
 `nvtest` is distributed as a python library and is most easily installed via `pip` (or other compatible tool):
 
+To install the latest development version, execute:
+
 ```console
 python3 -m pip install "nvtest git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/nvtest"
 ```
@@ -38,6 +40,16 @@ where `SCHEDULER` is `slurm`, `pbs`, `flux`, or any comma-separated combination 
 
 ```console
 python3 -m pip install "nvtest[slurm,pbs,flux] @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/nvtest"
+```
+
+To install the latest production version, execute:
+
+```console
+python3 -m pip install \
+  --trusted-host=cee-gitlab.sandia.gov \
+  --index-url=https://nexus.web.sandia.gov/repository/pypi-proxy/simple \
+  --extra-index-url=https://cee-gitlab.sandia.gov/api/v4/projects/51750/packages/pypi/simple \
+  nvtest[pbs,slurm,flux]
 ```
 
 ## Developers
