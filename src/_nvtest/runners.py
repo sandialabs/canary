@@ -394,8 +394,8 @@ class BatchRunner(AbstractTestRunner):
         fp.write("nvtest ")
         if config.debug:
             fp.write("-d ")
-        if getattr(config.options, "plugin_dirs", None):
-            for p in config.options.plugin_dirs:
+        if plugin_dirs := config.getoption("plugin_dirs"):
+            for p in plugin_dirs:
                 fp.write(f"-p {p} ")
 
         # The batch will be run in a compute node, so hpc_connect won't set the machine limits
@@ -418,11 +418,11 @@ class BatchRunner(AbstractTestRunner):
                 json.dump(cfg, fh, indent=2)
             fp.write(f"-f {config_file} ")
         fp.write(f"-C {config.session.work_tree} run -rv --stage={stage} ")
-        if getattr(config.options, "fail_fast", False):
+        if config.getoption("fail_fast"):
             fp.write("--fail-fast ")
-        if getattr(config.options, "dont_measure", False):
+        if config.getoption("dont_measure"):
             fp.write("--dont-measure ")
-        if p := getattr(config.options, "P", None):
+        if p := config.getoption("P"):
             if p != "pedantic":
                 fp.write(f"-P{p} ")
         if isinstance(arg, TestBatch):
