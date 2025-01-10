@@ -2,7 +2,7 @@ import os
 
 import _nvtest.test.instance as inst
 import nvtest
-from _nvtest.finder import Finder
+from _nvtest import finder
 from _nvtest.util.filesystem import mkdirp
 from _nvtest.util.filesystem import working_dir
 
@@ -15,12 +15,12 @@ def test_instance_deps(tmpdir):
             fh.write("nvtest.directives.analyze()\n")
             fh.write("nvtest.directives.parameterize('cpus', [1,2])\n")
             fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
-    finder = Finder()
-    finder.add(workdir)
-    assert len(finder.roots) == 1
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files)
+    f = finder.Finder()
+    f.add(workdir)
+    assert len(f.roots) == 1
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files)
     assert len([c for c in cases if c.status != "masked"]) == 7
     work_tree = os.path.join(workdir, "tests")
     mkdirp(work_tree)

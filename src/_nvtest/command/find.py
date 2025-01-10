@@ -1,10 +1,10 @@
 import argparse
 
 from _nvtest.config.argparsing import Parser
-from _nvtest.finder import Finder
 from _nvtest.util import logging
 from _nvtest.util.banner import banner
 
+from .. import finder
 from .base import Command
 from .common import PathSpec
 from .common import add_filter_arguments
@@ -34,32 +34,31 @@ class Find(Command):
             logging.set_level(logging.ERROR)
         logging.emit(banner() + "\n")
         self.parse_search_paths(args)
-        finder = Finder()
+        f = finder.Finder()
         for root, paths in args.paths.items():
-            finder.add(root, *paths, tolerant=True)
-        finder.prepare()
-        generators = finder.discover()
-        cases = finder.lock_and_filter(
-            generators,
+            f.add(root, *paths, tolerant=True)
+        f.prepare()
+        generators = f.discover()
+        cases = finder.generate_test_cases(generators, on_options=args.on_options)
+        finder.mask(
+            cases,
             keyword_expr=args.keyword_expr,
             parameter_expr=args.parameter_expr,
-            on_options=args.on_options,
             owners=None if not args.owners else set(args.owners),
-            env_mods=args.env_mods.get("test") or {},
             regex=args.regex_filter,
         )
-        cases_to_run = [case for case in cases if case.status != "masked"]
+        cases_to_run = [case for case in cases if not case.masked()]
         cases_to_run.sort(key=lambda x: x.name)
         if args.print_keywords:
-            Finder.pprint_keywords(cases_to_run)
+            finder.pprint_keywords(cases_to_run)
         elif args.print_paths:
-            Finder.pprint_paths(cases_to_run)
+            finder.pprint_paths(cases_to_run)
         elif args.print_files:
-            Finder.pprint_files(cases_to_run)
+            finder.pprint_files(cases_to_run)
         elif args.print_graph:
-            Finder.pprint_graph(cases_to_run)
+            finder.pprint_graph(cases_to_run)
         else:
-            Finder.pprint(cases_to_run)
+            finder.pprint(cases_to_run)
         return 0
 
     def add_group_argument(self, group, name, help_string, add_short_arg=True):

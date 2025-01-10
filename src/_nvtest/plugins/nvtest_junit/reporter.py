@@ -137,7 +137,7 @@ def gather_statistics(cases: list[TestCase]) -> SimpleNamespace:
         finish=-1,
     )
     for case in cases:
-        if case.status == "masked":
+        if case.masked():
             continue
         stats.num_tests += 1
         if case.status.value in ("diffed", "failed", "timeout"):

@@ -26,7 +26,8 @@ class Info(Command):
             session = Session(os.getcwd(), mode="r")
         if args.testspec.startswith("^"):
             batch_id = args.testspec[1:]
-            cases = session.bfilter(batch_id=batch_id)
+            session.bfilter(batch_id=batch_id)
+            cases = session.get_ready()
             self.describe_batch(batch_id, cases)
             return 0
         for case in session.cases:

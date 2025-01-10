@@ -99,15 +99,18 @@ class Case(AbstractTestCase):
     def gpus(self) -> int:
         return 4
 
-    def command(self) -> list[str]:
+    def command(self, stage: str = "") -> list[str]:
         raise NotImplementedError
 
+    @property
     def cputime(self) -> float:
         raise NotImplementedError
 
+    @property
     def runtime(self) -> float:
         raise NotImplementedError
 
+    @property
     def path(self) -> str:
         raise NotImplementedError
 

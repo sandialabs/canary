@@ -24,8 +24,7 @@ class CDashXMLReporter:
     def __init__(self, session: Session | None = None, dest: str | None = None) -> None:
         self.data = TestData()
         if session:
-            cases_to_run: list["TestCase"] = [c for c in session.cases if c.status != "masked"]
-            for case in cases_to_run:
+            for case in session.active_cases():
                 self.data.add_test(case)
         dest = dest or os.path.join("." if not session else session.work_tree, "_reports/cdash")
         self.xml_dir = os.path.abspath(dest)
@@ -55,7 +54,7 @@ class CDashXMLReporter:
                 case.dependencies[i] = cases[dep.id]
             cases[id] = case
         for case in cases.values():
-            if case.status != "masked":
+            if not case.masked():
                 # case.refresh()
                 self.data.add_test(case)
         return self
@@ -181,16 +180,24 @@ class CDashXMLReporter:
         for case in cases:
             add_text_node(testlist, "Test", f"./{case.fullname}")
         l1.appendChild(testlist)
-        not_done = ("retry", "created", "pending", "ready", "running", "skipped")
+        not_done = ("retry", "created", "pending", "ready", "running")
         success = ("success", "xfail", "xdiff")
 
         status: str
         for case in cases:
             exit_value = case.returncode
             fail_reason = None
-            if case.status == "masked" or case.status.value in not_done:
+            if case.masked() or case.status.value in not_done:
                 status = "notdone"
                 exit_code = "Not Done"
+                completion_status = "notrun"
+            elif case.status == "error":
+                status = "notdone"
+                exit_code = "Initialization Error"
+                completion_status = "notrun"
+            elif case.status == "skipped":
+                status = "notdone"
+                exit_code = "Skipped"
                 completion_status = "notrun"
             elif case.status.value in success:
                 status = "passed"

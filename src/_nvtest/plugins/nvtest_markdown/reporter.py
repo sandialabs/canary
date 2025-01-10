@@ -34,7 +34,7 @@ class MarkdownReporter(Reporter):
         logging.info(f"Markdown report written to {f}")
 
     def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
-        if case.status.value in ("skipped", "masked"):
+        if not case.masked():
             return
         fh.write(f"**Test:** {case.display_name}\n")
         fh.write(f"**Status:** {case.status.name}\n")
@@ -56,7 +56,7 @@ class MarkdownReporter(Reporter):
         fh.write("| --- | --- | --- | --- | --- | --- | --- | --- |\n")
         totals: dict[str, list[TestCase]] = {}
         for case in self.data.cases:
-            if case.status == "masked":
+            if case.masked():
                 continue
             group = case.status.name.title()
             totals.setdefault(group, []).append(case)

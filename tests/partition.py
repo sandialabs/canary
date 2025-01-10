@@ -1,7 +1,7 @@
 import pytest
 
 import _nvtest.partition as p
-from _nvtest.finder import Finder
+from _nvtest import finder
 from _nvtest.util.filesystem import mkdirp
 
 num_cases = 25
@@ -23,11 +23,11 @@ def generate_files(tmpdir):
 
 def test_partition_x(generate_files):
     workdir = generate_files
-    finder = Finder()
-    finder.add(workdir)
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files)
+    f = finder.Finder()
+    f.add(workdir)
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files)
     assert len([c for c in cases if c.status != "masked"]) == num_cases
     partitions = p.partition_x(cases)
     assert len(partitions) == 2
@@ -37,11 +37,11 @@ def test_partition_x(generate_files):
 
 def test_partition_n(generate_files):
     workdir = generate_files
-    finder = Finder()
-    finder.add(workdir)
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files)
+    f = finder.Finder()
+    f.add(workdir)
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files)
     assert len([c for c in cases if c.status != "masked"]) == num_cases
     partitions = p.partition_n(cases, n=5)
     assert len(partitions) == 5
@@ -50,11 +50,11 @@ def test_partition_n(generate_files):
 
 def test_autopartition(generate_files):
     workdir = generate_files
-    finder = Finder()
-    finder.add(workdir)
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files)
+    f = finder.Finder()
+    f.add(workdir)
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files)
     assert len([c for c in cases if c.status != "masked"]) == num_cases
     partitions = p.autopartition(cases, t=15 * 60)  # 5x long test case duration
     assert sum(len(_) for _ in partitions) == num_cases

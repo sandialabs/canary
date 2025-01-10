@@ -1,7 +1,7 @@
 import _nvtest.config as config
 import _nvtest.test.case as tc
 import nvtest
-from _nvtest.finder import Finder
+from _nvtest import finder
 from _nvtest.util.filesystem import mkdirp
 from _nvtest.util.filesystem import working_dir
 
@@ -13,15 +13,15 @@ def test_skipif(tmpdir):
             fh.write("import nvtest\nnvtest.directives.skipif(True, reason='Because')")
         with open("b.pyt", "w") as fh:
             fh.write("import nvtest\nnvtest.directives.skipif(False, reason='Because')")
-    finder = Finder()
-    finder.add(workdir)
-    assert len(finder.roots) == 1
-    assert workdir in finder.roots
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files)
+    f = finder.Finder()
+    f.add(workdir)
+    assert len(f.roots) == 1
+    assert workdir in f.roots
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files)
     assert len(cases) == 2
-    assert len([c for c in cases if c.status != "masked"]) == 1
+    assert len([c for c in cases if not c.masked()]) == 1
 
 
 def test_keywords(tmpdir):
@@ -31,18 +31,21 @@ def test_keywords(tmpdir):
             fh.write("import nvtest\nnvtest.directives.keywords('a', 'b', 'c', 'd', 'e')")
         with open("b.pyt", "w") as fh:
             fh.write("import nvtest\nnvtest.directives.keywords('e', 'f', 'g', 'h', 'i')")
-    finder = Finder()
-    finder.add(workdir)
-    assert len(finder.roots) == 1
-    assert workdir in finder.roots
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files, keyword_expr="a and i")
-    assert len([c for c in cases if c.status != "masked"]) == 0
-    cases = finder.lock_and_filter(files, keyword_expr="a and e")
-    assert len([c for c in cases if c.status != "masked"]) == 1
-    cases = finder.lock_and_filter(files, keyword_expr="a or i")
-    assert len([c for c in cases if c.status != "masked"]) == 2
+    f = finder.Finder()
+    f.add(workdir)
+    assert len(f.roots) == 1
+    assert workdir in f.roots
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files)
+    finder.mask(cases, keyword_expr="a and i")
+    assert len([c for c in cases if not c.masked()]) == 0
+    cases = finder.generate_test_cases(files)
+    finder.mask(cases, keyword_expr="a and e")
+    assert len([c for c in cases if not c.masked()]) == 1
+    cases = finder.generate_test_cases(files)
+    finder.mask(cases, keyword_expr="a or i")
+    assert len([c for c in cases if not c.masked()]) == 2
 
 
 def test_parameterize_1(tmpdir):
@@ -51,13 +54,13 @@ def test_parameterize_1(tmpdir):
         with open("a.pyt", "w") as fh:
             fh.write("import nvtest\n")
             fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
-    finder = Finder()
-    finder.add(workdir)
-    assert len(finder.roots) == 1
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if c.status != "masked"]) == 3
+    f = finder.Finder()
+    f.add(workdir)
+    assert len(f.roots) == 1
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files)
+    assert len([c for c in cases if not c.masked()]) == 3
     a, b = 0, 1
     for case in cases:
         assert case.parameters == {"a": a, "b": b}
@@ -72,13 +75,13 @@ def test_parameterize_2(tmpdir):
             fh.write("import nvtest\n")
             fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
             fh.write("nvtest.directives.parameterize('n', [10,11,12])\n")
-    finder = Finder()
-    finder.add(workdir)
-    assert len(finder.roots) == 1
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if c.status != "masked"]) == 9
+    f = finder.Finder()
+    f.add(workdir)
+    assert len(f.roots) == 1
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files)
+    assert len([c for c in cases if not c.masked()]) == 9
     i = 0
     for a, b in [(0, 1), (2, 3), (4, 5)]:
         for n in (10, 11, 12):
@@ -92,16 +95,16 @@ def test_parameterize_3(tmpdir):
         with open("a.pyt", "w") as fh:
             fh.write("import nvtest\n")
             fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3)], when='options=xxx')\n")
-    finder = Finder()
-    finder.add(workdir)
-    assert len(finder.roots) == 1
-    assert workdir in finder.roots
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files, on_options=["xxx"])
-    assert len([c for c in cases if c.status != "masked"]) == 2
-    cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if c.status != "masked"]) == 1
+    f = finder.Finder()
+    f.add(workdir)
+    assert len(f.roots) == 1
+    assert workdir in f.roots
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files, on_options=["xxx"])
+    assert len([c for c in cases if not c.masked()]) == 2
+    cases = finder.generate_test_cases(files)
+    assert len([c for c in cases if not c.masked()]) == 1
     assert cases[0].parameters == {}
 
 
@@ -113,16 +116,17 @@ def test_cpu_count(tmpdir):
             fh.write("nvtest.directives.parameterize('cpus', [1, 4, 8, 32])\n")
     with nvtest.config.override():
         nvtest.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=42)
-        finder = Finder()
-        finder.add(workdir)
-        finder.prepare()
-        files = finder.discover()
-        cases = finder.lock_and_filter(files)
-        assert len([c for c in cases if c.status != "masked"]) == 4
+        f = finder.Finder()
+        f.add(workdir)
+        f.prepare()
+        files = f.discover()
+        cases = finder.generate_test_cases(files)
+        assert len([c for c in cases if not c.masked()]) == 4
     with nvtest.config.override():
         nvtest.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=2)
-        cases = finder.lock_and_filter(files)
-        assert len([c for c in cases if c.status != "masked"]) == 1
+        cases = finder.generate_test_cases(files)
+        finder.mask(cases)
+        assert len([c for c in cases if not c.masked()]) == 1
 
 
 def test_dep_patterns(tmpdir):
@@ -136,12 +140,12 @@ def test_dep_patterns(tmpdir):
         with open("b/g.pyt", "w") as fh:
             fh.write("import nvtest\n")
             fh.write("nvtest.directives.parameterize('n', [1, 2, 3])\n")
-    finder = Finder()
-    finder.add(workdir)
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if c.status != "masked"]) == 4
+    f = finder.Finder()
+    f.add(workdir)
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files)
+    assert len([c for c in cases if not c.masked()]) == 4
     for case in cases:
         if case.name == "f":
             assert len(case.dependencies) == 1
@@ -157,14 +161,14 @@ def test_analyze(tmpdir):
             fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
             fh.write("nvtest.directives.parameterize('n', [10,11,12])\n")
             fh.write("nvtest.directives.analyze()\n")
-    finder = Finder()
-    finder.add(workdir)
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files)
+    f = finder.Finder()
+    f.add(workdir)
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files)
     print(cases)
     print(vars(cases[-1]))
-    assert len([c for c in cases if c.status != "masked"]) == 10
+    assert len([c for c in cases if not c.masked()]) == 10
     assert cases[-1].postflags == ["--analyze"]
     assert all(case in cases[-1].dependencies for case in cases[:-1])
 
@@ -176,16 +180,16 @@ def test_enable(tmpdir):
         with open("a/f.pyt", "w") as fh:
             fh.write("import nvtest\n")
             fh.write("nvtest.directives.enable(True, when=\"options='baz and spam'\")\n")
-    finder = Finder()
-    finder.add(workdir)
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files, on_options=["baz", "spam"])
-    assert len([c for c in cases if c.status != "masked"]) == 1
-    cases = finder.lock_and_filter(files, on_options=["baz"])
-    assert len([c for c in cases if c.status != "masked"]) == 0
-    cases = finder.lock_and_filter(files, on_options=["spam", "baz", "foo"])
-    assert len([c for c in cases if c.status != "masked"]) == 1
+    f = finder.Finder()
+    f.add(workdir)
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files, on_options=["baz", "spam"])
+    assert len([c for c in cases if not c.masked()]) == 1
+    cases = finder.generate_test_cases(files, on_options=["baz"])
+    assert len([c for c in cases if not c.masked()]) == 0
+    cases = finder.generate_test_cases(files, on_options=["spam", "baz", "foo"])
+    assert len([c for c in cases if not c.masked()]) == 1
 
 
 def test_enable_names(tmpdir):
@@ -198,12 +202,12 @@ def test_enable_names(tmpdir):
             fh.write("nvtest.directives.name('baz')\n")
             fh.write("nvtest.directives.name('spam')\n")
             fh.write('nvtest.directives.enable(False, when="testname=foo")\n')
-    finder = Finder()
-    finder.add(workdir)
-    finder.prepare()
-    files = finder.discover()
-    cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if c.status != "masked"]) == 2
+    f = finder.Finder()
+    f.add(workdir)
+    f.prepare()
+    files = f.discover()
+    cases = finder.generate_test_cases(files)
+    assert len([c for c in cases if not c.masked()]) == 2
 
 
 def test_pyt_generator(tmpdir):
@@ -225,53 +229,51 @@ nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             config.test.gpu_count = (0, 0)
             config.test.node_count = (1, 1)
 
-            finder = Finder()
-            finder.add(".")
-            finder.prepare()
-            files = finder.discover()
-            cases = finder.lock_and_filter(
-                files,
+            f = finder.Finder()
+            f.add(".")
+            f.prepare()
+            files = f.discover()
+            cases = finder.generate_test_cases(files, on_options=["baz"])
+            finder.mask(
+                cases,
                 keyword_expr="test and unit",
-                on_options=["baz"],
                 owners=["me"],
-                env_mods={"SPAM": "EGGS"},
             )
             assert len(cases) == 10
             assert isinstance(cases[-1], tc.TestMultiCase)
             for case in cases:
-                assert case.status != "masked", case.status.details
+                assert not case.masked(), case.status.details
 
             # without the baz option, the `cpus` parameter will not be expanded so we will be left with
             # three test cases and one analyze.  The analyze will not be masked because the `cpus`
             # parameter is never expanded
-            cases = finder.lock_and_filter(
-                files,
+            cases = finder.generate_test_cases(files)
+            finder.mask(
+                cases,
                 keyword_expr="test and unit",
                 owners=["me"],
-                env_mods={"SPAM": "EGGS"},
             )
             assert len(cases) == 4
             assert isinstance(cases[-1], tc.TestMultiCase)
-            assert not cases[-1].masked
+            assert not cases[-1].masked()
 
             # with cpus<3, some of the cases will be filtered
-            cases = finder.lock_and_filter(
-                files,
+            cases = finder.generate_test_cases(files, on_options=["baz"])
+            finder.mask(
+                cases,
                 keyword_expr="test and unit",
-                on_options=["baz"],
                 parameter_expr="cpus < 3",
                 owners=["me"],
-                env_mods={"SPAM": "EGGS"},
             )
             assert len(cases) == 10
             assert isinstance(cases[-1], tc.TestMultiCase)
-            assert cases[-1].masked
+            assert cases[-1].masked()
             for case in cases[:-1]:
                 assert isinstance(case, tc.TestCase)
                 if case.cpus == 3:
-                    assert case.masked
+                    assert case.masked()
                 else:
-                    assert not case.masked
+                    assert not case.masked()
 
 
 def test_vvt_generator(tmpdir):
@@ -291,40 +293,39 @@ def test_vvt_generator(tmpdir):
             config.test.gpu_count = (0, 0)
             config.test.node_count = (1, 1)
 
-            finder = Finder()
-            finder.add(".")
-            finder.prepare()
-            files = finder.discover()
-            cases = finder.lock_and_filter(files, keyword_expr="test and unit", on_options=["baz"])
+            f = finder.Finder()
+            f.add(".")
+            f.prepare()
+            files = f.discover()
+            cases = finder.generate_test_cases(files, on_options=["baz"])
+            finder.mask(cases, keyword_expr="test and unit")
             assert len(cases) == 10
             assert isinstance(cases[-1], tc.TestMultiCase)
             for case in cases:
-                assert not case.masked
+                assert not case.masked()
 
             # without the baz option, the `np` parameter will not be expanded so we will be left with
             # three test cases and one analyze.  The analyze will not be masked because the `np`
             # parameter is never expanded
-            cases = finder.lock_and_filter(
-                files, keyword_expr="test and unit", env_mods={"SPAM": "EGGS"}
-            )
+            cases = finder.generate_test_cases(files)
+            finder.mask(cases, keyword_expr="test and unit")
             assert len(cases) == 4
             assert isinstance(cases[-1], tc.TestMultiCase)
-            assert not cases[-1].masked
+            assert not cases[-1].masked()
 
             # with np<3, some of the cases will be filtered
-            cases = finder.lock_and_filter(
-                files,
+            cases = finder.generate_test_cases(files, on_options=["baz"])
+            finder.mask(
+                cases,
                 keyword_expr="test and unit",
-                on_options=["baz"],
                 parameter_expr="np < 3",
-                env_mods={"SPAM": "EGGS"},
             )
             assert len(cases) == 10
             assert isinstance(cases[-1], tc.TestMultiCase)
-            assert cases[-1].masked
+            assert cases[-1].masked()
             for case in cases[:-1]:
                 assert isinstance(case, tc.TestCase)
                 if case.cpus == 3:
-                    assert case.masked
+                    assert case.masked()
                 else:
-                    assert not case.masked
+                    assert not case.masked()

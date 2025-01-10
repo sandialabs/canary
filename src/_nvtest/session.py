@@ -22,10 +22,10 @@ from typing import Generator
 from typing import Type
 
 from . import config
+from . import finder
 from . import plugin
 from .error import FailFast
 from .error import StopExecution
-from .finder import Finder
 from .generator import AbstractTestGenerator
 from .queues import BatchResourceQueue
 from .queues import Busy as BusyQueue
@@ -38,7 +38,7 @@ from .test.batch import TestBatch
 from .test.case import TestCase
 from .test.case import TestMultiCase
 from .test.case import from_state as testcase_from_state
-from .third_party import color
+from .third_party.color import colorize
 from .third_party.lock import Lock
 from .third_party.lock import LockTransaction
 from .third_party.lock import ReadTransaction
@@ -53,7 +53,6 @@ from .util.graph import TopologicalSorter
 from .util.returncode import compute_returncode
 from .util.time import hhmmss
 from .util.time import timestamp
-from .when import when
 
 global_session_lock = threading.Lock()
 
@@ -195,6 +194,12 @@ class Session:
                 break
         return None
 
+    def get_ready(self) -> list[TestCase]:
+        return [case for case in self.cases if case.ready() or case.pending()]
+
+    def active_cases(self) -> list[TestCase]:
+        return [case for case in self.cases if not case.masked()]
+
     def dump_attrs(self) -> None:
         """Dump this session attributes to ``file`` as ``json``"""
         attrs: dict[str, Any] = {}
@@ -216,8 +221,6 @@ class Session:
         index: dict[str, list[str]] = {}
         for case in self.cases:
             index[case.id] = [dep.id for dep in case.dependencies]
-            if case.status.value not in ("masked", "skipped"):
-                case.status.set("ready" if not case.dependencies else "pending")
             case.save()
         with self.db.open("cases/index", "w") as fh:
             json.dump({"index": index}, fh, indent=2)
@@ -344,13 +347,13 @@ class Session:
 
     def discover(self, pedantic: bool = True) -> None:
         """Walk each path in the session's search path and collect test files"""
-        finder = Finder()
+        f = finder.Finder()
         for root, paths in self.search_paths.items():
-            finder.add(root, *paths, tolerant=True)
+            f.add(root, *paths, tolerant=True)
         for hook in plugin.hooks():
-            hook.session_discovery(finder)
-        finder.prepare()
-        self.generators = finder.discover(pedantic=pedantic)
+            hook.session_discovery(f)
+        f.prepare()
+        self.generators = f.discover(pedantic=pedantic)
         self.dump_testfiles()
         logging.debug(f"Discovered {len(self.generators)} test files")
 
@@ -362,7 +365,7 @@ class Session:
         owners: set[str] | None = None,
         env_mods: dict[str, str] | None = None,
         regex: str | None = None,
-    ) -> list[TestCase]:
+    ) -> None:
         """Lock test files into concrete (parameterized) test cases
 
         Args:
@@ -382,30 +385,67 @@ class Session:
           env_mods: Environment variables to be defined in a tests execution environment.
 
         """
-
-        self.cases = Finder.lock_and_filter(
-            self.generators,
+        self.cases.clear()
+        self.cases.extend(finder.generate_test_cases(self.generators, on_options=on_options))
+        start = time.monotonic()
+        logging.info(colorize("@*{Masking} test cases based on filtering criteria..."), end="")
+        finder.mask(
+            self.cases,
             keyword_expr=keyword_expr,
             parameter_expr=parameter_expr,
-            on_options=on_options,
             owners=owners,
-            env_mods=env_mods,
             regex=regex,
         )
-        cases_to_run = [case for case in self.cases if case.status.value != "masked"]
-        if not cases_to_run:
+        dt = time.monotonic() - start
+        logging.info(
+            colorize("@*{Masking} test cases based on filtering criteria... done (%.2fs.)" % dt),
+            rewind=True,
+        )
+        finder.check_for_skipped_dependencies(self.cases)
+        for p in plugin.hooks():
+            for case in self.cases:
+                p.test_discovery(case)
+        if env_mods:
+            for case in self.cases:
+                if not case.masked():
+                    case.add_default_env(**env_mods)
+
+        masked: list[TestCase] = []
+        for case in self.cases:
+            if env_mods:
+                case.add_default_env(**env_mods)
+            if not case.masked():
+                case.mark_as_ready()
+            else:
+                masked.append(case)
+
+        logging.info(colorize("@*{Selected} %d test cases" % (len(self.cases) - len(masked))))
+        if masked:
+            logging.info(
+                colorize("@*{Excluding} %d test cases for the following reasons:" % len(masked))
+            )
+            masked_reasons: dict[str, int] = {}
+            for case in masked:
+                masked_reasons[case.mask] = masked_reasons.get(case.mask, 0) + 1
+            reasons = sorted(masked_reasons, key=lambda x: masked_reasons[x])
+            for reason in reversed(reasons):
+                logging.emit(f"{glyphs.bullet} {masked_reasons[reason]}: {reason.lstrip()}\n")
+
+        if not self.get_ready():
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
+
         self.dump_testcases()
-        return cases_to_run
 
     def filter(
         self,
         keyword_expr: str | None = None,
         parameter_expr: str | None = None,
+        owners: set[str] | None = None,
+        regex: str | None = None,
         start: str | None = None,
-        case_specs: list[str] | None = None,
         stage: str | None = None,
-    ) -> list[TestCase]:
+        case_specs: list[str] | None = None,
+    ) -> None:
         """Filter test cases (mask test cases that don't meet a specific criteria)
 
         Args:
@@ -418,131 +458,54 @@ class Session:
           A list of test cases
 
         """
-        explicit_start_path = start is not None
-        if start is None:
-            start = self.work_tree
-        elif not os.path.isabs(start):
-            start = os.path.join(self.work_tree, start)
-        start = os.path.normpath(start)
-        # mask all tests and then later enable based on additional conditions
+
+        finder.mask(
+            self.cases,
+            keyword_expr=keyword_expr,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+            start=start,
+            stage=stage,
+            case_specs=case_specs,
+        )
         for case in self.cases:
-            if case.status.value in ("masked", "skipped"):
-                continue
-            if not case.working_directory.startswith(start):
-                case.status.set("masked", "Unreachable from start directory")
-                continue
-            if case_specs is not None:
-                if any(case.matches(_) for _ in case_specs):
-                    case.status.set("ready")
-                else:
-                    expr = ",".join(case_specs)
-                    case.status.set(
-                        "masked", color.colorize("testspec expression @*{%s} did not match" % expr)
-                    )
-                continue
+            if not case.masked():
+                case.mark_as_ready()
 
-            try:
-                config.resource_pool.satisfiable(case.required_resources())
-            except config.ResourceUnsatisfiable as e:
-                case.status.set(
-                    "masked", color.colorize("@*{ResourceUnsatisfiable}(%r)" % e.args[0])
-                )
-                continue
-
-            when_expr: dict[str, str] = {}
-            if parameter_expr:
-                when_expr.update({"parameters": parameter_expr})
-            if keyword_expr:
-                when_expr.update({"keywords": keyword_expr})
-            if explicit_start_path and not when_expr:
-                case.status.set("ready")
-                continue
-            if not when_expr:
-                if stage is not None:
-                    if stage in case.stages:
-                        case.status.set("ready" if not case.dependencies else "pending")
-                elif case.status.value in ("not_run", "cancelled"):
-                    case.status.set("ready" if not case.dependencies else "pending")
-            else:
-                match = when(
-                    when_expr,
-                    parameters=case.parameters,
-                    keywords=case.keywords + case.implicit_keywords,
-                )
-                if match:
-                    case.status.set("ready" if not case.dependencies else "pending")
-                elif case.status != "ready":
-                    case.status.set(
-                        "masked", f"previous status {case.status.cname!r} is not 'ready'"
-                    )
-                else:
-                    case.status.set(
-                        "masked",
-                        color.colorize(
-                            "when expression @*b{%s} evaluated to @*r{False}" % when_expr
-                        ),
-                    )
-
-        cases: list[TestCase] = []
-        for case in self.cases:
-            if case.status.value == "masked":
-                continue
-            if case.status.satisfies(("pending", "ready")):
-                for dep in case.dependencies:
-                    # FIXME: CHECK OTHER CODES AS REQUIRED BY THE TEST
-                    if not dep.status.satisfies(("pending", "ready", "success", "diff")):
-                        case.status.set("masked", color.colorize("one or more dependencies failed"))
-                        break
-                else:
-                    cases.append(case)
-        return cases
-
-    def bfilter(self, *, batch_id: str) -> list[TestCase]:
+    def bfilter(self, *, batch_id: str) -> None:
         """Mask any test cases not in batch ``batch_id``"""
         batch_case_ids = TestBatch.loadindex(batch_id)
         if batch_case_ids is None:
             raise ValueError(f"could not find index for batch {batch_id}")
         expected = len(batch_case_ids)
         logging.info(f"Selecting {expected} tests from batch {batch_id}")
+        cases: list[TestCase] = []
         for case in self.cases:
-            if case.id in batch_case_ids:
-                if case.status.value in ("masked", "skipped"):
-                    raise ValueError(f"{case}: unexpected initial status: {case.status.value}")
-                if not case.dependencies:
-                    case.status.set("ready")
-                elif all(_.status.value in ("success", "diff") for _ in case.dependencies):
-                    case.status.set("ready")
-                elif all(_.id in batch_case_ids for _ in case.dependencies):
-                    case.status.set("pending")
-                else:
-                    failed_deps: list[TestCase] = []
-                    case.status.set("pending")
-                    for dep in case.dependencies:
-                        if dep.status == "success":
-                            continue
-                        elif dep.status == "ready" and dep.id in batch_case_ids:
-                            continue
-                        else:
-                            failed_deps.append(dep)
-                    if failed_deps:
-                        logging.warning(
-                            f"Not running {case} because the following dependencies failed:"
-                        )
-                        for dep in failed_deps:
-                            logging.emit(f"  - {dep} [id={dep.id}, status={dep.status.value}]\n")
-                        case.status.set("skipped", "one or more dependencies failed")
+            if case.id not in batch_case_ids:
+                case.mask = f"Case not in batch {batch_id}"
+            elif case.masked():
+                logging.warning(f"{case}: unexpected mask: {case.mask}")
+            elif case.ready():
+                cases.append(case)
+            elif not case.dependencies:
+                case.status.set("ready")
+                cases.append(case)
+            elif case.pending():
+                if not all(dep.id in batch_case_ids for dep in case.dependencies):
+                    case.status.set("skipped", "one or more missing dependencies")
+                    case.save()
             else:
-                case.status.set("masked", f"Case not in batch {batch_id}")
-        return [case for case in self.cases if case.status.value not in ("masked", "skipped")]
+                logging.warning(f"{case}: unknown test case state: {case.status}")
+        return
 
     def run(
         self,
-        cases: list[TestCase],
         *,
         fail_fast: bool = False,
         reporting: ProgressReporting = ProgressReporting(),
         stage: str | None = None,
-    ) -> int:
+    ) -> list[TestCase]:
         """Run each test case in ``cases``.
 
         Args:
@@ -555,6 +518,7 @@ class Session:
           The session returncode (0 for success)
 
         """
+        cases = self.get_ready()
         if not cases:
             raise ValueError("There are no cases to run in this session")
         queue = self.setup_queue(cases)
@@ -566,7 +530,7 @@ class Session:
                 try:
                     queue_size = len(queue)
                     what = "batches" if hasattr(queue, "batch_scheme") else "test cases"
-                    logging.info(color.colorize("@*{Running} %d %s" % (queue_size, what)))
+                    logging.info(colorize("@*{Running} %d %s" % (queue_size, what)))
                     self.start = timestamp()
                     self.finish = -1.0
                     self.process_queue(
@@ -600,19 +564,17 @@ class Session:
                         queue.display_progress(self.start, last=True)
                     self.returncode = compute_returncode(queue.cases())
                 finally:
+                    self.exitstatus = self.returncode
                     queue.close(cleanup=cleanup_queue)
                     self.finish = timestamp()
                     dt = self.finish - self.start
                     logging.info(
-                        color.colorize(
-                            "@*{Finished} running %d %s (%.2fs.)\n" % (queue_size, what, dt)
-                        )
+                        colorize("@*{Finished} running %d %s (%.2fs.)\n" % (queue_size, what, dt))
                     )
                 for hook in plugin.hooks():
                     hook.session_finish(self)
-        self.exitstatus = self.returncode
         self.save()
-        return self.returncode
+        return cases
 
     @contextmanager
     def rc_environ(self, **variables) -> Generator[None, None, None]:
@@ -832,7 +794,7 @@ class Session:
                     file.write("%s %s\n" % (glyph, case.describe()))
         string = file.getvalue()
         if string.strip():
-            string = color.colorize("@*{Short test summary info}\n") + string + "\n"
+            string = colorize("@*{Short test summary info}\n") + string + "\n"
         return string
 
     @staticmethod
@@ -856,7 +818,7 @@ class Session:
             if n:
                 c = Status.colors[member]
                 stat = totals[member][0].status.name
-                summary.append(color.colorize("@%s{%d %s}" % (c, n, stat.lower())))
+                summary.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
         emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
         x, y = random.sample(emojis, 2)
         kwds = {
@@ -866,7 +828,7 @@ class Session:
             "t": hhmmss(None if duration < 0 else duration),
             "title": title,
         }
-        string.write(color.colorize("%(x)s%(x)s @*{%(title)s} -- %(s)s in @*{%(t)s}\n" % kwds))
+        string.write(colorize("%(x)s%(x)s @*{%(title)s} -- %(s)s in @*{%(t)s}\n" % kwds))
         return string.getvalue()
 
     @staticmethod
@@ -880,7 +842,7 @@ class Session:
         kwds = {"t": glyphs.turtle, "N": N}
         string.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
         for case in sorted_cases:
-            id = color.colorize("@*b{%s}" % case.id[:7])
+            id = colorize("@*b{%s}" % case.id[:7])
             string.write("  %6.2f   %s    %s\n" % (case.duration, id, case.pretty_repr()))
         string.write("\n")
         return string.getvalue()
@@ -891,7 +853,7 @@ class Session:
         file = io.StringIO()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            if case.status == "masked":
+            if case.masked():
                 totals.setdefault("masked", []).append(case)
             else:
                 totals.setdefault(case.status.value, []).append(case)
@@ -929,16 +891,16 @@ class Session:
             if "x" in rc:
                 cases_to_show = cases
             else:
-                cases_to_show = [c for c in cases if c.status != "masked"]
+                cases_to_show = [c for c in cases if not c.masked()]
         elif "a" in rc:
             if "x" in rc:
                 cases_to_show = [c for c in cases if c.status != "success"]
             else:
-                cases_to_show = [c for c in cases if c.status != "masked" and c.status != "success"]
+                cases_to_show = [c for c in cases if not c.masked() and c.status != "success"]
         else:
             cases_to_show = []
             for case in cases:
-                if case.status == "masked":
+                if case.masked():
                     if "x" in rc:
                         cases_to_show.append(case)
                 elif "s" in rc and case.status == "skipped":
@@ -964,7 +926,7 @@ class Session:
             file.write(self.status(cases_to_show, sortby=sortby) + "\n")
         if durations:
             file.write(self.durations(cases_to_show, int(durations)) + "\n")
-        s = self.footer([c for c in self.cases if not c.status == "masked"], title="Summary")
+        s = self.footer([c for c in self.cases if not c.masked()], title="Summary")
         file.write(s + "\n")
         return file.getvalue()
 

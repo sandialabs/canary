@@ -3,8 +3,8 @@ import sys
 
 import _nvtest.plugins.nvtest_vvt.generator as vvtest
 import _nvtest.util.filesystem as fs
+from _nvtest import finder
 from _nvtest.enums import list_parameter_space
-from _nvtest.finder import Finder
 
 
 def test_parse_parameterize():
@@ -272,11 +272,11 @@ if __name__ == "__main__":
             fh.write("else:\n    assert 0\n")
         fs.set_executable("vvtest_param_generator.py")
     with fs.working_dir(tmpdir.strpath):
-        finder = Finder()
-        finder.add(".")
-        finder.prepare()
-        files = finder.discover()
-        cases = finder.lock_and_filter(files)
+        f = finder.Finder()
+        f.add(".")
+        f.prepare()
+        files = f.discover()
+        cases = finder.generate_test_cases(files)
         assert len(cases) == 6
         assert cases[0].name == "create_inputs.a=A.b=B.np=1"
         for case in cases[1:]:

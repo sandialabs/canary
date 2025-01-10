@@ -13,7 +13,6 @@ from .test.case import TestCase
 from .third_party.colify import colified
 from .third_party.color import colorize
 from .util import filesystem as fs
-from .util import glyphs
 from .util import graph
 from .util import logging
 from .util.executable import Executable
@@ -182,260 +181,245 @@ class Finder:
     def search_paths(self) -> list[str]:
         return [root for root in self.roots]
 
-    @staticmethod
-    def resolve_dependencies(cases: list[TestCase]) -> None:
-        start = time.monotonic()
-        logging.info(colorize("@*{Resolving} test case dependencies..."), end="")
-        for case in cases:
-            while True:
-                if not case.unresolved_dependencies:
-                    break
-                dep = case.unresolved_dependencies.pop(0)
-                matches = dep.evaluate([c for c in cases if c != case], extra_fields=True)
-                n = len(matches)
-                if dep.expect == "+" and n < 1:
-                    raise ValueError(f"{case}: expected at least one dependency, got {n}")
-                elif dep.expect == "?" and n not in (0, 1):
-                    raise ValueError(f"{case}: expected 0 or 1 dependency, got {n}")
-                elif isinstance(dep.expect, int) and n != dep.expect:
-                    raise ValueError(f"{case}: expected {dep.expect} dependencies, got {n}")
-                elif dep.expect != "*" and n == 0:
-                    raise ValueError(
-                        f"Dependency pattern {dep.value} of test case {case.name} not found"
-                    )
-                for match in matches:
-                    assert isinstance(match, TestCase)
-                    case.add_dependency(match, dep.result)
-        dt = time.monotonic() - start
-        logging.info(
-            colorize("@*{Resolving} test case dependencies... done (%.2fs.)" % dt), rewind=True
-        )
 
-    @staticmethod
-    def check_for_skipped_dependencies(cases: list[TestCase]) -> None:
-        start = time.monotonic()
-        logging.info(colorize("@*{Checking} for skipped dependencies..."), end="")
-        missing = 0
-        ids = [id(case) for case in cases]
-        for case in cases:
-            if case.status.value in ("masked", "skipped"):
-                continue
-            for dep in case.dependencies:
-                if id(dep) not in ids:
-                    logging.error(f"ID of {dep!r} is not in test cases")
-                    missing += 1
-                if dep.status.value in ("masked", "skipped"):
-                    case.status.set("masked", "one or more skipped dependency")
-                    logging.debug(f"Dependency {dep!r} of {case!r} is marked to be skipped")
-        if missing:
-            raise ValueError("Missing dependencies")
-        dt = time.monotonic() - start
-        logging.info(
-            colorize("@*{Checking} for skipped dependencies... done (%.2fs)" % dt), rewind=True
-        )
-
-    @staticmethod
-    def lock_and_filter(
-        generators: list[AbstractTestGenerator],
-        keyword_expr: str | None = None,
-        parameter_expr: str | None = None,
-        on_options: list[str] | None = None,
-        owners: set[str] | None = None,
-        env_mods: dict[str, str] | None = None,
-        regex: str | None = None,
-    ) -> list[TestCase]:
-        logging.info(colorize("@*{Generating} test cases..."), end="")
-        locked: list[list[TestCase]]
-        start = time.monotonic()
-        if config.debug:
-            locked = [f.lock(on_options) for f in generators]
-        else:
-            locked = starmap(lock_file, [(f, on_options) for f in generators])
-        cases: list[TestCase] = [case for group in locked for case in group if case]
-        dt = time.monotonic() - start
-        nc, ng = len(cases), len(generators)
-        logging.info(colorize("@*{Generating} test cases... done (%.2fs.)" % dt), rewind=True)
-        logging.info(colorize("@*{Generated} %d test cases from %d generators" % (nc, ng)))
-
-        duplicates = Finder.find_duplicates(cases)
-        if duplicates:
-            logging.error("Duplicate test IDs generated for the following test cases")
-            for id, dcases in duplicates.items():
-                logging.error(f"{id}:")
-                for case in dcases:
-                    logging.emit(f"  - {case.display_name}: {case.file_path}\n")
-            raise ValueError("Duplicate test IDs in test suite")
-
-        # this sanity check should not be necessary
-        if any(case.status.value not in ("created", "skipped", "masked") for case in cases):
-            raise ValueError("One or more test cases is not in created state")
-
-        if env_mods:
-            for case in cases:
-                case.add_default_env(**env_mods)
-
-        Finder.resolve_dependencies(cases)
-        Finder.filter(
-            cases,
-            keyword_expr=keyword_expr,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            regex=regex,
-        )
-        Finder.check_for_skipped_dependencies(cases)
-
-        for p in plugin.hooks():
-            for case in cases:
-                p.test_discovery(case)
-
-        masked = [case for case in cases if case.status == "masked"]
-        logging.info(colorize("@*{Selected} %d test cases" % (len(cases) - len(masked))))
-        if masked:
-            logging.info(
-                colorize("@*{Skipping} %d test cases for the following reasons:" % len(masked))
-            )
-            masked_reasons: dict[str, int] = {}
-            for case in cases:
-                if case.status.value in ("masked", "skipped"):
-                    reason = str(case.status.details)
-                    masked_reasons[reason] = masked_reasons.get(reason, 0) + 1
-            reasons = sorted(masked_reasons, key=lambda x: masked_reasons[x])
-            for reason in reversed(reasons):
-                logging.emit(f"{glyphs.bullet} {masked_reasons[reason]}: {reason.lstrip()}\n")
-
-        return cases
-
-    @staticmethod
-    def filter(
-        cases: list[TestCase],
-        keyword_expr: str | None = None,
-        parameter_expr: str | None = None,
-        owners: set[str] | None = None,
-        regex: str | None = None,
-    ) -> None:
-        def already_skipped(case: TestCase) -> bool:
-            return case.status.value in ("masked", "skipped")
-
-        rx: re.Pattern | None = None
-        if regex is not None:
-            logging.warning("Regular expression search can be slow for large test suites")
-            rx = re.compile(regex)
-
-        start = time.monotonic()
-        logging.info(colorize("@*{Selecting} test cases based on filtering criteria..."), end="")
-        owners = set(owners or [])
-        for case in cases:
-            try:
-                config.resource_pool.satisfiable(case.required_resources())
-            except config.ResourceUnsatisfiable as e:
-                if not already_skipped(case):
-                    s = "@*{ResourceUnsatisfiable}(%r)" % e.args[0]
-                    case.status.set("masked", colorize(s))
-
-            if not already_skipped(case) and owners:
-                if not owners.intersection(case.owners):
-                    case.status.set("masked", colorize("not owned by @*{%r}" % case.owners))
-
-            if not already_skipped(case) and keyword_expr is not None:
-                kwds = set(case.keywords)
-                kwds.update(case.implicit_keywords)
-                kwds.add(case.name)
-                kwds.update(case.parameters.keys())
-                match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
-                if not match:
-                    case.status.set(
-                        "masked", colorize("keyword expression @*{%r} did not match" % keyword_expr)
-                    )
-
-            if not already_skipped(case) and ("TDD" in case.keywords or "tdd" in case.keywords):
-                case.status.set("masked", colorize("test marked as @*{TDD}"))
-
-            if not already_skipped(case) and parameter_expr:
-                match = when.when(
-                    f"parameters={parameter_expr!r}",
-                    parameters=case.parameters | case.implicit_parameters,
+def resolve_dependencies(cases: list[TestCase]) -> None:
+    start = time.monotonic()
+    logging.info(colorize("@*{Resolving} test case dependencies..."), end="")
+    for case in cases:
+        while True:
+            if not case.unresolved_dependencies:
+                break
+            dep = case.unresolved_dependencies.pop(0)
+            matches = dep.evaluate([c for c in cases if c != case], extra_fields=True)
+            n = len(matches)
+            if dep.expect == "+" and n < 1:
+                raise ValueError(f"{case}: expected at least one dependency, got {n}")
+            elif dep.expect == "?" and n not in (0, 1):
+                raise ValueError(f"{case}: expected 0 or 1 dependency, got {n}")
+            elif isinstance(dep.expect, int) and n != dep.expect:
+                raise ValueError(f"{case}: expected {dep.expect} dependencies, got {n}")
+            elif dep.expect != "*" and n == 0:
+                raise ValueError(
+                    f"Dependency pattern {dep.value} of test case {case.name} not found"
                 )
-                if not match:
-                    case.status.set(
-                        "masked",
-                        colorize("parameter expression @*{%s} did not match" % parameter_expr),
-                    )
+            for match in matches:
+                assert isinstance(match, TestCase)
+                case.add_dependency(match, dep.result)
+    dt = time.monotonic() - start
+    logging.info(
+        colorize("@*{Resolving} test case dependencies... done (%.2fs.)" % dt), rewind=True
+    )
 
-            if not already_skipped(case) and any(
-                dep.status == "masked" for dep in case.dependencies
-            ):
-                case.status.set("masked", colorize("one or more skipped dependencies"))
 
-            if not already_skipped(case) and rx is not None:
-                if not fs.grep(rx, case.file):
-                    for asset in case.assets:
-                        if os.path.isfile(asset.src):
-                            if fs.grep(rx, asset.src):
-                                break
-                    else:
-                        msg = "@*{re.search(%r) is None} evaluated to @*g{True}" % regex
-                        case.status.set("masked", colorize(msg))
+def check_for_skipped_dependencies(cases: list[TestCase]) -> None:
+    start = time.monotonic()
+    logging.info(colorize("@*{Checking} for skipped dependencies..."), end="")
+    missing = 0
+    ids = [id(case) for case in cases]
+    for case in cases:
+        if not case.activated():
+            continue
+        for dep in case.dependencies:
+            if id(dep) not in ids:
+                logging.error(f"ID of {dep!r} is not in test cases")
+                missing += 1
+            if dep.masked() or dep.skipped():
+                case.mask = "one or more skipped dependency"
+                logging.debug(f"Dependency {dep!r} of {case!r} is marked to be skipped")
+    if missing:
+        raise ValueError("Missing dependencies")
+    dt = time.monotonic() - start
+    logging.info(
+        colorize("@*{Checking} for skipped dependencies... done (%.2fs)" % dt), rewind=True
+    )
 
-        dt = time.monotonic() - start
-        logging.info(
-            colorize("@*{Selecting} test cases based on filtering criteria... done (%.2fs.)" % dt),
-            rewind=True,
-        )
 
-    @staticmethod
-    def find_duplicates(cases: list[TestCase]) -> dict[str, list[TestCase]]:
-        ids = [case.id for case in cases]
-        duplicate_ids = {id for id in ids if ids.count(id) > 1}
-        duplicates: dict[str, list[TestCase]] = {}
-        for id in duplicate_ids:
-            duplicates.setdefault(id, []).extend([_ for _ in cases if _.id == id])
-        return duplicates
+def generate_test_cases(
+    generators: list[AbstractTestGenerator],
+    on_options: list[str] | None = None,
+) -> list[TestCase]:
+    """Generate test cases and filter based on criteria"""
 
-    @staticmethod
-    def pprint_paths(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
-        unique_generators: dict[str, set[str]] = dict()
-        for case in cases:
-            unique_generators.setdefault(case.file_root, set()).add(case.file_path)
-        _, max_width = terminal_size()
-        for root, paths in unique_generators.items():
-            label = colorize("@m{%s}" % root)
-            logging.hline(label, max_width=max_width, file=file)
-            cols = colified(sorted(paths), indent=2, width=max_width)
-            file.write(cols + "\n")
+    logging.info(colorize("@*{Generating} test cases..."), end="")
+    locked: list[list[TestCase]]
+    start = time.monotonic()
+    if config.debug:
+        locked = [f.lock(on_options) for f in generators]
+    else:
+        locked = starmap(lock_file, [(f, on_options) for f in generators])
+    cases: list[TestCase] = [case for group in locked for case in group if case]
+    dt = time.monotonic() - start
+    nc, ng = len(cases), len(generators)
+    logging.info(colorize("@*{Generating} test cases... done (%.2fs.)" % dt), rewind=True)
+    logging.info(colorize("@*{Generated} %d test cases from %d generators" % (nc, ng)))
 
-    @staticmethod
-    def pprint_files(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
-        for f in sorted(set([case.file for case in cases])):
-            file.write(os.path.relpath(f, os.getcwd()) + "\n")
+    duplicates = find_duplicates(cases)
+    if duplicates:
+        logging.error("Duplicate test IDs generated for the following test cases")
+        for id, dcases in duplicates.items():
+            logging.error(f"{id}:")
+            for case in dcases:
+                logging.emit(f"  - {case.display_name}: {case.file_path}\n")
+        raise ValueError("Duplicate test IDs in test suite")
 
-    @staticmethod
-    def pprint_keywords(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
-        unique_kwds: dict[str, set[str]] = dict()
-        for case in cases:
-            unique_kwds.setdefault(case.file_root, set()).update(case.keywords)
-        _, max_width = terminal_size()
-        for root, kwds in unique_kwds.items():
-            label = colorize("@m{%s}" % root)
-            logging.hline(label, max_width=max_width, file=file)
-            cols = colified(sorted(kwds), indent=2, width=max_width)
-            file.write(cols + "\n")
+    if any(case.status.value not in ("created", "error") for case in cases):
+        raise ValueError("One or more test cases is not in created state")
 
-    @staticmethod
-    def pprint_graph(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
-        graph.print(cases, file=file)
+    resolve_dependencies(cases)
 
-    @staticmethod
-    def pprint(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
-        _, max_width = terminal_size()
-        tree: dict[str, list[str]] = {}
-        for case in cases:
-            line = f"{hhmmss(case.runtime):11s}    {case.fullname}"
-            tree.setdefault(case.file_root, []).append(line)
-        for root, lines in tree.items():
-            cols = colified(lines, indent=2, width=max_width)
-            label = colorize("@m{%s}" % root)
-            logging.hline(label, max_width=max_width, file=file)
-            file.write(cols + "\n")
+    return cases
+
+
+def mask(
+    cases: list[TestCase],
+    keyword_expr: str | None = None,
+    parameter_expr: str | None = None,
+    owners: set[str] | None = None,
+    regex: str | None = None,
+    start: str | None = None,
+    case_specs: list[str] | None = None,
+    stage: str | None = None,
+) -> None:
+    """Filter test cases (mask test cases that don't meet a specific criteria)
+
+    Args:
+      keyword_expr: Include those tests matching this keyword expression
+      parameter_expr: Include those tests matching this parameter expression
+      start: The starting directory the python session was invoked in
+      case_specs: Include those tests matching these specs
+
+    """
+
+    rx: re.Pattern | None = None
+    if regex is not None:
+        logging.warning("Regular expression search can be slow for large test suites")
+        rx = re.compile(regex)
+
+    if start is None:
+        start = config.session.work_tree
+    elif not os.path.isabs(start):
+        start = os.path.join(config.session.work_tree, start)  # type: ignore
+    if start is not None:
+        start = os.path.normpath(start)
+    owners = set(owners or [])
+
+    for case in cases:
+        if case.masked():
+            continue
+
+        if start is not None and not case.working_directory.startswith(start):
+            case.mask = "Unreachable from start directory"
+            continue
+
+        if case_specs is not None:
+            if not any(case.matches(case_spec) for case_spec in case_specs):
+                expr = ",".join(case_specs)
+                case.mask = colorize("testspec expression @*{%s} did not match" % expr)
+            continue
+
+        try:
+            config.resource_pool.satisfiable(case.required_resources())
+        except config.ResourceUnsatisfiable as e:
+            case.mask = colorize("@*{ResourceUnsatisfiable}(%r)" % e.args[0])
+            continue
+
+        if "TDD" in case.keywords or "tdd" in case.keywords:
+            case.mask = colorize("test marked as @*{TDD}")
+            continue
+
+        if owners and not owners.intersection(case.owners):
+            case.mask = colorize("not owned by @*{%r}" % case.owners)
+            continue
+
+        if keyword_expr is not None:
+            kwds = set(case.keywords)
+            kwds.update(case.implicit_keywords)
+            kwds.update(case.parameters.keys())
+            match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
+            if not match:
+                case.mask = colorize("keyword expression @*{%r} did not match" % keyword_expr)
+                continue
+
+        if parameter_expr:
+            match = when.when(
+                f"parameters={parameter_expr!r}",
+                parameters=case.parameters | case.implicit_parameters,
+            )
+            if not match:
+                case.mask = colorize("parameter expression @*{%s} did not match" % parameter_expr)
+                continue
+
+        if stage and stage not in case.stages:
+            case.mask = f"{stage}: undefined stage"
+            continue
+
+        if any(dep.masked() for dep in case.dependencies):
+            case.mask = colorize("one or more skipped dependencies")
+            continue
+
+        if rx is not None:
+            if not fs.grep(rx, case.file):
+                for asset in case.assets:
+                    if os.path.isfile(asset.src) and fs.grep(rx, asset.src):
+                        break
+                else:
+                    case.mask = colorize("@*{re.search(%r) is None} evaluated to @*g{True}" % regex)
+                    continue
+
+
+def find_duplicates(cases: list[TestCase]) -> dict[str, list[TestCase]]:
+    ids = [case.id for case in cases]
+    duplicate_ids = {id for id in ids if ids.count(id) > 1}
+    duplicates: dict[str, list[TestCase]] = {}
+    for id in duplicate_ids:
+        duplicates.setdefault(id, []).extend([_ for _ in cases if _.id == id])
+    return duplicates
+
+
+def pprint_paths(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+    unique_generators: dict[str, set[str]] = dict()
+    for case in cases:
+        unique_generators.setdefault(case.file_root, set()).add(case.file_path)
+    _, max_width = terminal_size()
+    for root, paths in unique_generators.items():
+        label = colorize("@m{%s}" % root)
+        logging.hline(label, max_width=max_width, file=file)
+        cols = colified(sorted(paths), indent=2, width=max_width)
+        file.write(cols + "\n")
+
+
+def pprint_files(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+    for f in sorted(set([case.file for case in cases])):
+        file.write(os.path.relpath(f, os.getcwd()) + "\n")
+
+
+def pprint_keywords(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+    unique_kwds: dict[str, set[str]] = dict()
+    for case in cases:
+        unique_kwds.setdefault(case.file_root, set()).update(case.keywords)
+    _, max_width = terminal_size()
+    for root, kwds in unique_kwds.items():
+        label = colorize("@m{%s}" % root)
+        logging.hline(label, max_width=max_width, file=file)
+        cols = colified(sorted(kwds), indent=2, width=max_width)
+        file.write(cols + "\n")
+
+
+def pprint_graph(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+    graph.print(cases, file=file)
+
+
+def pprint(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+    _, max_width = terminal_size()
+    tree: dict[str, list[str]] = {}
+    for case in cases:
+        line = f"{hhmmss(case.runtime):11s}    {case.fullname}"
+        tree.setdefault(case.file_root, []).append(line)
+    for root, lines in tree.items():
+        cols = colified(lines, indent=2, width=max_width)
+        label = colorize("@m{%s}" % root)
+        logging.hline(label, max_width=max_width, file=file)
+        file.write(cols + "\n")
 
 
 def is_test_file(file: str) -> bool:

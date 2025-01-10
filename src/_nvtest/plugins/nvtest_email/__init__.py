@@ -41,9 +41,7 @@ def send_email_summary(session: nvtest.Session) -> None:
 
 def generate_html_report(session: nvtest.Session) -> str:
     totals: dict[str, list[nvtest.TestCase]] = {}
-    for case in session.cases:
-        if case.status == "masked":
-            continue
+    for case in session.active_cases():
         group = case.status.name.title()
         totals.setdefault(group, []).append(case)
     file = io.StringIO()

@@ -8,7 +8,6 @@ from _nvtest.error import StopExecution
 from _nvtest.session import ExitCode
 from _nvtest.session import ProgressReporting
 from _nvtest.session import Session
-from _nvtest.test.case import TestCase
 from _nvtest.third_party.color import colorize
 from _nvtest.util import graph
 from _nvtest.util import logging
@@ -96,7 +95,6 @@ class Run(Command):
         logging.emit(banner() + "\n")
         PathSpec.parse(args)
         session: Session
-        cases: list[TestCase]
         stage: str = args.stage or "run"
         if args.mode == "w":
             if stage != "run":
@@ -118,25 +116,27 @@ class Run(Command):
                 if args.until == "discover":
                     logging.info("Done with test discovery")
                     return 0
-            cases = session.lock(
+            session.lock(
                 keyword_expr=args.keyword_expr,
                 parameter_expr=args.parameter_expr,
                 on_options=args.on_options,
                 env_mods=args.env_mods.get("test") or {},
                 regex=args.regex_filter,
             )
+
             if args.until is not None:
-                unmasked_cases = [case for case in session.cases if case.status != "masked"]
-                n, N = len(unmasked_cases), len({case.file for case in unmasked_cases})
+                active_cases = session.get_ready()
+                n, N = len(active_cases), len({case.file for case in active_cases})
                 s, S = "" if n == 1 else "s", "" if N == 1 else "s"
                 logging.info(colorize("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S)))
-                graph.print(unmasked_cases, file=sys.stdout)
+                graph.print(active_cases, file=sys.stdout)
                 if args.until == "lock":
                     logging.info("Done freezing test cases")
                     return 0
+
         elif args.mode == "a":
             session = Session(args.work_tree, mode=args.mode)
-            cases = session.filter(
+            session.filter(
                 start=args.start,
                 keyword_expr=args.keyword_expr,
                 parameter_expr=args.parameter_expr,
@@ -146,13 +146,11 @@ class Run(Command):
         else:
             assert args.mode == "b"
             session = Session(args.work_tree, mode="a")
-            cases = session.bfilter(batch_id=args.batch_id)
+            session.bfilter(batch_id=args.batch_id)
         level = ProgressReporting.progress_bar if args.r == "b" else ProgressReporting.verbose
         reporting = ProgressReporting(level=level)
         try:
-            session.exitstatus = session.run(
-                cases, reporting=reporting, fail_fast=args.fail_fast, stage=stage
-            )
+            cases = session.run(reporting=reporting, fail_fast=args.fail_fast, stage=stage)
         except KeyboardInterrupt:
             session.exitstatus = ExitCode.INTERRUPTED
         except StopExecution as e:

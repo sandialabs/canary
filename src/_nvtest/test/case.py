@@ -228,6 +228,7 @@ class TestCase(AbstractTestCase):
         self._display_name: str | None = None
         self._id: str | None = None
         self._status: Status = Status()
+        self._mask: str = ""
         self._cmd_line: str | None = None
         self._work_tree: str | None = None
         self._working_directory: str | None = None
@@ -618,12 +619,8 @@ class TestCase(AbstractTestCase):
         self._exclusive = arg
 
     @property
-    def skipped(self) -> bool:
-        return self.status == "skipped"
-
-    @property
     def status(self) -> Status:
-        if self._status.pending():
+        if self._status.value == "pending":
             if not self.dependencies:
                 raise ValueError("should never have a pending case without dependencies")
             # Determine if dependent cases have completed and, if so, flip status to 'ready'
@@ -664,6 +661,17 @@ class TestCase(AbstractTestCase):
             self._status.set(arg["value"], details=arg["details"])
         else:
             raise ValueError(arg)
+
+    @property
+    def mask(self) -> str:
+        return self._mask
+
+    @mask.setter
+    def mask(self, arg: str) -> None:
+        self._mask = arg
+
+    def masked(self) -> bool:
+        return bool(self._mask)
 
     @property
     def url(self) -> str | None:
@@ -746,18 +754,6 @@ class TestCase(AbstractTestCase):
     @measurements.setter
     def measurements(self, arg: dict[str, Any]) -> None:
         self._measurements = dict(arg)
-
-    @property
-    def masked(self) -> bool:
-        return self.status.value == "masked"
-
-    @property
-    def mask(self) -> str | None:
-        return None if self.status.value != "masked" else self.status.details
-
-    @mask.setter
-    def mask(self, arg: str) -> None:
-        self.status.set("masked", arg)
 
     @property
     def name(self) -> str:
@@ -1115,7 +1111,7 @@ class TestCase(AbstractTestCase):
     def describe(self) -> str:
         """Write a string describing the test case"""
         id = colorize("@*b{%s}" % self.id[:7])
-        if self.status.value == "masked":
+        if self.masked():
             string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.status.details)
             return colorize(string)
         string = "%s %s %s" % (self.status.cname, id, self.pretty_repr())
@@ -1129,11 +1125,29 @@ class TestCase(AbstractTestCase):
             string += " diff reason: %s" % self.status.details or "unknown"
         return string
 
+    def activated(self) -> bool:
+        if self.masked():
+            return False
+        elif self.skipped():
+            return False
+        return True
+
+    def mark_as_ready(self) -> None:
+        if self.status == "error":
+            return
+        self._status.set("ready" if not self.dependencies else "pending")
+
+    def skipped(self) -> bool:
+        return self.status == "skipped"
+
     def complete(self) -> bool:
         return self.status.complete()
 
     def ready(self) -> bool:
-        return self.status.ready()
+        return not self.masked() and self.status == "ready"
+
+    def pending(self) -> bool:
+        return not self.masked() and self.status == "pending"
 
     def matches(self, pattern) -> bool:
         if pattern.startswith("/") and self.id.startswith(pattern[1:]):
@@ -1284,10 +1298,12 @@ class TestCase(AbstractTestCase):
             os.environ.update(save_env)
 
     def output(self, compress: bool = False) -> str:
-        if not self.status.complete():
+        if self.status == "skipped":
+            return f"Test skipped.  Reason: {self.status.details}"
+        elif self.status == "error":
+            return f"Test failed to initialize.  Reason: {self.status.details}"
+        elif not self.status.complete():
             return "Log not found"
-        elif self.status == "skipped":
-            return "Test skipped"
         text = io.open(self.logfile(), errors="ignore").read()
         if compress:
             kb_to_keep = 2 if self.status == "success" else 300
@@ -1303,7 +1319,6 @@ class TestCase(AbstractTestCase):
         clean_out_folder(self.working_directory)
         with fs.working_dir(self.working_directory, create=True):
             self.setup_working_directory()
-            self._status.set("ready" if not self.dependencies else "pending")
             for hook in plugin.hooks():
                 hook.test_setup(self)
             self.save()
