@@ -565,7 +565,7 @@ class TestCase(AbstractTestCase):
             for t, dst in arg[action]:
                 src = t if os.path.isabs(t) else os.path.join(self.file_dir, t)
                 if not os.path.exists(src):
-                    logging.warning(f"{self}: {action} resource file {t} not found")
+                    logging.debug(f"{self}: {action} resource file {t} not found")
                 asset = Asset(src=os.path.abspath(src), dst=dst, action=action)
                 self._assets.append(asset)
 
