@@ -64,6 +64,10 @@ class Reporter(ABC):
         self._data: TestData | None = None
         self._session: Session | None = session
 
+    @classmethod
+    def matches(cls, type: str) -> bool:
+        return cls.label().lower() == type.lower()
+
     @property
     def data(self) -> TestData:
         if self._data is None:

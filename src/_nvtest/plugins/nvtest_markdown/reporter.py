@@ -34,7 +34,7 @@ class MarkdownReporter(Reporter):
         logging.info(f"Markdown report written to {f}")
 
     def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
-        if not case.masked():
+        if case.masked():
             return
         fh.write(f"**Test:** {case.display_name}\n")
         fh.write(f"**Status:** {case.status.name}\n")
