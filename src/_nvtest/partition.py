@@ -14,7 +14,7 @@ size_t = tuple[int, int]
 class _Partition(set):
     @property
     def cputime(self):
-        return sum(case.cpus * case.runtime for case in self if not case.mask)
+        return sum(case.cpus * case.runtime for case in self if case.status != "masked")
 
 
 def groupby_dep(cases: Sequence[TestCase]) -> list[set[TestCase]]:

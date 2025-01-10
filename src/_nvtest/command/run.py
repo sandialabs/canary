@@ -126,7 +126,7 @@ class Run(Command):
                 regex=args.regex_filter,
             )
             if args.until is not None:
-                unmasked_cases = [case for case in session.cases if not case.mask]
+                unmasked_cases = [case for case in session.cases if case.status != "masked"]
                 n, N = len(unmasked_cases), len({case.file for case in unmasked_cases})
                 s, S = "" if n == 1 else "s", "" if N == 1 else "s"
                 logging.info(colorize("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S)))

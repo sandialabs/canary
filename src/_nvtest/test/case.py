@@ -224,7 +224,6 @@ class TestCase(AbstractTestCase):
         self._artifacts: list[dict[str, str]] = []
         self._exclusive: bool = exclusive
 
-        self._mask: str | None = None
         self._name: str | None = None
         self._display_name: str | None = None
         self._id: str | None = None
@@ -750,15 +749,15 @@ class TestCase(AbstractTestCase):
 
     @property
     def masked(self) -> bool:
-        return True if self._mask else False
+        return self.status.value == "masked"
 
     @property
     def mask(self) -> str | None:
-        return self._mask
+        return None if self.status.value != "masked" else self.status.details
 
     @mask.setter
     def mask(self, arg: str) -> None:
-        self._mask = arg
+        self.status.set("masked", arg)
 
     @property
     def name(self) -> str:
@@ -1116,8 +1115,8 @@ class TestCase(AbstractTestCase):
     def describe(self) -> str:
         """Write a string describing the test case"""
         id = colorize("@*b{%s}" % self.id[:7])
-        if self.mask is not None:
-            string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.mask)
+        if self.status.value == "masked":
+            string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.status.details)
             return colorize(string)
         string = "%s %s %s" % (self.status.cname, id, self.pretty_repr())
         if self.duration >= 0:

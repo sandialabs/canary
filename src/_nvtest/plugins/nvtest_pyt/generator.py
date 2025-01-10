@@ -164,7 +164,7 @@ class PYTTestFile(AbstractTestGenerator):
                 )
                 case.launcher = sys.executable
                 if test_mask is not None:
-                    case.mask = test_mask
+                    case.status.set("masked", test_mask)
                 if any([_[1] is not None for _ in modules]):
                     mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
                     for _, use in modules:
@@ -210,7 +210,7 @@ class PYTTestFile(AbstractTestGenerator):
                 )
                 parent.launcher = sys.executable
                 if test_mask is not None:
-                    case.mask = test_mask
+                    case.status.set("masked", test_mask)
                 if any([_[1] is not None for _ in modules]):
                     mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
                     for _, use in modules:

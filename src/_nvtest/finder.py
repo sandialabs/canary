@@ -218,14 +218,14 @@ class Finder:
         missing = 0
         ids = [id(case) for case in cases]
         for case in cases:
-            if case.mask:
+            if case.status.value in ("masked", "skipped"):
                 continue
             for dep in case.dependencies:
                 if id(dep) not in ids:
                     logging.error(f"ID of {dep!r} is not in test cases")
                     missing += 1
-                if dep.mask:
-                    case.mask = "one or more skipped dependency"
+                if dep.status.value in ("masked", "skipped"):
+                    case.status.set("masked", "one or more skipped dependency")
                     logging.debug(f"Dependency {dep!r} of {case!r} is marked to be skipped")
         if missing:
             raise ValueError("Missing dependencies")
@@ -267,7 +267,7 @@ class Finder:
             raise ValueError("Duplicate test IDs in test suite")
 
         # this sanity check should not be necessary
-        if any(case.status.value != "created" for case in cases if not case.mask):
+        if any(case.status.value not in ("created", "skipped", "masked") for case in cases):
             raise ValueError("One or more test cases is not in created state")
 
         if env_mods:
@@ -288,7 +288,7 @@ class Finder:
             for case in cases:
                 p.test_discovery(case)
 
-        masked = [case for case in cases if case.mask]
+        masked = [case for case in cases if case.status == "masked"]
         logging.info(colorize("@*{Selected} %d test cases" % (len(cases) - len(masked))))
         if masked:
             logging.info(
@@ -296,8 +296,9 @@ class Finder:
             )
             masked_reasons: dict[str, int] = {}
             for case in cases:
-                if case.mask:
-                    masked_reasons[case.mask] = masked_reasons.get(case.mask, 0) + 1
+                if case.status.value in ("masked", "skipped"):
+                    reason = str(case.status.details)
+                    masked_reasons[reason] = masked_reasons.get(reason, 0) + 1
             reasons = sorted(masked_reasons, key=lambda x: masked_reasons[x])
             for reason in reversed(reasons):
                 logging.emit(f"{glyphs.bullet} {masked_reasons[reason]}: {reason.lstrip()}\n")
@@ -312,6 +313,9 @@ class Finder:
         owners: set[str] | None = None,
         regex: str | None = None,
     ) -> None:
+        def already_skipped(case: TestCase) -> bool:
+            return case.status.value in ("masked", "skipped")
+
         rx: re.Pattern | None = None
         if regex is not None:
             logging.warning("Regular expression search can be slow for large test suites")
@@ -324,40 +328,45 @@ class Finder:
             try:
                 config.resource_pool.satisfiable(case.required_resources())
             except config.ResourceUnsatisfiable as e:
-                if case.mask is None:
+                if not already_skipped(case):
                     s = "@*{ResourceUnsatisfiable}(%r)" % e.args[0]
-                    case.mask = colorize(s)
+                    case.status.set("masked", colorize(s))
 
-            if case.mask is None and owners:
+            if not already_skipped(case) and owners:
                 if not owners.intersection(case.owners):
-                    case.mask = colorize("not owned by @*{%r}" % case.owners)
+                    case.status.set("masked", colorize("not owned by @*{%r}" % case.owners))
 
-            if case.mask is None and keyword_expr is not None:
+            if not already_skipped(case) and keyword_expr is not None:
                 kwds = set(case.keywords)
                 kwds.update(case.implicit_keywords)
                 kwds.add(case.name)
                 kwds.update(case.parameters.keys())
                 match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
                 if not match:
-                    case.mask = colorize("keyword expression @*{%r} did not match" % keyword_expr)
+                    case.status.set(
+                        "masked", colorize("keyword expression @*{%r} did not match" % keyword_expr)
+                    )
 
-            if case.mask is None and ("TDD" in case.keywords or "tdd" in case.keywords):
-                case.mask = colorize("test marked as @*{TDD}")
+            if not already_skipped(case) and ("TDD" in case.keywords or "tdd" in case.keywords):
+                case.status.set("masked", colorize("test marked as @*{TDD}"))
 
-            if case.mask is None and parameter_expr:
+            if not already_skipped(case) and parameter_expr:
                 match = when.when(
                     f"parameters={parameter_expr!r}",
                     parameters=case.parameters | case.implicit_parameters,
                 )
                 if not match:
-                    case.mask = colorize(
-                        "parameter expression @*{%s} did not match" % parameter_expr
+                    case.status.set(
+                        "masked",
+                        colorize("parameter expression @*{%s} did not match" % parameter_expr),
                     )
 
-            if case.mask is None and any(dep.mask for dep in case.dependencies):
-                case.mask = colorize("one or more skipped dependencies")
+            if not already_skipped(case) and any(
+                dep.status == "masked" for dep in case.dependencies
+            ):
+                case.status.set("masked", colorize("one or more skipped dependencies"))
 
-            if case.mask is None and rx is not None:
+            if not already_skipped(case) and rx is not None:
                 if not fs.grep(rx, case.file):
                     for asset in case.assets:
                         if os.path.isfile(asset.src):
@@ -365,7 +374,7 @@ class Finder:
                                 break
                     else:
                         msg = "@*{re.search(%r) is None} evaluated to @*g{True}" % regex
-                        case.mask = colorize(msg)
+                        case.status.set("masked", colorize(msg))
 
         dt = time.monotonic() - start
         logging.info(

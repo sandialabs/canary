@@ -48,7 +48,7 @@ class Find(Command):
             env_mods=args.env_mods.get("test") or {},
             regex=args.regex_filter,
         )
-        cases_to_run = [case for case in cases if not case.mask]
+        cases_to_run = [case for case in cases if case.status != "masked"]
         cases_to_run.sort(key=lambda x: x.name)
         if args.print_keywords:
             Finder.pprint_keywords(cases_to_run)

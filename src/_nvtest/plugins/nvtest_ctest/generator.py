@@ -204,7 +204,7 @@ class CTestTestCase(TestCase):
             self.resource_groups = resource_groups
 
         if disabled:
-            self.mask = f"Explicitly disabled in {self.file}"
+            self.status.set("masked", f"Explicitly disabled in {self.file}")
 
         if attached_files is not None:
             self.artifacts.extend([{"file": f, "when": "always"} for f in attached_files])

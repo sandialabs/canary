@@ -28,7 +28,7 @@ def test_partition_x(generate_files):
     finder.prepare()
     files = finder.discover()
     cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if not c.mask]) == num_cases
+    assert len([c for c in cases if c.status != "masked"]) == num_cases
     partitions = p.partition_x(cases)
     assert len(partitions) == 2
     assert len(partitions[0]) == num_cases - num_base_cases
@@ -42,7 +42,7 @@ def test_partition_n(generate_files):
     finder.prepare()
     files = finder.discover()
     cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if not c.mask]) == num_cases
+    assert len([c for c in cases if c.status != "masked"]) == num_cases
     partitions = p.partition_n(cases, n=5)
     assert len(partitions) == 5
     assert sum(len(_) for _ in partitions) == num_cases
@@ -55,6 +55,6 @@ def test_autopartition(generate_files):
     finder.prepare()
     files = finder.discover()
     cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if not c.mask]) == num_cases
+    assert len([c for c in cases if c.status != "masked"]) == num_cases
     partitions = p.autopartition(cases, t=15 * 60)  # 5x long test case duration
     assert sum(len(_) for _ in partitions) == num_cases

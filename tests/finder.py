@@ -21,7 +21,7 @@ def test_skipif(tmpdir):
     files = finder.discover()
     cases = finder.lock_and_filter(files)
     assert len(cases) == 2
-    assert len([c for c in cases if not c.mask]) == 1
+    assert len([c for c in cases if c.status != "masked"]) == 1
 
 
 def test_keywords(tmpdir):
@@ -38,11 +38,11 @@ def test_keywords(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.lock_and_filter(files, keyword_expr="a and i")
-    assert len([c for c in cases if not c.mask]) == 0
+    assert len([c for c in cases if c.status != "masked"]) == 0
     cases = finder.lock_and_filter(files, keyword_expr="a and e")
-    assert len([c for c in cases if not c.mask]) == 1
+    assert len([c for c in cases if c.status != "masked"]) == 1
     cases = finder.lock_and_filter(files, keyword_expr="a or i")
-    assert len([c for c in cases if not c.mask]) == 2
+    assert len([c for c in cases if c.status != "masked"]) == 2
 
 
 def test_parameterize_1(tmpdir):
@@ -57,7 +57,7 @@ def test_parameterize_1(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if not c.mask]) == 3
+    assert len([c for c in cases if c.status != "masked"]) == 3
     a, b = 0, 1
     for case in cases:
         assert case.parameters == {"a": a, "b": b}
@@ -78,7 +78,7 @@ def test_parameterize_2(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if not c.mask]) == 9
+    assert len([c for c in cases if c.status != "masked"]) == 9
     i = 0
     for a, b in [(0, 1), (2, 3), (4, 5)]:
         for n in (10, 11, 12):
@@ -99,9 +99,9 @@ def test_parameterize_3(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.lock_and_filter(files, on_options=["xxx"])
-    assert len([c for c in cases if not c.mask]) == 2
+    assert len([c for c in cases if c.status != "masked"]) == 2
     cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if not c.mask]) == 1
+    assert len([c for c in cases if c.status != "masked"]) == 1
     assert cases[0].parameters == {}
 
 
@@ -118,12 +118,11 @@ def test_cpu_count(tmpdir):
         finder.prepare()
         files = finder.discover()
         cases = finder.lock_and_filter(files)
-        print([c.mask for c in cases])
-        assert len([c for c in cases if not c.mask]) == 4
+        assert len([c for c in cases if c.status != "masked"]) == 4
     with nvtest.config.override():
         nvtest.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=2)
         cases = finder.lock_and_filter(files)
-        assert len([c for c in cases if not c.mask]) == 1
+        assert len([c for c in cases if c.status != "masked"]) == 1
 
 
 def test_dep_patterns(tmpdir):
@@ -142,7 +141,7 @@ def test_dep_patterns(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if not c.mask]) == 4
+    assert len([c for c in cases if c.status != "masked"]) == 4
     for case in cases:
         if case.name == "f":
             assert len(case.dependencies) == 1
@@ -165,7 +164,7 @@ def test_analyze(tmpdir):
     cases = finder.lock_and_filter(files)
     print(cases)
     print(vars(cases[-1]))
-    assert len([c for c in cases if not c.mask]) == 10
+    assert len([c for c in cases if c.status != "masked"]) == 10
     assert cases[-1].postflags == ["--analyze"]
     assert all(case in cases[-1].dependencies for case in cases[:-1])
 
@@ -182,11 +181,11 @@ def test_enable(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.lock_and_filter(files, on_options=["baz", "spam"])
-    assert len([c for c in cases if not c.mask]) == 1
+    assert len([c for c in cases if c.status != "masked"]) == 1
     cases = finder.lock_and_filter(files, on_options=["baz"])
-    assert len([c for c in cases if not c.mask]) == 0
+    assert len([c for c in cases if c.status != "masked"]) == 0
     cases = finder.lock_and_filter(files, on_options=["spam", "baz", "foo"])
-    assert len([c for c in cases if not c.mask]) == 1
+    assert len([c for c in cases if c.status != "masked"]) == 1
 
 
 def test_enable_names(tmpdir):
@@ -204,7 +203,7 @@ def test_enable_names(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if not c.mask]) == 2
+    assert len([c for c in cases if c.status != "masked"]) == 2
 
 
 def test_pyt_generator(tmpdir):
@@ -240,7 +239,7 @@ nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             assert len(cases) == 10
             assert isinstance(cases[-1], tc.TestMultiCase)
             for case in cases:
-                assert not case.masked, case.mask
+                assert case.status != "masked", case.status.details
 
             # without the baz option, the `cpus` parameter will not be expanded so we will be left with
             # three test cases and one analyze.  The analyze will not be masked because the `cpus`

@@ -68,7 +68,7 @@ class Reporter(ABC):
     def data(self) -> TestData:
         if self._data is None:
             self._data = TestData()
-            cases_to_run: list["TestCase"] = [c for c in self.session.cases if not c.mask]
+            cases_to_run: list["TestCase"] = [c for c in self.session.cases if c.status != "masked"]
             for case in cases_to_run:
                 self._data.add_test(case)
         assert self._data is not None

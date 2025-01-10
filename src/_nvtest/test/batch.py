@@ -81,11 +81,11 @@ class TestBatch(AbstractTestCase):
     def validate(self, cases: Sequence[TestCase]):
         errors = 0
         for case in cases:
-            if case.mask:
+            if case.status == "masked":
                 logging.fatal(f"{case}: case is masked")
                 errors += 1
             for dep in case.dependencies:
-                if dep.mask:
+                if dep.status == "masked":
                     errors += 1
                     logging.fatal(f"{dep}: dependent of {case} is masked")
         if errors:

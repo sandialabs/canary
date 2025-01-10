@@ -24,7 +24,7 @@ class CDashXMLReporter:
     def __init__(self, session: Session | None = None, dest: str | None = None) -> None:
         self.data = TestData()
         if session:
-            cases_to_run: list["TestCase"] = [c for c in session.cases if not c.mask]
+            cases_to_run: list["TestCase"] = [c for c in session.cases if c.status != "masked"]
             for case in cases_to_run:
                 self.data.add_test(case)
         dest = dest or os.path.join("." if not session else session.work_tree, "_reports/cdash")
@@ -55,7 +55,7 @@ class CDashXMLReporter:
                 case.dependencies[i] = cases[dep.id]
             cases[id] = case
         for case in cases.values():
-            if not case.mask:
+            if case.status != "masked":
                 # case.refresh()
                 self.data.add_test(case)
         return self
@@ -188,7 +188,7 @@ class CDashXMLReporter:
         for case in cases:
             exit_value = case.returncode
             fail_reason = None
-            if case.mask or case.status.value in not_done:
+            if case.status == "masked" or case.status.value in not_done:
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"

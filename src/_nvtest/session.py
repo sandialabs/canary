@@ -216,7 +216,7 @@ class Session:
         index: dict[str, list[str]] = {}
         for case in self.cases:
             index[case.id] = [dep.id for dep in case.dependencies]
-            if not case.mask:
+            if case.status.value not in ("masked", "skipped"):
                 case.status.set("ready" if not case.dependencies else "pending")
             case.save()
         with self.db.open("cases/index", "w") as fh:
@@ -392,7 +392,7 @@ class Session:
             env_mods=env_mods,
             regex=regex,
         )
-        cases_to_run = [case for case in self.cases if not case.mask]
+        cases_to_run = [case for case in self.cases if case.status.value != "masked"]
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
         self.dump_testcases()
@@ -426,23 +426,27 @@ class Session:
         start = os.path.normpath(start)
         # mask all tests and then later enable based on additional conditions
         for case in self.cases:
-            if case.mask:
+            if case.status.value in ("masked", "skipped"):
                 continue
             if not case.working_directory.startswith(start):
-                case.mask = "Unreachable from start directory"
+                case.status.set("masked", "Unreachable from start directory")
                 continue
             if case_specs is not None:
                 if any(case.matches(_) for _ in case_specs):
                     case.status.set("ready")
                 else:
                     expr = ",".join(case_specs)
-                    case.mask = color.colorize("testspec expression @*{%s} did not match" % expr)
+                    case.status.set(
+                        "masked", color.colorize("testspec expression @*{%s} did not match" % expr)
+                    )
                 continue
 
             try:
                 config.resource_pool.satisfiable(case.required_resources())
             except config.ResourceUnsatisfiable as e:
-                case.mask = color.colorize("@*{ResourceUnsatisfiable}(%r)" % e.args[0])
+                case.status.set(
+                    "masked", color.colorize("@*{ResourceUnsatisfiable}(%r)" % e.args[0])
+                )
                 continue
 
             when_expr: dict[str, str] = {}
@@ -468,21 +472,26 @@ class Session:
                 if match:
                     case.status.set("ready" if not case.dependencies else "pending")
                 elif case.status != "ready":
-                    case.mask = f"previous status {case.status.cname!r} is not 'ready'"
+                    case.status.set(
+                        "masked", f"previous status {case.status.cname!r} is not 'ready'"
+                    )
                 else:
-                    case.mask = color.colorize(
-                        "when expression @*b{%s} evaluated to @*r{False}" % when_expr
+                    case.status.set(
+                        "masked",
+                        color.colorize(
+                            "when expression @*b{%s} evaluated to @*r{False}" % when_expr
+                        ),
                     )
 
         cases: list[TestCase] = []
         for case in self.cases:
-            if case.mask:
+            if case.status.value == "masked":
                 continue
             if case.status.satisfies(("pending", "ready")):
                 for dep in case.dependencies:
                     # FIXME: CHECK OTHER CODES AS REQUIRED BY THE TEST
                     if not dep.status.satisfies(("pending", "ready", "success", "diff")):
-                        case.mask = color.colorize("one or more dependencies failed")
+                        case.status.set("masked", color.colorize("one or more dependencies failed"))
                         break
                 else:
                     cases.append(case)
@@ -497,7 +506,8 @@ class Session:
         logging.info(f"Selecting {expected} tests from batch {batch_id}")
         for case in self.cases:
             if case.id in batch_case_ids:
-                assert not case.mask, case.mask
+                if case.status.value in ("masked", "skipped"):
+                    raise ValueError(f"{case}: unexpected initial status: {case.status.value}")
                 if not case.dependencies:
                     case.status.set("ready")
                 elif all(_.status.value in ("success", "diff") for _ in case.dependencies):
@@ -520,11 +530,10 @@ class Session:
                         )
                         for dep in failed_deps:
                             logging.emit(f"  - {dep} [id={dep.id}, status={dep.status.value}]\n")
-                        case.status.set("not_run", "one or more dependencies failed")
-                        case.mask = str(case.status.details)
+                        case.status.set("skipped", "one or more dependencies failed")
             else:
-                case.mask = f"Case not in batch {batch_id}"
-        return [case for case in self.cases if not case.mask]
+                case.status.set("masked", f"Case not in batch {batch_id}")
+        return [case for case in self.cases if case.status.value not in ("masked", "skipped")]
 
     def run(
         self,
@@ -882,7 +891,7 @@ class Session:
         file = io.StringIO()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            if case.mask:
+            if case.status == "masked":
                 totals.setdefault("masked", []).append(case)
             else:
                 totals.setdefault(case.status.value, []).append(case)
@@ -920,16 +929,16 @@ class Session:
             if "x" in rc:
                 cases_to_show = cases
             else:
-                cases_to_show = [c for c in cases if not c.mask]
+                cases_to_show = [c for c in cases if c.status != "masked"]
         elif "a" in rc:
             if "x" in rc:
                 cases_to_show = [c for c in cases if c.status != "success"]
             else:
-                cases_to_show = [c for c in cases if not c.mask and c.status != "success"]
+                cases_to_show = [c for c in cases if c.status != "masked" and c.status != "success"]
         else:
             cases_to_show = []
             for case in cases:
-                if case.mask:
+                if case.status == "masked":
                     if "x" in rc:
                         cases_to_show.append(case)
                 elif "s" in rc and case.status == "skipped":
@@ -955,7 +964,8 @@ class Session:
             file.write(self.status(cases_to_show, sortby=sortby) + "\n")
         if durations:
             file.write(self.durations(cases_to_show, int(durations)) + "\n")
-        file.write(self.footer([c for c in self.cases if not c.mask], title="Summary") + "\n")
+        s = self.footer([c for c in self.cases if not c.status == "masked"], title="Summary")
+        file.write(s + "\n")
         return file.getvalue()
 
 

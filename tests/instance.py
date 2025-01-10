@@ -21,7 +21,7 @@ def test_instance_deps(tmpdir):
     finder.prepare()
     files = finder.discover()
     cases = finder.lock_and_filter(files)
-    assert len([c for c in cases if not c.mask]) == 7
+    assert len([c for c in cases if c.status != "masked"]) == 7
     work_tree = os.path.join(workdir, "tests")
     mkdirp(work_tree)
     with nvtest.config.override():

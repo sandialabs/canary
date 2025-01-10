@@ -10,6 +10,7 @@ class Status:
     """The status of a ``nvtest`` test case."""
 
     members = (
+        "masked",
         "retry",
         "created",
         "pending",
@@ -26,6 +27,7 @@ class Status:
         "timeout",
     )
     colors = {
+        "masked": "m",
         "retry": "r",
         "created": "b",
         "pending": "b",
@@ -84,6 +86,7 @@ class Status:
     @staticmethod
     def glyph(status):
         map = {
+            "masked": glyphs.masked,
             "retry": glyphs.retry,
             "created": glyphs.mdash,
             "pending": glyphs.mdash,
@@ -150,6 +153,8 @@ class Status:
     def set(self, arg: str, details: str | None = None) -> None:
         if arg not in self.members:
             raise ValueError(f"{arg} is not a valid status")
+        if arg == "masked" and details is None:
+            details = "unknown"
         if arg in ("skipped", "failed", "diffed") and details is None:
             details = "unknown"
         if arg in ("pending", "ready", "created", "retry"):
