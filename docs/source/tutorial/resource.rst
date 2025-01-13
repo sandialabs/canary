@@ -9,7 +9,6 @@ Resource allocation
     :maxdepth: 1
 
     resource.pool
-    resource.spec
     resource.defn
     resource.reqd
     resource.env

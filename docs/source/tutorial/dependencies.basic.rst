@@ -3,7 +3,7 @@
 Basic test dependencies
 =======================
 
-The :func:`~nvtest.directives.depends_on` directive designates one test as dependent on another.  Dependent tests will not run until all of its dependencies run to completion. When it is run, it can query the properties of its dependencies by the ``instance.dependencies`` attribute.
+The :func:`~nvtest.directives.depends_on` directive designates one test case as dependent on another.  Dependent test cases will not run until all of its dependencies run to completion. When the test case is run, it can query the properties of its dependencies by the ``instance.dependencies`` attribute.
 
 Example
 -------

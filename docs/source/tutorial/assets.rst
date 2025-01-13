@@ -7,4 +7,4 @@ Test asset management
     :maxdepth: 1
 
     Copy files into the test's working directory <assets.copy>
-    LInk files into the test's working directory <assets.link>
+    Link files into the test's working directory <assets.link>

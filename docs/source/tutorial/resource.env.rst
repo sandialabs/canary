@@ -25,3 +25,8 @@ Other environment variables
 ---------------------------
 
 Existing environment variables having the placeholders ``%(<name>_ids)s`` have those placeholders replaced when the test is run.  If, in the previous example, the environment had defined ``CUDA_VISIBLE_DEVICES="%(gpu_ids)s"``, then ``CUDA_VISIBLE_DEVICES=0,1,2,3`` would be defined in the test environment.
+
+CTest environment variables
+---------------------------
+
+For CTest tests, ``nvtest`` defines environment variables in a manner consistent with `CTest conventions <https://cmake.org/cmake/help/latest/manual/ctest.1.html#environment-variables>`_.

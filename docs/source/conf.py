@@ -74,7 +74,8 @@ exclude_patterns = [
     "tutorial/intro.pyt.rst",
     "tutorial/intro.testcase.rst",
     "tutorial/intro.testfile.rst",
-    "tutorial/intro.why.rst"
+    "tutorial/intro.why.rst",
+    "tutorial/resource.spec.rst"
 ]
 
 
