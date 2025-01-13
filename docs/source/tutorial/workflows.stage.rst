@@ -16,7 +16,7 @@ In this example, an expensive ``run`` stage is defined as well as a relatively i
 
     The ``run`` stage is always defined for each test, whether explicitly or implicitly, as in this example.
 
-.. command-output:: nvtest -C run ./staged
+.. command-output:: nvtest run ./staged
     :cwd: /examples
     :nocache:
     :extraargs: -w
