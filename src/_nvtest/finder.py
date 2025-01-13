@@ -276,9 +276,9 @@ def mask(
     parameter_expr: str | None = None,
     owners: set[str] | None = None,
     regex: str | None = None,
-    start: str | None = None,
     case_specs: list[str] | None = None,
     stage: str | None = None,
+    start: str | None = None,
 ) -> None:
     """Filter test cases (mask test cases that don't meet a specific criteria)
 
@@ -295,19 +295,26 @@ def mask(
         logging.warning("Regular expression search can be slow for large test suites")
         rx = re.compile(regex)
 
+    owners = set(owners or [])
+    no_filter_criteria = all(_ is None for _ in (keyword_expr, parameter_expr, owners, regex))
+
+    explicit_start_path = start is not None
     if start is None:
         start = config.session.work_tree
     elif not os.path.isabs(start):
         start = os.path.join(config.session.work_tree, start)  # type: ignore
     if start is not None:
         start = os.path.normpath(start)
-    owners = set(owners or [])
 
     for case in cases:
         if case.masked():
             continue
 
-        if start is not None and not case.working_directory.startswith(start):
+        if explicit_start_path and case.matches(start):
+            # won't mask
+            continue
+
+        if start and not case.working_directory.startswith(start):
             case.mask = "Unreachable from start directory"
             continue
 
@@ -323,10 +330,6 @@ def mask(
             case.mask = colorize("@*{ResourceUnsatisfiable}(%r)" % e.args[0])
             continue
 
-        if "TDD" in case.keywords or "tdd" in case.keywords:
-            case.mask = colorize("test marked as @*{TDD}")
-            continue
-
         if owners and not owners.intersection(case.owners):
             case.mask = colorize("not owned by @*{%r}" % case.owners)
             continue
@@ -334,11 +337,14 @@ def mask(
         if keyword_expr is not None:
             kwds = set(case.keywords)
             kwds.update(case.implicit_keywords)
-            kwds.update(case.parameters.keys())
             match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
             if not match:
                 case.mask = colorize("keyword expression @*{%r} did not match" % keyword_expr)
                 continue
+
+        elif case.has_keyword("TDD"):
+            case.mask = colorize("test marked as @*{TDD}")
+            continue
 
         if parameter_expr:
             match = when.when(
@@ -350,7 +356,7 @@ def mask(
                 continue
 
         if stage and stage not in case.stages:
-            case.mask = f"{stage}: undefined stage"
+            case.mask = f"{stage}: unsupported stage"
             continue
 
         if any(dep.masked() for dep in case.dependencies):
@@ -365,6 +371,11 @@ def mask(
                 else:
                     case.mask = colorize("@*{re.search(%r) is None} evaluated to @*g{True}" % regex)
                     continue
+
+        # If we got this far and the case is not masked, only mask it if no filtering criteria were
+        # specified
+        if no_filter_criteria and not case.status.satisfies(("pending", "ready")):
+            case.mask = f"previous status {case.status.value!r} is not 'ready'"
 
 
 def find_duplicates(cases: list[TestCase]) -> dict[str, list[TestCase]]:

@@ -49,18 +49,6 @@ Set environment variables that will be set during test execution.
    variables:
      var: value # (str) environment variables to set for the test session
 
-.. _machine_config:
-
-machine
--------
-
-Set machine settings.
-
-.. code-block:: yaml
-
-   machine:
-     cpu_count: N  # (int) default determined from system probe
-
 build
 -----
 

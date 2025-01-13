@@ -421,15 +421,7 @@ class Session:
 
         logging.info(colorize("@*{Selected} %d test cases" % (len(self.cases) - len(masked))))
         if masked:
-            logging.info(
-                colorize("@*{Excluding} %d test cases for the following reasons:" % len(masked))
-            )
-            masked_reasons: dict[str, int] = {}
-            for case in masked:
-                masked_reasons[case.mask] = masked_reasons.get(case.mask, 0) + 1
-            reasons = sorted(masked_reasons, key=lambda x: masked_reasons[x])
-            for reason in reversed(reasons):
-                logging.emit(f"{glyphs.bullet} {masked_reasons[reason]}: {reason.lstrip()}\n")
+            self.report_excluded(masked)
 
         if not self.get_ready():
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
@@ -458,20 +450,26 @@ class Session:
           A list of test cases
 
         """
-
+        cases = self.active_cases()
         finder.mask(
-            self.cases,
+            cases,
             keyword_expr=keyword_expr,
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
-            start=start,
             stage=stage,
             case_specs=case_specs,
+            start=start,
         )
-        for case in self.cases:
+        masked: list[TestCase] = []
+        for case in cases:
             if not case.masked():
                 case.mark_as_ready()
+            else:
+                masked.append(case)
+        logging.info(colorize("@*{Selected} %d test cases" % (len(cases) - len(masked))))
+        if masked:
+            self.report_excluded(masked)
 
     def bfilter(self, *, batch_id: str) -> None:
         """Mask any test cases not in batch ``batch_id``"""
@@ -520,7 +518,7 @@ class Session:
         """
         cases = self.get_ready()
         if not cases:
-            raise ValueError("There are no cases to run in this session")
+            raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
         queue = self.setup_queue(cases)
         config.session.stage = stage = stage or "run"
         config.variables[stage] = stage
@@ -868,6 +866,16 @@ class Session:
                     description = case.describe()
                     file.write("%s %s\n" % (glyph, description))
         return file.getvalue()
+
+    def report_excluded(self, cases: list[TestCase]) -> None:
+        n = len(cases)
+        logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
+        reasons: dict[str, int] = {}
+        for case in cases:
+            reasons[case.mask] = reasons.get(case.mask, 0) + 1
+        keys = sorted(reasons, key=lambda x: reasons[x])
+        for key in reversed(keys):
+            logging.emit(f"{glyphs.bullet} {reasons[key]}: {key.lstrip()}\n")
 
     def report(
         self,

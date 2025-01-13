@@ -343,6 +343,8 @@ class TestCase(AbstractTestCase):
     @property
     def work_tree(self) -> str | None:
         """The session work tree.  Can be lazily evaluated so we don't set it here if missing"""
+        if self._work_tree is None:
+            self._work_tree = config.session.work_tree
         return self._work_tree
 
     @work_tree.setter
@@ -375,6 +377,13 @@ class TestCase(AbstractTestCase):
 
     # backward compatibility
     exec_path = path
+
+    @property
+    def execfile(self) -> str | None:
+        if self.work_tree is None:
+            return None
+        else:
+            return os.path.join(self.work_tree, self.path, os.path.basename(self.file))
 
     def logfile(self, stage: str | None = None) -> str:
         if stage is None:
@@ -621,36 +630,7 @@ class TestCase(AbstractTestCase):
     @property
     def status(self) -> Status:
         if self._status.value == "pending":
-            if not self.dependencies:
-                raise ValueError("should never have a pending case without dependencies")
-            # Determine if dependent cases have completed and, if so, flip status to 'ready'
-            expected = self.dep_done_criteria
-            ready: list[bool] = [False] * len(self.dependencies)
-            for i, dep in enumerate(self.dependencies):
-                if dep.status.value not in ("ready", "pending", "running"):
-                    if expected[i] in (None, dep.status.value, "*"):
-                        ready[i] = True
-                    else:
-                        ready[i] = match_any(expected[i], [dep.status.value, dep.status.name])
-                    if ready[i] is False:
-                        # this case will never be able to run
-                        if dep.status == "skipped":
-                            self._status.set("skipped", "one or more dependencies was skipped")
-                        elif dep.status == "cancelled":
-                            self._status.set("not_run", "one or more dependencies was cancelled")
-                        elif dep.status == "timeout":
-                            self._status.set("not_run", "one or more dependencies timed out")
-                        elif dep.status == "failed":
-                            self._status.set("not_run", "one or more dependencies failed")
-                        elif dep.status == "diffed":
-                            self._status.set("skipped", "one or more dependencies diffed")
-                        else:
-                            self._status.set(
-                                "skipped",
-                                f"one or more dependencies failed with status {dep.status.value}",
-                            )
-            if all(ready):
-                self._status.set("ready")
+            self.check_dep_status()
         return self._status
 
     @status.setter
@@ -661,6 +641,38 @@ class TestCase(AbstractTestCase):
             self._status.set(arg["value"], details=arg["details"])
         else:
             raise ValueError(arg)
+
+    def check_dep_status(self) -> None:
+        if not self.dependencies:
+            raise ValueError("should never have a pending case without dependencies")
+        # Determine if dependent cases have completed and, if so, flip status to 'ready'
+        expected = self.dep_done_criteria
+        ready: list[bool] = [False] * len(self.dependencies)
+        for i, dep in enumerate(self.dependencies):
+            if dep.status.value not in ("ready", "pending", "running"):
+                if expected[i] in (None, dep.status.value, "*"):
+                    ready[i] = True
+                else:
+                    ready[i] = match_any(expected[i], [dep.status.value, dep.status.name])
+                if ready[i] is False:
+                    # this case will never be able to run
+                    if dep.status == "skipped":
+                        self._status.set("skipped", "one or more dependencies was skipped")
+                    elif dep.status == "cancelled":
+                        self._status.set("not_run", "one or more dependencies was cancelled")
+                    elif dep.status == "timeout":
+                        self._status.set("not_run", "one or more dependencies timed out")
+                    elif dep.status == "failed":
+                        self._status.set("not_run", "one or more dependencies failed")
+                    elif dep.status == "diffed":
+                        self._status.set("skipped", "one or more dependencies diffed")
+                    else:
+                        self._status.set(
+                            "skipped",
+                            f"one or more dependencies failed with status {dep.status.value}",
+                        )
+        if all(ready):
+            self._status.set("ready")
 
     @property
     def mask(self) -> str:
@@ -1158,6 +1170,17 @@ class TestCase(AbstractTestCase):
             return True
         elif self.file_path.endswith(pattern):
             return True
+        elif self.execfile == pattern:
+            return True
+        return False
+
+    def has_keyword(self, /, keyword: str, case_insensitive: bool = True) -> bool:
+        def matches(a: str, b: str, case_insensitive: bool) -> bool:
+            return a.lower() == b.lower() if case_insensitive else a == b
+
+        for kwd in self.keywords:
+            if matches(keyword, kwd, case_insensitive):
+                return True
         return False
 
     @staticmethod
