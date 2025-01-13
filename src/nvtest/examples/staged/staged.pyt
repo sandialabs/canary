@@ -4,7 +4,7 @@ import sys
 import nvtest
 
 nvtest.directives.parameterize("cpus", [1, 4, 8])
-nvtest.directives.stages("analyze", "plot")
+nvtest.directives.stages("analyze", "plot", when="parameters='cpus=1'")
 
 
 def run(case: nvtest.TestInstance) -> None:

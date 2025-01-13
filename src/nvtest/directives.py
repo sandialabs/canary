@@ -1273,7 +1273,7 @@ def sources(*args: str, when: WhenType | None = None) -> None:
     pass
 
 
-def stages(*args: str) -> None:
+def stages(*args: str, when: WhenType | None = None) -> None:
     """Assign different execution stages to this test case.
 
     Usage

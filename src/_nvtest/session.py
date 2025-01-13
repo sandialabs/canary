@@ -528,7 +528,8 @@ class Session:
                 try:
                     queue_size = len(queue)
                     what = "batches" if hasattr(queue, "batch_scheme") else "test cases"
-                    logging.info(colorize("@*{Running} %d %s" % (queue_size, what)))
+                    p = " " if stage == "run" else f" stage {stage!r} for "
+                    logging.info(colorize("@*{Running}%s%d %s" % (p, queue_size, what)))
                     self.start = timestamp()
                     self.finish = -1.0
                     self.process_queue(
