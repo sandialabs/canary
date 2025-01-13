@@ -5,7 +5,7 @@ Defining the resource pool
 
 By default:
 
-* The resource pool is automatically generated based on the :ref:`machine configuration <machine_config>` and consists of a single node with ``N`` CPUs *and* 0 GPUs
+* The resource pool is automatically generated based on a machine probe and consists of a single node with ``N`` CPUs *and* 0 GPUs
 * The number of CPUs ``N`` is determined by a system probe\ [3]_
 * No other resource types are assumed to exist
 

@@ -18,5 +18,4 @@ config
    :maxdepth: 1
 
    linux
-   machine
    macos

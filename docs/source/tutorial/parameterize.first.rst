@@ -3,7 +3,7 @@
 Getting started with parameterization
 =====================================
 
-As mentioned in :ref:`tutorial-intro-testfile`, a single test file can generate multiple test cases, each having different parameters as defined by the :ref:`parameterize <directive-parameterize>` directive.  Variations (test cases) of the test file are generated for combinations of parameter name[s] and value[s].  In the most simple case, a single parameter is defined, as demonstrated in the example ``paramterize/parameterize1.pyt``:
+In the most simple case, a single parameter is defined, as demonstrated in the example ``paramterize/parameterize1.pyt``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python

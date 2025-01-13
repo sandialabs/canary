@@ -224,11 +224,11 @@ class TestCase(AbstractTestCase):
         self._artifacts: list[dict[str, str]] = []
         self._exclusive: bool = exclusive
 
-        self._mask: str | None = None
         self._name: str | None = None
         self._display_name: str | None = None
         self._id: str | None = None
         self._status: Status = Status()
+        self._mask: str = ""
         self._cmd_line: str | None = None
         self._work_tree: str | None = None
         self._working_directory: str | None = None
@@ -343,6 +343,8 @@ class TestCase(AbstractTestCase):
     @property
     def work_tree(self) -> str | None:
         """The session work tree.  Can be lazily evaluated so we don't set it here if missing"""
+        if self._work_tree is None:
+            self._work_tree = config.session.work_tree
         return self._work_tree
 
     @work_tree.setter
@@ -375,6 +377,13 @@ class TestCase(AbstractTestCase):
 
     # backward compatibility
     exec_path = path
+
+    @property
+    def execfile(self) -> str | None:
+        if self.work_tree is None:
+            return None
+        else:
+            return os.path.join(self.work_tree, self.path, os.path.basename(self.file))
 
     def logfile(self, stage: str | None = None) -> str:
         if stage is None:
@@ -566,7 +575,7 @@ class TestCase(AbstractTestCase):
             for t, dst in arg[action]:
                 src = t if os.path.isabs(t) else os.path.join(self.file_dir, t)
                 if not os.path.exists(src):
-                    logging.warning(f"{self}: {action} resource file {t} not found")
+                    logging.debug(f"{self}: {action} resource file {t} not found")
                 asset = Asset(src=os.path.abspath(src), dst=dst, action=action)
                 self._assets.append(asset)
 
@@ -619,42 +628,9 @@ class TestCase(AbstractTestCase):
         self._exclusive = arg
 
     @property
-    def skipped(self) -> bool:
-        return self.status == "skipped"
-
-    @property
     def status(self) -> Status:
-        if self._status.pending():
-            if not self.dependencies:
-                raise ValueError("should never have a pending case without dependencies")
-            # Determine if dependent cases have completed and, if so, flip status to 'ready'
-            expected = self.dep_done_criteria
-            ready: list[bool] = [False] * len(self.dependencies)
-            for i, dep in enumerate(self.dependencies):
-                if dep.status.value not in ("ready", "pending", "running"):
-                    if expected[i] in (None, dep.status.value, "*"):
-                        ready[i] = True
-                    else:
-                        ready[i] = match_any(expected[i], [dep.status.value, dep.status.name])
-                    if ready[i] is False:
-                        # this case will never be able to run
-                        if dep.status == "skipped":
-                            self._status.set("skipped", "one or more dependencies was skipped")
-                        elif dep.status == "cancelled":
-                            self._status.set("not_run", "one or more dependencies was cancelled")
-                        elif dep.status == "timeout":
-                            self._status.set("not_run", "one or more dependencies timed out")
-                        elif dep.status == "failed":
-                            self._status.set("not_run", "one or more dependencies failed")
-                        elif dep.status == "diffed":
-                            self._status.set("skipped", "one or more dependencies diffed")
-                        else:
-                            self._status.set(
-                                "skipped",
-                                f"one or more dependencies failed with status {dep.status.value}",
-                            )
-            if all(ready):
-                self._status.set("ready")
+        if self._status.value == "pending":
+            self.check_dep_status()
         return self._status
 
     @status.setter
@@ -665,6 +641,49 @@ class TestCase(AbstractTestCase):
             self._status.set(arg["value"], details=arg["details"])
         else:
             raise ValueError(arg)
+
+    def check_dep_status(self) -> None:
+        if not self.dependencies:
+            raise ValueError("should never have a pending case without dependencies")
+        # Determine if dependent cases have completed and, if so, flip status to 'ready'
+        expected = self.dep_done_criteria
+        ready: list[bool] = [False] * len(self.dependencies)
+        for i, dep in enumerate(self.dependencies):
+            if dep.status.value not in ("ready", "pending", "running"):
+                if expected[i] in (None, dep.status.value, "*"):
+                    ready[i] = True
+                else:
+                    ready[i] = match_any(expected[i], [dep.status.value, dep.status.name])
+                if ready[i] is False:
+                    # this case will never be able to run
+                    if dep.status == "skipped":
+                        self._status.set("skipped", "one or more dependencies was skipped")
+                    elif dep.status == "cancelled":
+                        self._status.set("not_run", "one or more dependencies was cancelled")
+                    elif dep.status == "timeout":
+                        self._status.set("not_run", "one or more dependencies timed out")
+                    elif dep.status == "failed":
+                        self._status.set("not_run", "one or more dependencies failed")
+                    elif dep.status == "diffed":
+                        self._status.set("skipped", "one or more dependencies diffed")
+                    else:
+                        self._status.set(
+                            "skipped",
+                            f"one or more dependencies failed with status {dep.status.value}",
+                        )
+        if all(ready):
+            self._status.set("ready")
+
+    @property
+    def mask(self) -> str:
+        return self._mask
+
+    @mask.setter
+    def mask(self, arg: str) -> None:
+        self._mask = arg
+
+    def masked(self) -> bool:
+        return bool(self._mask)
 
     @property
     def url(self) -> str | None:
@@ -747,18 +766,6 @@ class TestCase(AbstractTestCase):
     @measurements.setter
     def measurements(self, arg: dict[str, Any]) -> None:
         self._measurements = dict(arg)
-
-    @property
-    def masked(self) -> bool:
-        return True if self._mask else False
-
-    @property
-    def mask(self) -> str | None:
-        return self._mask
-
-    @mask.setter
-    def mask(self, arg: str) -> None:
-        self._mask = arg
 
     @property
     def name(self) -> str:
@@ -1116,8 +1123,8 @@ class TestCase(AbstractTestCase):
     def describe(self) -> str:
         """Write a string describing the test case"""
         id = colorize("@*b{%s}" % self.id[:7])
-        if self.mask is not None:
-            string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.mask)
+        if self.masked():
+            string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.status.details)
             return colorize(string)
         string = "%s %s %s" % (self.status.cname, id, self.pretty_repr())
         if self.duration >= 0:
@@ -1130,11 +1137,29 @@ class TestCase(AbstractTestCase):
             string += " diff reason: %s" % self.status.details or "unknown"
         return string
 
+    def activated(self) -> bool:
+        if self.masked():
+            return False
+        elif self.skipped():
+            return False
+        return True
+
+    def mark_as_ready(self) -> None:
+        if self.status == "error":
+            return
+        self._status.set("ready" if not self.dependencies else "pending")
+
+    def skipped(self) -> bool:
+        return self.status == "skipped"
+
     def complete(self) -> bool:
         return self.status.complete()
 
     def ready(self) -> bool:
-        return self.status.ready()
+        return not self.masked() and self.status == "ready"
+
+    def pending(self) -> bool:
+        return not self.masked() and self.status == "pending"
 
     def matches(self, pattern) -> bool:
         if pattern.startswith("/") and self.id.startswith(pattern[1:]):
@@ -1145,6 +1170,17 @@ class TestCase(AbstractTestCase):
             return True
         elif self.file_path.endswith(pattern):
             return True
+        elif self.execfile == pattern:
+            return True
+        return False
+
+    def has_keyword(self, /, keyword: str, case_insensitive: bool = True) -> bool:
+        def matches(a: str, b: str, case_insensitive: bool) -> bool:
+            return a.lower() == b.lower() if case_insensitive else a == b
+
+        for kwd in self.keywords:
+            if matches(keyword, kwd, case_insensitive):
+                return True
         return False
 
     @staticmethod
@@ -1184,8 +1220,7 @@ class TestCase(AbstractTestCase):
             if asset.action not in ("copy", "link"):
                 continue
             if not os.path.exists(asset.src):
-                s = f"{self.file}: {asset.action} resource file {asset.src} not found"
-                raise MissingSourceError(s)
+                raise MissingSourceError(asset.src)
             dst: str
             if asset.dst is None:
                 dst = os.path.join(self.working_directory, os.path.basename(asset.src))
@@ -1286,10 +1321,12 @@ class TestCase(AbstractTestCase):
             os.environ.update(save_env)
 
     def output(self, compress: bool = False) -> str:
-        if not self.status.complete():
+        if self.status == "skipped":
+            return f"Test skipped.  Reason: {self.status.details}"
+        elif self.status == "error":
+            return f"Test failed to initialize.  Reason: {self.status.details}"
+        elif not self.status.complete():
             return "Log not found"
-        elif self.status == "skipped":
-            return "Test skipped"
         text = io.open(self.logfile(), errors="ignore").read()
         if compress:
             kb_to_keep = 2 if self.status == "success" else 300
@@ -1305,7 +1342,6 @@ class TestCase(AbstractTestCase):
         clean_out_folder(self.working_directory)
         with fs.working_dir(self.working_directory, create=True):
             self.setup_working_directory()
-            self._status.set("ready" if not self.dependencies else "pending")
             for hook in plugin.hooks():
                 hook.test_setup(self)
             self.save()

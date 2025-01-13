@@ -133,7 +133,8 @@ class PathSpec:
                     if is_test_file(f):
                         name = os.path.splitext(os.path.basename(f))[0]
                         kwds.append(name)
-                args.keyword_expr = " and ".join(kwds)
+                if kwds:
+                    args.keyword_expr = " and ".join(kwds)
         return
 
     @staticmethod

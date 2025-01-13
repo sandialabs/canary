@@ -1,7 +1,7 @@
 .. _tutorial-assets:
 
-Test resource management
-========================
+Test asset management
+=====================
 
 .. toctree::
     :maxdepth: 1

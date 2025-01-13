@@ -19,9 +19,11 @@ import hpc_connect
 
 from . import config
 from .error import diff_exit_status
+from .error import skip_exit_status
 from .status import Status
 from .test.atc import AbstractTestCase
 from .test.batch import TestBatch
+from .test.case import MissingSourceError
 from .test.case import TestCase
 from .third_party.color import colorize
 from .util import logging
@@ -109,6 +111,9 @@ class TestCaseRunner(AbstractTestRunner):
                                 os.kill(proc.pid, signal.SIGINT)
                                 raise TimeoutError
                             time.sleep(0.05)
+        except MissingSourceError as e:
+            case.returncode = skip_exit_status
+            case.status.set("skipped", f"{case}: resource file {e.args[0]} not found")
         except KeyboardInterrupt:
             case.returncode = 2
             case.status.set("cancelled", "keyboard interrupt")
@@ -141,9 +146,10 @@ class TestCaseRunner(AbstractTestRunner):
             else:
                 case.status.set_from_code(case.returncode)
         finally:
-            if metrics is not None:
-                case.add_measurement(**metrics)
-            case.finish = timestamp()
+            if case.status != "skipped":
+                if metrics is not None:
+                    case.add_measurement(**metrics)
+                case.finish = timestamp()
             case.finalize(stage=stage)
         return
 
@@ -327,14 +333,16 @@ class BatchRunner(AbstractTestRunner):
             batch.total_duration = time.monotonic() - start
             batch.refresh()
             for case in batch.cases:
-                if case.start > 0 and case.finish < 0:
-                    case.status.set("cancelled", "batch cancelled")
+                if case.status == "skipped":
+                    pass
+                elif case.status == "running":
+                    case.status.set("cancelled", "case failed to finish")
+                    case.save()
+                elif case.start > 0 and case.finish < 0:
+                    case.status.set("cancelled", "case failed to finish")
                     case.save()
                 elif case.status == "ready":
                     case.status.set("not_run", "case failed to start")
-                    case.save()
-                elif case.status == "running":
-                    case.status.set("cancelled", "batch cancelled")
                     case.save()
         return
 
@@ -388,8 +396,8 @@ class BatchRunner(AbstractTestRunner):
         fp.write("nvtest ")
         if config.debug:
             fp.write("-d ")
-        if getattr(config.options, "plugin_dirs", None):
-            for p in config.options.plugin_dirs:
+        if plugin_dirs := config.getoption("plugin_dirs"):
+            for p in plugin_dirs:
                 fp.write(f"-p {p} ")
 
         # The batch will be run in a compute node, so hpc_connect won't set the machine limits
@@ -412,11 +420,11 @@ class BatchRunner(AbstractTestRunner):
                 json.dump(cfg, fh, indent=2)
             fp.write(f"-f {config_file} ")
         fp.write(f"-C {config.session.work_tree} run -rv --stage={stage} ")
-        if getattr(config.options, "fail_fast", False):
+        if config.getoption("fail_fast"):
             fp.write("--fail-fast ")
-        if getattr(config.options, "dont_measure", False):
+        if config.getoption("dont_measure"):
             fp.write("--dont-measure ")
-        if p := getattr(config.options, "P", None):
+        if p := config.getoption("P"):
             if p != "pedantic":
                 fp.write(f"-P{p} ")
         if isinstance(arg, TestBatch):

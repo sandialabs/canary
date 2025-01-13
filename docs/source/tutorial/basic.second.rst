@@ -6,13 +6,10 @@ The test file
 
 In this second example, the external program "``add.py``" adds two numbers and writes the result to the console's stdout:
 
-.. literalinclude:: /examples/basic/second/add.py
-   :language: python
-
-In the test, ``add.py`` is linked to the execution directory, is executed, and output verified for correctness:
-
 .. literalinclude:: /examples/basic/second/second.pyt
    :language: python
+
+In the test, ``add.py`` is linked to the execution directory, is executed, and output verified for correctness.
 
 This test introduces two new features:
 
@@ -44,3 +41,9 @@ When a test is run, its output is captured to the file ``nvtest-out.txt`` in its
 .. command-output:: nvtest -C TestResults log second
     :cwd: /examples
     :nocache:
+
+Contents of add.py
+------------------
+
+.. literalinclude:: /examples/basic/second/add.py
+   :language: python

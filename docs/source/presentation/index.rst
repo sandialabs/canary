@@ -1,4 +1,4 @@
-.. _tutorial:
+.. _presentation:
 
 nvtest: Accelerating Application Testing Across Platforms
 =========================================================
@@ -13,10 +13,10 @@ A Flexible, Extensible, and Scalable Framework for Scientific Applications
     :maxdepth: 1
 
     Introduction <intro>
-    Getting started <basic>
-    Parameterizing tests <parameterize>
-    assets
-    Test dependencies <dependencies>
-    Resource allocation <resource>
-    batch
-    workflows
+    Key features <features>
+    Technical architectures <technical>
+    Use cases <use-cases>
+    Performance <performance>
+    Extensibility <extensibility>
+    Future work and roadmap <future>
+    Conclusion <conclusion>

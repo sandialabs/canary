@@ -17,14 +17,14 @@ class Report(Command):
 
     def setup_parser(self, parser: Parser) -> None:
         parent = parser.add_subparsers(dest="type", metavar="")
-        for cls in _nvtest.reporter.reporters():
-            p = parent.add_parser(cls.label().lower(), help=cls.description())
-            cls.setup_parser(p)
+        for reporter_t in _nvtest.reporter.reporters():
+            p = parent.add_parser(reporter_t.label().lower(), help=reporter_t.description())
+            reporter_t.setup_parser(p)
 
     def execute(self, args: Namespace) -> int:
-        for cls in _nvtest.reporter.reporters():
-            if args.type == cls.label().lower():
-                reporter = cls()
+        for reporter_t in _nvtest.reporter.reporters():
+            if reporter_t.matches(args.type):
+                reporter = reporter_t()
                 reporter.execute(args)
                 return 0
         else:

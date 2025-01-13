@@ -23,23 +23,25 @@ def test_session_filter(tmpdir):
         s = session.Session("tests", mode="w", force=True)
         s.add_search_paths([os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")])
         s.discover()
-        cases = s.lock()
-        s.run(cases)
+        s.lock()
+        s.run()
 
         with working_dir("tests"):
             s = session.Session(".", mode="r")
-            cases = s.filter(keyword_expr="first")
+            s.filter(keyword_expr="first")
 
         with working_dir("tests"):
             s = session.Session(".", mode="r")
-            cases = s.filter(parameter_expr="np=4")
+            s.filter(parameter_expr="np=4")
+            cases = s.get_ready()
             assert len(cases) == 1
             assert cases[0].family == "test_exec_dir"
             p = cases[0].path
 
         with working_dir(f"tests/{p}"):
             s = session.Session(".", mode="r")
-            cases = s.filter(start=os.getcwd())
+            s.filter(start=os.getcwd())
+            cases = s.get_ready()
             assert len(cases) == 1
             assert cases[0].name == "test_exec_dir.np=4.x=1.234e7"
 
@@ -53,15 +55,15 @@ def test_session_bfilter(tmpdir):
             s = session.Session("tests", mode="w", force=True)
             s.add_search_paths([os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")])
             s.discover()
-            cases = s.lock()
-            s.run(cases)
+            s.lock()
+            s.run()
             d1 = os.listdir("tests/.nvtest/batches")[0]
             d2 = os.listdir(os.path.join("tests/.nvtest/batches", d1))[0]
             id = d1 + d2
             f1 = s.batch_logfile(id)
             with working_dir("tests"):
                 s = session.Session(".", mode="r")
-                cases = s.bfilter(batch_id=id)
+                s.bfilter(batch_id=id)
 
 
 def test_session_fail_fast(tmpdir):
@@ -70,6 +72,6 @@ def test_session_fail_fast(tmpdir):
         s = session.Session("tests", mode="w", force=True)
         s.add_search_paths(os.path.join(p.examples, "status"))
         s.discover()
-        cases = s.lock()
-        rc = s.run(cases, fail_fast=True)
+        s.lock()
+        rc = s.run(fail_fast=True)
         assert rc != 0
