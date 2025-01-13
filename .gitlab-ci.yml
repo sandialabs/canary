@@ -118,8 +118,9 @@ mypy:
   tags:
   - cee.build
   script:
-  - python3 -m pip install $STD_PIP_ARGS .[dev,slurm,pbs,flux]
+  - python3 -m pip install $STD_PIP_ARGS .[dev,slurm,pbs]
   - cd docs
+  - make clean_cache
   - make clean
   - make html
   - make html

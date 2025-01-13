@@ -69,7 +69,14 @@ language = "python"
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = []
+exclude_patterns = [
+    "tutorial/intro.how.rst",
+    "tutorial/intro.pyt.rst",
+    "tutorial/intro.testcase.rst",
+    "tutorial/intro.testfile.rst",
+    "tutorial/intro.why.rst"
+]
+
 
 
 # -- Options for HTML output -------------------------------------------------

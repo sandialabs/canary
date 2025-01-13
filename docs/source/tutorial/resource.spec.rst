@@ -34,7 +34,8 @@ A machine having 4 CPUs with one slot each and 2 GPUs with 2 slots each would be
         "gpus": [
           {"id": "0", "slots": 2},
           {"id": "1", "slots": 2}
-        ]
+        ],
+        "id": "0"
       }
     ]
   }

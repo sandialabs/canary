@@ -1,9 +1,11 @@
 What is nvtest?
 ===============
 
-``nvtest``
+- A Python-based testing framework designed for scientific and software development workflows.
+- Aimed at accelerating and simplifying testing on various platforms from laptops to high-performance computing (HPC) systems.
 
-* is a tool for managing and running application test suites;
-* is inspired by `vvtest <https://github.com/sandialabs/vvtest>`_;
-* is designed to run tests on diverse hardware from laptops to super computing clusters; and
-* can also serve as a workflow manager for analysts.
+Why nvtest?
+-----------
+
+- Challenges in testing at scale: performance, extensibility, and tool compatibility.
+- The need for a unified framework that adapts to diverse environments and tools.
