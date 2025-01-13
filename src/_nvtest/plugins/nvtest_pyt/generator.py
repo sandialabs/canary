@@ -77,7 +77,7 @@ class PYTTestFile(AbstractTestGenerator):
         self._skipif_reason: str | None = None
         self._exclusive: FilterNamespace | None = None
         self._xstatus: FilterNamespace | None = None
-        self._stages: set[str] = {"run"}
+        self._stages: list[FilterNamespace] = []
         self.load()
 
     def __repr__(self) -> str:
@@ -160,7 +160,7 @@ class PYTTestFile(AbstractTestGenerator):
                     exclusive=self.exclusive(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
-                    stages=self.stages,
+                    stages=self.stages(testname=name, on_options=on_options, parameters=parameters),
                 )
                 case.launcher = sys.executable
                 if test_mask is not None:
@@ -206,7 +206,7 @@ class PYTTestFile(AbstractTestGenerator):
                     exclusive=self.exclusive(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
-                    stages=self.stages,
+                    stages=self.stages(testname=name, on_options=on_options, parameters=parameters),
                 )
                 parent.launcher = sys.executable
                 if test_mask is not None:
@@ -250,14 +250,21 @@ class PYTTestFile(AbstractTestGenerator):
 
     # -------------------------------------------------------------------------------- #
 
-    @property
-    def stages(self) -> list[str]:
+    def stages(
+        self,
+        testname: str | None = None,
+        on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
+    ) -> list[str]:
+        stages: set[str] = {"run"}
+        for ns in self._stages:
+            result = ns.when.evaluate(
+                testname=testname, parameters=parameters, on_options=on_options
+            )
+            if result.value:
+                stages.update(ns.value)
         std_stages = {"run": 0, "post-process": 1, "post": 1, "analyze": 2, "baseline": 3}
-        return sorted(self._stages, key=lambda s: (std_stages.get(s, 100), s[0]))
-
-    @stages.setter
-    def stages(self, arg: Sequence[str]) -> None:
-        self._stages.update(arg)
+        return sorted(stages, key=lambda s: (std_stages.get(s, 100), s[0]))
 
     @property
     def skipif_reason(self) -> str | None:
@@ -686,9 +693,10 @@ class PYTTestFile(AbstractTestGenerator):
     ) -> None:
         self.add_sources("sources", *files, when=when)
 
-    def m_stages(self, *args: str) -> None:
+    def m_stages(self, *args: str, when: WhenType | None = None) -> None:
         # For now just pass through, could add a when statement?
-        self._stages.update(args)
+        ns = FilterNamespace(set(args), when=when)
+        self._stages.append(ns)
 
     def m_generate_composite_base_case(
         self,
@@ -758,7 +766,7 @@ class PYTTestFile(AbstractTestGenerator):
                 "PYTTestFile.baseline: missing required argument 'src'/'dst' or 'flag'"
             )
         self._baseline.append(ns)
-        self._stages.add("baseline")
+        self.m_stages("baseline")
 
     def load(self):
         import _nvtest
@@ -892,8 +900,8 @@ class PYTTestFile(AbstractTestGenerator):
     def f_sources(self, *args: str, when: WhenType | None = None):
         self.m_sources(*args, when=when)
 
-    def f_stages(self, *args: str):
-        self.m_stages(*args)
+    def f_stages(self, *args: str, when: WhenType | None = None):
+        self.m_stages(*args, when=when)
 
     def f_testname(self, arg: str) -> None:
         self.m_name(arg)

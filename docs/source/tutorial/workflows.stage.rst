@@ -7,51 +7,27 @@ In ``nvtest``, tests are organized into execution stages to facilitate structure
 
 Consider the following example:
 
+.. literalinclude:: /examples/staged/staged.pyt
+    :language: python
 
-.. code-block:: python
+In this example, an expensive ``run`` stage is defined as well as a relatively inexpensive ``analyze`` and ``plot`` stages for the case that ``cpus=1``.  The ``run`` stage is executed when ``nvtest run`` is invoked for the first time:
 
-    import sys
-    import nvtest
-    nvtest.directives.stages("run", "post")
+.. note::
 
+    The ``run`` stage is always defined for each test, whether explicitly or implicitly, as in this example.
 
-    def run() -> int:
-        # a relatively expensive execution
-        ...
-
-
-    def post() -> int:
-        # a relatively inexpensive post processing routine that may run many times after a sing run
-        ...
-
-
-    def main() -> int:
-        p = nvtest.make_argument_parser()
-        args = p.parse_args()
-        if args.stage == "run":
-            return run()
-        elif args.stage == "post":
-            return post()
-
-
-    if __name__ == "__main__":
-        sys.exit(main())
-
-
-In this example, a relatively expensive ``run`` stage is defined as well as a relatively inexpensive ``post`` stage.  The ``run`` stage is executed when ``nvtest run`` is invoked for the first time:
-
-.. code-block:: console
-
-    nvtest run ...
+.. command-output:: nvtest run ./staged
+    :cwd: /examples
+    :nocache:
+    :extraargs: -w
 
 
 after the first exectuion, the additional stages can be run:
 
-.. code-block:: console
+.. command-output:: nvtest -C TestResults run --stage=analyze
+    :cwd: /examples
+    :nocache:
 
-    nvtest -C TestResults run --stage=post ...
-
-
-.. note::
-
-    The ``run`` stage is always defined for each test, whether implicitly or explicitly as in this example.
+.. command-output:: nvtest -C TestResults run --stage=plot
+    :cwd: /examples
+    :nocache:
