@@ -75,6 +75,7 @@ class NVTestMain:
         if args.C:
             self.working_dir = args.C
         os.chdir(self.working_dir)
+        load_plugins(args.plugin_dirs or [])
         return self
 
     def __exit__(self, ex_type, ex_value, ex_traceback):
