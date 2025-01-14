@@ -858,6 +858,20 @@ class TestCase(AbstractTestCase):
         assert isinstance(arg, str)
         self._id = arg
 
+    def cleanup(self) -> None:
+        keep = set([os.path.basename(a.src) if a.dst is None else a.dst for a in self.assets])
+        keep.add(os.path.basename(self.file))
+        keep.add("testcase.lock")
+        with fs.working_dir(self.working_directory):
+            files = os.listdir(".")
+            for file in files:
+                if re.search(r"nvtest[-]?.*-out.txt", file):
+                    continue
+                elif file in keep:
+                    continue
+                else:
+                    fs.force_remove(file)
+
     def chain(self, start: str | None = None, anchor: str = ".git") -> str:
         dirname = os.path.dirname(start or self.file)
         while True:
