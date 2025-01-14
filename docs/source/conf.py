@@ -75,7 +75,8 @@ exclude_patterns = [
     "tutorial/intro.testcase.rst",
     "tutorial/intro.testfile.rst",
     "tutorial/intro.why.rst",
-    "tutorial/resource.spec.rst"
+    "tutorial/resource.spec.rst",
+    "presentation",
 ]
 
 
