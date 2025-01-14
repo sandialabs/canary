@@ -5,7 +5,10 @@ readme = "README.md"
 license = {"file" = "LICENSE"}
 description = "nvtest: application testing with Python"
 requires-python = ">=3.10"
-dependencies = ["PyYAML", "hpc-connect==0.1.0"]
+dependencies = [
+  "PyYAML",
+  "hpc-connect @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/hpc-connect"
+]
 
 [project.scripts]
 nvtest = "nvtest:console_main"
@@ -14,9 +17,9 @@ nvtest = "nvtest:console_main"
 requests = ["requests"]
 dev = ["ruff", "mypy", "pytest", "sphinx", "pydata-sphinx-theme", "sphinx_design", "coverage", "xmlschema"]
 psutil = ["psutil"]
-flux = ["hpcc-flux==0.1.0"]
-slurm = ["hpcc-slurm==0.1.0"]
-pbs = ["hpcc-pbs==0.1.0"]
+flux = ["hpcc-flux @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/plugins/hpcc-flux"]
+slurm = ["hpcc-slurm @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/plugins/hpcc-slurm"]
+pbs = ["hpcc-pbs @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/plugins/hpcc-pbs"]
 
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
