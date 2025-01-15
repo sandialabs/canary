@@ -342,14 +342,6 @@ def mask(
                 case.mask = colorize("keyword expression @*{%r} did not match" % keyword_expr)
                 continue
 
-        if case.has_keyword("TDD"):
-            # Skip tests marked TDD unless explicitly requested.  Request by including TDD in the
-            # keyword_expr.
-            if keyword_expr is None:
-                # Since there is no keyword_expr, the user doesn't want it
-                case.mask = colorize("test marked as @*{TDD}")
-                continue
-
         if parameter_expr:
             match = when.when(
                 f"parameters={parameter_expr!r}",

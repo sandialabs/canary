@@ -24,9 +24,9 @@ unit-test:
   - cee.build
   script:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
-  - module load aue/cmake/3.27.7 > /dev/null 2>&1 || true
-  - module load aue/gcc/12.1.0 > /dev/null 2>&1 || true
-  - module load aue/openmpi/4.1.6-gcc-12.1.0 > /dev/null 2>&1 || true
+  - module load aue/cmake/3.27.7
+  - module load aue/gcc/12.1.0
+  - module load aue/openmpi/4.1.6-gcc-12.1.0
   - python3 -m pip install $STD_PIP_ARGS -e .[dev,slurm,pbs,flux,psutil]
   - pytest tests
   rules:
@@ -40,9 +40,9 @@ coverage-test:
   - cee.build
   script:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
-  - module load aue/cmake/3.27.7 > /dev/null 2>&1 || true
-  - module load aue/gcc/12.1.0 > /dev/null 2>&1 || true
-  - module load aue/openmpi/4.1.6-gcc-12.1.0 > /dev/null 2>&1 || true
+  - module load aue/cmake/3.27.7
+  - module load aue/gcc/12.1.0
+  - module load aue/openmpi/4.1.6-gcc-12.1.0
   - python3 -m pip install $STD_PIP_ARGS -e .[dev,slurm,pbs,flux,psutil]
   - coverage run
   - coverage report

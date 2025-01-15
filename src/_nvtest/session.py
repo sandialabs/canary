@@ -868,7 +868,8 @@ class Session:
                     file.write("%s %s\n" % (glyph, description))
         return file.getvalue()
 
-    def report_excluded(self, cases: list[TestCase]) -> None:
+    @staticmethod
+    def report_excluded(cases: list[TestCase]) -> None:
         n = len(cases)
         logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
         reasons: dict[str, int] = {}
