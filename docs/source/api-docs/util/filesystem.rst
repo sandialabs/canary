@@ -1,7 +1,7 @@
 filesystem
 ==========
 
-.. automodule:: _nvtest.util.filesystem
+.. automodule:: _canary.util.filesystem
    :members:
    :undoc-members:
    :show-inheritance:

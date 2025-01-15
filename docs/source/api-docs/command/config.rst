@@ -1,7 +1,7 @@
 config
 ======
 
-.. automodule:: _nvtest.command.config
+.. automodule:: _canary.command.config
    :members:
    :undoc-members:
    :show-inheritance:

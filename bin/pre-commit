@@ -2,7 +2,7 @@
 
 set -e
 
-export NVTEST_CACHE_DIR=null
+export CANARY_CACHE_DIR=null
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
@@ -11,8 +11,8 @@ cd $SCRIPT_DIR/..
 echo "========================="
 echo "ruff: formatting examples"
 echo "========================="
-find src/nvtest/examples -name "*.pyt" | xargs ruff format
-ruff format src/nvtest/examples
+find src/canary/examples -name "*.pyt" | xargs ruff format
+ruff format src/canary/examples
 
 echo ""
 echo "======================"
@@ -31,8 +31,8 @@ echo ""
 echo "======================="
 echo "ruff: checking examples"
 echo "======================="
-find src/nvtest/examples -name "*.pyt" | xargs ruff check --fix
-ruff check --fix src/nvtest/examples
+find src/canary/examples -name "*.pyt" | xargs ruff check --fix
+ruff check --fix src/canary/examples
 
 echo ""
 echo "===================="

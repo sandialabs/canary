@@ -1,11 +1,11 @@
 .. _usage:
 
-nvtest usage
+canary usage
 ============
 
 .. note::
 
-   Many of the code-snippets and output in the documentation were auto-generated using a set of examples distributed with ``nvtest``'s source code.  To run the examples, clone the ``nvtest`` repository and navigate to ``tests/examples`` where all of the examples in the guide are run.
+   Many of the code-snippets and output in the documentation were auto-generated using a set of examples distributed with ``canary``'s source code.  To run the examples, clone the ``canary`` repository and navigate to ``tests/examples`` where all of the examples in the guide are run.
 
 .. toctree::
    :maxdepth: 1

@@ -3,7 +3,7 @@
 Types of parameterizations
 ==========================
 
-:func:`~nvtest.directives.parameterize` takes an optional ``type`` argument, allowing parameters to be generated in different ways from the input ``values``.  Three ``type``\ s are recoginized:
+:func:`~canary.directives.parameterize` takes an optional ``type`` argument, allowing parameters to be generated in different ways from the input ``values``.  Three ``type``\ s are recoginized:
 
 * :ref:`list_parameter_space <tutorial-list-parameter-space>` (default)
 * :ref:`centered_parameter_space <tutorial-centered-parameter-space>`
@@ -11,7 +11,7 @@ Types of parameterizations
 
 .. _tutorial-list-parameter-space:
 
-type=nvtest.list_parameter_space
+type=canary.list_parameter_space
 --------------------------------
 
 .. code-block:: python
@@ -20,7 +20,7 @@ type=nvtest.list_parameter_space
         names: str | tuple[str],
         values: Iterable[Iterable[str | float | int]],
         when: dict | str,
-        type: nvtest.enums = nvtest.list_parameter_space
+        type: canary.enums = canary.list_parameter_space
     )
 
 The ``list_parameter_space`` reads lists of parameter values as defined by the user.  ``names`` is
@@ -32,7 +32,7 @@ This is the default parameterization shown in :ref:`tutorial-parameterize-first`
 
 .. _tutorial-centered-parameter-space:
 
-type=nvtest.centered_parameter_space
+type=canary.centered_parameter_space
 ------------------------------------
 
 .. code-block:: python
@@ -42,7 +42,7 @@ type=nvtest.centered_parameter_space
         values: Iterable[Iterable[str | float | int]],
         samples: int = 10,
         when: dict | str,
-        type: nvtest.enums = nvtest.centered_parameter_space
+        type: canary.enums = canary.centered_parameter_space
     )
 
 The ``centered_parameter_space`` type computes parameter sets along multiple coordinate-based
@@ -65,7 +65,7 @@ Example
 
 will produce two test cases, one with ``a=1`` and another with ``a=4``, each executed in their own test directory:
 
-.. command-output:: nvtest describe ./centered_space/centered_space.pyt
+.. command-output:: canary describe ./centered_space/centered_space.pyt
     :cwd: /examples
 
 .. _tutorial-random-parameter-space:
@@ -81,7 +81,7 @@ type=random_parameter_space
         samples: int = 10,
         seed: float = 1234.,
         when: dict | str,
-        type: nvtest.enums = nvtest.random_parameter_space
+        type: canary.enums = canary.random_parameter_space
     )
 
 The ``random_parameter_space`` type computes random parameter values. ``names`` is a tuple or
@@ -96,5 +96,5 @@ Example
 
 will produce four test cases, each with ``a`` and ``b`` being chosen randomly in the range ``0:5`` and ``6:10``, respectively:
 
-.. command-output:: nvtest describe ./random_space/random_space.pyt
+.. command-output:: canary describe ./random_space/random_space.pyt
     :cwd: /examples

@@ -3,17 +3,17 @@
 Setting configuration variables on the command line
 ===================================================
 
-Use yaml path syntax to set any of the ``nvtest`` configuration variables.  For example,
+Use yaml path syntax to set any of the ``canary`` configuration variables.  For example,
 
 .. code-block:: console
 
-   nvtest -c config:debug:true -c config:log_level:DEBUG SUBCOMMAND [OPTIONS] ARGUMENTS
+   canary -c config:debug:true -c config:log_level:DEBUG SUBCOMMAND [OPTIONS] ARGUMENTS
 
 To set environment variables do
 
 .. code-block:: console
 
-   nvtest -e VAR1=VAL1 -e VAR2=VAL2 SUBCOMMAND [OPTIONS] ARGUMENTS
+   canary -e VAR1=VAL1 -e VAR2=VAL2 SUBCOMMAND [OPTIONS] ARGUMENTS
 
 .. note::
 

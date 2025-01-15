@@ -88,7 +88,7 @@ def write_changelog(
     issues: list[dict],
     merge_requests: list[dict],
     authors: dict[tuple[str, str], int],
-    project: str = "nvtest",
+    project: str = "canary",
     version: str | None = None,
     output: str | None = None,
 ) -> None:
@@ -144,7 +144,7 @@ def make_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--project",
-        default="nvtest",
+        default="canary",
         help="The GitLab project name [default: %(default)s]",
     )
     parser.add_argument(

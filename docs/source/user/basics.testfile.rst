@@ -7,7 +7,7 @@ A test file is a python script ending with ``.pyt``.  If execution of the script
 
 .. note::
 
-    ``nvtest`` also runs ``vvtest`` ``.vvt`` test files with the restriction that ``nvtest`` assumes that the files are written in Python (``vvtest`` allows for its test files to be written in any language).
+    ``canary`` also runs ``vvtest`` ``.vvt`` test files with the restriction that ``canary`` assumes that the files are written in Python (``vvtest`` allows for its test files to be written in any language).
 
 Test file structure
 -------------------
@@ -19,12 +19,12 @@ The test file is composed of two parts: :ref:`directives<file-directives>` and t
 Directives
 ~~~~~~~~~~
 
-These lines provide instructions to ``nvtest`` regarding the setup and cleanup of the test.  These instructions are provided through the ``nvtest.directives`` namespace.  For example,
+These lines provide instructions to ``canary`` regarding the setup and cleanup of the test.  These instructions are provided through the ``canary.directives`` namespace.  For example,
 
 .. code-block:: python
 
-    import nvtest
-    nvtest.directives.copy("file.txt")
+    import canary
+    canary.directives.copy("file.txt")
 
 would copy ``file.txt`` from the test's source directory into the the test's execution directory.
 
@@ -66,7 +66,7 @@ would expand into two test instances, one with the parameter ``a=1`` and one wit
 .. image:: /dot/TestFile1.png
     :align: center
 
-Each test case would execute in its own directory and the test script should query for the value of ``a`` and adjust the test accordingly.  Test parameters and other test-specific and runtime-specific information are accessed from the ``nvtest.test.instance`` object which is accessible via ``nvtest.get_instance()``:
+Each test case would execute in its own directory and the test script should query for the value of ``a`` and adjust the test accordingly.  Test parameters and other test-specific and runtime-specific information are accessed from the ``canary.test.instance`` object which is accessible via ``canary.get_instance()``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
@@ -83,7 +83,7 @@ A complete example
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
 
-This test file would expand into two test instances, one with the parameter ``a=1`` and one with ``a=4``, as seen with the ``nvtest describe`` command:
+This test file would expand into two test instances, one with the parameter ``a=1`` and one with ``a=4``, as seen with the ``canary describe`` command:
 
-.. command-output:: nvtest describe parameterize/parameterize1.pyt
+.. command-output:: canary describe parameterize/parameterize1.pyt
     :cwd: /examples

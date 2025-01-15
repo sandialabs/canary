@@ -1,8 +1,8 @@
 import glob
 import os
 
-from _nvtest.main import NVTestCommand
-from _nvtest.util.filesystem import working_dir
+from _canary.main import CanaryCommand
+from _canary.util.filesystem import working_dir
 
 
 def test_batched(tmpdir):
@@ -13,8 +13,8 @@ def test_batched(tmpdir):
                 fh.write(
                     """\
 import sys
-import nvtest
-nvtest.directives.keywords('long')
+import canary
+canary.directives.keywords('long')
 def test():
     pass
 if __name__ == '__main__':
@@ -22,14 +22,14 @@ if __name__ == '__main__':
 """
                 )
 
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run("-w", "-b", "count=4", "-b", "scheduler=none", ".")
         dirs = os.listdir("TestResults")
-        expected = [".nvtest"] + [f"test_{i}" for i in range(12)]
+        expected = [".canary"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob.glob("TestResults/.nvtest/batches/**/nvtest-inp.sh", recursive=True)
+        files = glob.glob("TestResults/.canary/batches/**/canary-inp.sh", recursive=True)
         assert len(files) == 4
-        files = glob.glob("TestResults/.nvtest/batches/**/nvtest-out.txt", recursive=True)
+        files = glob.glob("TestResults/.canary/batches/**/canary-out.txt", recursive=True)
         assert len(files) == 4
         assert rc == 0
 
@@ -42,8 +42,8 @@ def test_batched_extra_args(tmpdir):
                 fh.write(
                     """\
 import sys
-import nvtest
-nvtest.directives.keywords('long')
+import canary
+canary.directives.keywords('long')
 def test():
     pass
 if __name__ == '__main__':
@@ -51,17 +51,17 @@ if __name__ == '__main__':
 """
                 )
 
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         args = ["-w", "-b", "count=4", "-b", "scheduler=none"]
         args.extend(["-b", "args='-l place=scatter:excl,-q debug,-A XYZ123'"])
         args.append(".")
         rc = run(*args)
         dirs = os.listdir("TestResults")
-        expected = [".nvtest"] + [f"test_{i}" for i in range(12)]
+        expected = [".canary"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob.glob("TestResults/.nvtest/batches/**/nvtest-inp.sh", recursive=True)
+        files = glob.glob("TestResults/.canary/batches/**/canary-inp.sh", recursive=True)
         assert len(files) == 4
-        files = glob.glob("TestResults/.nvtest/batches/**/nvtest-inp.sh", recursive=True)
+        files = glob.glob("TestResults/.canary/batches/**/canary-inp.sh", recursive=True)
         found = 0
         print(open(files[0]).read())
         for line in open(files[0]):
@@ -75,7 +75,7 @@ if __name__ == '__main__':
         if rc != 0:
             print(open(files[0], "r").read())
         assert len(files) == 4
-        files = glob.glob("TestResults/.nvtest/batches/**/nvtest-out.txt", recursive=True)
+        files = glob.glob("TestResults/.canary/batches/**/canary-out.txt", recursive=True)
         assert len(files) == 4
         if rc != 0:
             print(open(files[0], "r").read())

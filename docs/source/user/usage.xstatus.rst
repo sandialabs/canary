@@ -3,12 +3,12 @@
 Marking a test expected to diff or fail
 =======================================
 
-The :func:`nvtest.directives.xdiff` and :func:`nvtest.directives.xfail` directives can mark tests that you expect to diff or fail, respectively.  For example, the following test is expected to :ref:`diff <stat-diffed>`:
+The :func:`canary.directives.xdiff` and :func:`canary.directives.xfail` directives can mark tests that you expect to diff or fail, respectively.  For example, the following test is expected to :ref:`diff <stat-diffed>`:
 
 .. literalinclude:: /examples/xstatus/xdiff.pyt
     :language: python
 
-.. command-output:: nvtest run ./xstatus/xdiff.pyt
+.. command-output:: canary run ./xstatus/xdiff.pyt
     :cwd: /examples
     :setup: rm -rf TestResults
 
@@ -19,7 +19,7 @@ However, if a test that is marked to :ref:`diff <stat-diffed>` or :ref:`fail <st
 .. literalinclude:: /examples/xstatus/xfail-fail.pyt
     :language: python
 
-.. command-output:: nvtest run ./xstatus/xfail-fail.pyt
+.. command-output:: canary run ./xstatus/xfail-fail.pyt
     :cwd: /examples
     :returncode: 4
     :setup: rm -rf TestResults
@@ -27,11 +27,11 @@ However, if a test that is marked to :ref:`diff <stat-diffed>` or :ref:`fail <st
 Specifying a nonzero exit code
 ------------------------------
 
-If a nonzero exit code is expected, use ``nvtest.directives.xfail(code)``, where ``code`` is the expected exit code.  Any other exit code other than ``code`` will be considered a failure.
+If a nonzero exit code is expected, use ``canary.directives.xfail(code)``, where ``code`` is the expected exit code.  Any other exit code other than ``code`` will be considered a failure.
 
 .. literalinclude:: /examples/xstatus/xfail-code.pyt
     :language: python
 
-.. command-output:: nvtest run ./xstatus/xfail-code.pyt
+.. command-output:: canary run ./xstatus/xfail-code.pyt
     :cwd: /examples
     :setup: rm -rf TestResults

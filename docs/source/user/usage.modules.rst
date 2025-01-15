@@ -3,16 +3,16 @@
 Loading modules in your test environment
 ========================================
 
-Some tests require a modified environment.  When the required environment modifications are contained in module, ``nvtest`` can load the module prior to test execution.  There are two ways to modify the environment by loading a module:
+Some tests require a modified environment.  When the required environment modifications are contained in module, ``canary`` can load the module prior to test execution.  There are two ways to modify the environment by loading a module:
 
-1. Through the ``nvtest.module.load`` context manager:
+1. Through the ``canary.module.load`` context manager:
 
    .. code-block:: python
 
-      import nvtest
+      import canary
 
       def test():
-          with nvtest.module.load("modulename"):
+          with canary.module.load("modulename"):
             # do work
 
    To add the module's path to ``MODULEPATH``
@@ -20,15 +20,15 @@ Some tests require a modified environment.  When the required environment modifi
    .. code-block:: python
 
       def test():
-          with nvtest.module.load("modulename", use="modulepath"):
+          with canary.module.load("modulename", use="modulepath"):
             # do work
 
-2. Through the :func:`nvtest.directives.load_module` directive:
+2. Through the :func:`canary.directives.load_module` directive:
 
    .. code-block:: python
 
-      import nvtest
-      nvtest.directives.load_module("modulename", use=..., when=...)
+      import canary
+      canary.directives.load_module("modulename", use=..., when=...)
 
       def test():
           # do work

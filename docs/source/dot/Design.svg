@@ -11,15 +11,15 @@
 <!-- run -->
 <g id="node1" class="node">
 <title>run</title>
-<g id="a_node1"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugins/commands/nvtest_run.py?ref_type=heads#L26" title="nvtest run [options] [pathspec ...]">
-<text text-anchor="middle" x="357.5" y="-1447" font-family="Monaco" font-size="20.00">nvtest run [options] [pathspec ...]</text>
+<g id="a_node1"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/commands/run.py?ref_type=heads#L26" title="canary run [options] [pathspec ...]">
+<text text-anchor="middle" x="357.5" y="-1447" font-family="Monaco" font-size="20.00">canary run [options] [pathspec ...]</text>
 </a>
 </g>
 </g>
 <!-- init -->
 <g id="node4" class="node">
 <title>init</title>
-<g id="a_node4"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads#L90" title="Initialize\nCreate test session\ndirectory, database, etc.">
+<g id="a_node4"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/session.py?ref_type=heads#L90" title="Initialize\nCreate test session\ndirectory, database, etc.">
 <polygon fill="none" stroke="black" points="515,-1397 200,-1397 200,-1317 515,-1317 515,-1397"/>
 <text text-anchor="middle" x="357.5" y="-1374" font-family="Monaco" font-size="20.00">Initialize</text>
 <text text-anchor="middle" x="357.5" y="-1352" font-family="Monaco" font-size="20.00">Create test session</text>
@@ -36,7 +36,7 @@
 <!-- plug_test_run -->
 <g id="node2" class="node">
 <title>plug_test_run</title>
-<g id="a_node2"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugin.py?ref_type=heads#L70" title="Plugins:\ntest_prelaunch\ntest_finish">
+<g id="a_node2"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/plugin.py?ref_type=heads#L70" title="Plugins:\ntest_prelaunch\ntest_finish">
 <polygon fill="none" stroke="black" points="619,-157.5 706,-157.5 706,-192.5 619,-192.5 607,-175 619,-157.5"/>
 <text text-anchor="middle" x="656.5" y="-183.5" font-family="Monaco" font-size="10.00">Plugins:</text>
 <text text-anchor="middle" x="656.5" y="-172.5" font-family="Monaco" font-size="10.00">test_prelaunch</text>
@@ -47,7 +47,7 @@
 <!-- plug_test_run_b1 -->
 <g id="node3" class="node">
 <title>plug_test_run_b1</title>
-<g id="a_node3"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugin.py?ref_type=heads#L70" title="Plugins:\ntest_prelaunch\ntest_finish">
+<g id="a_node3"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/plugin.py?ref_type=heads#L70" title="Plugins:\ntest_prelaunch\ntest_finish">
 <polygon fill="none" stroke="black" points="296,-247 383,-247 383,-282 296,-282 284,-264.5 296,-247"/>
 <text text-anchor="middle" x="333.5" y="-273" font-family="Monaco" font-size="10.00">Plugins:</text>
 <text text-anchor="middle" x="333.5" y="-262" font-family="Monaco" font-size="10.00">test_prelaunch</text>
@@ -58,7 +58,7 @@
 <!-- run_async_b1 -->
 <g id="node21" class="node">
 <title>run_async_b1</title>
-<g id="a_node21"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/runners.py?ref_type=heads#L26" title="Run tests in\nbatch asynchronously">
+<g id="a_node21"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/runners.py?ref_type=heads#L26" title="Run tests in\nbatch asynchronously">
 <polygon fill="none" stroke="black" points="370,-204 115,-204 115,-146 370,-146 370,-204"/>
 <text text-anchor="middle" x="242.5" y="-181" font-family="Monaco" font-size="20.00">Run tests in</text>
 <text text-anchor="middle" x="242.5" y="-159" font-family="Monaco" font-size="20.00">batch asynchronously</text>
@@ -73,7 +73,7 @@
 <!-- search -->
 <g id="node5" class="node">
 <title>search</title>
-<g id="a_node5"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/finder.py?ref_type=heads" title="Search\nFind test files and\ninstantiate TestGenerator\nobjects for each">
+<g id="a_node5"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/finder.py?ref_type=heads" title="Search\nFind test files and\ninstantiate TestGenerator\nobjects for each">
 <polygon fill="none" stroke="black" points="515,-1280 200,-1280 200,-1178 515,-1178 515,-1280"/>
 <text text-anchor="middle" x="357.5" y="-1257" font-family="Monaco" font-size="20.00">Search</text>
 <text text-anchor="middle" x="357.5" y="-1235" font-family="Monaco" font-size="20.00">Find test files and</text>
@@ -91,7 +91,7 @@
 <!-- plug_session_init -->
 <g id="node10" class="node">
 <title>plug_session_init</title>
-<g id="a_node10"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads#L175" title="Plugin:\nsession_initialize">
+<g id="a_node10"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/session.py?ref_type=heads#L175" title="Plugin:\nsession_initialize">
 <polygon fill="none" stroke="black" points="563,-1345 674,-1345 674,-1369 563,-1369 551,-1357 563,-1345"/>
 <text text-anchor="middle" x="612.5" y="-1360" font-family="Monaco" font-size="10.00">Plugin:</text>
 <text text-anchor="middle" x="612.5" y="-1349" font-family="Monaco" font-size="10.00">session_initialize</text>
@@ -106,7 +106,7 @@
 <!-- lock -->
 <g id="node6" class="node">
 <title>lock</title>
-<g id="a_node6"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/finder.py?ref_type=heads#L161" title="Lock\nExpand parameters and\ncreate concrete test cases\nfrom each generator">
+<g id="a_node6"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/finder.py?ref_type=heads#L161" title="Lock\nExpand parameters and\ncreate concrete test cases\nfrom each generator">
 <polygon fill="none" stroke="black" points="521,-1141 194,-1141 194,-1039 521,-1039 521,-1141"/>
 <text text-anchor="middle" x="357.5" y="-1118" font-family="Monaco" font-size="20.00">Lock</text>
 <text text-anchor="middle" x="357.5" y="-1096" font-family="Monaco" font-size="20.00">Expand parameters and</text>
@@ -124,7 +124,7 @@
 <!-- plug_session_discovery -->
 <g id="node11" class="node">
 <title>plug_session_discovery</title>
-<g id="a_node11"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads#L402" title="Plugin:\nsession_discovery">
+<g id="a_node11"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/session.py?ref_type=heads#L402" title="Plugin:\nsession_discovery">
 <polygon fill="none" stroke="black" points="563,-1217 668,-1217 668,-1241 563,-1241 551,-1229 563,-1217"/>
 <text text-anchor="middle" x="609.5" y="-1232" font-family="Monaco" font-size="10.00">Plugin:</text>
 <text text-anchor="middle" x="609.5" y="-1221" font-family="Monaco" font-size="10.00">session_discovery</text>
@@ -139,7 +139,7 @@
 <!-- setup -->
 <g id="node7" class="node">
 <title>setup</title>
-<g id="a_node7"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/test/case.py?ref_type=heads#L806" title="Setup\ncreate execution\ndirectories for test cases\nand copy/link resources">
+<g id="a_node7"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/test/case.py?ref_type=heads#L806" title="Setup\ncreate execution\ndirectories for test cases\nand copy/link resources">
 <polygon fill="none" stroke="black" points="521,-1002 194,-1002 194,-900 521,-900 521,-1002"/>
 <text text-anchor="middle" x="357.5" y="-979" font-family="Monaco" font-size="20.00">Setup</text>
 <text text-anchor="middle" x="357.5" y="-957" font-family="Monaco" font-size="20.00">create execution</text>
@@ -157,7 +157,7 @@
 <!-- plug_test_setup -->
 <g id="node13" class="node">
 <title>plug_test_setup</title>
-<g id="a_node13"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/test/case.py?ref_type=heads#L818" title="Plugin:\ntest_setup">
+<g id="a_node13"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/test/case.py?ref_type=heads#L818" title="Plugin:\ntest_setup">
 <polygon fill="none" stroke="black" points="569,-939 632,-939 632,-963 569,-963 557,-951 569,-939"/>
 <text text-anchor="middle" x="594.5" y="-954" font-family="Monaco" font-size="10.00">Plugin:</text>
 <text text-anchor="middle" x="594.5" y="-943" font-family="Monaco" font-size="10.00">test_setup</text>
@@ -172,7 +172,7 @@
 <!-- batched -->
 <g id="node16" class="node">
 <title>batched</title>
-<g id="a_node16"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/test/batch.py?ref_type=heads" title="Batched?">
+<g id="a_node16"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/test/batch.py?ref_type=heads" title="Batched?">
 <polygon fill="lightgrey" stroke="black" points="357.5,-863 249.5,-827 357.5,-791 465.5,-827 357.5,-863"/>
 <text text-anchor="middle" x="357.5" y="-822" font-family="Monaco" font-size="20.00">Batched?</text>
 </a>
@@ -217,7 +217,7 @@
 <!-- queue -->
 <g id="node14" class="node">
 <title>queue</title>
-<g id="a_node14"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/queues.py?ref_type=heads#L203" title="Put test cases in\nResourceQueue">
+<g id="a_node14"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/queues.py?ref_type=heads#L203" title="Put test cases in\nResourceQueue">
 <polygon fill="none" stroke="black" points="589,-740 370,-740 370,-682 589,-682 589,-740"/>
 <text text-anchor="middle" x="479.5" y="-717" font-family="Monaco" font-size="20.00">Put test cases in</text>
 <text text-anchor="middle" x="479.5" y="-695" font-family="Monaco" font-size="20.00">ResourceQueue</text>
@@ -227,7 +227,7 @@
 <!-- run_async -->
 <g id="node23" class="node">
 <title>run_async</title>
-<g id="a_node23"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/runners.py?ref_type=heads#L26" title="Run tests\nasynchronously">
+<g id="a_node23"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/runners.py?ref_type=heads#L26" title="Run tests\nasynchronously">
 <polygon fill="none" stroke="black" points="571,-204 388,-204 388,-146 571,-146 571,-204"/>
 <text text-anchor="middle" x="479.5" y="-181" font-family="Monaco" font-size="20.00">Run tests</text>
 <text text-anchor="middle" x="479.5" y="-159" font-family="Monaco" font-size="20.00">asynchronously</text>
@@ -243,7 +243,7 @@
 <!-- batch_queue -->
 <g id="node15" class="node">
 <title>batch_queue</title>
-<g id="a_node15"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/queues.py?ref_type=heads#L264" title="Put test cases in\nBatchResourceQueue">
+<g id="a_node15"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/queues.py?ref_type=heads#L264" title="Put test cases in\nBatchResourceQueue">
 <polygon fill="none" stroke="black" points="352,-740 121,-740 121,-682 352,-682 352,-740"/>
 <text text-anchor="middle" x="236.5" y="-717" font-family="Monaco" font-size="20.00">Put test cases in</text>
 <text text-anchor="middle" x="236.5" y="-695" font-family="Monaco" font-size="20.00">BatchResourceQueue</text>
@@ -253,7 +253,7 @@
 <!-- batch_cases -->
 <g id="node17" class="node">
 <title>batch_cases</title>
-<g id="a_node17"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/partition.py?ref_type=heads#L53" title="Batch test cases\nusing tiling\nalgorithm">
+<g id="a_node17"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/partition.py?ref_type=heads#L53" title="Batch test cases\nusing tiling\nalgorithm">
 <polygon fill="none" stroke="black" points="340,-645 133,-645 133,-565 340,-565 340,-645"/>
 <text text-anchor="middle" x="236.5" y="-622" font-family="Monaco" font-size="20.00">Batch test cases</text>
 <text text-anchor="middle" x="236.5" y="-600" font-family="Monaco" font-size="20.00">using tiling</text>
@@ -296,7 +296,7 @@
 <!-- run_batch -->
 <g id="node18" class="node">
 <title>run_batch</title>
-<g id="a_node18"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugins/runners/nvtest_slurm.py?ref_type=heads#L77" title="Run batch">
+<g id="a_node18"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/plugins/runners/canary_slurm.py?ref_type=heads#L77" title="Run batch">
 <polygon fill="none" stroke="black" points="266,-282.5 143,-282.5 143,-246.5 266,-246.5 266,-282.5"/>
 <text text-anchor="middle" x="204.5" y="-259.5" font-family="Monaco" font-size="20.00">Run batch</text>
 </a>
@@ -311,7 +311,7 @@
 <!-- run_batched_sched -->
 <g id="node20" class="node">
 <title>run_batched_sched</title>
-<g id="a_node20"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/runners.py?ref_type=heads#L116" title="Run batches\nasynchronously\nthrough scheduler">
+<g id="a_node20"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/runners.py?ref_type=heads#L116" title="Run batches\nasynchronously\nthrough scheduler">
 <polygon fill="none" stroke="black" points="219,-405 0,-405 0,-325 219,-325 219,-405"/>
 <text text-anchor="middle" x="109.5" y="-382" font-family="Monaco" font-size="20.00">Run batches</text>
 <text text-anchor="middle" x="109.5" y="-360" font-family="Monaco" font-size="20.00">asynchronously</text>
@@ -329,7 +329,7 @@
 <!-- run_batched_no_sched -->
 <g id="node22" class="node">
 <title>run_batched_no_sched</title>
-<g id="a_node22"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/runners.py?ref_type=heads#L116" title="Run batches\nasynchronously">
+<g id="a_node22"><a href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/runners.py?ref_type=heads#L116" title="Run batches\nasynchronously">
 <polygon fill="none" stroke="black" points="420,-394 237,-394 237,-336 420,-336 420,-394"/>
 <text text-anchor="middle" x="328.5" y="-371" font-family="Monaco" font-size="20.00">Run batches</text>
 <text text-anchor="middle" x="328.5" y="-349" font-family="Monaco" font-size="20.00">asynchronously</text>

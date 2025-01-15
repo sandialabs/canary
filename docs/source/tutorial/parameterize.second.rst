@@ -8,7 +8,7 @@ A test can define multiple parameters by including multiple names and a correspo
 .. literalinclude:: /examples/parameterize/parameterize2.pyt
     :language: python
 
-.. command-output:: nvtest describe parameterize/parameterize2.pyt
+.. command-output:: canary describe parameterize/parameterize2.pyt
     :cwd: /examples
 
 .. note::

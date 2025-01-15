@@ -1,10 +1,10 @@
 import os
 import sys
 
-import _nvtest.plugins.nvtest_vvt.generator as vvtest
-import _nvtest.util.filesystem as fs
-from _nvtest import finder
-from _nvtest.enums import list_parameter_space
+import _canary.plugins.vvtest.generator as vvtest
+import _canary.util.filesystem as fs
+from _canary import finder
+from _canary.enums import list_parameter_space
 
 
 def test_parse_parameterize():

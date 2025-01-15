@@ -66,7 +66,7 @@ The test case was skipped due to a skipped dependency or by exiting with a ``63`
 
 .. admonition:: Tip
 
-   Don't explicitly exit with code ``63``.  Instead, exit with ``nvtest.skip_exit_status`` or raise a ``nvtest.TestSkipped`` exception.
+   Don't explicitly exit with code ``63``.  Instead, exit with ``canary.skip_exit_status`` or raise a ``canary.TestSkipped`` exception.
 
 .. _stat-diffed:
 
@@ -77,7 +77,7 @@ A test diffs if it exits with a ``64`` exit code.
 
 .. admonition:: Tip
 
-   Don't explicitly exit with code ``64``.  Instead, exit with ``nvtest.diff_exit_status`` or raise a ``nvtest.TestDiffed`` exception.
+   Don't explicitly exit with code ``64``.  Instead, exit with ``canary.diff_exit_status`` or raise a ``canary.TestDiffed`` exception.
 
 .. _stat-failed:
 
@@ -88,7 +88,7 @@ A test fails if it exits with any nonzero code not previously defined.
 
 .. admonition:: Tip
 
-   To explicitly mark a test as failed, exit with ``nvtest.fail_exit_status`` or raise a ``nvtest.TestFailed`` exception.
+   To explicitly mark a test as failed, exit with ``canary.fail_exit_status`` or raise a ``canary.TestFailed`` exception.
 
 .. _stat-timeout:
 

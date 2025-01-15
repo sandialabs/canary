@@ -1,7 +1,7 @@
 shell
 =====
 
-.. automodule:: _nvtest.util.shell
+.. automodule:: _canary.util.shell
    :members:
    :undoc-members:
    :show-inheritance:

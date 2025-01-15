@@ -1,7 +1,7 @@
 batch
 =====
 
-.. automodule:: _nvtest.test.batch
+.. automodule:: _canary.test.batch
    :members:
    :undoc-members:
    :show-inheritance:

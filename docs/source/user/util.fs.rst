@@ -3,7 +3,7 @@
 Filesystem utilities
 ====================
 
-.. automodule:: nvtest.filesystem
+.. automodule:: canary.filesystem
    :members:
    :undoc-members:
    :member-order: bysource

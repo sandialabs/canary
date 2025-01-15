@@ -1,8 +1,8 @@
 import sys
 
-import _nvtest.plugins.nvtest_vvt.generator as vvtest
-import nvtest
-from _nvtest.enums import list_parameter_space
+import _canary.plugins.vvtest.generator as vvtest
+import canary
+from _canary.enums import list_parameter_space
 
 
 def test_include_file(tmpdir):
@@ -10,7 +10,7 @@ def test_include_file(tmpdir):
 #!/usr/bin/env python3
 # VVT: include : ./file1.txt
 """
-    with nvtest.filesystem.working_dir(tmpdir.strpath, create=True):
+    with canary.filesystem.working_dir(tmpdir.strpath, create=True):
         with open("file1.txt", "w") as fh:
             fh.write("# VVT: include : ./file2.txt\n")
         with open("file2.txt", "w") as fh:
@@ -31,7 +31,7 @@ def test_include_file_platform_no(tmpdir):
 #!/usr/bin/env python3
 # VVT: include (platform="incredible_os") : ./file1.txt
 """
-    with nvtest.filesystem.working_dir(tmpdir.strpath, create=True):
+    with canary.filesystem.working_dir(tmpdir.strpath, create=True):
         with open("file1.txt", "w") as fh:
             fh.write("# VVT: parameterize (int, int) : np,n = 1,2 3,4 5,6 7,8\n")
         commands = list(vvtest.p_VVT(s))
@@ -43,7 +43,7 @@ def test_include_file_platform_yes(tmpdir):
 #!/usr/bin/env python3
 # VVT: include (platform="{sys.platform}") : ./file1.txt
 """
-    with nvtest.filesystem.working_dir(tmpdir.strpath, create=True):
+    with canary.filesystem.working_dir(tmpdir.strpath, create=True):
         with open("file1.txt", "w") as fh:
             fh.write("# VVT: parameterize (int, int) : np,n = 1,2 3,4 5,6 7,8\n")
         commands = list(vvtest.p_VVT(s))
@@ -60,7 +60,7 @@ def test_include_file_options_no(tmpdir):
 #!/usr/bin/env python3
 # VVT: include (option="baz") : ./file1.txt
 """
-    with nvtest.filesystem.working_dir(tmpdir.strpath, create=True):
+    with canary.filesystem.working_dir(tmpdir.strpath, create=True):
         with open("file1.txt", "w") as fh:
             fh.write("# VVT: parameterize (int, int) : np,n = 1,2 3,4 5,6 7,8\n")
         commands = list(vvtest.p_VVT(s))
@@ -72,12 +72,12 @@ def test_include_file_options_yes(tmpdir):
 #!/usr/bin/env python3
 # VVT: include (option="baz") : ./file1.txt
 """
-    with nvtest.filesystem.working_dir(tmpdir.strpath, create=True), nvtest.config.override():
+    with canary.filesystem.working_dir(tmpdir.strpath, create=True), canary.config.override():
         with open("file1.txt", "w") as fh:
             fh.write("# VVT: parameterize (int,int) : np,n = 1,2 3,4 5,6 7,8\n")
-        nvtest.config.options.on_options = ["baz"]
+        canary.config.options.on_options = ["baz"]
         commands = list(vvtest.p_VVT(s))
-        nvtest.config.options.on_options = []
+        canary.config.options.on_options = []
         assert commands[0].command == "parameterize"
         assert "%".join(commands[0].argument.split()) == "np,n%=%1,2%3,4%5,6%7,8"
         names, values, kwds, _ = vvtest.p_PARAMETERIZE(commands[0])

@@ -1,7 +1,7 @@
 ResourcePool
 ============
 
-.. autoclass:: _nvtest.config.ResourcePool
+.. autoclass:: _canary.config.ResourcePool
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,7 +1,7 @@
 misc
 ====
 
-.. automodule:: _nvtest.util.misc
+.. automodule:: _canary.util.misc
    :members:
    :undoc-members:
    :show-inheritance:

@@ -2,8 +2,8 @@ import sys
 
 import pytest
 
-from _nvtest.when import InvalidSyntax
-from _nvtest.when import When
+from _canary.when import InvalidSyntax
+from _canary.when import When
 
 
 def test_when_platform():

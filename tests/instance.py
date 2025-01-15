@@ -1,20 +1,20 @@
 import os
 
-import _nvtest.test.instance as inst
-import nvtest
-from _nvtest import finder
-from _nvtest.util.filesystem import mkdirp
-from _nvtest.util.filesystem import working_dir
+import _canary.test.instance as inst
+import canary
+from _canary import finder
+from _canary.util.filesystem import mkdirp
+from _canary.util.filesystem import working_dir
 
 
 def test_instance_deps(tmpdir):
     workdir = os.path.join(tmpdir.strpath, "src")
     with working_dir(workdir, create=True):
         with open("a.pyt", "w") as fh:
-            fh.write("import nvtest\n")
-            fh.write("nvtest.directives.analyze()\n")
-            fh.write("nvtest.directives.parameterize('cpus', [1,2])\n")
-            fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
+            fh.write("import canary\n")
+            fh.write("canary.directives.analyze()\n")
+            fh.write("canary.directives.parameterize('cpus', [1,2])\n")
+            fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
     f = finder.Finder()
     f.add(workdir)
     assert len(f.roots) == 1
@@ -24,8 +24,8 @@ def test_instance_deps(tmpdir):
     assert len([c for c in cases if c.status != "masked"]) == 7
     work_tree = os.path.join(workdir, "tests")
     mkdirp(work_tree)
-    with nvtest.config.override():
-        nvtest.config.session.work_tree = work_tree
+    with canary.config.override():
+        canary.config.session.work_tree = work_tree
         for case in cases:
             case.save()
             instance = inst.load(case.working_directory)

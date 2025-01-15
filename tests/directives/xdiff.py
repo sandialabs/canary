@@ -1,5 +1,5 @@
-from _nvtest.main import NVTestCommand
-from _nvtest.util.filesystem import working_dir
+from _canary.main import CanaryCommand
+from _canary.util.filesystem import working_dir
 
 
 def test_xdiff(tmpdir):
@@ -8,14 +8,14 @@ def test_xdiff(tmpdir):
             fh.write(
                 """\
 import sys
-import nvtest
-nvtest.directives.xdiff()
+import canary
+canary.directives.xdiff()
 def test():
-    raise nvtest.TestDiffed()
+    raise canary.TestDiffed()
 if __name__ == '__main__':
     sys.exit(test())
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run("-w", ".")
         assert rc == 0

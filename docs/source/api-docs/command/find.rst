@@ -1,7 +1,7 @@
 find
 ====
 
-.. automodule:: _nvtest.command.find
+.. automodule:: _canary.command.find
    :members:
    :undoc-members:
    :show-inheritance:

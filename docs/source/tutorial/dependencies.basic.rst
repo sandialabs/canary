@@ -3,7 +3,7 @@
 Basic test dependencies
 =======================
 
-The :func:`~nvtest.directives.depends_on` directive designates one test case as dependent on another.  Dependent test cases will not run until all of its dependencies run to completion. When the test case is run, it can query the properties of its dependencies by the ``instance.dependencies`` attribute.
+The :func:`~canary.directives.depends_on` directive designates one test case as dependent on another.  Dependent test cases will not run until all of its dependencies run to completion. When the test case is run, it can query the properties of its dependencies by the ``instance.dependencies`` attribute.
 
 Example
 -------
@@ -13,7 +13,7 @@ Example
 
 ``depends_on_a`` will not run until after ``a`` runs:
 
-.. command-output:: nvtest run ./depends_on/basic
+.. command-output:: canary run ./depends_on/basic
     :cwd: /examples
     :nocache:
     :extraargs: -w

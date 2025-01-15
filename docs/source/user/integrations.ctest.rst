@@ -3,18 +3,18 @@
 Run CTest tests
 ===============
 
-In addition to :ref:`CMake integration<integrations-cmake>`, ``nvtest`` can run `CTest <https://cmake.org/cmake/help/latest/manual/ctest.1.html>`_ tests natively.  Simply pass the path to a CMake build directory containing CTest tests:
+In addition to :ref:`CMake integration<integrations-cmake>`, ``canary`` can run `CTest <https://cmake.org/cmake/help/latest/manual/ctest.1.html>`_ tests natively.  Simply pass the path to a CMake build directory containing CTest tests:
 
 .. code-block:: console
 
-    $ nvtest run CMAKE_BINARY_DIR
+    $ canary run CMAKE_BINARY_DIR
 
-``nvtest`` will read the CTest instructions for each test added by ``add_test`` and run the test.
+``canary`` will read the CTest instructions for each test added by ``add_test`` and run the test.
 
 Supported CTest properties
 --------------------------
 
-The following `CTest properties <https://cmake.org/cmake/help/git-master/manual/cmake-properties.7.html#properties-on-tests>`_ are supported by ``nvtest``.
+The following `CTest properties <https://cmake.org/cmake/help/git-master/manual/cmake-properties.7.html#properties-on-tests>`_ are supported by ``canary``.
 
 * `ATTACHED_FILES <https://cmake.org/cmake/help/git-master/prop_test/ATTACHED_FILES.html>`_
 * `ATTACHED_FILES_ON_FAIL <https://cmake.org/cmake/help/git-master/prop_test/ATTACHED_FILES_ON_FAIL.html>`_
@@ -40,7 +40,7 @@ The following `CTest properties <https://cmake.org/cmake/help/git-master/manual/
 Unsupported CTest properties
 ----------------------------
 
-The following `CTest properties <https://cmake.org/cmake/help/git-master/manual/cmake-properties.7.html#properties-on-tests>`_ are **not** supported by ``nvtest``.
+The following `CTest properties <https://cmake.org/cmake/help/git-master/manual/cmake-properties.7.html#properties-on-tests>`_ are **not** supported by ``canary``.
 
 * `COST <https://cmake.org/cmake/help/git-master/prop_test/COST.html>`_
 * `GENERATED_RESOURCE_SPEC_FILE <https://cmake.org/cmake/help/git-master/prop_test/GENERATED_RESOURCE_SPEC_FILE.html>`_
@@ -54,7 +54,7 @@ The following `CTest properties <https://cmake.org/cmake/help/git-master/manual/
 
 .. note::
 
-    Contact the ``nvtest`` developers if you require any one of these properties to run your test suite.
+    Contact the ``canary`` developers if you require any one of these properties to run your test suite.
 
 Differences in behavior from CTest
 ----------------------------------
@@ -62,12 +62,12 @@ Differences in behavior from CTest
 DEPENDS
 ~~~~~~~
 
-The CTest `DEPENDS <https://cmake.org/cmake/help/git-master/prop_test/DEPENDS.html>`_ property sets the execution order, but "the results of those tests are not considered, the dependency relationship is purely for order of execution".  In ``nvtest``, the results of the tests are considered.  See :ref:`directive-depends-on`.
+The CTest `DEPENDS <https://cmake.org/cmake/help/git-master/prop_test/DEPENDS.html>`_ property sets the execution order, but "the results of those tests are not considered, the dependency relationship is purely for order of execution".  In ``canary``, the results of the tests are considered.  See :ref:`directive-depends-on`.
 
 RESOURCE_GROUPS
 ~~~~~~~~~~~~~~~
 
-``nvtest`` supports the `CTest resource specification file <https://cmake.org/cmake/help/latest/manual/ctest.1.html#resource-specification-file>`_.  See :ref:`basics-resource`.
+``canary`` supports the `CTest resource specification file <https://cmake.org/cmake/help/latest/manual/ctest.1.html#resource-specification-file>`_.  See :ref:`basics-resource`.
 
 \*_REGULAR_EXPRESSION behavior
 ------------------------------

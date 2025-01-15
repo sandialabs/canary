@@ -1,7 +1,7 @@
 report
 ======
 
-.. automodule:: _nvtest.command.report
+.. automodule:: _canary.command.report
    :members:
    :undoc-members:
    :show-inheritance:

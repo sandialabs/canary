@@ -1,7 +1,7 @@
 instance
 ========
 
-.. automodule:: _nvtest.test.instance
+.. automodule:: _canary.test.instance
    :members:
    :undoc-members:
    :show-inheritance:

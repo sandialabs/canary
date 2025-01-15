@@ -1,9 +1,9 @@
 .. _developers-flow:
 
-nvtest run program flow
+canary run program flow
 =======================
 
-Below is the program flow for ``nvtest run``:
+Below is the program flow for ``canary run``:
 
 .. imagesvg:: ../dot/Design.svg
     :width: 800px

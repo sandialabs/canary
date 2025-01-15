@@ -1,7 +1,7 @@
 import glob
 
-from _nvtest.main import NVTestCommand
-from _nvtest.util.filesystem import working_dir
+from _canary.main import CanaryCommand
+from _canary.util.filesystem import working_dir
 
 
 def test_parameterize(tmpdir):
@@ -10,20 +10,20 @@ def test_parameterize(tmpdir):
             fh.write(
                 """\
 import sys
-import nvtest
-nvtest.directives.parameterize('a,b,c', [(1, 2, 3), (4, 5, 6)])
+import canary
+canary.directives.parameterize('a,b,c', [(1, 2, 3), (4, 5, 6)])
 def test():
-    self = nvtest.get_instance()
+    self = canary.get_instance()
     a = self.parameters.a
     assert self.parameters[('a', 'b', 'c')] == (a, a + 1, a + 2)
 if __name__ == '__main__':
     sys.exit(test())
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run("-w", ".")
         if rc != 0:
-            for file in glob.glob("TestResults/**/nvtest-out.txt"):
+            for file in glob.glob("TestResults/**/canary-out.txt"):
                 print(open(file).read())
         assert rc == 0
 
@@ -34,12 +34,12 @@ def test_parameterize_prod(tmpdir):
             fh.write(
                 """\
 import sys
-import nvtest
-nvtest.directives.analyze()
-nvtest.directives.parameterize('a,b', [('a1', 'b1'), ('a2', 'b2')])
-nvtest.directives.parameterize('c,d', [('c1', 'd1'), ('c2', 'd2')])
+import canary
+canary.directives.analyze()
+canary.directives.parameterize('a,b', [('a1', 'b1'), ('a2', 'b2')])
+canary.directives.parameterize('c,d', [('c1', 'd1'), ('c2', 'd2')])
 def test():
-    self = nvtest.get_instance()
+    self = canary.get_instance()
     abcd = self.parameters[('a', 'b', 'c', 'd')]
     assert abcd in [
         ('a1', 'b1', 'c1', 'd1'),
@@ -48,7 +48,7 @@ def test():
         ('a2', 'b2', 'c2', 'd2'),
     ]
 def analyze():
-    self = nvtest.get_instance()
+    self = canary.get_instance()
     assert self.parameters.a == ('a1', 'a1', 'a2', 'a2')
     assert self.parameters.b == ('b1', 'b1', 'b2', 'b2')
     assert self.parameters.c == ('c1', 'c2', 'c1', 'c2')
@@ -75,8 +75,8 @@ if __name__ == '__main__':
     sys.exit(rc)
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run("-w", ".")
-        for file in glob.glob("TestResults/**/nvtest-out.txt"):
+        for file in glob.glob("TestResults/**/canary-out.txt"):
             print(open(file).read())
         assert rc == 0

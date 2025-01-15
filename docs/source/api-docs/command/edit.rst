@@ -1,7 +1,7 @@
 edit
 ====
 
-.. automodule:: _nvtest.command.edit
+.. automodule:: _canary.command.edit
    :members:
    :undoc-members:
    :show-inheritance:

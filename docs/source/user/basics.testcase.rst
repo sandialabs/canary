@@ -17,7 +17,7 @@ would expand into two test instances with names
 Test case execution
 -------------------
 
-During a test session, ``nvtest`` creates a :ref:`unique test execution directory <test-exec-dir>` for each test case and executes the script with the current python interpreter in its own subprocess.  Test parameters and other test-specific and runtime-specific information are accessed from the ``nvtest.test.instance`` object which is accessible via ``nvtest.get_instance()``:
+During a test session, ``canary`` creates a :ref:`unique test execution directory <test-exec-dir>` for each test case and executes the script with the current python interpreter in its own subprocess.  Test parameters and other test-specific and runtime-specific information are accessed from the ``canary.test.instance`` object which is accessible via ``canary.get_instance()``:
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
@@ -26,7 +26,7 @@ During a test session, ``nvtest`` creates a :ref:`unique test execution director
 The test instance object defines the following attributes and methods:
 
 ``file_root: str``:
-  The test case file's root search path, as passed to ``nvtest run``.
+  The test case file's root search path, as passed to ``canary run``.
 
 ``file_path: str``:
   Path to the test case's file, relative to ``file_root``.
@@ -95,8 +95,8 @@ Test execution directory
 
 .. note::
 
-    The test execution directory is an implementation detail and could change.  Do not rely on it for dependent tests.  Instead, use the ``nvtest.test.instance.dependencies`` object to get the ``exec_dir`` of each dependency.
+    The test execution directory is an implementation detail and could change.  Do not rely on it for dependent tests.  Instead, use the ``canary.test.instance.dependencies`` object to get the ``exec_dir`` of each dependency.
 
-The current test exeuction directory naming scheme matches ``vvtest``'s: ``<work_tree>/<path>/<name>``, where ``path`` is the test file's path *relative* to the test file's search root.  Eg, if ``/the/search/root`` is passed to ``nvtest run`` and the test file is found in ``some/sub_directory/file.pyt``, the test execution directory would be ``<work_tree>/some/sub_directory/<name>``.
+The current test exeuction directory naming scheme matches ``vvtest``'s: ``<work_tree>/<path>/<name>``, where ``path`` is the test file's path *relative* to the test file's search root.  Eg, if ``/the/search/root`` is passed to ``canary run`` and the test file is found in ``some/sub_directory/file.pyt``, the test execution directory would be ``<work_tree>/some/sub_directory/<name>``.
 
-.. [1] The CPU and GPU ids are IDs used internally in ``nvtest`` and may, or may not, correspond to the actual hardware IDs.
+.. [1] The CPU and GPU ids are IDs used internally in ``canary`` and may, or may not, correspond to the actual hardware IDs.

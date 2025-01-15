@@ -16,26 +16,26 @@ import re
 import subprocess
 import sys
 
-import nvtest
+import canary
 
 docs_source_dir = os.path.abspath(".")
 tests_dir = os.path.abspath(os.path.join(docs_source_dir, "../../tests"))
 assert os.path.exists(tests_dir)
 
-os.environ["NVTEST_MAKE_DOCS"] = "1"
+os.environ["CANARY_MAKE_DOCS"] = "1"
 
 
 # -- Project information -----------------------------------------------------
 
-project = "nvtest"
+project = "canary"
 copyright = "2024, National Technology & Engineering Solutions of Sandia, LLC (NTESS)"
 author = "National Technology & Engineering Solutions of Sandia, LLC (NTESS)"
 
 # The short X.Y version
-version = re.sub(r"\+.*$", r"", nvtest.__version__)
+version = re.sub(r"\+.*$", r"", canary.__version__)
 
 # The full version, including alpha/beta/rc tags
-release = nvtest.__version__
+release = canary.__version__
 
 
 # -- General configuration ---------------------------------------------------
@@ -49,8 +49,8 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.napoleon",
     "sphinx_design",
-    "_nvtest.third_party.programoutput",
-    "_nvtest.third_party.imagesvg",
+    "_canary.third_party.programoutput",
+    "_canary.third_party.imagesvg",
 ]
 autodoc_member_order = "bysource"
 
@@ -98,10 +98,10 @@ html_sidebars = {"index": ["search-button-field"], "**": ["search-button-field",
 html_theme_options = {
     "navigation_depth": 4,
     "show_toc_level": 1,
-    "gitlab_url": "https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest",
+    "gitlab_url": "https://cee-gitlab.sandia.gov/ascic-test-infra/canary",
     "navbar_start": ["navbar-logo"],
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
-    "logo": {"text": f"nvtest {version}"},
+    "logo": {"text": f"canary {version}"},
     "navbar_persistent": [],
     "secondary_sidebar_items": ["page-toc"],
 }
@@ -125,7 +125,7 @@ for section in ("directives", "commands"):
     files = glob.glob(pat)
     for file in files:
         os.remove(file)
-args = [sys.executable, "-m", "nvtest", "autodoc", "-d", user_dir]
+args = [sys.executable, "-m", "canary", "autodoc", "-d", user_dir]
 proc = subprocess.run(args)
 assert proc.returncode == 0
 

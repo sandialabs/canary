@@ -1,9 +1,9 @@
 [project]
-name = "nvtest"
+name = "canary-wm"
 dynamic = ["version"]
 readme = "README.md"
 license = {"file" = "LICENSE"}
-description = "nvtest: application testing with Python"
+description = "canary: application testing with Python"
 requires-python = ">=3.10"
 dependencies = [
   "PyYAML",
@@ -11,7 +11,8 @@ dependencies = [
 ]
 
 [project.scripts]
-nvtest = "nvtest:console_main"
+nvtest = "canary:console_main"
+canary = "canary:console_main"
 
 [project.optional-dependencies]
 requests = ["requests"]
@@ -26,17 +27,17 @@ requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.dynamic]
-version = {attr = "_nvtest.util.generate_version.__generate_dynamic_version__"}
+version = {attr = "_canary.util.generate_version.__generate_dynamic_version__"}
 
 [tool.mypy]
 exclude = [
-    "src/nvtest/examples/*",
-    "src/_nvtest/third_party/distro.py",
-    "src/_nvtest/third_party/programoutput/*",
-    "src/_nvtest/third_party/monkeypatch.py",
-    "src/_nvtest/third_party/cloudpickle.py",
-    "src/_nvtest/third_party/docstring_parser/*",
-    "src/_nvtest/third_party/imagesvg/*"
+    "src/canary/examples/*",
+    "src/_canary/third_party/distro.py",
+    "src/_canary/third_party/programoutput/*",
+    "src/_canary/third_party/monkeypatch.py",
+    "src/_canary/third_party/cloudpickle.py",
+    "src/_canary/third_party/docstring_parser/*",
+    "src/_canary/third_party/imagesvg/*"
 ]
 
 [[tool.mypy.overrides]]
@@ -96,7 +97,7 @@ module = "psutil"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["_nvtest.third_party.*"]
+module = ["_canary.third_party.*"]
 ignore_errors = true
 
 # check-wheel-contents is executed by the build-and-inspect-python-package action.
@@ -124,12 +125,12 @@ ignore = ["E741", "F841", "E731"]
 select = ["F", "I"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/nvtest/__init__.py" = ["F401"]
-"src/_nvtest/abc/__init__.py" = ["F401"]
-"src/_nvtest/command/__init__.py" = ["F401"]
-"src/_nvtest/third_party/*.py" = ["F401", "F403", "F405"]
-"src/_nvtest/plugins/__init__.py" = ["F401", "F403", "F405"]
-"src/_nvtest/plugins/*/__init__.py" = ["F401", "F403", "F405"]
+"src/canary/__init__.py" = ["F401"]
+"src/_canary/abc/__init__.py" = ["F401"]
+"src/_canary/command/__init__.py" = ["F401"]
+"src/_canary/third_party/*.py" = ["F401", "F403", "F405"]
+"src/_canary/plugins/__init__.py" = ["F401", "F403", "F405"]
+"src/_canary/plugins/*/__init__.py" = ["F401", "F403", "F405"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -145,7 +146,7 @@ output = "coverage.xml"
 [tool.coverage.run]
 branch = true
 omit = ["*/third_party/*"]
-source = ["_nvtest"]
+source = ["_canary"]
 command_line = "-m pytest"
 
 [tool.coverage.html]

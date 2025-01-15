@@ -1,7 +1,7 @@
 enums
 =====
 
-.. automodule:: _nvtest.enums
+.. automodule:: _canary.enums
    :members:
    :undoc-members:
    :show-inheritance:

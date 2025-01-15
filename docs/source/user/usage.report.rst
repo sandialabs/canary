@@ -16,12 +16,12 @@ Junit
 -----
 A junit report of a test session can be generated after the session has completed:
 
-.. command-output:: nvtest run -d TestResults.junit ./basic
+.. command-output:: canary run -d TestResults.junit ./basic
     :cwd: /examples
     :extraargs: -rv -w
     :ellipsis: 0
 
-.. command-output:: nvtest -C TestResults.junit report junit create
+.. command-output:: canary -C TestResults.junit report junit create
     :cwd: /examples
 
 .. literalinclude:: /examples/TestResults.junit/junit.xml
@@ -33,12 +33,12 @@ Markdown
 --------
 A markdown report of a test session can be generated after the session has completed:
 
-.. command-output:: nvtest run -d TestResults.Markdown ./basic
+.. command-output:: canary run -d TestResults.Markdown ./basic
     :cwd: /examples
     :extraargs: -rv -w
     :ellipsis: 0
 
-.. command-output:: nvtest -C TestResults.Markdown report markdown create
+.. command-output:: canary -C TestResults.Markdown report markdown create
     :cwd: /examples
 
 .. literalinclude:: /examples/TestResults.Markdown/Results.md
@@ -51,12 +51,12 @@ HTML
 
 A HTML report of a test session can be generated after the session has completed:
 
-.. command-output:: nvtest run -d TestResults.HTML ./basic
+.. command-output:: canary run -d TestResults.HTML ./basic
     :cwd: /examples
     :ellipsis: 0
     :extraargs: -rv -w
 
-.. command-output:: nvtest -C TestResults.HTML report html create
+.. command-output:: canary -C TestResults.HTML report html create
     :cwd: /examples
 
 .. literalinclude:: /examples/TestResults.HTML/Results.html
@@ -72,11 +72,11 @@ A CDash report of a test session can be generated after the session has complete
 .. code-block:: console
 
     $ cd TestResults
-    $ nvtest report cdash create -p PROJECT_NAME -b BUILD_NAME
+    $ canary report cdash create -p PROJECT_NAME -b BUILD_NAME
 
 The report can be uploaded to a CDash server via
 
 .. code-block:: console
 
     $ cd TestResults
-    $ nvtest report cdash post URL
+    $ canary report cdash post URL

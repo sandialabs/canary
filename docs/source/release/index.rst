@@ -1,7 +1,7 @@
 Release Notes
 =============
 
-For full details, refer to the `commit logs <https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/commits/main?ref_type=heads>`_
+For full details, refer to the `commit logs <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/commits/main?ref_type=heads>`_
 
 .. toctree::
     :maxdepth: 1

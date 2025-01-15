@@ -1,7 +1,7 @@
 log
 ===
 
-.. automodule:: _nvtest.command.log
+.. automodule:: _canary.command.log
    :members:
    :undoc-members:
    :show-inheritance:

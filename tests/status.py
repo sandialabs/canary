@@ -1,8 +1,8 @@
-import _nvtest.status as status
-from _nvtest.error import diff_exit_status
-from _nvtest.error import fail_exit_status
-from _nvtest.error import skip_exit_status
-from _nvtest.error import timeout_exit_status
+import _canary.status as status
+from _canary.error import diff_exit_status
+from _canary.error import fail_exit_status
+from _canary.error import skip_exit_status
+from _canary.error import timeout_exit_status
 
 
 def test_status_0():

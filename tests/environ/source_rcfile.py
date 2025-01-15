@@ -1,8 +1,8 @@
 import os
 
-from _nvtest.main import NVTestCommand
-from _nvtest.util import shell
-from _nvtest.util.filesystem import working_dir
+from _canary.main import CanaryCommand
+from _canary.util import shell
+from _canary.util.filesystem import working_dir
 
 
 def test_source_rcfile_1(tmpdir):
@@ -12,21 +12,21 @@ def test_source_rcfile_1(tmpdir):
         with open("file.pyt", "w") as fh:
             fh.write(
                 """\
-import nvtest
+import canary
 import os
 import sys
-nvtest.directives.source('file.sh')
-nvtest.directives.link('file.sh')
+canary.directives.source('file.sh')
+canary.directives.link('file.sh')
 def test():
     assert os.getenv("BAZ") == "SPAM", os.getenv("BAZ")
 if __name__ == "__main__":
     sys.exit(test())
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run(".")
         if rc != 0:
-            print(open("TestResults/file/nvtest-out.txt").read())
+            print(open("TestResults/file/canary-out.txt").read())
         assert rc == 0
 
 
@@ -37,21 +37,21 @@ def test_source_rcfile_2(tmpdir):
         with open("file.pyt", "w") as fh:
             fh.write(
                 """\
-import nvtest
+import canary
 import os
 import sys
-nvtest.directives.link('file.sh')
+canary.directives.link('file.sh')
 def test():
-    with nvtest.shell.source('file.sh'):
+    with canary.shell.source('file.sh'):
         assert os.getenv("BAZ") == "SPAM", os.getenv("BAZ")
 if __name__ == "__main__":
     sys.exit(test())
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run(".")
         if rc != 0:
-            print(open("TestResults/file/nvtest-out.txt").read())
+            print(open("TestResults/file/canary-out.txt").read())
         assert rc == 0
 
 

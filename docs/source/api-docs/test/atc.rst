@@ -1,7 +1,7 @@
 atc
 ===
 
-.. automodule:: _nvtest.test.atc
+.. automodule:: _canary.test.atc
    :members:
    :undoc-members:
    :show-inheritance:

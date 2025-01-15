@@ -1,18 +1,20 @@
 plugins
 =======
 
-``nvtest`` builtin plugins
+``canary`` builtin plugins
 
 -------------
 
 .. toctree::
    :maxdepth: 1
 
-   nvtest_ctest
-   nvtest_gitlab
-   nvtest_html
-   nvtest_json
-   nvtest_junit
-   nvtest_markdown
-   nvtest_pyt
-   nvtest_vvt
+   ctest
+   email
+   gitlab
+   html
+   json
+   junit
+   markdown
+   post_clean
+   pyt
+   vvtest

@@ -3,19 +3,19 @@
 Finding locations of test assets
 ================================
 
-It is often useful to know the location a test's execution directory.  The :ref:`nvtest location<nvtest-location>` command can display the locations of test assets:
+It is often useful to know the location a test's execution directory.  The :ref:`canary location<canary-location>` command can display the locations of test assets:
 
 
-.. command-output:: nvtest location -h
+.. command-output:: canary location -h
 
 For example to move to the test execution directory, simply:
 
 .. code-block:: console
 
-    cd $(nvtest location /ID)
+    cd $(canary location /ID)
 
-where ``ID`` is the test ID that is printed by :ref:`nvtest status<basics-status>`.
+where ``ID`` is the test ID that is printed by :ref:`canary status<basics-status>`.
 
 .. note::
 
-    ``nvtest log`` should be run inside of a test session by either navigating to the session's directory or by ``nvtest -C PATH``.
+    ``canary log`` should be run inside of a test session by either navigating to the session's directory or by ``canary -C PATH``.

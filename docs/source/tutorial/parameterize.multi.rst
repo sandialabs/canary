@@ -8,7 +8,7 @@ If multiple ``parameterize`` directives are issued in the same test file, the ca
 .. literalinclude:: /examples/parameterize/parameterize3.pyt
     :language: python
 
-.. command-output:: nvtest describe parameterize/parameterize3.pyt
+.. command-output:: canary describe parameterize/parameterize3.pyt
     :cwd: /examples
 
 Similarly,
@@ -18,5 +18,5 @@ Similarly,
 
 results in the following 6 test cases:
 
-.. command-output:: nvtest describe parameterize/parameterize4.pyt
+.. command-output:: canary describe parameterize/parameterize4.pyt
     :cwd: /examples

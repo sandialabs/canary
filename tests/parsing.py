@@ -3,7 +3,7 @@ import os
 
 
 def test_batch_args_backward():
-    import _nvtest.command.common as common
+    import _canary.command.common as common
 
     parser = argparse.ArgumentParser()
     common.add_resource_arguments(parser)
@@ -30,7 +30,7 @@ def test_batch_args_backward():
 
 
 def test_batch_options():
-    import _nvtest.command.common as common
+    import _canary.command.common as common
 
     parser = argparse.ArgumentParser()
     common.add_resource_arguments(parser)
@@ -57,7 +57,7 @@ def test_batch_options():
 
 
 def test_parsing_backward():
-    import _nvtest.command.common as common
+    import _canary.command.common as common
 
     parser = argparse.ArgumentParser()
     common.add_resource_arguments(parser)
@@ -66,8 +66,8 @@ def test_parsing_backward():
 
 
 def test_config_args():
-    from _nvtest.config import Config
-    from _nvtest.config.argparsing import make_argument_parser
+    from _canary.config import Config
+    from _canary.config.argparsing import make_argument_parser
 
     parser = make_argument_parser()
     args = parser.parse_args(

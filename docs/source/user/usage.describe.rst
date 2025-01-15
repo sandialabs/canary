@@ -3,10 +3,10 @@
 Describing a test file
 ======================
 
-``nvtest describe`` can print information about a test file and/or test case.
+``canary describe`` can print information about a test file and/or test case.
 
 Basic usage
 -----------
 
-.. command-output:: nvtest describe execute_and_analyze/execute_and_analyze.pyt
+.. command-output:: canary describe execute_and_analyze/execute_and_analyze.pyt
    :cwd: /examples

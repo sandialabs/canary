@@ -2,9 +2,9 @@ import argparse
 import json
 import os
 
-import _nvtest.command.common.pathspec as ps
-from _nvtest.util.filesystem import touchp
-from _nvtest.util.filesystem import working_dir
+import _canary.command.common.pathspec as ps
+from _canary.util.filesystem import touchp
+from _canary.util.filesystem import working_dir
 
 
 def test_pathspec_setdefault():

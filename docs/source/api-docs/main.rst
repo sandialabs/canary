@@ -1,7 +1,7 @@
 main
 ====
 
-.. automodule:: _nvtest.main
+.. automodule:: _canary.main
    :members:
    :undoc-members:
    :show-inheritance:

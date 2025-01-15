@@ -1,6 +1,6 @@
 .. _presentation-features:
 
-Key features of nvtest
+Key features of canary
 ======================
 
 * Hierarchical parallelism
@@ -11,7 +11,7 @@ Key features of nvtest
 * Extensible plugin architecture
 
   * How plugins enable customization and integration with user-defined test files.
-  * Example: Running ``ctest`` tests seamlessly via a nvtest plugin.
+  * Example: Running ``ctest`` tests seamlessly via a canary plugin.
 
 * Cross-platform compatibility
 
