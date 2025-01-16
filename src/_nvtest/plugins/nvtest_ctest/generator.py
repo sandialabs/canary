@@ -87,8 +87,60 @@ class CTestTestFile(AbstractTestGenerator):
         return file.getvalue()
 
     def load(self) -> dict:
+        """Load and transform the tests loaded from CMake into a form understood by nvtest
+
+        ``tests`` is of the form
+
+        ``{NAME: {'command': [...], 'properties': [{'name': ..., 'value': ...}, ...]}, ...}``
+
+        and is transformed in place to the form:
+
+        ``{NAME: {'command': [...], 'prop_name': prop_value, ...}, ...}``
+
+        """
+        project_source_dir: str | None = None
+        project_binary_dir: str | None = find_project_binary_dir(self.root)
+        if project_binary_dir is not None:
+            _cache = open(os.path.join(project_binary_dir, "CMakeCache.txt"), "r").read()
+            if match := re.search(r"(?im)^\s*PROJECT_SOURCE_DIR(:INTERNAL)?=(.*)", _cache):
+                project_source_dir = match.group(2)
+        else:
+            project_binary_dir = os.path.dirname(self.file)
         tests = load(self.file)
-        transform(tests)
+        for name, data in tests.items():
+            transformed: dict[str, Any] = {"command": data["command"]}
+            file = data["file"]
+            if data["cmakelists"] is not None:
+                cmakelists = data["cmakelists"]
+                if project_source_dir is None:
+                    project_source_dir = find_project_source_dir(cmakelists)
+                reldir = os.path.relpath(os.path.dirname(cmakelists), project_source_dir)
+                transformed["project_binary_dir"] = project_binary_dir
+                transformed["project_source_dir"] = project_source_dir
+                transformed["binary_dir"] = os.path.join(project_binary_dir, reldir)  # type: ignore
+                transformed["ctestfile"] = os.path.join(
+                    transformed["binary_dir"], os.path.basename(file)
+                )
+                transformed["cmakelists"] = cmakelists
+                transformed["source_dir"] = os.path.dirname(cmakelists)
+            else:
+                transformed["ctestfile"] = transformed["cmakelists"] = file
+                transformed["project_binary_dir"] = transformed["binary_dir"] = os.path.dirname(
+                    file
+                )
+                transformed["project_source_dir"] = transformed["source_dir"] = os.path.dirname(
+                    file
+                )
+            for prop in data["properties"]:
+                prop_name, prop_value = prop["name"], prop["value"]
+                if prop_name == "ENVIRONMENT":
+                    prop_value = parse_environment(prop_value)
+                elif prop_name == "ENVIRONMENT_MODIFICATION":
+                    prop_value = parse_environment_modification(prop_value)
+                elif prop_name == "RESOURCE_GROUPS":
+                    prop_value = parse_resource_groups(prop_value)
+                transformed[prop_name.lower()] = prop_value
+            tests[name] = transformed
         return tests
 
     def resolve_fixtures(self, cases: list["CTestTestCase"]) -> None:
@@ -160,6 +212,8 @@ class CTestTestCase(TestCase):
         backtrace_triples: list[str] | None = None,
         cmakelists: str | None = None,
         ctestfile: str | None = None,
+        project_source_dir: str | None = None,
+        project_binary_dir: str | None = None,
         **kwds,
     ) -> None:
         super().__init__(
@@ -176,6 +230,8 @@ class CTestTestCase(TestCase):
         self._cmakelists = cmakelists
         self._ctestfile = ctestfile
         self.ctest_working_directory = working_directory
+        self._project_source_dir = project_source_dir
+        self._project_binary_dir = project_binary_dir
 
         if command is not None:
             with nvtest.filesystem.working_dir(self.execution_directory):
@@ -273,8 +329,20 @@ class CTestTestCase(TestCase):
     def cmakelists(self, arg: str) -> None:
         self._cmakelists = arg
 
+    @property
+    def source_dir(self) -> str:
+        return os.path.dirname(self.cmakelists)  # type: ignore
+
+    @property
+    def project_source_dir(self) -> str:
+        return self._project_source_dir or self.source_dir
+
+    @project_source_dir.setter
+    def project_source_dir(self, arg: str) -> None:
+        self._project_source_dir = arg
+
     def chain(self, start: str | None = None, anchor: str = ".git") -> str:
-        return super().chain(start=self.ctestfile, anchor="CMakeFiles")
+        return os.path.relpath(self.cmakelists, self.project_source_dir)  # type: ignore
 
     @property
     def execution_directory(self) -> str:
@@ -285,6 +353,14 @@ class CTestTestCase(TestCase):
     @property
     def binary_dir(self) -> str:
         return os.path.dirname(self.ctestfile)
+
+    @property
+    def project_binary_dir(self) -> str:
+        return self._project_binary_dir or self.binary_dir
+
+    @project_binary_dir.setter
+    def project_binary_dir(self, arg: str) -> None:
+        self._project_binary_dir = arg
 
     def required_resources(self) -> list[list[dict[str, Any]]]:
         required = copy.deepcopy(self.resource_groups)
@@ -532,6 +608,10 @@ def load(file: str) -> dict[str, Any]:
             t["file"] = os.path.abspath(file)
             if nodes:
                 node = nodes[test["backtrace"]]
+                while True:
+                    if "parent" not in node:
+                        break
+                    node = nodes[node["parent"]]
                 t["cmakelists"] = os.path.abspath(files[node["file"]])
             else:
                 t["cmakelists"] = None
@@ -539,8 +619,8 @@ def load(file: str) -> dict[str, Any]:
     return tests
 
 
-def find_project_binary_dir(file: str) -> str:
-    dirname = os.path.dirname(file)
+def find_project_binary_dir(start: str) -> str | None:
+    dirname = start
     while True:
         cmakecache = os.path.join(dirname, "CMakeCache.txt")
         if os.path.exists(cmakecache):
@@ -548,66 +628,21 @@ def find_project_binary_dir(file: str) -> str:
         dirname = os.path.dirname(dirname)
         if dirname == os.path.sep:
             break
-    return os.path.dirname(file)
+    return None
 
 
-def find_project_source_dir(file: str) -> str:
-    dirname, basename = os.path.split(os.path.abspath(file))
-    if basename not in ("CMakeLists.txt", "CTestTestfile.cmake"):
-        logging.debug(f"Unrecognized file name {basename!r}")
+def find_project_source_dir(start: str) -> str:
+    dirname = start
     while True:
         parent = os.path.dirname(dirname)
-        if not os.path.exists(os.path.join(parent, basename)):
-            return dirname
-        dirname = parent
+        f = os.path.join(dirname, "CMakeLists.txt")
+        if os.path.exists(f):
+            if re.search(r"(?im)^\s*PROJECT\(", open(f).read()):
+                return dirname
+        dirname = os.path.dirname(dirname)
         if dirname == os.path.sep:
             break
-    return os.path.dirname(os.path.abspath(file))
-
-
-def transform(tests: dict[str, Any]) -> None:
-    """Transform the tests loaded from CMake into a form understood by nvtest
-
-    ``tests`` is of the form
-
-    ``{NAME: {'command': [...], 'properties': [{'name': ..., 'value': ...}, ...]}, ...}``
-
-    and is transformed in place to the form:
-
-    ``{NAME: {'command': [...], 'prop_name': prop_value, ...}, ...}``
-
-    """
-    for name, data in tests.items():
-        transformed: dict[str, Any] = {"command": data["command"]}
-        file = data["file"]
-        if data["cmakelists"] is not None:
-            cmakelists = data["cmakelists"]
-            project_binary_dir = find_project_binary_dir(file)
-            project_source_dir = find_project_source_dir(cmakelists)
-            reldir = os.path.relpath(os.path.dirname(cmakelists), project_source_dir)
-            transformed["project_binary_dir"] = project_binary_dir
-            transformed["project_source_dir"] = project_source_dir
-            transformed["binary_dir"] = os.path.join(project_binary_dir, reldir)
-            transformed["ctestfile"] = os.path.join(
-                transformed["binary_dir"], os.path.basename(file)
-            )
-            transformed["cmakelists"] = cmakelists
-            transformed["source_dir"] = os.path.dirname(cmakelists)
-        else:
-            transformed["ctestfile"] = transformed["cmakelists"] = file
-            transformed["project_binary_dir"] = transformed["binary_dir"] = os.path.dirname(file)
-            transformed["project_source_dir"] = transformed["source_dir"] = os.path.dirname(file)
-        for prop in data["properties"]:
-            prop_name, prop_value = prop["name"], prop["value"]
-            if prop_name == "ENVIRONMENT":
-                prop_value = parse_environment(prop_value)
-            elif prop_name == "ENVIRONMENT_MODIFICATION":
-                prop_value = parse_environment_modification(prop_value)
-            elif prop_name == "RESOURCE_GROUPS":
-                prop_value = parse_resource_groups(prop_value)
-            transformed[prop_name.lower()] = prop_value
-        tests[name] = transformed
-    return
+    return start
 
 
 def find_cmake():

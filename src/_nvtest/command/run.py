@@ -92,7 +92,8 @@ class Run(Command):
         PathSpec.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
-        logging.emit(banner() + "\n")
+        if not args.no_header:
+            logging.emit(banner() + "\n")
         PathSpec.parse(args)
         session: Session
         stage: str = args.stage or "run"
