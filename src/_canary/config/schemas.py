@@ -71,6 +71,7 @@ test_schema = Schema(
                 Optional("fast"): Use(time_in_seconds),
                 Optional("long"): Use(time_in_seconds),
                 Optional("default"): Use(time_in_seconds),
+                Optional("ctest"): Use(time_in_seconds),
             }
         }
     }

@@ -95,6 +95,7 @@ class Test:
     timeout_fast: float = 120.0
     timeout_default: float = 5 * 60.0
     timeout_long: float = 15 * 60.0
+    timeout_ctest: float = 1500.0
 
     def update(self, *args: Any, **kwargs: Any) -> None:
         if len(args) > 1:
@@ -370,6 +371,10 @@ class Config:
             if n := b.get("workers"):
                 if n > cpu_count():
                     raise ValueError(f"batch:workers={n} > cpu_count={cpu_count()}")
+
+        for type in ("fast", "default", "long", "ctest"):
+            if t := getattr(args, f"test_timeout_{type}", None):
+                setattr(self.test, f"timeout_{type}", t)
 
         self.options = args
 

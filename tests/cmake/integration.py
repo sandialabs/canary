@@ -46,7 +46,7 @@ def test_cmake_integration(tmpdir):
             make()
             print(os.listdir("."))
             run = CanaryCommand("run", debug=True)
-            run("-w", "--recurse-cmake", ".")
+            run("-w", "--recurse-ctest", ".")
             dirs = sorted(os.listdir("TestResults"))
             dirs.remove(".canary")
             assert len(dirs) == 3

@@ -20,6 +20,7 @@ from _canary.util import graph
 from _canary.util import logging
 from _canary.util.filesystem import force_remove
 from _canary.util.filesystem import is_exe
+from _canary.util.time import time_in_seconds
 
 warning_cache = set()
 
@@ -47,7 +48,7 @@ class CTestTestFile(AbstractTestGenerator):
         return False
 
     def stop_recursion(self) -> bool:
-        if config.getoption("recurse_cmake", False):
+        if config.getoption("recurse_ctest", False):
             return False
         return True
 
@@ -216,7 +217,6 @@ class CTestTestCase(TestCase):
             file_path=file_path,
             family=family,
             keywords=labels,
-            timeout=timeout or 60.0,
         )
 
         self._resource_groups: list[list[dict[str, Any]]] | None = None
@@ -227,6 +227,7 @@ class CTestTestCase(TestCase):
         self.ctest_working_directory = working_directory
         self._project_source_dir = project_source_dir
         self._project_binary_dir = project_binary_dir
+        self.timeout_property = timeout
 
         if command is not None:
             with canary.filesystem.working_dir(self.execution_directory):
@@ -300,6 +301,19 @@ class CTestTestCase(TestCase):
             warn_unsupported_ctest_option("timeout_signal_grace_period")
         if timeout_signal_name is not None:
             warn_unsupported_ctest_option("timeout_signal_name")
+
+    def set_default_timeout(self) -> None:
+        """Sets the default timeout which is 1500 for CMake generated files."""
+        timeout: float
+        if var := config.getoption("ctest_test_timeout"):
+            timeout = float(var)
+        elif var := os.getenv("CTEST_TEST_TIMEOUT"):
+            timeout = time_in_seconds(var)
+        elif self.timeout_property is not None:
+            timeout = self.timeout_property
+        else:
+            timeout = config.test.timeout_ctest
+        self._timeout = float(timeout)
 
     @property
     def file(self) -> str:

@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 from typing import TYPE_CHECKING
 
 from _canary.util.time import time_in_seconds
@@ -23,14 +24,6 @@ if TYPE_CHECKING:
 
 def add_filter_arguments(parser: "Parser") -> None:
     group = parser.add_argument_group("filtering")
-    group.add_argument(
-        "--recurse-cmake",
-        action="store_true",
-        default=False,
-        help="Recurse CMake binary directory for test files.  CTest tests can be detected "
-        "from the root CTestTestfile.cmake, so this is option is not necessary unless there "
-        "is a mix of CTests and other test types in the binary directory",
-    )
     group.add_argument(
         "-k",
         dest="keyword_expr",
@@ -59,6 +52,14 @@ def add_filter_arguments(parser: "Parser") -> None:
         help="Include tests containing the regular expression regex in at least 1 of its "
         "file assets.  regex is a python regular expression, see "
         "https://docs.python.org/3/library/re.html",
+    )
+    group.add_argument(
+        "--recurse-ctest",
+        action="store_true",
+        default=False,
+        help="Recurse CMake binary directory for test files.  CTest tests can be detected "
+        "from the root CTestTestfile.cmake, so this is option is not necessary unless there "
+        "is a mix of CTests and other test types in the binary directory",
     )
 
 
@@ -94,10 +95,20 @@ def add_resource_arguments(parser: "Parser") -> None:
     )
     group.add_argument(
         "--timeout",
+        "--session-timeout",
+        dest="session_timeout",
         metavar="T",
         type=time_in_seconds,
         help="Set a timeout on test session execution in seconds "
         "(accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: None]",
+    )
+    group.add_argument(
+        "--test-timeout",
+        metavar="type:T",
+        action=TimeoutResource,
+        help="Set the timeout for tests of type.  "
+        "Type is one of 'fast', 'long', 'default', or 'ctest'"
+        "(T accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: 5m]",
     )
     group.add_argument(
         "--timeout-multiplier",
@@ -114,6 +125,22 @@ def add_resource_arguments(parser: "Parser") -> None:
         dest="batch",
         help=BatchResourceSetter.help_page("-b"),
     )
+
+
+class TimeoutResource(argparse.Action):
+    def __call__(self, parser, args, values, option_string=None):
+        if match := re.search(r"^(long|default|fast|ctest)[:=](.*)$", values):
+            type = match.group(1)
+            value = time_in_seconds(match.group(2))
+        else:
+            raise ValueError(f"Incorrect test timeout spec: {values}, expected 'type:value'")
+        choices = ("fast", "long", "default", "ctest")
+        if type.lower() not in choices:
+            s = ", ".join(repr(c) for c in choices)
+            raise ValueError(
+                f"argument {option_string}: invalid choice: {type!r} (choose from {s})"
+            )
+        setattr(args, f"test_timeout_{type}", value)
 
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:
