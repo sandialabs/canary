@@ -34,6 +34,9 @@ add_test(test2 "mpiexec" "-n" "4" "some-exe")
 set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM" LABELS "foo;spam" _BACKTRACE_TRIPLES "CMakeLists.txt;0;")
 """
             )
+        mkdirp("CMakeFiles")
+        with open("CMakeCache.txt", "w") as fh:
+            fh.write(f"PROJECT_SOURCE_DIR:INTERNAL={os.getcwd()}")
         file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
         cases = file.lock()
         assert len(cases) == 2
@@ -235,6 +238,9 @@ add_test(test1 "script.py")
 set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,crypto_chips:2" _BACKTRACE_TRIPLES "CMakeLists.txt;0;")
 """
             )
+        mkdirp("CMakeFiles")
+        with open("CMakeCache.txt", "w") as fh:
+            fh.write(f"PROJECT_SOURCE_DIR:INTERNAL={os.getcwd()}")
 
         pool = {
             "local": {

@@ -328,7 +328,9 @@ class TestCase(AbstractTestCase):
 
     @file_path.setter
     def file_path(self, arg: str) -> None:
-        assert os.path.exists(os.path.join(self.file_root, arg))
+        path = os.path.join(self.file_root, arg)
+        if not os.path.exists(path):
+            raise ValueError(f"{self}: {path}: no such file or directory")
         self._file_path = arg
 
     @property
