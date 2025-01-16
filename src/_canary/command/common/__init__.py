@@ -134,13 +134,18 @@ class TimeoutResource(argparse.Action):
             value = time_in_seconds(match.group(2))
         else:
             raise ValueError(f"Incorrect test timeout spec: {values}, expected 'type:value'")
-        choices = ("fast", "long", "default", "ctest")
+        choices = ("fast", "long", "default", "ctest", "session")
         if type.lower() not in choices:
             s = ", ".join(repr(c) for c in choices)
             raise ValueError(
                 f"argument {option_string}: invalid choice: {type!r} (choose from {s})"
             )
-        setattr(args, f"test_timeout_{type}", value)
+        elif type.lower() == "session":
+            args.session_timeout = value
+        else:
+            timeout_resources = getattr(args, self.dest, None) or {}
+            timeout_resources[type] = value
+            setattr(args, self.dest, timeout_resources)
 
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:

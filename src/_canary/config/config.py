@@ -372,9 +372,9 @@ class Config:
                 if n > cpu_count():
                     raise ValueError(f"batch:workers={n} > cpu_count={cpu_count()}")
 
-        for type in ("fast", "default", "long", "ctest"):
-            if t := getattr(args, f"test_timeout_{type}", None):
-                setattr(self.test, f"timeout_{type}", t)
+        if t := getattr(args, "test_timeout", None):
+            for key, value in t.items():
+                setattr(self.test, f"timeout_{key}", value)
 
         self.options = args
 
