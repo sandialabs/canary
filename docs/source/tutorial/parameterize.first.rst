@@ -10,12 +10,12 @@ In the most simple case, a single parameter is defined, as demonstrated in the e
 
 The test file generates two test cases with parameters ``a=1`` and ``a=4``, respectively:
 
-.. command-output:: nvtest describe parameterize/parameterize1.pyt
+.. command-output:: canary describe parameterize/parameterize1.pyt
     :cwd: /examples
 
 When the test file is run, each case is executed in its own uniquely named directory:
 
-.. command-output:: nvtest run parameterize/parameterize1.pyt
+.. command-output:: canary run parameterize/parameterize1.pyt
    :cwd: /examples
    :nocache:
    :extraargs: -w

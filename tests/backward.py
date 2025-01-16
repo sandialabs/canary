@@ -1,12 +1,12 @@
-from _nvtest import finder
-from _nvtest.util.filesystem import working_dir
+from _canary import finder
+from _canary.util.filesystem import working_dir
 
 
 def test_backward_names(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import nvtest\nnvtest.directives.keywords('a', 'b', 'c', 'd', 'e')")
+            fh.write("import canary\ncanary.directives.keywords('a', 'b', 'c', 'd', 'e')")
     f = finder.Finder()
     f.add(workdir)
     assert len(f.roots) == 1

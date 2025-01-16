@@ -3,7 +3,7 @@
 Controlling test execution based on dependency results
 ======================================================
 
-By default, a test case will not run unless all of its dependencies complete successfully.  This behavior can be modified by passing the ``result`` argument to :func:`~nvtest.directives.depends_on`.
+By default, a test case will not run unless all of its dependencies complete successfully.  This behavior can be modified by passing the ``result`` argument to :func:`~canary.directives.depends_on`.
 
 Example
 -------
@@ -15,7 +15,7 @@ Run a test case only when its dependency fails:
 
 ``depends_on_willfail`` will run only if the result of ``willfail`` is ``failed``:
 
-.. command-output:: nvtest run ./depends_on/result
+.. command-output:: canary run ./depends_on/result
     :cwd: /examples
     :nocache:
     :anyreturncode:

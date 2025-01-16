@@ -1,6 +1,6 @@
 .. _tutorial:
 
-nvtest: Accelerating Application Testing Across Platforms
+canary: Accelerating Application Testing Across Platforms
 =========================================================
 
 A Flexible, Extensible, and Scalable Framework for Scientific Applications

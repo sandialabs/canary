@@ -3,7 +3,7 @@
 Defining additional execution stages
 ====================================
 
-All tests are configured to run during the ``run`` stage of execution.  :func:`nvtest.directives.stages` configures a test to run in additional stages of execution, as illustrated in the following example.
+All tests are configured to run during the ``run`` stage of execution.  :func:`canary.directives.stages` configures a test to run in additional stages of execution, as illustrated in the following example.
 
 Example
 --------
@@ -26,7 +26,7 @@ The following example defines the additional post processing stages "analyze" an
     :language: python
     :lines: 27-28
 
-To determine the stage of execution, the test should parse the command line for the ``--stage`` option.  As a convenience, ``nvtest`` provides the ``make_argument_parser`` utility that creates and ``argparse.ArgumentParser`` object and adds several common arguments, including ``--stage``:
+To determine the stage of execution, the test should parse the command line for the ``--stage`` option.  As a convenience, ``canary`` provides the ``make_argument_parser`` utility that creates and ``argparse.ArgumentParser`` object and adds several common arguments, including ``--stage``:
 
 .. literalinclude:: /examples/staged/staged.pyt
     :language: python
@@ -38,7 +38,7 @@ The test must first be run with ``--stage=run`` (the default) to generate the te
 
     All tests are assigned the stage ``run``, regardless of whether the ``stages`` directive is called.
 
-.. command-output:: nvtest run -d TestResults.Staged ./staged
+.. command-output:: canary run -d TestResults.Staged ./staged
     :cwd: /examples
     :extraargs: -rv -w
 
@@ -46,23 +46,23 @@ Thereafter, the additional stages can be run:
 
 .. note::
 
-    When ``nvtest run`` is invoked with ``--stage=STAGE``, only tests having been assigned the stage ``STAGE`` will be run.
+    When ``canary run`` is invoked with ``--stage=STAGE``, only tests having been assigned the stage ``STAGE`` will be run.
 
 .. note::
 
-    ``nvtest run --stage=STAGE`` for any other stage than run should be executed in the session work tree.
+    ``canary run --stage=STAGE`` for any other stage than run should be executed in the session work tree.
 
-.. command-output:: nvtest -C TestResults.Staged run --stage=analyze .
+.. command-output:: canary -C TestResults.Staged run --stage=analyze .
     :cwd: /examples
     :extraargs: -rv
 
-.. command-output:: nvtest -C TestResults.Staged run --stage=plot .
+.. command-output:: canary -C TestResults.Staged run --stage=plot .
     :cwd: /examples
     :extraargs: -rv
 
 .. admonition:: Processor counts
 
-    During any stageanalyze other than ``run``, ``nvtest`` assumes that the stage will use only one processor.
+    During any stageanalyze other than ``run``, ``canary`` assumes that the stage will use only one processor.
 
 The complete file
 .................

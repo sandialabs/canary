@@ -1,7 +1,7 @@
 progress
 ========
 
-.. automodule:: _nvtest.util.progress
+.. automodule:: _canary.util.progress
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,7 +1,7 @@
 status
 ======
 
-.. automodule:: _nvtest.status
+.. automodule:: _canary.status
    :members:
    :undoc-members:
    :show-inheritance:

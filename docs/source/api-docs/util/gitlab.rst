@@ -1,7 +1,7 @@
 gitlab
 ======
 
-.. automodule:: _nvtest.util.gitlab
+.. automodule:: _canary.util.gitlab
    :members:
    :undoc-members:
    :show-inheritance:

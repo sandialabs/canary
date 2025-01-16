@@ -8,13 +8,13 @@ from typing import Optional
 
 import yaml
 
-import nvtest
-from _nvtest.util import graph
-from _nvtest.util.filesystem import set_executable
-from _nvtest.util.filesystem import working_dir
+import canary
+from _canary.util import graph
+from _canary.util.filesystem import set_executable
+from _canary.util.filesystem import working_dir
 
 
-class YAMLTestFile(nvtest.AbstractTestGenerator):
+class YAMLTestFile(canary.AbstractTestGenerator):
     def __init__(self, root: str, path: Optional[str] = None) -> None:
         super().__init__(root, path=path)
         self.load(open(self.file))
@@ -51,7 +51,7 @@ class YAMLTestFile(nvtest.AbstractTestGenerator):
         self.parameters = details.get("parameters", {})
         self.script = details.get("script", [])
 
-    def lock(self, on_options: Optional[list[str]] = None) -> list[nvtest.TestCase]:
+    def lock(self, on_options: Optional[list[str]] = None) -> list[canary.TestCase]:
         """Take the cartesian product of parameters and from each combination create a test case."""
         kwds = dict(
             file_root=self.root,
@@ -84,7 +84,7 @@ class YAMLTestFile(nvtest.AbstractTestGenerator):
         return file.getvalue()
 
 
-class YAMLTestCase(nvtest.TestCase):
+class YAMLTestCase(canary.TestCase):
     def __init__(
         self,
         *,

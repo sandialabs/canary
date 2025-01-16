@@ -3,12 +3,12 @@
 What is a pyt test file?
 ========================
 
-Files ending in ``.pyt`` are ``nvtest``'s "native" test file format.  ``pyt`` files are python files consisting of two parts:
+Files ending in ``.pyt`` are ``canary``'s "native" test file format.  ``pyt`` files are python files consisting of two parts:
 
-* ``nvtest`` :ref:`directives <test-directives>`; and
+* ``canary`` :ref:`directives <test-directives>`; and
 * the test body
 
-nvtest directives
+canary directives
 -----------------
 
 :ref:`Test directives <test-directives>` are python function calls that communicate information to
@@ -17,8 +17,8 @@ directive assigns keywords (labels) to the test which can be used in filtering o
 
 .. code-block:: python
 
-    import nvtest
-    nvtest.directives.keywords("spam")
+    import canary
+    canary.directives.keywords("spam")
 
 Directives are evaluated when the test file is imported and must appear at the file's global scope
 and not in function or class scopes.

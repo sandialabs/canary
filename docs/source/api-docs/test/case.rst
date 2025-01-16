@@ -1,7 +1,7 @@
 case
 ====
 
-.. automodule:: _nvtest.test.case
+.. automodule:: _canary.test.case
    :members:
    :undoc-members:
    :show-inheritance:

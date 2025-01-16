@@ -1,7 +1,7 @@
 run
 ===
 
-.. automodule:: _nvtest.command.run
+.. automodule:: _canary.command.run
    :members:
    :undoc-members:
    :show-inheritance:

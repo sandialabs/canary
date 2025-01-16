@@ -1,7 +1,7 @@
 executable
 ==========
 
-.. automodule:: _nvtest.util.executable
+.. automodule:: _canary.util.executable
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,7 +1,7 @@
 help
 ====
 
-.. automodule:: _nvtest.command.help
+.. automodule:: _canary.command.help
    :members:
    :undoc-members:
    :show-inheritance:

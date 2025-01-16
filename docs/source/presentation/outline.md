@@ -1,6 +1,6 @@
-# Accelerate Your Development: how nvtest can streamline software development through efficient testing
+# Accelerate Your Development: how canary can streamline software development through efficient testing
 
-## 1. Introduction to nvtest
+## 1. Introduction to canary
 
 ### History of Software Testing
 - **Early Testing Practices (1950s-1960s)**
@@ -41,25 +41,25 @@
 - **Test Fixtures**: Fixed states or conditions used as a baseline for running tests. They set up the necessary environment, data, and conditions required for the tests to execute properly.
 - **Test Runner**: A tool that executes test cases and reports the results. It manages the execution of tests, collects the outcomes, and provides feedback on the success or failure of each test. Test runners can be part of a test framework or standalone tools that support various testing methodologies.
 
-## 2. Introducing nvtest
+## 2. Introducing canary
 
-- nvtest as a solution to modern software testing challenges.
-- nvtest is not just a test framework like xUnit but a **test runner** designed to manage tests across **diverse hardware environments**.
-- as a test runner, nvtest runs tests from a variety of sources through a plugin architecture.
+- canary as a solution to modern software testing challenges.
+- canary is not just a test framework like xUnit but a **test runner** designed to manage tests across **diverse hardware environments**.
+- as a test runner, canary runs tests from a variety of sources through a plugin architecture.
 - Highlight the **asynchronous execution** of tests and **plugin architecture** that allows for deep customization and integration.
 
-### Why nvtest?
+### Why canary?
 - Address the challenges of scaling tests across heterogeneous environments (local machines, cloud, HPC clusters).
 - Flexibility to define custom test processes and integrate with various development tools and CI/CD systems.
 
-### How nvtest Works
-- nvtest searches for test files in the specified directories.
+### How canary Works
+- canary searches for test files in the specified directories.
 - It generates test cases from these files, interpreting the test definitions according to the rules and structures defined by the user or defaults.
-- nvtest then runs these test cases asynchronously, allowing for efficient use of resources and faster completion of the test suite.
+- canary then runs these test cases asynchronously, allowing for efficient use of resources and faster completion of the test suite.
 
 ---
 
-## 3. Core Features of nvtest
+## 3. Core Features of canary
 
 - **Hardware Agnosticism**
   - Running tests on various hardware platforms (laptops, desktops, servers, HPC clusters).
@@ -67,15 +67,15 @@
 
 - **Asynchronous Test Execution**
   - Benefits of asynchronous test execution.
-  - How nvtest manages concurrent test executions and resource allocation.
+  - How canary manages concurrent test executions and resource allocation.
 
 - **Plugin Architecture**
-  - Explanation of nvtest’s rich plugin architecture.
+  - Explanation of canary’s rich plugin architecture.
   - Customization and extensibility through plugins.
 
 ---
 
-## 4. nvtest Plugin Architecture
+## 4. canary Plugin Architecture
 
 - **Test File Definition Plugin**
   - Overview of the test file definition mechanism.
@@ -92,27 +92,27 @@
 
 - **CTests and CMake**
   - Integration with CTest and CMake for building and running tests.
-  - How nvtest enhances these tools with its asynchronous execution and hardware versatility.
+  - How canary enhances these tools with its asynchronous execution and hardware versatility.
 
 - **GitLab**
   - Integration with GitLab for Continuous Integration (CI).
-  - nvtest's role in automating tests in GitLab pipelines.
+  - canary's role in automating tests in GitLab pipelines.
 
 - **JUnit**
   - Integration with JUnit for test results reporting and analysis.
-  - Converting nvtest results into JUnit-compatible formats.
+  - Converting canary results into JUnit-compatible formats.
 
 - **Plugin Flexibility**
-  - Demonstration of how nvtest can interface with other tools (through plugins).
+  - Demonstration of how canary can interface with other tools (through plugins).
   - Examples of community-contributed plugins or potential custom integrations.
 
 ---
 
-## 6. Benefits of Using nvtest
+## 6. Benefits of Using canary
 
 - **Scalability**
   - Efficient scaling across different hardware environments (from local machines to large HPC clusters).
-  - How nvtest handles scaling with minimal configuration.
+  - How canary handles scaling with minimal configuration.
 
 - **Customization and Flexibility**
   - How users can tailor the testing process to fit their specific workflows.
@@ -127,12 +127,12 @@
 ## 7. Use Case Scenarios
 
 - **Scenario 1: Running Tests in an HPC Environment**
-  - Step-by-step demonstration of how nvtest can be used to execute tests on an HPC cluster.
-  - Benefits of using nvtest for large-scale testing on high-performance hardware.
+  - Step-by-step demonstration of how canary can be used to execute tests on an HPC cluster.
+  - Benefits of using canary for large-scale testing on high-performance hardware.
 
 - **Scenario 2: Continuous Integration with GitLab**
-  - How nvtest can be integrated into a GitLab CI/CD pipeline to automate testing.
-  - Real-world example of setting up and executing tests in a GitLab pipeline with nvtest.
+  - How canary can be integrated into a GitLab CI/CD pipeline to automate testing.
+  - Real-world example of setting up and executing tests in a GitLab pipeline with canary.
 
 - **Scenario 3: Custom Test File Definition**
   - Customizing the test file format for a specific project or workflow.
@@ -143,39 +143,39 @@
 ## 8. Advanced Features
 
 - **Environment Setup and Configuration**
-  - Using nvtest to configure complex testing environments.
+  - Using canary to configure complex testing environments.
   - Automated setup and teardown of environments before and after tests.
 
 - **Test Reporting and Results Analysis**
-  - How nvtest generates detailed test reports.
+  - How canary generates detailed test reports.
   - Integration with other reporting tools or custom reporting plugins.
 
 - **Error Handling and Test Failures**
-  - nvtest’s approach to error management during test execution.
+  - canary’s approach to error management during test execution.
   - Strategies for isolating and debugging failing tests.
 
 ---
 
-## 9. Getting Started with nvtest
+## 9. Getting Started with canary
 
 - **Installation and Setup**
-  - Quick start guide for installing nvtest on different platforms (laptop, server, HPC).
+  - Quick start guide for installing canary on different platforms (laptop, server, HPC).
   - Basic configuration and integration with existing tools (CTest, CMake, GitLab).
 
 - **Creating and Running Your First Test**
-  - Walkthrough of creating a simple test file and running it with nvtest.
+  - Walkthrough of creating a simple test file and running it with canary.
   - Example output and analysis of results.
 
 ---
 
 ## 10. Community and Support
 
-- **nvtest Community**
-  - Overview of the nvtest user and developer community.
+- **canary Community**
+  - Overview of the canary user and developer community.
   - How to contribute plugins, share test configurations, and seek support.
 
 - **Documentation and Resources**
-  - Accessing the official nvtest documentation.
+  - Accessing the official canary documentation.
   - Tutorials, guides, and FAQs for users and developers.
 
 ---
@@ -189,9 +189,9 @@
 ## 12. Conclusion
 
 - **Recap of Key Takeaways**
-  - Why nvtest is a powerful and flexible test runner.
+  - Why canary is a powerful and flexible test runner.
   - Its ability to scale, integrate, and customize for diverse testing needs.
 
 - **Next Steps**
-  - Encourage participants to explore nvtest and experiment with its features.
+  - Encourage participants to explore canary and experiment with its features.
   - Share resources for further learning and involvement in the community.

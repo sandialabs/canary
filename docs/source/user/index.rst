@@ -1,4 +1,4 @@
-nvtest user's guide
+canary user's guide
 ===================
 
 .. toctree::
@@ -24,7 +24,7 @@ nvtest user's guide
    configuration
 
 .. toctree::
-   :caption: Extending nvtest through plugins
+   :caption: Extending canary through plugins
    :maxdepth: 2
 
    extending

@@ -13,15 +13,15 @@ In the test, ``add.py`` is linked to the execution directory, is executed, and o
 
 This test introduces two new features:
 
-* :func:`nvtest.directives.link`: links ``add.py`` into the execution directory (see :ref:`test-directives` for more directives); and
-* :class:`~_nvtest.util.executable.Executable`: creates a callable wrapper around executable scripts.
+* :func:`canary.directives.link`: links ``add.py`` into the execution directory (see :ref:`test-directives` for more directives); and
+* :class:`~_canary.util.executable.Executable`: creates a callable wrapper around executable scripts.
 
 Running the test
 ----------------
 
 To run the test, navigate to the examples folder and run:
 
-.. command-output:: nvtest run -k second ./basic
+.. command-output:: canary run -k second ./basic
     :cwd: /examples
     :nocache:
     :extraargs: -rv -w
@@ -32,13 +32,13 @@ Here, the ``-k`` flag was used to select only the tests having the ``second`` ke
 Inspecting test output
 ----------------------
 
-When a test is run, its output is captured to the file ``nvtest-out.txt`` in its execution directory.  The :ref:`nvtest log<nvtest-log>` command can find and print the contents of this file to the console:
+When a test is run, its output is captured to the file ``canary-out.txt`` in its execution directory.  The :ref:`canary log<canary-log>` command can find and print the contents of this file to the console:
 
 .. note::
 
-   ``nvtest log`` must be run from within a test session either by ``cd``\ ing into the directory or passing the directory name to ``nvtest``\ 's ``-C`` flag
+   ``canary log`` must be run from within a test session either by ``cd``\ ing into the directory or passing the directory name to ``canary``\ 's ``-C`` flag
 
-.. command-output:: nvtest -C TestResults log second
+.. command-output:: canary -C TestResults log second
     :cwd: /examples
     :nocache:
 

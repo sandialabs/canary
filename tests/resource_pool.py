@@ -2,11 +2,11 @@ import copy
 
 import pytest
 
-import _nvtest.config.schemas as schemas
-import nvtest
-from _nvtest.status import Status
-from _nvtest.test.atc import AbstractTestCase
-from _nvtest.third_party.schema import SchemaError
+import _canary.config.schemas as schemas
+import canary
+from _canary.status import Status
+from _canary.test.atc import AbstractTestCase
+from _canary.third_party.schema import SchemaError
 
 
 def test_ctest_schema():
@@ -133,16 +133,16 @@ class Case(AbstractTestCase):
 
 def test_resource_pool_acquire():
     case = Case()
-    with nvtest.config.override():
-        nvtest.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=4, gpus_per_node=4)
-        resources = nvtest.config.resource_pool.acquire(case.required_resources())
+    with canary.config.override():
+        canary.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=4, gpus_per_node=4)
+        resources = canary.config.resource_pool.acquire(case.required_resources())
         assert resources == [
             {
                 "cpus": [{"gid": 0, "slots": 1}, {"gid": 1, "slots": 1}],
                 "gpus": [{"gid": 0, "slots": 1}, {"gid": 1, "slots": 1}],
             }
         ]
-        assert nvtest.config.resource_pool.pool == [
+        assert canary.config.resource_pool.pool == [
             {
                 "id": "0",
                 "cpus": [

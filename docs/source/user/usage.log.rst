@@ -3,20 +3,20 @@
 Inspecting log files
 ====================
 
-Use :ref:`nvtest log<nvtest-log>` to view logs of test cases and batches:
+Use :ref:`canary log<canary-log>` to view logs of test cases and batches:
 
-.. command-output:: nvtest log -h
+.. command-output:: canary log -h
 
 Test case logs
 --------------
 
-The output of each test is logged to ``<path>/nvtest-out.txt`` and can be viewed by
+The output of each test is logged to ``<path>/canary-out.txt`` and can be viewed by
 
 .. code-block:: console
 
-    nvtest log /ID
+    canary log /ID
 
-where ``ID`` is the test ID that is printed by :ref:`nvtest status<basics-status>`.
+where ``ID`` is the test ID that is printed by :ref:`canary status<basics-status>`.
 
 Batch logs
 ----------
@@ -25,10 +25,10 @@ Similar to individual test cases, the output of each batch is logged and can be 
 
 .. code-block:: console
 
-    nvtest log ^M:N
+    canary log ^M:N
 
 where ``M`` is the batch lot and ``N`` is the batch number within the lot.
 
 .. note::
 
-    ``nvtest log`` should be run inside of a test session by either navigating to the session's directory or by ``nvtest -C PATH``.
+    ``canary log`` should be run inside of a test session by either navigating to the session's directory or by ``canary -C PATH``.

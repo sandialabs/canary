@@ -2,9 +2,9 @@ import os
 
 import pytest
 
-from _nvtest.error import StopExecution
-from _nvtest.main import NVTestCommand
-from _nvtest.util.filesystem import working_dir
+from _canary.error import StopExecution
+from _canary.main import CanaryCommand
+from _canary.util.filesystem import working_dir
 
 
 def test_skipif(tmpdir):
@@ -14,21 +14,21 @@ def test_skipif(tmpdir):
                 """\
 import os
 import sys
-import nvtest
-nvtest.directives.skipif(os.getenv('NVTEST_BAZ') is not None, reason='just because')
+import canary
+canary.directives.skipif(os.getenv('CANARY_BAZ') is not None, reason='just because')
 def test():
     pass
 if __name__ == '__main__':
     sys.exit(test())
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run("-w", ".")
-        assert os.listdir("TestResults") == [".nvtest", "f1"]
+        assert os.listdir("TestResults") == [".canary", "f1"]
         assert len(os.listdir("TestResults")) == 2
         assert rc == 0
         with pytest.raises(StopExecution):
             # Error raised due to empty test session
-            os.environ["NVTEST_BAZ"] = "1"
+            os.environ["CANARY_BAZ"] = "1"
             rc = run("-w", "-o", "baz", ".")
-        os.environ.pop("NVTEST_BAZ", None)
+        os.environ.pop("CANARY_BAZ", None)

@@ -3,12 +3,12 @@
 User defined test generator
 ===========================
 
-``nvtest`` generates test cases from ``.pyt``, ``.vvt``, and ``CTestTestFile.cmake`` files.
-Each generator is implemented as a subclass of :class:`~_nvtest.generator.AbstractTestGenerator`.  Custom test
-generators can also be created by subclassing :class:`~_nvtest.generator.AbstractTestGenerator` and defining the
-:meth:`~_nvtest.generator.AbstractTestGenerator.matches`,
-:meth:`~_nvtest.generator.AbstractTestGenerator.describe`, and
-:meth:`~_nvtest.generator.AbstractTestGenerator.lock` methods.
+``canary`` generates test cases from ``.pyt``, ``.vvt``, and ``CTestTestFile.cmake`` files.
+Each generator is implemented as a subclass of :class:`~_canary.generator.AbstractTestGenerator`.  Custom test
+generators can also be created by subclassing :class:`~_canary.generator.AbstractTestGenerator` and defining the
+:meth:`~_canary.generator.AbstractTestGenerator.matches`,
+:meth:`~_canary.generator.AbstractTestGenerator.describe`, and
+:meth:`~_canary.generator.AbstractTestGenerator.lock` methods.
 
 Consider the following YAML test input:
 
@@ -34,7 +34,7 @@ test files.
 .. note::
 
     The completed test file generator can be seen at
-    https://cee-gitlab.sandia.gov/ascic-test-infra/plugins/nvtest-yaml
+    https://cee-gitlab.sandia.gov/ascic-test-infra/plugins/canary-yaml
 
 
 Example implementation

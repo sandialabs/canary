@@ -3,7 +3,7 @@
 Resource allocation
 ===================
 
-``nvtest`` uses a `ProcessPoolExecutor <https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ProcessPoolExecutor>`_ to execute tests asynchronously using ``N`` workers\ [1]_.  Tests are submitted to the executor such that the number of occupied slots of a resource remains less than or equal to the total number slots available.  Resources across compute nodes are specified within a "resource pool" using a structured JSON format\ [2]_.
+``canary`` uses a `ProcessPoolExecutor <https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ProcessPoolExecutor>`_ to execute tests asynchronously using ``N`` workers\ [1]_.  Tests are submitted to the executor such that the number of occupied slots of a resource remains less than or equal to the total number slots available.  Resources across compute nodes are specified within a "resource pool" using a structured JSON format\ [2]_.
 
 Resource pool specification
 ---------------------------
@@ -74,16 +74,16 @@ By default, the resource pool is automatically generated based on a machine prob
 .. note::
 
   * Any resources other than ``cpus`` and ``gpus`` must be defined by the user.
-  * ``nvtest`` assumes a default GPU count of 0
+  * ``canary`` assumes a default GPU count of 0
 
 Homogeneous single-node compute environments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For desktop and single-node *homogeneous* compute environments, the resource pool can be specified on the command line by simply defining the number of each resource type.  For example, resource pool having the default CPU count (as determined by ``nvtest``) and 4 GPUs, can be generated via
+For desktop and single-node *homogeneous* compute environments, the resource pool can be specified on the command line by simply defining the number of each resource type.  For example, resource pool having the default CPU count (as determined by ``canary``) and 4 GPUs, can be generated via
 
 .. code-block:: console
 
-  nvtest -c resource_pool:gpus:4 ...
+  canary -c resource_pool:gpus:4 ...
 
 The resource pool can also be defined in the ``resource_pool`` section of the configuration file:
 
@@ -99,7 +99,7 @@ For homogeneous multi-node compute environments, the resource pool can be specif
 
 .. code-block:: console
 
-  nvtest -c resource_pool:nodes=4 -c resource_pool:cpus_per_node=32 -c resource_pool:gpus_per_node=4 ...
+  canary -c resource_pool:nodes=4 -c resource_pool:cpus_per_node=32 -c resource_pool:gpus_per_node=4 ...
 
 The resource pool can also be defined in the ``resource_pool`` section of the configuration file:
 
@@ -148,7 +148,7 @@ The resources required by a test case are inferred by comparing the case's :ref:
 
 .. code-block:: python
 
-  nvtest.directives.parameterize("cpus,gpus", [(4, 4)])
+  canary.directives.parameterize("cpus,gpus", [(4, 4)])
 
 
 .. code-block:: yaml
@@ -165,18 +165,18 @@ If a test requires a non-default resource, that resource type must appear in the
 
 .. code-block:: python
 
-  nvtest.directives.parameterize("fpgas", [n])
+  canary.directives.parameterize("fpgas", [n])
 
-``nvtest`` will not treat ``fpgas`` as a resource consuming parameter unless it is explicitly defined within the resource pool - either by the command line, a configuration file, or both. Even if the system does not contain any ``fpgas`` (i.e., the count is 0), the user still must explicitly set the count to zero. Otherwise, ``nvtest`` will treat ``fpgas`` as a regular parameter and proceed with executing the test on systems not having ``fpgas``.
+``canary`` will not treat ``fpgas`` as a resource consuming parameter unless it is explicitly defined within the resource pool - either by the command line, a configuration file, or both. Even if the system does not contain any ``fpgas`` (i.e., the count is 0), the user still must explicitly set the count to zero. Otherwise, ``canary`` will treat ``fpgas`` as a regular parameter and proceed with executing the test on systems not having ``fpgas``.
 
 Environment variables
 ---------------------
 
-When a test is executed by ``nvtest`` it sets and passes the following environment variables to the test process:
+When a test is executed by ``canary`` it sets and passes the following environment variables to the test process:
 
-* ``NVTEST_<NAME>_IDS``: comma separated list of :ref:`global <id-map>` ids for machine resource ``NAME``.
+* ``CANARY_<NAME>_IDS``: comma separated list of :ref:`global <id-map>` ids for machine resource ``NAME``.
 
-For example, consider the test requiring 4 CPUs and 4 GPUs and suppose that ``nvtest`` acquires CPUs 10, 11, 12, and 13, and GPUs 0, 1, 2, and 3 from the resource pool, respectively. The test environment would have the following variables defined: ``NVTEST_CPU_IDS=10,11,12,13`` and ``NVTEST_GPU_IDS=0,1,2,3``.
+For example, consider the test requiring 4 CPUs and 4 GPUs and suppose that ``canary`` acquires CPUs 10, 11, 12, and 13, and GPUs 0, 1, 2, and 3 from the resource pool, respectively. The test environment would have the following variables defined: ``CANARY_CPU_IDS=10,11,12,13`` and ``CANARY_GPU_IDS=0,1,2,3``.
 
 Additionally, existing environment variables having the placeholders ``%(<name>_ids)s`` are replaced with the actual global ids.  If, in the previous example, the session environment had defined ``CUDA_VISIBLE_DEVICES="%(gpu_ids)s"``, then ``CUDA_VISIBLE_DEVICES=0,1,2,3`` would be defined in the test environment.
 
@@ -185,10 +185,10 @@ Additionally, existing environment variables having the placeholders ``%(<name>_
 Mapping of global to local resource type IDs
 --------------------------------------------
 
-The IDs contained in the resource pool are considered local (to the node) IDs.  ``nvtest`` maintains a mapping from (node ID, local resource type ID) to an associated global ID.
+The IDs contained in the resource pool are considered local (to the node) IDs.  ``canary`` maintains a mapping from (node ID, local resource type ID) to an associated global ID.
 
 -----------------------
 
-.. [1] The number of workers can be set by the ``--workers=N`` ``nvtest run`` flag.
-.. [2] ``nvtest``\ 's resource pool specification is a generalization of `ctest's <https://cmake.org/cmake/help/latest/manual/ctest.1.html#resource-allocation>`_.
-.. [3] The CPU IDs are ``nvtest``'s internal IDs (number ``0..N-1``) and may not represent actual hardware IDs.
+.. [1] The number of workers can be set by the ``--workers=N`` ``canary run`` flag.
+.. [2] ``canary``\ 's resource pool specification is a generalization of `ctest's <https://cmake.org/cmake/help/latest/manual/ctest.1.html#resource-allocation>`_.
+.. [3] The CPU IDs are ``canary``'s internal IDs (number ``0..N-1``) and may not represent actual hardware IDs.

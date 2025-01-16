@@ -3,9 +3,9 @@ import types
 
 import hpc_connect
 
-import _nvtest.config as config
-import _nvtest.session as session
-from _nvtest.util.filesystem import working_dir
+import _canary.config as config
+import _canary.session as session
+from _canary.util.filesystem import working_dir
 
 
 def paths():
@@ -57,8 +57,8 @@ def test_session_bfilter(tmpdir):
             s.discover()
             s.lock()
             s.run()
-            d1 = os.listdir("tests/.nvtest/batches")[0]
-            d2 = os.listdir(os.path.join("tests/.nvtest/batches", d1))[0]
+            d1 = os.listdir("tests/.canary/batches")[0]
+            d2 = os.listdir(os.path.join("tests/.canary/batches", d1))[0]
             id = d1 + d2
             f1 = s.batch_logfile(id)
             with working_dir("tests"):

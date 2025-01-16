@@ -3,24 +3,24 @@
 Sourcing rc scripts during test execution
 =========================================
 
-Some tests require a modified environment.  When the required environment modifications are contained in rc files, ``nvtest`` can source the files prior to test execution.  There are two ways to modify the environment by sourcing an rc file:
+Some tests require a modified environment.  When the required environment modifications are contained in rc files, ``canary`` can source the files prior to test execution.  There are two ways to modify the environment by sourcing an rc file:
 
-1. Through the ``nvtest.shell.source`` context manager:
+1. Through the ``canary.shell.source`` context manager:
 
    .. code-block:: python
 
-      import nvtest
+      import canary
 
       def test():
-          with nvtest.shell.source("filename"):
+          with canary.shell.source("filename"):
               # do work
 
-2. Through the :func:`nvtest.directives.source` directive:
+2. Through the :func:`canary.directives.source` directive:
 
    .. code-block:: python
 
-      import nvtest
-      nvtest.directives.source("filename", when=...)
+      import canary
+      canary.directives.source("filename", when=...)
 
       def test():
           # do work

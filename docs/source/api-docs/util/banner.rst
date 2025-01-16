@@ -1,7 +1,7 @@
 banner
 ======
 
-.. automodule:: _nvtest.util.banner
+.. automodule:: _canary.util.banner
    :members:
    :undoc-members:
    :show-inheritance:

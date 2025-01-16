@@ -1,7 +1,7 @@
 term
 ====
 
-.. automodule:: _nvtest.util.term
+.. automodule:: _canary.util.term
    :members:
    :undoc-members:
    :show-inheritance:

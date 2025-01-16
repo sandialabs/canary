@@ -12,4 +12,4 @@ Upcoming features
 Long-term vision
 ----------------
 
-- Making nvtest the go-to testing framework for diverse scientific and software environments.
+- Making canary the go-to testing framework for diverse scientific and software environments.

@@ -1,7 +1,7 @@
 describe
 ========
 
-.. automodule:: _nvtest.command.describe
+.. automodule:: _canary.command.describe
    :members:
    :undoc-members:
    :show-inheritance:

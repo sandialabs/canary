@@ -3,17 +3,17 @@ import threading
 
 import pytest
 
-import nvtest
-from _nvtest.config.schemas import resource_schema
-from _nvtest.plugins.nvtest_ctest.generator import CTestTestFile
-from _nvtest.queues import DirectResourceQueue
-from _nvtest.runners import TestCaseRunner as xTestCaseRunner
-from _nvtest.util.executable import Executable
-from _nvtest.util.filesystem import mkdirp
-from _nvtest.util.filesystem import set_executable
-from _nvtest.util.filesystem import touchp
-from _nvtest.util.filesystem import which
-from _nvtest.util.filesystem import working_dir
+import canary
+from _canary.config.schemas import resource_schema
+from _canary.plugins.ctest.generator import CTestTestFile
+from _canary.queues import DirectResourceQueue
+from _canary.runners import TestCaseRunner as xTestCaseRunner
+from _canary.util.executable import Executable
+from _canary.util.filesystem import mkdirp
+from _canary.util.filesystem import set_executable
+from _canary.util.filesystem import touchp
+from _canary.util.filesystem import which
+from _canary.util.filesystem import working_dir
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -105,8 +105,8 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
         [case] = file.lock()
         runner = xTestCaseRunner()
         mkdirp("./foo")
-        with nvtest.config.override():
-            nvtest.config.session.work_tree = f"{os.getcwd()}/foo"
+        with canary.config.override():
+            canary.config.session.work_tree = f"{os.getcwd()}/foo"
             runner.run(case)
             assert case.returncode == 0
             assert case.status == "failed"
@@ -129,8 +129,8 @@ set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test shoul
         [case] = file.lock()
         runner = xTestCaseRunner()
         mkdirp("./foo")
-        with nvtest.config.override():
-            nvtest.config.session.work_tree = f"{os.getcwd()}/foo"
+        with canary.config.override():
+            canary.config.session.work_tree = f"{os.getcwd()}/foo"
             runner.run(case)
 
 
@@ -151,8 +151,8 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
         [case] = file.lock()
         runner = xTestCaseRunner()
         mkdirp("./foo")
-        with nvtest.config.override():
-            nvtest.config.session.work_tree = f"{os.getcwd()}/foo"
+        with canary.config.override():
+            canary.config.session.work_tree = f"{os.getcwd()}/foo"
             runner.run(case)
         assert case.status == "success"
         assert case.returncode == 1
@@ -260,13 +260,13 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
                 "crypto_chips": [{"id": "card0", "slots": 4}],
             }
         }
-        with nvtest.config.override():
+        with canary.config.override():
             validated = resource_schema.validate(pool)
-            nvtest.config.session.work_tree = f"{os.getcwd()}/foo"
-            nvtest.config.resource_pool.fill(validated["resource_pool"])
+            canary.config.session.work_tree = f"{os.getcwd()}/foo"
+            canary.config.resource_pool.fill(validated["resource_pool"])
             file = CTestTestFile(os.getcwd(), "CTestTestfile.cmake")
             [case] = file.lock()
-            nvtest.config.resource_pool.satisfiable(case.required_resources())
+            canary.config.resource_pool.satisfiable(case.required_resources())
             case.status.set("ready")
             queue = DirectResourceQueue(threading.Lock())
             queue.put(case)

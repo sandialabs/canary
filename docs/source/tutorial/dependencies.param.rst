@@ -16,7 +16,7 @@ The test ``lunch`` depends on ``breakfast``, but only when ``dish="spam"``:
 .. literalinclude:: /examples/depends_on/parameter/lunch.pyt
     :language: python
 
-.. command-output:: nvtest run ./depends_on/parameter
+.. command-output:: canary run ./depends_on/parameter
     :cwd: /examples
     :nocache:
     :extraargs: -w

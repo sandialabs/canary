@@ -1,7 +1,7 @@
 config
 ======
 
-``nvtest`` configuration package.
+``canary`` configuration package.
 
 
 .. toctree::

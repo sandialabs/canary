@@ -1,7 +1,7 @@
 reporter
 ========
 
-.. automodule:: _nvtest.reporter
+.. automodule:: _canary.reporter
    :members:
    :undoc-members:
    :show-inheritance:

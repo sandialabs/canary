@@ -1,7 +1,7 @@
 macos
 =====
 
-.. automodule:: _nvtest.config.macos
+.. automodule:: _canary.config.macos
    :members:
    :undoc-members:
    :show-inheritance:

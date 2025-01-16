@@ -3,7 +3,7 @@
 Batching schemes
 ================
 
-``nvtest`` supports 3 batching schemes:
+``canary`` supports 3 batching schemes:
 
 * ``-b scheme=duration``: (impled by ``-b duration=T``) group tests into batches such that the duration of each batch is approximately equal to ``T`` seconds.
 * ``-b scheme=count``: (implied by ``-b count=N``) group tests into ``N`` batches.

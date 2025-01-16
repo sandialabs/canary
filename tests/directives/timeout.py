@@ -1,5 +1,5 @@
-from _nvtest.main import NVTestCommand
-from _nvtest.util.filesystem import working_dir
+from _canary.main import CanaryCommand
+from _canary.util.filesystem import working_dir
 
 
 def test_timeout(tmpdir):
@@ -9,14 +9,14 @@ def test_timeout(tmpdir):
                 """\
 import sys
 import time
-import nvtest
-nvtest.directives.timeout('1us')
+import canary
+canary.directives.timeout('1us')
 def test():
     time.sleep(1)
 if __name__ == '__main__':
     sys.exit(test())
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run("-w", ".")
         assert rc == 8

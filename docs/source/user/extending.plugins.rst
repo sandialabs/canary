@@ -1,33 +1,33 @@
 .. _extending-plugins:
 
-Extend nvtest with plugins
+Extend canary with plugins
 ==========================
 
-The default behavior of ``nvtest`` can be modified with user defined plugins.  A plugin is a python function that is called at different phases of the ``nvtest`` session.  Plugin functions must be defined in a python module starting with ``nvtest_`` and registered with ``nvtest`` with the ``@nvtest.plugin.register`` decorator.
+The default behavior of ``canary`` can be modified with user defined plugins.  A plugin is a python function that is called at different phases of the ``canary`` session.  Plugin functions must be defined in a python module starting with ``canary_`` and registered with ``canary`` with the ``@canary.plugin.register`` decorator.
 
 Plugin discovery
 ----------------
 
-``nvtest`` loads plugin modules in the following order:
+``canary`` loads plugin modules in the following order:
 
 * Builtin plugins.
-* Local plugins specified by the ``-p PATH`` command line option.  ``PATH`` can be a python file or directory.  If ``PATH`` is a directory, all files named ``nvtest_*.py`` in ``PATH`` will be loaded.
-* Plugins registered through `setuptools entry points <https://docs.pytest.org/en/7.1.x/how-to/writing_plugins.html#setuptools-entry-points>`_ ``nvtest`` looks up the ``nvtest.plugin`` entrypoint to discover its plugins.  Make your plugin available by defining it in your ``pyproject.toml``:
+* Local plugins specified by the ``-p PATH`` command line option.  ``PATH`` can be a python file or directory.  If ``PATH`` is a directory, all files named ``canary_*.py`` in ``PATH`` will be loaded.
+* Plugins registered through `setuptools entry points <https://docs.pytest.org/en/7.1.x/how-to/writing_plugins.html#setuptools-entry-points>`_ ``canary`` looks up the ``canary.plugin`` entrypoint to discover its plugins.  Make your plugin available by defining it in your ``pyproject.toml``:
 
   .. code-block:: toml
 
-     [project.entry-points."nvtest.plugin"]
+     [project.entry-points."canary.plugin"]
      plugin_name = "myproject.pluginmodule"
 
 Writing plugins
 ---------------
 
-Plugins are registered with ``nvtest`` by the ``nvtest.plugin.register`` decorator:
+Plugins are registered with ``canary`` by the ``canary.plugin.register`` decorator:
 
 .. code-block:: python
 
     def register(*, scope: str, stage: str) -> None:
-        """Register the decorated plugin function with nvtest"""
+        """Register the decorated plugin function with canary"""
 
 The possible combinations of ``scope`` and ``stage`` are:
 
@@ -35,8 +35,8 @@ The possible combinations of ``scope`` and ``stage`` are:
 | scope        | stage            | Description                                                       |
 +==============+==================+===================================================================+
 |``main``      | ``setup``        | Called before argument parsing with a single argument:            |
-|              |                  | ``parser: nvtest.Parser``.  Use this plugin to register           |
-|              |                  | additional command line options with ``nvtest``                   |
+|              |                  | ``parser: canary.Parser``.  Use this plugin to register           |
+|              |                  | additional command line options with ``canary``                   |
 +--------------+------------------+-------------------------------------------------------------------+
 | ``session``  | ``discovery``    | Called before a session's search paths are searched for test      |
 |              |                  | files.  Called with a single argument: ``session: Session``       |
@@ -63,11 +63,11 @@ The possible combinations of ``scope`` and ``stage`` are:
 |              |                  | ``case: TestCase``                                                |
 +--------------+------------------+-------------------------------------------------------------------+
 
-Alternatively, a plugin can be created by subclassing the ``nvtest.plugin.PluginHook`` class and overriding one or more of its methods.  The following methods are overrideable:
+Alternatively, a plugin can be created by subclassing the ``canary.plugin.PluginHook`` class and overriding one or more of its methods.  The following methods are overrideable:
 
 .. code-block:: python
 
-    import nvtest
+    import canary
 
     class PluginHook:
 
@@ -117,10 +117,10 @@ Examples
 
   .. code-block:: python
 
-    import nvtest
+    import canary
 
-    @nvtest.plugin.register(scope="test", stage="discovery")
-    def exclude_test(case: nvtest.TestCase):
+    @canary.plugin.register(scope="test", stage="discovery")
+    def exclude_test(case: canary.TestCase):
         if case.name in EXCLUSION_DB:
             case.mask = "excluded due to ..."
 
@@ -129,10 +129,10 @@ Examples
 
   .. code-block:: python
 
-    import nvtest
+    import canary
 
-    @nvtest.plugin.register(scope="main", stage="setup")
-    def llvm_coverage_parser(parser: nvtest.Parser) -> None:
+    @canary.plugin.register(scope="main", stage="setup")
+    def llvm_coverage_parser(parser: canary.Parser) -> None:
         parser.add_plugin_argument(
             "--code-coverage",
             action="store_true",
@@ -140,17 +140,17 @@ Examples
             help="Create and export coverage data",
         )
 
-    @nvtest.plugin.register(scope="test", stage="setup")
-    def llvm_coverage_setup(case: nvtest.TestCase) -> None:
-        if not nvtest.config.get("option:code_coverage"):
+    @canary.plugin.register(scope="test", stage="setup")
+    def llvm_coverage_setup(case: canary.TestCase) -> None:
+        if not canary.config.get("option:code_coverage"):
             return
         if case.mask:
             return
         case.add_default_env("LLVM_PROFILE_FILE", f"{case.name}.profraw")
 
-    @nvtest.plugin.register(scope="session", stage="finish")
-    def llvm_coverage_combine(session: nvtest.Session) -> None:
-        if not nvtest.config.get("option:code_coverage"):
+    @canary.plugin.register(scope="session", stage="finish")
+    def llvm_coverage_combine(session: canary.Session) -> None:
+        if not canary.config.get("option:code_coverage"):
             return
         files = find_raw_profiling_files(session.work_tree)
         combined_files = combine_profiling_files(files)
@@ -158,22 +158,22 @@ Examples
 
 ----------------
 
-Alternatively, a plugin can be created by subclassing the ``nvtest.plugin.PluginHook`` class and overriding one or more of its methods.  For example, the plugins above can be implemented as single plugin class:
+Alternatively, a plugin can be created by subclassing the ``canary.plugin.PluginHook`` class and overriding one or more of its methods.  For example, the plugins above can be implemented as single plugin class:
 
 .. code-block:: python
 
-    import nvtest
+    import canary
 
-    class LLVMCoverage(nvtest.plugin.PluginHook):
+    class LLVMCoverage(canary.plugin.PluginHook):
 
         @staticmethod
-        def main_setup(parser: nvtest.Parser) -> None:
+        def main_setup(parser: canary.Parser) -> None:
             ...
 
         @staticmethod
-        def session_finish(session: nvtest.Session) -> None:
+        def session_finish(session: canary.Session) -> None:
             ...
 
         @staticmethod
-        def test_setup(case: nvtest.TestCase) -> None:
+        def test_setup(case: canary.TestCase) -> None:
             ...

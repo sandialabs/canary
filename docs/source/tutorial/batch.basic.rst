@@ -8,11 +8,11 @@ command line:
 
 .. code-block:: console
 
-    nvtest run -b scheduler=[slurm|flux|pbs|shell] -b [count=N|duration=T] PATH
+    canary run -b scheduler=[slurm|flux|pbs|shell] -b [count=N|duration=T] PATH
 
 For example, to run the example suite using the ``shell`` scheduler in 4 batches:
 
-.. command-output:: nvtest run -b scheduler=shell -b count=4 .
+.. command-output:: canary run -b scheduler=shell -b count=4 .
     :cwd: /examples
     :extraargs: -w
     :returncode: 30

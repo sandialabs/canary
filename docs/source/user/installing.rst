@@ -1,12 +1,12 @@
 .. _intro-install:
 
-Installing nvtest
+Installing canary
 =================
 
 
 .. note::
 
-   ``nvtest`` requires Python 3.10+
+   ``canary`` requires Python 3.10+
 
 Basic installation
 ------------------
@@ -22,7 +22,7 @@ Basic installation
 
    .. code-block:: console
 
-      python3 -m pip install git+ssh://git@cee-gitlab.gov/alegra/tools/nvtest
+      python3 -m pip install git+ssh://git@cee-gitlab.gov/alegra/tools/canary
 
 
 Editable installation
@@ -41,7 +41,7 @@ An "editable installation" installs package dependencies, metadata, and wrappers
 
    .. code-block:: console
 
-      python3 -m pip install -e git+ssh://git@cee-gitlab.gov/alegra/tools/nvtest#egg=nvtest
+      python3 -m pip install -e git+ssh://git@cee-gitlab.gov/alegra/tools/canary#egg=canary
 
 Alternatively, the package can be installed from a source checkout:
 
@@ -56,11 +56,11 @@ Alternatively, the package can be installed from a source checkout:
 
    .. code-block:: console
 
-      git clone git@cee-gitlab.gov:alegra/tools/nvtest
+      git clone git@cee-gitlab.gov:alegra/tools/canary
 
 3. Install via ``pip`` into the virtual environment with the ``-e`` flag
 
    .. code-block:: console
 
-      cd nvtest
+      cd canary
       python3 -m pip install -e .

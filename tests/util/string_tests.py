@@ -1,4 +1,4 @@
-from _nvtest.util.string import strip_quotes
+from _canary.util.string import strip_quotes
 
 
 def test_strip_quotes():

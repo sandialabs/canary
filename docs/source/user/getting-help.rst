@@ -3,11 +3,11 @@
 Getting help
 ============
 
-``nvtest`` has several :ref:`subcommands <nvtest>`.  To get the list of subcommands, issue
+``canary`` has several :ref:`subcommands <canary>`.  To get the list of subcommands, issue
 
-.. command-output:: nvtest -h
+.. command-output:: canary -h
 
 
 To get help on an individual subcommand, issue, for example:
 
-.. command-output:: nvtest run -h
+.. command-output:: canary run -h

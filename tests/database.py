@@ -3,8 +3,8 @@ import os
 import random
 import string
 
-import _nvtest.util.filesystem as fs
-from _nvtest.session import Database
+import _canary.util.filesystem as fs
+from _canary.session import Database
 
 
 def random_chars():

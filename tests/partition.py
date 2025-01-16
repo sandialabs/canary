@@ -1,8 +1,8 @@
 import pytest
 
-import _nvtest.partition as p
-from _nvtest import finder
-from _nvtest.util.filesystem import mkdirp
+import _canary.partition as p
+from _canary import finder
+from _canary.util.filesystem import mkdirp
 
 num_cases = 25
 num_base_cases = 5
@@ -14,10 +14,10 @@ def generate_files(tmpdir):
     mkdirp(workdir)
     for name in "abcde":
         with open(f"{workdir}/{name}.pyt", "w") as fh:
-            fh.write("import nvtest\n")
-            fh.write("nvtest.directives.keywords('long')\n")
-            fh.write(f"nvtest.directives.parameterize({name!r}, list(range(4)))\n")
-            fh.write("nvtest.directives.generate_composite_base_case()\n")
+            fh.write("import canary\n")
+            fh.write("canary.directives.keywords('long')\n")
+            fh.write(f"canary.directives.parameterize({name!r}, list(range(4)))\n")
+            fh.write("canary.directives.generate_composite_base_case()\n")
     yield workdir
 
 

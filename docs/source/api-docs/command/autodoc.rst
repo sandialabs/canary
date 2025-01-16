@@ -1,7 +1,7 @@
 autodoc
 =======
 
-.. automodule:: _nvtest.command.autodoc
+.. automodule:: _canary.command.autodoc
    :members:
    :undoc-members:
    :show-inheritance:

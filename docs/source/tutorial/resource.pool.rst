@@ -3,7 +3,7 @@
 The resource pool
 =================
 
-Compute resources available to ``nvtest`` are defined in the ``resource_pool`` :ref:`configuration <configuration>` field.  By default:
+Compute resources available to ``canary`` are defined in the ``resource_pool`` :ref:`configuration <configuration>` field.  By default:
 
 * The resource pool is automatically generated based on a machine probe and consists of a single node with ``N`` CPUs *and* 0 GPUs
 * The number of CPUs ``N`` is determined by a system probe\ [1]_
@@ -11,7 +11,7 @@ Compute resources available to ``nvtest`` are defined in the ``resource_pool`` :
 
 To see the current resource pool, execute:
 
-.. command-output:: nvtest config show resource_pool
+.. command-output:: canary config show resource_pool
     :nocache:
 
 ----------------------
@@ -21,8 +21,8 @@ Users have the flexibility to define the resource pool in a variety of ways usin
 .. note::
 
   * Any resources other than ``cpus`` and ``gpus`` must be defined by the user.
-  * ``nvtest`` assumes a default GPU count of 0
+  * ``canary`` assumes a default GPU count of 0
 
 -----------------------
 
-.. [1] The CPU IDs are ``nvtest``'s internal IDs (number ``0..N-1``) and may not represent actual hardware IDs.
+.. [1] The CPU IDs are ``canary``'s internal IDs (number ``0..N-1``) and may not represent actual hardware IDs.

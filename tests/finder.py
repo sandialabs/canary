@@ -1,18 +1,18 @@
-import _nvtest.config as config
-import _nvtest.test.case as tc
-import nvtest
-from _nvtest import finder
-from _nvtest.util.filesystem import mkdirp
-from _nvtest.util.filesystem import working_dir
+import _canary.config as config
+import _canary.test.case as tc
+import canary
+from _canary import finder
+from _canary.util.filesystem import mkdirp
+from _canary.util.filesystem import working_dir
 
 
 def test_skipif(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import nvtest\nnvtest.directives.skipif(True, reason='Because')")
+            fh.write("import canary\ncanary.directives.skipif(True, reason='Because')")
         with open("b.pyt", "w") as fh:
-            fh.write("import nvtest\nnvtest.directives.skipif(False, reason='Because')")
+            fh.write("import canary\ncanary.directives.skipif(False, reason='Because')")
     f = finder.Finder()
     f.add(workdir)
     assert len(f.roots) == 1
@@ -28,9 +28,9 @@ def test_keywords(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import nvtest\nnvtest.directives.keywords('a', 'b', 'c', 'd', 'e')")
+            fh.write("import canary\ncanary.directives.keywords('a', 'b', 'c', 'd', 'e')")
         with open("b.pyt", "w") as fh:
-            fh.write("import nvtest\nnvtest.directives.keywords('e', 'f', 'g', 'h', 'i')")
+            fh.write("import canary\ncanary.directives.keywords('e', 'f', 'g', 'h', 'i')")
     f = finder.Finder()
     f.add(workdir)
     assert len(f.roots) == 1
@@ -52,8 +52,8 @@ def test_parameterize_1(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import nvtest\n")
-            fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
+            fh.write("import canary\n")
+            fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
     f = finder.Finder()
     f.add(workdir)
     assert len(f.roots) == 1
@@ -72,9 +72,9 @@ def test_parameterize_2(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import nvtest\n")
-            fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
-            fh.write("nvtest.directives.parameterize('n', [10,11,12])\n")
+            fh.write("import canary\n")
+            fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
+            fh.write("canary.directives.parameterize('n', [10,11,12])\n")
     f = finder.Finder()
     f.add(workdir)
     assert len(f.roots) == 1
@@ -93,8 +93,8 @@ def test_parameterize_3(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import nvtest\n")
-            fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3)], when='options=xxx')\n")
+            fh.write("import canary\n")
+            fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3)], when='options=xxx')\n")
     f = finder.Finder()
     f.add(workdir)
     assert len(f.roots) == 1
@@ -112,18 +112,18 @@ def test_cpu_count(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
         with open("a.pyt", "w") as fh:
-            fh.write("import nvtest\n")
-            fh.write("nvtest.directives.parameterize('cpus', [1, 4, 8, 32])\n")
-    with nvtest.config.override():
-        nvtest.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=42)
+            fh.write("import canary\n")
+            fh.write("canary.directives.parameterize('cpus', [1, 4, 8, 32])\n")
+    with canary.config.override():
+        canary.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=42)
         f = finder.Finder()
         f.add(workdir)
         f.prepare()
         files = f.discover()
         cases = finder.generate_test_cases(files)
         assert len([c for c in cases if not c.masked()]) == 4
-    with nvtest.config.override():
-        nvtest.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=2)
+    with canary.config.override():
+        canary.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=2)
         cases = finder.generate_test_cases(files)
         finder.mask(cases)
         assert len([c for c in cases if not c.masked()]) == 1
@@ -134,12 +134,12 @@ def test_dep_patterns(tmpdir):
     with working_dir(workdir):
         mkdirp("a")
         with open("a/f.pyt", "w") as fh:
-            fh.write("import nvtest\n")
-            fh.write("nvtest.directives.depends_on('b/g[n=1]')\n")
+            fh.write("import canary\n")
+            fh.write("canary.directives.depends_on('b/g[n=1]')\n")
         mkdirp("b")
         with open("b/g.pyt", "w") as fh:
-            fh.write("import nvtest\n")
-            fh.write("nvtest.directives.parameterize('n', [1, 2, 3])\n")
+            fh.write("import canary\n")
+            fh.write("canary.directives.parameterize('n', [1, 2, 3])\n")
     f = finder.Finder()
     f.add(workdir)
     f.prepare()
@@ -157,10 +157,10 @@ def test_analyze(tmpdir):
     with working_dir(workdir):
         mkdirp("a")
         with open("a/f.pyt", "w") as fh:
-            fh.write("import nvtest\n")
-            fh.write("nvtest.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
-            fh.write("nvtest.directives.parameterize('n', [10,11,12])\n")
-            fh.write("nvtest.directives.analyze()\n")
+            fh.write("import canary\n")
+            fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
+            fh.write("canary.directives.parameterize('n', [10,11,12])\n")
+            fh.write("canary.directives.analyze()\n")
     f = finder.Finder()
     f.add(workdir)
     f.prepare()
@@ -178,8 +178,8 @@ def test_enable(tmpdir):
     with working_dir(workdir):
         mkdirp("a")
         with open("a/f.pyt", "w") as fh:
-            fh.write("import nvtest\n")
-            fh.write("nvtest.directives.enable(True, when=\"options='baz and spam'\")\n")
+            fh.write("import canary\n")
+            fh.write("canary.directives.enable(True, when=\"options='baz and spam'\")\n")
     f = finder.Finder()
     f.add(workdir)
     f.prepare()
@@ -197,11 +197,11 @@ def test_enable_names(tmpdir):
     with working_dir(workdir):
         mkdirp("a")
         with open("a/f.pyt", "w") as fh:
-            fh.write("import nvtest\n")
-            fh.write("nvtest.directives.name('foo')\n")
-            fh.write("nvtest.directives.name('baz')\n")
-            fh.write("nvtest.directives.name('spam')\n")
-            fh.write('nvtest.directives.enable(False, when="testname=foo")\n')
+            fh.write("import canary\n")
+            fh.write("canary.directives.name('foo')\n")
+            fh.write("canary.directives.name('baz')\n")
+            fh.write("canary.directives.name('spam')\n")
+            fh.write('canary.directives.enable(False, when="testname=foo")\n')
     f = finder.Finder()
     f.add(workdir)
     f.prepare()
@@ -215,13 +215,13 @@ def test_pyt_generator(tmpdir):
         with open("test.pyt", "w") as fh:
             fh.write(
                 """
-import nvtest
-nvtest.directives.name('baz')
-nvtest.directives.analyze()
-nvtest.directives.owner('me')
-nvtest.directives.keywords('test', 'unit')
-nvtest.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
-nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
+import canary
+canary.directives.name('baz')
+canary.directives.analyze()
+canary.directives.owner('me')
+canary.directives.keywords('test', 'unit')
+canary.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
+canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """
             )
         with config.override():

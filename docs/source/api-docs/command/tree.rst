@@ -1,7 +1,7 @@
 tree
 ====
 
-.. automodule:: _nvtest.command.tree
+.. automodule:: _canary.command.tree
    :members:
    :undoc-members:
    :show-inheritance:

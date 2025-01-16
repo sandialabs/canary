@@ -3,8 +3,8 @@ What is a test case?
 
 A test case
 
-* is an instance of :class:`~_nvtest.test.case.TestCase`;
-* is generated from an implementation of :class:`~_nvtest.generator.AbstractTestGenerator`; and
+* is an instance of :class:`~_canary.test.case.TestCase`;
+* is generated from an implementation of :class:`~_canary.generator.AbstractTestGenerator`; and
 * is the concrete realization of the test files's body, executed with specific values for each parameter.
 
 Example
@@ -14,12 +14,12 @@ Example
     :emphasize-lines: 6-10
 
     import sys
-    import nvtest
-    nvtest.directives.keywords("spam")
-    nvtest.directives.parameters("breakfast", ("bacon", "eggs"))
+    import canary
+    canary.directives.keywords("spam")
+    canary.directives.parameters("breakfast", ("bacon", "eggs"))
 
     def test() -> int:
-        instance = nvtest.get_instance()
+        instance = canary.get_instance()
         assert "spam" in instance.keywords
         assert instance.parameters.breakfast in ("bacon", "eggs")
         return 0
@@ -31,4 +31,4 @@ Example
 
 .. note::
 
-   :class:`~_nvtest.test.instance.TestInstance` is a read-only mirror of the :class:`~_nvtest.test.case.TestCase`, made available by :func:`nvtest.get_instance`.  The test instance contains all relevant information about the test case being executed.
+   :class:`~_canary.test.instance.TestInstance` is a read-only mirror of the :class:`~_canary.test.case.TestCase`, made available by :func:`canary.get_instance`.  The test instance contains all relevant information about the test case being executed.

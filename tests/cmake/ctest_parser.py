@@ -3,9 +3,9 @@ from typing import Any
 
 import pytest
 
-import _nvtest.plugins.nvtest_ctest.generator as ctg
-from _nvtest.util.filesystem import force_remove
-from _nvtest.util.filesystem import which
+import _canary.plugins.ctest.generator as ctg
+from _canary.util.filesystem import force_remove
+from _canary.util.filesystem import which
 
 
 @pytest.fixture(scope="module")

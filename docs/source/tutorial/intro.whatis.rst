@@ -1,10 +1,10 @@
-What is nvtest?
+What is canary?
 ===============
 
 - A Python-based testing framework designed for scientific and software development workflows.
 - Aimed at accelerating and simplifying testing on various platforms from laptops to high-performance computing (HPC) systems.
 
-Why nvtest?
+Why canary?
 -----------
 
 - Challenges in testing at scale: performance, extensibility, and tool compatibility.

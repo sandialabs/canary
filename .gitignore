@@ -4,24 +4,24 @@ junit.xml
 coverage.xml
 html.cov
 *.pyc
-.nvtest_cache
-.nvtest_cache/*
-.nvtest_cache*
+.canary_cache
+.canary_cache/*
+.canary_cache*
 Results*
 TestResults*
 TestPartitions*
 TestBatches*
 _test-cache
 __pycache__
-.nvtest
+.canary
 .mypy_cache
 partition.p.*
-nvtest.cfg
+canary.cfg
 scripts/sbatch
 docs/source/commands.rst
 
 src/*.egg-info/
-src/_nvtest/_version.py
+src/_canary/_version.py
 
 docs/build
 build

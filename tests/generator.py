@@ -1,7 +1,7 @@
-import _nvtest.plugins.nvtest_pyt.generator as pyt
-import _nvtest.plugins.nvtest_vvt.generator as vvt
-import _nvtest.test.case as tc
-from _nvtest.util.filesystem import working_dir
+import _canary.plugins.pyt.generator as pyt
+import _canary.plugins.vvtest.generator as vvt
+import _canary.test.case as tc
+from _canary.util.filesystem import working_dir
 
 
 def test_pyt_generator(tmpdir):
@@ -9,13 +9,13 @@ def test_pyt_generator(tmpdir):
         with open("test.pyt", "w") as fh:
             fh.write(
                 """
-import nvtest
-nvtest.directives.name('baz')
-nvtest.directives.analyze()
-nvtest.directives.owner('me')
-nvtest.directives.keywords('test', 'unit')
-nvtest.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
-nvtest.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
+import canary
+canary.directives.name('baz')
+canary.directives.analyze()
+canary.directives.owner('me')
+canary.directives.keywords('test', 'unit')
+canary.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
+canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """
             )
         file = pyt.PYTTestFile(".", "test.pyt")

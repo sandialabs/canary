@@ -12,7 +12,7 @@ Summary of benefits
 Call to action
 --------------
 
-- How to get started with nvtest (installation, tutorials, and documentation).
+- How to get started with canary (installation, tutorials, and documentation).
 
 Open the floor for questions
 ----------------------------

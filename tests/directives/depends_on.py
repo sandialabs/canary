@@ -1,8 +1,8 @@
 import glob
 import os
 
-from _nvtest.main import NVTestCommand
-from _nvtest.util.filesystem import working_dir
+from _canary.main import CanaryCommand
+from _canary.util.filesystem import working_dir
 
 
 def test_depends_on_one_to_one(tmpdir):
@@ -11,10 +11,10 @@ def test_depends_on_one_to_one(tmpdir):
             fh.write(
                 """\
 import sys
-import nvtest
+import canary
 def test():
-    self = nvtest.get_instance()
-    nvtest.filesystem.touchp("baz.txt")
+    self = canary.get_instance()
+    canary.filesystem.touchp("baz.txt")
 if __name__ == '__main__':
     sys.exit(test())
 """
@@ -24,20 +24,20 @@ if __name__ == '__main__':
                 """\
 import os
 import sys
-import nvtest
-nvtest.directives.depends_on('f1')
+import canary
+canary.directives.depends_on('f1')
 def test():
-    self = nvtest.get_instance()
+    self = canary.get_instance()
     assert len(self.dependencies) == 1
     assert os.path.exists(os.path.join(self.dependencies[0].working_directory, "baz.txt"))
 if __name__ == '__main__':
     sys.exit(test())
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run("-w", ".")
         if rc != 0:
-            for file in glob.glob("TestResults/**/nvtest-out.txt", recursive=True):
+            for file in glob.glob("TestResults/**/canary-out.txt", recursive=True):
                 print(open(file).read())
         assert os.path.exists("TestResults/f1")
         assert os.path.exists("TestResults/f2")
@@ -50,10 +50,10 @@ def test_depends_on_one_to_many(tmpdir):
             fh.write(
                 """\
 import sys
-import nvtest
+import canary
 def test():
-    self = nvtest.get_instance()
-    nvtest.filesystem.touchp("baz.txt")
+    self = canary.get_instance()
+    canary.filesystem.touchp("baz.txt")
 if __name__ == '__main__':
     sys.exit(test())
 """
@@ -63,10 +63,10 @@ if __name__ == '__main__':
                 """\
 import os
 import sys
-import nvtest
-nvtest.directives.depends_on('f1')
+import canary
+canary.directives.depends_on('f1')
 def test():
-    self = nvtest.get_instance()
+    self = canary.get_instance()
     assert len(self.dependencies) == 1
     assert os.path.exists(os.path.join(self.dependencies[0].working_directory, "baz.txt"))
 if __name__ == '__main__':
@@ -78,20 +78,20 @@ if __name__ == '__main__':
                 """\
 import os
 import sys
-import nvtest
-nvtest.directives.depends_on('f1')
+import canary
+canary.directives.depends_on('f1')
 def test():
-    self = nvtest.get_instance()
+    self = canary.get_instance()
     assert len(self.dependencies) == 1
     assert os.path.exists(os.path.join(self.dependencies[0].working_directory, "baz.txt"))
 if __name__ == '__main__':
     sys.exit(test())
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run("-w", ".")
         if rc != 0:
-            for file in glob.glob("TestResults/**/nvtest-out.txt", recursive=True):
+            for file in glob.glob("TestResults/**/canary-out.txt", recursive=True):
                 print(open(file).read())
         assert os.path.exists("TestResults/f1")
         assert os.path.exists("TestResults/f2")
@@ -105,11 +105,11 @@ def test_depends_on_glob(tmpdir):
             fh.write(
                 """\
 import sys
-import nvtest
-nvtest.directives.parameterize('a', (1, 2, 3))
+import canary
+canary.directives.parameterize('a', (1, 2, 3))
 def test():
-    self = nvtest.get_instance()
-    nvtest.filesystem.touchp(f"baz-{self.parameters.a}.txt")
+    self = canary.get_instance()
+    canary.filesystem.touchp(f"baz-{self.parameters.a}.txt")
 if __name__ == '__main__':
     sys.exit(test())
 """
@@ -119,10 +119,10 @@ if __name__ == '__main__':
                 """\
 import os
 import sys
-import nvtest
-nvtest.directives.depends_on('f1.a=2')
+import canary
+canary.directives.depends_on('f1.a=2')
 def test():
-    self = nvtest.get_instance()
+    self = canary.get_instance()
     print(self.dependencies)
     assert len(self.dependencies) == 1
     dep = self.dependencies[0]
@@ -133,10 +133,10 @@ if __name__ == '__main__':
     sys.exit(test())
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run("-w", ".")
         if rc != 0:
-            for file in glob.glob("TestResults/**/nvtest-out.txt", recursive=True):
+            for file in glob.glob("TestResults/**/canary-out.txt", recursive=True):
                 print(open(file).read())
         assert rc == 0
 
@@ -147,11 +147,11 @@ def test_depends_on_many_to_one(tmpdir):
             fh.write(
                 """\
 import sys
-import nvtest
-nvtest.directives.parameterize('a', (1, 2, 3, 4))
+import canary
+canary.directives.parameterize('a', (1, 2, 3, 4))
 def test():
-    self = nvtest.get_instance()
-    nvtest.filesystem.touchp(f"baz-{self.parameters.a}.txt")
+    self = canary.get_instance()
+    canary.filesystem.touchp(f"baz-{self.parameters.a}.txt")
 if __name__ == '__main__':
     sys.exit(test())
 """
@@ -161,10 +161,10 @@ if __name__ == '__main__':
                 """\
 import os
 import sys
-import nvtest
-nvtest.directives.depends_on('f1.a=1', 'f1.a=3', 'f1.a=4')
+import canary
+canary.directives.depends_on('f1.a=1', 'f1.a=3', 'f1.a=4')
 def test():
-    self = nvtest.get_instance()
+    self = canary.get_instance()
     print(self.dependencies)
     assert len(self.dependencies) == 3
     for dep in self.dependencies:
@@ -175,9 +175,9 @@ if __name__ == '__main__':
     sys.exit(test())
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run("-w", ".")
         if rc != 0:
-            for file in glob.glob("TestResults/**/nvtest-out.txt", recursive=True):
+            for file in glob.glob("TestResults/**/canary-out.txt", recursive=True):
                 print(open(file).read())
         assert rc == 0

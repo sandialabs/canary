@@ -3,13 +3,13 @@
 User defined commands
 =====================
 
-Custom commands can be created by subclassing :class:`~_nvtest.command.Command`.  For example, the following will create a custom command that emails a plain text test report:
+Custom commands can be created by subclassing :class:`~_canary.command.Command`.  For example, the following will create a custom command that emails a plain text test report:
 
 .. code-block:: python
 
     import io
 
-    class Email(nvtest.Command):
+    class Email(canary.Command):
 
         @property
         def description(self):
@@ -20,7 +20,7 @@ Custom commands can be created by subclassing :class:`~_nvtest.command.Command`.
             parser.add_argument("--from", dest="_from", required=True)
 
         def execute(self, args) -> int:
-            session = nvtest.Session(".", mode="r")
+            session = canary.Session(".", mode="r")
 
             fp = io.StringIO()
             for case in self.session.cases:
@@ -38,10 +38,10 @@ On the command line, you will now see:
 
 .. code-block:: console
 
-   $ nvtest -h
-   usage: nvtest ...
+   $ canary -h
+   usage: canary ...
 
-   nvtest - an application testing framework
+   canary - an application testing framework
 
    subcommands:
 
@@ -53,8 +53,8 @@ and
 
 .. code-block:: console
 
-   $ nvtest email -h
-   usage: nvtest email [-h] --to TO --from FROM
+   $ canary email -h
+   usage: canary email [-h] --to TO --from FROM
 
    options:
 

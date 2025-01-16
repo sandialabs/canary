@@ -3,23 +3,23 @@
 Environment variables
 =====================
 
-When a test is executed by ``nvtest`` it sets and passes the following environment variables to the test process:
+When a test is executed by ``canary`` it sets and passes the following environment variables to the test process:
 
-* ``NVTEST_<NAME>_IDS``: comma separated list of :ref:`global <id-map>` ids for machine resource ``NAME``.
+* ``CANARY_<NAME>_IDS``: comma separated list of :ref:`global <id-map>` ids for machine resource ``NAME``.
 
 For example, if the following test:
 
 .. code-block:: python
 
-    import nvtest
+    import canary
 
-    nvtest.directives.parameterize("cpus,gpus", ((4, 4)))
+    canary.directives.parameterize("cpus,gpus", ((4, 4)))
 
 
 acquires CPUs 10, 11, 12, and 13, and GPUs 0, 1, 2, and 3 from the resource pool, respectively, the test environment would have the following variables defined:
 
-* ``NVTEST_CPU_IDS=10,11,12,13``
-* ``NVTEST_GPU_IDS=0,1,2,3``
+* ``CANARY_CPU_IDS=10,11,12,13``
+* ``CANARY_GPU_IDS=0,1,2,3``
 
 Other environment variables
 ---------------------------
@@ -29,4 +29,4 @@ Existing environment variables having the placeholders ``%(<name>_ids)s`` have t
 CTest environment variables
 ---------------------------
 
-For CTest tests, ``nvtest`` defines environment variables in a manner consistent with `CTest conventions <https://cmake.org/cmake/help/latest/manual/ctest.1.html#environment-variables>`_.
+For CTest tests, ``canary`` defines environment variables in a manner consistent with `CTest conventions <https://cmake.org/cmake/help/latest/manual/ctest.1.html#environment-variables>`_.

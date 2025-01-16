@@ -6,7 +6,7 @@ Use Cases and demonstrations
 Development environments
 ------------------------
 
-- Using nvtest to test locally on a developer's laptop or desktop.
+- Using canary to test locally on a developer's laptop or desktop.
 
 HPC workflows
 -------------
@@ -18,4 +18,4 @@ Toolchain integration
 ---------------------
 
 - Demonstrating a workflow with CMake, CDash, and GitLab
-- Show how nvtest automates and accelerates CI/CD pipelines.
+- Show how canary automates and accelerates CI/CD pipelines.

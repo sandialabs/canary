@@ -3,15 +3,15 @@
 Community and extensibility
 ===========================
 
-Who can use nvtest?
+Who can use canary?
 -------------------
 
 - Developers, scientists, and engineers working on software for HPC and beyond.
 
-Customizing nvtest
+Customizing canary
 ------------------
 
-- How to write plugins and adapt nvtest for specialized workflows.
+- How to write plugins and adapt canary for specialized workflows.
 
 Open source contributions
 -------------------------

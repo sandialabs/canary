@@ -1,6 +1,6 @@
 .. _basics:
 
-nvtest basics
+canary basics
 =============
 
 .. toctree::

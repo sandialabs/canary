@@ -1,5 +1,5 @@
-from _nvtest.main import NVTestCommand
-from _nvtest.util.filesystem import working_dir
+from _canary.main import CanaryCommand
+from _canary.util.filesystem import working_dir
 
 
 def test_xfail(tmpdir):
@@ -8,14 +8,14 @@ def test_xfail(tmpdir):
             fh.write(
                 """\
 import sys
-import nvtest
-nvtest.directives.xfail()
+import canary
+canary.directives.xfail()
 def test():
-    raise nvtest.TestFailed()
+    raise canary.TestFailed()
 if __name__ == '__main__':
     sys.exit(test())
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         rc = run("-w", ".")
         assert rc == 0

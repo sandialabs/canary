@@ -14,9 +14,9 @@ node[
 ]
 
 run [
-  label="nvtest run [options] [pathspec ...]",
+  label="canary run [options] [pathspec ...]",
   shape="plaintext",
-  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugins/commands/nvtest_run.py?ref_type=heads#L26"
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/commands/run.py?ref_type=heads#L26"
 ]
 
 plug_test_run [
@@ -24,30 +24,30 @@ plug_test_run [
   shape="cds",
   orientation=180,
   fontsize=10,
-  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugin.py?ref_type=heads#L70"
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/plugin.py?ref_type=heads#L70"
 ]
 plug_test_run_b1 [
   label="Plugins:\ntest_prelaunch\ntest_finish",
   shape="cds",
   orientation=180,
   fontsize=10,
-  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugin.py?ref_type=heads#L70"
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/plugin.py?ref_type=heads#L70"
 ]
 init [
   label="Initialize\nCreate test session\ndirectory, database, etc.",
-  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads#L90"
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/session.py?ref_type=heads#L90"
 ]
 search [
   label="Search\nFind test files and\ninstantiate TestGenerator\nobjects for each",
-  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/finder.py?ref_type=heads"
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/finder.py?ref_type=heads"
 ]
 lock [
   label="Lock\nExpand parameters and\ncreate concrete test cases\nfrom each generator",
-  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/finder.py?ref_type=heads#L161"
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/finder.py?ref_type=heads#L161"
 ]
 setup [
   label="Setup\ncreate execution\ndirectories for test cases\nand copy/link resources",
-  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/test/case.py?ref_type=heads#L806"
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/test/case.py?ref_type=heads#L806"
 ]
 finish [label="Finish"]
 done [label="Done"]
@@ -57,14 +57,14 @@ plug_session_init [
   shape="cds",
   orientation=180,
   fontsize=10,
-  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads#L175",
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/session.py?ref_type=heads#L175",
 ]
 plug_session_discovery [
   label="Plugin:\nsession_discovery",
   shape="cds",
   orientation=180,
   fontsize=10,
-  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/session.py?ref_type=heads#L402",
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/session.py?ref_type=heads#L402",
 ]
 plug_session_finish [
   label="Plugin:\nsession_finish",
@@ -77,16 +77,16 @@ plug_test_setup [
   shape="cds",
   orientation=180,
   fontsize=10,
-  href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/test/case.py?ref_type=heads#L818"
+  href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/test/case.py?ref_type=heads#L818"
 ]
 
   queue [
     label="Put test cases in\nResourceQueue",
-    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/queues.py?ref_type=heads#L203"
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/queues.py?ref_type=heads#L203"
   ]
   batch_queue [
     label="Put test cases in\nBatchResourceQueue",
-    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/queues.py?ref_type=heads#L264"
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/queues.py?ref_type=heads#L264"
   ]
 
   batched [
@@ -96,16 +96,15 @@ plug_test_setup [
     height="1",
     shape="diamond",
     style="filled",
-    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/test/batch.py?ref_type=heads"
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/test/batch.py?ref_type=heads"
   ]
   batch_cases [
     label="Batch test cases\nusing tiling\nalgorithm",
-    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/partition.py?ref_type=heads#L53"
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/partition.py?ref_type=heads#L53"
 
   ]
   run_batch [
     label="Run batch",
-    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/plugins/runners/nvtest_slurm.py?ref_type=heads#L77"
   ]
 
   scheduled [
@@ -118,21 +117,21 @@ plug_test_setup [
   ]
   run_batched_sched [
     label="Run batches\nasynchronously\nthrough scheduler",
-    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/runners.py?ref_type=heads#L116"
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/runners.py?ref_type=heads#L116"
   ]
   run_async_b1 [
     label="Run tests in\nbatch asynchronously",
-    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/runners.py?ref_type=heads#L26"
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/runners.py?ref_type=heads#L26"
   ]
 
   run_batched_no_sched [
     label="Run batches\nasynchronously",
-    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/runners.py?ref_type=heads#L116"
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/runners.py?ref_type=heads#L116"
   ]
 
   run_async [
     label="Run tests\nasynchronously",
-    href="https://cee-gitlab.sandia.gov/ascic-test-infra/nvtest/-/blob/main/src/_nvtest/runners.py?ref_type=heads#L26"
+    href="https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/src/_canary/runners.py?ref_type=heads#L26"
   ]
 
   nothing1 [style="invis" label="          "]

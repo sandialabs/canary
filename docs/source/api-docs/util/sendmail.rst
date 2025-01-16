@@ -1,7 +1,7 @@
 sendmail
 ========
 
-.. automodule:: _nvtest.util.sendmail
+.. automodule:: _canary.util.sendmail
    :members:
    :undoc-members:
    :show-inheritance:

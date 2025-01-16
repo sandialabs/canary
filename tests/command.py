@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-import nvtest
-from _nvtest.main import NVTestCommand
-from _nvtest.util.filesystem import working_dir
+import canary
+from _canary.main import CanaryCommand
+from _canary.util.filesystem import working_dir
 
 
 @pytest.fixture(scope="module")
@@ -16,18 +16,18 @@ def setup():
         with open("e.pyt", "w") as fh:
             fh.write(
                 """\
-import nvtest
-nvtest.directives.parameterize('a', (1, 2, 3, 4, 5, 6, 7, 8))
+import canary
+canary.directives.parameterize('a', (1, 2, 3, 4, 5, 6, 7, 8))
 def test():
-    self = nvtest.get_instance()
+    self = canary.get_instance()
     if self.parameters.a == 2:
-        raise nvtest.TestDiffed()
+        raise canary.TestDiffed()
     elif self.parameters.a == 3:
-        raise nvtest.TestFailed()
+        raise canary.TestFailed()
     elif self.parameters.a == 4:
-        raise nvtest.TestSkipped()
+        raise canary.TestSkipped()
     elif self.parameters.a == 5:
-        raise nvtest.TestTimedOut()
+        raise canary.TestTimedOut()
 if __name__ == "__main__":
     test()
 """
@@ -35,12 +35,12 @@ if __name__ == "__main__":
         with open("f.pyt", "w") as fh:
             fh.write(
                 """\
-import nvtest
-nvtest.directives.parameterize('a', (1, 2))
+import canary
+canary.directives.parameterize('a', (1, 2))
 def test():
-    self = nvtest.get_instance()
+    self = canary.get_instance()
     if self.parameters.a == 2:
-        raise nvtest.TestDiffed()
+        raise canary.TestDiffed()
 if __name__ == "__main__":
     test()
 """
@@ -48,19 +48,19 @@ if __name__ == "__main__":
         with open("g.pyt", "w") as fh:
             fh.write(
                 """\
-import nvtest
-nvtest.directives.generate_composite_base_case()
-nvtest.directives.parameterize('a', (1, 2))
+import canary
+canary.directives.generate_composite_base_case()
+canary.directives.parameterize('a', (1, 2))
 def test(case):
     if self.parameters.a == 2:
-        raise nvtest.TestDiffed()
+        raise canary.TestDiffed()
 if __name__ == "__main__":
-    self = nvtest.get_instance()
-    if not isinstance(self, nvtest.TestMultiInstance):
+    self = canary.get_instance()
+    if not isinstance(self, canary.TestMultiInstance):
         test(self)
 """
             )
-        run = NVTestCommand("run")
+        run = CanaryCommand("run")
         run(".")
         ns = SimpleNamespace(tmp_path=d, results_path=os.path.join(d, "TestResults"))
         yield ns
@@ -71,84 +71,84 @@ if __name__ == "__main__":
 
 def test_report_html(setup):
     with working_dir(setup.results_path):
-        with nvtest.config.override():
-            report = NVTestCommand("report")
+        with canary.config.override():
+            report = CanaryCommand("report")
             report("html", "create")
 
 
 def test_report_cdash(setup):
     with working_dir(setup.results_path):
-        with nvtest.config.override():
-            report = NVTestCommand("report")
+        with canary.config.override():
+            report = CanaryCommand("report")
             report("cdash", "create")
 
 
 def test_report_json(setup):
     with working_dir(setup.results_path):
-        with nvtest.config.override():
-            report = NVTestCommand("report")
+        with canary.config.override():
+            report = CanaryCommand("report")
             report("json", "create")
 
 
 def test_report_markdown(setup):
     with working_dir(setup.results_path):
-        with nvtest.config.override():
-            report = NVTestCommand("report")
+        with canary.config.override():
+            report = CanaryCommand("report")
             report("markdown", "create")
 
 
 def test_report_junit(setup):
     with working_dir(setup.results_path):
-        with nvtest.config.override():
-            report = NVTestCommand("report")
+        with canary.config.override():
+            report = CanaryCommand("report")
             report("junit", "create")
 
 
 def test_location_0(setup):
     with working_dir(setup.results_path):
-        with nvtest.config.override():
-            location = NVTestCommand("location")
+        with canary.config.override():
+            location = CanaryCommand("location")
             location("-i", "f[a=1]")
 
 
 def test_location_1(setup):
     with working_dir(setup.results_path):
-        with nvtest.config.override():
-            location = NVTestCommand("location")
+        with canary.config.override():
+            location = CanaryCommand("location")
             location("-l", "f[a=1]")
 
 
 def test_location_2(setup):
     with working_dir(setup.results_path):
-        with nvtest.config.override():
-            location = NVTestCommand("location")
+        with canary.config.override():
+            location = CanaryCommand("location")
             location("-s", "f[a=1]")
 
 
 def test_location_3(setup):
     with working_dir(setup.results_path):
-        with nvtest.config.override():
-            location = NVTestCommand("location")
+        with canary.config.override():
+            location = CanaryCommand("location")
             location("-x", "f[a=1]")
 
 
 def test_location_4(setup):
     with working_dir(setup.results_path):
-        with nvtest.config.override():
-            location = NVTestCommand("location")
+        with canary.config.override():
+            location = CanaryCommand("location")
             location("f[a=1]")
 
 
 def test_log(setup):
     with working_dir(setup.results_path):
-        with nvtest.config.override():
-            log = NVTestCommand("log")
+        with canary.config.override():
+            log = CanaryCommand("log")
             log("f[a=1]")
 
 
 def test_status(setup):
-    with working_dir(setup.results_path), nvtest.config.override():
-        status = NVTestCommand("status")
+    with working_dir(setup.results_path), canary.config.override():
+        status = CanaryCommand("status")
         status()
         status("-rA")
         status("-rA", "--durations")
@@ -156,10 +156,10 @@ def test_status(setup):
 
 
 def test_describe(capsys):
-    from _nvtest.main import NVTestCommand
+    from _canary.main import CanaryCommand
 
     data_dir = os.path.join(os.path.dirname(__file__), "data")
-    describe = NVTestCommand("describe", debug=True)
+    describe = CanaryCommand("describe", debug=True)
 
     describe(os.path.join(data_dir, "empire.pyt"))
     captured = capsys.readouterr()
@@ -175,22 +175,22 @@ def test_describe(capsys):
 def test_find():
     d = os.path.dirname(__file__)
     with working_dir(os.path.join(d, "..")):
-        find = NVTestCommand("find")
+        find = CanaryCommand("find")
         find("examples")
 
 
 def test_config_show():
-    config = NVTestCommand("config")
+    config = CanaryCommand("config")
     config("show")
 
 
 def test_analyze(setup):
-    with working_dir(setup.results_path), nvtest.config.override():
-        run = NVTestCommand("run")
+    with working_dir(setup.results_path), canary.config.override():
+        run = CanaryCommand("run")
         run("--stage=analyze", ".")
 
 
 def test_tree():
     examples = os.path.join(os.path.dirname(__file__), "../examples")
-    tree = NVTestCommand("tree")
+    tree = CanaryCommand("tree")
     tree(examples)

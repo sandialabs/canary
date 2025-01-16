@@ -3,13 +3,13 @@
 Running tests in a scheduler
 ============================
 
-Tests can be run under a workload manager (scheduler) such as Slurm or PBS by adding the following options to :ref:`nvtest run<nvtest-run>`:
+Tests can be run under a workload manager (scheduler) such as Slurm or PBS by adding the following options to :ref:`canary run<canary-run>`:
 
 .. code-block:: console
 
-  nvtest run [-b (count=N|length=T)] -b scheduler=SCHEDULER ...
+  canary run [-b (count=N|length=T)] -b scheduler=SCHEDULER ...
 
-When run in "batch" mode, ``nvtest`` will group tests into "batches" and submit each batch to ``SCHEDULER``.
+When run in "batch" mode, ``canary`` will group tests into "batches" and submit each batch to ``SCHEDULER``.
 
 Batching options
 ----------------
@@ -55,17 +55,17 @@ Batch concurrency can be controlled by
 Examples
 --------
 
-* Run the nvtest example suite in 4 batches
+* Run the canary example suite in 4 batches
 
-  .. command-output:: nvtest run -d TestResults.Batched --workers=1 -b scheduler=shell -b count=4 .
+  .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b count=4 .
     :cwd: /examples
     :extraargs: -rv -w
     :returncode: 30
 
 
-* Run the nvtest example suite in 4 batches, running tests in serial in each batch
+* Run the canary example suite in 4 batches, running tests in serial in each batch
 
-  .. command-output:: nvtest run -d TestResults.Batched --workers=1 -b scheduler=shell -b count=4 -b workers=1 .
+  .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b count=4 -b workers=1 .
     :cwd: /examples
     :extraargs: -rv -w
     :returncode: 30

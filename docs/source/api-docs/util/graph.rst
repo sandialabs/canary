@@ -1,7 +1,7 @@
 graph
 =====
 
-.. automodule:: _nvtest.util.graph
+.. automodule:: _canary.util.graph
    :members:
    :undoc-members:
    :show-inheritance:

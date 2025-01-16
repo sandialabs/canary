@@ -3,7 +3,7 @@
 The test session
 ================
 
-When ``nvtest run [options] path [path...]`` is executed, ``path`` is searched for :ref:`test files<basics-testfile>`, the test files are expanded into test cases, and each test case is run in a separate execution directory, relative to the session's root directory (default: ``./TestResults``).
+When ``canary run [options] path [path...]`` is executed, ``path`` is searched for :ref:`test files<basics-testfile>`, the test files are expanded into test cases, and each test case is run in a separate execution directory, relative to the session's root directory (default: ``./TestResults``).
 
 Phases of a test session
 ------------------------
@@ -46,7 +46,7 @@ Discover
 
 During discovery test files are collected:
 
-.. command-output:: nvtest run --until=discover -k centered_space .
+.. command-output:: canary run --until=discover -k centered_space .
    :cwd: /examples
    :extraargs: -rv -w --no-header
    :setup: rm -rf TestResults
@@ -58,7 +58,7 @@ Lock
 
 During the ``lock`` stage, test files are :ref:`filtered <usage-filter>`, ``parameterize`` statements are expanded, and dependency links created:
 
-.. command-output:: nvtest run --until=lock -k centered_space .
+.. command-output:: canary run --until=lock -k centered_space .
    :cwd: /examples
    :extraargs: -rv -w --no-header
    :setup: rm -rf TestResults
@@ -84,9 +84,9 @@ Optionally, a fixed number of batches can be requested (``-b count=N``).
 Run
 ...
 
-During test execution, ``nvtest`` navigates to each test directory and runs the script:
+During test execution, ``canary`` navigates to each test directory and runs the script:
 
-.. command-output:: nvtest run -k centered_space .
+.. command-output:: canary run -k centered_space .
    :cwd: /examples
    :extraargs: -rv -w --no-header
    :nocache:

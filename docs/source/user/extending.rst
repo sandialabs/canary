@@ -1,6 +1,6 @@
 .. _extending:
 
-Extending nvtest
+Extending canary
 ================
 
 .. toctree::
