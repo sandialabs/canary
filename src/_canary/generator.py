@@ -59,6 +59,9 @@ class AbstractTestGenerator(ABC):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = os.path.splitext(os.path.basename(self.path))[0]
 
+    def stop_recursion(self) -> bool:
+        return False
+
     @classmethod
     @abstractmethod
     def matches(cls, path: str) -> bool:

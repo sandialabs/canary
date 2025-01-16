@@ -163,18 +163,24 @@ class Finder:
             if skip(dirname):
                 del dirs[:]
                 continue
-            for f in files:
-                file = os.path.join(dirname, f)
-                for gen_type in gen_types:
-                    if gen_type.matches(file):
-                        try:
-                            generator = gen_type(root, os.path.relpath(file, root))
-                        except Exception as e:
-                            errors += 1
-                            logging.exception(f"Failed to parse {file}", e)
-                        else:
-                            generators.append(generator)
-                        break
+            try:
+                for f in files:
+                    file = os.path.join(dirname, f)
+                    for gen_type in gen_types:
+                        if gen_type.matches(file):
+                            try:
+                                generator = gen_type(root, os.path.relpath(file, root))
+                            except Exception as e:
+                                errors += 1
+                                logging.exception(f"Failed to parse {file}", e)
+                            else:
+                                generators.append(generator)
+                                if generator.stop_recursion():
+                                    raise StopRecursion
+                            break
+            except StopRecursion:
+                del dirs[:]
+                continue
         return generators, errors
 
     @property
@@ -460,3 +466,7 @@ def repo_ls(root: str) -> list[str]:
     with fs.working_dir(root):
         result = repo("-c", "git ls-files --recurse-submodules", stdout=str)
     return [f.strip() for f in result.get_output().split("\n") if f.split()]
+
+
+class StopRecursion(Exception):
+    pass

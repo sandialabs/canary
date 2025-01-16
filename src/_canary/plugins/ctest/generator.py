@@ -35,8 +35,6 @@ def warn_unsupported_ctest_option(option: str) -> None:
 
 
 class CTestTestFile(AbstractTestGenerator):
-    no_recurse_dirs: set[str] = set()
-
     def __init__(self, root: str, path: str | None = None) -> None:
         super().__init__(root, path=path)
         self.owners: list[str] = []
@@ -45,16 +43,13 @@ class CTestTestFile(AbstractTestGenerator):
     def matches(cls, path: str) -> bool:
         matches = cls.always_matches(path)
         if matches:
-            dir = os.path.dirname(os.path.abspath(path))
-            for no_recurse_dir in CTestTestFile.no_recurse_dirs:
-                if dir.startswith(no_recurse_dir):
-                    # ctest does its own recursion, following add_directory(...) commands
-                    logging.debug(f"CTest: skipping {path} due to ctest recursion")
-                    return False
-            CTestTestFile.no_recurse_dirs.add(dir)
-            logging.debug(f"CTest: marked {dir} to skip recursion")
             return True
         return False
+
+    def stop_recursion(self) -> bool:
+        if config.getoption("recurse_cmake", False):
+            return False
+        return True
 
     @classmethod
     def always_matches(cls, path: str) -> bool:
