@@ -6,6 +6,7 @@ import multiprocessing
 import os
 import random
 import signal
+import sys
 import threading
 import time
 import traceback
@@ -615,8 +616,9 @@ class Session:
         try:
             context = multiprocessing.get_context("spawn")
             with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
-                if self.level == 0:
-                    signal.signal(signal.SIGINT, partial(handle_sigint, ppe))
+                if multiprocessing.parent_process() is None:
+                    signal.signal(signal.SIGINT, partial(signal_handler, ppe))
+                    signal.signal(signal.SIGTERM, partial(signal_handler, ppe))
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
@@ -1005,9 +1007,9 @@ def kill_session(ppe: ProcessPoolExecutor | None = None, kill_delay: float = 0.0
             proc.kill()
 
 
-def handle_sigint(ppe, sig, frame):
+def signal_handler(ppe, sig, frame):
     kill_session(ppe)
-    raise KeyboardInterrupt
+    sys.exit(sig)
 
 
 class DirectoryExistsError(Exception):
