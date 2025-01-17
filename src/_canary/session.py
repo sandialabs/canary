@@ -616,7 +616,7 @@ class Session:
             context = multiprocessing.get_context("spawn")
             with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
                 if self.level == 0:
-                    signal.signal(signal.SIGINT, handle_sigint)
+                    signal.signal(signal.SIGINT, partial(handle_sigint, ppe))
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
@@ -648,7 +648,7 @@ class Session:
         except BaseException:
             if ppe is None:
                 raise ProcessPoolExecutorFailedToStart
-            shutdown_active_children()
+            kill_session(ppe)
             raise
         finally:
             if ppe:
@@ -990,8 +990,10 @@ def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
     return sorted(cases, key=lambda case: getattr(case, field))
 
 
-def shutdown_active_children(kill_delay: float = 0.5):
+def kill_session(ppe: ProcessPoolExecutor | None = None, kill_delay: float = 0.05):
     # send SIGTERM to children so they can clean up and then send SIGKILL after a delay
+    if ppe is not None:
+        ppe.shutdown(wait=False, cancel_futures=True)
     if multiprocessing.parent_process() is not None:
         return
     for proc in multiprocessing.active_children():
@@ -1003,8 +1005,8 @@ def shutdown_active_children(kill_delay: float = 0.5):
             proc.kill()
 
 
-def handle_sigint(sig, frame):
-    shutdown_active_children()
+def handle_sigint(ppe, sig, frame):
+    kill_session(ppe)
     raise KeyboardInterrupt
 
 
