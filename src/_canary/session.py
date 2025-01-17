@@ -6,7 +6,6 @@ import multiprocessing
 import os
 import random
 import signal
-import sys
 import threading
 import time
 import traceback
@@ -176,6 +175,7 @@ class Session:
 
         os.environ.setdefault("CANARY_LEVEL", "0")
         config.variables["CANARY_WORK_TREE"] = self.work_tree
+        self.level = int(os.environ["CANARY_LEVEL"])
         if mode == "w":
             self.save(ini=True)
 
@@ -204,7 +204,7 @@ class Session:
         """Dump this session attributes to ``file`` as ``json``"""
         attrs: dict[str, Any] = {}
         for var, value in vars(self).items():
-            if var not in ("generators", "cases", "db"):
+            if var not in ("generators", "cases", "db", "level"):
                 attrs[var] = value
         with self.db.open("session", "w") as file:
             json.dump(attrs, file, indent=2)
@@ -536,7 +536,7 @@ class Session:
                         queue=queue, fail_fast=fail_fast, reporting=reporting, stage=stage
                     )
                 except ProcessPoolExecutorFailedToStart:
-                    if int(os.getenv("CANARY_LEVEL", "0")) > 1:
+                    if self.level > 0:
                         # This can happen when the ProcessPoolExecutor fails to obtain a lock.
                         self.returncode = -3
                         for case in queue.cases():
@@ -562,14 +562,14 @@ class Session:
                     if reporting == ProgressReporting.progress_bar:
                         queue.display_progress(self.start, last=True)
                     self.returncode = compute_returncode(queue.cases())
-                finally:
-                    self.exitstatus = self.returncode
-                    queue.close(cleanup=cleanup_queue)
                     self.finish = timestamp()
                     dt = self.finish - self.start
                     logging.info(
                         colorize("@*{Finished} running %d %s (%.2fs.)\n" % (queue_size, what, dt))
                     )
+                finally:
+                    self.exitstatus = self.returncode
+                    queue.close(cleanup=cleanup_queue)
                 for hook in plugin.hooks():
                     hook.session_finish(self)
         self.save()
@@ -615,7 +615,7 @@ class Session:
         try:
             context = multiprocessing.get_context("spawn")
             with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
-                if multiprocessing.parent_process() is None:
+                if self.level == 0:
                     signal.signal(signal.SIGINT, handle_sigint)
                 while True:
                     key = keyboard.get_key()
@@ -648,8 +648,11 @@ class Session:
         except BaseException:
             if ppe is None:
                 raise ProcessPoolExecutorFailedToStart
-            kill_session()
+            shutdown_active_children()
             raise
+        finally:
+            if ppe:
+                ppe.shutdown(cancel_futures=True)
 
     def heartbeat(self, queue: ResourceQueue) -> None:
         """Take a heartbeat of the simulation by dumping the case, cpu, and gpu IDs that are
@@ -987,20 +990,22 @@ def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
     return sorted(cases, key=lambda case: getattr(case, field))
 
 
-def kill_session():
+def shutdown_active_children(kill_delay: float = 0.5):
     # send SIGTERM to children so they can clean up and then send SIGKILL after a delay
     if multiprocessing.parent_process() is not None:
         return
     for proc in multiprocessing.active_children():
-        os.kill(proc.pid, signal.SIGTERM)
-    time.sleep(0.5)
+        if proc.is_alive():
+            proc.terminate()
+    time.sleep(kill_delay)
     for proc in multiprocessing.active_children():
-        os.kill(proc.pid, signal.SIGKILL)
+        if proc.is_alive():
+            proc.kill()
 
 
 def handle_sigint(sig, frame):
-    kill_session()
-    sys.exit(signal.SIGINT.value)
+    shutdown_active_children()
+    raise KeyboardInterrupt
 
 
 class DirectoryExistsError(Exception):
