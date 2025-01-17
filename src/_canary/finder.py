@@ -312,7 +312,7 @@ def mask(
     if start is not None:
         start = os.path.normpath(start)
 
-    for case in cases:
+    for case in graph.static_order(cases):
         if case.masked():
             continue
 

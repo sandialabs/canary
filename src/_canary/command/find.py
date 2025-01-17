@@ -51,8 +51,6 @@ class Find(Command):
 
         cases = finder.generate_test_cases(generators, on_options=args.on_options)
         logging.info(colorize("@*{Masking} test cases based on filtering criteria..."), end="")
-
-        logging.info(colorize("@*{Masking} test cases based on filtering criteria..."), end="")
         finder.mask(
             cases,
             keyword_expr=args.keyword_expr,
