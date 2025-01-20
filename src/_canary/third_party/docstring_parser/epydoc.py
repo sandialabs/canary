@@ -239,7 +239,7 @@ def compose(
             text += process_desc(meta.description, False)
             parts.append(text)
         else:
-            text = f'@{" ".join(meta.args)}:'
+            text = f"@{' '.join(meta.args)}:"
             text += process_desc(meta.description, False)
             parts.append(text)
     return "\n".join(parts)

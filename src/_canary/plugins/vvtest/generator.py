@@ -483,11 +483,11 @@ def find_vvt_lines(filename: Path | str) -> tuple[list[str], int]:
         elif token.type == tokenize.COMMENT:
             match = re.search(r"^\s*#\s*VVT\s*:\s*:", token.line)
             if match:
-                s.write(f" {token.line[match.end():].rstrip()}")
+                s.write(f" {token.line[match.end() :].rstrip()}")
                 continue
             match = re.search(r"^\s*#\s*VVT\s*:(?!(\s*:))", token.line)
             if match:
-                s.write(f"\n{token.line[match.end():].strip()}")
+                s.write(f"\n{token.line[match.end() :].strip()}")
                 continue
         elif token.type not in non_code_token_nums:
             break

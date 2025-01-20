@@ -37,7 +37,8 @@ def warn_unsupported_ctest_option(option: str) -> None:
 
 class CTestTestFile(AbstractTestGenerator):
     def __init__(self, root: str, path: str | None = None) -> None:
-        super().__init__(root, path=path)
+        # CTest works with resolved paths
+        super().__init__(os.path.realpath(root), path=path)
         self.owners: list[str] = []
 
     @classmethod
@@ -94,40 +95,13 @@ class CTestTestFile(AbstractTestGenerator):
         ``{NAME: {'command': [...], 'prop_name': prop_value, ...}, ...}``
 
         """
-        project_source_dir: str | None = None
-        project_binary_dir: str | None = find_project_binary_dir(self.root)
-        if project_binary_dir is not None:
-            _cache = open(os.path.join(project_binary_dir, "CMakeCache.txt"), "r").read()
-            if match := re.search(r"(?im)^\s*PROJECT_SOURCE_DIR(:INTERNAL)?=(.*)", _cache):
-                project_source_dir = match.group(2)
-        else:
-            project_binary_dir = os.path.dirname(self.file)
         tests = load(self.file)
-        for name, data in tests.items():
-            transformed: dict[str, Any] = {"command": data["command"]}
-            file = data["file"]
-            if data["cmakelists"] is not None:
-                cmakelists = data["cmakelists"]
-                if project_source_dir is None:
-                    project_source_dir = find_project_source_dir(cmakelists)
-                reldir = os.path.relpath(os.path.dirname(cmakelists), project_source_dir)
-                transformed["project_binary_dir"] = project_binary_dir
-                transformed["project_source_dir"] = project_source_dir
-                transformed["binary_dir"] = os.path.join(project_binary_dir, reldir)  # type: ignore
-                transformed["ctestfile"] = os.path.join(
-                    transformed["binary_dir"], os.path.basename(file)
-                )
-                transformed["cmakelists"] = cmakelists
-                transformed["source_dir"] = os.path.dirname(cmakelists)
-            else:
-                transformed["ctestfile"] = transformed["cmakelists"] = file
-                transformed["project_binary_dir"] = transformed["binary_dir"] = os.path.dirname(
-                    file
-                )
-                transformed["project_source_dir"] = transformed["source_dir"] = os.path.dirname(
-                    file
-                )
-            for prop in data["properties"]:
+        if not tests:
+            return {}
+        for name, defn in tests.items():
+            transformed: dict[str, Any] = {"command": defn["command"]}
+            transformed["ctestfile"] = defn["ctestfile"] or self.file
+            for prop in defn["properties"]:
                 prop_name, prop_value = prop["name"], prop["value"]
                 if prop_name == "ENVIRONMENT":
                     prop_value = parse_environment(prop_value)
@@ -206,10 +180,7 @@ class CTestTestCase(TestCase):
         will_fail: bool | None = None,
         working_directory: str | None = None,
         backtrace_triples: list[str] | None = None,
-        cmakelists: str | None = None,
         ctestfile: str | None = None,
-        project_source_dir: str | None = None,
-        project_binary_dir: str | None = None,
         **kwds,
     ) -> None:
         super().__init__(
@@ -222,11 +193,8 @@ class CTestTestCase(TestCase):
         self._resource_groups: list[list[dict[str, Any]]] | None = None
         self._required_files: list[str] | None = None
         self._will_fail: bool = will_fail or False
-        self._cmakelists = cmakelists
         self._ctestfile = ctestfile
         self.ctest_working_directory = working_directory
-        self._project_source_dir = project_source_dir
-        self._project_binary_dir = project_binary_dir
         self.timeout_property = timeout
 
         if command is not None:
@@ -317,8 +285,6 @@ class CTestTestCase(TestCase):
 
     @property
     def file(self) -> str:
-        if self.cmakelists and os.path.exists(self.cmakelists):
-            return self.cmakelists
         return self.ctestfile
 
     @property
@@ -330,28 +296,8 @@ class CTestTestCase(TestCase):
     def ctestfile(self, arg: str) -> None:
         self._ctestfile = arg
 
-    @property
-    def cmakelists(self) -> str | None:
-        return self._cmakelists
-
-    @cmakelists.setter
-    def cmakelists(self, arg: str) -> None:
-        self._cmakelists = arg
-
-    @property
-    def source_dir(self) -> str:
-        return os.path.dirname(self.cmakelists)  # type: ignore
-
-    @property
-    def project_source_dir(self) -> str:
-        return self._project_source_dir or self.source_dir
-
-    @project_source_dir.setter
-    def project_source_dir(self, arg: str) -> None:
-        self._project_source_dir = arg
-
     def chain(self, start: str | None = None, anchor: str = ".git") -> str:
-        return os.path.relpath(self.cmakelists, self.project_source_dir)  # type: ignore
+        return os.path.relpath(self.file, self.file_root)  # type: ignore
 
     @property
     def execution_directory(self) -> str:
@@ -362,14 +308,6 @@ class CTestTestCase(TestCase):
     @property
     def binary_dir(self) -> str:
         return os.path.dirname(self.ctestfile)
-
-    @property
-    def project_binary_dir(self) -> str:
-        return self._project_binary_dir or self.binary_dir
-
-    @project_binary_dir.setter
-    def project_binary_dir(self, arg: str) -> None:
-        self._project_binary_dir = arg
 
     def required_resources(self) -> list[list[dict[str, Any]]]:
         # The CTest resource group is already configured but CTest does not include CPUs in the
@@ -593,9 +531,19 @@ def load(file: str) -> dict[str, Any]:
     """Use ctest --show-only"""
     tests: dict[str, Any] = {}
     logging.debug(f"Loading ctest tests from {file}")
+
+    ctest = canary.filesystem.which("ctest")
+    assert ctest is not None
+
     with canary.filesystem.working_dir(os.path.dirname(file)):
-        ctest = canary.filesystem.which("ctest")
-        assert ctest is not None
+        project_binary_dir: str | None = find_project_binary_dir(os.path.dirname(file))
+        project_source_dir: str | None = None
+        if project_binary_dir is not None:
+            f = os.path.join(project_binary_dir, "CMakeCache.txt")
+            cache = open(f, "r").read()
+            if match := re.search(r"(?im)^\s*PROJECT_SOURCE_DIR.*=(.*)", cache):
+                project_source_dir = match.group(1)
+
         try:
             with open(".ctest-json-v1.json", "w") as fh:
                 p = subprocess.Popen([ctest, "--show-only=json-v1"], stdout=fh)
@@ -604,6 +552,7 @@ def load(file: str) -> dict[str, Any]:
                 payload = json.load(fh)
         finally:
             force_remove(".ctest-json-v1.json")
+
         nodes = payload["backtraceGraph"]["nodes"]
         files = payload["backtraceGraph"]["files"]
         for test in payload["tests"]:
@@ -614,16 +563,37 @@ def load(file: str) -> dict[str, Any]:
             t["properties"] = test["properties"]
             t["command"] = test["command"]
             t["file"] = os.path.abspath(file)
-            if nodes:
-                node = nodes[test["backtrace"]]
-                while True:
-                    if "parent" not in node:
+
+            # Determine where this test is defined
+            t["ctestfile"] = None
+            for prop in t["properties"]:
+                if prop["name"] == "WORKING_DIRECTORY":
+                    working_directory = prop["value"]
+                    f = os.path.join(working_directory, "CTestTestfile.cmake")
+                    if os.path.exists(f):
+                        # Assume that this test is defined in this file (which is not a guarantee)
+                        t["ctestfile"] = os.path.abspath(f)
                         break
-                    node = nodes[node["parent"]]
-                t["cmakelists"] = os.path.abspath(files[node["file"]])
             else:
-                t["cmakelists"] = None
-    logging.debug(f"Found {len(tests)} in {file}")
+                if nodes and project_source_dir is not None and project_binary_dir is not None:
+                    node = nodes[test["backtrace"]]
+                    while True:
+                        if "parent" not in node:
+                            break
+                        node = nodes[node["parent"]]
+                    f = os.path.abspath(files[node["file"]])
+                    if os.access(f, os.R_OK):
+                        # With the CMakeList we can infer the CTest file if we can find the project
+                        # source directory
+                        reldir = os.path.relpath(os.path.dirname(f), project_source_dir)
+                        f = os.path.join(project_binary_dir, reldir, "CTestTestfile.cmake")
+                        if os.path.exists(f):
+                            t["ctestfile"] = f
+            if t["ctestfile"] is None or not os.path.exists(t["ctestfile"]):
+                t["ctestfile"] = file
+
+            assert os.path.exists(t["ctestfile"]), "CTestTestfile.cmake not found"
+
     return tests
 
 
@@ -637,20 +607,6 @@ def find_project_binary_dir(start: str) -> str | None:
         if dirname == os.path.sep:
             break
     return None
-
-
-def find_project_source_dir(start: str) -> str:
-    dirname = start
-    while True:
-        parent = os.path.dirname(dirname)
-        f = os.path.join(dirname, "CMakeLists.txt")
-        if os.path.exists(f):
-            if re.search(r"(?im)^\s*PROJECT\(", open(f).read()):
-                return dirname
-        dirname = os.path.dirname(dirname)
-        if dirname == os.path.sep:
-            break
-    return start
 
 
 def find_cmake():
