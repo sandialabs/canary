@@ -372,19 +372,14 @@ class CTestTestCase(TestCase):
         self._project_binary_dir = arg
 
     def required_resources(self) -> list[list[dict[str, Any]]]:
+        # The CTest resource group is already configured but CTest does not include CPUs in the
+        # resource groups, so we add it on here as a separate resource group.
         required = copy.deepcopy(self.resource_groups)
-        if not required:
+        has_cpu = any(inst["type"] == "cpus" for group in required for inst in group)
+        if not has_cpu:
             cpus = self.parameters.get("cpus", 1)
-            group = [{"type": "cpus", "slots": 1} for _ in range(cpus)]
-            return [group]
-        for group in required:
-            for item in group:
-                if item["type"] == "cpus":
-                    break
-            else:
-                # fill in default cpus required
-                cpus = self.parameters.get("cpus", 1)
-                group.extend([{"type": "cpus", "slots": 1} for _ in range(cpus)])
+            cpu_group: list[dict[str, Any]] = [{"type": "cpus", "slots": 1} for _ in range(cpus)]
+            required.append(cpu_group)
         return required
 
     @property
@@ -434,13 +429,16 @@ class CTestTestCase(TestCase):
             yield
 
     def set_resource_groups_vars(self) -> None:
-        os.environ["CTEST_RESOURCE_GROUP_COUNT"] = str(len(self.resources))
         # some resources may have been added to the required resources even if they aren't in the
         # resource groups (eg, cpus).  make sure to remove them so they don't unexpectedly appear
         # in the environment variables
-        resource_group_types = {_["type"] for group in self.resource_groups for _ in group}
+        resource_group_count: int = 0
+        resource_group_types = {inst["type"] for group in self.resource_groups for inst in group}
         for i, spec in enumerate(self.resources):
             types = sorted(resource_group_types & spec.keys())
+            if not types:
+                continue
+            resource_group_count += 1
             os.environ[f"CTEST_RESOURCE_GROUP_{i}"] = ",".join(types)
             for type, items in spec.items():
                 if type not in types:
@@ -452,6 +450,7 @@ class CTestTestCase(TestCase):
                     _, lid = config.resource_pool.local_ids(type, item["gid"])
                     values.append(f"id:{lid},slots:{item['slots']}")
                 os.environ[key] = ";".join(values)
+        os.environ["CTEST_RESOURCE_GROUP_COUNT"] = str(resource_group_count)
 
     def setup(self, clean: bool = True) -> None:
         super().setup()
