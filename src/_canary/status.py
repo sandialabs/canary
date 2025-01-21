@@ -11,7 +11,6 @@ class Status:
 
     members = (
         "created",
-        "error",
         "retry",
         "pending",
         "ready",
@@ -28,7 +27,6 @@ class Status:
     )
     colors = {
         "created": "b",
-        "error": "m",
         "retry": "r",
         "pending": "b",
         "ready": "b",
@@ -87,7 +85,6 @@ class Status:
     def glyph(status):
         map = {
             "created": glyphs.mdash,
-            "error": glyphs.ballotx,
             "retry": glyphs.retry,
             "pending": glyphs.mdash,
             "ready": glyphs.mdash,
@@ -153,7 +150,7 @@ class Status:
     def set(self, arg: str, details: str | None = None) -> None:
         if arg not in self.members:
             raise ValueError(f"{arg} is not a valid status")
-        if arg in ("error", "skipped", "failed", "diffed") and details is None:
+        if arg in ("skipped", "failed", "diffed") and details is None:
             details = "unknown"
         if arg in ("pending", "ready", "created", "retry"):
             if details is not None:

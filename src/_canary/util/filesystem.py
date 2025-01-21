@@ -110,7 +110,7 @@ def copyfile(src: str, dst: str) -> None:
     if os.path.isdir(dst):
         basename = os.path.basename(src)
         dst = os.path.join(dst, basename)
-    shutil.copyfile(src, dst)
+    shutil.copy(src, dst)
 
 
 def movefile(src: str, dst: str) -> None:
