@@ -50,7 +50,9 @@ class Find(Command):
         logging.debug(f"Discovered {len(generators)} test files")
 
         cases = finder.generate_test_cases(generators, on_options=args.on_options)
+
         logging.info(colorize("@*{Masking} test cases based on filtering criteria..."), end="")
+        start = time.monotonic()
         finder.mask(
             cases,
             keyword_expr=args.keyword_expr,
@@ -58,7 +60,7 @@ class Find(Command):
             owners=None if not args.owners else set(args.owners),
             regex=args.regex_filter,
         )
-        dt = time.monotonic()
+        dt = time.monotonic() - start
         logging.info(
             colorize("@*{Masking} test cases based on filtering criteria... done (%.2fs.)" % dt),
             rewind=True,

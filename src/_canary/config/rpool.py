@@ -107,13 +107,14 @@ class ResourcePool:
 
     """
 
-    __slots__ = ("map", "pool", "types", "_stash")
+    __slots__ = ("map", "pool", "types", "_stash", "slots_per")
 
     def __init__(self, pool: list[dict[str, Any]] | None = None) -> None:
         self.map: dict[str, dict[tuple[str, str], int]] = {}
         self.pool: list[dict[str, Any]] = []
         self.types: set[str] = {"cpus", "gpus"}
         self._stash: bytes | None = None
+        self.slots_per: dict[str, int] = {}
         if pool:
             self.fill(pool)
         else:
@@ -134,11 +135,14 @@ class ResourcePool:
             # fraction usable
             for type, instances in local.items():
                 self.types.add(type)
+                slots = self.slots_per.get(type, 0)
                 for instance in instances:
                     lid = instance["id"]
+                    slots += instance["slots"]
                     gid = gids.setdefault(type, 0)
                     self.map.setdefault(type, {})[(pid, lid)] = gid
                     gids[type] += 1
+                self.slots_per[type] = slots
             local["id"] = pid
             self.pool.append(local)
 
@@ -190,6 +194,7 @@ class ResourcePool:
         self.map.clear()
         self.pool.clear()
         self.types.clear()
+        self.slots_per.clear()
 
     def fill_uniform(self, *, node_count: int, cpus_per_node: int, **kwds: int) -> None:
         pool: list[dict[str, Any]] = []
@@ -227,22 +232,18 @@ class ResourcePool:
 
     def satisfiable(self, required: list[list[dict[str, Any]]]) -> None:
         """determine if the resources for this test are satisfiable"""
-        try:
-            self.stash()
-            for group in required:
-                for item in group:
-                    if item["type"] not in self.types:
-                        t = item["type"]
-                        msg = f"required resource type {t!r} is not registered with canary"
-                        raise ResourceUnsatisfiable(msg)
-                    try:
-                        self._get_from_pool(item["type"], item["slots"])
-                    except ResourceUnavailable:
-                        t = item["type"]
-                        msg = f"insufficient slots of {t!r} available"
-                        raise ResourceUnsatisfiable(msg) from None
-        finally:
-            self.unstash()
+        slots_reqd: dict[str, int] = {}
+        for group in required:
+            for item in group:
+                if item["type"] not in self.types:
+                    t = item["type"]
+                    msg = f"required resource type {t!r} is not registered with canary"
+                    raise ResourceUnsatisfiable(msg)
+                slots_reqd[item["type"]] = slots_reqd.get(item["type"], 0) + item["slots"]
+        for type, slots in slots_reqd.items():
+            if self.slots_per[type] < slots:
+                msg = f"insufficient slots of {type!r} available"
+                raise ResourceUnsatisfiable(msg) from None
 
     def acquire(self, required: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
         """Returns resources available to the test
