@@ -369,6 +369,7 @@ class TestCase(AbstractTestCase):
             if len(os.path.join(path, basename)) < n:
                 self._path = os.path.join(dirname, self.name)
             else:
+                # exceeds maximum name length for this filesystem
                 self._path = os.path.join(dirname, f"{self.family}.{self.id[:7]}")
         assert isinstance(self._path, str)
         return self._path
@@ -919,8 +920,6 @@ class TestCase(AbstractTestCase):
         if byte_limit:
             accept = lambda f: os.path.isfile(f) and os.path.getsize(f) <= byte_limit
             files.extend([asset.src for asset in self.assets if accept(asset.src)])
-        else:
-            hasher.update(self.chain().encode())
         files.sort()
         buffer = bytearray(4096)
         view = memoryview(buffer)

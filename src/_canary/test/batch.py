@@ -177,7 +177,14 @@ class TestBatch(AbstractTestCase):
     def stage(batch_id: str) -> str:
         work_tree = config.session.work_tree
         assert work_tree is not None
-        return os.path.join(work_tree, ".canary/batches", batch_id[:2], f"{batch_id[2:]}")
+        root = os.path.join(work_tree, ".canary/batches", batch_id[:2])
+        if os.path.exists(root) and os.path.exists(os.path.join(root, batch_id[2:])):
+            return os.path.join(root, batch_id[2:])
+        pattern = os.path.join(root, f"{batch_id[2:]}*")
+        matches = glob.glob(pattern)
+        if matches:
+            return matches[0]
+        return os.path.join(root, batch_id[2:])
 
     @staticmethod
     def find(batch_id: str) -> str:
