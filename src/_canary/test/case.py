@@ -1161,8 +1161,6 @@ class TestCase(AbstractTestCase):
         return True
 
     def mark_as_ready(self) -> None:
-        if self.status == "error":
-            return
         self._status.set("ready" if not self.dependencies else "pending")
 
     def skipped(self) -> bool:
