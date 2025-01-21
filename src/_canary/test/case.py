@@ -881,8 +881,6 @@ class TestCase(AbstractTestCase):
         return the path to my file relative to the ``anchor``.  If ``anchor`` is a VCS directory,
         than the chain (and, thus, ID) will be reproducible no matter where it is checked out.
 
-        In
-
         """
         dirname = os.path.dirname(start or self.file)
         while True:
