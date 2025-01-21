@@ -876,6 +876,14 @@ class TestCase(AbstractTestCase):
                     fs.force_remove(file)
 
     def chain(self, start: str | None = None, anchor: str = ".git") -> str:
+        """The 'chain' is used to provide a unique name for a test so that IDs are unique and
+        reproducible.  We search backward from the start directory until we hit the ``anchor`` and
+        return the path to my file relative to the ``anchor``.  If ``anchor`` is a VCS directory,
+        than the chain (and, thus, ID) will be reproducible no matter where it is checked out.
+
+        In
+
+        """
         dirname = os.path.dirname(start or self.file)
         while True:
             if os.path.isdir(os.path.join(dirname, anchor)):
@@ -883,7 +891,9 @@ class TestCase(AbstractTestCase):
             dirname = os.path.dirname(dirname)
             if dirname == os.path.sep:
                 break
-        return self.path
+        # Since self.path can have my ID in it (for the case that the path length is longer
+        # than the system allowable file name), we replicate some of the logic here.
+        return os.path.join(os.path.dirname(self.file_path), self.name)
 
     def generate_id(self, byte_limit: int | None = None, **kwds: str) -> str:
         """The test ID is a hash built up from the test name, parameters, and additional keywords.
