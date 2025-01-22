@@ -28,8 +28,8 @@ from _canary.util import logging
 from _canary.util import module
 from _canary.util import shell
 from _canary.util.executable import Executable
-from _canary.version import __version__
 from _canary.version import version
+from _canary.version import version_info
 
 from . import directives
 from . import patterns

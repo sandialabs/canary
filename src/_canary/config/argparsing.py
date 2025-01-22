@@ -9,14 +9,13 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
 
+from .. import version
 from ..third_party.color import colorize
 from ..util.collections import merge
 from ..util.term import terminal_size
 
 if TYPE_CHECKING:
     from ..command.base import Command
-
-from _canary.version import __version__
 
 stat_names = pstats.Stats.sort_arg_dict_default
 
@@ -223,7 +222,7 @@ def make_argument_parser(**kwargs):
     parser.add_argument(
         "--version",
         action="version",
-        version=__version__,
+        version=version.version,
         help="show version and exit",
     )
     parser.add_argument(
