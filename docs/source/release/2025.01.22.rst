@@ -1,0 +1,39 @@
+canary 25.1.22 release notes
+============================
+
+.. contents::
+
+SYNOPSIS
+
+Authors
+-------
+
+* Stuart Baxley (1)
+* Tim Fuller (100)
+* Mario LoPrinzi (3)
+* Matthew Mosby (1)
+
+A total of 4 authors contributed 105 commits to this release.
+
+Issues closed for 25.1.22
+-------------------------
+
+* `#30 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/30>`__: when expr parsing bug in python 3.12
+* `#31 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/31>`__: Resource allocation
+* `#38 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/38>`__: batch args parsing error
+* `#39 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/39>`__: TestMultiCase Should Append Analyze
+* `#41 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/41>`__: Fix command line plugin hook
+* `#42 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/42>`__: timeout for ctest tests always 60.0s
+* `#43 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/43>`__: Forget about the TDD keyword
+* `#44 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/44>`__: change name to canary
+
+Merge requests for 25.1.22
+--------------------------
+
+* `!27 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/27>`__: update to resource config
+* `!28 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/28>`__: Fix the usage of the os.environ use to use variables
+* `!29 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/29>`__: fixes pairing with Tim
+* `!31 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/31>`__: Resolve "Fix command line plugin hook"
+* `!32 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/32>`__: Resolve "Forget about the TDD keyword"
+* `!33 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/33>`__: Resolve "change name to canary"
+* `!34 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/34>`__: Remove "error" status as a means to bypass TestCase __init__

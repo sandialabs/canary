@@ -1,4 +1,4 @@
-canary 24.12.10 release notes
+nvtest 24.12.10 release notes
 =============================
 
 .. contents::

@@ -1,9 +1,9 @@
-canary 24.10.22 Release Notes
+nvtest 24.10.22 Release Notes
 =============================
 
 .. contents::
 
-``canary`` 2024.10.22 is the initial release of ``canary`` after about 1 year of development.
+``nvtest`` 2024.10.22 is the initial release of ``nvtest`` after about 1 year of development.
 
 Features
 --------
@@ -11,7 +11,7 @@ Features
 Test file types
 ~~~~~~~~~~~~~~~
 
-``canary`` recognizes ``.pyt``, ``.vvt``, and ``CTestTestFile.cmake`` test generators.  Other test file generators can be enabled via plugin.
+``nvtest`` recognizes ``.pyt``, ``.vvt``, and ``CTestTestFile.cmake`` test generators.  Other test file generators can be enabled via plugin.
 
 Asynchronous execution
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -31,20 +31,20 @@ Batches are run asynchronously and test cases within a batch are *also* run asyn
 Plugin system
 ~~~~~~~~~~~~~
 
-Many components of ``canary`` are enabled via plugin.  The builtin plugins include:
+Many components of ``nvtest`` are enabled via plugin.  The builtin plugins include:
 
 * commands;
 * test file generators; and
 * reporters.
 
-Users can create their own plugins in files prefixed by ``nvest_`` and they can be automatically loaded by ``canary``.
+Users can create their own plugins in files prefixed by ``nvest_`` and they can be automatically loaded by ``nvtest``.
 
 Additionally, user plugins are called during different phases of test session execution.
 
 Integration with other tools
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``canary`` integrates with popular developer tools like :ref:`CMake <integrations-cmake>`, :ref:`CDash <integrations-cdash>`, and :ref:`GitLab <integrations-gitlab>`, streamlining the testing and continuous integration (CI) processes.
+``nvtest`` integrates with popular developer tools like :ref:`CMake <integrations-cmake>`, :ref:`CDash <integrations-cdash>`, and :ref:`GitLab <integrations-gitlab>`, streamlining the testing and continuous integration (CI) processes.
 
 Documentation
 ~~~~~~~~~~~~~
