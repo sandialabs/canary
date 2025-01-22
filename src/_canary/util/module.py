@@ -27,7 +27,10 @@ def _module(*args, environb: MutableMapping | None = None) -> str | None:
         )
 
         new_environb = {}
+        module_p.wait()
         output = module_p.communicate()[0]
+        if module_p.returncode != 0:
+            raise ModuleError(f"failed: {module_cmd}: {output.decode()}")
 
         # Loop over each environment variable key=value byte string
         for entry in output.strip(b"\0").split(b"\0"):
@@ -58,7 +61,10 @@ def load_module(module_name: str) -> None:
     text = _module("show", module_name).split()  # type: ignore
     for i, word in enumerate(text):
         if word == "conflict":
-            _module("unload", text[i + 1])
+            try:
+                _module("unload", text[i + 1])
+            except ModuleError:
+                pass
     _module("load", module_name)
 
 
@@ -71,7 +77,10 @@ def load(module_name: str, use: str | None = None) -> Generator[None, None, None
     text = _module("show", module_name).split()  # type: ignore
     for i, word in enumerate(text):
         if word == "conflict":
-            _module("unload", text[i + 1])
+            try:
+                _module("unload", text[i + 1])
+            except ModuleError:
+                pass
     _module("load", module_name)
     yield
     os.environb.clear()
@@ -79,3 +88,7 @@ def load(module_name: str, use: str | None = None) -> Generator[None, None, None
 
 
 loaded = load
+
+
+class ModuleError(Exception):
+    pass
