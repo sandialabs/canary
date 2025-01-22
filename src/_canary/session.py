@@ -563,14 +563,14 @@ class Session:
                     if reporting == ProgressReporting.progress_bar:
                         queue.display_progress(self.start, last=True)
                     self.returncode = compute_returncode(queue.cases())
+                finally:
+                    self.exitstatus = self.returncode
+                    queue.close(cleanup=cleanup_queue)
                     self.finish = timestamp()
                     dt = self.finish - self.start
                     logging.info(
                         colorize("@*{Finished} running %d %s (%.2fs.)\n" % (queue_size, what, dt))
                     )
-                finally:
-                    self.exitstatus = self.returncode
-                    queue.close(cleanup=cleanup_queue)
                 for hook in plugin.hooks():
                     hook.session_finish(self)
         self.save()
@@ -616,9 +616,8 @@ class Session:
         try:
             context = multiprocessing.get_context("spawn")
             with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
-                if multiprocessing.parent_process() is None:
-                    signal.signal(signal.SIGINT, partial(signal_handler, ppe))
-                    signal.signal(signal.SIGTERM, partial(signal_handler, ppe))
+                if self.level == 0:
+                    signal.signal(signal.SIGINT, handle_sigint)
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
@@ -647,14 +646,10 @@ class Session:
                     callback = partial(self.done_callback, iid, queue, fail_fast)
                     future.add_done_callback(callback)
                     futures[iid] = (obj, future)
-        except BaseException:
-            if ppe is None:
-                raise ProcessPoolExecutorFailedToStart
-            kill_session(ppe)
-            raise
         finally:
-            if ppe:
+            if ppe is not None:
                 ppe.shutdown(cancel_futures=True)
+            kill_session()
 
     def heartbeat(self, queue: ResourceQueue) -> None:
         """Take a heartbeat of the simulation by dumping the case, cpu, and gpu IDs that are
@@ -992,10 +987,8 @@ def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
     return sorted(cases, key=lambda case: getattr(case, field))
 
 
-def kill_session(ppe: ProcessPoolExecutor | None = None, kill_delay: float = 0.05):
+def kill_session(kill_delay: float = 0.1):
     # send SIGTERM to children so they can clean up and then send SIGKILL after a delay
-    if ppe is not None:
-        ppe.shutdown(wait=False, cancel_futures=True)
     if multiprocessing.parent_process() is not None:
         return
     for proc in multiprocessing.active_children():
@@ -1007,9 +1000,9 @@ def kill_session(ppe: ProcessPoolExecutor | None = None, kill_delay: float = 0.0
             proc.kill()
 
 
-def signal_handler(ppe, sig, frame):
-    kill_session(ppe)
-    sys.exit(sig)
+def handle_sigint(sig, frame):
+    kill_session()
+    sys.exit(signal.SIGINT.value)
 
 
 class DirectoryExistsError(Exception):
