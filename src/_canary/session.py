@@ -646,6 +646,10 @@ class Session:
                     callback = partial(self.done_callback, iid, queue, fail_fast)
                     future.add_done_callback(callback)
                     futures[iid] = (obj, future)
+        except BaseException:
+            if ppe is None:
+                raise ProcessPoolExecutorFailedToStart
+            raise
         finally:
             if ppe is not None:
                 ppe.shutdown(cancel_futures=True)
