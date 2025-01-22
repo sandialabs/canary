@@ -38,13 +38,13 @@ def test_keywords(tmpdir):
     f.prepare()
     files = f.discover()
     cases = finder.generate_test_cases(files)
-    finder.mask(cases, keyword_expr="a and i")
+    finder.mask(cases, keyword_exprs=["a and i"])
     assert len([c for c in cases if not c.masked()]) == 0
     cases = finder.generate_test_cases(files)
-    finder.mask(cases, keyword_expr="a and e")
+    finder.mask(cases, keyword_exprs=["a and e"])
     assert len([c for c in cases if not c.masked()]) == 1
     cases = finder.generate_test_cases(files)
-    finder.mask(cases, keyword_expr="a or i")
+    finder.mask(cases, keyword_exprs=["a or i"])
     assert len([c for c in cases if not c.masked()]) == 2
 
 
@@ -236,7 +236,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             cases = finder.generate_test_cases(files, on_options=["baz"])
             finder.mask(
                 cases,
-                keyword_expr="test and unit",
+                keyword_exprs=["test and unit"],
                 owners=["me"],
             )
             assert len(cases) == 10
@@ -250,7 +250,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             cases = finder.generate_test_cases(files)
             finder.mask(
                 cases,
-                keyword_expr="test and unit",
+                keyword_exprs=["test and unit"],
                 owners=["me"],
             )
             assert len(cases) == 4
@@ -261,7 +261,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             cases = finder.generate_test_cases(files, on_options=["baz"])
             finder.mask(
                 cases,
-                keyword_expr="test and unit",
+                keyword_exprs=["test and unit"],
                 parameter_expr="cpus < 3",
                 owners=["me"],
             )
@@ -298,7 +298,7 @@ def test_vvt_generator(tmpdir):
             f.prepare()
             files = f.discover()
             cases = finder.generate_test_cases(files, on_options=["baz"])
-            finder.mask(cases, keyword_expr="test and unit")
+            finder.mask(cases, keyword_exprs=["test and unit"])
             assert len(cases) == 10
             assert isinstance(cases[-1], tc.TestMultiCase)
             for case in cases:
@@ -308,7 +308,7 @@ def test_vvt_generator(tmpdir):
             # three test cases and one analyze.  The analyze will not be masked because the `np`
             # parameter is never expanded
             cases = finder.generate_test_cases(files)
-            finder.mask(cases, keyword_expr="test and unit")
+            finder.mask(cases, keyword_exprs=["test and unit"])
             assert len(cases) == 4
             assert isinstance(cases[-1], tc.TestMultiCase)
             assert not cases[-1].masked()
@@ -317,7 +317,7 @@ def test_vvt_generator(tmpdir):
             cases = finder.generate_test_cases(files, on_options=["baz"])
             finder.mask(
                 cases,
-                keyword_expr="test and unit",
+                keyword_exprs=["test and unit"],
                 parameter_expr="np < 3",
             )
             assert len(cases) == 10

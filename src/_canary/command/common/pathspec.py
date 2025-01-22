@@ -121,20 +121,20 @@ class PathSpec:
             if os.path.isfile(path):
                 if is_test_file(path):
                     name = os.path.splitext(os.path.basename(path))[0]
-                    if args.keyword_expr:
-                        args.keyword_expr += f" and {name}"
+                    if args.keyword_exprs:
+                        args.keyword_exprs.append(name)
                     else:
-                        args.keyword_expr = name
+                        args.keyword_exprs = [name]
                 else:
                     raise ValueError(f"{path}: unrecognized file extension")
-            elif not args.keyword_expr:
+            elif not args.keyword_exprs:
                 kwds: list[str] = []
                 for f in os.listdir(path):
                     if is_test_file(f):
                         name = os.path.splitext(os.path.basename(f))[0]
                         kwds.append(name)
                 if kwds:
-                    args.keyword_expr = " and ".join(kwds)
+                    args.keyword_exprs = kwds
         return
 
     @staticmethod

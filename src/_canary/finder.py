@@ -278,7 +278,7 @@ def generate_test_cases(
 
 def mask(
     cases: list[TestCase],
-    keyword_expr: str | None = None,
+    keyword_exprs: list[str] | None = None,
     parameter_expr: str | None = None,
     owners: set[str] | None = None,
     regex: str | None = None,
@@ -289,7 +289,7 @@ def mask(
     """Filter test cases (mask test cases that don't meet a specific criteria)
 
     Args:
-      keyword_expr: Include those tests matching this keyword expression
+      keyword_exprs: Include those tests matching this keyword expressions
       parameter_expr: Include those tests matching this parameter expression
       start: The starting directory the python session was invoked in
       case_specs: Include those tests matching these specs
@@ -302,7 +302,7 @@ def mask(
         rx = re.compile(regex)
 
     owners = set(owners or [])
-    no_filter_criteria = all(_ is None for _ in (keyword_expr, parameter_expr, owners, regex))
+    no_filter_criteria = all(_ is None for _ in (keyword_exprs, parameter_expr, owners, regex))
 
     explicit_start_path = start is not None
     if start is None:
@@ -340,12 +340,15 @@ def mask(
             case.mask = colorize("not owned by @*{%r}" % case.owners)
             continue
 
-        if keyword_expr is not None:
+        if keyword_exprs is not None:
             kwds = set(case.keywords)
             kwds.update(case.implicit_keywords)
-            match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
-            if not match:
-                case.mask = colorize("keyword expression @*{%r} did not match" % keyword_expr)
+            for keyword_expr in keyword_exprs:
+                match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
+                if not match:
+                    case.mask = colorize("keyword expression @*{%r} did not match" % keyword_expr)
+                    break
+            if case.masked():
                 continue
 
         if parameter_expr:

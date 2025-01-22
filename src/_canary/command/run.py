@@ -118,7 +118,7 @@ class Run(Command):
                     logging.info("Done with test discovery")
                     return 0
             session.lock(
-                keyword_expr=args.keyword_expr,
+                keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
                 on_options=args.on_options,
                 env_mods=args.env_mods.get("test") or {},
@@ -139,7 +139,7 @@ class Run(Command):
             session = Session(args.work_tree, mode=args.mode)
             session.filter(
                 start=args.start,
-                keyword_expr=args.keyword_expr,
+                keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
                 stage=stage,
                 case_specs=getattr(args, "case_specs", None),

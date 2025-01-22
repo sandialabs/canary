@@ -26,8 +26,9 @@ def add_filter_arguments(parser: "Parser") -> None:
     group = parser.add_argument_group("filtering")
     group.add_argument(
         "-k",
-        dest="keyword_expr",
+        dest="keyword_exprs",
         metavar="expression",
+        action="append",
         help="Only run tests matching given keyword expression. "
         "For example: `-k 'key1 and not key2'`.",
     )

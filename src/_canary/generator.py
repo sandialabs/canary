@@ -80,20 +80,8 @@ class AbstractTestGenerator(ABC):
         """Expand parameters and instantiate concrete test cases
 
         Args:
-          cpus: [min_cpus, max_cpus] available to this test.  Tests requiring less/more cpus
-            than the min/max, respectively, should be masked.
-          gpus: [min_gpus, max_gpus] available to this test.  Tests requiring less/more gpus
-            than the min/max, respectively, should be masked.
-          nodes: [min_nodes, max_nodes] available to this test.  Tests requiring less/more nodes
-            than the min/max, respectively, should be masked.
-          keyword_expr: User specified keyword expression used to filter tests.  Test cases
-            not matching ``keyword_expr`` should be masked.
           on_options: User specified options used to filter tests.  Test cases not matching
             ``on_options`` should be masked.
-          parameter_expr: User specified parameter expression used to filter tests.  Test cases
-            not matching ``parameter_expr`` should be masked.
-          timeout: User specified global timeout.
-          owners: Test cases not owned by one of ``owners`` should be masked.
 
         Notes:
 

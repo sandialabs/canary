@@ -28,7 +28,7 @@ class Describe(Command):
             path = args.testspec
             return self.describe_folder(
                 path,
-                keyword_expr=args.keyword_expr,
+                keyword_exprs=args.keyword_exprs,
                 on_options=args.on_options,
                 parameter_expr=args.parameter_expr,
             )
@@ -48,7 +48,7 @@ class Describe(Command):
     @staticmethod
     def describe_folder(
         path: str,
-        keyword_expr: str | None = None,
+        keyword_exprs: list[str] | None = None,
         on_options: list[str] | None = None,
         parameter_expr: str | None = None,
     ) -> int:

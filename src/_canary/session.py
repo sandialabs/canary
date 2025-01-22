@@ -360,7 +360,7 @@ class Session:
 
     def lock(
         self,
-        keyword_expr: str | None = None,
+        keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
         on_options: list[str] | None = None,
         owners: set[str] | None = None,
@@ -370,7 +370,7 @@ class Session:
         """Lock test files into concrete (parameterized) test cases
 
         Args:
-          keyword_expr: Used to filter tests by keyword.  E.g., if two test define the keywords
+          keyword_exprs: Used to filter tests by keyword.  E.g., if two test define the keywords
             ``baz`` and ``spam``, respectively and ``keyword_expr = 'baz or spam'`` both tests will
             be locked and marked as ready.  However, if a test defines only the keyword ``ham`` it
             will be marked as "skipped by keyword expression".
@@ -392,7 +392,7 @@ class Session:
         logging.info(colorize("@*{Masking} test cases based on filtering criteria..."), end="")
         finder.mask(
             self.cases,
-            keyword_expr=keyword_expr,
+            keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
@@ -431,7 +431,7 @@ class Session:
 
     def filter(
         self,
-        keyword_expr: str | None = None,
+        keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
         owners: set[str] | None = None,
         regex: str | None = None,
@@ -442,7 +442,7 @@ class Session:
         """Filter test cases (mask test cases that don't meet a specific criteria)
 
         Args:
-          keyword_expr: Include those tests matching this keyword expression
+          keyword_exprs: Include those tests matching this keyword expressions
           parameter_expr: Include those tests matching this parameter expression
           start: The starting directory the python session was invoked in
           case_specs: Include those tests matching these specs
@@ -454,7 +454,7 @@ class Session:
         cases = self.active_cases()
         finder.mask(
             cases,
-            keyword_expr=keyword_expr,
+            keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
@@ -873,15 +873,16 @@ class Session:
         return file.getvalue()
 
     @staticmethod
-    def report_excluded(cases: list[TestCase]) -> None:
-        n = len(cases)
+    def report_excluded(excluded_cases: list[TestCase]) -> None:
+        n = len(excluded_cases)
         logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
-        reasons: dict[str, int] = {}
-        for case in cases:
+        reasons: dict[str | None, int] = {}
+        for case in excluded_cases:
             reasons[case.mask] = reasons.get(case.mask, 0) + 1
         keys = sorted(reasons, key=lambda x: reasons[x])
         for key in reversed(keys):
-            logging.emit(f"{glyphs.bullet} {reasons[key]}: {key.lstrip()}\n")
+            reason = key if key is None else key.lstrip()
+            logging.emit(f"{glyphs.bullet} {reasons[key]}: {reason}\n")
 
     def report(
         self,

@@ -28,7 +28,7 @@ def test_session_filter(tmpdir):
 
         with working_dir("tests"):
             s = session.Session(".", mode="r")
-            s.filter(keyword_expr="first")
+            s.filter(keyword_exprs=["first"])
 
         with working_dir("tests"):
             s = session.Session(".", mode="r")

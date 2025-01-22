@@ -88,17 +88,26 @@ def get_active_plugin_description() -> str:
     table: list[tuple[str, str, str]] = []
     widths = [len("Namespace"), len("Name"), 0]
     for hook in plugin.hooks():
-        row = _get_plugin_info(hook)
+        try:
+            row = _get_plugin_info(hook)
+        except AttributeError:
+            continue
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))
         table.append(row)
     for gen_type in plugin.generators():
-        row = _get_plugin_info(gen_type)
+        try:
+            row = _get_plugin_info(gen_type)
+        except AttributeError:
+            continue
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))
         table.append(row)
     for scheduler_type in hpc_connect.schedulers().values():  # type: ignore
-        row = _get_plugin_info(scheduler_type)
+        try:
+            row = _get_plugin_info(scheduler_type)
+        except AttributeError:
+            continue
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))
         table.append(row)

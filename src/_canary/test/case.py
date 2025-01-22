@@ -228,7 +228,7 @@ class TestCase(AbstractTestCase):
         self._display_name: str | None = None
         self._id: str | None = None
         self._status: Status = Status()
-        self._mask: str = ""
+        self._mask: str | None = None
         self._cmd_line: str | None = None
         self._work_tree: str | None = None
         self._working_directory: str | None = None
@@ -678,7 +678,7 @@ class TestCase(AbstractTestCase):
             self._status.set("ready")
 
     @property
-    def mask(self) -> str:
+    def mask(self) -> str | None:
         return self._mask
 
     @mask.setter
@@ -686,7 +686,7 @@ class TestCase(AbstractTestCase):
         self._mask = arg
 
     def masked(self) -> bool:
-        return bool(self._mask)
+        return self._mask is not None
 
     @property
     def url(self) -> str | None:

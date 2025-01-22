@@ -2,15 +2,15 @@ import argparse
 import os
 import time
 
-from _canary.config.argparsing import Parser
-from _canary.util import logging
-from _canary.util.banner import banner
-
 from .. import finder
+from .. import plugin
+from ..config.argparsing import Parser
 from ..error import StopExecution
 from ..session import ExitCode
 from ..session import Session
 from ..third_party.color import colorize
+from ..util import logging
+from ..util.banner import banner
 from .base import Command
 from .common import PathSpec
 from .common import add_filter_arguments
@@ -38,7 +38,8 @@ class Find(Command):
     def execute(self, args: argparse.Namespace) -> int:
         if args.print_files:
             logging.set_level(logging.ERROR)
-        logging.emit(banner() + "\n")
+        else:
+            logging.emit(banner() + "\n")
         self.parse_search_paths(args)
         f = finder.Finder()
         for root, paths in args.paths.items():
@@ -55,11 +56,14 @@ class Find(Command):
         start = time.monotonic()
         finder.mask(
             cases,
-            keyword_expr=args.keyword_expr,
+            keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,
             owners=None if not args.owners else set(args.owners),
             regex=args.regex_filter,
         )
+        for p in plugin.hooks():
+            for case in cases:
+                p.test_discovery(case)
         dt = time.monotonic() - start
         logging.info(
             colorize("@*{Masking} test cases based on filtering criteria... done (%.2fs.)" % dt),
@@ -69,7 +73,7 @@ class Find(Command):
         cases_to_run = [case for case in cases if not case.masked()]
         masked = [case for case in cases if case.masked()]
         logging.info(colorize("@*{Selected} %d test cases" % (len(cases) - len(masked))))
-        if masked:
+        if masked and not args.print_files:
             Session.report_excluded(masked)
         if not cases_to_run:
             raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
