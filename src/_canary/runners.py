@@ -82,6 +82,7 @@ class TestCaseRunner(AbstractTestRunner):
         if stage in ("baseline", "rebase", "rebaseline"):
             return self.baseline(case)
         try:
+            proc: "subprocess.Popen | psutil.Popen | None" = None
             metrics: dict[str, Any] | None = None
             case.start = timestamp()
             case.prepare_for_launch(stage=stage)
@@ -115,6 +116,8 @@ class TestCaseRunner(AbstractTestRunner):
             case.returncode = skip_exit_status
             case.status.set("skipped", f"{case}: resource file {e.args[0]} not found")
         except KeyboardInterrupt:
+            if proc is not None:
+                os.kill(proc.pid, signal.SIGINT)
             case.returncode = 2
             case.status.set("cancelled", "keyboard interrupt")
             time.sleep(0.01)
@@ -123,6 +126,8 @@ class TestCaseRunner(AbstractTestRunner):
             case.returncode = -2
             case.status.set("timeout", f"{case} failed to finish in {timeout:.2f}s.")
         except BaseException:
+            if proc is not None:
+                os.kill(proc.pid, signal.SIGTERM)
             case.returncode = 1
             case.status.set("failed", "unknown failure")
             time.sleep(0.01)
