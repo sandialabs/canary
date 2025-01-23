@@ -550,16 +550,19 @@ class Session:
                         self.returncode = compute_returncode(queue.cases())
                     raise
                 except KeyboardInterrupt:
+                    kill_child_processes(signal.SIGINT)
                     self.returncode = signal.SIGINT.value
                     cleanup_queue = False
                     raise
                 except FailFast as e:
+                    kill_child_processes(signal.SIGTERM)
                     name, code = e.args
                     self.returncode = code
                     cleanup_queue = False
                     raise StopExecution(f"fail_fast: {name}", code)
                 except Exception:
                     logging.error(traceback.format_exc())
+                    kill_child_processes(signal.SIGTERM)
                     self.returncode = compute_returncode(queue.cases())
                     raise
                 else:
@@ -619,8 +622,7 @@ class Session:
         try:
             context = multiprocessing.get_context("spawn")
             with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
-                if self.level == 0:
-                    signal.signal(signal.SIGINT, handle_sigint)
+                signal.signal(signal.SIGTERM, handle_signal)
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
@@ -656,7 +658,6 @@ class Session:
         finally:
             if ppe is not None:
                 ppe.shutdown(cancel_futures=True)
-            cleanup_session(signal.SIGTERM)
 
     def heartbeat(self, queue: ResourceQueue) -> None:
         """Take a heartbeat of the simulation by dumping the case, cpu, and gpu IDs that are
@@ -995,27 +996,43 @@ def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
     return sorted(cases, key=lambda case: getattr(case, field))
 
 
-def cleanup_session(sig: int, kill_delay: float = 0.1):
-    # send SIGTERM to children so they can clean up and then send SIGKILL after a delay
+def is_base_process(process: psutil.Process) -> bool:
+    """Check if process is one of the resource tracking processes launched by the
+    ProcessPoolExecutor"""
+    try:
+        command = " ".join(process.cmdline())
+    except (psutil.ZombieProcess, ProcessLookupError):
+        return False
+    else:
+        return f"{sys.executable} -c from multiprocessing" in command
+
+
+def kill_child_processes(sig: int, kill_delay: float = 0.1) -> None:
     import warnings
 
-    warnings.filterwarnings("ignore")
+    if not config.debug:
+        warnings.filterwarnings("ignore")
+
     with tempfile.TemporaryFile("w") as fh:
-        with logging.capture(fh):
-            process = psutil.Process()
-            children = process.children(recursive=True)
+        with logging.capture(sys.stdout if config.debug else fh):
+            process = psutil.Process(os.getpid())
+            children = sorted(
+                [_ for _ in process.children(recursive=True) if not is_base_process(_)],
+                key=lambda p: p.create_time(),
+                reverse=True,
+            )
             for child in children:
                 if child.is_running():
-                    os.kill(child.pid, sig)
+                    child.send_signal(sig)
             time.sleep(kill_delay)
             for child in children:
                 if child.is_running():
-                    os.kill(child.pid, signal.SIGKILL)
+                    child.send_signal(signal.SIGKILL)
 
 
-def handle_sigint(sig, frame):
-    cleanup_session(sig)
-    sys.exit(signal.SIGINT.value)
+def handle_signal(sig, frame):
+    kill_child_processes(sig)
+    raise SystemExit(sig)
 
 
 class DirectoryExistsError(Exception):
