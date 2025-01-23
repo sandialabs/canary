@@ -7,6 +7,7 @@ description = "canary: application testing with Python"
 requires-python = ">=3.10"
 dependencies = [
   "PyYAML",
+  "psutil",
   "hpc-connect @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/hpc-connect"
 ]
 
@@ -17,10 +18,10 @@ canary = "canary:console_main"
 [project.optional-dependencies]
 requests = ["requests"]
 dev = ["ruff", "mypy", "pytest", "sphinx", "pydata-sphinx-theme", "sphinx_design", "coverage", "xmlschema"]
-psutil = ["psutil"]
 flux = ["hpcc-flux @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/plugins/hpcc-flux"]
 slurm = ["hpcc-slurm @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/plugins/hpcc-slurm"]
 pbs = ["hpcc-pbs @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/plugins/hpcc-pbs"]
+psutil = []
 
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]

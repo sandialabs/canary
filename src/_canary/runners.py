@@ -8,14 +8,8 @@ import subprocess
 import time
 from typing import Any
 
-try:
-    import psutil  # type: ignore
-
-    HAVE_PSUTIL = True
-except ImportError:
-    HAVE_PSUTIL = False
-
 import hpc_connect
+import psutil
 
 from . import config
 from .error import diff_exit_status
@@ -30,6 +24,8 @@ from .util import logging
 from .util.filesystem import working_dir
 from .util.time import hhmmss
 from .util.time import timestamp
+
+HAVE_PSUTIL = True
 
 
 class AbstractTestRunner:
@@ -82,7 +78,7 @@ class TestCaseRunner(AbstractTestRunner):
         if stage in ("baseline", "rebase", "rebaseline"):
             return self.baseline(case)
         try:
-            proc: "subprocess.Popen | psutil.Popen | None" = None
+            proc: psutil.Popen | None = None
             metrics: dict[str, Any] | None = None
             case.start = timestamp()
             case.prepare_for_launch(stage=stage)
@@ -116,7 +112,7 @@ class TestCaseRunner(AbstractTestRunner):
             case.returncode = skip_exit_status
             case.status.set("skipped", f"{case}: resource file {e.args[0]} not found")
         except KeyboardInterrupt:
-            if proc is not None:
+            if proc is not None and proc.poll() is None:
                 os.kill(proc.pid, signal.SIGINT)
             case.returncode = 2
             case.status.set("cancelled", "keyboard interrupt")
@@ -126,7 +122,7 @@ class TestCaseRunner(AbstractTestRunner):
             case.returncode = -2
             case.status.set("timeout", f"{case} failed to finish in {timeout:.2f}s.")
         except BaseException:
-            if proc is not None:
+            if proc is not None and proc.poll() is None:
                 os.kill(proc.pid, signal.SIGTERM)
             case.returncode = 1
             case.status.set("failed", "unknown failure")
@@ -193,16 +189,15 @@ class TestCaseRunner(AbstractTestRunner):
         return f.getvalue()
 
     def get_process_metrics(
-        self, proc: "psutil.Popen", metrics: dict[str, Any] | None = None
+        self, proc: psutil.Popen, metrics: dict[str, Any] | None = None
     ) -> dict[str, Any] | None:
         # Collect process information
-        if not HAVE_PSUTIL:
-            return None
         metrics = metrics or {}
         try:
             valid_names = set(psutil._as_dict_attrnames)
             skip_names = {
                 "cmdline",
+                "cpu_affinity",
                 "net_connections",
                 "cwd",
                 "environ",
@@ -210,6 +205,8 @@ class TestCaseRunner(AbstractTestRunner):
                 "gids",
                 "ionice",
                 "memory_full_info",
+                "memory_maps",
+                "threads",
                 "name",
                 "nice",
                 "pid",
@@ -471,7 +468,7 @@ def factory() -> "AbstractTestRunner":
     return runner
 
 
-def Popen(*args, **kwargs) -> "subprocess.Popen | psutil.Popen":
+def Popen(*args, **kwargs) -> psutil.Popen:
     if HAVE_PSUTIL:
         return psutil.Popen(*args, **kwargs)
     return subprocess.Popen(*args, **kwargs)

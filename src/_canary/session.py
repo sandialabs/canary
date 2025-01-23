@@ -7,6 +7,7 @@ import os
 import random
 import signal
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -20,6 +21,8 @@ from typing import IO
 from typing import Any
 from typing import Generator
 from typing import Type
+
+import psutil
 
 from . import config
 from . import finder
@@ -653,7 +656,7 @@ class Session:
         finally:
             if ppe is not None:
                 ppe.shutdown(cancel_futures=True)
-            kill_session()
+            cleanup_session(signal.SIGTERM)
 
     def heartbeat(self, queue: ResourceQueue) -> None:
         """Take a heartbeat of the simulation by dumping the case, cpu, and gpu IDs that are
@@ -992,21 +995,26 @@ def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
     return sorted(cases, key=lambda case: getattr(case, field))
 
 
-def kill_session(kill_delay: float = 0.1):
+def cleanup_session(sig: int, kill_delay: float = 0.1):
     # send SIGTERM to children so they can clean up and then send SIGKILL after a delay
-    if multiprocessing.parent_process() is not None:
-        return
-    for proc in multiprocessing.active_children():
-        if proc.is_alive():
-            proc.terminate()
-    time.sleep(kill_delay)
-    for proc in multiprocessing.active_children():
-        if proc.is_alive():
-            proc.kill()
+    import warnings
+
+    warnings.filterwarnings("ignore")
+    with tempfile.TemporaryFile("w") as fh:
+        with logging.capture(fh):
+            process = psutil.Process()
+            children = process.children(recursive=True)
+            for child in children:
+                if child.is_running():
+                    os.kill(child.pid, sig)
+            time.sleep(kill_delay)
+            for child in children:
+                if child.is_running():
+                    os.kill(child.pid, signal.SIGKILL)
 
 
 def handle_sigint(sig, frame):
-    kill_session()
+    cleanup_session(sig)
     sys.exit(signal.SIGINT.value)
 
 
