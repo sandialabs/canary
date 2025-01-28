@@ -411,7 +411,7 @@ class CTestTestCase(TestCase):
         self.concatenate_logs()
         file = self.logfile(stage)
 
-        if self.status.value in ("timeout", "skipped", "not_run"):
+        if self.status.value in ("timeout", "skipped", "cancelled", "not_run"):
             config.plugin_manager.hook.canary_testcase_finish(case=self, stage=stage)
             self.save()
             return
