@@ -1,7 +1,7 @@
 import os
 import sys
 
-import _canary.plugins.vvtest.generator as vvtest
+import _canary.plugins.generators.vvt as vvtest
 import _canary.util.filesystem as fs
 from _canary import finder
 from _canary.enums import list_parameter_space

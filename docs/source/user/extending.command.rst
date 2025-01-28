@@ -3,35 +3,37 @@
 User defined commands
 =====================
 
-Custom commands can be created by subclassing :class:`~_canary.command.Command`.  For example, the following will create a custom command that emails a plain text test report:
+User defined commands are created by returning a :class:`~_canary.plugins.types.CanarySubcommand` from the :func:`~_canary.plugins.hookspec.canary_subcommand` plugin hook. For example, the following will create a custom command that emails a plain text test report:
 
 .. code-block:: python
 
     import io
+    import canary
 
-    class Email(canary.Command):
+    @canary.hookimpl
+    def canary_subcommand():
+        return canary.CanarySubcommand(
+            name="email",
+            description="Send an email report",
+            setup_parser=setup_parser,
+            execute=email,
+        )
 
-        @property
-        def description(self):
-            return "Send an email report"
+    def setup_parser(parser):
+        parser.add_argument("--to", required=True)
+        parser.add_argument("--from", dest="_from", required=True)
 
-        def setup_parser(self, parser):
-            parser.add_argument("--to", required=True)
-            parser.add_argument("--from", dest="_from", required=True)
+    def email(args) -> None:
+        session = canary.Session(".", mode="r")
 
-        def execute(self, args) -> int:
-            session = canary.Session(".", mode="r")
-
-            fp = io.StringIO()
-            for case in self.session.cases:
-                if case.mask:
-                    continue
-                fp.write("====\n")
-                fp.write(f"Name: {case.name}\n")
-                fp.write(f"Start: {case.start}\n")
-                fp.write(f"Finish: {case.finish}\n")
-                fp.write(f"Status: {case.status.value}\n")
-            send_email(to=args.to, recipients=[args._from], body=fp.getvalue())
+        fp = io.StringIO()
+        for case in self.session.active_cases():
+            fp.write("====\n")
+            fp.write(f"Name: {case.name}\n")
+            fp.write(f"Start: {case.start}\n")
+            fp.write(f"Finish: {case.stop}\n")
+            fp.write(f"Status: {case.status.value}\n")
+        send_email(to=args.to, recipients=[args._from], body=fp.getvalue())
 
 
 On the command line, you will now see:

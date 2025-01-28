@@ -1,5 +1,5 @@
-import _canary.plugins.pyt.generator as pyt
-import _canary.plugins.vvtest.generator as vvt
+import _canary.plugins.generators.pyt as pyt
+import _canary.plugins.generators.vvt as vvt
 import _canary.test.case as tc
 from _canary.util.filesystem import working_dir
 
@@ -18,7 +18,7 @@ canary.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
 canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """
             )
-        file = pyt.PYTTestFile(".", "test.pyt")
+        file = pyt.PYTTestGenerator(".", "test.pyt")
         cases = file.lock(on_options=["baz"])
         assert len(cases) == 10
         assert isinstance(cases[-1], tc.TestMultiCase)
@@ -36,7 +36,7 @@ def test_vvt_generator(tmpdir):
 # VVT: parameterize : a,b,c=1,11,111 2,22,222 3,33,333
 """
             )
-        file = vvt.VVTTestFile(".", "test.vvt")
+        file = vvt.VVTTestGenerator(".", "test.vvt")
         cases = file.lock(on_options=["baz"])
         assert len(cases) == 10
         assert isinstance(cases[-1], tc.TestMultiCase)

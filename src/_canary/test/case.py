@@ -19,7 +19,6 @@ from typing import Generator
 from typing import Type
 
 from .. import config
-from .. import plugin
 from ..paramset import ParameterSet
 from ..status import Status
 from ..third_party.color import colorize
@@ -236,7 +235,7 @@ class TestCase(AbstractTestCase):
 
         # The process running the test case
         self._start: float = -1.0
-        self._finish: float = -1.0
+        self._stop: float = -1.0
         self._returncode: int = -1
 
         # Dependency management
@@ -825,21 +824,21 @@ class TestCase(AbstractTestCase):
     @start.setter
     def start(self, arg: float) -> None:
         self._start = arg
-        self._finish = -1
+        self._stop = -1
 
     @property
-    def finish(self) -> float:
-        return self._finish
+    def stop(self) -> float:
+        return self._stop
 
-    @finish.setter
-    def finish(self, arg: float) -> None:
-        self._finish = arg
+    @stop.setter
+    def stop(self, arg: float) -> None:
+        self._stop = arg
 
     @property
     def duration(self):
-        if self.start == -1 or self.finish == -1:
+        if self.start == -1 or self.stop == -1:
             return -1
-        return self.finish - self.start
+        return self.stop - self.start
 
     @property
     def returncode(self) -> int:
@@ -860,20 +859,6 @@ class TestCase(AbstractTestCase):
     def id(self, arg: str) -> None:
         assert isinstance(arg, str)
         self._id = arg
-
-    def cleanup(self) -> None:
-        keep = set([os.path.basename(a.src) if a.dst is None else a.dst for a in self.assets])
-        keep.add(os.path.basename(self.file))
-        keep.add("testcase.lock")
-        with fs.working_dir(self.working_directory):
-            files = os.listdir(".")
-            for file in files:
-                if re.search(r"canary[-]?.*-out.txt", file):
-                    continue
-                elif file in keep:
-                    continue
-                else:
-                    fs.force_remove(file)
 
     def chain(self, start: str | None = None, anchor: str = ".git") -> str:
         """The 'chain' is used to provide a unique name for a test so that IDs are unique and
@@ -1286,7 +1271,7 @@ class TestCase(AbstractTestCase):
         state = self._load_lockfile()
         keep = (
             "start",
-            "finish",
+            "stop",
             "returncode",
             "work_tree",
             "status",
@@ -1354,18 +1339,21 @@ class TestCase(AbstractTestCase):
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
 
-    def setup(self) -> None:
+    def setup(self, stage: str = "run") -> None:
         if len(self.dependencies) != len(self.dep_done_criteria):
-            raise ValueError("Inconsistent dependency/dep_done_criteria lists")
-        logging.debug(f"Setting up {self}")
+            raise RuntimeError("Inconsistent dependency/dep_done_criteria lists")
+        elif self.unresolved_dependencies:
+            raise RuntimeError("All dependencies must be resolved before running")
+        logging.trace(f"Setting up {self}")
         self.work_tree = config.session.work_tree
         fs.mkdirp(self.working_directory)
-        clean_out_folder(self.working_directory)
+        if stage == "run":
+            clean_out_folder(self.working_directory)
+            with fs.working_dir(self.working_directory, create=True):
+                self.setup_working_directory()
         with fs.working_dir(self.working_directory, create=True):
-            self.setup_working_directory()
-            for hook in plugin.hooks():
-                hook.test_setup(self)
-            self.save()
+            config.plugin_manager.hook.canary_testcase_setup(case=self, stage=stage)
+        self.save()
         logging.trace(f"Done setting up {self}")
 
     def setup_working_directory(self) -> None:
@@ -1388,8 +1376,6 @@ class TestCase(AbstractTestCase):
             return
         logging.info(f"Rebaselining {self.pretty_repr()}")
         with fs.working_dir(self.working_directory):
-            for hook in plugin.hooks():
-                hook.test_before_run(self, stage="baseline")
             for arg in self.baseline:
                 if isinstance(arg, str):
                     if os.path.exists(arg):
@@ -1416,16 +1402,6 @@ class TestCase(AbstractTestCase):
         id = colorize("@b{%s}" % self.id[:7])
         return "FINISHED: {0} {1} {2}".format(id, self.pretty_repr(), self.status.cname)
 
-    def prepare_for_launch(self, stage: str = "run") -> None:
-        if stage == "run":
-            self.setup()
-            if self.unresolved_dependencies:
-                raise RuntimeError("All dependencies must be resolved before running")
-            with fs.working_dir(self.working_directory):
-                for hook in plugin.hooks():
-                    hook.test_before_run(self, stage=stage)
-            self.save()
-
     def concatenate_logs(self) -> None:
         with open(self.logfile(), "w") as fh:
             for stage in ("setup", "run", "analyze"):
@@ -1433,15 +1409,26 @@ class TestCase(AbstractTestCase):
                 if os.path.exists(file):
                     fh.write(open(file).read())
 
-    def finalize(self, stage: str = "run") -> None:
+    def finish(self, stage: str = "run") -> None:
         if stage == "run":
-            for hook in plugin.hooks():
-                hook.test_after_run(self)
             self.update_run_stats()
         self.concatenate_logs()
+        config.plugin_manager.hook.canary_testcase_finish(case=self, stage=stage)
         self.save()
 
-    def teardown(self) -> None: ...
+    def teardown(self) -> None:
+        keep = set([os.path.basename(a.src) if a.dst is None else a.dst for a in self.assets])
+        keep.add(os.path.basename(self.file))
+        keep.add("testcase.lock")
+        with fs.working_dir(self.working_directory):
+            files = os.listdir(".")
+            for file in files:
+                if re.search(r"canary[-]?.*-out.txt", file):
+                    continue
+                elif file in keep:
+                    continue
+                else:
+                    fs.force_remove(file)
 
     def dump(self, fname: str | IO[Any]) -> None:
         file: IO[Any]

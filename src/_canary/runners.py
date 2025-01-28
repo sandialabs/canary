@@ -14,6 +14,7 @@ import psutil
 from . import config
 from .error import diff_exit_status
 from .error import skip_exit_status
+from .error import timeout_exit_status
 from .status import Status
 from .test.atc import AbstractTestCase
 from .test.batch import TestBatch
@@ -33,15 +34,14 @@ class AbstractTestRunner:
 
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
         prefix = colorize("@*b{==>} ")
-        verbose = kwargs.get("verbose", True)
-        progress_bar = not verbose
+        verbose = logging.get_level() <= logging.INFO
         stage = kwargs.get("stage", "run")
         qsize = kwargs.get("qsize")
         qrank = kwargs.get("qrank")
-        if not progress_bar:
+        if verbose:
             logging.emit("%s%s\n" % (prefix, self.start_msg(case, stage, qsize=qsize, qrank=qrank)))
         self.run(case, stage)
-        if not progress_bar:
+        if verbose:
             logging.emit("%s%s\n" % (prefix, self.end_msg(case, stage, qsize=qsize, qrank=qrank)))
         return None
 
@@ -81,7 +81,7 @@ class TestCaseRunner(AbstractTestRunner):
             proc: psutil.Popen | None = None
             metrics: dict[str, Any] | None = None
             case.start = timestamp()
-            case.prepare_for_launch(stage=stage)
+            case.setup(stage=stage)
             case.status.set("running")
             timeout = case.timeout
             if timeoutx := config.getoption("timeout_multiplier"):
@@ -112,12 +112,12 @@ class TestCaseRunner(AbstractTestRunner):
             case.returncode = skip_exit_status
             case.status.set("skipped", f"{case}: resource file {e.args[0]} not found")
         except KeyboardInterrupt:
-            case.returncode = 2
+            case.returncode = signal.SIGINT.value
             case.status.set("cancelled", "keyboard interrupt")
             time.sleep(0.01)
             raise
         except TimeoutError:
-            case.returncode = -2
+            case.returncode = timeout_exit_status
             case.status.set("timeout", f"{case} failed to finish in {timeout:.2f}s.")
         except BaseException:
             case.returncode = 1
@@ -144,10 +144,10 @@ class TestCaseRunner(AbstractTestRunner):
                 case.status.set_from_code(case.returncode)
         finally:
             if case.status != "skipped":
+                case.stop = timestamp()
                 if metrics is not None:
                     case.add_measurement(**metrics)
-                case.finish = timestamp()
-            case.finalize(stage=stage)
+            case.finish(stage=stage)
         return
 
     def baseline(self, case: "TestCase") -> None:
@@ -282,6 +282,15 @@ class BatchRunner(AbstractTestRunner):
             variables["CANARY_LEVEL"] = "1"
             variables["CANARY_DISABLE_KB"] = "1"
             variables["CANARY_BATCH_SCHEDULER"] = "null"  # guard against infinite batch recursion
+            if config.debug:
+                variables["CANARY_DEBUG"] = "on"
+
+            if dirs := config.getoption("plugin_dirs"):
+                plugin_dirs = ":".join(dirs)
+                if "CANARY_PLUGINS" in os.environ:
+                    plugin_dirs += ":" + os.environ["CANARY_PLUGINS"]
+                variables["CANARY_PLUGINS"] = plugin_dirs
+
             jobs: list[hpc_connect.Job] = []
             batchopts = config.getoption("batch", {})
             scheme = batchopts.get("scheme")
@@ -334,10 +343,10 @@ class BatchRunner(AbstractTestRunner):
                 if case.status == "skipped":
                     pass
                 elif case.status == "running":
-                    case.status.set("cancelled", "case failed to finish")
+                    case.status.set("cancelled", "case failed to stop")
                     case.save()
-                elif case.start > 0 and case.finish < 0:
-                    case.status.set("cancelled", "case failed to finish")
+                elif case.start > 0 and case.stop < 0:
+                    case.status.set("cancelled", "case failed to stop")
                     case.save()
                 elif case.status == "ready":
                     case.status.set("not_run", "case failed to start")
@@ -377,9 +386,9 @@ class BatchRunner(AbstractTestRunner):
         id = colorize("@b{%s}" % batch.id[:7])
         f.write(f"Finished batch {id}: {st_stat} ")
         f.write(f"(time: {hhmmss(duration, threshold=0)}")
-        if any(_.start > 0 for _ in batch.cases) and any(_.finish > 0 for _ in batch.cases):
+        if any(_.start > 0 for _ in batch.cases) and any(_.stop > 0 for _ in batch.cases):
             ti = min(_.start for _ in batch.cases if _.start > 0)
-            tf = max(_.finish for _ in batch.cases if _.finish > 0)
+            tf = max(_.stop for _ in batch.cases if _.stop > 0)
             f.write(f", running: {hhmmss(tf - ti, threshold=0)}")
             if duration:
                 time_in_queue = max(duration - (tf - ti), 0)
@@ -392,11 +401,6 @@ class BatchRunner(AbstractTestRunner):
 
         fp = io.StringIO()
         fp.write("canary ")
-        if config.debug:
-            fp.write("-d ")
-        if plugin_dirs := config.getoption("plugin_dirs"):
-            for p in plugin_dirs:
-                fp.write(f"-p {p} ")
 
         # The batch will be run in a compute node, so hpc_connect won't set the machine limits
         nodes: int

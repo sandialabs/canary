@@ -6,8 +6,6 @@ if TYPE_CHECKING:
 
 import _canary.config as config
 import _canary.enums as enums
-import _canary.plugin as plugin
-from _canary.command.base import Command
 from _canary.config.argparsing import Parser
 from _canary.enums import centered_parameter_space
 from _canary.enums import list_parameter_space
@@ -17,7 +15,9 @@ from _canary.error import TestFailed
 from _canary.error import TestSkipped
 from _canary.generator import AbstractTestGenerator
 from _canary.main import console_main
-from _canary.reporter import Reporter
+from _canary.plugins.hookspec import hookimpl
+from _canary.plugins.types import CanaryReporterSubcommand
+from _canary.plugins.types import CanarySubcommand
 from _canary.session import Session
 from _canary.test.case import TestCase
 from _canary.test.instance import TestInstance

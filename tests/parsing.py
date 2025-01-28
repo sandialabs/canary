@@ -3,7 +3,7 @@ import os
 
 
 def test_batch_args_backward():
-    import _canary.command.common as common
+    import _canary.plugins.subcommands.common as common
 
     parser = argparse.ArgumentParser()
     common.add_resource_arguments(parser)
@@ -30,7 +30,7 @@ def test_batch_args_backward():
 
 
 def test_batch_options():
-    import _canary.command.common as common
+    import _canary.plugins.subcommands.common as common
 
     parser = argparse.ArgumentParser()
     common.add_resource_arguments(parser)
@@ -57,7 +57,7 @@ def test_batch_options():
 
 
 def test_parsing_backward():
-    import _canary.command.common as common
+    import _canary.plugins.subcommands.common as common
 
     parser = argparse.ArgumentParser()
     common.add_resource_arguments(parser)

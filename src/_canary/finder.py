@@ -6,7 +6,6 @@ from typing import Any
 from typing import TextIO
 
 from . import config
-from . import plugin
 from . import when
 from .generator import AbstractTestGenerator
 from .test.case import TestCase
@@ -20,9 +19,10 @@ from .util.parallel import starmap
 from .util.term import terminal_size
 from .util.time import hhmmss
 
+skip_dirs = ["__nvcache__", "__pycache__", ".git", ".svn", ".canary"]
+
 
 class Finder:
-    skip_dirs = ["__nvcache__", "__pycache__", ".git", ".svn", ".canary"]
     version_info = (1, 0, 3)
 
     def __init__(self) -> None:
@@ -80,7 +80,7 @@ class Finder:
                     generators.add(f)
             elif vc is not None:
                 generators = tree.setdefault(root, set())
-                p_generators, p_errors = self.vcfind(root, type=vc)
+                p_generators, p_errors = vcfind(root, type=vc)
                 generators.update(p_generators)
                 errors += p_errors
             elif paths is not None:
@@ -96,7 +96,7 @@ class Finder:
                         else:
                             generators.add(f)
                     elif os.path.isdir(p):
-                        p_generators, p_errors = self.rfind(root, subdir=path)
+                        p_generators, p_errors = rfind(root, subdir=path)
                         generators.update(p_generators)
                         errors += p_errors
                     else:
@@ -104,7 +104,7 @@ class Finder:
                         logging.error(f"No such file: {path}")
             else:
                 generators = tree.setdefault(root, set())
-                p_generators, p_errors = self.rfind(root)
+                p_generators, p_errors = rfind(root)
                 generators.update(p_generators)
                 errors += p_errors
             dt = time.monotonic() - start
@@ -121,71 +121,71 @@ class Finder:
         files: list[AbstractTestGenerator] = [file for files in tree.values() for file in files]
         return files
 
-    def vcfind(self, root: str, type: str) -> tuple[list[AbstractTestGenerator], int]:
-        """Find files in version control repository (only git supported)"""
-        files: list[str]
-        if type == "git":
-            files = git_ls(root)
-        elif type == "repo":
-            files = repo_ls(root)
-        errors: int = 0
-        generators: list[AbstractTestGenerator] = []
-        with fs.working_dir(root):
-            gen_types = list(plugin.generators())
-            for file in files:
-                for gen_type in gen_types:
-                    if gen_type.matches(file):
-                        try:
-                            generators.append(gen_type(root, file))
-                        except Exception as e:
-                            errors += 1
-                            logging.exception(f"Failed to parse {root}/{file}", e)
-                        break
-        return generators, errors
-
-    def rfind(
-        self, root: str, subdir: str | None = None
-    ) -> tuple[list[AbstractTestGenerator], int]:
-        def skip(directory):
-            if os.path.basename(directory).startswith("."):
-                return True
-            elif os.path.basename(directory) in self.skip_dirs:
-                return True
-            if os.path.exists(os.path.join(directory, ".canary/SESSION.TAG")):
-                return True
-            return False
-
-        start = root if subdir is None else os.path.join(root, subdir)
-        errors: int = 0
-        gen_types = list(plugin.generators())
-        generators: list[AbstractTestGenerator] = []
-        for dirname, dirs, files in os.walk(start):
-            if skip(dirname):
-                del dirs[:]
-                continue
-            try:
-                for f in files:
-                    file = os.path.join(dirname, f)
-                    for gen_type in gen_types:
-                        if gen_type.matches(file):
-                            try:
-                                generator = gen_type(root, os.path.relpath(file, root))
-                            except Exception as e:
-                                errors += 1
-                                logging.exception(f"Failed to parse {file}", e)
-                            else:
-                                generators.append(generator)
-                                if generator.stop_recursion():
-                                    raise StopRecursion
-                            break
-            except StopRecursion:
-                del dirs[:]
-                continue
-        return generators, errors
-
     @property
     def search_paths(self) -> list[str]:
         return [root for root in self.roots]
+
+
+def vcfind(root: str, type: str) -> tuple[list[AbstractTestGenerator], int]:
+    """Find files in version control repository (only git supported)"""
+    files: list[str]
+    if type == "git":
+        files = git_ls(root)
+    elif type == "repo":
+        files = repo_ls(root)
+    errors: int = 0
+    generators: list[AbstractTestGenerator] = []
+    with fs.working_dir(root):
+        gen_types = config.plugin_manager.get_generators()
+        for file in files:
+            for gen_type in gen_types:
+                if gen_type.matches(file):
+                    try:
+                        generators.append(gen_type(root, file))
+                    except Exception as e:
+                        errors += 1
+                        logging.exception(f"Failed to parse {root}/{file}", e)
+                    break
+    return generators, errors
+
+
+def rfind(root: str, subdir: str | None = None) -> tuple[list[AbstractTestGenerator], int]:
+    def skip(directory):
+        if os.path.basename(directory).startswith("."):
+            return True
+        elif os.path.basename(directory) in skip_dirs:
+            return True
+        if os.path.exists(os.path.join(directory, ".canary/SESSION.TAG")):
+            return True
+        return False
+
+    start = root if subdir is None else os.path.join(root, subdir)
+    errors: int = 0
+    gen_types = config.plugin_manager.get_generators()
+    generators: list[AbstractTestGenerator] = []
+    for dirname, dirs, files in os.walk(start):
+        if skip(dirname):
+            del dirs[:]
+            continue
+        try:
+            for f in files:
+                file = os.path.join(dirname, f)
+                for gen_type in gen_types:
+                    if gen_type.matches(file):
+                        try:
+                            generator = gen_type(root, os.path.relpath(file, root))
+                        except Exception as e:
+                            errors += 1
+                            logging.exception(f"Failed to parse {file}", e)
+                        else:
+                            generators.append(generator)
+                            if generator.stop_recursion():
+                                raise StopRecursion
+                        break
+        except StopRecursion:
+            del dirs[:]
+            continue
+    return generators, errors
 
 
 def resolve_dependencies(cases: list[TestCase]) -> None:
@@ -312,7 +312,10 @@ def mask(
     if start is not None:
         start = os.path.normpath(start)
 
-    for case in graph.static_order(cases):
+    order = graph.static_order_ix(cases)
+    for i in order:
+        case = cases[i]
+
         if case.masked():
             continue
 
@@ -382,6 +385,11 @@ def mask(
         if no_filter_criteria and not case.status.satisfies(("pending", "ready")):
             case.mask = f"previous status {case.status.value!r} is not 'ready'"
 
+    check_for_skipped_dependencies(cases)
+
+    for i in order:
+        config.plugin_manager.hook.canary_testcase_modify(case=cases[i])
+
 
 def find_duplicates(cases: list[TestCase]) -> dict[str, list[TestCase]]:
     ids = [case.id for case in cases]
@@ -439,7 +447,7 @@ def pprint(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
 
 
 def is_test_file(file: str) -> bool:
-    for generator in plugin.generators():
+    for generator in config.plugin_manager.get_generators():
         if generator.always_matches(file):
             return True
     return False

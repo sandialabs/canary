@@ -2,9 +2,11 @@ import errno
 import os
 from abc import ABC
 from abc import abstractmethod
+from typing import TYPE_CHECKING
 from typing import Type
 
-from .test.case import TestCase
+if TYPE_CHECKING:
+    from .test.case import TestCase
 
 
 class AbstractTestGenerator(ABC):
@@ -76,7 +78,7 @@ class AbstractTestGenerator(ABC):
         """Return a description of the test"""
 
     @abstractmethod
-    def lock(self, on_options: list[str] | None = None) -> list[TestCase]:
+    def lock(self, on_options: list[str] | None = None) -> list["TestCase"]:
         """Expand parameters and instantiate concrete test cases
 
         Args:

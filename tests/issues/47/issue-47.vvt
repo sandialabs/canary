@@ -1,0 +1,8 @@
+# VVT: name : test2
+# VVT: name : test4
+# VVT: parameterize (autotype, testname="test4") : arg1 = pear plum
+# VVT: include (testname="test2") : vvtest_directives.txt
+# VVT: parameterize (autotype, testname="test4") : arg2 = kiwi pineapple
+import vvtest_util as vvt
+
+print(vvt.PARAM_DICT)

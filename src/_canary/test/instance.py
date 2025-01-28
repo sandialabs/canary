@@ -176,7 +176,7 @@ class TestInstance:
     working_directory: str
     status: Status
     start: float
-    finish: float
+    stop: float
     id: str
     cmd_line: str | None
     returncode: int
@@ -220,7 +220,7 @@ class TestInstance:
             working_directory=case.working_directory,
             status=case.status,
             start=case.start,
-            finish=case.finish,
+            stop=case.stop,
             id=case.id,
             cmd_line=case.cmd_line,
             returncode=case.returncode,
@@ -281,7 +281,7 @@ class TestMultiInstance(TestInstance):
             working_directory=case.working_directory,
             status=case.status,
             start=case.start,
-            finish=case.finish,
+            stop=case.stop,
             id=case.id,
             cmd_line=case.cmd_line,
             returncode=case.returncode,

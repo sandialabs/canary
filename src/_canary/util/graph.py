@@ -19,6 +19,16 @@ def static_order(cases: Sequence["TestCase"]) -> list["TestCase"]:
     return list(ts.static_order())
 
 
+def static_order_ix(cases: Sequence["TestCase"]) -> list[int]:
+    graph: dict["TestCase", list["TestCase"]] = {}
+    map: dict[str, int] = {}
+    for i, case in enumerate(cases):
+        graph[case] = case.dependencies
+        map[case.id] = i
+    ts = TopologicalSorter(graph)
+    return [map[case.id] for case in ts.static_order()]
+
+
 def print_case(
     case: "TestCase",
     level: int = -1,

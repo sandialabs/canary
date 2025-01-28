@@ -15,7 +15,7 @@ from ..util.collections import merge
 from ..util.term import terminal_size
 
 if TYPE_CHECKING:
-    from ..command.base import Command
+    from ..plugins.types import CanarySubcommand
 
 stat_names = pstats.Stats.sort_arg_dict_default
 
@@ -45,9 +45,8 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
         chars = "".join(re.findall(r"\[-(.)\]", usage))
         usage = re.sub(r"\[-.\] ?", "", usage)
         if chars:
-            return "[-%s] %s" % (chars, usage)
-        else:
-            return usage
+            usage = "[-%s] %s" % (chars, usage)
+        return usage.strip()
 
     def _iter_indented_subactions(self, action):
         try:
@@ -63,7 +62,7 @@ class Parser(argparse.ArgumentParser):
         positionals_title = kwargs.pop("positionals_title", None)
         super().__init__(*args, **kwargs)
         self.register("type", None, identity)
-        self.__subcommand_objects: dict[str, "Command"] = {}
+        self.__subcommand_objects: dict[str, "CanarySubcommand"] = {}
         self.__subcommand_parsers: dict[str, "Parser"] = {}
         self.argv: Sequence[str] = sys.argv[1:]
         if positionals_title:
@@ -72,16 +71,49 @@ class Parser(argparse.ArgumentParser):
     def convert_arg_line_to_args(self, arg_line: str) -> list[str]:
         return shlex.split(arg_line.split("#", 1)[0].strip())
 
-    def preparse(self, args: list[str] | None = None, namespace=None):
-        subcommands = list(self.__subcommand_objects.keys())
-        argv: list[str] = sys.argv[1:] if args is None else args
-        args = []
-        for arg in argv:
-            if arg in subcommands:
-                break
-            args.append(arg)
-        args = [_ for _ in args if _ not in ("-h", "--help")]
-        return super().parse_known_args(args, namespace=namespace)[0]
+    def preparse(self, args: list[str]):
+        known_commands = [
+            "run",
+            "report",
+            "log",
+            "location",
+            "info",
+            "help",
+            "find",
+            "fetch",
+            "describe",
+            "config",
+        ]
+        ns = argparse.Namespace(plugin_dirs=[], debug=False, C=None)
+        i = 0
+        n = len(args)
+        while i < n:
+            opt = args[i]
+            i += 1
+            if opt in known_commands:
+                return ns
+            if isinstance(opt, str):
+                if opt == "-p":
+                    try:
+                        ns.plugin_dirs.append(args[i].strip())
+                    except IndexError:
+                        return ns
+                    i += 1
+                elif opt.startswith("-p"):
+                    ns.plugin_dirs.append(opt[2:].strip())
+                elif opt in ("-d", "--debug"):
+                    ns.debug = True
+                elif opt == "-C":
+                    try:
+                        ns.C = args[i]
+                    except IndexError:
+                        return ns
+                    i += 1
+                elif opt.startswith("-C"):
+                    ns.C = opt[2:]
+                else:
+                    continue
+        return ns
 
     def parse_known_args(self, args=None, namespace=None):
         if args is not None:
@@ -94,7 +126,7 @@ class Parser(argparse.ArgumentParser):
         self.argv = arg_strings
         return arg_strings
 
-    def add_command(self, command: "Command", add_help_override: bool = False) -> None:
+    def add_command(self, command: "CanarySubcommand", add_help_override: bool = False) -> None:
         """Add one subcommand to this parser."""
         # lazily initialize any subparsers
         if not hasattr(self, "subparsers"):
@@ -102,22 +134,27 @@ class Parser(argparse.ArgumentParser):
             if self._actions[-1].dest == "command":
                 self._remove_action(self._actions[-1])
             self.subparsers = self.add_subparsers(metavar="", dest="command")
-        cmdname = command.cmd_name()
         kwds: dict[str, Any] = dict(
             description=command.description,
             formatter_class=HelpFormatter,
         )
         if command.add_help or add_help_override:
-            kwds["add_help"] = True
+            kwds["add_help"] = False
             kwds["epilog"] = command.epilog
             kwds["help"] = command.description
-        subparser = self.subparsers.add_parser(cmdname, **kwds)
+        subparser = self.subparsers.add_parser(command.name, **kwds)
         subparser.register("type", None, identity)
-        command.setup_parser(subparser)  # type: ignore
-        self.__subcommand_objects[cmdname] = command
-        self.__subcommand_parsers[cmdname] = subparser
+        if command.setup_parser:
+            command.setup_parser(subparser)  # type: ignore
+        try:
+            add_parser_help(subparser)
+        except argparse.ArgumentError:
+            pass
 
-    def get_command(self, cmdname: str) -> "Command | None":
+        self.__subcommand_objects[command.name] = command
+        self.__subcommand_parsers[command.name] = subparser
+
+    def get_command(self, cmdname: str) -> "CanarySubcommand | None":
         for name, command in self.__subcommand_objects.items():
             if cmdname == name:
                 return command
@@ -154,13 +191,6 @@ class Parser(argparse.ArgumentParser):
         else:
             group = parser.add_argument_group(group_name)
         group.add_argument(*args, **kwargs)
-
-    def add_all_commands(self, add_help_override: bool = False) -> None:
-        import _canary.plugin as plugin
-
-        for command_class in plugin.commands():
-            command = command_class()
-            self.add_command(command, add_help_override=add_help_override)
 
 
 def identity(arg):
@@ -331,3 +361,18 @@ def safe_loads(arg):
         return json.loads(arg)
     except json.decoder.JSONDecodeError:
         return arg
+
+
+def add_parser_help(p: argparse.ArgumentParser) -> None:
+    """
+    So we can use consistent capitalization and periods in the help. You must
+    use the add_help=False argument to ArgumentParser or add_parser to use
+    this. Add this first to be consistent with the default argparse output.
+
+    """
+    p.add_argument(
+        "-h",
+        "--help",
+        action=argparse._HelpAction,
+        help="Show this help message and exit.",
+    )

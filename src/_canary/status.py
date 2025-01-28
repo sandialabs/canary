@@ -1,3 +1,5 @@
+import signal
+
 from .error import diff_exit_status
 from .error import fail_exit_status
 from .error import skip_exit_status
@@ -115,8 +117,8 @@ class Status:
             self.set("failed", "the fail exit status was returned")
         elif arg == timeout_exit_status:
             self.set("timeout")
-        elif arg == -2:
-            self.set("timeout")
+        elif abs(arg) == signal.SIGINT.value:
+            self.set("cancelled", "keyboard interrupt")
         else:
             self.set("failed", "a non-zero exit status was returned")
 

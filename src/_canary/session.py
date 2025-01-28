@@ -26,7 +26,6 @@ import psutil
 
 from . import config
 from . import finder
-from . import plugin
 from .error import FailFast
 from .error import StopExecution
 from .generator import AbstractTestGenerator
@@ -49,6 +48,7 @@ from .third_party.lock import WriteTransaction
 from .util import glyphs
 from .util import keyboard
 from .util import logging
+from .util.filesystem import find_work_tree
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
@@ -58,32 +58,6 @@ from .util.time import hhmmss
 from .util.time import timestamp
 
 global_session_lock = threading.Lock()
-
-
-class ExitCode:
-    OK: int = 0
-    INTERNAL_ERROR: int = 1
-    INTERRUPTED: int = 3
-    TIMEOUT: int = 5
-    NO_TESTS_COLLECTED: int = 7
-
-    @staticmethod
-    def compute(cases: list[TestCase]) -> int:
-        return compute_returncode(cases)
-
-
-class ProgressReporting:
-    progress_bar = 0
-    verbose = 1
-
-    def __init__(self, level: int = 1) -> None:
-        self.level = max(0, min(level, 1))
-
-    def __eq__(self, other) -> bool:
-        if isinstance(other, ProgressReporting):
-            return self.level == other.level
-        else:
-            return self.level == other
 
 
 class Session:
@@ -153,7 +127,7 @@ class Session:
                 raise DirectoryExistsError(f"{path}: directory exists")
             self.work_tree = path
         else:
-            root = self.find_root(path)
+            root = find_work_tree(path)
             if root is None:
                 raise NotASession("not a canary session (or any of the parent directories)")
             self.work_tree = root
@@ -168,35 +142,19 @@ class Session:
             self.load()
         else:
             self.initialize()
-        for hook in plugin.hooks():
-            hook.session_initialize(self)
+            config.plugin_manager.hook.canary_session_start(session=self)
 
         self.exitstatus = -1
         self.returncode = -1
         self.mode = mode
         self.start = -1.0
-        self.finish = -1.0
+        self.stop = -1.0
 
         os.environ.setdefault("CANARY_LEVEL", "0")
         config.variables["CANARY_WORK_TREE"] = self.work_tree
         self.level = int(os.environ["CANARY_LEVEL"])
         if mode == "w":
             self.save(ini=True)
-
-    @staticmethod
-    def find_root(path: str):
-        """Walk up ``path``, looking for a test session root.  The search is stops when the root
-        directory is reached"""
-        path = os.path.abspath(path)
-        while True:
-            if os.path.exists(os.path.join(path, Session.tagfile)):
-                return os.path.dirname(path)
-            elif os.path.exists(os.path.join(path, ".canary", Session.tagfile)):
-                return path
-            path = os.path.dirname(path)
-            if path == os.path.sep:
-                break
-        return None
 
     def get_ready(self) -> list[TestCase]:
         return [case for case in self.cases if case.ready() or case.pending()]
@@ -317,8 +275,6 @@ class Session:
             file = os.path.join(self.config_dir, "config")
             with open(file, "w") as fh:
                 config.snapshot(fh)
-            with self.db.open("plugin", "w") as record:
-                json.dump(plugin.getstate(), record, indent=2)
 
     def add_search_paths(self, search_paths: dict[str, list[str]] | list[str] | str) -> None:
         """Add paths to this session's search paths
@@ -354,8 +310,6 @@ class Session:
         f = finder.Finder()
         for root, paths in self.search_paths.items():
             f.add(root, *paths, tolerant=True)
-        for hook in plugin.hooks():
-            hook.session_discovery(f)
         f.prepare()
         self.generators = f.discover(pedantic=pedantic)
         self.dump_testfiles()
@@ -394,7 +348,7 @@ class Session:
         start = time.monotonic()
         logging.info(colorize("@*{Masking} test cases based on filtering criteria..."), end="")
         finder.mask(
-            self.cases,
+            cases=self.cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,
@@ -405,10 +359,7 @@ class Session:
             colorize("@*{Masking} test cases based on filtering criteria... done (%.2fs.)" % dt),
             rewind=True,
         )
-        finder.check_for_skipped_dependencies(self.cases)
-        for p in plugin.hooks():
-            for case in self.cases:
-                p.test_discovery(case)
+
         if env_mods:
             for case in self.cases:
                 if not case.masked():
@@ -428,7 +379,7 @@ class Session:
             self.report_excluded(masked)
 
         if not self.get_ready():
-            raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
+            raise StopExecution("No tests to run", 7)
 
         self.dump_testcases()
 
@@ -456,7 +407,7 @@ class Session:
         """
         cases = self.active_cases()
         finder.mask(
-            cases,
+            cases=cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,
@@ -501,20 +452,13 @@ class Session:
                 logging.warning(f"{case}: unknown test case state: {case.status}")
         return
 
-    def run(
-        self,
-        *,
-        fail_fast: bool = False,
-        reporting: ProgressReporting = ProgressReporting(),
-        stage: str | None = None,
-    ) -> list[TestCase]:
+    def run(self, *, fail_fast: bool = False, stage: str | None = None) -> list[TestCase]:
         """Run each test case in ``cases``.
 
         Args:
           cases: test cases to run
           fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
             continuing running until all tests have been run.
-          reporting: level of verbosity
 
         Returns:
           The session returncode (0 for success)
@@ -522,10 +466,10 @@ class Session:
         """
         cases = self.get_ready()
         if not cases:
-            raise StopExecution("No tests to run", ExitCode.NO_TESTS_COLLECTED)
+            raise StopExecution("No tests to run", 7)
         queue = self.setup_queue(cases)
         config.session.stage = stage = stage or "run"
-        config.variables[stage] = stage
+        config.variables["CANARY_STAGE"] = stage
         with self.rc_environ():
             with working_dir(self.work_tree):
                 cleanup_queue = True
@@ -535,10 +479,8 @@ class Session:
                     p = " " if stage == "run" else f" stage {stage!r} for "
                     logging.info(colorize("@*{Running}%s%d %s" % (p, queue_size, what)))
                     self.start = timestamp()
-                    self.finish = -1.0
-                    self.process_queue(
-                        queue=queue, fail_fast=fail_fast, reporting=reporting, stage=stage
-                    )
+                    self.stop = -1.0
+                    self.process_queue(queue=queue, fail_fast=fail_fast, stage=stage)
                 except ProcessPoolExecutorFailedToStart:
                     if self.level > 0:
                         # This can happen when the ProcessPoolExecutor fails to obtain a lock.
@@ -554,6 +496,9 @@ class Session:
                     self.returncode = signal.SIGINT.value
                     cleanup_queue = False
                     raise
+                except StopExecution as e:
+                    kill_child_processes(signal.SIGTERM)
+                    self.returncode = e.exit_code
                 except FailFast as e:
                     kill_child_processes(signal.SIGTERM)
                     name, code = e.args
@@ -566,19 +511,20 @@ class Session:
                     self.returncode = compute_returncode(queue.cases())
                     raise
                 else:
-                    if reporting == ProgressReporting.progress_bar:
-                        queue.display_progress(self.start, last=True)
+                    if logging.get_level() > logging.INFO:
+                        queue.update_progress_bar(self.start, last=True)
                     self.returncode = compute_returncode(queue.cases())
                 finally:
                     self.exitstatus = self.returncode
                     queue.close(cleanup=cleanup_queue)
-                    self.finish = timestamp()
-                    dt = self.finish - self.start
+                    self.stop = timestamp()
+                    config.plugin_manager.hook.canary_session_finish(
+                        session=self, exitstatus=self.exitstatus
+                    )
+                    dt = self.stop - self.start
                     logging.info(
                         colorize("@*{Finished} running %d %s (%.2fs.)\n" % (queue_size, what, dt))
                     )
-                for hook in plugin.hooks():
-                    hook.session_finish(self)
         self.save()
         return cases
 
@@ -595,21 +541,13 @@ class Session:
         os.environ.clear()
         os.environ.update(save_env)
 
-    def process_queue(
-        self,
-        *,
-        queue: ResourceQueue,
-        fail_fast: bool,
-        reporting: ProgressReporting = ProgressReporting(),
-        stage: str,
-    ) -> None:
+    def process_queue(self, *, queue: ResourceQueue, fail_fast: bool, stage: str) -> None:
         """Process the test queue, asynchronously
 
         Args:
           queue: the test queue to process
           fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
             continuing running until all tests have been run.
-          reporting: level of verbosity
           stage: the execution stage
 
         """
@@ -623,12 +561,13 @@ class Session:
             context = multiprocessing.get_context("spawn")
             with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
                 signal.signal(signal.SIGTERM, handle_signal)
+                signal.signal(signal.SIGINT, handle_signal)
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
                         logging.emit(queue.status(start=self.start))
-                    if reporting == ProgressReporting.progress_bar:
-                        queue.display_progress(self.start)
+                    if logging.get_level() > logging.INFO:
+                        queue.update_progress_bar(self.start)
                     if timeout >= 0.0 and duration() > timeout:
                         raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
                     try:
@@ -639,14 +578,7 @@ class Session:
                         continue
                     except EmptyQueue:
                         break
-                    future = ppe.submit(
-                        runner,
-                        obj,
-                        qsize=qsize,
-                        qrank=qrank,
-                        verbose=reporting == ProgressReporting.verbose,
-                        stage=stage,
-                    )
+                    future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank, stage=stage)
                     qrank += 1
                     callback = partial(self.done_callback, iid, queue, fail_fast)
                     future.add_done_callback(callback)
@@ -734,8 +666,8 @@ class Session:
                 elif case.status == "skipped":
                     pass
                 elif case.status == "ready":
-                    case.status.set("skipped", "test skipped for unknown reasons")
-                elif case.start > 0 and case.finish < 0:
+                    case.status.set("not_run", "test not run for unknown reasons")
+                elif case.start > 0 and case.stop < 0:
                     case.status.set("cancelled", "test case cancelled")
             if fail_fast and any(_.status != "success" for _ in obj):
                 code = compute_returncode(obj.cases)
@@ -810,9 +742,9 @@ class Session:
         string = io.StringIO()
         if duration == -1:
             has_a = any(_.start for _ in cases if _.start > 0)
-            has_b = any(_.finish for _ in cases if _.finish > 0)
+            has_b = any(_.stop for _ in cases if _.stop > 0)
             if has_a and has_b:
-                finish = max(_.finish for _ in cases if _.finish > 0)
+                finish = max(_.stop for _ in cases if _.stop > 0)
                 start = min(_.start for _ in cases if _.start > 0)
                 duration = finish - start
         totals: dict[str, list[TestCase]] = {}
@@ -1023,11 +955,17 @@ def kill_child_processes(sig: int, kill_delay: float = 0.1) -> None:
             )
             for child in children:
                 if child.is_running():
-                    child.send_signal(sig)
+                    try:
+                        child.send_signal(sig)
+                    except psutil.NoSuchProcess:
+                        pass
             time.sleep(kill_delay)
             for child in children:
                 if child.is_running():
-                    child.send_signal(signal.SIGKILL)
+                    try:
+                        child.send_signal(signal.SIGKILL)
+                    except psutil.NoSuchProcess:
+                        pass
 
 
 def handle_signal(sig, frame):
