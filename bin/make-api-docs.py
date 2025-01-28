@@ -18,7 +18,6 @@ def dump(text: str, file: str) -> None:
 
 
 def make_api_docs(source_dir: str, dest_dir: str, skip_dirs: list[str] | None = None) -> None:
-
     skip_dirs = skip_dirs or []
     skip_dirs.append("__pycache__")
 
@@ -36,7 +35,9 @@ def make_api_docs(source_dir: str, dest_dir: str, skip_dirs: list[str] | None = 
         namespace = ".".join(p)
         data = package_data.setdefault(namespace, {})
         data["modules"] = [module_name(f) for f in files if module_name(f)]
-        data["packages"] = [d for d in dirs if d not in ("__pycache__", "third_party", "validators")]
+        data["packages"] = [
+            d for d in dirs if d not in ("__pycache__", "third_party", "validators")
+        ]
 
     for namespace, data in package_data.items():
         dest = os.path.join(dest_dir, namespace.replace(".", os.path.sep).lstrip(os.path.sep))
@@ -61,8 +62,7 @@ def make_api_docs(source_dir: str, dest_dir: str, skip_dirs: list[str] | None = 
    :members:
    :undoc-members:
    :show-inheritance:
-"""
-            )
+""")
             dump(fp.getvalue(), file)
 
 
@@ -73,7 +73,7 @@ if __name__ == "__main__":
             make_api_docs(
                 os.path.join(start, "src/_canary"),
                 os.path.join(start, "docs/source/api-docs/canary"),
-                skip_dirs=["third_party", "cdash/validators"]
+                skip_dirs=["third_party", "cdash/validators"],
             )
             make_api_docs(
                 os.path.join(start, "../hpc-connect/src/hpc_connect"),
