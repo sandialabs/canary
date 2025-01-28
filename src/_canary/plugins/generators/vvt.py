@@ -751,7 +751,7 @@ class InvalidTimeFormat(Exception):
 
 
 @hookimpl
-def canary_test_generator() -> Type[VVTTestGenerator]:
+def canary_testcase_generator() -> Type[VVTTestGenerator]:
     return VVTTestGenerator
 
 

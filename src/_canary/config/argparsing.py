@@ -45,9 +45,8 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
         chars = "".join(re.findall(r"\[-(.)\]", usage))
         usage = re.sub(r"\[-.\] ?", "", usage)
         if chars:
-            return "[-%s] %s" % (chars, usage)
-        else:
-            return usage
+            usage = "[-%s] %s" % (chars, usage)
+        return usage.strip()
 
     def _iter_indented_subactions(self, action):
         try:

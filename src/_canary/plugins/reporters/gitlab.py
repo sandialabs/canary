@@ -23,7 +23,7 @@ def canary_reporter_subcommand() -> CanaryReporterSubcommand:
 
 
 def setup_parser(parser: Parser):
-    sp = parser.add_subparsers(dest="subcommand", metavar="")
+    sp = parser.add_subparsers(dest="subcommand", metavar="subcommands")
     p = sp.add_parser("create", help="Create GitLab merge request reports")
     p.add_argument("--cdash-url", help="Add a link to a CDash report for this MR")
     p.add_argument(

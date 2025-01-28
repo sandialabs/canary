@@ -934,5 +934,5 @@ class PYTTestGenerator(AbstractTestGenerator):
 
 
 @hookimpl
-def canary_test_generator() -> Type[PYTTestGenerator]:
+def canary_testcase_generator() -> Type[PYTTestGenerator]:
     return PYTTestGenerator

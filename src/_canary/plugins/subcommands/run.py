@@ -38,13 +38,7 @@ def setup_parser(parser: "Parser") -> None:
         metavar="N",
         help="Show N slowest test durations (N=0 for all)",
     )
-    group.add_argument(
-        "-r",
-        choices=("b", "v"),
-        default="v",
-        metavar="char",
-        help=argparse.SUPPRESS,
-    )
+    group.add_argument("-r", help="Deprecated option.  Use -q or -v to adjust verbosity")
     parser.add_argument("-u", "--until", choices=("discover", "lock"), help=argparse.SUPPRESS)
     parser.add_argument(
         "--fail-fast",

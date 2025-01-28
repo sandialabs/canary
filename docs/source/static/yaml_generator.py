@@ -14,14 +14,14 @@ from _canary.util.filesystem import set_executable
 from _canary.util.filesystem import working_dir
 
 
-class YAMLTestFile(canary.AbstractTestGenerator):
+class YAMLTestGenerator(canary.AbstractTestGenerator):
     def __init__(self, root: str, path: Optional[str] = None) -> None:
         super().__init__(root, path=path)
         self.load(open(self.file))
 
     @classmethod
     def matches(cls, path: str) -> bool:
-        """Is ``path`` a YAMLTestFile?"""
+        """Is ``path`` a YAMLTestGenerator?"""
         return os.path.basename(path).startswith("test_") and path.endswith((".yml", ".yaml"))
 
     def load(self, file: IO[Any]) -> None:
@@ -124,3 +124,8 @@ class YAMLTestCase(canary.TestCase):
                 fh.write("#!/usr/bin/env bash\n")
                 fh.write("\n".join(self.script))
             set_executable(self.exe)
+
+
+@canary.hookimpl
+def canary_testcase_generator():
+    return YAMLTestGenerator

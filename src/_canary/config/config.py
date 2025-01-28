@@ -61,7 +61,7 @@ class Variables(dict):
         return super().pop(key, default)
 
 
-class Session:
+class SessionConfig:
     __slots__ = ("work_tree", "stage", "level")
 
     def __init__(
@@ -187,7 +187,7 @@ class Config:
     _config_dir: str | None = None
     scheduler: hpc_connect.HPCScheduler | None = None
     system: System = dataclasses.field(default_factory=System)
-    session: Session = dataclasses.field(default_factory=Session)
+    session: SessionConfig = dataclasses.field(default_factory=SessionConfig)
     test: Test = dataclasses.field(default_factory=Test)
     variables: Variables = dataclasses.field(default_factory=Variables)
     batch: Batch = dataclasses.field(default_factory=Batch)
@@ -249,7 +249,7 @@ class Config:
         self.system = System(snapshot["system"])
         self.variables.clear()
         self.variables.update(snapshot["variables"])
-        self.session = Session(**snapshot["session"])
+        self.session = SessionConfig(**snapshot["session"])
         self.test = Test(**snapshot["test"])
         compiler = Compiler(**snapshot["build"].pop("compiler"))
         self.build = Build(compiler=compiler, **snapshot["build"])

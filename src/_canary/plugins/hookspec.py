@@ -19,7 +19,7 @@ hookimpl = pluggy.HookimplMarker(project_name)
 
 
 @_hookspec
-def canary_test_generator() -> Type["AbstractTestGenerator"]:
+def canary_testcase_generator() -> Type["AbstractTestGenerator"]:
     """Returns an implementation of AbstractTestGenerator"""
     raise NotImplementedError
 
@@ -67,6 +67,32 @@ def canary_subcommand() -> CanarySubcommand:
 
 @_hookspec
 def canary_reporter_subcommand() -> CanaryReporterSubcommand:
+    """Register Canary report subcommand
+
+    Example:
+
+    .. code-block:: python
+
+       import argparse
+
+       from canary import plugins
+
+       def setup_parser(parser: canary.Parser) -> None:
+           parser.add_argument("--flag")
+
+       def my_report_subcommand(args: argparse.Namespace) -> int:
+           ...
+
+       @plugins.hookimpl
+       def canary_reporter_subcommand():
+           return plugins.CanarySubcommand(
+               name="subcommand-name",
+               description="Some description",
+               setup_parser=setup_parser,
+               execute=my_report_subcommand,
+            )
+
+    """
     raise NotImplementedError
 
 

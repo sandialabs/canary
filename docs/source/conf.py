@@ -32,10 +32,10 @@ copyright = "2024, National Technology & Engineering Solutions of Sandia, LLC (N
 author = "National Technology & Engineering Solutions of Sandia, LLC (NTESS)"
 
 # The short X.Y version
-version = re.sub(r"\+.*$", r"", canary.__version__)
+version = re.sub(r"\+.*$", r"", canary.version)
 
 # The full version, including alpha/beta/rc tags
-release = canary.__version__
+release = canary.version
 
 
 # -- General configuration ---------------------------------------------------

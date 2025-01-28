@@ -24,7 +24,7 @@ def canary_reporter_subcommand() -> CanaryReporterSubcommand:
 
 
 def setup_parser(parser: Parser) -> None:
-    sp = parser.add_subparsers(dest="subcommand", metavar="")
+    sp = parser.add_subparsers(dest="subcommand", metavar="subcommands")
     p = sp.add_parser("create", help="Create JUnit report")
     p.add_argument("-o", dest="output", help="Output file name", default="junit.xml")
 

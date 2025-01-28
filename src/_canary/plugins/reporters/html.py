@@ -24,7 +24,7 @@ def canary_reporter_subcommand() -> CanaryReporterSubcommand:
 
 
 def setup_parser(parser: Parser) -> None:
-    sp = parser.add_subparsers(dest="subcommand", metavar="")
+    sp = parser.add_subparsers(dest="subcommand", metavar="subcommands")
     p = sp.add_parser("create", help="Create multi-page HTML report")
     p.add_argument("--dest", default="$canary_work_tree", help="Write reports to this directory")
 

@@ -671,5 +671,5 @@ def parse_environment_modification(environment_modification: list[str]) -> list[
 
 
 @hookimpl
-def canary_test_generator() -> Type[CTestTestGenerator]:
+def canary_testcase_generator() -> Type[CTestTestGenerator]:
     return CTestTestGenerator

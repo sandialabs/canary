@@ -25,7 +25,7 @@ def canary_reporter_subcommand() -> CanaryReporterSubcommand:
 
 
 def setup_parser(parser: Parser) -> None:
-    sp = parser.add_subparsers(dest="subcommand", metavar="")
+    sp = parser.add_subparsers(dest="subcommand", metavar="subcommands")
     p = sp.add_parser("create", help="Create multi-file Markdown report")
     p.add_argument("--dest", help="Output directory", default="$canary_work_tree")
 

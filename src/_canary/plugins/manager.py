@@ -45,7 +45,7 @@ class CanaryPluginManager(pluggy.PluginManager):
         return hook()
 
     def get_generators(self) -> list[Type["AbstractTestGenerator"]]:
-        hook = self.hook.canary_test_generator
+        hook = self.hook.canary_testcase_generator
         return hook()
 
     def load_from_paths(self, paths: list[str]) -> None:

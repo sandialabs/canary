@@ -21,7 +21,7 @@ epilog = "Note: this command must be run from inside of a test session directory
 
 
 def setup_parser(parser: Parser) -> None:
-    parent = parser.add_subparsers(dest="type", metavar="")
+    parent = parser.add_subparsers(dest="type", metavar="subcommands")
     for reporter in config.plugin_manager.hook.canary_reporter_subcommand():
         p = parent.add_parser(reporter.name, help=reporter.description)
         reporter.setup_parser(p)

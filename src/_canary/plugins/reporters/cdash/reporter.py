@@ -10,7 +10,7 @@ from .xml_generator import CDashXMLReporter
 
 
 def setup_parser(parser):
-    sp = parser.add_subparsers(dest="child_command", metavar="")
+    sp = parser.add_subparsers(dest="child_command", metavar="subcommands")
     p = sp.add_parser("create", help="Create CDash XML files")
     p.add_argument(
         "--build",
