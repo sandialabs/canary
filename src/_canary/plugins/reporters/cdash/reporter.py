@@ -26,8 +26,7 @@ def setup_parser(parser):
     p.add_argument(
         "-f",
         metavar="file",
-        help="Read site, build, and buildstamp from this XML "
-        "file (eg, Build.xml or Configure.xml)",
+        help="Read site, build, and buildstamp from this XML file (eg, Build.xml or Configure.xml)",
     )
     p.add_argument(
         "-d",

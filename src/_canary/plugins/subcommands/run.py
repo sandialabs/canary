@@ -50,8 +50,7 @@ def setup_parser(parser: "Parser") -> None:
         "-P",
         choices=("permissive", "pedantic"),
         default="pedantic",
-        help="If pedantic (default), stop if file parsing errors occur, "
-        "else ignore parsing errors",
+        help="If pedantic (default), stop if file parsing errors occur, else ignore parsing errors",
     )
     parser.add_argument(
         "--copy-all-resources",

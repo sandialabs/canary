@@ -35,7 +35,8 @@ def test_include_file_platform_no(tmpdir):
         with open("file1.txt", "w") as fh:
             fh.write("# VVT: parameterize (int, int) : np,n = 1,2 3,4 5,6 7,8\n")
         commands = list(vvtest.p_VVT(s))
-        assert len(commands) == 0
+        assert len(commands) == 1
+        assert commands[0].when == {"platforms": "incredible_os"}
 
 
 def test_include_file_platform_yes(tmpdir):
@@ -62,9 +63,10 @@ def test_include_file_options_no(tmpdir):
 """
     with canary.filesystem.working_dir(tmpdir.strpath, create=True):
         with open("file1.txt", "w") as fh:
-            fh.write("# VVT: parameterize (int, int) : np,n = 1,2 3,4 5,6 7,8\n")
+            fh.write("# VVT: parameterize (options=foo, int, int) : np,n = 1,2 3,4 5,6 7,8\n")
         commands = list(vvtest.p_VVT(s))
-        assert len(commands) == 0
+        assert len(commands) == 1
+        assert commands[0].when == {"options": "foo and baz"}
 
 
 def test_include_file_options_yes(tmpdir):
@@ -75,10 +77,10 @@ def test_include_file_options_yes(tmpdir):
     with canary.filesystem.working_dir(tmpdir.strpath, create=True), canary.config.override():
         with open("file1.txt", "w") as fh:
             fh.write("# VVT: parameterize (int,int) : np,n = 1,2 3,4 5,6 7,8\n")
-        canary.config.options.on_options = ["baz"]
         commands = list(vvtest.p_VVT(s))
-        canary.config.options.on_options = []
         assert commands[0].command == "parameterize"
+        assert commands[0].when == {"options": "baz"}
+        canary.config.options.on_options = ["baz"]
         assert "%".join(commands[0].argument.split()) == "np,n%=%1,2%3,4%5,6%7,8"
         names, values, kwds, _ = vvtest.p_PARAMETERIZE(commands[0])
         assert names == ["np", "n"]

@@ -8,6 +8,7 @@ requires-python = ">=3.10"
 dependencies = [
   "PyYAML",
   "psutil",
+  "pluggy",
   "hpc-connect @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/hpc-connect"
 ]
 

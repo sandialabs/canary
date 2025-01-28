@@ -18,7 +18,6 @@ from typing import Generator
 from typing import Type
 
 from ... import config
-from ... import when as m_when
 from ...enums import list_parameter_space
 from ...test.case import TestCase
 from ...test.case import TestMultiCase
@@ -444,30 +443,40 @@ def p_VVT(filename: Path | str) -> Generator[SimpleNamespace, None, None]:
             if not os.path.exists(inc_file) and not os.path.isabs(inc_file):
                 inc_file = os.path.join(os.path.dirname(filename), inc_file)
             if not os.path.exists(inc_file):
-                raise VVTParseError(f"include file does not exist: {ns.argument()!r}", ns)
-            when = m_when.When.factory(ns.when)
-            result = when.evaluate(on_options=getattr(config.options, "on_options", []))
-            if not result.value:
-                logging.debug(
-                    f"{filename}: Skipping inclusion of {inc_file} due to:\n{result.reason}"
-                )
-                return
-            yield from p_VVT(inc_file)
+                raise VVTParseError(f"include file does not exist: {inc_file!r}", ns)
+            for i_ns in p_VVT(inc_file):
+                i_ns.when = combine_when_exprs(i_ns.when, ns.when)
+                yield i_ns
         elif ns:
             yield ns
 
 
-def make_when_expr(options: dict) -> str:
-    when_expr = io.StringIO()
+def combine_when_exprs(when1: dict[str, str], when2: dict[str, str]) -> dict[str, str]:
+    if not when1 and not when2:
+        return {}
+    elif when1 and not when2:
+        return when1
+    elif when2 and not when1:
+        return when2
+    else:
+        when_expr: dict[str, str] = {}
+        keys = set(when1) | set(when2)
+        for key in keys:
+            exprs = [when1.get(key), when2.get(key)]
+            when_expr[key] = " and ".join([_ for _ in exprs if _])
+        return when_expr
+
+
+def make_when_expr(options: dict) -> dict[str, str]:
+    when_expr: dict[str, str] = {}
     wildcards = "*?=><!"
     for key, value in options.items():
         if key in ("testname", "parameters", "options", "platforms"):
-            when_expr.write(f"{key}=")
             if len(value.split()) > 1 or any([_ in value for _ in wildcards]):
-                when_expr.write(f"{value!r} ")
+                when_expr[key] = repr(value)
             else:
-                when_expr.write(f"{value} ")
-    return when_expr.getvalue().strip()
+                when_expr[key] = value
+    return when_expr
 
 
 def find_vvt_lines(filename: Path | str) -> tuple[list[str], int]:

@@ -56,7 +56,7 @@ def make_api_docs(source_dir: str, dest_dir: str, skip_dirs: list[str] | None = 
             fp = io.StringIO()
             fp.write(f"""\
 {module}
-{'=' * len(module)}
+{"=" * len(module)}
 
 .. automodule:: {name}
    :members:
