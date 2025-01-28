@@ -1,6 +1,6 @@
 import sys
 
-import _canary.plugins.vvtest.generator as vvtest
+import _canary.plugins.generators.vvt as vvtest
 import canary
 from _canary.enums import list_parameter_space
 

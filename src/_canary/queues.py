@@ -164,7 +164,7 @@ class ResourceQueue(abc.ABC):
             string.write(f"\n{header}\n{pad} {text} {pad}\n{footer}\n\n")
         return string.getvalue()
 
-    def display_progress(self, start: float, last: bool = False) -> None:
+    def update_progress_bar(self, start: float, last: bool = False) -> None:
         with self.lock:
             progress(self.cases(), timestamp() - start)
             if last:

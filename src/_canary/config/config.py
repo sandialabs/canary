@@ -4,18 +4,19 @@ import json
 import os
 from string import Template
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
 
 import hpc_connect
 import yaml
 
+from ..plugins.manager import CanaryPluginManager
 from ..third_party import color
 from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
 from ..util import logging
 from ..util.collections import merge
+from ..util.filesystem import find_work_tree
 from ..util.rprobe import cpu_count
 from . import _machine
 from .rpool import ResourcePool
@@ -25,9 +26,6 @@ from .schemas import config_schema
 from .schemas import resource_schema
 from .schemas import test_schema
 from .schemas import variables_schema
-
-if TYPE_CHECKING:
-    pass
 
 section_schemas: dict[str, Schema] = {
     "build": build_schema,
@@ -183,6 +181,7 @@ class Config:
     """Access to configuration values"""
 
     invocation_dir: str = os.getcwd()
+    working_dir: str = os.getcwd()
     debug: bool = False
     log_level: str = "INFO"
     _config_dir: str | None = None
@@ -195,6 +194,7 @@ class Config:
     build: Build = dataclasses.field(default_factory=Build)
     options: argparse.Namespace = dataclasses.field(default_factory=argparse.Namespace)
     resource_pool: ResourcePool = dataclasses.field(default_factory=ResourcePool)
+    _plugin_manager: CanaryPluginManager | None = dataclasses.field(default=None)
 
     @classmethod
     def factory(cls) -> "Config":
@@ -234,6 +234,16 @@ class Config:
             self._config_dir = get_config_dir()
         return self._config_dir
 
+    @property
+    def plugin_manager(self) -> CanaryPluginManager:
+        if self._plugin_manager is None:
+            self._plugin_manager = CanaryPluginManager.factory()
+        return self._plugin_manager
+
+    @plugin_manager.setter
+    def plugin_manager(self, arg: CanaryPluginManager) -> None:
+        self._plugin_manager = arg
+
     def restore_from_snapshot(self, fh: TextIO) -> None:
         snapshot = json.load(fh)
         self.system = System(snapshot["system"])
@@ -246,9 +256,10 @@ class Config:
         self.resource_pool = ResourcePool()
         self.resource_pool.update(snapshot["resource_pool"])
         self.setup_hpc_connect(snapshot["scheduler"])
-        for key, val in snapshot["config"].items():
-            setattr(self, key, val)
+        self.update(snapshot["config"])
         self.batch = Batch(**snapshot["batch"])
+        for f in snapshot["plugin_manager"]["extra_files"]:
+            self.plugin_manager.load_from_file(f)
 
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The
@@ -460,7 +471,9 @@ class Config:
     def getstate(self) -> dict[str, Any]:
         d: dict[str, Any] = {}
         for key, value in vars(self).items():
-            if dataclasses.is_dataclass(value):
+            if key == "_plugin_manager":
+                d["plugin_manager"] = {"extra_files": list(value.files)}
+            elif dataclasses.is_dataclass(value):
                 d[key] = dataclasses.asdict(value)  # type: ignore
                 if key == "system":
                     d[key]["os"] = vars(d[key]["os"])
@@ -487,20 +500,6 @@ def boolean(arg: Any) -> bool:
     if isinstance(arg, str):
         return arg.lower() in ("on", "1", "true", "yes")
     return bool(arg)
-
-
-def find_work_tree(start: str | None = None) -> str | None:
-    path = os.path.abspath(start or os.getcwd())
-    tagfile = "SESSION.TAG"
-    while True:
-        if os.path.exists(os.path.join(path, tagfile)):
-            return os.path.dirname(path)
-        elif os.path.exists(os.path.join(path, ".canary", tagfile)):
-            return path
-        path = os.path.dirname(path)
-        if path == os.path.sep:
-            break
-    return None
 
 
 def expandvars(arg: Any, mapping: dict) -> Any:

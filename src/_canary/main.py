@@ -8,14 +8,13 @@ from typing import TYPE_CHECKING
 from typing import Sequence
 
 from . import config
-from . import plugin
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
 from .third_party.monkeypatch import monkeypatch
 from .util import logging
 
 if TYPE_CHECKING:
-    from .command.base import Command
+    from .plugins.types import CanarySubcommand
 
 
 reraise: bool = False
@@ -35,16 +34,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     with CanaryMain(argv) as m:
         parser = make_argument_parser()
-        parser.add_all_commands()
+        for command in config.plugin_manager.get_subcommands():
+            parser.add_command(command)
         with monkeypatch.context() as mp:
             mp.setattr(parser, "add_argument", parser.add_plugin_argument)
-            for hook in plugin.hooks():
-                hook.main_setup(parser)
+            config.plugin_manager.hook.canary_addoption(parser=parser)
         args = parser.parse_args(m.argv)
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
             logging.emit(shlex.join(a) + "\n")
         config.set_main_options(args)
+        config.plugin_manager.hook.canary_configure(config=config)
         command = parser.get_command(args.command)
         if command is None:
             parser.print_help()
@@ -60,34 +60,34 @@ class CanaryMain:
 
     def __init__(self, argv: Sequence[str] | None = None) -> None:
         self.argv: Sequence[str] = argv or sys.argv[1:]
-        self.invocation_dir = self.working_dir = os.getcwd()
+        config.invocation_dir = config.working_dir = os.getcwd()
 
     def __enter__(self) -> "CanaryMain":
+        """Preparsing is necessary to parse out options that need to take effect before the main
+        program starts up"""
         global reraise
         if "GITLAB_CI" in os.environ:
             reraise = True
         parser = make_argument_parser()
-        parser.add_all_commands()
-        # preparse to get the list of plugins to load and/or not load
         args = parser.preparse(self.argv)
         if args.debug:
             reraise = True
         if args.C:
-            self.working_dir = args.C
-        os.chdir(self.working_dir)
-        load_plugins(args.plugin_dirs or [])
+            config.working_dir = args.C
+        os.chdir(config.working_dir)
+        config.plugin_manager.load_from_paths(args.plugin_dirs or [])
         return self
 
     def __exit__(self, ex_type, ex_value, ex_traceback):
-        os.chdir(self.invocation_dir)
+        os.chdir(config.invocation_dir)
 
 
 class CanaryCommand:
     def __init__(self, command_name: str, debug: bool = False) -> None:
-        plugin.load_from_entry_points()
-        for command_class in plugin.commands():
-            if command_class.cmd_name() == command_name:
-                self.command = command_class()
+        # plugin.load_from_entry_points()
+        for command in config.plugin_manager.get_subcommands():
+            if command.name == command_name:
+                self.command = command
                 break
         else:
             raise ValueError(f"Unknown command {command_name!r}")
@@ -100,12 +100,13 @@ class CanaryCommand:
             if self.debug:
                 save_debug = config.debug
                 config.debug = True
+            argv = [self.command.name] + list(args_in)
             parser = make_argument_parser()
+            args = parser.preparse(argv)
+            config.plugin_manager.load_from_paths(args.plugin_dirs or [])
             parser.add_command(self.command)
-            argv = [self.command.cmd_name()] + list(args_in)
             args = parser.parse_args(argv)
             config.set_main_options(args)
-            load_plugins(args.plugin_dirs or [])
             rc = self.command.execute(args)
             self.returncode = rc
         except Exception:
@@ -118,7 +119,7 @@ class CanaryCommand:
         return self.returncode
 
 
-def invoke_command(command: "Command", args: argparse.Namespace) -> int:
+def invoke_command(command: "CanarySubcommand", args: argparse.Namespace) -> int:
     return command.execute(args)
 
 
@@ -165,21 +166,6 @@ def invoke_profiled_command(command, args):
     with Profiler(nlines=nlines):
         rc = invoke_command(command, args)
     return rc
-
-
-def load_plugins(paths: list[str]) -> None:
-    disable, dirs = [], []
-    for path in paths:
-        if path.startswith("no:"):
-            disable.append(path[3:])
-        elif not os.path.exists(path):
-            logging.warning(f"{path}: plugin directory not found")
-        else:
-            dirs.append(path)
-    plugin.load_from_entry_points(disable=disable)
-    for dir in dirs:
-        path = os.path.abspath(dir)
-        plugin.load_from_path(path)
 
 
 def console_main() -> int:

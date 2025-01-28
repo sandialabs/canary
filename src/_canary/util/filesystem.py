@@ -46,6 +46,7 @@ __all__ = [
     "force_symlink",
     "accessible",
     "samepath",
+    "find_work_tree",
 ]
 
 
@@ -442,3 +443,17 @@ def grep(regex: str | re.Pattern, file: str) -> bool:
     except UnicodeDecodeError:
         pass
     return False
+
+
+def find_work_tree(start: str | None = None) -> str | None:
+    path = os.path.abspath(start or os.getcwd())
+    tagfile = "SESSION.TAG"
+    while True:
+        if os.path.exists(os.path.join(path, tagfile)):
+            return os.path.dirname(path)
+        elif os.path.exists(os.path.join(path, ".canary", tagfile)):
+            return path
+        path = os.path.dirname(path)
+        if path == os.path.sep:
+            break
+    return None

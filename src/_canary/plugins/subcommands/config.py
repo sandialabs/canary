@@ -1,0 +1,112 @@
+import argparse
+import inspect
+import io
+import os
+
+from ... import config
+from ...config.argparsing import Parser
+from ...util.filesystem import find_work_tree
+from ..hookspec import hookimpl
+from ..types import CanarySubcommand
+from .common import load_session
+
+
+@hookimpl
+def canary_subcommand() -> CanarySubcommand:
+    return CanarySubcommand(
+        name="config",
+        description="Show configuration variable values",
+        setup_parser=setup_parser,
+        execute=config_ex,
+    )
+
+
+def setup_parser(parser: "Parser") -> None:
+    sp = parser.add_subparsers(dest="subcommand")
+    p = sp.add_parser("show", help="Show the current configuration")
+    p.add_argument("section", nargs="?", help="Show only this section")
+    p = sp.add_parser("add", help="Show the current configuration")
+    p.add_argument(
+        "--scope",
+        choices=("local", "global", "session"),
+        default="local",
+        help="Configuration scope",
+    )
+    p.add_argument(
+        "path",
+        help="colon-separated path to config to be set, e.g. 'config:debug:true'",
+    )
+
+
+def config_ex(args: "argparse.Namespace") -> int:
+    do_pretty_print: bool = "CANARY_MAKE_DOCS" not in os.environ
+    if root := find_work_tree(os.getcwd()):
+        load_session(root=root)
+    if args.subcommand == "show":
+        text: str
+        if args.section in ("plugins", "plugin"):
+            text = get_active_plugin_description()
+            do_pretty_print = False
+        else:
+            text = config.describe(section=args.section)
+        try:
+            if do_pretty_print:
+                pretty_print(text)
+            else:
+                print(text)
+        except ImportError:
+            print(text)
+        return 0
+    elif args.subcommand == "add":
+        config.save(args.path, scope=args.scope)
+    elif args.command is None:
+        raise ValueError("canary config: missing required subcommand (choose from show, add)")
+    else:
+        raise ValueError(f"canary config: unknown subcommand: {args.subcommand}")
+    return 1
+
+
+def pretty_print(text: str):
+    from pygments import highlight
+    from pygments.formatters import TerminalTrueColorFormatter as Formatter
+    from pygments.lexers import get_lexer_by_name
+
+    lexer = get_lexer_by_name("yaml")
+    formatter = Formatter(bg="dark", style="monokai", linenos=True)
+    formatted_text = highlight(text.strip(), lexer, formatter)
+    print(formatted_text)
+
+
+def get_active_plugin_description() -> str:
+    import hpc_connect
+
+    table: list[tuple[str, str, str]] = []
+    widths = [len("Namespace"), len("Name"), 0]
+    for name, plugin in config.plugin_manager.list_name_plugin():
+        file = inspect.getfile(plugin)  # type: ignore
+        namespace = plugin.__package__.split(".")[0]  # type: ignore
+        if namespace == "_canary":
+            namespace = "builtin"
+        row = (namespace, name, file)
+        for i, ri in enumerate(row):
+            widths[i] = max(widths[i], len(ri))
+        table.append(row)
+    for scheduler_type in hpc_connect.schedulers().values():  # type: ignore
+        try:
+            row = ("hpc_connect", scheduler_type.name, inspect.getfile(scheduler_type))
+        except Exception:
+            continue
+        for i, ri in enumerate(row):
+            widths[i] = max(widths[i], len(ri))
+        table.append(row)
+    rows = sorted(table, key=lambda _: _[0])
+    fp = io.StringIO()
+    fp.write("{0:{1}s}  {2:{3}s}  File\n".format("Namespace", widths[0], "Name", widths[1]))
+    fp.write("{0}  {1}  {2}\n".format("=" * widths[0], "=" * widths[1], "=" * widths[2]))
+    for row in rows:
+        fp.write(
+            "{0:{1}s}  {2:{3}s}  {4:{5}s}\n".format(
+                row[0], widths[0], row[1], widths[1], row[2], widths[2]
+            )
+        )
+    return fp.getvalue()

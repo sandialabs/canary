@@ -37,7 +37,7 @@ def test_status_0():
     stat.iid
     stat.set_from_code(timeout_exit_status)
     assert stat == "timeout"
-    stat.set_from_code(-2)
+    stat.set_from_code(66)
     assert stat == "timeout"
     stat.set_from_code(22)
     assert stat == "failed"

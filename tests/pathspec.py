@@ -2,7 +2,7 @@ import argparse
 import json
 import os
 
-import _canary.command.common.pathspec as ps
+import _canary.plugins.subcommands.common.pathspec as ps
 from _canary.util.filesystem import touchp
 from _canary.util.filesystem import working_dir
 

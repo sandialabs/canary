@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-import _canary.plugins.ctest.generator as ctg
+import _canary.plugins.generators.ctest as ctg
 from _canary.util.filesystem import force_remove
 from _canary.util.filesystem import which
 

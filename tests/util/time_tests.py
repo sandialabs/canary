@@ -1,4 +1,4 @@
-from _canary.plugins.vvtest.generator import to_seconds
+from _canary.plugins.generators.vvt import to_seconds
 from _canary.util.time import pretty_seconds
 from _canary.util.time import time_in_seconds
 
