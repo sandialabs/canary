@@ -15,7 +15,7 @@ Plugin discovery
 
   .. code-block:: toml
 
-     [project.entry-points."canary.plugin"]
+     [project.entry-points.canary]
      plugin_name = "myproject.pluginmodule"
 
 * Local plugins specified by the ``-p PATH`` command line option.  ``PATH`` can be a python file or directory.  If ``PATH`` is a directory, all files named ``canary_*.py`` in ``PATH`` will be loaded.
