@@ -393,10 +393,10 @@ class Session:
         for case in self.cases:
             if env_mods:
                 case.add_default_env(**env_mods)
-            if not case.masked():
-                case.mark_as_ready()
-            else:
+            if case.masked() or case.defective():
                 masked.append(case)
+            else:
+                case.mark_as_ready()
 
         logging.info(colorize("@*{Selected} %d test cases" % (len(self.cases) - len(masked))))
         if masked:
@@ -442,10 +442,10 @@ class Session:
         )
         masked: list[TestCase] = []
         for case in cases:
-            if not case.masked():
-                case.mark_as_ready()
-            else:
+            if case.masked() or case.defective():
                 masked.append(case)
+            else:
+                case.mark_as_ready()
         logging.info(colorize("@*{Selected} %d test cases" % (len(cases) - len(masked))))
         if masked:
             self.report_excluded(masked)
@@ -527,6 +527,9 @@ class Session:
                     msg = colorize("@*{Finished} %d %s (%s)\n" % (queue_size, what, hhmmss(dt)))
                     logging.info(msg)
         self.save()
+        for case in self.cases:
+            if case.defective():
+                cases.append(case)
         return cases
 
     @contextmanager
@@ -712,19 +715,26 @@ class Session:
                 return True
         return False
 
-    @staticmethod
-    def summary(cases: list[TestCase], include_pass: bool = True) -> str:
+    def summary(self, cases: list[TestCase] | None = None, include_pass: bool = True) -> str:
         """Return a summary of the completed test cases.  if ``include_pass is True``, include
         passed tests in the summary
 
         """
+        cases = cases or self.active_cases()
         file = io.StringIO()
         if not cases:
             file.write("Nothing to report\n")
             return file.getvalue()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            totals.setdefault(case.status.value, []).append(case)
+            if case.defective():
+                totals.setdefault("defective", []).append(case)
+            else:
+                totals.setdefault(case.status.value, []).append(case)
+        if "defective" in totals:
+            for case in sorted(totals["defective"], key=lambda t: t.name):
+                description = case.describe()
+                file.write("%s %s\n" % (glyphs.ballotx, description))
         for status in Status.members:
             if not include_pass and status == "success":
                 continue
@@ -737,9 +747,11 @@ class Session:
             string = colorize("@*{Short test summary info}\n") + string + "\n"
         return string
 
-    @staticmethod
-    def footer(cases: list[TestCase], duration: float = -1, title="Session done") -> str:
+    def footer(
+        self, cases: list[TestCase] | None = None, duration: float = -1, title="Session done"
+    ) -> str:
         """Return a short, high-level, summary of test results"""
+        cases = cases or self.active_cases()
         string = io.StringIO()
         if duration == -1:
             has_a = any(_.start for _ in cases if _.start > 0)
@@ -750,7 +762,10 @@ class Session:
                 duration = finish - start
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            totals.setdefault(case.status.value, []).append(case)
+            if case.defective():
+                totals.setdefault("defective", []).append(case)
+            else:
+                totals.setdefault(case.status.value, []).append(case)
         N = len(cases)
         summary = ["@*b{%d total}" % N]
         for member in Status.colors:
@@ -759,6 +774,9 @@ class Session:
                 c = Status.colors[member]
                 stat = totals[member][0].status.name
                 summary.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
+        if "defective" in totals:
+            n = len(totals["defective"])
+            summary.append(colorize("@*r{%d defective}" % n))
         emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
         x, y = random.sample(emojis, 2)
         kwds = {
@@ -771,9 +789,9 @@ class Session:
         string.write(colorize("%(x)s%(x)s @*{%(title)s} -- %(s)s in @*{%(t)s}\n" % kwds))
         return string.getvalue()
 
-    @staticmethod
-    def durations(cases: list[TestCase], N: int) -> str:
+    def durations(self, cases: list[TestCase] | None = None, N: int = 10) -> str:
         """Return a string describing the ``N`` slowest tests"""
+        cases = cases or self.active_cases()
         string = io.StringIO()
         cases = [c for c in cases if c.duration > 0]
         sorted_cases = sorted(cases, key=lambda x: x.duration)
@@ -787,20 +805,27 @@ class Session:
         string.write("\n")
         return string.getvalue()
 
-    @staticmethod
-    def status(cases: list[TestCase], sortby: str = "duration") -> str:
+    def status(self, cases: list[TestCase] | None = None, sortby: str = "duration") -> str:
         """Return a string describing the status of each test (grouped by status)"""
+        cases = cases or self.active_cases()
         file = io.StringIO()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
             if case.masked():
                 totals.setdefault("masked", []).append(case)
+            elif case.defective():
+                totals.setdefault("defective", []).append(case)
             else:
                 totals.setdefault(case.status.value, []).append(case)
         if "masked" in totals:
             for case in sort_cases_by(totals["masked"], field=sortby):
                 description = case.describe()
                 file.write("%s %s\n" % (glyphs.masked, description))
+        if "defective" in totals:
+            for case in sort_cases_by(totals["defective"], field=sortby):
+                description = case.describe()
+                glyph = colorize("@*r{%s}" % glyphs.ballotx)
+                file.write("%s %s\n" % (glyph, description))
         for member in Status.members:
             if member in totals:
                 for case in sort_cases_by(totals[member], field=sortby):
@@ -815,7 +840,10 @@ class Session:
         logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
         reasons: dict[str | None, int] = {}
         for case in excluded_cases:
-            reasons[case.mask] = reasons.get(case.mask, 0) + 1
+            if case.masked():
+                reasons[case.mask] = reasons.get(case.mask, 0) + 1
+            elif case.defective():
+                reasons[case.defect] = reasons.get(case.defect, 0) + 1
         keys = sorted(reasons, key=lambda x: reasons[x])
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
@@ -865,6 +893,8 @@ class Session:
                     cases_to_show.append(case)
                 elif "t" in rc and case.status == "timeout":
                     cases_to_show.append(case)
+                elif "n" in rc and case.defective():
+                    cases_to_show.append(case)
                 elif "n" in rc and case.status.value in (
                     "ready",
                     "created",
@@ -875,10 +905,10 @@ class Session:
                     cases_to_show.append(case)
         file = io.StringIO()
         if cases_to_show:
-            file.write(self.status(cases_to_show, sortby=sortby) + "\n")
+            file.write(self.status(cases=cases_to_show, sortby=sortby) + "\n")
         if durations:
-            file.write(self.durations(cases_to_show, int(durations)) + "\n")
-        s = self.footer([c for c in self.cases if not c.masked()], title="Summary")
+            file.write(self.durations(cases=cases_to_show, N=int(durations)) + "\n")
+        s = self.footer(cases=cases_to_show, title="Summary")
         file.write(s + "\n")
         return file.getvalue()
 

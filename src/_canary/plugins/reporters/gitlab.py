@@ -123,6 +123,8 @@ def group_failed_tests(cases: list[TestCase]):
     for case in cases:
         if case.status.value in nonpass:
             failed.setdefault(case.status.value, []).append(case)
+        elif case.defective():
+            failed.setdefault("defective", []).append(case)
     return failed
 
 

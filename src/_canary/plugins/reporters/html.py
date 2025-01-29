@@ -84,13 +84,18 @@ class HTMLReporter:
         fh.write("<html>\n")
         fh.write("<body>\n<table>\n")
         fh.write(f"<tr><td><b>Test:</b> {case.display_name}</td></tr>\n")
-        fh.write(f"<tr><td><b>Status:</b> {case.status.name}</td></tr>\n")
+        if case.defective():
+            fh.write("<tr><td><b>Status:</b> Defective</td></tr>\n")
+        else:
+            fh.write(f"<tr><td><b>Status:</b> {case.status.name}</td></tr>\n")
         fh.write(f"<tr><td><b>Exit code:</b> {case.returncode}</td></tr>\n")
         fh.write(f"<tr><td><b>ID:</b> {case.id}</td></tr>\n")
         fh.write(f"<tr><td><b>Duration:</b> {case.duration}</td></tr>\n")
         fh.write("</table>\n")
         fh.write("<h2>Test output</h2>\n<pre>\n")
-        if os.path.exists(case.logfile()):
+        if case.defective():
+            fh.write(f"{case.defect}\n")
+        elif os.path.exists(case.logfile()):
             with open(case.logfile()) as fp:
                 fh.write(fp.read())
         else:
@@ -110,18 +115,20 @@ class HTMLReporter:
             "Fail",
             "Diff",
             "Pass",
+            "Defective",
+            "Cancelled",
             "Total",
         ):
             fh.write(f"<th>{col}</th>")
         fh.write("</tr>\n")
         totals: dict[str, list[TestCase]] = {}
         for case in self.session.active_cases():
-            group = case.status.name.title()
+            group = "Defective" if case.defective() else case.status.name.title()
             totals.setdefault(group, []).append(case)
         fh.write("<tr>")
         fh.write(f"<td>{config.system.host}</td>")
         fh.write(f"<td>{config.build.project}</td>")
-        for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass"):
+        for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Defective", "Cancelled"):
             if group not in totals:
                 fh.write("<td>0</td>")
             else:
@@ -138,10 +145,10 @@ class HTMLReporter:
         fh.write("</table>\n</body>\n</html>")
 
     def generate_group_index(self, cases, fh: TextIO) -> None:
-        assert all([cases[0].status.name == c.status.name for c in cases[1:]])
         fh.write("<html>\n")
         fh.write(self.head)
-        fh.write(f"<body>\n<h1> {cases[0].status.name} Summary </h1>\n")
+        key = "Defective" if cases[0].defective() else cases[0].status.name
+        fh.write(f"<body>\n<h1> {key} Summary </h1>\n")
         fh.write('<table class="sortable">\n')
         fh.write("<thead><tr><th>Test</th><th>Duration</th><th>Status</th></tr></thead>\n")
         fh.write("<tbody>")
@@ -150,10 +157,8 @@ class HTMLReporter:
             if not os.path.exists(file):
                 raise ValueError(f"{file}: html file not found")
             link = f'<a href="file://{file}">{case.display_name}</a>'
-            fh.write(
-                f"<tr><td>{link}</td><td>{case.duration:.2f}</td>"
-                f"<td>{case.status.html_name}</td></tr>\n"
-            )
+            html_name = "Defective" if case.defective() else case.status.html_name
+            fh.write(f"<tr><td>{link}</td><td>{case.duration:.2f}</td><td>{html_name}</td></tr>\n")
         fh.write("</tbody>")
         fh.write("</table>\n</body>\n</html>")
 
@@ -168,8 +173,8 @@ class HTMLReporter:
                 if not os.path.exists(file):
                     raise ValueError(f"{file}: html file not found")
                 link = f'<a href="file://{file}">{case.display_name}</a>'
+                html_name = "Defective" if case.defective() else case.status.html_name
                 fh.write(
-                    f"<tr><td>{link}</td><td>{case.duration:.2f}</td>"
-                    f"<td>{case.status.html_name}</td></tr>\n"
+                    f"<tr><td>{link}</td><td>{case.duration:.2f}</td><td>{html_name}</td></tr>\n"
                 )
         fh.write("</table>\n</body>\n</html>")

@@ -228,6 +228,7 @@ class TestCase(AbstractTestCase):
         self._id: str | None = None
         self._status: Status = Status()
         self._mask: str | None = None
+        self._defect: str | None = None
         self._cmd_line: str | None = None
         self._work_tree: str | None = None
         self._working_directory: str | None = None
@@ -694,6 +695,12 @@ class TestCase(AbstractTestCase):
                 flags[i] = "wont_run"
         return flags
 
+    def inactive(self) -> bool:
+        return self.masked() or self.defective()
+
+    def activated(self) -> bool:
+        return not self.inactive()
+
     @property
     def mask(self) -> str | None:
         return self._mask
@@ -704,6 +711,17 @@ class TestCase(AbstractTestCase):
 
     def masked(self) -> bool:
         return self._mask is not None
+
+    @property
+    def defect(self) -> str | None:
+        return self._defect
+
+    @defect.setter
+    def defect(self, arg: str) -> None:
+        self._defect = arg
+
+    def defective(self) -> bool:
+        return self._defect is not None
 
     @property
     def url(self) -> str | None:
@@ -1150,7 +1168,10 @@ class TestCase(AbstractTestCase):
         """Write a string describing the test case"""
         id = colorize("@*b{%s}" % self.id[:7])
         if self.masked():
-            string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.status.details)
+            string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.mask)
+            return colorize(string)
+        if self.defective():
+            string = "@*r{DEFECT (NOOP)} %s %s: %s" % (id, self.pretty_repr(), self.defect)
             return colorize(string)
         string = "%s %s %s" % (self.status.cname, id, self.pretty_repr())
         if self.duration >= 0:
@@ -1163,13 +1184,6 @@ class TestCase(AbstractTestCase):
             string += " diff reason: %s" % self.status.details or "unknown"
         return string
 
-    def activated(self) -> bool:
-        if self.masked():
-            return False
-        elif self.skipped():
-            return False
-        return True
-
     def mark_as_ready(self) -> None:
         self._status.set("ready" if not self.dependencies else "pending")
 
@@ -1180,10 +1194,10 @@ class TestCase(AbstractTestCase):
         return self.status.complete()
 
     def ready(self) -> bool:
-        return not self.masked() and self.status == "ready"
+        return not self.inactive() and self.status == "ready"
 
     def pending(self) -> bool:
-        return not self.masked() and self.status == "pending"
+        return not self.inactive() and self.status == "pending"
 
     def matches(self, pattern) -> bool:
         if pattern.startswith("/") and self.id.startswith(pattern[1:]):
@@ -1347,8 +1361,8 @@ class TestCase(AbstractTestCase):
     def output(self, compress: bool = False) -> str:
         if self.status == "skipped":
             return f"Test skipped.  Reason: {self.status.details}"
-        elif self.status == "error":
-            return f"Test failed to initialize.  Reason: {self.status.details}"
+        elif self.defective():
+            return self.defect  # type: ignore
         elif not self.status.complete():
             return "Log not found"
         text = io.open(self.logfile(), errors="ignore").read()

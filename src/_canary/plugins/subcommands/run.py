@@ -128,12 +128,12 @@ def run(args: "argparse.Namespace") -> int:
     else:
         assert args.mode == "b"
         session = Session.batch_view(args.work_tree, args.batch_id)
-    cases = session.run(fail_fast=args.fail_fast, stage=stage)
+    session.run(fail_fast=args.fail_fast, stage=stage)
     if not args.no_summary:
-        logging.emit(session.summary(cases, include_pass=False))
+        logging.emit(session.summary(include_pass=False))
     if args.durations:
-        logging.emit(session.durations(cases, args.durations))
-    logging.emit(session.footer(cases))
+        logging.emit(session.durations(args.durations))
+    logging.emit(session.footer())
     return session.exitstatus
 
 

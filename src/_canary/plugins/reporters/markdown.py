@@ -62,30 +62,37 @@ class MarkdownReporter:
         if case.masked():
             return
         fh.write(f"**Test:** {case.display_name}\n")
-        fh.write(f"**Status:** {case.status.name}\n")
+        if case.defective():
+            fh.write("**Status:** Defective\n")
+        else:
+            fh.write(f"**Status:** {case.status.name}\n")
         fh.write(f"**Exit code:** {case.returncode}\n")
         fh.write(f"**ID:** {case.id}\n")
         fh.write(f"**Duration:** {case.duration:.4f}\n\n")
         fh.write("## Test output\n")
         fh.write("\n```console\n")
-        if os.path.exists(case.logfile()):
+        if case.defective():
+            fh.write(f"{case.defect}\n")
+        elif os.path.exists(case.logfile()):
             with open(case.logfile()) as fp:
-                fh.write(fp.read())
+                fh.write(fp.read().strip() + "\n")
         else:
             fh.write("Log file does not exist\n")
         fh.write("```\n")
 
     def generate_index(self, fh: TextIO) -> None:
         fh.write("# Canary Summary\n\n")
-        fh.write("| Site | Project | Not Run | Timeout | Fail | Diff | Pass | Total |\n")
-        fh.write("| --- | --- | --- | --- | --- | --- | --- | --- |\n")
+        fh.write(
+            "| Site | Project | Not Run | Timeout | Fail | Diff | Pass | Defective | Cancelled | Total |\n"
+        )
+        fh.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
         totals: dict[str, list[TestCase]] = {}
         for case in self.session.active_cases():
-            group = case.status.name.title()
+            group = "Defective" if case.defective() else case.status.name.title()
             totals.setdefault(group, []).append(case)
         fh.write(f"| {config.system.host} ")
         fh.write(f"| {config.build.project} ")
-        for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass"):
+        for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Defective", "Cancelled"):
             if group not in totals:
                 fh.write("| 0 ")
             else:
@@ -102,8 +109,8 @@ class MarkdownReporter:
             self.generate_all_tests_index(totals, fp)
 
     def generate_group_index(self, cases, fh: TextIO) -> None:
-        assert all([cases[0].status.name == c.status.name for c in cases[1:]])
-        fh.write(f"# {cases[0].status.name} Summary\n\n")
+        key = "Defective" if cases[0].defective() else cases[0].status.name
+        fh.write(f"# {key} Summary\n\n")
         fh.write("| Test | ID | Duration | Status |\n")
         fh.write("| --- | --- | --- | --- |\n")
         for case in sorted(cases, key=lambda c: c.name.lower()):
@@ -112,7 +119,7 @@ class MarkdownReporter:
                 raise ValueError(f"{file}: markdown file not found")
             link = f"[{case.display_name}](./{os.path.basename(file)})"
             duration = f"{case.duration:.2f}"
-            status = case.status.name
+            status = "Defective" if case.defective() else case.status.name
             fh.write(f"| {link} | {case.id} | {duration} | {status} |\n")
 
     def generate_all_tests_index(self, totals: dict, fh: TextIO) -> None:
@@ -126,6 +133,6 @@ class MarkdownReporter:
                     raise ValueError(f"{file}: markdown file not found")
                 link = f"[{case.display_name}](./{os.path.basename(file)})"
                 duration = f"{case.duration:.2f}"
-                status = case.status.name
+                status = "Defective" if case.defective() else case.status.name
                 fh.write(f"| {link} | {duration} | {status} |\n")
         fh.write("\n")
