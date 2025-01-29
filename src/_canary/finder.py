@@ -367,9 +367,11 @@ def mask(
             case.mask = f"{stage}: unsupported stage"
             continue
 
-        if any(dep.masked() for dep in case.dependencies):
-            case.mask = colorize("one or more skipped dependencies")
-            continue
+        if case.dependencies:
+            flags = case.dep_condition_flags()
+            if any([flag == "wont_run" for flag in flags]):
+                case.mask = colorize("one or more dependencies not satisfied")
+                continue
 
         if rx is not None:
             if not fs.grep(rx, case.file):

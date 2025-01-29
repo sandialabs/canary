@@ -66,13 +66,10 @@ if __name__ == "__main__":
         yield ns
 
 
-#        force_remove(d)
-
-
 def test_report_html(setup):
     with working_dir(setup.results_path):
         with canary.config.override():
-            report = CanaryCommand("report")
+            report = CanaryCommand("report", debug=True)
             report("html", "create")
 
 

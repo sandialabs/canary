@@ -631,8 +631,10 @@ class TestCase(AbstractTestCase):
 
     @property
     def status(self) -> Status:
-        if self._status.value == "pending":
-            self.check_dep_status()
+        if self._status == "pending":
+            if not self.dependencies:
+                raise ValueError(f"{self!r}: should never have a pending case without dependencies")
+            self.check_if_ready()
         return self._status
 
     @status.setter
@@ -643,38 +645,52 @@ class TestCase(AbstractTestCase):
             self._status.set(arg["value"], details=arg["details"])
         else:
             raise ValueError(arg)
+        if self._status == "pending" and not self.dependencies:
+            raise ValueError(f"{self!r}: should never have a pending case without dependencies")
 
-    def check_dep_status(self) -> None:
-        if not self.dependencies:
-            raise ValueError("should never have a pending case without dependencies")
+    def check_if_ready(self) -> None:
+        # Determine if dependent cases have completed and, if so, flip status to 'ready'
+        flags = self.dep_condition_flags()
+        if all(flag == "ready" for flag in flags):
+            self._status.set("ready")
+            return
+        for i, flag in enumerate(flags):
+            if flag == "wont_run":
+                # this case will never be able to run
+                dep = self.dependencies[i]
+                if dep.status == "skipped":
+                    self._status.set("skipped", "one or more dependencies was skipped")
+                elif dep.status == "cancelled":
+                    self._status.set("not_run", "one or more dependencies was cancelled")
+                elif dep.status == "timeout":
+                    self._status.set("not_run", "one or more dependencies timed out")
+                elif dep.status == "failed":
+                    self._status.set("not_run", "one or more dependencies failed")
+                elif dep.status == "diffed":
+                    self._status.set("skipped", "one or more dependencies diffed")
+                elif dep.status == "success":
+                    self._status.set("skipped", "one or more dependencies succeeded")
+                else:
+                    self._status.set(
+                        "skipped", f"one or more dependencies failed with status {dep.status!r}"
+                    )
+                break
+
+    def dep_condition_flags(self) -> list[str]:
         # Determine if dependent cases have completed and, if so, flip status to 'ready'
         expected = self.dep_done_criteria
-        ready: list[bool] = [False] * len(self.dependencies)
+        flags: list[str] = [""] * len(self.dependencies)
         for i, dep in enumerate(self.dependencies):
-            if dep.status.value not in ("ready", "pending", "running"):
-                if expected[i] in (None, dep.status.value, "*"):
-                    ready[i] = True
-                else:
-                    ready[i] = match_any(expected[i], [dep.status.value, dep.status.name])
-                if ready[i] is False:
-                    # this case will never be able to run
-                    if dep.status == "skipped":
-                        self._status.set("skipped", "one or more dependencies was skipped")
-                    elif dep.status == "cancelled":
-                        self._status.set("not_run", "one or more dependencies was cancelled")
-                    elif dep.status == "timeout":
-                        self._status.set("not_run", "one or more dependencies timed out")
-                    elif dep.status == "failed":
-                        self._status.set("not_run", "one or more dependencies failed")
-                    elif dep.status == "diffed":
-                        self._status.set("skipped", "one or more dependencies diffed")
-                    else:
-                        self._status.set(
-                            "skipped",
-                            f"one or more dependencies failed with status {dep.status.value}",
-                        )
-        if all(ready):
-            self._status.set("ready")
+            if dep.status.value in ("created", "ready", "pending", "running"):
+                # Still pending on this case
+                flags[i] = "pending"
+            elif expected[i] in (None, dep.status.value, "*"):
+                flags[i] = "ready"
+            elif match_any(expected[i], [dep.status.value, dep.status.name]):
+                flags[i] = "ready"
+            else:
+                flags[i] = "wont_run"
+        return flags
 
     @property
     def mask(self) -> str | None:
@@ -1488,15 +1504,14 @@ class TestCase(AbstractTestCase):
                 properties[name] = value
             elif name == "status":
                 properties[name] = Status(value["value"], details=value["details"])
+        if "dependencies" in properties:
+            self.dependencies.clear()
+            self.dep_done_criteria.clear()
+            dep_done_criteria = properties.pop("dep_done_criteria")
+            for i, dep in enumerate(properties.pop("dependencies")):
+                self.add_dependency(dep, dep_done_criteria[i])
         for name, value in properties.items():
-            if name == "dependencies":
-                self.dependencies.clear()
-                self.dep_done_criteria.clear()
-                for i, dep in enumerate(value):
-                    self.add_dependency(dep, properties["dep_done_criteria"][i])
-            elif name == "dep_done_criteria":
-                continue
-            elif name == "cpu_ids":
+            if name == "cpu_ids":
                 self._cpu_ids = value
             elif name == "gpu_ids":
                 self._gpu_ids = value
