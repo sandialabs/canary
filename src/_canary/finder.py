@@ -1,7 +1,6 @@
 import os
 import re
 import sys
-import time
 from typing import Any
 from typing import TextIO
 
@@ -62,12 +61,12 @@ class Finder:
             raise ValueError("Cannot call discover() before calling prepare()")
         errors = 0
         for root, paths in self.roots.items():
-            start = time.monotonic()
             vc: str | None = None
             if root.startswith(("git@", "repo@")):
                 vc, _, root = root.partition("@")
             relroot = os.path.relpath(root, config.invocation_dir)
-            logging.info(colorize("@*{Searching} %s for test generators..." % relroot), end="")
+            ctx = logging.context(colorize("@*{Searching} %s for test generators" % relroot))
+            ctx.start()
             if os.path.isfile(root):
                 try:
                     f = AbstractTestGenerator.factory(root)
@@ -107,11 +106,7 @@ class Finder:
                 p_generators, p_errors = rfind(root)
                 generators.update(p_generators)
                 errors += p_errors
-            dt = time.monotonic() - start
-            logging.info(
-                colorize("@*{Searching} %s for test generators... done (%.2fs.)" % (relroot, dt)),
-                rewind=True,
-            )
+            ctx.stop()
             logging.debug(f"Found {len(generators)} test files in {root}")
         n = sum([len(_) for _ in tree.values()])
         nr = len(tree)
@@ -189,8 +184,8 @@ def rfind(root: str, subdir: str | None = None) -> tuple[list[AbstractTestGenera
 
 
 def resolve_dependencies(cases: list[TestCase]) -> None:
-    start = time.monotonic()
-    logging.info(colorize("@*{Resolving} test case dependencies..."), end="")
+    ctx = logging.context(colorize("@*{Resolving} test case dependencies"))
+    ctx.start()
     for case in cases:
         while True:
             if not case.unresolved_dependencies:
@@ -211,33 +206,7 @@ def resolve_dependencies(cases: list[TestCase]) -> None:
             for match in matches:
                 assert isinstance(match, TestCase)
                 case.add_dependency(match, dep.result)
-    dt = time.monotonic() - start
-    logging.info(
-        colorize("@*{Resolving} test case dependencies... done (%.2fs.)" % dt), rewind=True
-    )
-
-
-def check_for_skipped_dependencies(cases: list[TestCase]) -> None:
-    start = time.monotonic()
-    logging.info(colorize("@*{Checking} for skipped dependencies..."), end="")
-    missing = 0
-    ids = [id(case) for case in cases]
-    for case in cases:
-        if not case.activated():
-            continue
-        for dep in case.dependencies:
-            if id(dep) not in ids:
-                logging.error(f"ID of {dep!r} is not in test cases")
-                missing += 1
-            if dep.masked() or dep.skipped():
-                case.mask = "one or more skipped dependency"
-                logging.debug(f"Dependency {dep!r} of {case!r} is marked to be skipped")
-    if missing:
-        raise ValueError("Missing dependencies")
-    dt = time.monotonic() - start
-    logging.info(
-        colorize("@*{Checking} for skipped dependencies... done (%.2fs)" % dt), rewind=True
-    )
+    ctx.stop()
 
 
 def generate_test_cases(
@@ -246,17 +215,16 @@ def generate_test_cases(
 ) -> list[TestCase]:
     """Generate test cases and filter based on criteria"""
 
-    logging.info(colorize("@*{Generating} test cases..."), end="")
+    ctx = logging.context(colorize("@*{Generating} test cases"))
+    ctx.start()
     locked: list[list[TestCase]]
-    start = time.monotonic()
     if config.debug:
         locked = [f.lock(on_options) for f in generators]
     else:
         locked = starmap(lock_file, [(f, on_options) for f in generators])
     cases: list[TestCase] = [case for group in locked for case in group if case]
-    dt = time.monotonic() - start
     nc, ng = len(cases), len(generators)
-    logging.info(colorize("@*{Generating} test cases... done (%.2fs.)" % dt), rewind=True)
+    ctx.stop()
     logging.info(colorize("@*{Generated} %d test cases from %d generators" % (nc, ng)))
 
     duplicates = find_duplicates(cases)
@@ -295,7 +263,8 @@ def mask(
       case_specs: Include those tests matching these specs
 
     """
-
+    ctx = logging.context(colorize("@*{Masking} test cases based on filtering criteria"))
+    ctx.start()
     rx: re.Pattern | None = None
     if regex is not None:
         logging.warning("Regular expression search can be slow for large test suites")
@@ -370,7 +339,7 @@ def mask(
         if case.dependencies:
             flags = case.dep_condition_flags()
             if any([flag == "wont_run" for flag in flags]):
-                case.mask = colorize("one or more dependencies not satisfied")
+                case.mask = "one or more dependencies not satisfied"
                 continue
 
         if rx is not None:
@@ -387,10 +356,10 @@ def mask(
         if no_filter_criteria and not case.status.satisfies(("pending", "ready")):
             case.mask = f"previous status {case.status.value!r} is not 'ready'"
 
-    check_for_skipped_dependencies(cases)
-
     for i in order:
         config.plugin_manager.hook.canary_testcase_modify(case=cases[i])
+
+    ctx.stop()
 
 
 def find_duplicates(cases: list[TestCase]) -> dict[str, list[TestCase]]:

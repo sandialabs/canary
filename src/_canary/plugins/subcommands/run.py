@@ -130,18 +130,15 @@ def run(args: "argparse.Namespace") -> int:
         )
     else:
         assert args.mode == "b"
+        batch_case_ids = Session.load_batch_index(args.batch_id)
         session = Session(args.work_tree, mode="a")
         session.bfilter(batch_id=args.batch_id)
-    try:
-        cases = session.run(fail_fast=args.fail_fast, stage=stage)
-    except Exception:
-        pass
-    else:
-        if not args.no_summary:
-            logging.emit(session.summary(cases, include_pass=False))
-        if args.durations:
-            logging.emit(session.durations(cases, args.durations))
-        logging.emit(session.footer(cases))
+    cases = session.run(fail_fast=args.fail_fast, stage=stage)
+    if not args.no_summary:
+        logging.emit(session.summary(cases, include_pass=False))
+    if args.durations:
+        logging.emit(session.durations(cases, args.durations))
+    logging.emit(session.footer(cases))
     return session.exitstatus
 
 

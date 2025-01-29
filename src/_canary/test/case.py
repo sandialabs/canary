@@ -681,7 +681,9 @@ class TestCase(AbstractTestCase):
         expected = self.dep_done_criteria
         flags: list[str] = [""] * len(self.dependencies)
         for i, dep in enumerate(self.dependencies):
-            if dep.status.value in ("created", "ready", "pending", "running"):
+            if dep.masked() and dep.status.value in ("created", "ready", "pending"):
+                flags[i] = "wont_run"
+            elif dep.status.value in ("created", "ready", "pending", "running"):
                 # Still pending on this case
                 flags[i] = "pending"
             elif expected[i] in (None, dep.status.value, "*"):

@@ -52,8 +52,7 @@ import canary
 canary.directives.generate_composite_base_case()
 canary.directives.parameterize('a', (1, 2))
 def test(case):
-    if self.parameters.a == 2:
-        raise canary.TestDiffed()
+    pass
 if __name__ == "__main__":
     self = canary.get_instance()
     if not isinstance(self, canary.TestMultiInstance):

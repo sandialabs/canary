@@ -3,6 +3,7 @@ import math
 import os
 import sys
 import termios
+import time
 import traceback
 from contextlib import contextmanager
 from io import StringIO
@@ -32,6 +33,23 @@ FORMAT = "%(prefix)s%(timestamp)s%(message)s"
 
 
 builtin_print = print
+log_levels = (TRACE, DEBUG, INFO, WARNING, ERROR, FATAL)
+level_color_map: dict[int, str] = {
+    TRACE: "c",
+    DEBUG: "g",
+    INFO: "b",
+    WARNING: "Y",
+    ERROR: "r",
+    FATAL: "r",
+}
+level_name_map: dict[int, str] = {
+    TRACE: "TRACE",
+    DEBUG: "DEBUG",
+    INFO: "INFO",
+    WARNING: "WARNING",
+    ERROR: "ERROR",
+    FATAL: "FATAL",
+}
 
 
 def get_timestamp():
@@ -62,7 +80,7 @@ def level(level: int) -> Generator[None, None, None]:
 
 def set_level(level: int) -> None:
     global LEVEL
-    assert level in (TRACE, DEBUG, INFO, WARNING, ERROR, FATAL)
+    assert level in log_levels
     LEVEL = level
 
 
@@ -74,34 +92,23 @@ def set_format(format: str) -> None:
 def get_level(name: str | None = None) -> int:
     if name is None:
         return LEVEL
-    if name == "TRACE":
-        return TRACE
-    if name == "DEBUG":
-        return DEBUG
-    if name == "INFO":
-        return INFO
-    if name == "WARNING":
-        return WARNING
-    if name == "ERROR":
-        return ERROR
-    if name == "FATAL":
-        return FATAL
+    for level_num, level_name in level_name_map.items():
+        if name == level_name:
+            return level_num
     raise ValueError(name)
 
 
 def get_level_name(level: int) -> str:
-    if level == TRACE:
-        return "TRACE"
-    if level == DEBUG:
-        return "DEBUG"
-    if level == INFO:
-        return "INFO"
-    if level == WARNING:
-        return "WARNING"
-    if level == ERROR:
-        return "ERROR"
-    if level == FATAL:
-        return "FATAL"
+    for level_num, level_name in level_name_map.items():
+        if level == level_num:
+            return level_name
+    raise ValueError(level)
+
+
+def level_color(level: int) -> str:
+    for level_num, level_color in level_color_map.items():
+        if level == level_num:
+            return level_color
     raise ValueError(level)
 
 
@@ -155,37 +162,42 @@ def emit(message: str, *, file: TextIO = sys.stdout) -> None:
 
 
 def trace(message: str, *, file: TextIO = sys.stdout, end: str = "\n") -> None:
-    log(TRACE, message, file=file, prefix="@*c{==>} ", end=end)
+    c = level_color(TRACE)
+    log(TRACE, message, file=file, prefix="@*%s{==>} " % c, end=end)
 
 
-def debug(
-    message: str, *, file: TextIO = sys.stdout, end: str = "\n", rewind: bool = False
-) -> None:
-    log(DEBUG, message, file=file, prefix="@*g{==>} ", end=end, rewind=rewind)
+def debug(message: str, *, file: TextIO = sys.stdout, end: str = "\n") -> None:
+    c = level_color(DEBUG)
+    log(DEBUG, message, file=file, prefix="@*%s{==>} " % c, end=end)
 
 
-def info(message: str, *, file: TextIO = sys.stdout, end: str = "\n", rewind: bool = False) -> None:
-    log(INFO, message, file=file, prefix="@*b{==>} ", end=end, rewind=rewind)
+def info(message: str, *, file: TextIO = sys.stdout, end: str = "\n") -> None:
+    c = level_color(INFO)
+    log(INFO, message, file=file, prefix="@*%s{==>} " % c, end=end)
 
 
 def warning(message: str, *, file: TextIO = sys.stderr, end: str = "\n") -> None:
-    log(WARNING, message, file=file, prefix="@*Y{==>} Warning: ", end=end)
+    c = level_color(WARNING)
+    log(WARNING, message, file=file, prefix="@*%s{==>} Warning: " % c, end=end)
 
 
 def error(
     message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Any | None = None
 ) -> None:
-    log(ERROR, message, file=file, prefix="@*r{==>} Error: ", end=end, ex=ex)
+    c = level_color(ERROR)
+    log(ERROR, message, file=file, prefix="@*%s{==>} Error: " % c, end=end)
 
 
 def exception(message: str, ex: Exception, *, file: TextIO = sys.stderr, end: str = "\n") -> None:
-    log(ERROR, message, file=file, prefix="@*r{==>} Error: ", end=end, ex=ex)
+    c = level_color(ERROR)
+    log(ERROR, message, file=file, prefix="@*%s{==>} Error: " % c, end=end, ex=ex)
 
 
 def fatal(
     message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Any | None = None
 ) -> None:
-    log(FATAL, message, file=file, prefix="@*r{==>} Fatal: ", end=end, ex=ex)
+    c = level_color(FATAL)
+    log(FATAL, message, file=file, prefix="@*%s{==>} Fatal: " % c, end=end, ex=ex)
 
 
 def progress_bar(
@@ -316,3 +328,27 @@ def reset():
         fd = sys.stdin.fileno()
         save_tty_attr = termios.tcgetattr(fd)
         termios.tcsetattr(fd, termios.TCSAFLUSH, save_tty_attr)
+
+
+class context:
+    def __init__(self, message: str, *, file: TextIO = sys.stdout, level=INFO) -> None:
+        self._start = -1.0
+        self.message = message
+        self.file = file
+        self.level = level
+        self.prefix = "@*%s{==>} " % level_color(level)
+
+    def start(self) -> "context":
+        self._start = time.monotonic()
+        log(self.level, self.message, file=self.file, prefix=self.prefix, end="... ")
+        return self
+
+    def stop(self):
+        end = "... done (%.2fs.)\n" % (time.monotonic() - self._start)
+        log(self.level, self.message, file=self.file, prefix=self.prefix, end=end, rewind=True)
+
+    def __enter__(self) -> "context":
+        return self.start()
+
+    def __exit__(self, *args) -> None:
+        self.stop()

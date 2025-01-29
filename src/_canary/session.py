@@ -137,6 +137,12 @@ class Session:
         self.search_paths: dict[str, list[str]] = {}
         self.generators: list[AbstractTestGenerator] = list()
         self.cases: list[TestCase] = list()
+
+        self.exitstatus = -1
+        self.returncode = -1
+        self.start = -1.0
+        self.stop = -1.0
+
         self.db = Database(self.config_dir, mode=mode)
         if mode in "ra":
             self.load()
@@ -144,11 +150,7 @@ class Session:
             self.initialize()
             config.plugin_manager.hook.canary_session_start(session=self)
 
-        self.exitstatus = -1
-        self.returncode = -1
         self.mode = mode
-        self.start = -1.0
-        self.stop = -1.0
 
         os.environ.setdefault("CANARY_LEVEL", "0")
         config.variables["CANARY_WORK_TREE"] = self.work_tree
@@ -191,14 +193,14 @@ class Session:
         """Load test cases previously dumpped by ``dump_testcases``.  Dependency resolution is also
         performed
         """
-        logging.debug("Loading test cases")
+        ctx = logging.context(colorize("@*{Loading} test cases"), level=logging.DEBUG)
+        ctx.start()
         with self.db.open("cases/index", "r") as fh:
             index = json.load(fh)["index"]
         ts: TopologicalSorter = TopologicalSorter()
         cases: dict[str, TestCase | TestMultiCase] = {}
         for id, deps in index.items():
             ts.add(id, *deps)
-        logging.debug("Resolving test case dependencies")
         for id in ts.static_order():
             # see TestCase.lockfile for file pattern
             file = self.db.join_path("cases", id[:2], id[2:], TestCase._lockfile)
@@ -210,7 +212,7 @@ class Session:
             for i, dep in enumerate(case.dependencies):
                 case.dependencies[i] = cases[dep.id]
             cases[case.id] = case
-        logging.debug("Finished loading test cases")
+        ctx.stop()
         return list(cases.values())
 
     def dump_testfiles(self) -> None:
@@ -222,9 +224,11 @@ class Session:
 
     def load_testfiles(self) -> list[AbstractTestGenerator]:
         """Load test files (test generators) previously dumped by ``dump_testfiles``"""
-        logging.debug("Loading test case generators")
+        ctx = logging.context(colorize("@*{Loading} test case generators"), level=logging.DEBUG)
+        ctx.start()
         with self.db.open("files", "r") as file:
             testfiles = [AbstractTestGenerator.from_state(state) for state in json.load(file)]
+        ctx.stop()
         return testfiles
 
     def load(self) -> None:
@@ -340,8 +344,6 @@ class Session:
         """
         self.cases.clear()
         self.cases.extend(finder.generate_test_cases(self.generators, on_options=on_options))
-        start = time.monotonic()
-        logging.info(colorize("@*{Masking} test cases based on filtering criteria..."), end="")
         finder.mask(
             cases=self.cases,
             keyword_exprs=keyword_exprs,
@@ -349,12 +351,6 @@ class Session:
             owners=owners,
             regex=regex,
         )
-        dt = time.monotonic() - start
-        logging.info(
-            colorize("@*{Masking} test cases based on filtering criteria... done (%.2fs.)" % dt),
-            rewind=True,
-        )
-
         if env_mods:
             for case in self.cases:
                 if not case.masked():
@@ -421,6 +417,10 @@ class Session:
         if masked:
             self.report_excluded(masked)
 
+    @staticmethod
+    def load_batch_index(batch_id: str) -> list[str] | None:
+        return TestBatch.loadindex(batch_id)
+
     def bfilter(self, *, batch_id: str) -> None:
         """Mask any test cases not in batch ``batch_id``"""
         batch_case_ids = TestBatch.loadindex(batch_id)
@@ -428,23 +428,17 @@ class Session:
             raise ValueError(f"could not find index for batch {batch_id}")
         expected = len(batch_case_ids)
         logging.info(f"Selecting {expected} tests from batch {batch_id}")
-        cases: list[TestCase] = []
         for case in self.cases:
             if case.id not in batch_case_ids:
                 case.mask = f"Case not in batch {batch_id}"
             elif case.masked():
                 logging.warning(f"{case}: unexpected mask: {case.mask}")
-            elif case.ready():
-                cases.append(case)
-            elif not case.dependencies:
-                case.status.set("ready")
-                cases.append(case)
             elif case.pending():
                 if not all(dep.id in batch_case_ids for dep in case.dependencies):
-                    case.status.set("skipped", "one or more missing dependencies")
-                    case.save()
-            else:
-                logging.warning(f"{case}: unknown test case state: {case.status}")
+                    case.mask = "one or more missing dependencies"
+        for case in self.cases:
+            if not case.masked():
+                case.mark_as_ready()
         return
 
     def run(self, *, fail_fast: bool = False, stage: str | None = None) -> list[TestCase]:
@@ -517,9 +511,8 @@ class Session:
                         session=self, exitstatus=self.exitstatus
                     )
                     dt = self.stop - self.start
-                    logging.info(
-                        colorize("@*{Finished} running %d %s (%.2fs.)\n" % (queue_size, what, dt))
-                    )
+                    msg = colorize("@*{Finished} %d %s (%s)\n" % (queue_size, what, hhmmss(dt)))
+                    logging.info(msg)
         self.save()
         return cases
 
