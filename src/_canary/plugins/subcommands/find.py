@@ -47,8 +47,6 @@ def find(args: argparse.Namespace) -> int:
 
     cases = finder.generate_test_cases(generators, on_options=args.on_options)
 
-    ctx = logging.context(colorize("@*{Masking} test cases based on filtering criteria"))
-    ctx.start()
     finder.mask(
         cases=cases,
         keyword_exprs=args.keyword_exprs,
@@ -56,7 +54,6 @@ def find(args: argparse.Namespace) -> int:
         owners=None if not args.owners else set(args.owners),
         regex=args.regex_filter,
     )
-    ctx.stop()
     cases_to_run = [case for case in cases if not case.masked()]
     masked = [case for case in cases if case.masked()]
     logging.info(colorize("@*{Selected} %d test cases" % (len(cases) - len(masked))))

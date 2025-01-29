@@ -62,8 +62,7 @@ def test_session_bfilter(tmpdir):
             id = d1 + d2
             f1 = s.batch_logfile(id)
             with working_dir("tests"):
-                s = session.Session(".", mode="r")
-                s.bfilter(batch_id=id)
+                s = session.Session.batch_view(".", id)
 
 
 def test_session_fail_fast(tmpdir):

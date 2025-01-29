@@ -26,6 +26,7 @@ class Finder:
 
     def __init__(self) -> None:
         self.roots: dict[str, list[str] | None] = {}
+        self.meta: dict[str, dict[str, Any]] = {}
         self._ready = False
 
     def prepare(self):
@@ -35,14 +36,16 @@ class Finder:
         tolerant: bool = kwargs.get("tolerant", False)
         if self._ready:
             raise ValueError("Cannot call add() after calling prepare()")
+        vcs: str | None = None
         if root.startswith(("git@", "repo@")):
-            vc, _, f = root.partition("@")
-            root = f"{vc}@{os.path.abspath(f)}"
+            vcs, _, f = root.partition("@")
+            root = os.path.abspath(f)
             if paths:
-                raise ValueError(f"{vc}@ and paths are mutually exclusive")
+                raise ValueError(f"{vcs}@ and paths are mutually exclusive")
         else:
             root = os.path.abspath(root)
         self.roots.setdefault(root, None)
+        self.meta.setdefault(root, {})["vcs"] = vcs
         if paths and self.roots[root] is None:
             self.roots[root] = []
         for path in paths:
@@ -61,9 +64,6 @@ class Finder:
             raise ValueError("Cannot call discover() before calling prepare()")
         errors = 0
         for root, paths in self.roots.items():
-            vc: str | None = None
-            if root.startswith(("git@", "repo@")):
-                vc, _, root = root.partition("@")
             relroot = os.path.relpath(root, config.invocation_dir)
             ctx = logging.context(colorize("@*{Searching} %s for test generators" % relroot))
             ctx.start()
@@ -77,9 +77,9 @@ class Finder:
                     root = f.root
                     generators = tree.setdefault(root, set())
                     generators.add(f)
-            elif vc is not None:
+            elif vcs := self.meta[root].get("vcs"):
                 generators = tree.setdefault(root, set())
-                p_generators, p_errors = vcfind(root, type=vc)
+                p_generators, p_errors = vcfind(root, type=vcs)
                 generators.update(p_generators)
                 errors += p_errors
             elif paths is not None:
@@ -293,6 +293,7 @@ def mask(
             continue
 
         if start and not case.working_directory.startswith(start):
+            logging.debug(f"{case}: {case.working_directory=} but {start=}")
             case.mask = "Unreachable from start directory"
             continue
 

@@ -340,7 +340,7 @@ class context:
 
     def start(self) -> "context":
         self._start = time.monotonic()
-        log(self.level, self.message, file=self.file, prefix=self.prefix, end="... ")
+        log(self.level, self.message, file=self.file, prefix=self.prefix, end="...")
         return self
 
     def stop(self):

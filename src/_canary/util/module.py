@@ -16,7 +16,7 @@ def _module(*args, environb: MutableMapping | None = None) -> str | None:
 
     if args[0] in ["load", "swap", "unload", "purge", "use", "unuse"]:
         # Suppress module output
-        module_cmd += r" >/dev/null 2>&1; " + awk_cmd
+        module_cmd += r" >/dev/null 2>&1 && " + awk_cmd
         module_p = subprocess.Popen(
             module_cmd,
             stdout=subprocess.PIPE,

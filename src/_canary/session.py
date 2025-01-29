@@ -114,7 +114,7 @@ class Session:
     default_worktree = "./TestResults"
 
     def __init__(self, path: str, mode: str = "r", force: bool = False) -> None:
-        if mode not in "arw":
+        if mode not in "arwb":
             raise ValueError(f"invalid mode: {mode!r}")
         self.work_tree: str
         if mode == "w":
@@ -133,7 +133,6 @@ class Session:
             self.work_tree = root
         self.config_dir = os.path.join(self.work_tree, ".canary")
         self.log_dir = os.path.join(self.config_dir, "logs")
-        self.mode = mode
         self.search_paths: dict[str, list[str]] = {}
         self.generators: list[AbstractTestGenerator] = list()
         self.cases: list[TestCase] = list()
@@ -144,8 +143,11 @@ class Session:
         self.stop = -1.0
 
         self.db = Database(self.config_dir, mode=mode)
-        if mode in "ra":
-            self.load()
+        if mode in "rab":
+            self.restore_settings()
+            self.load_test_generators()
+            if mode != "b":
+                self.load_testcases()
         else:
             self.initialize()
             config.plugin_manager.hook.canary_session_start(session=self)
@@ -157,6 +159,27 @@ class Session:
         self.level = int(os.environ["CANARY_LEVEL"])
         if mode == "w":
             self.save(ini=True)
+
+    @classmethod
+    def batch_view(cls, path: str, batch_id: str) -> "Session":
+        """Create a view of this session that only includes cases in ``batch_id``"""
+        batch_case_ids = TestBatch.loadindex(batch_id)
+        if batch_case_ids is None:
+            raise ValueError(f"could not find index for batch {batch_id}")
+        expected = len(batch_case_ids)
+        logging.info(f"Selecting {expected} tests from batch {batch_id}")
+        self = cls(path, mode="b")
+        self.load_testcases(ids=batch_case_ids)
+        for case in self.cases:
+            if case.masked():
+                logging.warning(f"{case}: unexpected mask: {case.mask}")
+            elif case.pending():
+                if not all(dep.id in batch_case_ids for dep in case.dependencies):
+                    case.mask = "one or more missing dependencies"
+        for case in self.cases:
+            if not case.masked():
+                case.mark_as_ready()
+        return self
 
     def get_ready(self) -> list[TestCase]:
         return [case for case in self.cases if case.ready() or case.pending()]
@@ -183,13 +206,14 @@ class Session:
     def dump_testcases(self) -> None:
         """Dump each case's state in this session to ``file`` in json format"""
         index: dict[str, list[str]] = {}
-        for case in self.cases:
-            index[case.id] = [dep.id for dep in case.dependencies]
-            case.save()
-        with self.db.open("cases/index", "w") as fh:
-            json.dump({"index": index}, fh, indent=2)
+        with logging.context(colorize("@*{Generating} test case lockfiles")):
+            for case in self.cases:
+                index[case.id] = [dep.id for dep in case.dependencies]
+                case.save()
+            with self.db.open("cases/index", "w") as fh:
+                json.dump({"index": index}, fh, indent=2)
 
-    def load_testcases(self) -> list[TestCase | TestMultiCase]:
+    def load_testcases(self, ids: list[str] | None = None) -> None:
         """Load test cases previously dumpped by ``dump_testcases``.  Dependency resolution is also
         performed
         """
@@ -202,6 +226,8 @@ class Session:
         for id, deps in index.items():
             ts.add(id, *deps)
         for id in ts.static_order():
+            if ids and id not in ids:
+                continue
             # see TestCase.lockfile for file pattern
             file = self.db.join_path("cases", id[:2], id[2:], TestCase._lockfile)
             with self.db.open(file) as fh:
@@ -213,7 +239,9 @@ class Session:
                 case.dependencies[i] = cases[dep.id]
             cases[case.id] = case
         ctx.stop()
-        return list(cases.values())
+        self.cases.clear()
+        self.cases.extend(cases.values())
+        return
 
     def dump_testfiles(self) -> None:
         """Dump each test file (test generator) in this session to ``file`` in json format"""
@@ -222,16 +250,18 @@ class Session:
         with self.db.open("files", mode="w") as file:
             json.dump(testfiles, file, indent=2)
 
-    def load_testfiles(self) -> list[AbstractTestGenerator]:
+    def load_test_generators(self) -> None:
         """Load test files (test generators) previously dumped by ``dump_testfiles``"""
+        self.generators.clear()
         ctx = logging.context(colorize("@*{Loading} test case generators"), level=logging.DEBUG)
         ctx.start()
         with self.db.open("files", "r") as file:
-            testfiles = [AbstractTestGenerator.from_state(state) for state in json.load(file)]
+            states = json.load(file)
+            self.generators.extend(map(AbstractTestGenerator.from_state, states))
         ctx.stop()
-        return testfiles
+        return
 
-    def load(self) -> None:
+    def restore_settings(self) -> None:
         """Load an existing test session:
 
         * load test files and cases from the database;
@@ -243,8 +273,6 @@ class Session:
         if config.session.work_tree != self.work_tree:
             msg = "Expected config.session.work_tree=%r but got %s"
             raise RuntimeError(msg % (self.work_tree, config.session.work_tree))
-        self.generators = self.load_testfiles()
-        self.cases = self.load_testcases()
         self.load_attrs()
         self.set_config_values()
 
@@ -284,21 +312,26 @@ class Session:
         This form is useful if you know which tests to run.
 
         """
+        if self.generators:
+            raise ValueError("session is already populated")
         if isinstance(search_paths, str):
             search_paths = {search_paths: []}
         if isinstance(search_paths, list):
             search_paths = {path: [] for path in search_paths}
-        if self.generators:
-            raise ValueError("session is already populated")
         errors = 0
         for root, paths in search_paths.items():
+            vcs: str | None = None
             if not root:
                 root = os.getcwd()
+            if root.startswith(("git@", "repo@")):
+                vcs, _, root = root.partition("@")
             if not os.path.isdir(root):
                 errors += 1
                 logging.warning(f"{root}: directory does not exist and will not be searched")
             else:
                 root = os.path.abspath(root)
+                if vcs:
+                    root = f"{vcs}@{root}"
                 self.search_paths[root] = paths
         if errors:
             logging.warning("one or more search paths does not exist")
@@ -420,26 +453,6 @@ class Session:
     @staticmethod
     def load_batch_index(batch_id: str) -> list[str] | None:
         return TestBatch.loadindex(batch_id)
-
-    def bfilter(self, *, batch_id: str) -> None:
-        """Mask any test cases not in batch ``batch_id``"""
-        batch_case_ids = TestBatch.loadindex(batch_id)
-        if batch_case_ids is None:
-            raise ValueError(f"could not find index for batch {batch_id}")
-        expected = len(batch_case_ids)
-        logging.info(f"Selecting {expected} tests from batch {batch_id}")
-        for case in self.cases:
-            if case.id not in batch_case_ids:
-                case.mask = f"Case not in batch {batch_id}"
-            elif case.masked():
-                logging.warning(f"{case}: unexpected mask: {case.mask}")
-            elif case.pending():
-                if not all(dep.id in batch_case_ids for dep in case.dependencies):
-                    case.mask = "one or more missing dependencies"
-        for case in self.cases:
-            if not case.masked():
-                case.mark_as_ready()
-        return
 
     def run(self, *, fail_fast: bool = False, stage: str | None = None) -> list[TestCase]:
         """Run each test case in ``cases``.
@@ -881,7 +894,7 @@ class Database:
 
     def __init__(self, directory: str, mode="a") -> None:
         self.home = os.path.join(os.path.abspath(directory), "objects")
-        if mode in "ra":
+        if mode in "rab":
             if not os.path.exists(self.home):
                 raise FileNotFoundError(self.home)
         elif mode == "w":

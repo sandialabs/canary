@@ -1,5 +1,4 @@
 import argparse
-import os
 import sys
 
 from ...config.argparsing import Parser
@@ -87,8 +86,6 @@ def run(args: "argparse.Namespace") -> int:
         path = args.work_tree or Session.default_worktree
         session = Session(path, mode=args.mode, force=args.wipe)
         session.add_search_paths(args.paths)
-        s = ", ".join(os.path.relpath(p, os.getcwd()) for p in session.search_paths)
-        logging.info(colorize("@*{Searching} for tests in %s" % s))
         session.discover(pedantic=args.P == "pedantic")
         if args.until is not None:
             generators = session.generators
@@ -130,9 +127,7 @@ def run(args: "argparse.Namespace") -> int:
         )
     else:
         assert args.mode == "b"
-        batch_case_ids = Session.load_batch_index(args.batch_id)
-        session = Session(args.work_tree, mode="a")
-        session.bfilter(batch_id=args.batch_id)
+        session = Session.batch_view(args.work_tree, args.batch_id)
     cases = session.run(fail_fast=args.fail_fast, stage=stage)
     if not args.no_summary:
         logging.emit(session.summary(cases, include_pass=False))
