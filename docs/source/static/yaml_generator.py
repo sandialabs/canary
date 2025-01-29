@@ -1,10 +1,9 @@
 import io
-import os
-from itertools import product
+import itertools
+import re
 from string import Template
-from typing import IO
-from typing import Any
 from typing import Optional
+from typing import Type
 
 import yaml
 
@@ -14,63 +13,35 @@ from _canary.util.filesystem import set_executable
 from _canary.util.filesystem import working_dir
 
 
-class YAMLTestGenerator(canary.AbstractTestGenerator):
-    def __init__(self, root: str, path: Optional[str] = None) -> None:
-        super().__init__(root, path=path)
-        self.load(open(self.file))
+@canary.hookimpl
+def canary_testcase_generator() -> Type["YAMLTestGenerator"]:
+    return YAMLTestGenerator
 
+
+class YAMLTestGenerator(canary.AbstractTestGenerator):
     @classmethod
     def matches(cls, path: str) -> bool:
-        """Is ``path`` a YAMLTestGenerator?"""
-        return os.path.basename(path).startswith("test_") and path.endswith((".yml", ".yaml"))
-
-    def load(self, file: IO[Any]) -> None:
-        """Load the file.  A file may contain more than one test spec
-
-        The test spec has the form:
-
-        .. code-block:: yaml
-
-           NAME:
-             description: str
-             script: list[str]
-             keywords: list[str]
-             parameters: dict[str, list[float | int | str | None]]
-
-        """
-        self.spec: dict[str, Any] = {}
-        data = yaml.safe_load(file)
-        if not isinstance(data, dict):
-            raise ValueError(f"{file.name}: expected test spec to be a mapping")
-        if len(data) != 1:
-            raise ValueError(f"{file.name}: expected one test spec")
-        self.name = next(iter(data))
-        details = data[self.name]
-        self.description = details.get("description")
-        self.keywords = details.get("keywords", [])
-        self.parameters = details.get("parameters", {})
-        self.script = details.get("script", [])
+        return re.match("test_.*\.yaml", path)
 
     def lock(self, on_options: Optional[list[str]] = None) -> list[canary.TestCase]:
-        """Take the cartesian product of parameters and from each combination create a test case."""
-        kwds = dict(
-            file_root=self.root,
-            file_path=self.path,
-            family=self.name,
-            script=self.script,
-            keywords=self.keywords,
-            description=self.description,
-        )
-        if not self.parameters:
-            case = YAMLTestCase(**kwds)
-            return [case]
-        cases: list[YAMLTestCase] = []
-        keys = list(self.parameters.keys())
-        for values in product(*self.parameters.values()):
-            parameters = dict(zip(keys, values))
-            case = YAMLTestCase(parameters=parameters, **kwds)
-            cases.append(case)
-        return cases  # type: ignore
+        with open(self.file, "r") as fh:
+            fd = yaml.load(fh)
+        cases: list[canary.TestCase] = []
+        for spec in fd["tests"]:
+            parameter_names = list(spec["parameters"].keys())
+            for parameter_values in itertools.product(*spec["parameters"].values()):
+                parameters = dict(zip(parameter_names, parameter_values))
+                script = [Template(cmd).safe_substitute(**parameters) for cmd in spec["script"]]
+                case = YAMLTestCase(
+                    file_root=self.root,
+                    file_path=self.path,
+                    family=spec["name"],
+                    keywords=spec["keywords"],
+                    script=script,
+                    parameters=parameters,
+                )
+                cases.append(case)
+        return cases
 
     def describe(self, on_options: Optional[list[str]] = None) -> str:
         cases = self.lock(on_options=on_options)
@@ -85,47 +56,16 @@ class YAMLTestGenerator(canary.AbstractTestGenerator):
 
 
 class YAMLTestCase(canary.TestCase):
-    def __init__(
-        self,
-        *,
-        file_root: str,
-        file_path: str,
-        family: str,
-        script: list[str],
-        keywords: list[str] = [],
-        description: str = "",
-        parameters: dict[str, Any] = {},
-        **kwds,
-    ) -> None:
-        super().__init__(
-            file_root=file_root,
-            file_path=file_path,
-            family=family,
-            parameters=parameters,
-        )
-
-        if keywords is not None:
-            self.keywords = keywords
-
+    def __init__(self, **kwds) -> None:
+        self.script = kwds.pop("script")
+        super().__init__(**kwds)
         self.launcher = "bash"
-        self.exe = "test_script.sh"
-        self.description = description
+        self.exe = "test.sh"
 
-        # Expand variables in the script using my parameters
-        self.script: list[str] = []
-        for line in script:
-            t = Template(line)
-            self.script.append(t.safe_substitute(**parameters))
-
-    def setup(self, work_tree: str, copy_all_resources: bool = False) -> None:
-        super().setup(work_tree, copy_all_resources=copy_all_resources)
+    def setup(self, stage: str = "run", copy_all_resources: bool = False) -> None:
+        super().setup(stage=stage, copy_all_resources=copy_all_resources)
         with working_dir(self.working_directory):
             with open(self.exe, "w") as fh:
                 fh.write("#!/usr/bin/env bash\n")
                 fh.write("\n".join(self.script))
             set_executable(self.exe)
-
-
-@canary.hookimpl
-def canary_testcase_generator():
-    return YAMLTestGenerator
