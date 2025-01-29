@@ -205,15 +205,10 @@ class Session:
             with self.db.open(file) as fh:
                 state = json.load(fh)
             state["properties"]["work_tree"] = self.work_tree
-            # update dependencies manually so that the dependencies are consistent across the suite
-            dependency_states = state["properties"].pop("dependencies", [])
-            dep_done_criteria = state["properties"].pop("dep_done_criteria", [])
             case = testcase_from_state(state)
-            case.dependencies.clear()
-            case.dep_done_criteria.clear()
-            for i, dep_state in enumerate(dependency_states):
-                dep = cases[dep_state["properties"]["id"]]
-                case.add_dependency(dep, dep_done_criteria[i])
+            # update dependencies manually so that the dependencies are consistent across the suite
+            for i, dep in enumerate(case.dependencies):
+                case.dependencies[i] = cases[dep.id]
             cases[case.id] = case
         logging.debug("Finished loading test cases")
         return list(cases.values())

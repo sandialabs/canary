@@ -160,7 +160,7 @@ def test_analyze(tmpdir):
             fh.write("import canary\n")
             fh.write("canary.directives.parameterize('a,b', [(0,1),(2,3),(4,5)])\n")
             fh.write("canary.directives.parameterize('n', [10,11,12])\n")
-            fh.write("canary.directives.analyze()\n")
+            fh.write("canary.directives.generate_composite_base_case()\n")
     f = finder.Finder()
     f.add(workdir)
     f.prepare()
@@ -169,7 +169,7 @@ def test_analyze(tmpdir):
     print(cases)
     print(vars(cases[-1]))
     assert len([c for c in cases if not c.masked()]) == 10
-    assert cases[-1].postflags == ["--analyze"]
+    assert cases[-1].postflags == ["--base"]
     assert all(case in cases[-1].dependencies for case in cases[:-1])
 
 
@@ -217,7 +217,7 @@ def test_pyt_generator(tmpdir):
                 """
 import canary
 canary.directives.name('baz')
-canary.directives.analyze()
+canary.directives.generate_composite_base_case()
 canary.directives.owner('me')
 canary.directives.keywords('test', 'unit')
 canary.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
@@ -242,7 +242,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             assert len(cases) == 10
             assert isinstance(cases[-1], tc.TestMultiCase)
             for case in cases:
-                assert not case.masked(), case.status.details
+                assert not case.masked(), f"{case}: {case.status}"
 
             # without the baz option, the `cpus` parameter will not be expanded so we will be left with
             # three test cases and one analyze.  The analyze will not be masked because the `cpus`

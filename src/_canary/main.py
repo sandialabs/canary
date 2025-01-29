@@ -96,10 +96,14 @@ class CanaryCommand:
 
     def __call__(self, *args_in: str, fail_on_error: bool = True) -> int:
         try:
+            global reraise
             save_debug: bool | None = None
+            save_reraise: bool | None = None
             if self.debug:
                 save_debug = config.debug
                 config.debug = True
+                save_reraise = reraise
+                reraise = True
             argv = [self.command.name] + list(args_in)
             parser = make_argument_parser()
             args = parser.preparse(argv)
@@ -116,6 +120,8 @@ class CanaryCommand:
         finally:
             if save_debug is not None:
                 config.debug = save_debug
+            if save_reraise is not None:
+                reraise = save_reraise
         return self.returncode
 
 
