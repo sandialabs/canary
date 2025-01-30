@@ -121,7 +121,7 @@ class PYTTestGenerator(AbstractTestGenerator):
         testcases: list[TestCase] = []
 
         names = ", ".join(self.names())
-        logging.debug(f"Generating test cases for {self} using the following test names: {names}")
+        logging.trace(f"Generating test cases for {self} using the following test names: {names}")
         dependencies: dict[str, list[DependencyPatterns]] = {}
         for name in self.names():
             test_mask = self.skipif_reason
@@ -229,7 +229,7 @@ class PYTTestGenerator(AbstractTestGenerator):
     def resolve_inter_dependencies(
         self, cases: list[TestCase], dependencies: dict[str, list[DependencyPatterns]]
     ) -> None:
-        logging.debug(f"Resolving dependencies in test {self}")
+        logging.trace(f"Resolving dependencies in test {self}")
         for case in cases:
             if case.id not in dependencies:
                 continue

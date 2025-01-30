@@ -54,6 +54,7 @@ from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
 from .util.returncode import compute_returncode
+from .util.rprobe import cpu_count
 from .util.time import hhmmss
 from .util.time import timestamp
 
@@ -205,11 +206,17 @@ class Session:
 
     def dump_testcases(self) -> None:
         """Dump each case's state in this session to ``file`` in json format"""
-        index: dict[str, list[str]] = {}
         with logging.context(colorize("@*{Generating} test case lockfiles")):
-            for case in self.cases:
-                index[case.id] = [dep.id for dep in case.dependencies]
-                case.save()
+            if len(self.cases) < 100:
+                [case.save() for case in self.cases]
+            else:
+                cpus = cpu_count()
+                args = ((case.getstate(), case.lockfile) for case in self.cases)
+                pool = multiprocessing.Pool(cpus)
+                pool.imap_unordered(json_dump, args, chunksize=len(self.cases) // cpus or 1)
+                pool.close()
+                pool.join()
+            index = {case.id: [dep.id for dep in case.dependencies] for case in self.cases}
             with self.db.open("cases/index", "w") as fh:
                 json.dump({"index": index}, fh, indent=2)
 
@@ -1002,6 +1009,13 @@ def kill_child_processes(sig: int, kill_delay: float = 0.1) -> None:
 def handle_signal(sig, frame):
     kill_child_processes(sig)
     raise SystemExit(sig)
+
+
+def json_dump(args):
+    data, filename = args
+    mkdirp(os.path.dirname(filename))
+    with open(filename, "w") as fh:
+        json.dump(data, fh, indent=2)
 
 
 class DirectoryExistsError(Exception):

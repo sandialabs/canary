@@ -41,7 +41,7 @@ def warn_unsupported_ctest_option(option: str) -> None:
 class CTestTestGenerator(AbstractTestGenerator):
     def __init__(self, root: str, path: str | None = None) -> None:
         # CTest works with resolved paths
-        super().__init__(os.path.realpath(root), path=path)
+        super().__init__(os.path.abspath(root), path=path)
         self.owners: list[str] = []
 
     @classmethod
@@ -69,8 +69,11 @@ class CTestTestGenerator(AbstractTestGenerator):
         if not tests:
             return []
         cases: list[CTestTestCase] = []
+        realpath = os.path.realpath
         for family, details in tests.items():
             path = os.path.relpath(details["ctestfile"], self.root)
+            if not os.path.exists(os.path.join(self.root, path)):
+                path = os.path.relpath(realpath(details["ctestfile"]), realpath(self.root))
             case = CTestTestCase(file_root=self.root, file_path=path, family=family, **details)
             cases.append(case)
         self.resolve_inter_dependencies(cases)
