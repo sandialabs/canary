@@ -1,14 +1,12 @@
 from argparse import Namespace
-from dataclasses import dataclass
-from dataclasses import field
 from typing import TYPE_CHECKING
-from typing import Callable
+from typing import Any
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
+    from ..session import Session
 
 
-@dataclass
 class CanarySubcommand:
     """Canary subcommand used when defining a Canary subcommand plugin hook.
 
@@ -24,25 +22,45 @@ class CanarySubcommand:
 
     name: str
     description: str
-    execute: Callable[[Namespace], int]
-    setup_parser: Callable[["Parser"], None] | None = field(default=None)
-    epilog: str | None = field(default=None)
-    add_help: bool = field(default=True)
+    epilog: str | None = None
+    add_help: bool = False
+
+    def setup_parser(self, parser: "Parser") -> None:
+        pass
+
+    def execute(self, args: Namespace) -> int:
+        raise NotImplementedError
 
 
-@dataclass
-class CanaryReporterSubcommand:
+class CanaryReport:
     """Canary reporter class
 
     Args:
-      name: Report type name (e.g., ``canary report my-report``)
+      type: Report type name (e.g., ``canary report my-report``)
       description: Subcommand description, shown in ``canary report --help``
       execute: Called when the subcommand is invoked
       setup_parser: Called when the subcommand parser is initialized
+      multipage: Whether the report is a multi-page report
 
     """
 
-    name: str
+    type: str
     description: str
-    execute: Callable[[Namespace], None]
-    setup_parser: Callable[["Parser"], None] | None = field(default=None)
+    multipage: bool = False
+
+    def setup_parser(self, parser: "Parser") -> None:
+        subparsers = parser.add_subparsers(dest="action", metavar="subcommands")
+        p = subparsers.add_parser("create", help=f"Create {self.type.upper()} report")
+        if self.multipage:
+            p.add_argument(
+                "--dest", default="$canary_work_tree", help="Write reports to this directory"
+            )
+        else:
+            p.add_argument("-o", dest="output", help=f"Output file name [default: {self.type}.ext]")
+
+    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
+        raise NotImplementedError
+
+    def not_implemented(self, session: "Session | None" = None, **kwargs: Any) -> None:
+        action = kwargs["action"]
+        raise NotImplementedError(f"{self}: {action} method is not implemented")

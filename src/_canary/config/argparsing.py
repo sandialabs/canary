@@ -144,8 +144,7 @@ class Parser(argparse.ArgumentParser):
             kwds["help"] = command.description
         subparser = self.subparsers.add_parser(command.name, **kwds)
         subparser.register("type", None, identity)
-        if command.setup_parser:
-            command.setup_parser(subparser)  # type: ignore
+        command.setup_parser(subparser)  # type: ignore
         try:
             add_parser_help(subparser)
         except argparse.ArgumentError:

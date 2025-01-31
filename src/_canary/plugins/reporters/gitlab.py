@@ -1,54 +1,52 @@
-import argparse
 import io
 import os
 import re
+from typing import TYPE_CHECKING
+from typing import Any
 
-from ...config.argparsing import Parser
 from ...test.case import TestCase
 from ...util import gitlab
 from ...util import logging
 from ..hookspec import hookimpl
-from ..types import CanaryReporterSubcommand
-from .common import load_session
+from ..types import CanaryReport
+
+if TYPE_CHECKING:
+    from ...config.argparsing import Parser
+    from ...session import Session
 
 
 @hookimpl
-def canary_reporter_subcommand() -> CanaryReporterSubcommand:
-    return CanaryReporterSubcommand(
-        name="gitlab-mr",
-        description="GitLab reporter",
-        setup_parser=setup_parser,
-        execute=gitlab_report,
-    )
+def canary_session_report() -> CanaryReport:
+    return GitLabMRReport()
 
 
-def setup_parser(parser: Parser):
-    sp = parser.add_subparsers(dest="subcommand", metavar="subcommands")
-    p = sp.add_parser("create", help="Create GitLab merge request reports")
-    p.add_argument("--cdash-url", help="Add a link to a CDash report for this MR")
-    p.add_argument(
-        "-a",
-        "--access-token",
-        help="GitLab access token that allows to GET/POST to the merge request API",
-    )
+class GitLabMRReport(CanaryReport):
+    type = "gitlab-mr"
+    description = "GitLab reporter"
 
+    def setup_parser(self, parser: "Parser") -> None:
+        sp = parser.add_subparsers(dest="subcommand", metavar="subcommands")
+        p = sp.add_parser("create", help="Create GitLab merge request reports")
+        p.add_argument("--cdash-url", help="Add a link to a CDash report for this MR")
+        p.add_argument(
+            "-a",
+            "--access-token",
+            help="GitLab access token that allows to GET/POST to the merge request API",
+        )
 
-def gitlab_report(args: argparse.Namespace) -> None:
-    """Create a merge request report and post it to the active merge request
+    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
+        if session is None:
+            raise ValueError("canary report html: session required")
 
-    Args:
-        cdash_url: Add a link to a CDash report for this merge request
-        access_token: A GitLab access token that allows to GET/POST to the merge request API
-
-    """
-    mr = MergeRequest(access_token=args.access_token)
-    session = load_session()
-    failed = group_failed_tests(session.active_cases())
-    if failed:
-        mr.report_failed(failed, cdash_build_url=args.cdash_url)
-    else:
-        mr.report_success(cdash_build_url=args.cdash_url)
-    return
+        access_token = kwargs["access_token"]
+        cdash_url = kwargs["cdash_url"]
+        mr = MergeRequest(access_token=access_token)
+        failed = group_failed_tests(session.active_cases())
+        if failed:
+            mr.report_failed(failed, cdash_build_url=cdash_url)
+        else:
+            mr.report_success(cdash_build_url=cdash_url)
+        return
 
 
 class MergeRequest:

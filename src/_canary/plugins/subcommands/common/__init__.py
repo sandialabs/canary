@@ -162,5 +162,7 @@ def filter_cases_by_status(cases: list["TestCase"], status: tuple | str) -> list
 
 def load_session(root: str | None = None, mode: str = "r"):
     from ....session import Session
+    from ....util import logging
 
-    return Session(root or os.getcwd(), mode=mode)
+    with logging.level(logging.WARNING):
+        return Session(root or os.getcwd(), mode=mode)

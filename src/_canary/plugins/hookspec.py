@@ -3,7 +3,7 @@ from typing import Type
 
 import pluggy
 
-from .types import CanaryReporterSubcommand
+from .types import CanaryReport
 from .types import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -46,53 +46,27 @@ def canary_subcommand() -> CanarySubcommand:
 
        from canary import plugins
 
-       def setup_parser(parser: canary.Parser) -> None:
-           parser.add_argument("--flag")
+       class MyCommand(CanarySubcommand):
+           name = "my-command"
+           description = "my-command description"
 
-       def my_subcommand(args: argparse.Namespace) -> int:
-           ...
+           def setup_parser(parser: canary.Parser) -> None:
+               parser.add_argument("--flag")
+
+           def execute(args: argparse.Namespace) -> int:
+               ...
 
        @plugins.hookimpl
        def canary_subcommand():
-           return plugins.CanarySubcommand(
-               name="subcommand-name",
-               description="Some description",
-               setup_parser=setup_parser,
-               execute=my_subcommand,
-            )
+           return MyCommand()
 
     """
     raise NotImplementedError
 
 
 @_hookspec
-def canary_reporter_subcommand() -> CanaryReporterSubcommand:
-    """Register Canary report subcommand
-
-    Example:
-
-    .. code-block:: python
-
-       import argparse
-
-       from canary import plugins
-
-       def setup_parser(parser: canary.Parser) -> None:
-           parser.add_argument("--flag")
-
-       def my_report_subcommand(args: argparse.Namespace) -> int:
-           ...
-
-       @plugins.hookimpl
-       def canary_reporter_subcommand():
-           return plugins.CanarySubcommand(
-               name="subcommand-name",
-               description="Some description",
-               setup_parser=setup_parser,
-               execute=my_report_subcommand,
-            )
-
-    """
+def canary_session_report() -> CanaryReport:
+    """Register Canary report type"""
     raise NotImplementedError
 
 

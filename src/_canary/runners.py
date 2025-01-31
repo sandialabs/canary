@@ -7,6 +7,7 @@ import signal
 import subprocess
 import time
 from typing import Any
+from typing import TextIO
 
 import hpc_connect
 import psutil
@@ -87,19 +88,23 @@ class TestCaseRunner(AbstractTestRunner):
             if timeoutx := config.getoption("timeout_multiplier"):
                 timeout *= timeoutx
             with working_dir(case.working_directory):
-                with open(case.logfile(stage), "w") as fh:
+                try:
+                    stdout = open(case.stdout(stage), "w")
+                    stderr: TextIO | int
+                    if f := case.stderr(stage):
+                        stderr = open(f, "w")
+                    else:
+                        stderr = subprocess.STDOUT
                     cmd = case.command(stage=stage)
                     case.cmd_line = " ".join(cmd)
-                    fh.write(f"==> Running {case.display_name} in {case.working_directory}\n")
-                    fh.write(f"==> Command line: {case.cmd_line}\n")
+                    stdout.write(f"==> Running {case.display_name} in {case.working_directory}\n")
+                    stdout.write(f"==> Command line: {case.cmd_line}\n")
                     if timeoutx:
-                        fh.write(f"==> Timeout multiplier: {timeoutx}\n")
-                    fh.flush()
+                        stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
+                    stdout.flush()
                     with case.rc_environ():
                         tic = time.monotonic()
-                        proc = Popen(
-                            cmd, start_new_session=True, stdout=fh, stderr=subprocess.STDOUT
-                        )
+                        proc = Popen(cmd, start_new_session=True, stdout=stdout, stderr=stderr)
                         metrics = self.get_process_metrics(proc)
                         while proc.poll() is None:
                             self.get_process_metrics(proc, metrics=metrics)
@@ -108,6 +113,10 @@ class TestCaseRunner(AbstractTestRunner):
                                 os.kill(proc.pid, signal.SIGINT)
                                 raise TimeoutError
                             time.sleep(0.05)
+                finally:
+                    stdout.close()
+                    if hasattr(stderr, "close"):
+                        stderr.close()  # type: ignore
         except MissingSourceError as e:
             case.returncode = skip_exit_status
             case.status.set("skipped", f"{case}: resource file {e.args[0]} not found")

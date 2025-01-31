@@ -16,7 +16,7 @@ from _canary.error import TestSkipped
 from _canary.generator import AbstractTestGenerator
 from _canary.main import console_main
 from _canary.plugins.hookspec import hookimpl
-from _canary.plugins.types import CanaryReporterSubcommand
+from _canary.plugins.types import CanaryReport
 from _canary.plugins.types import CanarySubcommand
 from _canary.session import Session
 from _canary.test.case import TestCase

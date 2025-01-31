@@ -2,68 +2,70 @@ import argparse
 import inspect
 import io
 import os
+from typing import TYPE_CHECKING
 
-from ... import config
-from ...config.argparsing import Parser
 from ...util.filesystem import find_work_tree
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import load_session
 
+if TYPE_CHECKING:
+    from ...config.argparsing import Parser
+
 
 @hookimpl
 def canary_subcommand() -> CanarySubcommand:
-    return CanarySubcommand(
-        name="config",
-        description="Show configuration variable values",
-        setup_parser=setup_parser,
-        execute=config_ex,
-    )
+    return Config()
 
 
-def setup_parser(parser: "Parser") -> None:
-    sp = parser.add_subparsers(dest="subcommand")
-    p = sp.add_parser("show", help="Show the current configuration")
-    p.add_argument("section", nargs="?", help="Show only this section")
-    p = sp.add_parser("add", help="Show the current configuration")
-    p.add_argument(
-        "--scope",
-        choices=("local", "global", "session"),
-        default="local",
-        help="Configuration scope",
-    )
-    p.add_argument(
-        "path",
-        help="colon-separated path to config to be set, e.g. 'config:debug:true'",
-    )
+class Config(CanarySubcommand):
+    name = "config"
+    description = "Show configuration variable values"
 
+    def setup_parser(self, parser: "Parser") -> None:
+        sp = parser.add_subparsers(dest="subcommand")
+        p = sp.add_parser("show", help="Show the current configuration")
+        p.add_argument("section", nargs="?", help="Show only this section")
+        p = sp.add_parser("add", help="Show the current configuration")
+        p.add_argument(
+            "--scope",
+            choices=("local", "global", "session"),
+            default="local",
+            help="Configuration scope",
+        )
+        p.add_argument(
+            "path",
+            help="colon-separated path to config to be set, e.g. 'config:debug:true'",
+        )
 
-def config_ex(args: "argparse.Namespace") -> int:
-    do_pretty_print: bool = "CANARY_MAKE_DOCS" not in os.environ
-    if root := find_work_tree(os.getcwd()):
-        load_session(root=root)
-    if args.subcommand == "show":
-        text: str
-        if args.section in ("plugins", "plugin"):
-            text = get_active_plugin_description()
-            do_pretty_print = False
-        else:
-            text = config.describe(section=args.section)
-        try:
-            if do_pretty_print:
-                pretty_print(text)
+    def execute(self, args: "argparse.Namespace") -> int:
+        from ... import config
+
+        do_pretty_print: bool = "CANARY_MAKE_DOCS" not in os.environ
+        if root := find_work_tree(os.getcwd()):
+            load_session(root=root)
+        if args.subcommand == "show":
+            text: str
+            if args.section in ("plugins", "plugin"):
+                text = get_active_plugin_description()
+                do_pretty_print = False
             else:
+                text = config.describe(section=args.section)
+            try:
+                if do_pretty_print:
+                    pretty_print(text)
+                else:
+                    print(text)
+            except ImportError:
                 print(text)
-        except ImportError:
-            print(text)
-        return 0
-    elif args.subcommand == "add":
-        config.save(args.path, scope=args.scope)
-    elif args.command is None:
-        raise ValueError("canary config: missing required subcommand (choose from show, add)")
-    else:
-        raise ValueError(f"canary config: unknown subcommand: {args.subcommand}")
-    return 1
+            return 0
+        elif args.subcommand == "add":
+            config.save(args.path, scope=args.scope)
+        elif args.command is None:
+            raise ValueError("canary config: missing required subcommand (choose from show, add)")
+        else:
+            raise ValueError(f"canary config: unknown subcommand: {args.subcommand}")
+        return 1
 
 
 def pretty_print(text: str):
@@ -79,6 +81,8 @@ def pretty_print(text: str):
 
 def get_active_plugin_description() -> str:
     import hpc_connect
+
+    from ... import config
 
     table: list[tuple[str, str, str]] = []
     widths = [len("Namespace"), len("Name"), 0]

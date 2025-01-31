@@ -1,60 +1,47 @@
-import argparse
 import os
 import string
+from typing import TYPE_CHECKING
+from typing import Any
 from typing import TextIO
 
 from ... import config
-from ...config.argparsing import Parser
 from ...test.case import TestCase
 from ...util import logging
 from ...util.filesystem import force_remove
 from ...util.filesystem import mkdirp
 from ..hookspec import hookimpl
-from ..types import CanaryReporterSubcommand
-from .common import load_session
+from ..types import CanaryReport
+
+if TYPE_CHECKING:
+    from ...session import Session
 
 
 @hookimpl
-def canary_reporter_subcommand() -> CanaryReporterSubcommand:
-    return CanaryReporterSubcommand(
-        name="markdown",
-        description="Markdown reporter",
-        setup_parser=setup_parser,
-        execute=markdown,
-    )
+def canary_session_report() -> CanaryReport:
+    return MarkdownReport()
 
 
-def setup_parser(parser: Parser) -> None:
-    sp = parser.add_subparsers(dest="subcommand", metavar="subcommands")
-    p = sp.add_parser("create", help="Create multi-file Markdown report")
-    p.add_argument("--dest", help="Output directory", default="$canary_work_tree")
+class MarkdownReport(CanaryReport):
+    type = "markdown"
+    description = "Markdown reporter"
+    multipage = True
 
+    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
+        if session is None:
+            raise ValueError("canary report html: session required")
 
-def markdown(args: argparse.Namespace) -> None:
-    if args.subcommand == "create":
-        reporter = MarkdownReporter()
-        reporter.create(dest=args.dest)
-    else:
-        raise ValueError(f"{args.subcommand}: unknown Markdown report subcommand")
-
-
-class MarkdownReporter:
-    def __init__(self):
-        self.session = load_session()
-
-    def create(self, dest: str) -> None:
-        dest = string.Template(dest).safe_substitute(canary_work_tree=self.session.work_tree)
+        dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=session.work_tree)
         self.md_dir = os.path.join(dest, "MARKDOWN")
-        self.index = os.path.join(dest, "Results.md")
+        self.index = os.path.join(dest, "canary-report.md")
         self.root = dest
         force_remove(self.md_dir)
         mkdirp(self.md_dir)
-        for case in self.session.active_cases():
+        for case in session.active_cases():
             file = os.path.join(self.md_dir, f"{case.id}.md")
             with open(file, "w") as fh:
                 self.generate_case_file(case, fh)
         with open(self.index, "w") as fh:
-            self.generate_index(fh)
+            self.generate_index(session, fh)
         f = os.path.relpath(self.index, config.invocation_dir)
         logging.info(f"Markdown report written to {f}")
 
@@ -80,14 +67,14 @@ class MarkdownReporter:
             fh.write("Log file does not exist\n")
         fh.write("```\n")
 
-    def generate_index(self, fh: TextIO) -> None:
+    def generate_index(self, session: "Session", fh: TextIO) -> None:
         fh.write("# Canary Summary\n\n")
         fh.write(
             "| Site | Project | Not Run | Timeout | Fail | Diff | Pass | Defective | Cancelled | Total |\n"
         )
         fh.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
         totals: dict[str, list[TestCase]] = {}
-        for case in self.session.active_cases():
+        for case in session.active_cases():
             group = "Defective" if case.defective() else case.status.name.title()
             totals.setdefault(group, []).append(case)
         fh.write(f"| {config.system.host} ")
@@ -104,7 +91,7 @@ class MarkdownReporter:
                     self.generate_group_index(totals[group], fp)
         file = os.path.join(self.md_dir, "Total.md")
         relpath = os.path.relpath(file, self.root)
-        fh.write(f"| [{len(self.session.active_cases())}]({relpath}) |\n")
+        fh.write(f"| [{len(session.active_cases())}]({relpath}) |\n")
         with open(file, "w") as fp:
             self.generate_all_tests_index(totals, fp)
 

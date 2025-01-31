@@ -1,7 +1,7 @@
 import argparse
 import os
+from typing import TYPE_CHECKING
 
-from ...config.argparsing import Parser
 from ...generator import AbstractTestGenerator
 from ...test.case import TestCase
 from ..hookspec import hookimpl
@@ -10,45 +10,46 @@ from .common import add_filter_arguments
 from .common import add_resource_arguments
 from .common import load_session
 
+if TYPE_CHECKING:
+    from ...config.argparsing import Parser
+
 
 @hookimpl
 def canary_subcommand() -> CanarySubcommand:
-    return CanarySubcommand(
-        name="describe",
-        description="Print information about a test file or test case",
-        setup_parser=setup_parser,
-        execute=describe,
-    )
+    return Describe()
 
 
-def setup_parser(parser: "Parser") -> None:
-    add_filter_arguments(parser)
-    add_resource_arguments(parser)
-    parser.add_argument("testspec", help="Test file or test case spec")
+class Describe(CanarySubcommand):
+    name = "describe"
+    description = "Print information about a test file or test case"
 
+    def setup_parser(self, parser: "Parser") -> None:
+        add_filter_arguments(parser)
+        add_resource_arguments(parser)
+        parser.add_argument("testspec", help="Test file or test case spec")
 
-def describe(args: argparse.Namespace) -> int:
-    import _canary.finder as finder
+    def execute(self, args: argparse.Namespace) -> int:
+        import _canary.finder as finder
 
-    if os.path.isdir(args.testspec):
-        path = args.testspec
-        return describe_folder(
-            path,
-            keyword_exprs=args.keyword_exprs,
-            on_options=args.on_options,
-            parameter_expr=args.parameter_expr,
-        )
-    if finder.is_test_file(args.testspec):
-        file = finder.find(args.testspec)
-        return describe_generator(file, on_options=args.on_options)
-    # could be a test case in the test session?
-    session = load_session()
-    for case in session.cases:
-        if case.matches(args.testspec):
-            describe_testcase(case)
-            return 0
-    print(f"{args.testspec}: could not find matching generator or test case")
-    return 1
+        if os.path.isdir(args.testspec):
+            path = args.testspec
+            return describe_folder(
+                path,
+                keyword_exprs=args.keyword_exprs,
+                on_options=args.on_options,
+                parameter_expr=args.parameter_expr,
+            )
+        if finder.is_test_file(args.testspec):
+            file = finder.find(args.testspec)
+            return describe_generator(file, on_options=args.on_options)
+        # could be a test case in the test session?
+        session = load_session()
+        for case in session.cases:
+            if case.matches(args.testspec):
+                describe_testcase(case)
+                return 0
+        print(f"{args.testspec}: could not find matching generator or test case")
+        return 1
 
 
 def describe_folder(

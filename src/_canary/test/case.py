@@ -388,10 +388,15 @@ class TestCase(AbstractTestCase):
         else:
             return os.path.join(self.work_tree, self.path, os.path.basename(self.file))
 
+    def stdout(self, stage: str | None = None) -> str:
+        p = "-" if stage is None else f"-{stage}-"
+        return os.path.join(self.working_directory, f"canary{p}out.txt")
+
+    def stderr(self, stage: str | None = None) -> str | None:
+        return None
+
     def logfile(self, stage: str | None = None) -> str:
-        if stage is None:
-            return os.path.join(self.working_directory, "canary-out.txt")
-        return os.path.join(self.working_directory, f"canary-{stage}-out.txt")
+        return self.stdout(stage=stage)
 
     @property
     def working_directory(self) -> str:
@@ -1449,6 +1454,7 @@ class TestCase(AbstractTestCase):
         self.save()
 
     def teardown(self) -> None:
+        print("HERE I AM")
         keep = set([os.path.basename(a.src) if a.dst is None else a.dst for a in self.assets])
         keep.add(os.path.basename(self.file))
         keep.add("testcase.lock")

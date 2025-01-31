@@ -1,31 +1,41 @@
 import argparse
 import os
 import types
+from typing import TYPE_CHECKING
 
-from ... import config
-from ...config.argparsing import Parser
-from ...config.argparsing import make_argument_parser
 from ...third_party import argparsewriter as aw
 from ...third_party.color import set_color_when
 from ...util.filesystem import mkdirp
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
-
-def setup_parser(parser: "Parser") -> None:
-    parser.add_argument(
-        "-d", dest="dest", default=".", help="Destination folder to write documentation"
-    )
+if TYPE_CHECKING:
+    from ...config.argparsing import Parser
 
 
-def autodoc(args: argparse.Namespace) -> int:
-    set_color_when("never")
-    dest = os.path.abspath(args.dest)
-    if not os.path.isdir(dest):
-        mkdirp(dest)
-    autodoc_directives(dest)
-    autodoc_commands(dest)
-    return 0
+@hookimpl
+def canary_subcommand() -> CanarySubcommand:
+    return Autodoc()
+
+
+class Autodoc(CanarySubcommand):
+    name = "autodoc"
+    description = "Generate rst documentation files"
+    add_help = False
+
+    def setup_parser(self, parser: "Parser") -> None:
+        parser.add_argument(
+            "-d", dest="dest", default=".", help="Destination folder to write documentation"
+        )
+
+    def execute(self, args: argparse.Namespace) -> int:
+        set_color_when("never")
+        dest = os.path.abspath(args.dest)
+        if not os.path.isdir(dest):
+            mkdirp(dest)
+        autodoc_directives(dest)
+        autodoc_commands(dest)
+        return 0
 
 
 def autodoc_directives(dest: str) -> None:
@@ -53,19 +63,11 @@ def autodoc_directives(dest: str) -> None:
 
 
 def autodoc_commands(dest: str) -> None:
+    from ... import config
+    from ...config.argparsing import make_argument_parser
+
     parser = make_argument_parser()
     for command in config.plugin_manager.hook.canary_subcommand():
         parser.add_command(command)
     writer = aw.ArgparseMultiRstWriter(parser.prog, dest)
     writer.write(parser)
-
-
-@hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return CanarySubcommand(
-        name="autodoc",
-        description="Generate rst documentation files",
-        add_help=False,
-        setup_parser=setup_parser,
-        execute=autodoc,
-    )

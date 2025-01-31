@@ -29,7 +29,7 @@ class CDashXMLReporter:
         if session:
             for case in session.active_cases():
                 self.data.add_test(case)
-        dest = dest or os.path.join("." if not session else session.work_tree, "_reports/cdash")
+        dest = dest or os.path.join("." if not session else session.work_tree, "CDASH")
         self.xml_dir = os.path.abspath(dest)
         self.xml_files: list[str] = []
         self.notes: dict[str, str] = {}
@@ -37,7 +37,7 @@ class CDashXMLReporter:
     @classmethod
     def from_json(cls, file: str, dest: str | None = None) -> "CDashXMLReporter":
         """Create an xml report from a json report"""
-        dest = dest or os.path.join(os.path.dirname(file), "xml")
+        dest = dest or os.path.join(os.path.dirname(file), "CDASH")
         self = cls(dest=dest)
         data = json.load(open(file))
         ts: TopologicalSorter = TopologicalSorter()
@@ -45,7 +45,7 @@ class CDashXMLReporter:
             for name, value in state["properties"].items():
                 if name == "dependencies":
                     dependencies = value
-                    dep_ids = [d["id"] for d in dependencies]
+                    dep_ids = [d["properties"]["id"] for d in dependencies]
                     ts.add(id, *dep_ids)
                     break
         cases: dict[str, TestCase] = {}

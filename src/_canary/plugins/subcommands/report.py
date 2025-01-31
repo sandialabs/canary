@@ -1,36 +1,53 @@
+import os
 from argparse import Namespace
+from typing import TYPE_CHECKING
 
-from ... import config
-from ...config.argparsing import Parser
+from ...util import logging
 from ..hookspec import hookimpl
+from ..types import CanaryReport
 from ..types import CanarySubcommand
+
+if TYPE_CHECKING:
+    from ...config.argparsing import Parser
 
 
 @hookimpl
 def canary_subcommand() -> CanarySubcommand:
-    return CanarySubcommand(
-        name="report",
-        description="Create and post test reports",
-        setup_parser=setup_parser,
-        execute=report,
-        epilog=epilog,
-    )
+    return Report()
 
 
-epilog = "Note: this command must be run from inside of a test session directory."
+class Report(CanarySubcommand):
+    name = "report"
+    description = "Create and post test reports"
+    epilog = "Note: this command must be run from inside of a test session directory."
 
+    def setup_parser(self, parser: "Parser") -> None:
+        from ... import config
 
-def setup_parser(parser: Parser) -> None:
-    parent = parser.add_subparsers(dest="type", metavar="subcommands")
-    for reporter in config.plugin_manager.hook.canary_reporter_subcommand():
-        p = parent.add_parser(reporter.name, help=reporter.description)
-        reporter.setup_parser(p)
+        subparsers = parser.add_subparsers(dest="type", metavar="subcommands")
+        for report in config.plugin_manager.hook.canary_session_report():
+            parent = subparsers.add_parser(report.type, help=report.description)
+            report.setup_parser(parent)
 
+    def execute(self, args: Namespace) -> int:
+        from ... import config
+        from ...session import NotASession
+        from ...session import Session
 
-def report(args: Namespace) -> int:
-    for reporter in config.plugin_manager.hook.canary_reporter_subcommand():
-        if reporter.name == args.type:
-            reporter.execute(args)
-            return 0
-    else:
-        raise ValueError(f"canary report: unknown subcommand {args.type!r}")
+        report: CanaryReport
+        for report in config.plugin_manager.hook.canary_session_report():
+            if report.type == args.type:
+                break
+        else:
+            raise ValueError(f"canary report: unknown report type {args.type!r}")
+
+        session: Session | None
+        try:
+            with logging.level(logging.WARNING):
+                session = Session(os.getcwd(), mode="r")
+        except NotASession:
+            session = None
+        kwargs = vars(args)
+        action = getattr(report, args.action.replace("-", "_"), report.not_implemented)
+        action(session, **kwargs)
+        return 0

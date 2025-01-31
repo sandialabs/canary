@@ -1,66 +1,48 @@
 import os
 import string
+from typing import TYPE_CHECKING
+from typing import Any
 from typing import TextIO
 
 from ... import config
-from ...config.argparsing import Parser
 from ...test.case import TestCase
 from ...util import logging
 from ...util.filesystem import force_remove
 from ...util.filesystem import mkdirp
 from ..hookspec import hookimpl
-from ..types import CanaryReporterSubcommand
-from .common import load_session
+from ..types import CanaryReport
+
+if TYPE_CHECKING:
+    from ...session import Session
 
 
 @hookimpl
-def canary_reporter_subcommand() -> CanaryReporterSubcommand:
-    return CanaryReporterSubcommand(
-        name="html",
-        description="HTML reporter",
-        setup_parser=setup_parser,
-        execute=html,
-    )
+def canary_session_report() -> CanaryReport:
+    return HTMLReport()
 
 
-def setup_parser(parser: Parser) -> None:
-    sp = parser.add_subparsers(dest="subcommand", metavar="subcommands")
-    p = sp.add_parser("create", help="Create multi-page HTML report")
-    p.add_argument("--dest", default="$canary_work_tree", help="Write reports to this directory")
+class HTMLReport(CanaryReport):
+    type = "html"
+    description = "HTML reporter"
+    multipage = True
 
+    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
+        if session is None:
+            raise ValueError("canary report html: session required")
 
-def html(args) -> None:
-    """Create a multi-page HTML report
-
-    Args:
-        dest: Directory to write report
-
-    """
-    if args.subcommand == "create":
-        reporter = HTMLReporter()
-        reporter.create(dest=args.dest)
-    else:
-        raise ValueError(f"{args.subcommand}: unknown HTML report subcommand")
-
-
-class HTMLReporter:
-    def __init__(self) -> None:
-        self.session = load_session()
-
-    def create(self, dest: str) -> None:
-        dest = string.Template(dest).safe_substitute(canary_work_tree=self.session.work_tree)
+        dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=session.work_tree)
         self.html_dir = os.path.join(dest, "HTML")
         self.cases_dir = os.path.join(self.html_dir, "cases")
-        self.index = os.path.join(dest, "Results.html")
+        self.index = os.path.join(dest, "canary-report.html")
 
         force_remove(self.html_dir)
         mkdirp(self.cases_dir)
-        for case in self.session.active_cases():
+        for case in session.active_cases():
             file = os.path.join(self.cases_dir, f"{case.id}.html")
             with open(file, "w") as fh:
                 self.generate_case_file(case, fh)
         with open(self.index, "w") as fh:
-            self.generate_index(fh)
+            self.generate_index(session, fh)
         f = os.path.relpath(self.index, config.invocation_dir)
         logging.info(f"HTML report written to {f}")
 
@@ -102,7 +84,7 @@ class HTMLReporter:
             fh.write("Log file does not exist\n")
         fh.write("</pre>\n</body>\n</html>\n")
 
-    def generate_index(self, fh: TextIO) -> None:
+    def generate_index(self, session: "Session", fh: TextIO) -> None:
         fh.write("<html>\n")
         fh.write(self.head)
         fh.write("<body>\n<h1>Canary Summary</h1>\n")
@@ -122,7 +104,7 @@ class HTMLReporter:
             fh.write(f"<th>{col}</th>")
         fh.write("</tr>\n")
         totals: dict[str, list[TestCase]] = {}
-        for case in self.session.active_cases():
+        for case in session.active_cases():
             group = "Defective" if case.defective() else case.status.name.title()
             totals.setdefault(group, []).append(case)
         fh.write("<tr>")
@@ -138,7 +120,7 @@ class HTMLReporter:
                 with open(file, "w") as fp:
                     self.generate_group_index(totals[group], fp)
         file = os.path.join(self.html_dir, "Total.html")
-        fh.write(f'<td><a href="file://{file}">{len(self.session.active_cases())}</a></td>')
+        fh.write(f'<td><a href="file://{file}">{len(session.active_cases())}</a></td>')
         with open(file, "w") as fp:
             self.generate_all_tests_index(totals, fp)
         fh.write("</tr>\n")
