@@ -65,12 +65,6 @@ def canary_subcommand() -> CanarySubcommand:
 
 
 @_hookspec
-def canary_session_report() -> CanaryReport:
-    """Register Canary report type"""
-    raise NotImplementedError
-
-
-@_hookspec
 def canary_session_start(session: "Session") -> None:
     """Called after the session object has been created and before performing collection and
     entering the run test loop."""
@@ -80,6 +74,34 @@ def canary_session_start(session: "Session") -> None:
 def canary_session_finish(session: "Session", exitstatus: int) -> None:
     """Called after the test session has finished allowing plugins to perform custom actions after
     all tests have been run."""
+
+
+@_hookspec
+def canary_session_report() -> CanaryReport:
+    """Register Canary report type"""
+    raise NotImplementedError
+
+
+@_hookspec
+def canary_testsuite_mask(
+    cases: list["TestCase"],
+    keyword_exprs: list[str],
+    parameter_expr: str,
+    owners: set[str],
+    regex: str | None,
+    case_specs: list[str] | None,
+    stage: str | None,
+    start: str | None,
+) -> None:
+    """Filter test cases (mask test cases that don't meet a specific criteria)
+
+    Args:
+      keyword_exprs: Include those tests matching this keyword expressions
+      parameter_expr: Include those tests matching this parameter expression
+      start: The starting directory the python session was invoked in
+      case_specs: Include those tests matching these specs
+
+    """
 
 
 @_hookspec

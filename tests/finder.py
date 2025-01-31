@@ -6,6 +6,31 @@ from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import working_dir
 
 
+def mask(
+    cases,
+    *,
+    keyword_exprs=None,
+    parameter_expr=None,
+    owners=None,
+    regex=None,
+    case_specs=None,
+    stage=None,
+    start=None,
+):
+    from _canary.plugins.builtin.mask import canary_testsuite_mask
+
+    canary_testsuite_mask(
+        cases,
+        keyword_exprs=keyword_exprs,
+        parameter_expr=parameter_expr,
+        owners=owners,
+        regex=regex,
+        case_specs=case_specs,
+        stage=stage,
+        start=start,
+    )
+
+
 def test_skipif(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
@@ -38,13 +63,13 @@ def test_keywords(tmpdir):
     f.prepare()
     files = f.discover()
     cases = finder.generate_test_cases(files)
-    finder.mask(cases, keyword_exprs=["a and i"])
+    mask(cases, keyword_exprs=["a and i"])
     assert len([c for c in cases if not c.masked()]) == 0
     cases = finder.generate_test_cases(files)
-    finder.mask(cases, keyword_exprs=["a and e"])
+    mask(cases, keyword_exprs=["a and e"])
     assert len([c for c in cases if not c.masked()]) == 1
     cases = finder.generate_test_cases(files)
-    finder.mask(cases, keyword_exprs=["a or i"])
+    mask(cases, keyword_exprs=["a or i"])
     assert len([c for c in cases if not c.masked()]) == 2
 
 
@@ -125,7 +150,7 @@ def test_cpu_count(tmpdir):
     with canary.config.override():
         canary.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=2)
         cases = finder.generate_test_cases(files)
-        finder.mask(cases)
+        mask(cases)
         assert len([c for c in cases if not c.masked()]) == 1
 
 
@@ -166,8 +191,6 @@ def test_analyze(tmpdir):
     f.prepare()
     files = f.discover()
     cases = finder.generate_test_cases(files)
-    print(cases)
-    print(vars(cases[-1]))
     assert len([c for c in cases if not c.masked()]) == 10
     assert cases[-1].postflags == ["--base"]
     assert all(case in cases[-1].dependencies for case in cases[:-1])
@@ -234,11 +257,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             f.prepare()
             files = f.discover()
             cases = finder.generate_test_cases(files, on_options=["baz"])
-            finder.mask(
-                cases,
-                keyword_exprs=["test and unit"],
-                owners=["me"],
-            )
+            mask(cases, keyword_exprs=["test and unit"], owners=["me"])
             assert len(cases) == 10
             assert isinstance(cases[-1], tc.TestMultiCase)
             for case in cases:
@@ -248,23 +267,14 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             # three test cases and one analyze.  The analyze will not be masked because the `cpus`
             # parameter is never expanded
             cases = finder.generate_test_cases(files)
-            finder.mask(
-                cases,
-                keyword_exprs=["test and unit"],
-                owners=["me"],
-            )
+            mask(cases, keyword_exprs=["test and unit"], owners=["me"])
             assert len(cases) == 4
             assert isinstance(cases[-1], tc.TestMultiCase)
             assert not cases[-1].masked()
 
             # with cpus<3, some of the cases will be filtered
             cases = finder.generate_test_cases(files, on_options=["baz"])
-            finder.mask(
-                cases,
-                keyword_exprs=["test and unit"],
-                parameter_expr="cpus < 3",
-                owners=["me"],
-            )
+            mask(cases, keyword_exprs=["test and unit"], parameter_expr="cpus < 3", owners=["me"])
             assert len(cases) == 10
             assert isinstance(cases[-1], tc.TestMultiCase)
             assert cases[-1].masked()
@@ -298,7 +308,7 @@ def test_vvt_generator(tmpdir):
             f.prepare()
             files = f.discover()
             cases = finder.generate_test_cases(files, on_options=["baz"])
-            finder.mask(cases, keyword_exprs=["test and unit"])
+            mask(cases, keyword_exprs=["test and unit"])
             assert len(cases) == 10
             assert isinstance(cases[-1], tc.TestMultiCase)
             for case in cases:
@@ -308,18 +318,14 @@ def test_vvt_generator(tmpdir):
             # three test cases and one analyze.  The analyze will not be masked because the `np`
             # parameter is never expanded
             cases = finder.generate_test_cases(files)
-            finder.mask(cases, keyword_exprs=["test and unit"])
+            mask(cases, keyword_exprs=["test and unit"])
             assert len(cases) == 4
             assert isinstance(cases[-1], tc.TestMultiCase)
             assert not cases[-1].masked()
 
             # with np<3, some of the cases will be filtered
             cases = finder.generate_test_cases(files, on_options=["baz"])
-            finder.mask(
-                cases,
-                keyword_exprs=["test and unit"],
-                parameter_expr="np < 3",
-            )
+            mask(cases, keyword_exprs=["test and unit"], parameter_expr="np < 3")
             assert len(cases) == 10
             assert isinstance(cases[-1], tc.TestMultiCase)
             assert cases[-1].masked()

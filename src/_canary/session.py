@@ -384,18 +384,16 @@ class Session:
         """
         self.cases.clear()
         self.cases.extend(finder.generate_test_cases(self.generators, on_options=on_options))
-        finder.mask(
+        config.plugin_manager.hook.canary_testsuite_mask(
             cases=self.cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
+            case_specs=None,
+            stage=None,
+            start=None,
         )
-        if env_mods:
-            for case in self.cases:
-                if not case.masked():
-                    case.add_default_env(**env_mods)
-
         masked: list[TestCase] = []
         for case in self.cases:
             if env_mods:
@@ -437,7 +435,7 @@ class Session:
 
         """
         cases = self.active_cases()
-        finder.mask(
+        config.plugin_manager.hook.canary_testsuite_mask(
             cases=cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
@@ -456,10 +454,6 @@ class Session:
         logging.info(colorize("@*{Selected} %d test cases" % (len(cases) - len(masked))))
         if masked:
             self.report_excluded(masked)
-
-    @staticmethod
-    def load_batch_index(batch_id: str) -> list[str] | None:
-        return TestBatch.loadindex(batch_id)
 
     def run(self, *, fail_fast: bool = False, stage: str | None = None) -> list[TestCase]:
         """Run each test case in ``cases``.

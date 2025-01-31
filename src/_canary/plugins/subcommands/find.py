@@ -39,6 +39,7 @@ class Find(CanarySubcommand):
         PathSpec.setup_parser(parser)
 
     def execute(self, args: argparse.Namespace) -> int:
+        from ... import config
         from ... import finder
         from ...session import Session
 
@@ -58,12 +59,15 @@ class Find(CanarySubcommand):
 
         cases = finder.generate_test_cases(generators, on_options=args.on_options)
 
-        finder.mask(
+        config.plugin_manager.hook.canary_testsuite_mask(
             cases=cases,
             keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,
             owners=None if not args.owners else set(args.owners),
             regex=args.regex_filter,
+            case_specs=None,
+            stage=None,
+            start=None,
         )
         cases_to_run = [case for case in cases if not case.masked()]
         masked = [case for case in cases if case.masked()]
