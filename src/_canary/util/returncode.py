@@ -21,19 +21,13 @@ def compute_returncode(cases: Sequence[TestCase], permissive: bool = False) -> i
                 returncode |= 2**2
             elif result == "timeout":
                 returncode |= 2**3
-            elif result == "skipped":  # notdone
+            elif result in ("skipped", "not_run"):
                 returncode |= 2**4
-            elif result == "ready":
+            elif result in ("cancelled", "ready"):
                 returncode |= 2**5
-            elif result == "skipped":
-                returncode |= 2**6
-            elif result == "cancelled":
-                returncode |= 2**7
-            elif result == "not_run":
-                returncode |= 2**8
             elif not permissive:
                 # any other code is a failure
-                returncode |= 2**9
+                returncode |= 2**6
                 if case.status.value not in warned:
                     logging.warning(f"{case}: unhandled status: {case.status}")
                     warned.add(case.status.value)
