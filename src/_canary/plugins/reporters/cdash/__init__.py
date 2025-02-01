@@ -104,7 +104,7 @@ class CDashReport(CanaryReport):
             "-t",
             "--track",
             default=None,
-            dest="tracks",
+            dest="track",
             action="append",
             help="CDash build groups to pull from CDash [default: all]",  # noqa: E501
         )
@@ -120,11 +120,12 @@ class CDashReport(CanaryReport):
             "--skip-site",
             default=None,
             action="append",
-            dest="skip_sites",
             metavar="SKIP_SITE",
             help="Sites to skip (accepts Python regular expression)",
         )
-        p.add_argument("-o", help="Filename to write the html summary [default: stdout]")
+        p.add_argument(
+            "-o", dest="output", help="Filename to write the html summary [default: stdout]"
+        )
         p = sp.add_parser("make-gitlab-issues", help="Create GitLab issues for failed tests")
         p.add_argument(
             "--cdash-url", required=True, help="The base CDash url, do not include project"
@@ -147,7 +148,6 @@ class CDashReport(CanaryReport):
         p.add_argument(
             "--skip-site",
             default=None,
-            dest="skip_sites",
             action="append",
             metavar="SKIP_SITE",
             help="Sites to skip (accepts Python regular expression)",
@@ -181,10 +181,10 @@ class CDashReport(CanaryReport):
         cdash_summary(
             url=kwargs["cdash_url"],
             project=kwargs["cdash_project"],
-            buildgroups=kwargs["tracks"],
+            buildgroups=kwargs["track"],
             mailto=kwargs["mailto"],
             file=kwargs["output"],
-            skip_sites=kwargs["skip_sites"],
+            skip_sites=kwargs["skip_site"],
         )
         return
 
@@ -197,7 +197,7 @@ class CDashReport(CanaryReport):
             gitlab_project_id=kwargs["gitlab_project_id"],
             date=kwargs["date"],
             filtergroups=kwargs["filter_groups"],
-            skip_sites=kwargs["skip_sites"],
+            skip_sites=kwargs["skip_site"],
             dont_close_missing=kwargs["dont_close_missing"],
         )
         return
