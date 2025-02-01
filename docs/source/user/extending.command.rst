@@ -12,28 +12,27 @@ User defined commands are created by returning a :class:`~_canary.plugins.types.
 
     @canary.hookimpl
     def canary_subcommand():
-        return canary.CanarySubcommand(
-            name="email",
-            description="Send an email report",
-            setup_parser=setup_parser,
-            execute=email,
-        )
+        return Email()
 
-    def setup_parser(parser):
-        parser.add_argument("--to", required=True)
-        parser.add_argument("--from", dest="_from", required=True)
 
-    def email(args) -> None:
-        session = canary.Session(".", mode="r")
+    class Email(canary.CanarySubcommand):
+        name = "email"
+        description = "Send an email report"
 
-        fp = io.StringIO()
-        for case in self.session.active_cases():
-            fp.write("====\n")
-            fp.write(f"Name: {case.name}\n")
-            fp.write(f"Start: {case.start}\n")
-            fp.write(f"Finish: {case.stop}\n")
-            fp.write(f"Status: {case.status.value}\n")
-        send_email(to=args.to, recipients=[args._from], body=fp.getvalue())
+        def setup_parser(self, parser):
+            parser.add_argument("--to", required=True)
+            parser.add_argument("--from", dest="_from", required=True)
+
+        def email(self, args) -> None:
+            session = canary.Session(".", mode="r")
+            fp = io.StringIO()
+            for case in self.session.active_cases():
+                fp.write("====\n")
+                fp.write(f"Name: {case.name}\n")
+                fp.write(f"Start: {case.start}\n")
+                fp.write(f"Finish: {case.stop}\n")
+                fp.write(f"Status: {case.status.value}\n")
+            send_email(to=args.to, recipients=[args._from], body=fp.getvalue())
 
 
 On the command line, you will now see:

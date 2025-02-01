@@ -172,7 +172,9 @@ class Session:
         self = cls(path, mode="b")
         self.load_testcases(ids=batch_case_ids)
         for case in self.cases:
-            if case.masked():
+            if case.id not in batch_case_ids:
+                case.mask = f"case not in batch {batch_id}"
+            elif case.masked():
                 logging.warning(f"{case}: unexpected mask: {case.mask}")
             elif case.pending():
                 if not all(dep.id in batch_case_ids for dep in case.dependencies):
@@ -228,6 +230,12 @@ class Session:
         ctx.start()
         with self.db.open("cases/index", "r") as fh:
             index = json.load(fh)["index"]
+        if ids:
+            # Be sure that if an ID is loaded that its dependencies are accessible
+            i: int = 0
+            while i < len(ids):
+                ids.extend(index[ids[i]])
+                i += 1
         ts: TopologicalSorter = TopologicalSorter()
         cases: dict[str, TestCase | TestMultiCase] = {}
         for id, deps in index.items():

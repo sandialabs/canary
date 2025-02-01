@@ -1454,7 +1454,6 @@ class TestCase(AbstractTestCase):
         self.save()
 
     def teardown(self) -> None:
-        print("HERE I AM")
         keep = set([os.path.basename(a.src) if a.dst is None else a.dst for a in self.assets])
         keep.add(os.path.basename(self.file))
         keep.add("testcase.lock")

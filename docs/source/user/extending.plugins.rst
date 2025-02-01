@@ -52,6 +52,8 @@ Recognized plugin hooks are:
 +----------------------------------------------------+-------------------------------------------------------------------------------------+
 |``canary_testcase_finish(case: canary.TestCase)``   | Called after the test case is run                                                   |
 +----------------------------------------------------+-------------------------------------------------------------------------------------+
+|``canary_session_report()``                         | Called by the ``canary report`` subcommand                                          |
++----------------------------------------------------+-------------------------------------------------------------------------------------+
 
 
 Examples
@@ -64,7 +66,7 @@ Examples
     import canary
 
     @canary.hookimpl
-    def canary_testcase_mask(case: canary.TestCase):
+    def canary_testcase_modify(case: canary.TestCase):
         if case.name in EXCLUSION_DB:
             case.mask = "excluded due to ..."
 
