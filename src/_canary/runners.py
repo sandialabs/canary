@@ -273,7 +273,7 @@ class BatchRunner(AbstractTestRunner):
         # Otherwise, if we just referenced config.scheduler throughout, the modifications to the
         # scheduler (eg, add_default_args) are lost in spawned uses of config.scheduler.
         self.scheduler: hpc_connect.HPCScheduler = config.scheduler
-        batch_options: list[str] = []
+        batch_options: list[str] = list(config.batch.default_options)
         if varargs := os.getenv("CANARY_BATCH_ARGS"):
             logging.debug(f"Using batch arguments from environment: {varargs}")
             batch_options.extend(shlex.split(varargs))

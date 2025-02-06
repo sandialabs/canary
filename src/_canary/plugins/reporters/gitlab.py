@@ -25,7 +25,7 @@ class GitLabMRReport(CanaryReport):
     description = "GitLab reporter"
 
     def setup_parser(self, parser: "Parser") -> None:
-        sp = parser.add_subparsers(dest="subcommand", metavar="subcommands")
+        sp = parser.add_subparsers(dest="action", metavar="subcommands")
         p = sp.add_parser("create", help="Create GitLab merge request reports")
         p.add_argument("--cdash-url", help="Add a link to a CDash report for this MR")
         p.add_argument(
