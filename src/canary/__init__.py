@@ -7,6 +7,7 @@ if TYPE_CHECKING:
 import _canary.config as config
 import _canary.enums as enums
 from _canary.config.argparsing import Parser
+from _canary.config.config import Config
 from _canary.enums import centered_parameter_space
 from _canary.enums import list_parameter_space
 from _canary.enums import random_parameter_space
