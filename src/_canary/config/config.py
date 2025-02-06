@@ -167,7 +167,7 @@ class Build:
 @dataclasses.dataclass
 class Batch:
     duration: float = 30 * 60  # 30 minutes
-    default_options: list[str] = []
+    default_options: list[str] = dataclasses.field(default_factory=list)
 
     def update(self, *args: Any, **kwargs: Any) -> None:
         if len(args) > 1:
