@@ -69,22 +69,29 @@ def load_module(module_name: str) -> None:
 
 
 @contextmanager
-def load(module_name: str, use: str | None = None) -> Generator[None, None, None]:
-    save_environb = dict(os.environb)
+def load(
+    modulename: str, *names: str, use: str | list[str] | None = None
+) -> Generator[None, None, None]:
     if use is not None:
         existing_modulepath = os.getenv("MODULEPATH", "")
-        os.environb[b"MODULEPATH"] = f"{use}:{existing_modulepath}".encode()
-    text = _module("show", module_name).split()  # type: ignore
-    for i, word in enumerate(text):
-        if word == "conflict":
-            try:
-                _module("unload", text[i + 1])
-            except ModuleError:
-                pass
-    _module("load", module_name)
-    yield
-    os.environb.clear()
-    os.environb.update(save_environb)
+        prepend_path = use if isinstance(use, str) else ":".join(use)
+        os.environb[b"MODULEPATH"] = f"{prepend_path}:{existing_modulepath}".encode()
+    try:
+        save_environb = dict(os.environb)
+        for name in [modulename, *names]:
+            text = _module("show", name).split()  # type: ignore
+            for i, word in enumerate(text):
+                if word == "conflict":
+                    try:
+                        _module("unload", text[i + 1])
+                    except ModuleError:
+                        pass
+        for name in [modulename, *names]:
+            _module("load", name)
+        yield
+    finally:
+        os.environb.clear()
+        os.environb.update(save_environb)
 
 
 loaded = load
