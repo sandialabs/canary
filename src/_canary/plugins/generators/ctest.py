@@ -544,10 +544,7 @@ def load(file: str) -> dict[str, Any]:
         project_binary_dir: str | None = find_project_binary_dir(os.path.dirname(file))
         project_source_dir: str | None = None
         if project_binary_dir is not None:
-            f = os.path.join(project_binary_dir, "CMakeCache.txt")
-            cache = open(f, "r").read()
-            if match := re.search(r"(?im)^\s*PROJECT_SOURCE_DIR.*=(.*)", cache):
-                project_source_dir = match.group(1)
+            project_source_dir = infer_project_source_dir(project_binary_dir)
 
         try:
             with open(".ctest-json-v1.json", "w") as fh:
@@ -571,29 +568,29 @@ def load(file: str) -> dict[str, Any]:
 
             # Determine where this test is defined
             t["ctestfile"] = None
-            for prop in t["properties"]:
-                if prop["name"] == "WORKING_DIRECTORY":
-                    working_directory = prop["value"]
-                    f = os.path.join(working_directory, "CTestTestfile.cmake")
-                    if os.path.exists(f):
-                        # Assume that this test is defined in this file (which is not a guarantee)
-                        t["ctestfile"] = os.path.abspath(f)
+            if nodes and project_source_dir is not None and project_binary_dir is not None:
+                node = nodes[test["backtrace"]]
+                while True:
+                    if "parent" not in node:
                         break
-            else:
-                if nodes and project_source_dir is not None and project_binary_dir is not None:
-                    node = nodes[test["backtrace"]]
-                    while True:
-                        if "parent" not in node:
-                            break
-                        node = nodes[node["parent"]]
-                    f = os.path.abspath(files[node["file"]])
-                    if os.access(f, os.R_OK):
-                        # With the CMakeList we can infer the CTest file if we can find the project
-                        # source directory
-                        reldir = os.path.relpath(os.path.dirname(f), project_source_dir)
-                        f = os.path.join(project_binary_dir, reldir, "CTestTestfile.cmake")
+                    node = nodes[node["parent"]]
+                f = os.path.abspath(files[node["file"]])
+                if os.access(f, os.R_OK):
+                    # With the CMakeList we can infer the CTest file if we can find the project
+                    # source directory
+                    reldir = os.path.relpath(os.path.dirname(f), project_source_dir)
+                    f = os.path.join(project_binary_dir, reldir, "CTestTestfile.cmake")
+                    if os.path.exists(f):
+                        t["ctestfile"] = f
+            if t["ctestfile"] is None or not os.path.exists(t["ctestfile"]):
+                for prop in t["properties"]:
+                    if prop["name"] == "WORKING_DIRECTORY":
+                        working_directory = prop["value"]
+                        f = os.path.join(working_directory, "CTestTestfile.cmake")
                         if os.path.exists(f):
-                            t["ctestfile"] = f
+                            # Assume that this test is defined in this file (which is not a guarantee)
+                            t["ctestfile"] = os.path.abspath(f)
+                            break
             if t["ctestfile"] is None or not os.path.exists(t["ctestfile"]):
                 t["ctestfile"] = file
 
@@ -611,6 +608,16 @@ def find_project_binary_dir(start: str) -> str | None:
         dirname = os.path.dirname(dirname)
         if dirname == os.path.sep:
             break
+    return None
+
+
+def infer_project_source_dir(project_binary_dir: str) -> str | None:
+    f = os.path.join(project_binary_dir, "CMakeCache.txt")
+    cache = open(f, "r").read()
+    if match := re.search(r"(?im)^\s*CMAKE_PROJECT_NAME.*=(.*)", cache):
+        name = match.group(1)
+        if match := re.search(r"(?im)^\s*%s_SOURCE_DIR.*=(.*)" % name, cache):
+            return match.group(1)
     return None
 
 

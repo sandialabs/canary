@@ -46,11 +46,9 @@ def canary_testsuite_mask(
     no_filter_criteria = all(_ is None for _ in (keyword_exprs, parameter_expr, owners, regex))
 
     explicit_start_path = start is not None
-    if start is None:
-        start = config.session.work_tree
-    elif not os.path.isabs(start):
-        start = os.path.join(config.session.work_tree, start)  # type: ignore
     if start is not None:
+        if not os.path.isabs(start):
+            start = os.path.join(config.session.work_tree, start)  # type: ignore
         start = os.path.normpath(start)
 
     order = graph.static_order_ix(cases)
@@ -64,7 +62,7 @@ def canary_testsuite_mask(
             # won't mask
             continue
 
-        if start and not case.working_directory.startswith(start):
+        if start and not isrel(case.working_directory, start):
             logging.debug(f"{case}: {case.working_directory=} but {start=}")
             case.mask = "Unreachable from start directory"
             continue
@@ -133,3 +131,7 @@ def canary_testsuite_mask(
         config.plugin_manager.hook.canary_testcase_modify(case=cases[i])
 
     ctx.stop()
+
+
+def isrel(path1: str, path2: str) -> bool:
+    return os.path.realpath(path1).startswith(os.path.realpath(path2))
