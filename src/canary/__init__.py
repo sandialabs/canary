@@ -24,6 +24,7 @@ from _canary.test.case import TestCase
 from _canary.test.instance import TestInstance
 from _canary.test.instance import TestMultiInstance
 from _canary.test.instance import load as load_instance
+from _canary.util import _difflib as difflib
 from _canary.util import filesystem
 from _canary.util import logging
 from _canary.util import module

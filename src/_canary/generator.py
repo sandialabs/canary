@@ -3,7 +3,6 @@ import os
 from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
-from typing import Type
 
 if TYPE_CHECKING:
     from .test.case import TestCase
@@ -44,12 +43,6 @@ class AbstractTestGenerator(ABC):
                ...
 
     """
-
-    REGISTRY: set[Type["AbstractTestGenerator"]] = set()
-
-    def __init_subclass__(cls, **kwargs):
-        cls.REGISTRY.add(cls)
-        return super().__init_subclass__(**kwargs)
 
     def __init__(self, root: str, path: str | None = None) -> None:
         if path is None:
@@ -106,7 +99,9 @@ class AbstractTestGenerator(ABC):
 
     @staticmethod
     def factory(root: str, path: str | None = None) -> "AbstractTestGenerator":
-        for gen_type in AbstractTestGenerator.REGISTRY:
+        from . import config
+
+        for gen_type in config.plugin_manager.get_generators():
             if gen_type.always_matches(root if path is None else path):
                 return gen_type(root, path=path)
         f = root if path is None else os.path.join(root, path)

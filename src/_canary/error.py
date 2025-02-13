@@ -13,7 +13,7 @@ class MyException(Exception):
 def excepthook(exctype, value, trace):
     """If an exeception is uncaught, set the proper exit code"""
     sys_excepthook(exctype, value, trace)
-    if isinstance(value, MyException):
+    if hasattr(exctype, "exit_code"):
         raise SystemExit(value.exit_code)
 
 
