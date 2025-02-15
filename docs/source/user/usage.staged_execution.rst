@@ -16,15 +16,15 @@ The following example defines the additional post processing stages "analyze" an
 
 .. literalinclude:: /examples/staged/staged.pyt
     :language: python
-    :lines: 10-11
+    :lines: 10-14
 
 .. literalinclude:: /examples/staged/staged.pyt
     :language: python
-    :lines: 18-19
+    :lines: 17-23
 
 .. literalinclude:: /examples/staged/staged.pyt
     :language: python
-    :lines: 27-28
+    :lines: 26-34
 
 To determine the stage of execution, the test should parse the command line for the ``--stage`` option.  As a convenience, ``canary`` provides the ``make_argument_parser`` utility that creates and ``argparse.ArgumentParser`` object and adds several common arguments, including ``--stage``:
 
