@@ -88,7 +88,7 @@ Examples
 
     @canary.hookimpl
     def canary_testcase_modify(case: canary.TestCase) -> None:
-        if not canary.config.get("option:code_coverage"):
+        if not canary.config.getoption("code_coverage"):
             return
         if case.mask:
             return
@@ -96,7 +96,7 @@ Examples
 
     @canary.hookimpl
     def canary_session_finish(session: canary.Session) -> None:
-        if not canary.config.get("option:code_coverage"):
+        if not canary.config.getoption("code_coverage"):
             return
         files = find_raw_profiling_files(session.work_tree)
         combined_files = combine_profiling_files(files)
