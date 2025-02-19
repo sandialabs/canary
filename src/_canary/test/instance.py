@@ -193,6 +193,9 @@ class TestInstance:
         # compatibility with vvtest
         return False
 
+    def logfile(self, stage: str = "run") -> str:
+        return os.path.join(self.working_directory, f"canary-{stage}-out.txt")
+
     @classmethod
     def from_case(cls: Type["TestInstance"], case: TestCase) -> "TestInstance":
         dependencies: list[TestInstance] = []
