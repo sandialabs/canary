@@ -57,19 +57,31 @@ def _module(*args, environb: MutableMapping | None = None) -> str | None:
         return str(module_p.communicate()[0].decode())
 
 
-def load_module(module_name: str) -> None:
-    text = _module("show", module_name).split()  # type: ignore
+def unload(modulename: str) -> None:
+    _module("unload", modulename)
+
+
+def purge() -> None:
+    _module("purge")
+
+
+def use(path: str) -> None:
+    _module("use", path)
+
+
+def load(modulename: str) -> None:
+    text = _module("show", modulename).split()  # type: ignore
     for i, word in enumerate(text):
         if word == "conflict":
             try:
                 _module("unload", text[i + 1])
             except ModuleError:
                 pass
-    _module("load", module_name)
+    _module("load", modulename)
 
 
 @contextmanager
-def load(
+def loaded(
     modulename: str, *names: str, use: str | list[str] | None = None
 ) -> Generator[None, None, None]:
     if use is not None:
@@ -92,9 +104,6 @@ def load(
     finally:
         os.environb.clear()
         os.environb.update(save_environb)
-
-
-loaded = load
 
 
 class ModuleError(Exception):

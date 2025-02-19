@@ -30,7 +30,7 @@ from ..util.filesystem import copyfile
 from ..util.filesystem import max_name_length
 from ..util.filesystem import mkdirp
 from ..util.misc import boolean
-from ..util.module import load_module
+from ..util.module import load as load_module
 from ..util.shell import source_rcfile
 from ..util.time import hhmmss
 from ..when import match_any
