@@ -23,7 +23,7 @@ class CanarySubcommand:
     name: str
     description: str
     epilog: str | None = None
-    add_help: bool = False
+    add_help: bool = True
 
     def setup_parser(self, parser: "Parser") -> None:
         pass
