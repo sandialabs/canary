@@ -23,15 +23,15 @@ from .rpool import ResourcePool
 from .schemas import batch_schema
 from .schemas import build_schema
 from .schemas import config_schema
+from .schemas import environment_schema
 from .schemas import resource_schema
 from .schemas import test_schema
-from .schemas import variables_schema
 
 section_schemas: dict[str, Schema] = {
     "build": build_schema,
     "batch": batch_schema,
     "config": config_schema,
-    "variables": variables_schema,
+    "environment": environment_schema,
     "resource_pool": resource_schema,
     "test": test_schema,
 }
@@ -39,26 +39,52 @@ section_schemas: dict[str, Schema] = {
 log_levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.TRACE)
 
 
-class Variables(dict):
-    """Dict subclass that updates os.environ"""
+class EnvironmentModifications:
+    def __init__(self, arg: dict[str, dict[str, str] | list[str]] | None = None) -> None:
+        self.mods: dict[str, Any] = {}
+        self.update(arg or {})
 
-    def __setitem__(self, key: str, value: Any) -> None:
-        if value is None:
-            os.environ.pop(str(key), None)
-        else:
-            os.environ[str(key)] = str(value)
-        super().__setitem__(key, value)
+    def update(self, arg: dict[str, Any]) -> None:
+        for key, value in arg.items():
+            if key == "set":
+                self.set(value)
+            elif key == "unset":
+                self.unset(value)
+            elif key in ("prepend-path", "prepend_path"):
+                self.prepend_path(value)
+            elif key in ("append-path", "append_path"):
+                self.append_path(value)
+            else:
+                raise KeyError(key)
 
-    def update(self, *args, **kwargs):
-        if len(args) > 1:
-            raise TypeError(f"Variables.update() expected at most 1 argument, got {len(args)}")
-        other = dict(*args, **kwargs)
-        for key in other:
-            self[key] = other[key]
+    def getstate(self) -> dict[str, Any]:
+        return dict(self.mods)
 
-    def pop(self, key: Any, /, default: Any = None) -> Any:
-        os.environ.pop(str(key), default)
-        return super().pop(key, default)
+    def set(self, arg: dict[str, str]) -> None:
+        self.mods.setdefault("set", {}).update(arg)
+        for name, value in arg.items():
+            os.environ[name] = value
+
+    def unset(self, arg: list[str]) -> None:
+        self.mods.setdefault("unset", []).extend(arg)
+        for name in arg:
+            os.environ.pop(name, None)
+
+    def prepend_path(self, arg: dict[str, str]) -> None:
+        self.mods.setdefault("prepend-path", {}).update(arg)
+        for name, value in arg.items():
+            if existing := os.getenv(name):
+                os.environ[name] = f"{value}:{existing}"
+            else:
+                os.environ[name] = value
+
+    def append_path(self, arg: dict[str, str]) -> None:
+        self.mods.setdefault("append-path", {}).update(arg)
+        for name, value in arg.items():
+            if existing := os.getenv(name):
+                os.environ[name] = f"{existing}:{value}"
+            else:
+                os.environ[name] = value
 
 
 class SessionConfig:
@@ -190,7 +216,9 @@ class Config:
     system: System = dataclasses.field(default_factory=System)
     session: SessionConfig = dataclasses.field(default_factory=SessionConfig)
     test: Test = dataclasses.field(default_factory=Test)
-    variables: Variables = dataclasses.field(default_factory=Variables)
+    environment: EnvironmentModifications = dataclasses.field(
+        default_factory=EnvironmentModifications
+    )
     batch: Batch = dataclasses.field(default_factory=Batch)
     build: Build = dataclasses.field(default_factory=Build)
     options: argparse.Namespace = dataclasses.field(default_factory=argparse.Namespace)
@@ -248,8 +276,7 @@ class Config:
     def restore_from_snapshot(self, fh: TextIO) -> None:
         snapshot = json.load(fh)
         self.system = System(snapshot["system"])
-        self.variables.clear()
-        self.variables.update(snapshot["variables"])
+        self.environment = EnvironmentModifications(snapshot["environment"])
         self.session = SessionConfig(**snapshot["session"])
         self.test = Test(**snapshot["test"])
         compiler = Compiler(**snapshot["build"].pop("compiler"))
@@ -334,7 +361,7 @@ class Config:
             logging.set_level(logging.DEBUG)
 
         if "session" in args.env_mods:
-            self.variables.update(args.env_mods["session"])
+            self.environment.update({"set": args.env_mods["session"]})
 
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The
@@ -411,22 +438,6 @@ class Config:
     def read_config(cls, file: str) -> dict:
         with open(file) as fh:
             data = yaml.safe_load(fh)
-        variables = dict(os.environ)
-
-        # make variables available in other config sections
-        if "variables" in data:
-            section_data = data["variables"]
-            for key, raw_value in section_data.items():
-                value = expandvars(raw_value, variables)
-                section_data[key] = str(safe_loads(value))
-                variables[key] = section_data[key]
-
-        for section in data:
-            if section in ("variables",):
-                continue
-            for key, raw_value in data[section].items():
-                value = expandvars(raw_value, variables)
-                data[section][key] = value
 
         config: dict[str, Any] = {}
         # expand any keys given as a:b:c
@@ -484,8 +495,6 @@ class Config:
                 d[key] = vars(value)
             elif key == "scheduler":
                 d[key] = getattr(value, "name", None)
-            elif isinstance(value, Variables):
-                d[key] = dict(value)
             else:
                 d.setdefault("config", {})[key] = value
         return d

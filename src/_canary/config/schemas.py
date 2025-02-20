@@ -86,8 +86,17 @@ test_schema = Schema(
 
 machine_schema = Schema({"machine": {Optional("cpu_count"): Use(int)}})
 python_schema = Schema({"python": {"executable": str, "version": str, "version_info": list}})
-variables_schema = Schema({"variables": vardict})
 testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
+environment_schema = Schema(
+    {
+        "environment": {
+            Optional("set"): vardict,
+            Optional("unset"): list_of_str,
+            Optional("prepend-path"): vardict,
+            Optional("append-path"): vardict,
+        }
+    }
+)
 
 build_schema = Schema(
     {

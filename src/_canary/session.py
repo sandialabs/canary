@@ -156,7 +156,7 @@ class Session:
         self.mode = mode
 
         os.environ.setdefault("CANARY_LEVEL", "0")
-        config.variables["CANARY_WORK_TREE"] = self.work_tree
+        os.environ["CANARY_WORK_TREE"] = self.work_tree
         self.level = int(os.environ["CANARY_LEVEL"])
         if mode == "w":
             self.save(ini=True)
@@ -480,7 +480,7 @@ class Session:
             raise StopExecution("No tests to run", 7)
         queue = self.setup_queue(cases)
         config.session.stage = stage = stage or "run"
-        config.variables["CANARY_STAGE"] = stage
+        os.environ["CANARY_STAGE"] = stage
         with self.rc_environ():
             with working_dir(self.work_tree):
                 cleanup_queue = True
@@ -545,8 +545,6 @@ class Session:
     def rc_environ(self, **variables) -> Generator[None, None, None]:
         """Set the runtime environment"""
         save_env = os.environ.copy()
-        for var, val in config.variables.items():
-            os.environ[var] = val
         os.environ.update(variables)
         level = logging.get_level()
         os.environ["CANARY_LOG_LEVEL"] = logging.get_level_name(level)

@@ -39,15 +39,23 @@ Set test timeouts.
        long: T  # (number or str) default: 10m
        default: T  # (number or str) default: 5m
 
-variables
----------
+environment
+-----------
 
-Set environment variables that will be set during test execution.
+Modify environment variables.
 
 .. code-block:: yaml
 
-   variables:
-     var: value # (str) environment variables to set for the test session
+   environment:
+     set:
+       var: value # (str) environment variables to set for the test session
+     unset:
+     - var # (str) environment variables to unset for the test session
+     prepend-path:
+       PATHNAME: value # (str) prepend value to path variable PATHNAME
+     append-path:
+       PATHNAME: value # (str) append value to path variable PATHNAME
+
 
 build
 -----

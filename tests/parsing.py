@@ -89,6 +89,6 @@ def test_config_args():
     assert config.debug is True
     assert config.resource_pool.pinfo("cpus_per_node") == 8
     assert config.resource_pool.pinfo("gpus_per_node") == 4
-    assert config.variables["SPAM"] == "EGGS"
+    assert config.environment.mods["set"]["SPAM"] == "EGGS"
     assert os.environ["SPAM"] == "EGGS"
     os.environ.pop("SPAM")
