@@ -1457,6 +1457,10 @@ class TestCase(AbstractTestCase):
         keep = set([os.path.basename(a.src) if a.dst is None else a.dst for a in self.assets])
         keep.add(os.path.basename(self.file))
         keep.add("testcase.lock")
+        keep.add(os.path.basename(self.stdout()))
+        if self.stderr():
+            keep.add(os.path.basename(self.stderr()))
+        print(keep)
         with fs.working_dir(self.working_directory):
             files = os.listdir(".")
             for file in files:
