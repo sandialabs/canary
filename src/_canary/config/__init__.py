@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     config_dir = _config.config_dir
     debug = _config.debug
     getoption = _config.getoption
+    get_loglevel = _config.get_loglevel
     environment = _config.environment
     invocation_dir = _config.invocation_dir
     working_dir = _config.working_dir

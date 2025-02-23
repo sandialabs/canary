@@ -480,6 +480,9 @@ class Config:
         option = getattr(self.options, key, None) or default
         return option
 
+    def get_loglevel(self) -> int:
+        return logging.get_level()
+
     def getstate(self) -> dict[str, Any]:
         d: dict[str, Any] = {}
         for key, value in vars(self).items():

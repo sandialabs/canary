@@ -34,8 +34,8 @@ class AbstractTestRunner:
     scheduled = False
 
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
+        verbose = config.get_loglevel() <= logging.INFO
         prefix = colorize("@*b{==>} ")
-        verbose = logging.get_level() <= logging.INFO
         stage = kwargs.get("stage", "run")
         qsize = kwargs.get("qsize")
         qrank = kwargs.get("qrank")
