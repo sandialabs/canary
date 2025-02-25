@@ -46,6 +46,14 @@ def log_levels(arg: typing.Any) -> bool:
     return True
 
 
+def multiprocessing_contexts(arg: typing.Any) -> bool:
+    if not isinstance(arg, str):
+        return False
+    elif arg.upper() not in ("FORK", "SPAWN"):
+        return False
+    return True
+
+
 def boolean(arg: typing.Any) -> bool:
     if isinstance(arg, str):
         return arg.lower() in ("0", "off", "false", "no")
@@ -57,6 +65,7 @@ config_schema = Schema(
         "config": {
             Optional("debug"): Use(boolean),
             Optional("log_level"): log_levels,
+            Optional("multiprocessing_context"): multiprocessing_contexts,
         }
     }
 )

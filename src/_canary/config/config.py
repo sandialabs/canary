@@ -210,6 +210,7 @@ class Config:
     invocation_dir: str = os.getcwd()
     working_dir: str = os.getcwd()
     debug: bool = False
+    multiprocessing_context: str = "spawn"
     log_level: str = "INFO"
     _config_dir: str | None = None
     scheduler: hpc_connect.HPCScheduler | None = None
@@ -317,6 +318,8 @@ class Config:
                     config["_config_dir"] = items["_config_dir"]
                 if "log_level" in items:
                     config["log_level"] = items["log_level"]
+                if "multiprocessing_context" in items:
+                    config["multiprocessing_context"] = items["multiprocessing_context"]
             elif key == "test":
                 for name in ("fast", "long", "default"):
                     if name in items.get("timeout", {}):
@@ -344,6 +347,8 @@ class Config:
             self.log_level = data["log_level"].upper()
             level = logging.get_level(self.log_level)
             logging.set_level(level)
+        if "multiprocessing_context" in data:
+            self.multiprocessing_context = data["multiprocessing_context"]
 
     def set_main_options(self, args: argparse.Namespace) -> None:
         logging.set_level(logging.INFO)
@@ -479,9 +484,6 @@ class Config:
         """Compatibility with external tools"""
         option = getattr(self.options, key, None) or default
         return option
-
-    def get_loglevel(self) -> int:
-        return logging.get_level()
 
     def getstate(self) -> dict[str, Any]:
         d: dict[str, Any] = {}

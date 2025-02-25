@@ -21,8 +21,8 @@ if TYPE_CHECKING:
     plugin_manager = _config.plugin_manager
     config_dir = _config.config_dir
     debug = _config.debug
+    multiprocessing_context = _config.multiprocessing_context
     getoption = _config.getoption
-    get_loglevel = _config.get_loglevel
     environment = _config.environment
     invocation_dir = _config.invocation_dir
     working_dir = _config.working_dir
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     snapshot = _config.snapshot
 else:
     # allow config to be lazily loaded
-    _config: Config | None = None
+    _config: Config = Config.factory()
 
     def __getattr__(name: str) -> Any:
         global _config

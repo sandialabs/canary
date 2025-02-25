@@ -1459,7 +1459,7 @@ class TestCase(AbstractTestCase):
         keep.add("testcase.lock")
         keep.add(os.path.basename(self.stdout()))
         if self.stderr():
-            keep.add(os.path.basename(self.stderr()))
+            keep.add(os.path.basename(self.stderr()))  # type: ignore
         with fs.working_dir(self.working_directory):
             files = os.listdir(".")
             for file in files:

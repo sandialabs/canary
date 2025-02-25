@@ -285,7 +285,9 @@ class Session:
 
         """
         logging.debug(f"Loading test session in {self.work_tree}")
-        if config.session.work_tree != self.work_tree:
+        if config.session.work_tree is None:
+            config.session.work_tree = self.work_tree
+        elif config.session.work_tree != self.work_tree:
             msg = "Expected config.session.work_tree=%r but got %s"
             raise RuntimeError(msg % (self.work_tree, config.session.work_tree))
         self.load_attrs()
@@ -569,7 +571,7 @@ class Session:
         qsize = queue.qsize
         qrank = 0
         try:
-            context = multiprocessing.get_context("spawn")
+            context = multiprocessing.get_context(config.multiprocessing_context)
             with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
                 signal.signal(signal.SIGTERM, handle_signal)
                 signal.signal(signal.SIGINT, handle_signal)
