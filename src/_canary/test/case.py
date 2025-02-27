@@ -1258,7 +1258,6 @@ class TestCase(AbstractTestCase):
 
     def copy_sources_to_workdir(self) -> None:
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
-        workdir = self.working_directory
         for asset in self.assets:
             if asset.action not in ("copy", "link"):
                 continue
@@ -1272,8 +1271,7 @@ class TestCase(AbstractTestCase):
             if asset.action == "copy" or copy_all_resources:
                 fs.force_copy(asset.src, dst, echo=logging.info)
             else:
-                relsrc = os.path.relpath(asset.src, workdir)
-                fs.force_symlink(relsrc, dst, echo=logging.info)
+                fs.force_symlink(asset.src, dst, echo=logging.info)
 
     def save(self):
         lockfile = self.lockfile
@@ -1404,8 +1402,7 @@ class TestCase(AbstractTestCase):
                 if copy_all_resources:
                     fs.force_copy(self.file, os.path.basename(self.file), echo=logging.info)
                 else:
-                    relsrc = os.path.relpath(self.file, os.getcwd())
-                    fs.force_symlink(relsrc, os.path.basename(self.file), echo=logging.info)
+                    fs.force_symlink(self.file, os.path.basename(self.file), echo=logging.info)
                 self.copy_sources_to_workdir()
 
     def do_baseline(self) -> None:
