@@ -47,7 +47,7 @@ class CanaryPluginManager(pluggy.PluginManager):
 
     def load_from_env(self) -> None:
         if plugins := os.getenv("_CANARY_PLUGINS"):
-            for plugin in plugins.split(";"):
+            for plugin in plugins.split(","):
                 self.import_plugin(plugin)
 
     def consider_plugin(self, name: str) -> None:
