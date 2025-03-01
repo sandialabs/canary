@@ -287,8 +287,8 @@ class Config:
         self.setup_hpc_connect(snapshot["scheduler"])
         self.update(snapshot["config"])
         self.batch = Batch(**snapshot["batch"])
-        for f in snapshot["plugin_manager"]["extra_files"]:
-            self.plugin_manager.load_from_file(f)
+        for f in snapshot["plugin_manager"]["plugins"]:
+            self.plugin_manager.consider_plugin(f)
 
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The
@@ -489,7 +489,7 @@ class Config:
         d: dict[str, Any] = {}
         for key, value in vars(self).items():
             if key == "_plugin_manager":
-                d["plugin_manager"] = {"extra_files": list(value.files)}
+                d["plugin_manager"] = {"plugins": list(value.considered)}
             elif dataclasses.is_dataclass(value):
                 d[key] = dataclasses.asdict(value)  # type: ignore
                 if key == "system":

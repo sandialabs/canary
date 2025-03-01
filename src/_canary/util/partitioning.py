@@ -2,11 +2,11 @@ import math
 from graphlib import TopologicalSorter
 from typing import Sequence
 
-from . import config
-from .test.batch import TestBatch
-from .test.case import TestCase
-from .util import logging
-from .util.collections import defaultlist
+from .. import config
+from ..test.batch import TestBatch
+from ..test.case import TestCase
+from ..util import logging
+from ..util.collections import defaultlist
 
 size_t = tuple[int, int]
 

@@ -7,9 +7,6 @@ from typing import Any
 from typing import Callable
 
 from . import config
-from .partition import autopartition
-from .partition import partition_n
-from .partition import partition_x
 from .test.batch import TestBatch
 from .test.case import TestCase
 from .third_party import color
@@ -235,36 +232,20 @@ class BatchResourceQueue(ResourceQueue):
         super().__init__(lock=lock, workers=5 if workers < 0 else workers)
         if config.scheduler is None:
             raise ValueError("BatchResourceQueue requires a batch:scheduler")
-        batchopts = config.getoption("batch", {})
-        scheme: str
-        if scheme := batchopts.get("scheme"):
-            if scheme == "count":
-                if batchopts.get("count") is None:
-                    raise ValueError("batch:scheme=count requires batch:count=N be defined")
-        else:
-            scheme = "duration"
-        assert scheme in ("count", "duration", "isolate")
-        self.batch_scheme = scheme
         self.tmp_buffer: list[TestCase] = []
 
     def iter_keys(self) -> list[int]:
         return list(self.buffer.keys())
 
     def prepare(self, **kwds: Any) -> None:
-        batches: list[TestBatch]
-        batchopts = config.getoption("batch", {})
-        logging.info(f"Batching test cases using scheme={self.batch_scheme}")
-        if self.batch_scheme == "count":
-            count = batchopts.get("count")
-            assert isinstance(count, int)
-            batches = partition_n(self.tmp_buffer, n=count)
-        elif self.batch_scheme == "isolate":
-            batches = partition_x(self.tmp_buffer)
-        else:
-            # duration is the default batch scheme
-            default_length = 30 * 60
-            length = float(batchopts.get("duration") or default_length)  # 30 minute default
-            batches = autopartition(self.tmp_buffer, t=length)
+        batches: list[TestBatch] | None = config.plugin_manager.hook.canary_testcases_batch(
+            cases=self.tmp_buffer
+        )
+        if batches is None:
+            raise ValueError(
+                "No test batches generated (this should never happen, "
+                "the default batching scheme should have been used)"
+            )
         logging.info(f"Generated {len(batches)} batches")
         for batch in batches:
             super().put(batch)

@@ -57,13 +57,13 @@ class TestBatch(AbstractTestCase):
 
     @property
     def runtime(self) -> float:
-        from .. import partition
+        from ..util import partitioning
 
         if self._runtime is None:
             if len(self.cases) == 1:
                 self._runtime = self.cases[0].runtime
             else:
-                _, height = partition.packed_perimeter(self.cases)
+                _, height = partitioning.packed_perimeter(self.cases)
                 t = sum(c.runtime for c in self)
                 self._runtime = float(min(height, t))
         assert self._runtime is not None

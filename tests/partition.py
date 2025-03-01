@@ -1,6 +1,6 @@
 import pytest
 
-import _canary.partition as p
+import _canary.util.partitioning as p
 from _canary import finder
 from _canary.util.filesystem import mkdirp
 

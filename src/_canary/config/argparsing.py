@@ -84,7 +84,7 @@ class Parser(argparse.ArgumentParser):
             "describe",
             "config",
         ]
-        ns = argparse.Namespace(plugin_dirs=[], debug=False, C=None)
+        ns = argparse.Namespace(plugins=[], debug=False, C=None)
         i = 0
         n = len(args)
         while i < n:
@@ -95,12 +95,12 @@ class Parser(argparse.ArgumentParser):
             if isinstance(opt, str):
                 if opt == "-p":
                     try:
-                        ns.plugin_dirs.append(args[i].strip())
+                        ns.plugins.append(args[i].strip())
                     except IndexError:
                         return ns
                     i += 1
                 elif opt.startswith("-p"):
-                    ns.plugin_dirs.append(opt[2:].strip())
+                    ns.plugins.append(opt[2:].strip())
                 elif opt in ("-d", "--debug"):
                     ns.debug = True
                 elif opt == "-C":
@@ -265,10 +265,11 @@ def make_argument_parser(**kwargs):
     parser.add_argument(
         "-p",
         default=None,
-        dest="plugin_dirs",
+        dest="plugins",
         action="append",
-        metavar="directory",
-        help="Search directories for canary plugins.",
+        metavar="name",
+        help="Load given plugin module name (multi-allowed). "
+        "To avoid loading of plugins, use the `no:` prefix.",
     )
     group = parser.add_argument_group("console reporting")
     group.add_argument(

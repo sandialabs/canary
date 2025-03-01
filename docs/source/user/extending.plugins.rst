@@ -18,7 +18,7 @@ Plugin discovery
      [project.entry-points.canary]
      plugin_name = "myproject.pluginmodule"
 
-* Local plugins specified by the ``-p PATH`` command line option.  ``PATH`` can be a python file or directory.  If ``PATH`` is a directory, all files named ``canary_*.py`` in ``PATH`` will be loaded.
+* Local plugins specified by the ``-p NAME`` command line option.  ``NAME`` is the name of the python module containing the plugins and must be importable.
 
 Writing plugins
 ---------------
