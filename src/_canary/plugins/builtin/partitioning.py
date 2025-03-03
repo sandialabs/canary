@@ -54,7 +54,7 @@ def canary_configure(config: "Config") -> None:
             raise ValueError("Test batching requires a batch:scheduler")
         if scheme := batchopts.get("scheme"):
             if scheme == "count":
-                if count := batchopts.get("count") is None:
+                if (count := batchopts.get("count")) is None:
                     raise ValueError("batch:scheme=count requires batch:count=N be defined")
                 if count <= 0:
                     raise ValueError(f"batch:count={count} must be > 0")
