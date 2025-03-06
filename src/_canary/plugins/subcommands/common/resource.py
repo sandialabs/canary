@@ -67,7 +67,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • scheme=S: Partition tests into batches using the scheme {duration, count, isolate} [default: None]\n\n
 • scheduler=S: Submit test batches to scheduler 'S'.\n\n
 • workers=N: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
-• option=option: Pass *option* to the scheduler.  If *option* contains commas, it is split into multiple options at the commas.
+• option=option: Pass *option* to the scheduler.  If *option* contains commas, it is split into multiple options at the commas.\n\n
 • option:verb(atim)=option: Pass *option* to the scheduler exactly as it appears on the command line.
 """ % {"r_form": _bold("type=value"), "r_arg": _bold(f"{flag} resource")}
         return text
