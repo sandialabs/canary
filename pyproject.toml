@@ -9,7 +9,7 @@ dependencies = [
   "PyYAML",
   "psutil",
   "pluggy",
-  "hpc-connect==0.2.0"
+  "hpc-connect==0.3.0"
 ]
 
 [project.scripts]
@@ -19,9 +19,9 @@ canary = "canary:console_main"
 [project.optional-dependencies]
 requests = ["requests"]
 dev = ["ruff", "mypy", "pytest", "sphinx", "pydata-sphinx-theme", "sphinx_design", "coverage", "xmlschema"]
-flux = ["hpcc-flux==0.2.0"]
-slurm = ["hpcc-slurm==0.2.0"]
-pbs = ["hpcc-pbs==0.2.0"]
+flux = ["hpcc-flux==0.3.0"]
+slurm = ["hpcc-slurm==0.3.0"]
+pbs = ["hpcc-pbs==0.3.0"]
 psutil = []
 
 [build-system]
