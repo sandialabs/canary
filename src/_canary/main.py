@@ -75,7 +75,8 @@ class CanaryMain:
         if args.C:
             config.working_dir = args.C
         os.chdir(config.working_dir)
-        config.plugin_manager.load_from_paths(args.plugin_dirs or [])
+        for p in args.plugins:
+            config.plugin_manager.consider_plugin(p)
         return self
 
     def __exit__(self, ex_type, ex_value, ex_traceback):
@@ -107,7 +108,8 @@ class CanaryCommand:
             argv = [self.command.name] + list(args_in)
             parser = make_argument_parser()
             args = parser.preparse(argv)
-            config.plugin_manager.load_from_paths(args.plugin_dirs or [])
+            for p in args.plugins:
+                config.plugin_manager.consider_plugin(p)
             parser.add_command(self.command)
             args = parser.parse_args(argv)
             config.set_main_options(args)

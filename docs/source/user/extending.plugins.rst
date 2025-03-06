@@ -18,7 +18,7 @@ Plugin discovery
      [project.entry-points.canary]
      plugin_name = "myproject.pluginmodule"
 
-* Local plugins specified by the ``-p PATH`` command line option.  ``PATH`` can be a python file or directory.  If ``PATH`` is a directory, all files named ``canary_*.py`` in ``PATH`` will be loaded.
+* Local plugins specified by the ``-p NAME`` command line option.  ``NAME`` is the name of the python module containing the plugins and must be importable.
 
 Writing plugins
 ---------------
@@ -33,27 +33,27 @@ Plugin functions are registered with ``canary`` by decorating with ``canary.hook
 
 Recognized plugin hooks are:
 
-+----------------------------------------------------+-------------------------------------------------------------------------------------+
-| hook                                               | Description                                                                         |
-+====================================================+=====================================================================================+
-|``canary_addoption(parser: canary.Parser)``         | Use this plugin to register  additional command line options with ``canary``        |
-+----------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_configure(config: canary.Config)``         | Called after parsing arguments.  Use this plugin to modify the Canary configuration |
-+----------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_session_start(session: canary.Session)``   | Called after session initialization and before test discovery                       |
-+----------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_session_finish(session: canary.Session)``  | Called after the session finished                                                   |
-+----------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_testcase_generator()``                     | Returns an implementation of :class:`~_canary.generator.AbstractTestGenerator`      |
-+----------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_testcase_modify(case: canary.TestCase)``   | Called after test cases have been masked by filtering criteria                      |
-+----------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_testcase_setup(case: canary.TestCase)``    | Called after the test case's working directory is setup                             |
-+----------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_testcase_finish(case: canary.TestCase)``   | Called after the test case is run                                                   |
-+----------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_session_report()``                         | Called by the ``canary report`` subcommand                                          |
-+----------------------------------------------------+-------------------------------------------------------------------------------------+
++------------------------------------------------------+-------------------------------------------------------------------------------------+
+| hook                                                 | Description                                                                         |
++======================================================+=====================================================================================+
+|``canary_addoption(parser: canary.Parser)``           | Use this plugin to register  additional command line options with ``canary``        |
++------------------------------------------------------+-------------------------------------------------------------------------------------+
+|``canary_configure(config: canary.Config)``           | Called after parsing arguments.  Use this plugin to modify the Canary configuration |
++------------------------------------------------------+-------------------------------------------------------------------------------------+
+|``canary_session_start(session: canary.Session)``     | Called after session initialization and before test discovery                       |
++------------------------------------------------------+-------------------------------------------------------------------------------------+
+|``canary_session_finish(session: canary.Session)``    | Called after the session finished                                                   |
++------------------------------------------------------+-------------------------------------------------------------------------------------+
+|``canary_testcase_generator()``                       | Returns an implementation of :class:`~_canary.generator.AbstractTestGenerator`      |
++------------------------------------------------------+-------------------------------------------------------------------------------------+
+|``canary_testcase_modify(case: canary.TestCase)``     | Called after test cases have been masked by filtering criteria                      |
++------------------------------------------------------+-------------------------------------------------------------------------------------+
+|``canary_testcase_setup(case: canary.TestCase)``      | Called after the test case's working directory is setup                             |
++------------------------------------------------------+-------------------------------------------------------------------------------------+
+|``canary_testcase_teardown(case: canary.TestCase)``   | Called after the test case is run                                                   |
++------------------------------------------------------+-------------------------------------------------------------------------------------+
+|``canary_session_report()``                           | Called by the ``canary report`` subcommand                                          |
++------------------------------------------------------+-------------------------------------------------------------------------------------+
 
 
 Examples

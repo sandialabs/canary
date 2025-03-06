@@ -488,7 +488,7 @@ class Session:
                 cleanup_queue = True
                 try:
                     queue_size = len(queue)
-                    what = "batches" if hasattr(queue, "batch_scheme") else "test cases"
+                    what = "batches" if isinstance(queue, BatchResourceQueue) else "test cases"
                     p = " " if stage == "run" else f" stage {stage!r} for "
                     logging.info(colorize("@*{Running}%s%d %s" % (p, queue_size, what)))
                     self.start = timestamp()

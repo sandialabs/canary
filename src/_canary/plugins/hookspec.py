@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from ..config.config import Config
     from ..generator import AbstractTestGenerator
     from ..session import Session
+    from ..test.batch import TestBatch
     from ..test.case import TestCase
 
 project_name = "canary"
@@ -102,6 +103,11 @@ def canary_testsuite_mask(
       case_specs: Include those tests matching these specs
 
     """
+
+
+@_hookspec(firstresult=True)
+def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
+    pass
 
 
 @_hookspec

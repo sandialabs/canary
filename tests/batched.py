@@ -1,5 +1,6 @@
 import glob
 import os
+import re
 
 from _canary.main import CanaryCommand
 from _canary.util.filesystem import working_dir
@@ -65,11 +66,11 @@ if __name__ == '__main__':
         found = 0
         print(open(files[0]).read())
         for line in open(files[0]):
-            if line.strip() == "# BASH: -l place=scatter:excl":
+            if re.search(r"#\s*BASH:? -l place=scatter:excl", line):
                 found += 1
-            elif line.strip() == "# BASH: -q debug":
+            elif re.search(r"#\s*BASH:? -q debug", line):
                 found += 1
-            elif line.strip() == "# BASH: -A XYZ123":
+            elif re.search(r"#\s*BASH:? -A XYZ123", line):
                 found += 1
         assert found == 3
         if rc != 0:

@@ -23,7 +23,6 @@ util
    module
    parallel
    progress
-   pstricks
    returncode
    rprobe
    scalar

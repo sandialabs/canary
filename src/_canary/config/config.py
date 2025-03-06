@@ -45,46 +45,46 @@ class EnvironmentModifications:
         self.update(arg or {})
 
     def update(self, arg: dict[str, Any]) -> None:
-        for key, value in arg.items():
-            if key == "set":
-                self.set(value)
-            elif key == "unset":
-                self.unset(value)
-            elif key in ("prepend-path", "prepend_path"):
-                self.prepend_path(value)
-            elif key in ("append-path", "append_path"):
-                self.append_path(value)
+        for action, items in arg.items():
+            if action == "set":
+                self.set(**items)
+            elif action == "unset":
+                self.unset(*items)
+            elif action in ("prepend-path", "prepend_path"):
+                for pathname, path in items.items():
+                    self.prepend_path(pathname, path)
+            elif action in ("append-path", "append_path"):
+                for pathname, path in items.items():
+                    self.append_path(pathname, path)
             else:
-                raise KeyError(key)
+                raise KeyError(action)
 
     def getstate(self) -> dict[str, Any]:
         return dict(self.mods)
 
-    def set(self, arg: dict[str, str]) -> None:
-        self.mods.setdefault("set", {}).update(arg)
-        for name, value in arg.items():
+    def set(self, **vars: str) -> None:
+        self.mods.setdefault("set", {}).update(vars)
+        for name, value in vars.items():
             os.environ[name] = value
 
-    def unset(self, arg: list[str]) -> None:
-        self.mods.setdefault("unset", []).extend(arg)
-        for name in arg:
+    def unset(self, *vars: str) -> None:
+        self.mods.setdefault("unset", []).extend(vars)
+        for name in vars:
             os.environ.pop(name, None)
 
-    def prepend_path(self, arg: dict[str, str]) -> None:
-        self.mods.setdefault("prepend-path", {}).update(arg)
-        for name, value in arg.items():
-            if existing := os.getenv(name):
-                os.environ[name] = f"{value}:{existing}"
-            else:
-                os.environ[name] = value
+    def prepend_path(self, pathname: str, path: str) -> None:
+        self.mods.setdefault("prepend-path", {}).update({pathname: path})
+        if existing := os.getenv(pathname):
+            os.environ[pathname] = f"{path}:{existing}"
+        else:
+            os.environ[pathname] = path
 
-    def append_path(self, arg: dict[str, str]) -> None:
-        self.mods.setdefault("append-path", {}).update(arg)
-        for name, value in arg.items():
-            if existing := os.getenv(name):
-                os.environ[name] = f"{existing}:{value}"
-            else:
-                os.environ[name] = value
+    def append_path(self, pathname: str, path: str, sep: str = ":") -> None:
+        self.mods.setdefault("append-path", {}).update({pathname: path})
+        if existing := os.getenv(pathname):
+            os.environ[pathname] = f"{existing}{sep}{path}"
+        else:
+            os.environ[pathname] = path
 
 
 class SessionConfig:
@@ -287,8 +287,8 @@ class Config:
         self.setup_hpc_connect(snapshot["scheduler"])
         self.update(snapshot["config"])
         self.batch = Batch(**snapshot["batch"])
-        for f in snapshot["plugin_manager"]["extra_files"]:
-            self.plugin_manager.load_from_file(f)
+        for f in snapshot["plugin_manager"]["plugins"]:
+            self.plugin_manager.consider_plugin(f)
 
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The
@@ -489,7 +489,7 @@ class Config:
         d: dict[str, Any] = {}
         for key, value in vars(self).items():
             if key == "_plugin_manager":
-                d["plugin_manager"] = {"extra_files": list(value.files)}
+                d["plugin_manager"] = {"plugins": list(value.considered)}
             elif dataclasses.is_dataclass(value):
                 d[key] = dataclasses.asdict(value)  # type: ignore
                 if key == "system":
