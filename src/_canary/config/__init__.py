@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     snapshot = _config.snapshot
 else:
     # allow config to be lazily loaded
-    _config: Config = Config.factory()
+    _config: Config | None = None
 
     def __getattr__(name: str) -> Any:
         global _config

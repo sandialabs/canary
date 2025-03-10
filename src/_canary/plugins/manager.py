@@ -46,9 +46,9 @@ class CanaryPluginManager(pluggy.PluginManager):
         return hook()
 
     def load_from_env(self) -> None:
-        if plugins := os.getenv("_CANARY_PLUGINS"):
+        if plugins := os.getenv("CANARY_PLUGINS"):
             for plugin in plugins.split(","):
-                self.import_plugin(plugin)
+                self.consider_plugin(plugin)
 
     def consider_plugin(self, name: str) -> None:
         assert isinstance(name, str), f"module name as text required, got {name!r}"

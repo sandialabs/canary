@@ -294,11 +294,6 @@ class BatchRunner(AbstractTestRunner):
             if config.debug:
                 variables["CANARY_DEBUG"] = "on"
 
-            if plugins := config.getoption("plugins"):
-                if "CANARY_PLUGINS" in os.environ:
-                    plugins.extend(os.environ["CANARY_PLUGINS"].split(","))
-                variables["CANARY_PLUGINS"] = ",".join(plugins)
-
             jobs: list[hpc_connect.Job] = []
             batchopts = config.getoption("batch", {})
             scheme = batchopts.get("scheme")

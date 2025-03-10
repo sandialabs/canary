@@ -287,8 +287,6 @@ class Config:
         self.setup_hpc_connect(snapshot["scheduler"])
         self.update(snapshot["config"])
         self.batch = Batch(**snapshot["batch"])
-        for f in snapshot["plugin_manager"]["plugins"]:
-            self.plugin_manager.consider_plugin(f)
 
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The
@@ -297,6 +295,11 @@ class Config:
             # no batching (default)
             snapshot["options"].pop("batch", None)
         self.options = argparse.Namespace(**snapshot["options"])
+
+        if plugins := getattr(self.options, "plugins", None):
+            for f in plugins:
+                self.plugin_manager.consider_plugin(f)
+
         return
 
     def snapshot(self, fh: TextIO) -> None:
