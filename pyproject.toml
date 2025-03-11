@@ -19,9 +19,10 @@ canary = "canary:console_main"
 [project.optional-dependencies]
 requests = ["requests"]
 dev = ["ruff", "mypy", "pytest", "sphinx", "pydata-sphinx-theme", "sphinx_design", "coverage", "xmlschema"]
-flux = ["hpcc-flux @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/plugins/hpcc-flux"]
-slurm = ["hpcc-slurm @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/plugins/hpcc-slurm"]
-pbs = ["hpcc-pbs @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/plugins/hpcc-pbs"]
+# backward compatible options that are now either required or builtin to hpc-connect
+flux = []
+slurm = []
+pbs = []
 psutil = []
 
 [build-system]
