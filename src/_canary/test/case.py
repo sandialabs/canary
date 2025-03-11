@@ -451,6 +451,14 @@ class TestCase(AbstractTestCase):
         return list(kwds)
 
     @property
+    def implicit_stages(self) -> list[str]:
+        """Implicit stages, used for some filtering operations"""
+        stages: list[str] = []
+        if self.file.endswith(".vvt"):
+            stages.append("analyze")
+        return stages
+
+    @property
     def implicit_parameters(self) -> dict[str, int | float]:
         # backward compatibility with vvtest
         parameters: dict[str, int | float] = {}
@@ -1580,8 +1588,6 @@ class TestMultiCase(TestCase):
             exclusive=exclusive,
             stages=stages,
         )
-        if "analyze" not in self.stages:
-            self.stages.append("analyze")
         if flag.startswith("-"):
             # for the base case, call back on the test file with ``flag`` on the command line
             self.launcher = sys.executable
@@ -1602,6 +1608,11 @@ class TestMultiCase(TestCase):
                 self.assets.append(asset)
         self._flag = flag
         self._paramsets = paramsets
+
+    @property
+    def implicit_stages(self) -> list[str]:
+        """Implicit stages, used for some filtering operations"""
+        return ["analyze"]
 
     @property
     def flag(self) -> str:

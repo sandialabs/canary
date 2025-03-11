@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from ...test.case import TestCase
 
 
-@hookimpl
+@hookimpl(tryfirst=True)
 def canary_testsuite_mask(
     cases: list["TestCase"],
     keyword_exprs: list[str] | None,
@@ -103,9 +103,12 @@ def canary_testsuite_mask(
                 case.mask = colorize("parameter expression @*{%s} did not match" % parameter_expr)
                 continue
 
-        if stage and stage not in case.stages:
-            case.mask = f"{stage}: unsupported stage"
-            continue
+        if stage is not None:
+            stages = set(case.stages)
+            stages.update(case.implicit_stages)
+            if stage not in stages:
+                case.mask = f"{stage}: unsupported stage"
+                continue
 
         if case.dependencies:
             flags = case.dep_condition_flags()

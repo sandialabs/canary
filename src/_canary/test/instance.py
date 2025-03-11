@@ -175,6 +175,7 @@ class TestInstance:
     work_tree: str
     working_directory: str
     status: Status
+    stages: list[str]
     start: float
     stop: float
     id: str
@@ -222,6 +223,7 @@ class TestInstance:
             work_tree=case.work_tree,  # type: ignore
             working_directory=case.working_directory,
             status=case.status,
+            stages=case.stages,
             start=case.start,
             stop=case.stop,
             id=case.id,
@@ -283,6 +285,7 @@ class TestMultiInstance(TestInstance):
             work_tree=case.work_tree,  # type: ignore
             working_directory=case.working_directory,
             status=case.status,
+            stages=case.stages,
             start=case.start,
             stop=case.stop,
             id=case.id,
