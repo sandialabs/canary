@@ -84,7 +84,7 @@ def canary_testsuite_mask(
         if keyword_exprs is not None:
             kwds = set(case.keywords)
             kwds.update(case.implicit_keywords)
-            if not any([":all:" == keyword_expr for keyword_expr in keyword_exprs]):
+            if not any(["__all__" == keyword_expr for keyword_expr in keyword_exprs]):
                 for keyword_expr in keyword_exprs:
                     match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
                     if not match:

@@ -191,7 +191,7 @@ class Parser(argparse.ArgumentParser):
                 parsers.append(self.__subcommand_parsers[command])
         else:
             parsers = [self]
-        group_name = "plugin options"
+        group_name = kwargs.pop("group", "plugin options")
         for parser in parsers:
             for group in parser._action_groups:
                 if group.title == group_name:

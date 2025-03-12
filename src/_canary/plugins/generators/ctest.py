@@ -691,13 +691,15 @@ def canary_addoption(parser) -> None:
     parser.add_argument(
         "--ctest-config",
         metavar="cfg",
+        group="ctest options",
         command=["run", "find"],
         help="Choose configuration to test",
     )
     parser.add_argument(
         "--recurse-ctest",
-        action="store_true",
         default=False,
+        action="store_true",
+        group="ctest options",
         command=["run", "find"],
         help="Recurse CMake binary directory for test files.  CTest tests can be detected "
         "from the root CTestTestfile.cmake, so this is option is not necessary unless there "

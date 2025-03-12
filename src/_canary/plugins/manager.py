@@ -28,7 +28,8 @@ class CanaryPluginManager(pluggy.PluginManager):
         for subcommand in subcommands.plugins:
             self.register(subcommand)
         for generator in generators.plugins:
-            self.register(generator)
+            name = generator.__name__.split(".")[-1]
+            self.register(generator, name=name)
         for p in builtin.plugins:
             self.register(p)
         for p in reporters.plugins:

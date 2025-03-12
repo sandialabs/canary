@@ -30,7 +30,7 @@ def add_filter_arguments(parser: "Parser") -> None:
         metavar="expression",
         action="append",
         help="Only run tests matching given keyword expression. "
-        "For example: `-k 'key1 and not key2'`.  The keyword ``:all:`` matches all tests",
+        "For example: `-k 'key1 and not key2'`.  The keyword ``__all__`` matches all tests",
     )
     group.add_argument(
         "-o",
@@ -47,7 +47,7 @@ def add_filter_arguments(parser: "Parser") -> None:
         help="Filter tests by parameter name and value, such as '-p cpus=8' or '-p cpus<8'",
     )
     group.add_argument(
-        "-R",
+        "-S",
         "--regex",
         dest="regex_filter",
         metavar="regex",
