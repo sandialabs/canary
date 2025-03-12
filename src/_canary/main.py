@@ -114,7 +114,11 @@ class CanaryCommand:
             args = parser.preparse(argv)
             for p in args.plugins:
                 config.plugin_manager.consider_plugin(p)
-            parser.add_command(self.command)
+            for command in config.plugin_manager.get_subcommands():
+                parser.add_command(command)
+            with monkeypatch.context() as mp:
+                mp.setattr(parser, "add_argument", parser.add_plugin_argument)
+                config.plugin_manager.hook.canary_addoption(parser=parser)
             args = parser.parse_args(argv)
             config.set_main_options(args)
             rc = self.command.execute(args)

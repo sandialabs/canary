@@ -546,7 +546,10 @@ def load(file: str) -> dict[str, Any]:
 
         try:
             with open(".ctest-json-v1.json", "w") as fh:
-                p = subprocess.Popen([ctest, "--show-only=json-v1"], stdout=fh)
+                args = [ctest, "--show-only=json-v1"]
+                if ctest_config := config.getoption("ctest_config"):
+                    args.extend(["-C", ctest_config])
+                p = subprocess.Popen(args, stdout=fh)
                 p.wait()
             with open(".ctest-json-v1.json", "r") as fh:
                 payload = json.load(fh)
@@ -681,3 +684,22 @@ def parse_environment_modification(environment_modification: list[str]) -> list[
 @hookimpl
 def canary_testcase_generator() -> Type[CTestTestGenerator]:
     return CTestTestGenerator
+
+
+@hookimpl
+def canary_addoption(parser) -> None:
+    parser.add_argument(
+        "--ctest-config",
+        metavar="cfg",
+        command=["run", "find"],
+        help="Choose configuration to test",
+    )
+    parser.add_argument(
+        "--recurse-ctest",
+        action="store_true",
+        default=False,
+        command=["run", "find"],
+        help="Recurse CMake binary directory for test files.  CTest tests can be detected "
+        "from the root CTestTestfile.cmake, so this is option is not necessary unless there "
+        "is a mix of CTests and other test types in the binary directory",
+    )

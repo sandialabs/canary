@@ -182,14 +182,23 @@ class Parser(argparse.ArgumentParser):
         return group
 
     def add_plugin_argument(self, *args, **kwargs):
-        parser = self.__subcommand_parsers.get(kwargs.pop("command", None)) or self
-        group_name = "plugin options"
-        for group in parser._action_groups:
-            if group.title == group_name:
-                break
+        parsers = []
+        if "command" in kwargs:
+            commands = kwargs.pop("command")
+            if isinstance(commands, str):
+                commands = [commands]
+            for command in set(commands):
+                parsers.append(self.__subcommand_parsers[command])
         else:
-            group = parser.add_argument_group(group_name)
-        group.add_argument(*args, **kwargs)
+            parsers = [self]
+        group_name = "plugin options"
+        for parser in parsers:
+            for group in parser._action_groups:
+                if group.title == group_name:
+                    break
+            else:
+                group = parser.add_argument_group(group_name)
+            group.add_argument(*args, **kwargs)
 
 
 def identity(arg):

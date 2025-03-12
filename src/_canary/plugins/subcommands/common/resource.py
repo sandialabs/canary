@@ -1,4 +1,5 @@
 import argparse
+import os
 import re
 from typing import Any
 
@@ -67,9 +68,9 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • scheme=S: Partition tests into batches using the scheme {duration, count, isolate} [default: None]\n\n
 • scheduler=S: Submit test batches to scheduler 'S'.\n\n
 • workers=N: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
-• option=option: Pass *option* to the scheduler.  If *option* contains commas, it is split into multiple options at the commas.\n\n
-• option:verb(atim)=option: Pass *option* to the scheduler exactly as it appears on the command line.
-""" % {"r_form": _bold("type=value"), "r_arg": _bold(f"{flag} resource")}
+• option=%(opt)s: Pass %(opt)s to the scheduler.  If %(opt)s contains commas, it is split into multiple options at the commas.\n\n
+• option:verb(atim)=%(opt)s: Pass %(opt)s to the scheduler exactly as it appears on the command line.
+""" % {"r_form": bold("type=value"), "r_arg": bold(f"{flag} resource"), "opt": bold("option")}
         return text
 
     @staticmethod
@@ -131,5 +132,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
                 logging.warning(f"{opt} count={old} being overridden by {opt} scheme=duration")
 
 
-def _bold(arg: str) -> str:
+def bold(arg: str) -> str:
+    if os.getenv("COLOR_WHEN", "auto") == "never":
+        return f"**{arg}**"
     return colorize("@*{%s}" % arg)

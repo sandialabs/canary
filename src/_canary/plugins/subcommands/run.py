@@ -64,9 +64,13 @@ class Run(CanarySubcommand):
             help="If pedantic (default), stop if file parsing errors occur, else ignore parsing errors",
         )
         parser.add_argument(
+            "--no-reset",
             "--dont-restage",
+            dest="dont_restage",
             action="store_true",
             default=False,
+            help="Do not return the test execution directory "
+            "to its original stage before re-running a test",
         )
         parser.add_argument(
             "--copy-all-resources",
