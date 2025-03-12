@@ -130,9 +130,6 @@ class Run(CanarySubcommand):
 
         elif args.mode == "a":
             session = Session(args.work_tree, mode=args.mode)
-            if args.rerun_all_testcases:
-                for case in session.active_cases():
-                    case.mark_as_ready()
             session.filter(
                 start=args.start,
                 keyword_exprs=args.keyword_exprs,
