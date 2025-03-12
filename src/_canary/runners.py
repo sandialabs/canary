@@ -424,7 +424,7 @@ class BatchRunner(AbstractTestRunner):
             with open(config_file, "w") as fh:
                 json.dump(cfg, fh, indent=2)
             fp.write(f"-f {config_file} ")
-        fp.write(f"-C {config.session.work_tree} run -rv --stage={stage} ")
+        fp.write(f"-C {config.session.work_tree} run --stage={stage} ")
         if config.getoption("fail_fast"):
             fp.write("--fail-fast ")
         if config.getoption("dont_measure"):

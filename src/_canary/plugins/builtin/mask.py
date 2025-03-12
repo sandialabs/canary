@@ -106,7 +106,8 @@ def canary_testsuite_mask(
         if stage is not None:
             stages = set(case.stages)
             stages.update(case.implicit_stages)
-            if stage not in stages:
+            st = stage[:-1] if stage.endswith(":") else stage
+            if st not in stages:
                 case.mask = f"{stage}: unsupported stage"
                 continue
 

@@ -378,7 +378,7 @@ class Config:
         # to use the original batch arguments.
         batchopts = getattr(args, "batch", None) or {}
         if os.getenv("CANARY_LEVEL") == "1":
-            batchopts = {}
+            batchopts.clear()
         if cached_batchopts := getattr(self.options, "batch", None):
             batchopts = merge(cached_batchopts, batchopts)
         scheduler = batchopts.get("scheduler")
@@ -423,7 +423,7 @@ class Config:
             for key, value in t.items():
                 setattr(self.test, f"timeout_{key}", value)
 
-        self.options = args
+        self.options = merge_namespaces(self.options, args)
 
     def setup_hpc_connect(self, name: str | None) -> None:
         """Set the hpc_connect library"""
@@ -553,3 +553,15 @@ def safe_loads(arg):
         return json.loads(arg)
     except json.decoder.JSONDecodeError:
         return arg
+
+
+def merge_namespaces(dest: argparse.Namespace, source: argparse.Namespace) -> argparse.Namespace:
+    for attr, value in vars(source).items():
+        if value is None:
+            continue
+        elif not hasattr(dest, attr):
+            setattr(dest, attr, value)
+        else:
+            my_value = getattr(dest, attr)
+            setattr(dest, attr, merge(my_value, value))
+    return dest
