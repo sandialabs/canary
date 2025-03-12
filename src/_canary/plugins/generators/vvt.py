@@ -665,7 +665,7 @@ def to_seconds(arg: str | int | float, round: bool = False, negatives: bool = Fa
 
 
 @typing.no_type_check
-def get_vvtest_attrs(case: "TestCase", stage: str = "run") -> dict:
+def get_vvtest_attrs(case: "TestCase") -> dict:
     attrs = {}
     compiler_spec = None
     if config.build.compiler.vendor is not None:
@@ -680,17 +680,28 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "run") -> dict:
     attrs["TESTROOT"] = case.work_tree
     attrs["VVTESTSRC"] = ""
     attrs["PROJECT"] = ""
-    attrs["OPTIONS"] = []  # FIXME
-    attrs["OPTIONS_OFF"] = []  # FIXME
+    attrs["OPTIONS"] = config.getoption("on_options") or []
+    attrs["OPTIONS_OFF"] = config.getoption("off_options") or []
     attrs["SRCDIR"] = case.file_dir
     attrs["TIMEOUT"] = case.timeout
     attrs["KEYWORDS"] = case.keywords
     attrs["diff_exit_status"] = 64
     attrs["skip_exit_status"] = 63
-    attrs["opt_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"
+
+    # tjfulle: the vvtest_util.opt_analyze and vvtest_util.is_analysis_only attributes seem to
+    # always be the same to me.  so far as I can tell, if you set -a/--analyze on the command line
+    # the runtime config 'analyze' is set to True.  When vvtest writes out vvtest_util.py it writes
+    #   - ``vvtest_util.is_analysis_only = rtconfig.getAttr("analyze")``; and
+    #   - ``vvtest_util.opt_analyze = '--execute-analysis-sections' in sys.argv[1:].
+    # ``--execute-analysis-sections`` is a appended to a test script's command line if
+    # rtconfig.getAttr("analyze") is True.  Thus, it seems that there is no differenece between
+    # ``opt_analyze`` and ``is_analysis_only``, so we put all three checks into our vvtest_util.py
+    opts = ["--execute-analysis-sections", "-a", "--analyze"]
+    analyze_check = " or ".join(f"{o!r} in sys.argv[1:]" for o in opts)
+    attrs["opt_analyze"] = attrs["is_analysis_only"] = analyze_check
+
     attrs["is_analyze"] = isinstance(case, TestMultiCase)
-    attrs["is_baseline"] = stage == "baseline"
-    attrs["is_analysis_only"] = stage == "analyze"
+    attrs["is_baseline"] = config.getoption("command") == "rebaseline"
     attrs["PARAM_DICT"] = case.parameters or {}
     for key, val in case.parameters.items():
         attrs[key] = val
@@ -726,7 +737,7 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "run") -> dict:
 def write_vvtest_util(case: "TestCase", stage: str = "run") -> None:
     if not case.file_path.endswith(".vvt"):
         return
-    attrs = get_vvtest_attrs(case, stage=stage)
+    attrs = get_vvtest_attrs(case)
     file = os.path.abspath("./vvtest_util.py")
     if os.path.dirname(file) != case.working_directory:
         raise ValueError("Incorrect directory for writing vvtest_util")

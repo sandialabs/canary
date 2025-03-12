@@ -335,7 +335,7 @@ class CTestTestCase(TestCase):
             kwds.append("ctest")
         return list(kwds)
 
-    def command(self, stage: str = "run") -> list[str]:
+    def command(self) -> list[str]:
         return [os.path.join(self.working_directory, "runtest")]
 
     def _command(self) -> list[str]:
@@ -396,8 +396,8 @@ class CTestTestCase(TestCase):
                 os.environ[key] = ";".join(values)
         os.environ["CTEST_RESOURCE_GROUP_COUNT"] = str(resource_group_count)
 
-    def setup(self, stage: str = "run") -> None:
-        super().setup(stage=stage)
+    def setup(self) -> None:
+        super().setup()
         with working_dir(self.working_directory):
             sh = which("sh")
             with open("runtest", "w") as fh:
@@ -406,16 +406,14 @@ class CTestTestCase(TestCase):
                 fh.write(shlex.join(self._command()))
             set_executable("runtest")
 
-    def finish(self, stage: str = "run") -> None:
-        if stage != "run":
-            return
-
-        self.update_run_stats()
+    def finish(self, update_stats: bool = True) -> None:
+        if update_stats:
+            self.update_run_stats()
         self.concatenate_logs()
-        file = self.logfile(stage)
+        file = self.logfile("run")
 
         if self.status.value in ("timeout", "skipped", "cancelled", "not_run"):
-            config.plugin_manager.hook.canary_testcase_finish(case=self, stage=stage)
+            config.plugin_manager.hook.canary_testcase_finish(case=self, stage="")
             self.save()
             return
 
@@ -451,7 +449,7 @@ class CTestTestCase(TestCase):
             elif self.status.value not in ("skipped",):
                 self.status.set("success")
 
-        config.plugin_manager.hook.canary_testcase_finish(case=self, stage=stage)
+        config.plugin_manager.hook.canary_testcase_finish(case=self, stage="")
         self.save()
 
     @property

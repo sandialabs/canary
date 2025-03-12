@@ -10,6 +10,7 @@ from typing import Sequence
 from . import config
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
+from .third_party import color
 from .third_party.monkeypatch import monkeypatch
 from .util import logging
 
@@ -40,6 +41,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             mp.setattr(parser, "add_argument", parser.add_plugin_argument)
             config.plugin_manager.hook.canary_addoption(parser=parser)
         args = parser.parse_args(m.argv)
+        if args.color:
+            color.set_color_when(args.color)
+
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
             logging.emit(shlex.join(a) + "\n")

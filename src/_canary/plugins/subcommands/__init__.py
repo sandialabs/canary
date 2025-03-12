@@ -8,6 +8,7 @@ from . import help
 from . import info
 from . import location
 from . import log
+from . import rebaseline
 from . import report
 from . import run
 from . import status
@@ -24,6 +25,7 @@ plugins = [
     info,
     location,
     log,
+    rebaseline,
     report,
     run,
     status,

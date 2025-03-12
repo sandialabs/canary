@@ -1,5 +1,6 @@
 import argparse
 import dataclasses
+import io
 import json
 import os
 from string import Template
@@ -16,6 +17,7 @@ from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
 from ..util import logging
 from ..util.collections import merge
+from ..util.compression import expand64
 from ..util.filesystem import find_work_tree
 from ..util.rprobe import cpu_count
 from . import _machine
@@ -230,8 +232,14 @@ class Config:
     def factory(cls) -> "Config":
         """Create the configuration object"""
         self = cls.create()
-        root = find_work_tree()
-        if root:
+        if cfg := os.getenv("CANARYCFG64"):
+            with io.StringIO() as fh:
+                fh.write(expand64(cfg))
+                fh.seek(0)
+                self.restore_from_snapshot(fh)
+            wt = find_work_tree()
+            assert wt == self.session.work_tree, "Inconsistent configuration state detected"
+        elif root := find_work_tree():
             # If we are inside a session directory, then we want to restore its configuration
             # any changes create happens before setting command line options, so changes can still
             # be made to the restored configuration
@@ -424,6 +432,10 @@ class Config:
                 setattr(self.test, f"timeout_{key}", value)
 
         self.options = merge_namespaces(self.options, args)
+
+    def null(self) -> None:
+        """Null opt to generate lazy config"""
+        ...
 
     def setup_hpc_connect(self, name: str | None) -> None:
         """Set the hpc_connect library"""

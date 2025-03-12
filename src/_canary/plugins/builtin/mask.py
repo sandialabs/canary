@@ -21,7 +21,6 @@ def canary_testsuite_mask(
     owners: set[str] | None,
     regex: str | None,
     case_specs: list[str] | None,
-    stage: str | None,
     start: str | None,
 ) -> None:
     """Filter test cases (mask test cases that don't meet a specific criteria)
@@ -42,15 +41,14 @@ def canary_testsuite_mask(
         logging.warning("Regular expression search can be slow for large test suites")
         rx = re.compile(regex)
 
-    owners = set(owners or [])
     no_filter_criteria = all(_ is None for _ in (keyword_exprs, parameter_expr, owners, regex))
 
-    explicit_start_path = start is not None
     if start is not None:
         if not os.path.isabs(start):
             start = os.path.join(config.session.work_tree, start)  # type: ignore
         start = os.path.normpath(start)
 
+    owners = set(owners or [])
     order = graph.static_order_ix(cases)
     for i in order:
         case = cases[i]
@@ -58,7 +56,7 @@ def canary_testsuite_mask(
         if case.masked():
             continue
 
-        if explicit_start_path and case.matches(start):
+        if start is not None and isrel(case.execfile, start):
             # won't mask
             continue
 
@@ -103,14 +101,6 @@ def canary_testsuite_mask(
                 case.mask = colorize("parameter expression @*{%s} did not match" % parameter_expr)
                 continue
 
-        if stage is not None:
-            stages = set(case.stages)
-            stages.update(case.implicit_stages)
-            st = stage[:-1] if stage.endswith(":") else stage
-            if st not in stages:
-                case.mask = f"{stage}: unsupported stage"
-                continue
-
         if case.dependencies:
             flags = case.dep_condition_flags()
             if any([flag == "wont_run" for flag in flags]):
@@ -128,7 +118,7 @@ def canary_testsuite_mask(
 
         # If we got this far and the case is not masked, only mask it if no filtering criteria were
         # specified
-        if no_filter_criteria and not case.status.satisfies(("pending", "ready")):
+        if no_filter_criteria and not case.status.satisfies(("created", "pending", "ready")):
             case.mask = f"previous status {case.status.value!r} is not 'ready'"
 
     for i in order:
@@ -137,5 +127,7 @@ def canary_testsuite_mask(
     ctx.stop()
 
 
-def isrel(path1: str, path2: str) -> bool:
-    return os.path.realpath(path1).startswith(os.path.realpath(path2))
+def isrel(path1: str | None, path2: str) -> bool:
+    if path1 is None:
+        return False
+    return os.path.abspath(path1).startswith(os.path.abspath(path2))

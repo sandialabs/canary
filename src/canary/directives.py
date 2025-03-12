@@ -1273,68 +1273,6 @@ def sources(*args: str, when: WhenType | None = None) -> None:
     pass
 
 
-def stages(*args: str, when: WhenType | None = None) -> None:
-    """Assign different execution stages to this test case.
-
-    Usage
-    -----
-
-    ``.pyt``:
-
-    .. code-block:: python
-
-       import canary
-       canary.directives.stages(stage_1, ...)
-
-    ``.vvt``: ``NA``
-
-    Parameters
-    ----------
-
-    * ``args``: The stage names.  By default, all test cases have an ``execute`` stage.
-
-    References
-    ----------
-
-    * :ref:`Staged test execution <usage-staged-execution>`
-
-    Notes
-    -----
-
-    The stage name is passed on the command line to the test as ``--stage=<stage>``.  Test case's
-    must parse the command line to determine the current execution stage.
-
-    Examples
-    --------
-
-    .. code-block:: python
-
-       import canary
-       canary.directives.stages("run", "post-process")
-
-       def run(case: canary.TestInstance) -> int:
-           # run the case
-
-       def post_process(case: canary.TestInstance) -> int:
-           # perform post processing
-
-       def main() -> int:
-           case = canary.get_instance()
-           parser = canary.make_argument_parser()
-           args = parser.parse_args()
-           if args.stage == "run":
-               return run(case)
-           elif args.stage == "post-process":
-               return post_process(case)
-           raise ValueError(f"unrecognized test stage: {case.stage}")
-
-       if __name__ == "__main__":
-           sys.exit(main())
-
-    """
-    pass
-
-
 def testname(arg: str) -> None:
     """Set the name of a test to one different from the filename and/or define
     multiple test names (multiple test instances) in the same file.

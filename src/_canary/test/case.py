@@ -169,7 +169,6 @@ class TestCase(AbstractTestCase):
       owners: List of owners responsible for the test.
       artifacts: Artifacts produced by the test.
       exclusive: Whether the test case is exclusive.
-      stages: Stages of the test case execution.
 
     """
 
@@ -199,7 +198,6 @@ class TestCase(AbstractTestCase):
         owners: list[str] | None = None,
         artifacts: list[dict[str, str]] | None = None,
         exclusive: bool = False,
-        stages: list[str] | None = None,
     ):
         super().__init__()
 
@@ -256,8 +254,6 @@ class TestCase(AbstractTestCase):
         self._environment_modifications: list[dict[str, str]] = []
 
         self._measurements: dict[str, Any] = {}
-
-        self.stages: list[str] = stages or ["run"]
 
         if file_root is not None:
             self.file_root = file_root
@@ -449,14 +445,6 @@ class TestCase(AbstractTestCase):
         """Implicit keywords, used for some filtering operations"""
         kwds = {self.status.name.lower(), self.status.value.lower(), self.name, self.family}
         return list(kwds)
-
-    @property
-    def implicit_stages(self) -> list[str]:
-        """Implicit stages, used for some filtering operations"""
-        stages: list[str] = []
-        if self.file.endswith(".vvt"):
-            stages.append("analyze")
-        return stages
 
     @property
     def implicit_parameters(self) -> dict[str, int | float]:
@@ -781,17 +769,15 @@ class TestCase(AbstractTestCase):
     def exe(self, arg: str) -> None:
         self._exe = arg
 
-    def command(self, stage: str = "run") -> list[str]:
+    def command(self) -> list[str]:
         cmd: list[str] = []
         if self.launcher:
             cmd.append(self.launcher)
             cmd.extend(self.preflags or [])
         cmd.append(self.exe)
-        if self.file.endswith(".pyt"):
-            cmd.append(f"--stage={stage}")
-        if self.file.endswith(".vvt") and stage == "analyze":
-            cmd.append("--execute-analysis-sections")
         cmd.extend(self.postflags or [])
+        if script_args := config.getoption("script_args"):
+            cmd.extend(script_args)
         return cmd
 
     @property
@@ -978,41 +964,35 @@ class TestCase(AbstractTestCase):
     @property
     def cpus(self) -> int:
         cpus: int = 1
-        stage = config.session.stage or "run"
-        if stage == "run":
-            if "cpus" in self.parameters:
-                cpus = int(self.parameters["cpus"])
-            elif "np" in self.parameters:
-                cpus = int(self.parameters["np"])
-            elif "nodes" in self.parameters:
-                nodes = int(self.parameters["nodes"])
-                cpus = nodes * config.resource_pool.pinfo("cpus_per_node")
+        if "cpus" in self.parameters:
+            cpus = int(self.parameters["cpus"])
+        elif "np" in self.parameters:
+            cpus = int(self.parameters["np"])
+        elif "nodes" in self.parameters:
+            nodes = int(self.parameters["nodes"])
+            cpus = nodes * config.resource_pool.pinfo("cpus_per_node")
         return cpus
 
     @property
     def nodes(self) -> int:
         nodes: int = 1
-        stage = config.session.stage or "run"
-        if stage == "run":
-            if "nodes" in self.parameters:
-                nodes = int(self.parameters["nodes"])  # type: ignore
-            else:
-                cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
-                nodes = math.ceil(self.cpus / cpus_per_node)
+        if "nodes" in self.parameters:
+            nodes = int(self.parameters["nodes"])  # type: ignore
+        else:
+            cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
+            nodes = math.ceil(self.cpus / cpus_per_node)
         return nodes
 
     @property
     def gpus(self) -> int:
         gpus: int = 0
-        stage = config.session.stage or "run"
-        if stage == "run":
-            if "gpus" in self.parameters:
-                gpus = int(self.parameters["gpus"])  # type: ignore
-            elif "ndevice" in self.parameters:
-                gpus = int(self.parameters["ndevice"])  # type: ignore
-            elif "nodes" in self.parameters:
-                nodes = int(self.parameters["nodes"])
-                gpus = nodes * config.resource_pool.pinfo("gpus_per_node")
+        if "gpus" in self.parameters:
+            gpus = int(self.parameters["gpus"])  # type: ignore
+        elif "ndevice" in self.parameters:
+            gpus = int(self.parameters["ndevice"])  # type: ignore
+        elif "nodes" in self.parameters:
+            nodes = int(self.parameters["nodes"])
+            gpus = nodes * config.resource_pool.pinfo("gpus_per_node")
         return gpus
 
     @property
@@ -1382,7 +1362,7 @@ class TestCase(AbstractTestCase):
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
 
-    def setup(self, stage: str = "run") -> None:
+    def setup(self) -> None:
         if len(self.dependencies) != len(self.dep_done_criteria):
             raise RuntimeError("Inconsistent dependency/dep_done_criteria lists")
         elif self.unresolved_dependencies:
@@ -1390,12 +1370,11 @@ class TestCase(AbstractTestCase):
         logging.trace(f"Setting up {self}")
         self.work_tree = config.session.work_tree
         fs.mkdirp(self.working_directory)
-        if stage == "run":
-            clean_out_folder(self.working_directory)
-            with fs.working_dir(self.working_directory, create=True):
-                self.setup_working_directory()
+        clean_out_folder(self.working_directory)
         with fs.working_dir(self.working_directory, create=True):
-            config.plugin_manager.hook.canary_testcase_setup(case=self, stage=stage)
+            self.setup_working_directory()
+        with fs.working_dir(self.working_directory, create=True):
+            config.plugin_manager.hook.canary_testcase_setup(case=self, stage="")
         self.save()
         logging.trace(f"Done setting up {self}")
 
@@ -1451,11 +1430,11 @@ class TestCase(AbstractTestCase):
                 if os.path.exists(file):
                     fh.write(open(file).read())
 
-    def finish(self, stage: str = "run") -> None:
-        if stage == "run":
+    def finish(self, update_stats: bool = True) -> None:
+        if update_stats:
             self.update_run_stats()
         self.concatenate_logs()
-        config.plugin_manager.hook.canary_testcase_finish(case=self, stage=stage)
+        config.plugin_manager.hook.canary_testcase_finish(case=self, stage="")
         self.save()
 
     def teardown(self) -> None:
@@ -1569,7 +1548,6 @@ class TestMultiCase(TestCase):
         owners: list[str] | None = None,
         artifacts: list[dict[str, str]] | None = None,
         exclusive: bool = False,
-        stages: list[str] | None = None,
     ):
         super().__init__(
             file_root=file_root,
@@ -1586,7 +1564,6 @@ class TestMultiCase(TestCase):
             owners=owners,
             artifacts=artifacts,
             exclusive=exclusive,
-            stages=stages,
         )
         if flag.startswith("-"):
             # for the base case, call back on the test file with ``flag`` on the command line
@@ -1610,11 +1587,6 @@ class TestMultiCase(TestCase):
         self._paramsets = paramsets
 
     @property
-    def implicit_stages(self) -> list[str]:
-        """Implicit stages, used for some filtering operations"""
-        return ["analyze"]
-
-    @property
     def flag(self) -> str:
         assert self._flag is not None
         return self._flag
@@ -1623,15 +1595,15 @@ class TestMultiCase(TestCase):
     def flag(self, arg: str) -> None:
         self._flag = arg
 
-    def command(self, stage: str = "run") -> list[str]:
+    def command(self) -> list[str]:
         cmd: list[str] = []
         if self.launcher:
             cmd.append(self.launcher)
             cmd.extend(self.preflags or [])
         cmd.append(self.exe)
-        if self.file.endswith(".pyt"):
-            cmd.append(f"--stage={stage}")
         cmd.extend(self.postflags or [])
+        if script_args := config.getoption("script_args"):
+            cmd.extend(script_args)
         return cmd
 
     @property

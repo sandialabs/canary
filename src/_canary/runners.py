@@ -34,26 +34,25 @@ class AbstractTestRunner:
     scheduled = False
 
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
+        config.null()
         verbose = logging.get_level() <= logging.INFO
         prefix = colorize("@*b{==>} ")
-        stage = kwargs.get("stage", "run")
         qsize = kwargs.get("qsize")
         qrank = kwargs.get("qrank")
         if verbose:
-            logging.emit("%s%s\n" % (prefix, self.start_msg(case, stage, qsize=qsize, qrank=qrank)))
-        self.run(case, stage)
+            logging.emit("%s%s\n" % (prefix, self.start_msg(case, qsize=qsize, qrank=qrank)))
+        self.run(case)
         if verbose:
-            logging.emit("%s%s\n" % (prefix, self.end_msg(case, stage, qsize=qsize, qrank=qrank)))
+            logging.emit("%s%s\n" % (prefix, self.end_msg(case, qsize=qsize, qrank=qrank)))
         return None
 
     @abc.abstractmethod
-    def run(self, case: AbstractTestCase, stage: str = "run") -> None: ...
+    def run(self, case: AbstractTestCase) -> None: ...
 
     @abc.abstractmethod
     def start_msg(
         self,
         case: AbstractTestCase,
-        stage: str = "run",
         qsize: int | None = None,
         qrank: int | None = None,
     ) -> str: ...
@@ -62,7 +61,6 @@ class AbstractTestRunner:
     def end_msg(
         self,
         case: AbstractTestCase,
-        stage: str = "run",
         qsize: int | None = None,
         qrank: int | None = None,
     ) -> str: ...
@@ -74,28 +72,27 @@ class TestCaseRunner(AbstractTestRunner):
     def __init__(self) -> None:
         super().__init__()
 
-    def run(self, case: "AbstractTestCase", stage: str = "run") -> None:
+    def run(self, case: "AbstractTestCase") -> None:
         assert isinstance(case, TestCase)
-        if stage in ("baseline", "rebase", "rebaseline"):
-            return self.baseline(case)
         try:
             proc: psutil.Popen | None = None
             metrics: dict[str, Any] | None = None
             case.start = timestamp()
-            case.setup(stage=stage)
+            if not config.getoption("dont_restage"):
+                case.setup()
             case.status.set("running")
             timeout = case.timeout
             if timeoutx := config.getoption("timeout_multiplier"):
                 timeout *= timeoutx
             with working_dir(case.working_directory):
                 try:
-                    stdout = open(case.stdout(stage), "w")
+                    stdout = open(case.stdout("run"), "w")
                     stderr: TextIO | int
-                    if f := case.stderr(stage):
+                    if f := case.stderr("run"):
                         stderr = open(f, "w")
                     else:
                         stderr = subprocess.STDOUT
-                    cmd = case.command(stage=stage)
+                    cmd = case.command()
                     case.cmd_line = " ".join(cmd)
                     stdout.write(f"==> Running {case.display_name} in {case.working_directory}\n")
                     stdout.write(f"==> Command line: {case.cmd_line}\n")
@@ -156,21 +153,12 @@ class TestCaseRunner(AbstractTestRunner):
                 case.stop = timestamp()
                 if metrics is not None:
                     case.add_measurement(**metrics)
-            case.finish(stage=stage)
+            case.finish()
         return
-
-    def baseline(self, case: "TestCase") -> None:
-        logging.emit(self.start_msg(case, "baseline") + "\n")
-        if "baseline" not in case.stages:
-            logging.warning(f"{case} does not define a baseline stage, skipping")
-        else:
-            case.do_baseline()
-        logging.emit(self.end_msg(case, "baseline ") + "\n")
 
     def start_msg(
         self,
         case: AbstractTestCase,
-        stage: str = "run",
         qsize: int | None = None,
         qrank: int | None = None,
     ) -> str:
@@ -183,7 +171,6 @@ class TestCaseRunner(AbstractTestRunner):
     def end_msg(
         self,
         case: AbstractTestCase,
-        stage: str = "run",
         qsize: int | None = None,
         qrank: int | None = None,
     ) -> str:
@@ -282,7 +269,7 @@ class BatchRunner(AbstractTestRunner):
             batch_options.extend(args)
         self.scheduler.add_default_args(*batch_options)
 
-    def run(self, batch: AbstractTestCase, stage: str = "run") -> None:
+    def run(self, batch: AbstractTestCase) -> None:
         assert isinstance(batch, TestBatch)
         try:
             logging.debug(f"Running batch {batch.id[:7]}")
@@ -302,7 +289,7 @@ class BatchRunner(AbstractTestRunner):
                 timeoutx = config.getoption("timeout_multiplier", 1.0)
                 variables.pop("CANARY_BATCH_ID", None)
                 for case in batch:
-                    canary_invocation = self.canary_invocation(case, stage=stage)
+                    canary_invocation = self.canary_invocation(case)
                     job = hpc_connect.Job(
                         name=case.name,
                         commands=[canary_invocation],
@@ -315,7 +302,7 @@ class BatchRunner(AbstractTestRunner):
                     )
                     jobs.append(job)
             else:
-                canary_invocation = self.canary_invocation(batch, stage=stage)
+                canary_invocation = self.canary_invocation(batch)
                 qtime = self.qtime(batch)
                 if timeoutx := config.getoption("timeout_multiplier"):
                     qtime *= timeoutx
@@ -359,7 +346,6 @@ class BatchRunner(AbstractTestRunner):
     def start_msg(
         self,
         batch: AbstractTestCase,
-        stage: str = "run",
         qsize: int | None = None,
         qrank: int | None = None,
     ) -> str:
@@ -373,7 +359,6 @@ class BatchRunner(AbstractTestRunner):
     def end_msg(
         self,
         batch: AbstractTestCase,
-        stage: str = "run",
         qsize: int | None = None,
         qrank: int | None = None,
     ) -> str:
@@ -399,7 +384,7 @@ class BatchRunner(AbstractTestRunner):
         f.write(")")
         return f.getvalue()
 
-    def canary_invocation(self, arg: TestBatch | TestCase, stage: str = "run") -> str:
+    def canary_invocation(self, arg: TestBatch | TestCase) -> str:
         """Write the canary invocation used to run this batch."""
 
         fp = io.StringIO()
@@ -424,7 +409,7 @@ class BatchRunner(AbstractTestRunner):
             with open(config_file, "w") as fh:
                 json.dump(cfg, fh, indent=2)
             fp.write(f"-f {config_file} ")
-        fp.write(f"-C {config.session.work_tree} run --stage={stage} ")
+        fp.write(f"-C {config.session.work_tree} run ")
         if config.getoption("fail_fast"):
             fp.write("--fail-fast ")
         if config.getoption("dont_measure"):

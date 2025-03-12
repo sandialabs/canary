@@ -89,7 +89,7 @@ Additionally, a full table of dependency parameters is accessible via key entry 
 Run only the analysis section of a test
 ---------------------------------------
 
-After a test is run, the composite base case can be run with the :ref:`canary run --stage=analyze<canary-run>` command.  Consider the test introduced in :ref:`usage-execute-and-analyze`, repeated here for convenience:
+After a test is run, the composite base case can be run with the :ref:`canary run -- --stage=analyze<canary-run>` command.  Consider the test introduced in :ref:`usage-execute-and-analyze`, repeated here for convenience:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :language: python
@@ -102,11 +102,5 @@ After the test has been run, the analysis sections can be run without rerunning 
     :ellipsis: 0
 
 
-.. command-output:: canary -C TestResults.ExecuteAndAnalyze run --stage=analyze .
+.. command-output:: canary -C TestResults.ExecuteAndAnalyze run -- --stage=analyze .
     :cwd: /examples
-
-
-Connection to additional execution stages
------------------------------------------
-
-The execute and analyze pattern is related to :ref:`usage-staged-execution` by adding the ``analyze`` stage to the composite base case's ``stages`` and adding each parameterized test case as a dependency.

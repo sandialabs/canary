@@ -34,15 +34,29 @@ class PathSpec:
     @staticmethod
     def parse(args: argparse.Namespace) -> None:
         args.start = None
+        script_args = None
         on_options: list[str] = []
+        off_options: list[str] = []
         pathspec: list[str] = []
-        for item in args.pathspec:
+        for i, item in enumerate(args.pathspec):
+            if item == "--":
+                script_args = args.pathspec[i + 1 :]
+                break
             if item.startswith("+"):
                 on_options.append(item[1:])
+            elif item.startswith("~"):
+                off_options.append(item[1:])
             else:
                 pathspec.append(item)
         args.pathspec = pathspec
-        args.on_options.extend(on_options)
+        if on_options:
+            args.on_options = getattr(args, "on_options", None) or []
+            args.on_options.extend(on_options)
+        if off_options:
+            args.off_options = getattr(args, "off_options", None) or []
+            args.off_options.extend(off_options)
+        if script_args:
+            args.script_args = script_args
         if find_work_tree(os.getcwd()) is not None:
             return PathSpec.parse_in_session(args)
         else:
@@ -169,8 +183,8 @@ class PathSpec:
         )
         parser.add_argument(
             "pathspec",
-            metavar="pathspec",
-            nargs="*",
+            metavar="pathspec [--] [user args]...",
+            nargs=argparse.REMAINDER,
             help="Test file[s] or directories to search",
         )
 
@@ -192,19 +206,30 @@ For %(existing)s test sessions, the %(pathspec)s argument is scanned for tests t
 %(pathspec)s can be one (or more) of the following types:
 
 • directory name: run test files in this directory and its children;
-• test id: run this specific test, specified as ``%(id)s``;
+• test id: run this specific test, specified as %(id)s;
 • test file: run the test defined in this file; and
-• batch spec: run this batch of tests, specified as ``%(batch_id)s``.
+• batch spec: run this batch of tests, specified as %(batch_id)s.
+
+Any argument following the %(sep)s separator is passed directly to each test script's command line.
 """ % {
-            "run": bold("canary run"),
+            "run": code("canary run"),
             "new": bold("new"),
             "existing": bold("existing"),
-            "pathspec": bold("pathspec"),
-            "id": bold("/ID"),
-            "batch_id": bold("^BATCH_ID"),
+            "pathspec": code("pathspec"),
+            "id": code("/ID"),
+            "batch_id": code("^BATCH_ID"),
+            "sep": code("--"),
         }
         return pathspec_help
 
 
 def bold(arg: str) -> str:
+    if os.getenv("COLOR_WHEN", "auto") == "never":
+        return f"**{arg}**"
+    return colorize("@*{%s}" % arg)
+
+
+def code(arg: str) -> str:
+    if os.getenv("COLOR_WHEN", "auto") == "never":
+        return f"``{arg}``"
     return colorize("@*{%s}" % arg)

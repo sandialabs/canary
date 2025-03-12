@@ -48,6 +48,7 @@ from .third_party.lock import WriteTransaction
 from .util import glyphs
 from .util import keyboard
 from .util import logging
+from .util.compression import compress64
 from .util.filesystem import find_work_tree
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
@@ -401,7 +402,6 @@ class Session:
             owners=owners,
             regex=regex,
             case_specs=None,
-            stage=None,
             start=None,
         )
         masked: list[TestCase] = []
@@ -429,7 +429,6 @@ class Session:
         owners: set[str] | None = None,
         regex: str | None = None,
         start: str | None = None,
-        stage: str | None = None,
         case_specs: list[str] | None = None,
     ) -> None:
         """Filter test cases (mask test cases that don't meet a specific criteria)
@@ -451,7 +450,6 @@ class Session:
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
-            stage=stage,
             case_specs=case_specs,
             start=start,
         )
@@ -465,7 +463,7 @@ class Session:
         if masked:
             self.report_excluded(masked)
 
-    def run(self, *, fail_fast: bool = False, stage: str | None = None) -> list[TestCase]:
+    def run(self, *, fail_fast: bool = False) -> list[TestCase]:
         """Run each test case in ``cases``.
 
         Args:
@@ -481,19 +479,16 @@ class Session:
         if not cases:
             raise StopExecution("No tests to run", 7)
         queue = self.setup_queue(cases)
-        config.session.stage = stage = stage or "run"
-        os.environ["CANARY_STAGE"] = stage
         with self.rc_environ():
             with working_dir(self.work_tree):
                 cleanup_queue = True
                 try:
                     queue_size = len(queue)
                     what = "batches" if isinstance(queue, BatchResourceQueue) else "test cases"
-                    p = " " if stage == "run" else f" stage {stage!r} for "
-                    logging.info(colorize("@*{Running}%s%d %s" % (p, queue_size, what)))
+                    logging.info(colorize("@*{Running} %d %s" % (queue_size, what)))
                     self.start = timestamp()
                     self.stop = -1.0
-                    self.process_queue(queue=queue, fail_fast=fail_fast, stage=stage)
+                    self.process_queue(queue=queue, fail_fast=fail_fast)
                 except ProcessPoolExecutorFailedToStart:
                     if self.level > 0:
                         # This can happen when the ProcessPoolExecutor fails to obtain a lock.
@@ -554,14 +549,13 @@ class Session:
         os.environ.clear()
         os.environ.update(save_env)
 
-    def process_queue(self, *, queue: ResourceQueue, fail_fast: bool, stage: str) -> None:
+    def process_queue(self, *, queue: ResourceQueue, fail_fast: bool) -> None:
         """Process the test queue, asynchronously
 
         Args:
           queue: the test queue to process
           fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
             continuing running until all tests have been run.
-          stage: the execution stage
 
         """
         futures: dict = {}
@@ -571,6 +565,9 @@ class Session:
         qsize = queue.qsize
         qrank = 0
         try:
+            with io.StringIO() as fh:
+                config.snapshot(fh)
+                os.environ["CANARYCFG64"] = compress64(fh.getvalue())
             context = multiprocessing.get_context(config.multiprocessing_context)
             with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
                 signal.signal(signal.SIGTERM, handle_signal)
@@ -591,7 +588,7 @@ class Session:
                         continue
                     except EmptyQueue:
                         break
-                    future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank, stage=stage)
+                    future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank)
                     qrank += 1
                     callback = partial(self.done_callback, iid, queue, fail_fast)
                     future.add_done_callback(callback)

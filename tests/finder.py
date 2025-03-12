@@ -14,7 +14,6 @@ def mask(
     owners=None,
     regex=None,
     case_specs=None,
-    stage=None,
     start=None,
 ):
     from _canary.plugins.builtin.mask import canary_testsuite_mask
@@ -26,7 +25,6 @@ def mask(
         owners=owners,
         regex=regex,
         case_specs=case_specs,
-        stage=stage,
         start=start,
     )
 

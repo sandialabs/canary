@@ -64,6 +64,11 @@ class Run(CanarySubcommand):
             help="If pedantic (default), stop if file parsing errors occur, else ignore parsing errors",
         )
         parser.add_argument(
+            "--dont-restage",
+            action="store_true",
+            default=False,
+        )
+        parser.add_argument(
             "--copy-all-resources",
             action="store_true",
             default=False,
@@ -76,11 +81,6 @@ class Run(CanarySubcommand):
             help="Do not collect a test's process information [default: %(default)s]",
         )
         add_resource_arguments(parser)
-        parser.add_argument(
-            "--stage",
-            default=None,
-            help="Run this execution stage [default: run]",
-        )
         PathSpec.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
@@ -90,10 +90,7 @@ class Run(CanarySubcommand):
             logging.emit(banner() + "\n")
         PathSpec.parse(args)
         session: Session
-        stage: str = args.stage or "run"
         if args.mode == "w":
-            if stage != "run":
-                raise ValueError("--stage must equal run when creating a new session")
             path = args.work_tree or Session.default_worktree
             session = Session(path, mode=args.mode, force=args.wipe)
             session.add_search_paths(args.paths)
@@ -129,17 +126,19 @@ class Run(CanarySubcommand):
 
         elif args.mode == "a":
             session = Session(args.work_tree, mode=args.mode)
+            if args.rerun_all_testcases:
+                for case in session.active_cases():
+                    case.mark_as_ready()
             session.filter(
                 start=args.start,
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
-                stage=stage,
                 case_specs=getattr(args, "case_specs", None),
             )
         else:
             assert args.mode == "b"
             session = Session.batch_view(args.work_tree, args.batch_id)
-        session.run(fail_fast=args.fail_fast, stage=stage)
+        session.run(fail_fast=args.fail_fast)
         if not args.no_summary:
             logging.emit(session.summary(include_pass=False))
         if args.durations:
