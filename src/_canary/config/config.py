@@ -575,5 +575,7 @@ def merge_namespaces(dest: argparse.Namespace, source: argparse.Namespace) -> ar
             setattr(dest, attr, value)
         else:
             my_value = getattr(dest, attr)
+            if hasattr(my_value, "copy"):
+                my_value = my_value.copy()
             setattr(dest, attr, merge(my_value, value))
     return dest
