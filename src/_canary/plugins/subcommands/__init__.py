@@ -1,6 +1,7 @@
 from . import autodoc
 from . import config
 from . import describe
+from . import docs
 from . import edit
 from . import fetch
 from . import find
@@ -18,6 +19,7 @@ plugins = [
     autodoc,
     config,
     describe,
+    docs,
     edit,
     fetch,
     find,

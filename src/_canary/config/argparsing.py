@@ -20,6 +20,10 @@ if TYPE_CHECKING:
 stat_names = pstats.Stats.sort_arg_dict_default
 
 
+def conditional_help(arg: str, suppress: bool = True) -> str:
+    return arg if not suppress else argparse.SUPPRESS
+
+
 class HelpFormatter(argparse.RawTextHelpFormatter):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -200,6 +204,16 @@ class Parser(argparse.ArgumentParser):
                 group = parser.add_argument_group(group_name)
             group.add_argument(*args, **kwargs)
 
+    @staticmethod
+    def add_main_epilog(parser: "Parser") -> None:
+        epilog = """\
+more help:
+  canary help --all        list all commands and options
+  canary help --pathspec   help on the path specification syntax
+  canary docs              open http://ascic-test-infra.cee-gitlab.lan/canary in a browser
+"""
+        parser.epilog = epilog
+
 
 def identity(arg):
     return arg
@@ -249,6 +263,7 @@ class ConfigMods(argparse.Action):
 
 def make_argument_parser(**kwargs):
     """Create an basic argument parser without any subcommands added."""
+    show_all = kwargs.pop("all", False)
     parser = Parser(
         formatter_class=HelpFormatter,
         description="canary - an application testing framework",
@@ -304,7 +319,9 @@ def make_argument_parser(**kwargs):
         "--echo",
         action="store_true",
         default=False,
-        help="Echo command line to the console [default: %(default)s]",
+        help=conditional_help(
+            "Echo command line to the console [default: %(default)s]", suppress=not show_all
+        ),
     )
     parser.add_argument(
         "--color",
@@ -317,21 +334,26 @@ def make_argument_parser(**kwargs):
         "--profile",
         action="store_true",
         dest="canary_profile",
-        help="profile execution using cProfile",
+        help=conditional_help("profile execution using cProfile", suppress=not show_all),
     )
     stat_lines = list(zip(*(iter(stat_names),) * 7))
     group.add_argument(
         "--sorted-profile",
         default=None,
         metavar="stat",
-        help="profile and sort by one or more of:\n[%s]"
-        % ",\n ".join([", ".join(line) for line in stat_lines]),
+        help=conditional_help(
+            "profile and sort by one or more of:\n[%s]"
+            % ",\n ".join([", ".join(line) for line in stat_lines]),
+            suppress=not show_all,
+        ),
     )
     group.add_argument(
         "--lines",
         default=20,
         action="store",
-        help="lines of profile output or 'all' [default: 20]",
+        help=conditional_help(
+            "lines of profile output or 'all' [default: 20]", suppress=not show_all
+        ),
     )
     group = parser.add_argument_group("runtime configuration")
     group.add_argument(

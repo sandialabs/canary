@@ -35,6 +35,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     with CanaryMain(argv) as m:
         parser = make_argument_parser()
+        parser.add_main_epilog(parser)
         for command in config.plugin_manager.get_subcommands():
             parser.add_command(command)
         with monkeypatch.context() as mp:

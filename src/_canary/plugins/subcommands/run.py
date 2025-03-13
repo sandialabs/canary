@@ -27,7 +27,7 @@ class Run(CanarySubcommand):
     description = "Find and run tests from a pathspec"
 
     def setup_parser(self, parser: "Parser") -> None:
-        parser.epilog = PathSpec.description()
+        parser.epilog = "See canary help --pathspec for help on the path specification"
         add_work_tree_arguments(parser)
         add_filter_arguments(parser)
         group = parser.add_argument_group("console reporting")
