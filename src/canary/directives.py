@@ -1273,6 +1273,10 @@ def sources(*args: str, when: WhenType | None = None) -> None:
     pass
 
 
+def stages(*args: str) -> None:
+    pass
+
+
 def testname(arg: str) -> None:
     """Set the name of a test to one different from the filename and/or define
     multiple test names (multiple test instances) in the same file.

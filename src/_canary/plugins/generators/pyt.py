@@ -3,6 +3,7 @@ import glob
 import io
 import os
 import sys
+import warnings
 from string import Template
 from types import ModuleType
 from typing import Any
@@ -710,6 +711,9 @@ class PYTTestGenerator(AbstractTestGenerator):
         if arg:
             self.skipif_reason = reason
 
+    def m_stages(self, *args: str) -> None:
+        warnings.warn("stages: function deprecated", category=DeprecationWarning, stacklevel=2)
+
     def m_enable(
         self,
         arg: bool,
@@ -863,6 +867,9 @@ class PYTTestGenerator(AbstractTestGenerator):
 
     def f_source(self, arg: str, *, when: WhenType | None = None):
         self.m_rcfile(arg, when=when)
+
+    def f_stages(self, *args: str) -> None:
+        warnings.warn("stages: function deprecated", category=DeprecationWarning, stacklevel=2)
 
     def f_artifact(self, file: str, *, when: WhenType | None = None, upon: str = "always") -> None:
         if upon not in ("always", "success", "failure"):
