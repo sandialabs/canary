@@ -36,7 +36,7 @@ class PathSpec(argparse.Action):
             paths = self.read_paths(values)
             args.mode = "w"
             args.start = None
-            setattr(args, self.dest, True)
+            setattr(args, self.dest, values)
             setdefault(args, "paths", {}).update(paths)
             return
 
@@ -59,8 +59,8 @@ class PathSpec(argparse.Action):
             return
 
         assert work_tree is not None
-        if getattr(args, "f_pathspec", None):
-            raise ValueError("-f option is illegal in re-use mode")
+        if f := getattr(args, "f_pathspec", None):
+            raise ValueError(f"-f {f} is illegal in re-use mode")
         if getattr(args, "wipe", None):
             raise ValueError("-w option is illegal in re-use mode")
         if getattr(args, "work_tree", None):
