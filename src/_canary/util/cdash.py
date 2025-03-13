@@ -108,6 +108,8 @@ class server:
 
     @staticmethod
     def put(url, file):
+        from .. import config
+
         with no_proxy():
             # Proxy settings must be turned off to submit to CDash
             curl = Executable("curl")
@@ -116,7 +118,7 @@ class server:
             args.extend(["-H", "Content-Type: text/xml"])
             args.extend(["-H", "Accept: text/xml"])
             args.extend(["--data-binary", f"@{file}"])
-            efile = ".curl-err.txt"
+            efile = "cdash-put-err.txt"
             try:
                 with open(efile, "w") as fh:
                     result = curl(*args, output=str, error=fh)
@@ -132,9 +134,10 @@ class server:
                     logging.error(f"Failed to upload {os.path.basename(file)}: {m}")
                 elif status:
                     m = doc.getElementsByTagName("message")[0].firstChild.data.strip()
-                    lines = [_.rstrip() for _ in open(efile).readlines()]
-                    logging.error(f"Failed to upload {os.path.basename(file)}: {m}", *lines)
-                force_remove(efile)
+                    lines = "\n    ".join([_.rstrip() for _ in open(efile).readlines()])
+                    logging.error(f"Failed to upload {os.path.basename(file)}: {m}\n    {lines}")
+                if not config.debug:
+                    force_remove(efile)
             return status
 
     @staticmethod
