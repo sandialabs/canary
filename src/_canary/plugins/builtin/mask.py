@@ -60,7 +60,7 @@ def canary_testsuite_mask(
             # won't mask
             continue
 
-        if start and not isrel(case.working_directory, start):
+        if start is not None and not isrel(case.working_directory, start):
             logging.debug(f"{case}: {case.working_directory=} but {start=}")
             case.mask = "Unreachable from start directory"
             continue

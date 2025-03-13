@@ -25,15 +25,22 @@ def test_pathspec_parse_new(tmpdir):
         with open("foo.json", "w") as fh:
             f = {"testpaths": [{"root": os.getcwd(), "paths": ["bacon"]}]}
             json.dump(f, fh)
-        args = argparse.Namespace(f_pathspec="./foo.json", on_options=[])
-        args.pathspec = [
+        values = [
             "./baz",
             "+baz",
             "./spam",
             "./eggs:f.pyt",
             "./ham/f.pyt",
+            "~bacon",
+            "--",
+            "--foo",
+            "--bar",
         ]
-        ps.PathSpec.parse(args)
+        p = ps.PathSpec("", "f_pathspec")
+        args = argparse.Namespace()
+        p(None, args, "foo.json")
+        p = ps.PathSpec("", "pathspec")
+        p(None, args, values)
         assert args.paths == {
             os.getcwd(): ["bacon"],
             "./baz": [],
@@ -42,3 +49,5 @@ def test_pathspec_parse_new(tmpdir):
             f"{os.getcwd()}/ham": ["f.pyt"],
         }
         assert args.on_options == ["baz"]
+        assert args.off_options == ["bacon"]
+        assert args.script_args == ["--foo", "--bar"]

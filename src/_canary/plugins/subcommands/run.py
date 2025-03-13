@@ -92,7 +92,6 @@ class Run(CanarySubcommand):
 
         if not args.no_header:
             logging.emit(banner() + "\n")
-        PathSpec.parse(args)
         session: Session
         if args.mode == "w":
             path = args.work_tree or Session.default_worktree

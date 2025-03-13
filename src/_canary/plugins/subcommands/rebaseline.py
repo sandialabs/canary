@@ -1,10 +1,8 @@
 import argparse
-import os
 from typing import TYPE_CHECKING
 
 from ...util import logging
 from ...util.banner import banner
-from ...util.filesystem import find_work_tree
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import PathSpec
@@ -26,22 +24,14 @@ class Rebaseline(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         add_filter_arguments(parser)
-        parser.add_argument("-f", dest="f_pathspec", help=argparse.SUPPRESS)
-        parser.add_argument(
-            "pathspec",
-            metavar="pathspec",
-            nargs="*",
-            help="Test file[s] or directories to search",
-        )
+        PathSpec.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
         from ...session import Session
 
-        work_tree = find_work_tree(os.getcwd())
-        if work_tree is None:
+        if args.work_tree is None:
             raise ValueError("rebaseline must be executed in a canary work tree")
         logging.emit(banner() + "\n")
-        PathSpec.parse(args)
         session = Session(args.work_tree, mode="r")
         session.filter(
             start=args.start,
