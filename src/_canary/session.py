@@ -144,6 +144,10 @@ class Session:
         self.start = -1.0
         self.stop = -1.0
 
+        os.environ.setdefault("CANARY_LEVEL", "0")
+        os.environ["CANARY_WORK_TREE"] = self.work_tree
+        self.level = int(os.environ["CANARY_LEVEL"])
+
         self.db = Database(self.config_dir, mode=mode)
         if mode in "rab":
             self.restore_settings()
@@ -156,9 +160,6 @@ class Session:
 
         self.mode = mode
 
-        os.environ.setdefault("CANARY_LEVEL", "0")
-        os.environ["CANARY_WORK_TREE"] = self.work_tree
-        self.level = int(os.environ["CANARY_LEVEL"])
         if mode == "w":
             self.save(ini=True)
 
@@ -312,6 +313,7 @@ class Session:
     def set_config_values(self):
         """Set ``section`` configuration values"""
         config.session.work_tree = self.work_tree
+        config.session.level = self.level
 
     def save(self, ini: bool = False) -> None:
         """Save session data, excluding data that is stored separately in the database"""

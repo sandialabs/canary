@@ -84,7 +84,8 @@ def canary_testsuite_mask(
         if keyword_exprs is not None:
             kwds = set(case.keywords)
             kwds.update(case.implicit_keywords)
-            if not any(["__all__" == keyword_expr for keyword_expr in keyword_exprs]):
+            kwd_all = contains_any(("__all__", ":all:"), keyword_exprs)
+            if not kwd_all:
                 for keyword_expr in keyword_exprs:
                     match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
                     if not match:
@@ -134,3 +135,7 @@ def isrel(path1: str | None, path2: str) -> bool:
     if path1 is None:
         return False
     return os.path.abspath(path1).startswith(os.path.abspath(path2))
+
+
+def contains_any(elements: tuple[str, ...], test_elements: list[str]) -> bool:
+    return any(element in test_elements for element in elements)

@@ -1,3 +1,4 @@
+import argparse
 import dataclasses
 import importlib.util
 import io
@@ -18,6 +19,7 @@ from typing import Generator
 from typing import Type
 
 from ... import config
+from ...config.argparsing import Parser
 from ...enums import list_parameter_space
 from ...test.case import TestCase
 from ...test.case import TestMultiCase
@@ -695,9 +697,9 @@ def get_vvtest_attrs(case: "TestCase") -> dict:
     #   - ``vvtest_util.opt_analyze = '--execute-analysis-sections' in sys.argv[1:].
     # ``--execute-analysis-sections`` is a appended to a test script's command line if
     # rtconfig.getAttr("analyze") is True.  Thus, it seems that there is no differenece between
-    # ``opt_analyze`` and ``is_analysis_only``, so we put all three checks into our vvtest_util.py
-    opts = ["--execute-analysis-sections", "-a", "--analyze"]
-    analyze_check = " or ".join(f"{o!r} in sys.argv[1:]" for o in opts)
+    # ``opt_analyze`` and ``is_analysis_only``.  In canary, --execute-analysis-sections is added
+    # to the command if canary_testcase_modify below
+    analyze_check = "'--execute-analysis-sections' in sys.argv[1:]"
     attrs["opt_analyze"] = attrs["is_analysis_only"] = analyze_check
 
     attrs["is_analyze"] = isinstance(case, TestMultiCase)
@@ -790,3 +792,44 @@ def canary_testcase_finish(case: "TestCase") -> None:
         return
     f = os.path.join(case.working_directory, "execute.log")
     force_symlink(case.logfile(), f)
+
+
+class RerunAction(argparse.Action):
+    def __call__(self, parser, args, values, option_string=None):
+        keywords = getattr(args, "keyword_exprs", None) or []
+        keywords.append(":all:")
+        setattr(args, "keyword_exprs", keywords)
+
+
+@hookimpl
+def canary_addoption(parser: "Parser") -> None:
+    parser.add_argument(
+        "-R",
+        action=RerunAction,
+        nargs=0,
+        command="run",
+        group="vvtest options",
+        dest="vvtest_runall",
+        help="Rerun tests. Normally tests are not run if they previously completed.",
+    )
+    parser.add_argument(
+        "-a",
+        "--analyze",
+        action="store_true",
+        default=False,
+        command="run",
+        group="vvtest options",
+        dest="vvtest_analyze",
+        help="Only run the analysis sections of each test. Note that a test must be written to "
+        "support this option (using the vvtest_util.is_analysis_only flag) otherwise the whole "
+        "test is run.",
+    )
+
+
+@hookimpl
+def canary_testcase_modify(case: "TestCase") -> None:
+    if not case.file_path.endswith(".vvt"):
+        return
+    if config.getoption("vvtest_analyze"):
+        if config.session.level and "--execute-analysis-sections" not in case.postflags:
+            case.postflags.append("--execute-analysis-sections")
