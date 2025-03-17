@@ -490,6 +490,7 @@ class Session:
                     logging.info(colorize("@*{Running} %d %s" % (queue_size, what)))
                     self.start = timestamp()
                     self.stop = -1.0
+                    logging.debug("processing queue")
                     self.process_queue(queue=queue)
                 except ProcessPoolExecutorFailedToStart:
                     if self.level > 0:
@@ -502,14 +503,17 @@ class Session:
                         self.returncode = compute_returncode(queue.cases())
                     raise
                 except KeyboardInterrupt:
+                    logging.debug("keyboard interrupt: killing child processes and exiting")
                     kill_child_processes(signal.SIGINT)
                     self.returncode = signal.SIGINT.value
                     cleanup_queue = False
                     raise
                 except StopExecution as e:
+                    logging.debug("stop execution: killing child processes and exiting")
                     kill_child_processes(signal.SIGTERM)
                     self.returncode = e.exit_code
                 except FailFast as e:
+                    logging.debug("fail fast: killing child processes and exiting")
                     kill_child_processes(signal.SIGTERM)
                     code = compute_returncode(e.failed)
                     self.returncode = code
@@ -517,6 +521,7 @@ class Session:
                     names = ",".join(_.name for _ in e.failed)
                     raise StopExecution(f"fail_fast: {names}", code)
                 except Exception:
+                    logging.debug("unknown failure: killing child processes and exiting")
                     logging.error(traceback.format_exc())
                     kill_child_processes(signal.SIGTERM)
                     self.returncode = compute_returncode(queue.cases())
@@ -984,6 +989,7 @@ def kill_child_processes(sig: int, kill_delay: float = 0.1) -> None:
             )
             for child in children:
                 if child.is_running():
+                    logging.debug(f"sending -{sig} to {' '.join(child.cmdline())}")
                     try:
                         child.send_signal(sig)
                     except psutil.NoSuchProcess:
@@ -991,6 +997,7 @@ def kill_child_processes(sig: int, kill_delay: float = 0.1) -> None:
             time.sleep(kill_delay)
             for child in children:
                 if child.is_running():
+                    logging.debug(f"killing {' '.join(child.cmdline())}")
                     try:
                         child.send_signal(signal.SIGKILL)
                     except psutil.NoSuchProcess:
