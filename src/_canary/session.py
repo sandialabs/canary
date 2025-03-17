@@ -983,10 +983,11 @@ def kill_child_processes(sig: int, kill_delay: float = 0.1) -> None:
         with logging.capture(sys.stdout if config.debug else fh):
             process = psutil.Process(os.getpid())
             children = sorted(
-                [_ for _ in process.children(recursive=True) if not is_base_process(_)],
+                [_ for _ in process.children(recursive=False) if not is_base_process(_)],
                 key=lambda p: p.create_time(),
                 reverse=True,
             )
+            logging.debug(f"cancelling {' '.join(c.cmdline()[0] for c in children)}")
             for child in children:
                 if child.is_running():
                     logging.debug(f"sending -{sig} to {' '.join(child.cmdline())}")

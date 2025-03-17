@@ -280,6 +280,7 @@ class BatchRunner(AbstractTestRunner):
             variables["CANARY_BATCH_SCHEDULER"] = "null"  # guard against infinite batch recursion
             if config.debug:
                 variables["CANARY_DEBUG"] = "on"
+                hpc_connect.set_debug(True)
 
             jobs: list[hpc_connect.Job] = []
             batchopts = config.getoption("batch", {})
