@@ -45,9 +45,9 @@ def test_batch_options():
             "-b",
             "option=--a=b,-c d",
             "-b",
-            "option:verbatim='--clusters=spam,baz'",
+            "option=--clusters='spam,baz'",
             "-b",
-            "option:verb='--clusters=horse,fly'",
+            "option=--clusters='horse,fly'",
         ]
     )
     assert args.batch["options"] == [
@@ -57,8 +57,8 @@ def test_batch_options():
         "--baz=spam",
         "--a=b",
         "-c d",
-        "--clusters=spam,baz",
-        "--clusters=horse,fly",
+        "--clusters='spam,baz'",
+        "--clusters='horse,fly'",
     ]
 
 

@@ -39,7 +39,9 @@ class TestTimedOut(MyException):
 
 
 class FailFast(Exception):
-    pass
+    def __init__(self, *, failed):
+        self.failed = failed
+        super().__init__(",".join(_.name for _ in failed))
 
 
 class StopExecution(Exception):

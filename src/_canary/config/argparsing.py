@@ -312,13 +312,13 @@ def make_argument_parser(**kwargs):
         "-d",
         "--debug",
         action="store_true",
-        default=False,
+        default=None,
         help="Debug mode [default: %(default)s]",
     )
     parser.add_argument(
         "--echo",
         action="store_true",
-        default=False,
+        default=None,
         help=conditional_help(
             "Echo command line to the console [default: %(default)s]", suppress=not show_all
         ),
@@ -333,6 +333,7 @@ def make_argument_parser(**kwargs):
     group.add_argument(
         "--profile",
         action="store_true",
+        default=None,
         dest="canary_profile",
         help=conditional_help("profile execution using cProfile", suppress=not show_all),
     )
@@ -349,7 +350,8 @@ def make_argument_parser(**kwargs):
     )
     group.add_argument(
         "--lines",
-        default=20,
+        default=None,
+        dest="profiling_lines",
         action="store",
         help=conditional_help(
             "lines of profile output or 'all' [default: 20]", suppress=not show_all
@@ -374,7 +376,7 @@ def make_argument_parser(**kwargs):
         "-e",
         dest="env_mods",
         metavar="var=val",
-        default={},
+        default=None,
         action=EnvironmentModification,
         default_scope="session",
         help="Add environment variable %s to the testing environment with value %s.  Accepts "

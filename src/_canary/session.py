@@ -480,7 +480,7 @@ class Session:
         cases = self.get_ready()
         if not cases:
             raise StopExecution("No tests to run", 7)
-        queue = self.setup_queue(cases)
+        queue = self.setup_queue(cases, fail_fast=fail_fast)
         with self.rc_environ():
             with working_dir(self.work_tree):
                 cleanup_queue = True
@@ -490,7 +490,7 @@ class Session:
                     logging.info(colorize("@*{Running} %d %s" % (queue_size, what)))
                     self.start = timestamp()
                     self.stop = -1.0
-                    self.process_queue(queue=queue, fail_fast=fail_fast)
+                    self.process_queue(queue=queue)
                 except ProcessPoolExecutorFailedToStart:
                     if self.level > 0:
                         # This can happen when the ProcessPoolExecutor fails to obtain a lock.
@@ -511,10 +511,11 @@ class Session:
                     self.returncode = e.exit_code
                 except FailFast as e:
                     kill_child_processes(signal.SIGTERM)
-                    name, code = e.args
+                    code = compute_returncode(e.failed)
                     self.returncode = code
                     cleanup_queue = False
-                    raise StopExecution(f"fail_fast: {name}", code)
+                    names = ",".join(_.name for _ in e.failed)
+                    raise StopExecution(f"fail_fast: {names}", code)
                 except Exception:
                     logging.error(traceback.format_exc())
                     kill_child_processes(signal.SIGTERM)
@@ -551,13 +552,11 @@ class Session:
         os.environ.clear()
         os.environ.update(save_env)
 
-    def process_queue(self, *, queue: ResourceQueue, fail_fast: bool) -> None:
+    def process_queue(self, *, queue: ResourceQueue) -> None:
         """Process the test queue, asynchronously
 
         Args:
           queue: the test queue to process
-          fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
-            continuing running until all tests have been run.
 
         """
         futures: dict = {}
@@ -566,6 +565,7 @@ class Session:
         runner = r_factory()
         qsize = queue.qsize
         qrank = 0
+        ppe = None
         try:
             with io.StringIO() as fh:
                 config.snapshot(fh)
@@ -592,7 +592,7 @@ class Session:
                         break
                     future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank)
                     qrank += 1
-                    callback = partial(self.done_callback, iid, queue, fail_fast)
+                    callback = partial(self.done_callback, iid, queue)
                     future.add_done_callback(callback)
                     futures[iid] = (obj, future)
         except BaseException:
@@ -628,16 +628,13 @@ class Session:
             fh.write(json.dumps(hb) + "\n")
         return None
 
-    def done_callback(
-        self, iid: int, queue: ResourceQueue, fail_fast: bool, future: Future
-    ) -> None:
+    def done_callback(self, iid: int, queue: ResourceQueue, future: Future) -> None:
         """Function registered to the process pool executor to be called when a test (or batch of
         tests) completes
 
         Args:
           iid: the queue's internal ID of the test (or batch)
           queue: the active test queue
-          fail_fast: whether to stop the test session at the first failed test
           future: the future return by the process pool executor
 
         """
@@ -662,11 +659,7 @@ class Session:
             logging.error(f"Expected AbstractTestCase, got {obj.__class__.__name__}")
             return
         obj.refresh()
-        if isinstance(obj, TestCase):
-            if fail_fast and obj.status != "success":
-                code = compute_returncode([obj])
-                raise FailFast(str(obj), code)
-        else:
+        if not isinstance(obj, TestCase):
             assert isinstance(obj, TestBatch)
             if all(case.status == "retry" for case in obj):
                 queue.retry(iid)
@@ -681,11 +674,8 @@ class Session:
                     case.status.set("not_run", "test not run for unknown reasons")
                 elif case.start > 0 and case.stop < 0:
                     case.status.set("cancelled", "test case cancelled")
-            if fail_fast and any(_.status != "success" for _ in obj):
-                code = compute_returncode(obj.cases)
-                raise FailFast(str(obj), code)
 
-    def setup_queue(self, cases: list[TestCase]) -> ResourceQueue:
+    def setup_queue(self, cases: list[TestCase], fail_fast: bool = False) -> ResourceQueue:
         """Setup the test queue
 
         Args:
@@ -693,7 +683,7 @@ class Session:
 
         """
         kwds: dict[str, Any] = {}
-        queue: ResourceQueue = q_factory(global_session_lock)
+        queue: ResourceQueue = q_factory(global_session_lock, fail_fast=fail_fast)
         for case in cases:
             if case.status == "skipped":
                 case.save()

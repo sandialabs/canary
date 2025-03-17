@@ -121,7 +121,6 @@ class Test:
     timeout_fast: float = 120.0
     timeout_default: float = 5 * 60.0
     timeout_long: float = 15 * 60.0
-    timeout_ctest: float = 1500.0
 
     def update(self, *args: Any, **kwargs: Any) -> None:
         if len(args) > 1:
@@ -332,9 +331,9 @@ class Config:
                 if "multiprocessing_context" in items:
                     config["multiprocessing_context"] = items["multiprocessing_context"]
             elif key == "test":
-                for name in ("fast", "long", "default"):
-                    if name in items.get("timeout", {}):
-                        config[f"test_timeout_{name}"] = items["timeout"][name]
+                if user_defined_timeouts := items.get("timeout"):
+                    for type, value in user_defined_timeouts.items():
+                        config.setdefault("test", {})[f"timeout_{type}"] = value
             elif key == "batch":
                 if "duration" in items:
                     config["batch_duration"] = items["duration"]
@@ -376,8 +375,9 @@ class Config:
             self.log_level = logging.get_level_name(log_levels[3])
             logging.set_level(logging.DEBUG)
 
-        if "session" in args.env_mods:
-            self.environment.update({"set": args.env_mods["session"]})
+        env_mods = getattr(args, "env_mods") or {}
+        if "session" in env_mods:
+            self.environment.update({"set": env_mods["session"]})
 
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The
@@ -428,8 +428,8 @@ class Config:
                     raise ValueError(f"batch:workers={n} > cpu_count={cpu_count()}")
 
         if t := getattr(args, "test_timeout", None):
-            for key, value in t.items():
-                setattr(self.test, f"timeout_{key}", value)
+            for type, value in t.items():
+                setattr(self.test, f"timeout_{type}", value)
 
         self.options = merge_namespaces(self.options, args)
 

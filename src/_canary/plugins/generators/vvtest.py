@@ -816,7 +816,7 @@ def canary_addoption(parser: "Parser") -> None:
         "-a",
         "--analyze",
         action="store_true",
-        default=False,
+        default=None,
         command="run",
         group="vvtest options",
         dest="vvtest_analyze",

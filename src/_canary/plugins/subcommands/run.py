@@ -2,6 +2,7 @@ import argparse
 import sys
 from typing import TYPE_CHECKING
 
+from ... import config
 from ...third_party.color import colorize
 from ...util import graph
 from ...util import logging
@@ -33,14 +34,14 @@ class Run(CanarySubcommand):
         group = parser.add_argument_group("console reporting")
         group.add_argument(
             "--no-header",
+            default=None,
             action="store_true",
-            default=False,
             help="Disable printing header [default: %(default)s]",
         )
         group.add_argument(
             "--no-summary",
+            default=None,
             action="store_true",
-            default=False,
             help="Disable summary [default: %(default)s]",
         )
         group.add_argument(
@@ -49,38 +50,39 @@ class Run(CanarySubcommand):
             metavar="N",
             help="Show N slowest test durations (N=0 for all)",
         )
-        group.add_argument("-r", help="Deprecated option.  Use -q or -v to adjust verbosity")
+        group.add_argument("-r", help=argparse.SUPPRESS)
         parser.add_argument("-u", "--until", choices=("discover", "lock"), help=argparse.SUPPRESS)
         parser.add_argument(
             "--fail-fast",
+            default=None,
             action="store_true",
-            default=False,
             help="Stop after first failed test [default: %(default)s]",
         )
         parser.add_argument(
             "-P",
+            "--parsing-policy",
+            dest="parsing_policy",
             choices=("permissive", "pedantic"),
-            default="pedantic",
             help="If pedantic (default), stop if file parsing errors occur, else ignore parsing errors",
         )
         parser.add_argument(
             "--no-reset",
             "--dont-restage",
             dest="dont_restage",
+            default=None,
             action="store_true",
-            default=False,
             help="Do not return the test execution directory "
             "to its original stage before re-running a test",
         )
         parser.add_argument(
             "--copy-all-resources",
+            default=None,
             action="store_true",
-            default=False,
             help="Do not link resources to the test directory, only copy [default: %(default)s]",
         )
         parser.add_argument(
             "--dont-measure",
-            default=False,
+            default=None,
             action="store_true",
             help="Do not collect a test's process information [default: %(default)s]",
         )
@@ -90,15 +92,17 @@ class Run(CanarySubcommand):
     def execute(self, args: "argparse.Namespace") -> int:
         from ...session import Session
 
-        if not args.no_header:
+        if not config.getoption("no_header"):
             logging.emit(banner() + "\n")
         session: Session
         if args.mode == "w":
             path = args.work_tree or Session.default_worktree
-            session = Session(path, mode=args.mode, force=args.wipe)
+            force = config.getoption("wipe") or False
+            session = Session(path, mode=args.mode, force=force)
             session.add_search_paths(args.paths)
-            session.discover(pedantic=args.P == "pedantic")
-            if args.until is not None:
+            parsing_policy = config.getoption("parsing_policy") or "pedantic"
+            session.discover(pedantic=parsing_policy == "pedantic")
+            if until := config.getoption("until"):
                 generators = session.generators
                 roots = set()
                 for generator in generators:
@@ -106,29 +110,32 @@ class Run(CanarySubcommand):
                 n, N = len(generators), len(roots)
                 s, S = "" if n == 1 else "s", "" if N == 1 else "s"
                 logging.info(colorize("@*{Collected} %d file%s from %d root%s" % (n, s, N, S)))
-                if args.until == "discover":
+                if until == "discover":
                     logging.info("Done with test discovery")
                     return 0
+            env_mods = config.getoption("env_mods") or {}
             session.lock(
-                keyword_exprs=args.keyword_exprs,
-                parameter_expr=args.parameter_expr,
-                on_options=args.on_options,
-                env_mods=args.env_mods.get("test") or {},
-                regex=args.regex_filter,
+                keyword_exprs=config.getoption("keyword_exprs"),
+                parameter_expr=config.getoption("parameter_expr"),
+                on_options=config.getoption("on_options"),
+                env_mods=env_mods.get("test") or {},
+                regex=config.getoption("regex_filter"),
             )
 
-            if args.until is not None:
+            if until := config.getoption("until"):
                 active_cases = session.get_ready()
                 n, N = len(active_cases), len({case.file for case in active_cases})
                 s, S = "" if n == 1 else "s", "" if N == 1 else "s"
                 logging.info(colorize("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S)))
                 graph.print(active_cases, file=sys.stdout)
-                if args.until == "lock":
+                if until == "lock":
                     logging.info("Done freezing test cases")
                     return 0
 
         elif args.mode == "a":
             session = Session(args.work_tree, mode=args.mode)
+            # use args here instead of config.getoption so that in-session runs can be filtered
+            # with options not used during sesssion setup
             session.filter(
                 start=args.start,
                 keyword_exprs=args.keyword_exprs,
@@ -138,10 +145,10 @@ class Run(CanarySubcommand):
         else:
             assert args.mode == "b"
             session = Session.batch_view(args.work_tree, args.batch_id)
-        session.run(fail_fast=args.fail_fast)
-        if not args.no_summary:
+        session.run(fail_fast=config.getoption("fail_fast") or False)
+        if not config.getoption("no_summary"):
             logging.emit(session.summary(include_pass=False))
-        if args.durations:
-            logging.emit(session.durations(args.durations))
+        if p := config.getoption("durations"):
+            logging.emit(session.durations(p))
         logging.emit(session.footer())
         return session.exitstatus

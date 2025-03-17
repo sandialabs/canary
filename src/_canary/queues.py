@@ -7,6 +7,7 @@ from typing import Any
 from typing import Callable
 
 from . import config
+from .error import FailFast
 from .test.batch import TestBatch
 from .test.case import TestCase
 from .third_party import color
@@ -19,6 +20,7 @@ from .util.time import timestamp
 
 class ResourceQueue(abc.ABC):
     def __init__(self, *, lock: threading.Lock, workers: int) -> None:
+        self.fail_fast = False
         self.workers = workers
         self.buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
@@ -55,6 +57,9 @@ class ResourceQueue(abc.ABC):
     @abc.abstractmethod
     def notrun(self) -> list[Any]: ...
 
+    @abc.abstractmethod
+    def failed(self) -> list[TestCase]: ...
+
     def empty(self) -> bool:
         return len(self.buffer) == 0
 
@@ -90,6 +95,8 @@ class ResourceQueue(abc.ABC):
 
     def get(self) -> tuple[int, TestCase | TestBatch]:
         """return (total number in queue, this number, iid, obj)"""
+        if self.fail_fast and (failed := self.failed()):
+            raise FailFast(failed=failed)
         with self.lock:
             if self.available_workers() <= 0:
                 raise Busy
@@ -225,6 +232,9 @@ class DirectResourceQueue(ResourceQueue):
     def notrun(self) -> list[TestCase]:
         return list(self._notrun.values())
 
+    def failed(self) -> list[TestCase]:
+        return [_ for _ in self._finished.values() if _.status != "success"]
+
 
 class BatchResourceQueue(ResourceQueue):
     def __init__(self, lock: threading.Lock) -> None:
@@ -321,6 +331,9 @@ class BatchResourceQueue(ResourceQueue):
     def notrun(self) -> list[TestBatch]:
         return list(self._notrun.values())
 
+    def failed(self) -> list[TestCase]:
+        return [_ for batch in self._finished.values() for _ in batch if _.status != "success"]
+
 
 def idjoin(ids: list[int], threshold: int = 4) -> str:
     if len(ids) <= threshold:
@@ -335,7 +348,7 @@ def le(arg1: tuple[int, ...], arg2: tuple[int, ...]) -> bool:
     return all(a <= b for a, b in zip(arg1, arg2))
 
 
-def factory(lock: threading.Lock) -> ResourceQueue:
+def factory(lock: threading.Lock, fail_fast: bool = False) -> ResourceQueue:
     """Setup the test queue
 
     Args:
@@ -347,6 +360,7 @@ def factory(lock: threading.Lock) -> ResourceQueue:
         queue = DirectResourceQueue(lock)
     else:
         queue = BatchResourceQueue(lock)
+    queue.fail_fast = fail_fast
     return queue
 
 

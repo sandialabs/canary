@@ -3,6 +3,8 @@ import os
 import re
 from typing import TYPE_CHECKING
 
+from ....third_party.color import colorize
+from ....util import logging
 from ....util.time import time_in_seconds
 
 __all__ = [
@@ -35,7 +37,7 @@ def add_filter_arguments(parser: "Parser") -> None:
     group.add_argument(
         "-o",
         dest="on_options",
-        default=[],
+        default=None,
         metavar="option",
         action="append",
         help="Turn option(s) on, such as '-o dbg' or '-o intel'",
@@ -100,8 +102,8 @@ def add_resource_arguments(parser: "Parser") -> None:
         "--test-timeout",
         metavar="type:T",
         action=TimeoutResource,
-        help="Set the timeout for tests of type.  "
-        "Type is one of 'fast', 'long', 'default', or 'ctest'"
+        help=f"Set the timeout for tests of {bold('type')}.  "
+        "Type is one of 'fast', 'long', 'default', or 'ctest' "
         "(T accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: 5m]",
     )
     group.add_argument(
@@ -122,23 +124,21 @@ def add_resource_arguments(parser: "Parser") -> None:
 
 
 class TimeoutResource(argparse.Action):
+    _types = ("fast", "long", "default", "session")
+
     def __call__(self, parser, args, values, option_string=None):
-        if match := re.search(r"^(long|default|fast|ctest)[:=](.*)$", values):
+        if match := re.search(r"^(\w*)[:=](.*)$", values):
             type = match.group(1)
             value = time_in_seconds(match.group(2))
         else:
             raise ValueError(f"Incorrect test timeout spec: {values}, expected 'type:value'")
-        choices = ("fast", "long", "default", "ctest", "session")
-        if type.lower() not in choices:
-            s = ", ".join(repr(c) for c in choices)
-            raise ValueError(
-                f"argument {option_string}: invalid choice: {type!r} (choose from {s})"
-            )
-        elif type.lower() == "session":
+        if type.lower() not in self._types:
+            logging.debug(f"{option_string}: unknown test timeout type {type!r}")
+        if type.lower() == "session":
             args.session_timeout = value
         else:
             timeout_resources = getattr(args, self.dest, None) or {}
-            timeout_resources[type] = value
+            timeout_resources[type.lower()] = value
             setattr(args, self.dest, timeout_resources)
 
 
@@ -159,3 +159,9 @@ def load_session(root: str | None = None, mode: str = "r"):
 
     with logging.level(logging.WARNING):
         return Session(root or os.getcwd(), mode=mode)
+
+
+def bold(arg: str) -> str:
+    if os.getenv("COLOR_WHEN", "auto") == "never":
+        return f"**{arg}**"
+    return colorize("@*{%s}" % arg)

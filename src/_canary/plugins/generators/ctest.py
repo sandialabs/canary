@@ -7,6 +7,7 @@ import re
 import shlex
 import subprocess
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
 from typing import Type
@@ -24,6 +25,9 @@ from ...util.filesystem import which
 from ...util.filesystem import working_dir
 from ...util.time import time_in_seconds
 from ..hookspec import hookimpl
+
+if TYPE_CHECKING:
+    from ...config.config import Config
 
 warning_cache = set()
 
@@ -286,7 +290,7 @@ class CTestTestCase(TestCase):
         elif self.timeout_property is not None:
             timeout = self.timeout_property
         else:
-            timeout = config.test.timeout_ctest
+            timeout = getattr(config.test, "timeout_ctest", 1500.0)
         self._timeout = float(timeout)
 
     @property
@@ -687,6 +691,11 @@ def canary_testcase_generator() -> Type[CTestTestGenerator]:
 
 
 @hookimpl
+def canary_configure(config: "Config"):
+    setattr(config.test, "timeout_ctest", 1500.0)
+
+
+@hookimpl
 def canary_addoption(parser) -> None:
     parser.add_argument(
         "--ctest-config",
@@ -696,8 +705,16 @@ def canary_addoption(parser) -> None:
         help="Choose configuration to test",
     )
     parser.add_argument(
+        "--ctest-test-timeout",
+        metavar="T",
+        type=time_in_seconds,
+        group="ctest options",
+        command="run",
+        help="Timeout for ctest tests [default: 1500 s.]",
+    )
+    parser.add_argument(
         "--recurse-ctest",
-        default=False,
+        default=None,
         action="store_true",
         group="ctest options",
         command=["run", "find"],

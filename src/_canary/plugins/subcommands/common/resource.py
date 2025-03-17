@@ -5,6 +5,7 @@ from typing import Any
 
 from ....third_party.color import colorize
 from ....util import logging
+from ....util.string import csvsplit
 from ....util.string import strip_quotes
 from ....util.time import time_in_seconds
 
@@ -69,7 +70,6 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • scheduler=S: Submit test batches to scheduler 'S'.\n\n
 • workers=N: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
 • option=%(opt)s: Pass %(opt)s to the scheduler.  If %(opt)s contains commas, it is split into multiple options at the commas.\n\n
-• option:verb(atim)=%(opt)s: Pass %(opt)s to the scheduler exactly as it appears on the command line.
 """ % {"r_form": bold("type=value"), "r_arg": bold(f"{flag} resource"), "opt": bold("option")}
         return text
 
@@ -94,12 +94,9 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         elif match := re.search(r"^(runner|scheduler|type)[:=](\w+)$", arg):
             raw = match.group(2)
             return ("scheduler", raw)
-        elif match := re.search(r"^(option|args|scheduler_args):(verb|verbatim)[:=](.*)$", arg):
-            raw = strip_quotes(match.group(3))
-            return ("options", [raw])
         elif match := re.search(r"^(option|args|scheduler_args)[:=](.*)$", arg):
             raw = strip_quotes(match.group(2))
-            return ("options", [_.strip() for _ in raw.split(",") if _.split()])
+            return ("options", csvsplit(raw))
         else:
             raise ValueError(f"invalid resource arg: {arg!r}")
 

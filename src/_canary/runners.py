@@ -410,19 +410,10 @@ class BatchRunner(AbstractTestRunner):
                 json.dump(cfg, fh, indent=2)
             fp.write(f"-f {config_file} ")
         fp.write(f"-C {config.session.work_tree} run ")
-        if config.getoption("fail_fast"):
-            fp.write("--fail-fast ")
-        if config.getoption("dont_measure"):
-            fp.write("--dont-measure ")
-        if p := config.getoption("P"):
-            if p != "pedantic":
-                fp.write(f"-P{p} ")
         if isinstance(arg, TestBatch):
             batchopts = config.getoption("batch", {})
             if workers := batchopts.get("workers"):
                 fp.write(f"--workers={workers} ")
-        if timeoutx := config.getoption("timeout_multiplier"):
-            fp.write(f"--timeout-multiplier={timeoutx} ")
         fp.write("-b scheduler=null ")  # guard against infinite batch recursion
         sigil = "^" if isinstance(arg, TestBatch) else "/"
         fp.write(f"{sigil}{arg.id}")

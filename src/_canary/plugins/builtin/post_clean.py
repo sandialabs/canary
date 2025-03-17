@@ -15,7 +15,7 @@ def canary_addoption(parser: "Parser") -> None:
         "--post-clean",
         command="run",
         action="store_true",
-        default=False,
+        default=None,
         help="Clean up files created by a test if it finishes successfully [default: %(default)s]",
     )
 
