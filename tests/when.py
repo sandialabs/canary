@@ -53,7 +53,8 @@ def test_when_parameters():
     assert expr.evaluate(parameters={"cpus": 7}).value is False
 
     expr = When.from_string("parameters='!cpus'")
-    assert expr.evaluate().value is False
+    assert expr.evaluate().value is True
+    assert expr.evaluate(parameters={"cpus": 4}).value is False
     assert expr.evaluate(parameters={"spam": "baz"}).value is True
 
     expr = When.from_string("parameters='cpus>2 and baz=spam'")

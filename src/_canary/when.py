@@ -189,10 +189,7 @@ class When:
 
     def evaluate_option_expression(self, options_arg: list[str] | None, **kwds: str) -> str | None:
         assert self.option_expr is not None
-        if options_arg is None:
-            fmt = "@*{{options={0}}} evaluated to @*r{{False}} for options=None"
-            reason = colorize(fmt.format(self.option_expr))
-            return reason
+        options_arg = options_arg or []
         string = safe_substitute(self.option_expr, **kwds)
         string = remove_surrounding_quotes(string)
         expr = Expression.compile(string, allow_wildcards=True)
@@ -206,10 +203,7 @@ class When:
         self, keywords_arg: list[str] | None, **kwds: str
     ) -> str | None:
         assert self.keyword_expr is not None
-        if keywords_arg is None:
-            fmt = "@*{{keywords={0}}} evaluated to @*r{{False}} for keywords=None"
-            reason = colorize(fmt.format(self.keyword_expr))
-            return reason
+        keywords_arg = keywords_arg or []
         string = safe_substitute(self.keyword_expr, **kwds)
         string = remove_surrounding_quotes(string)
         expr = Expression.compile(string, allow_wildcards=True)
@@ -223,10 +217,7 @@ class When:
         self, parameters_arg: dict[str, Any] | None, **kwds: str
     ) -> str | None:
         assert self.parameter_expr is not None
-        if parameters_arg is None:
-            fmt = "@*{{parameters={0}}} evaluated to @*r{{False}} for parameters=None"
-            reason = colorize(fmt.format(self.parameter_expr))
-            return reason
+        parameters_arg = parameters_arg or {}
         string = safe_substitute(self.parameter_expr, **kwds)
         string = remove_surrounding_quotes(string)
         expr = ParameterExpression(string)
