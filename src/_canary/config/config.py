@@ -445,6 +445,7 @@ class Config:
             logging.debug(f"Setting up HPC Connect for {name}")
             assert name is not None
             self.scheduler = hpc_connect.scheduler(name)
+            #hpc_connect.initialize(name, debug=self.debug)
             logging.debug(f"  HPC connect: node count: {self.scheduler.config.node_count}")
             logging.debug(f"  HPC connect: CPUs per node: {self.scheduler.config.cpus_per_node}")
             logging.debug(f"  HPC connect: GPUs per node: {self.scheduler.config.gpus_per_node}")

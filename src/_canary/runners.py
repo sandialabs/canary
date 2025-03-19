@@ -1,4 +1,6 @@
 import abc
+import sys
+import tempfile
 import io
 import json
 import os
@@ -6,6 +8,8 @@ import shlex
 import signal
 import subprocess
 import time
+import warnings
+import functools
 from typing import Any
 from typing import TextIO
 
@@ -24,6 +28,7 @@ from .test.case import TestCase
 from .third_party.color import colorize
 from .util import logging
 from .util.filesystem import working_dir
+from .util.procutils import cleanup_children
 from .util.time import hhmmss
 from .util.time import timestamp
 
@@ -74,6 +79,20 @@ class TestCaseRunner(AbstractTestRunner):
 
     def run(self, case: "AbstractTestCase") -> None:
         assert isinstance(case, TestCase)
+
+        def cancel(sig, frame):
+            nonlocal proc
+            if not config.debug:
+                warnings.filterwarnings("ignore")
+            try:
+                if proc is not None:
+                    proc.send_signal(sig)
+            except Exception:
+                pass
+
+        signal.signal(signal.SIGINT, cancel)
+        signal.signal(signal.SIGTERM, cancel)
+
         try:
             proc: psutil.Popen | None = None
             metrics: dict[str, Any] | None = None
@@ -271,56 +290,81 @@ class BatchRunner(AbstractTestRunner):
 
     def run(self, batch: AbstractTestCase) -> None:
         assert isinstance(batch, TestBatch)
-        try:
-            logging.debug(f"Running batch {batch.id[:7]}")
-            start = time.monotonic()
-            variables = dict(batch.variables)
-            variables["CANARY_LEVEL"] = "1"
-            variables["CANARY_DISABLE_KB"] = "1"
-            variables["CANARY_BATCH_SCHEDULER"] = "null"  # guard against infinite batch recursion
-            if config.debug:
-                variables["CANARY_DEBUG"] = "on"
-                hpc_connect.set_debug(True)
 
-            jobs: list[hpc_connect.Job] = []
-            batchopts = config.getoption("batch", {})
-            scheme = batchopts.get("scheme")
-            if scheme == "isolate" and self.scheduler.supports_subscheduling:
-                scriptdir = os.path.dirname(batch.submission_script_filename())
-                timeoutx = config.getoption("timeout_multiplier", 1.0)
-                variables.pop("CANARY_BATCH_ID", None)
-                for case in batch:
-                    canary_invocation = self.canary_invocation(case)
-                    job = hpc_connect.Job(
-                        name=case.name,
-                        commands=[canary_invocation],
-                        tasks=case.cpus,
-                        script=os.path.join(scriptdir, f"{case.name}-inp.sh"),
-                        output=os.path.join(scriptdir, f"{case.name}-out.txt"),
-                        error=os.path.join(scriptdir, f"{case.name}-err.txt"),
-                        qtime=case.runtime * timeoutx,
-                        variables=variables,
-                    )
-                    jobs.append(job)
-            else:
-                canary_invocation = self.canary_invocation(batch)
-                qtime = self.qtime(batch)
-                if timeoutx := config.getoption("timeout_multiplier"):
-                    qtime *= timeoutx
+        def cancel(sig, frame):
+            nonlocal proc
+            if not config.debug:
+                warnings.filterwarnings("ignore")
+            if proc is not None:
+                proc.cancel()
+
+        signal.signal(signal.SIGINT, cancel)
+        signal.signal(signal.SIGTERM, cancel)
+
+        logging.debug(f"Running batch {batch.id[:7]}")
+        start = time.monotonic()
+        variables = dict(batch.variables)
+        variables["CANARY_LEVEL"] = "1"
+        variables["CANARY_DISABLE_KB"] = "1"
+        variables["CANARY_BATCH_SCHEDULER"] = "null"  # guard against infinite batch recursion
+        if config.debug:
+            variables["CANARY_DEBUG"] = "on"
+            hpc_connect.set_debug(True)
+
+        jobs: list[hpc_connect.Job] = []
+        batchopts = config.getoption("batch", {})
+        scheme = batchopts.get("scheme")
+        if scheme == "isolate" and self.scheduler.supports_subscheduling:
+            scriptdir = os.path.dirname(batch.submission_script_filename())
+            timeoutx = config.getoption("timeout_multiplier", 1.0)
+            variables.pop("CANARY_BATCH_ID", None)
+            for case in batch:
+                canary_invocation = self.canary_invocation(case)
                 job = hpc_connect.Job(
-                    name=f"canary.{batch.id[:7]}",
+                    name=case.name,
                     commands=[canary_invocation],
-                    tasks=max(_.cpus for _ in batch),
-                    script=batch.submission_script_filename(),
-                    output=batch.logfile(batch.id),
-                    error=batch.logfile(batch.id),
-                    qtime=qtime,
+                    tasks=case.cpus,
+                    script=os.path.join(scriptdir, f"{case.name}-inp.sh"),
+                    output=os.path.join(scriptdir, f"{case.name}-out.txt"),
+                    error=os.path.join(scriptdir, f"{case.name}-err.txt"),
+                    qtime=case.runtime * timeoutx,
                     variables=variables,
                 )
                 jobs.append(job)
-            if config.debug:
-                logging.debug(f"Submitting batch {batch.id[:7]}")
-            self.scheduler.submit_and_wait(*jobs, sequential=scheme != "isolate")
+        else:
+            canary_invocation = self.canary_invocation(batch)
+            qtime = self.qtime(batch)
+            if timeoutx := config.getoption("timeout_multiplier"):
+                qtime *= timeoutx
+            job = hpc_connect.Job(
+                name=f"canary.{batch.id[:7]}",
+                commands=[canary_invocation],
+                tasks=max(_.cpus for _ in batch),
+                script=batch.submission_script_filename(),
+                output=batch.logfile(batch.id),
+                error=batch.logfile(batch.id),
+                qtime=qtime,
+                variables=variables,
+            )
+            jobs.append(job)
+        if config.debug:
+            logging.debug(f"Submitting batch {batch.id[:7]}")
+
+        try:
+            #self.scheduler.submit_and_wait(*jobs, sequential=scheme != "isolate")
+            with open(batch.logfile(batch.id), "w") as fh:
+                proc = hpc_connect.Popen(
+                    [canary_invocation],
+                    script=batch.submission_script_filename(),
+                    stdout=fh,
+                    variables=variables,
+                    qtime=qtime,
+                    tasks=max(_.cpus for _ in batch),
+                )
+                while True:
+                    if proc.poll() is not None:
+                        break
+                    time.sleep(0.05)
         except hpc_connect.HPCSubmissionFailedError:
             logging.error(f"Failed to submit {batch.id[:7]}!")
             for case in batch.cases:
