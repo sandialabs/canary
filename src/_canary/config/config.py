@@ -237,7 +237,9 @@ class Config:
                 fh.seek(0)
                 self.restore_from_snapshot(fh)
             wt = find_work_tree()
-            assert wt == self.session.work_tree, "Inconsistent configuration state detected"
+            assert os.path.samefile(wt, self.session.work_tree), (  # type: ignore
+                "Inconsistent configuration state detected"
+            )
         elif root := find_work_tree():
             # If we are inside a session directory, then we want to restore its configuration
             # any changes create happens before setting command line options, so changes can still
