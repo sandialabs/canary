@@ -27,8 +27,8 @@ def partition_by_count(cases: list["TestCase"]) -> list["TestBatch"] | None:
 def partition_consistent(cases: list["TestCase"]) -> list["TestBatch"] | None:
     batchopts = config.getoption("batch", {})
     if scheme := batchopts.get("scheme"):
-        if scheme == "isolate":
-            logging.info("Batching test cases using scheme=isolate")
+        if scheme == "isolated_sets":
+            logging.info("Batching test cases using scheme=isolated_sets")
             return partitioning.partition_x(cases)
     return None
 

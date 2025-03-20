@@ -7,6 +7,7 @@ import signal
 import subprocess
 import time
 import warnings
+from itertools import repeat
 from typing import Any
 from typing import TextIO
 
@@ -300,29 +301,47 @@ class BatchRunner(AbstractTestRunner):
             variables["CANARY_DEBUG"] = "on"
             hpc_connect.set_debug(True)
 
-        proc = None
-        canary_invocation = self.canary_invocation(batch)
-        qtime = self.qtime(batch)
-        if timeoutx := config.getoption("timeout_multiplier"):
-            qtime *= timeoutx
         if config.debug:
             logging.debug(f"Submitting batch {batch.id[:7]}")
 
+        batchopts = config.getoption("batch", {})
+        scheme = batchopts.get("scheme")
         try:
             default_int_signal = signal.signal(signal.SIGINT, cancel)
             default_term_signal = signal.signal(signal.SIGTERM, cancel)
             assert config.backend is not None
-            proc = config.backend.submit(
-                f"canary.{batch.id[:7]}",
-                [canary_invocation],
-                tasks=max(_.cpus for _ in batch),
-                scriptname=batch.submission_script_filename(),
-                output=batch.logfile(batch.id),
-                error=batch.logfile(batch.id),
-                submit_flags=self.batch_options,
-                variables=variables,
-                qtime=qtime,
-            )
+            proc: hpc_connect.HPCProcess | None = None
+            if scheme == "isolated_sets" and config.backend.supports_subscheduling:
+                scriptdir = os.path.dirname(batch.submission_script_filename())
+                timeoutx = config.getoption("timeout_multipler", 1.0)
+                variables.pop("CANARY_BATCH_ID", None)
+                proc = config.backend.submitn(
+                    [case.id for case in batch],
+                    [[self.canary_invocation(case)] for case in batch],
+                    tasks=[case.cpus for case in batch],
+                    scriptname=[os.path.join(scriptdir, f"{case.id}-inp.sh") for case in batch],
+                    output=[os.path.join(scriptdir, f"{case.id}-out.txt") for case in batch],
+                    error=[os.path.join(scriptdir, f"{case.id}-err.txt") for case in batch],
+                    submit_flags=list(repeat(self.batch_options, len(batch))),
+                    variables=list(repeat(variables, len(batch))),
+                    qtime=[case.runtime * timeoutx for case in batch],
+                )
+            else:
+                qtime = self.qtime(batch)
+                if timeoutx := config.getoption("timeout_multiplier"):
+                    qtime *= timeoutx
+                proc = config.backend.submit(
+                    f"canary.{batch.id[:7]}",
+                    [self.canary_invocation(batch)],
+                    tasks=max(_.cpus for _ in batch),
+                    scriptname=batch.submission_script_filename(),
+                    output=batch.logfile(batch.id),
+                    error=batch.logfile(batch.id),
+                    submit_flags=self.batch_options,
+                    variables=variables,
+                    qtime=qtime,
+                )
+            assert proc is not None
             while True:
                 if proc.poll() is not None:
                     break
