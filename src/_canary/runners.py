@@ -1,6 +1,4 @@
 import abc
-import sys
-import tempfile
 import io
 import json
 import os
@@ -9,7 +7,6 @@ import signal
 import subprocess
 import time
 import warnings
-import functools
 from typing import Any
 from typing import TextIO
 
@@ -28,7 +25,6 @@ from .test.case import TestCase
 from .third_party.color import colorize
 from .util import logging
 from .util.filesystem import working_dir
-from .util.procutils import cleanup_children
 from .util.time import hhmmss
 from .util.time import timestamp
 
@@ -82,18 +78,20 @@ class TestCaseRunner(AbstractTestRunner):
 
         def cancel(sig, frame):
             nonlocal proc
-            if not config.debug:
+            if proc is None:
+                return
+            with warnings.catch_warnings():
                 warnings.filterwarnings("ignore")
-            try:
-                if proc is not None:
-                    proc.send_signal(sig)
-            except Exception:
-                pass
-
-        signal.signal(signal.SIGINT, cancel)
-        signal.signal(signal.SIGTERM, cancel)
+                try:
+                    if proc.is_running():
+                        proc.send_signal(sig)
+                except Exception:
+                    pass
 
         try:
+            default_int_handler = signal.signal(signal.SIGINT, cancel)
+            default_term_handler = signal.signal(signal.SIGTERM, cancel)
+
             proc: psutil.Popen | None = None
             metrics: dict[str, Any] | None = None
             case.start = timestamp()
@@ -136,18 +134,12 @@ class TestCaseRunner(AbstractTestRunner):
         except MissingSourceError as e:
             case.returncode = skip_exit_status
             case.status.set("skipped", f"{case}: resource file {e.args[0]} not found")
-        except KeyboardInterrupt:
-            case.returncode = signal.SIGINT.value
-            case.status.set("cancelled", "keyboard interrupt")
-            time.sleep(0.01)
-            raise
         except TimeoutError:
             case.returncode = timeout_exit_status
             case.status.set("timeout", f"{case} failed to finish in {timeout:.2f}s.")
         except BaseException:
             case.returncode = 1
             case.status.set("failed", "unknown failure")
-            time.sleep(0.01)
             raise
         else:
             case.returncode = proc.returncode
@@ -168,6 +160,8 @@ class TestCaseRunner(AbstractTestRunner):
             else:
                 case.status.set_from_code(case.returncode)
         finally:
+            signal.signal(signal.SIGINT, default_int_handler)
+            signal.signal(signal.SIGTERM, default_term_handler)
             if case.status != "skipped":
                 case.stop = timestamp()
                 if metrics is not None:
@@ -274,11 +268,10 @@ class BatchRunner(AbstractTestRunner):
         super().__init__()
 
         # by this point, hpc_connect should have already be set up
-        assert config.scheduler is not None
-        # a reference to config.scheduler needs to be made since session.run spawns new processes.
-        # Otherwise, if we just referenced config.scheduler throughout, the modifications to the
-        # scheduler (eg, add_default_args) are lost in spawned uses of config.scheduler.
-        self.scheduler: hpc_connect.HPCScheduler = config.scheduler
+        assert config.backend is not None
+
+    @property
+    def batch_options(self) -> list[str]:
         batch_options: list[str] = list(config.batch.default_options)
         if varargs := os.getenv("CANARY_BATCH_ARGS"):
             logging.debug(f"Using batch arguments from environment: {varargs}")
@@ -286,20 +279,16 @@ class BatchRunner(AbstractTestRunner):
         batchopts = config.getoption("batch", {})
         if args := batchopts.get("options"):
             batch_options.extend(args)
-        self.scheduler.add_default_args(*batch_options)
+        return batch_options
 
     def run(self, batch: AbstractTestCase) -> None:
         assert isinstance(batch, TestBatch)
 
         def cancel(sig, frame):
             nonlocal proc
-            if not config.debug:
-                warnings.filterwarnings("ignore")
-            if proc is not None:
-                proc.cancel()
-
-        signal.signal(signal.SIGINT, cancel)
-        signal.signal(signal.SIGTERM, cancel)
+            if proc is None:
+                return
+            proc.cancel()
 
         logging.debug(f"Running batch {batch.id[:7]}")
         start = time.monotonic()
@@ -311,67 +300,36 @@ class BatchRunner(AbstractTestRunner):
             variables["CANARY_DEBUG"] = "on"
             hpc_connect.set_debug(True)
 
-        jobs: list[hpc_connect.Job] = []
-        batchopts = config.getoption("batch", {})
-        scheme = batchopts.get("scheme")
-        if scheme == "isolate" and self.scheduler.supports_subscheduling:
-            scriptdir = os.path.dirname(batch.submission_script_filename())
-            timeoutx = config.getoption("timeout_multiplier", 1.0)
-            variables.pop("CANARY_BATCH_ID", None)
-            for case in batch:
-                canary_invocation = self.canary_invocation(case)
-                job = hpc_connect.Job(
-                    name=case.name,
-                    commands=[canary_invocation],
-                    tasks=case.cpus,
-                    script=os.path.join(scriptdir, f"{case.name}-inp.sh"),
-                    output=os.path.join(scriptdir, f"{case.name}-out.txt"),
-                    error=os.path.join(scriptdir, f"{case.name}-err.txt"),
-                    qtime=case.runtime * timeoutx,
-                    variables=variables,
-                )
-                jobs.append(job)
-        else:
-            canary_invocation = self.canary_invocation(batch)
-            qtime = self.qtime(batch)
-            if timeoutx := config.getoption("timeout_multiplier"):
-                qtime *= timeoutx
-            job = hpc_connect.Job(
-                name=f"canary.{batch.id[:7]}",
-                commands=[canary_invocation],
-                tasks=max(_.cpus for _ in batch),
-                script=batch.submission_script_filename(),
-                output=batch.logfile(batch.id),
-                error=batch.logfile(batch.id),
-                qtime=qtime,
-                variables=variables,
-            )
-            jobs.append(job)
+        proc = None
+        canary_invocation = self.canary_invocation(batch)
+        qtime = self.qtime(batch)
+        if timeoutx := config.getoption("timeout_multiplier"):
+            qtime *= timeoutx
         if config.debug:
             logging.debug(f"Submitting batch {batch.id[:7]}")
 
         try:
-            #self.scheduler.submit_and_wait(*jobs, sequential=scheme != "isolate")
-            with open(batch.logfile(batch.id), "w") as fh:
-                proc = hpc_connect.Popen(
-                    [canary_invocation],
-                    script=batch.submission_script_filename(),
-                    stdout=fh,
-                    variables=variables,
-                    qtime=qtime,
-                    tasks=max(_.cpus for _ in batch),
-                )
-                while True:
-                    if proc.poll() is not None:
-                        break
-                    time.sleep(0.05)
-        except hpc_connect.HPCSubmissionFailedError:
-            logging.error(f"Failed to submit {batch.id[:7]}!")
-            for case in batch.cases:
-                if case.status.value in ("ready", "pending"):
-                    case.status.set("not_run", "batch submission failed")
-                    case.save()
+            default_int_signal = signal.signal(signal.SIGINT, cancel)
+            default_term_signal = signal.signal(signal.SIGTERM, cancel)
+            assert config.backend is not None
+            proc = config.backend.submit(
+                f"canary.{batch.id[:7]}",
+                [canary_invocation],
+                tasks=max(_.cpus for _ in batch),
+                scriptname=batch.submission_script_filename(),
+                output=batch.logfile(batch.id),
+                error=batch.logfile(batch.id),
+                submit_flags=self.batch_options,
+                variables=variables,
+                qtime=qtime,
+            )
+            while True:
+                if proc.poll() is not None:
+                    break
+                time.sleep(config.backend.polling_frequency)
         finally:
+            signal.signal(signal.SIGINT, default_int_signal)
+            signal.signal(signal.SIGTERM, default_term_signal)
             batch.total_duration = time.monotonic() - start
             batch.refresh()
             for case in batch.cases:
@@ -485,7 +443,7 @@ class BatchRunner(AbstractTestRunner):
 
 def factory() -> "AbstractTestRunner":
     runner: "AbstractTestRunner"
-    if config.scheduler is None:
+    if config.backend is None:
         runner = TestCaseRunner()
     else:
         runner = BatchRunner()

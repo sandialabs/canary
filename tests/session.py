@@ -1,8 +1,6 @@
 import os
 import types
 
-import hpc_connect
-
 import _canary.config as config
 import _canary.session as session
 from _canary.util.filesystem import working_dir
@@ -51,16 +49,17 @@ def test_session_bfilter(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         with config.override():
             config.options.batch = {"scheduler": "none", "count": 2, "scheme": "count"}
-            config.scheduler = hpc_connect.scheduler("none")
+            config.setup_hpc_connect("none")
             s = session.Session("tests", mode="w", force=True)
             s.add_search_paths([os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")])
             s.discover()
             s.lock()
             s.run()
+            # test batchfile
             d1 = os.listdir("tests/.canary/batches")[0]
             d2 = os.listdir(os.path.join("tests/.canary/batches", d1))[0]
             id = d1 + d2
-            f1 = s.batch_logfile(id)
+            s.batch_logfile(id)
             with working_dir("tests"):
                 s = session.Session.batch_view(".", id)
 

@@ -1,4 +1,5 @@
 """Setup and manage the test session"""
+
 import atexit
 import io
 import json
@@ -7,7 +8,6 @@ import os
 import random
 import signal
 import sys
-import tempfile
 import threading
 import time
 import traceback
@@ -537,7 +537,7 @@ class Session:
                     dt = self.stop - self.start
                     msg = colorize("@*{Finished} %d %s (%s)\n" % (queue_size, what, hhmmss(dt)))
                     logging.info(msg)
-        atexit.unregister(cleanup_children)
+                    atexit.unregister(cleanup_children)
         self.save()
         for case in self.cases:
             if case.defective():

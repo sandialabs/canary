@@ -50,7 +50,7 @@ def canary_configure(config: "Config") -> None:
     """Do some post configuration checks"""
     batchopts = config.getoption("batch")
     if batchopts:
-        if config.scheduler is None:
+        if config.backend is None:
             raise ValueError("Test batching requires a batch:scheduler")
         if scheme := batchopts.get("scheme"):
             if scheme == "count":

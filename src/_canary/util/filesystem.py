@@ -379,7 +379,7 @@ def force_symlink(src: str, dest: str, echo: Callable = lambda x: None) -> None:
     echo(f"link {src} -> {dest}\n")
     try:
         os.symlink(src, dest)
-    except OSError:
+    except (OSError, FileExistsError):
         remove(dest)
         os.symlink(src, dest)
 

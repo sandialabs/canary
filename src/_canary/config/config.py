@@ -214,7 +214,7 @@ class Config:
     multiprocessing_context: str = "spawn"
     log_level: str = "INFO"
     _config_dir: str | None = None
-    scheduler: hpc_connect.HPCScheduler | None = None
+    backend: hpc_connect.HPCBackend | None = None
     system: System = dataclasses.field(default_factory=System)
     session: SessionConfig = dataclasses.field(default_factory=SessionConfig)
     test: Test = dataclasses.field(default_factory=Test)
@@ -237,7 +237,8 @@ class Config:
                 fh.seek(0)
                 self.restore_from_snapshot(fh)
             wt = find_work_tree()
-            assert wt == self.session.work_tree, "Inconsistent configuration state detected"
+            if not os.path.samefile(wt, self.session.work_tree):  # type: ignore
+                raise RuntimeError("Inconsistent configuration state detected")
         elif root := find_work_tree():
             # If we are inside a session directory, then we want to restore its configuration
             # any changes create happens before setting command line options, so changes can still
@@ -291,8 +292,8 @@ class Config:
         self.build = Build(compiler=compiler, **snapshot["build"])
         self.resource_pool = ResourcePool()
         self.resource_pool.update(snapshot["resource_pool"])
-        self.setup_hpc_connect(snapshot["scheduler"])
         self.update(snapshot["config"])
+        self.setup_hpc_connect(snapshot["backend"])
         self.batch = Batch(**snapshot["batch"])
 
         # We need to be careful when restoring the batch configuration.  If this session is being
@@ -347,18 +348,16 @@ class Config:
             raise TypeError(f"Config.update() expected at most 1 argument, got {len(args)}")
         data = dict(*args) | kwargs
         if "debug" in data:
-            self.debug = boolean(data["debug"])
+            self.debug = boolean(data.pop("debug"))
             if self.debug:
                 self.log_level = logging.get_level_name(log_levels[3])
                 logging.set_level(logging.DEBUG)
-        if "_config_dir" in data:
-            self._config_dir = data["_config_dir"]
         if "log_level" in data:
-            self.log_level = data["log_level"].upper()
+            self.log_level = data.pop("log_level").upper()
             level = logging.get_level(self.log_level)
             logging.set_level(level)
-        if "multiprocessing_context" in data:
-            self.multiprocessing_context = data["multiprocessing_context"]
+        for key, val in data.items():
+            setattr(self, key, val)
 
     def set_main_options(self, args: argparse.Namespace) -> None:
         logging.set_level(logging.INFO)
@@ -389,9 +388,9 @@ class Config:
             batchopts.clear()
         if cached_batchopts := getattr(self.options, "batch", None):
             batchopts = merge(cached_batchopts, batchopts)
-        scheduler = batchopts.get("scheduler")
-        self.setup_hpc_connect(scheduler)
-        if self.scheduler is None:
+        backend = batchopts.get("scheduler")
+        self.setup_hpc_connect(backend)
+        if self.backend is None:
             batchopts.clear()
         args.batch = batchopts
 
@@ -439,21 +438,22 @@ class Config:
 
     def setup_hpc_connect(self, name: str | None) -> None:
         """Set the hpc_connect library"""
-        if name in ("null", None):
-            self.scheduler = None
-        else:
-            logging.debug(f"Setting up HPC Connect for {name}")
-            assert name is not None
-            self.scheduler = hpc_connect.scheduler(name)
-            #hpc_connect.initialize(name, debug=self.debug)
-            logging.debug(f"  HPC connect: node count: {self.scheduler.config.node_count}")
-            logging.debug(f"  HPC connect: CPUs per node: {self.scheduler.config.cpus_per_node}")
-            logging.debug(f"  HPC connect: GPUs per node: {self.scheduler.config.gpus_per_node}")
-            self.resource_pool.fill_uniform(
-                node_count=self.scheduler.config.node_count,
-                cpus_per_node=self.scheduler.config.cpus_per_node,
-                gpus_per_node=self.scheduler.config.gpus_per_node,
-            )
+        logging.debug(f"Setting up HPC Connect for {name}")
+        if name in ("null", "local", None):
+            self.backend = None
+            return
+        assert name is not None
+        self.backend = hpc_connect.get_backend(name)
+        if self.debug:
+            hpc_connect.set_debug(True)
+        logging.debug(f"  HPC connect: node count: {self.backend.config.node_count}")
+        logging.debug(f"  HPC connect: CPUs per node: {self.backend.config.cpus_per_node}")
+        logging.debug(f"  HPC connect: GPUs per node: {self.backend.config.gpus_per_node}")
+        self.resource_pool.fill_uniform(
+            node_count=self.backend.config.node_count,
+            cpus_per_node=self.backend.config.cpus_per_node,
+            gpus_per_node=self.backend.config.gpus_per_node,
+        )
 
     @classmethod
     def read_config(cls, file: str) -> dict:
@@ -514,7 +514,7 @@ class Config:
                 d[key] = value.getstate()
             elif isinstance(value, (argparse.Namespace, SimpleNamespace)):
                 d[key] = vars(value)
-            elif key == "scheduler":
+            elif key == "backend":
                 d[key] = getattr(value, "name", None)
             else:
                 d.setdefault("config", {})[key] = value
