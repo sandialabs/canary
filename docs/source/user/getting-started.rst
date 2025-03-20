@@ -27,7 +27,6 @@ To run the test, navigate to the examples directory and run ``canary run -k firs
 
 .. command-output:: canary run -k first ./basic
     :cwd: /examples
-    :extraargs: -w
     :setup: rm -rf TestResults
 
 A test is considered to have successfully completed if its exit code is ``0``.  See :ref:`basics-status` for more details on test statuses.
@@ -70,7 +69,6 @@ To run the test, navigate to the examples folder and run:
 
 .. command-output:: canary run -k second ./basic
     :cwd: /examples
-    :extraargs: -rv -w
     :setup: rm -rf TestResults
 
 Inspecting test output

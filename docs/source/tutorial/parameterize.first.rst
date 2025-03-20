@@ -18,7 +18,6 @@ When the test file is run, each case is executed in its own uniquely named direc
 .. command-output:: canary run parameterize/parameterize1.pyt
    :cwd: /examples
    :nocache:
-   :extraargs: -w
    :setup: rm -rf TestResults
 
 .. command-output:: ls -F TestResults/

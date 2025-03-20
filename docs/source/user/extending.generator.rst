@@ -38,18 +38,18 @@ Example implementation
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python
-    :lines: 1-88
+    :lines: 1-72
 
 
 The ``YAMLTestGenerator.lock()`` returns a list of ``YAMLTestCase`` test cases, defined below:
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python
-    :lines: 89-127
+    :lines: 75-115
 
 
 The user defined test generator is registered using the :meth:`~_canary.plugins.hookspec.canary_testcase_generator` plugin hook:
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python
-    :lines: 128-
+    :lines: 117-

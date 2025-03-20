@@ -6,4 +6,4 @@ plugins.generators
 
    ctest
    pyt
-   vvt
+   vvtest

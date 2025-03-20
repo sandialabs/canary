@@ -1,7 +1,7 @@
-submit
-======
+mpi
+===
 
-.. automodule:: hpcc_pbs.submit
+.. automodule:: hpc_connect.impl.mpi
    :members:
    :undoc-members:
    :show-inheritance:

@@ -19,7 +19,7 @@ Run a test case only when its dependency fails:
     :cwd: /examples
     :nocache:
     :anyreturncode:
-    :extraargs: -w
+    :setup: rm -rf TestResults
 
 
 .. note::

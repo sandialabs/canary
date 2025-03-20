@@ -1,7 +1,7 @@
-launch
-======
+types
+=====
 
-.. automodule:: hpcc_slurm.launch
+.. automodule:: hpc_connect.types
    :members:
    :undoc-members:
    :show-inheritance:

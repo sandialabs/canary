@@ -9,7 +9,7 @@ After running a test session, the ``status`` subcommand can show the status of t
     :cwd: /examples
     :returncode: 30
     :ellipsis: 0
-    :extraargs: -rv -w
+    :setup: rm -rf TestResults
 
 .. command-output:: canary -C TestResults status .
     :cwd: /examples

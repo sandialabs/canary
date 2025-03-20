@@ -18,7 +18,7 @@ A junit report of a test session can be generated after the session has complete
 
 .. command-output:: canary run -d TestResults.junit ./basic
     :cwd: /examples
-    :extraargs: -rv -w
+    :setup: rm -rf TestResults.junit
     :ellipsis: 0
 
 .. command-output:: canary -C TestResults.junit report junit create
@@ -35,7 +35,7 @@ A markdown report of a test session can be generated after the session has compl
 
 .. command-output:: canary run -d TestResults.Markdown ./basic
     :cwd: /examples
-    :extraargs: -rv -w
+    :setup: rm -rf TestResults.Markdown
     :ellipsis: 0
 
 .. command-output:: canary -C TestResults.Markdown report markdown create
@@ -54,7 +54,7 @@ A HTML report of a test session can be generated after the session has completed
 .. command-output:: canary run -d TestResults.HTML ./basic
     :cwd: /examples
     :ellipsis: 0
-    :extraargs: -rv -w
+    :setup: rm -rf TestResults.HTML
 
 .. command-output:: canary -C TestResults.HTML report html create
     :cwd: /examples

@@ -1,9 +1,12 @@
-HPC Connect
+.. _hpc-connect:
+
+hpc_connect
 ===========
 
 .. toctree::
    :maxdepth: 1
 
-   hpc_connect/index
-   hpcc_pbs/index
-   hpcc_slurm/index
+   hookspec
+   types
+   util/index
+   impl/index

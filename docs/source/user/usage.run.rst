@@ -10,7 +10,7 @@ Basic usage
 
 .. command-output:: canary run -d TestResults.Basic ./basic
     :cwd: /examples
-    :extraargs: -rv -w
+    :setup: rm -rf TestResults.Basic
 
 .. note::
 
@@ -27,7 +27,7 @@ where ``KEYWORD_EXPR`` is a Python expression such as ``-k 'fast and regression'
 
 .. command-output:: canary run -d TestResults.Basic -k first ./basic
     :cwd: /examples
-    :extraargs: -rv -w
+    :setup: rm -rf TestResults.Basic
 
 Limit the number of concurrent tests
 ------------------------------------
@@ -40,7 +40,7 @@ where ``N`` is a number of workers.  For example,
 
 .. command-output:: canary run -d TestResults.Basic --workers=1 ./basic
     :cwd: /examples
-    :extraargs: -rv -w
+    :setup: rm -rf TestResults.Basic
 
 Set a timeout on the test session
 ---------------------------------
@@ -53,7 +53,7 @@ where ``T`` is a duration in Go's duration format (``40s,``, ``1h20m``, ``2h``, 
 
 .. command-output:: canary run -d TestResults.Basic --timeout=1m ./basic
     :cwd: /examples
-    :extraargs: -rv -w
+    :setup: rm -rf TestResults.Basic
 
 Run specific test files
 -----------------------
@@ -65,7 +65,6 @@ Test files can be run directly by passing their paths to ``canary run``
 
 .. command-output:: canary run ./basic/first/first.pyt
     :nocache:
-    :extraargs: -w -rv
     :cwd: /examples
     :setup: rm -rf TestResults
 
@@ -78,7 +77,6 @@ If a path separator is replaced with a colon ``:``, the path is interpreted as `
 .. command-output:: canary run .:basic/first/first.pyt
     :nocache:
     :cwd: /examples
-    :extraargs: -w -rv
     :setup: rm -rf TestResults
 
 .. command-output:: ls -F TestResults
@@ -114,5 +112,4 @@ and pass it to ``canary run``:
 
 .. command-output:: canary run -f tests.json
     :cwd: /examples
-    :extraargs: -rv -w
     :setup: rm -rf TestResults

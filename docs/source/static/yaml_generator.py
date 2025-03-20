@@ -112,3 +112,8 @@ class YAMLTestCase(canary.TestCase):
                 fh.write("#!/usr/bin/env bash\n")
                 fh.write("\n".join(self.script))
             set_executable(self.exe)
+
+
+canary.hookimpl
+def canary_testcase_generator():
+    return YAMLTestGenerator

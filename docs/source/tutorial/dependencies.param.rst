@@ -19,4 +19,4 @@ The test ``lunch`` depends on ``breakfast``, but only when ``dish="spam"``:
 .. command-output:: canary run ./depends_on/parameter
     :cwd: /examples
     :nocache:
-    :extraargs: -w
+    :setup: rm -rf TestResults

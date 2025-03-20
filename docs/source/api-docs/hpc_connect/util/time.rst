@@ -1,7 +1,7 @@
-vvt
-===
+time
+====
 
-.. automodule:: _canary.plugins.generators.vvt
+.. automodule:: hpc_connect.util.time
    :members:
    :undoc-members:
    :show-inheritance:
