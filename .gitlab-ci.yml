@@ -61,7 +61,7 @@ test::coverage:
 
 
 test::integration::slurm:
-  stage: integration
+  stage: test
   tags:
   - jetcool
   before_script:
