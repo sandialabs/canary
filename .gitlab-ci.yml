@@ -162,11 +162,12 @@ test::plugin::yaml:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - git clone git@cee-gitlab.sandia.gov:ascic-test-infra/plugins/canary-yaml.git
-  - PYTHONPATH=`pwd`/canary-yaml/src canary -p canary_yaml run -w ./tests
+  # test -p PLUGIN_NAME
+  - PYTHONPATH=`pwd`/canary-yaml/src canary -p canary_yaml run -w ./canary-yaml/tests
   - cd canary-yaml
   - python3 -m pip install --no-deps .
   - cd $CI_PROJECT_DIR
-  - canary run -w ./tests
+  - canary run -w ./canary-yaml/tests
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
