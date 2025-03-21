@@ -13,6 +13,7 @@ echo "ruff: formatting examples"
 echo "========================="
 find src/canary/examples -name "*.pyt" | xargs ruff format
 ruff format src/canary/examples
+ruff format docs/source/static
 
 echo ""
 echo "======================"
@@ -33,6 +34,7 @@ echo "ruff: checking examples"
 echo "======================="
 find src/canary/examples -name "*.pyt" | xargs ruff check --fix
 ruff check --fix src/canary/examples
+ruff check --fix docs/source/static
 
 echo ""
 echo "===================="

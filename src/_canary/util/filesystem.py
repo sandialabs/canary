@@ -208,7 +208,7 @@ def getuser() -> str:
     """Return the name of the logged on user"""
     try:
         return getpass.getuser()
-    except:  # noqa: E722; pragma: no cover
+    except Exception:  # pragma: no cover
         home = os.path.expanduser("~")
         if home != "~":
             return os.path.basename(home)
