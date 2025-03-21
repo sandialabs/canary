@@ -60,6 +60,25 @@ test::coverage:
         coverage_format: cobertura
 
 
+test::integration::flux:
+  stage: test
+  tags:
+  - cee.build
+  script:
+  - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
+  - module load aue/flux-core
+  - module load aue/cmake/3.27.7
+  - module load aue/gcc/12.1.0
+  - module load aue/openmpi/4.1.6-gcc-12.1.0
+  - python3 -m pip install $STD_PIP_ARGS -e .[dev]
+  - exit_code=0
+  - flux start canary run -w -b scheduler=flux -b scheme=isolated_sets ./examples || exit_code=$?
+  - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+  - exit_code=0
+  - flux start canary run -w -b scheduler=flux -b count=2 ./examples || exit_code=$?
+  - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+
+
 test::integration::slurm:
   stage: test
   tags:
