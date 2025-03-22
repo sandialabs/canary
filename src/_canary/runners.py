@@ -119,7 +119,9 @@ class TestCaseRunner(AbstractTestRunner):
                     stdout.flush()
                     with case.rc_environ():
                         tic = time.monotonic()
-                        logging.debug(f"Submitting {case} for execution with command {case.cmd_line}")
+                        logging.debug(
+                            f"Submitting {case} for execution with command {case.cmd_line}"
+                        )
                         proc = Popen(cmd, start_new_session=True, stdout=stdout, stderr=stderr)
                         metrics = self.get_process_metrics(proc)
                         while proc.poll() is None:
