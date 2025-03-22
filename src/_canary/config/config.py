@@ -293,7 +293,6 @@ class Config:
         self.resource_pool = ResourcePool()
         self.resource_pool.update(snapshot["resource_pool"])
         self.update(snapshot["config"])
-        self.setup_hpc_connect(snapshot["backend"])
         self.batch = Batch(**snapshot["batch"])
 
         # We need to be careful when restoring the batch configuration.  If this session is being
@@ -302,6 +301,7 @@ class Config:
         if os.getenv("CANARY_LEVEL") == "1":
             # no batching (default)
             snapshot["options"].pop("batch", None)
+        self.setup_hpc_connect(os.getenv("CANARY_BATCH_SCHEDULER") or snapshot["backend"])
         self.options = argparse.Namespace(**snapshot["options"])
 
         if plugins := getattr(self.options, "plugins", None):
@@ -384,10 +384,10 @@ class Config:
         # running tests inside an existing test session and no batch arguments are given, we want
         # to use the original batch arguments.
         batchopts = getattr(args, "batch", None) or {}
-        if os.getenv("CANARY_LEVEL") == "1":
-            batchopts.clear()
         if cached_batchopts := getattr(self.options, "batch", None):
             batchopts = merge(cached_batchopts, batchopts)
+        if os.getenv("CANARY_LEVEL") == "1":
+            batchopts.clear()
         backend = batchopts.get("scheduler")
         self.setup_hpc_connect(backend)
         if self.backend is None:
@@ -441,8 +441,8 @@ class Config:
         if name in ("null", "local", None):
             self.backend = None
             return
-        logging.debug(f"Setting up HPC Connect for {name}")
         assert name is not None
+        logging.debug(f"Setting up HPC Connect for {name}")
         self.backend = hpc_connect.get_backend(name)
         if self.debug:
             hpc_connect.set_debug(True)
