@@ -122,7 +122,6 @@ class TestCaseRunner(AbstractTestRunner):
                         logging.debug(f"Submitting {case} for execution with command {case.cmd_line}")
                         proc = Popen(cmd, start_new_session=True, stdout=stdout, stderr=stderr)
                         metrics = self.get_process_metrics(proc)
-                        logging.debug(f"Waiting on {case} to fininsh")
                         while proc.poll() is None:
                             self.get_process_metrics(proc, metrics=metrics)
                             toc = time.monotonic()
@@ -434,6 +433,8 @@ class BatchRunner(AbstractTestRunner):
             with open(config_file, "w") as fh:
                 json.dump(cfg, fh, indent=2)
             fp.write(f"-f {config_file} ")
+        if config.debug:
+            fp.write("-d ")
         fp.write(f"-C {config.session.work_tree} run ")
         if isinstance(arg, TestBatch):
             batchopts = config.getoption("batch", {})
