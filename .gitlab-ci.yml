@@ -78,7 +78,8 @@ test::integration::flux:
   - flux start canary run -w -b scheduler=flux -b count=2 ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   rules:
-    when: never
+  - when: never
+# flux briken
 #  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
 #    when: always
 
