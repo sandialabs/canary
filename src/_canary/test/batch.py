@@ -78,6 +78,14 @@ class TestBatch(AbstractTestCase):
         # by default, only one resource group is returned
         return [group]
 
+    @property
+    def duration(self):
+        start = min(case.start for case in self)
+        stop = max(case.stop for case in self)
+        if start == -1 or stop == -1:
+            return -1
+        return stop - start
+
     def validate(self, cases: Sequence[TestCase]):
         errors = 0
         for case in cases:

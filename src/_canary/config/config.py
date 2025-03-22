@@ -438,10 +438,10 @@ class Config:
 
     def setup_hpc_connect(self, name: str | None) -> None:
         """Set the hpc_connect library"""
-        logging.debug(f"Setting up HPC Connect for {name}")
         if name in ("null", "local", None):
             self.backend = None
             return
+        logging.debug(f"Setting up HPC Connect for {name}")
         assert name is not None
         self.backend = hpc_connect.get_backend(name)
         if self.debug:

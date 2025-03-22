@@ -492,7 +492,7 @@ class Session:
                     logging.info(colorize("@*{Running} %d %s" % (queue_size, what)))
                     self.start = timestamp()
                     self.stop = -1.0
-                    logging.debug("processing queue")
+                    logging.debug("Start: processing queue")
                     self.process_queue(queue=queue)
                 except ProcessPoolExecutorFailedToStart:
                     if self.level > 0:
@@ -592,10 +592,12 @@ class Session:
                         continue
                     except EmptyQueue:
                         break
+                    logging.debug(f"Submitting {obj} to process pool for execution", end="... ")
                     future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank)
                     qrank += 1
                     callback = partial(self.done_callback, iid, queue)
                     future.add_done_callback(callback)
+                    logging.log(logging.DEBUG, "done")
                     futures[iid] = (obj, future)
         except BaseException:
             if ppe is None:
@@ -661,6 +663,7 @@ class Session:
             logging.error(f"Expected AbstractTestCase, got {obj.__class__.__name__}")
             return
         obj.refresh()
+        logging.debug(f"Finished {obj} ({obj.duration} s.)")
         if not isinstance(obj, TestCase):
             assert isinstance(obj, TestBatch)
             if all(case.status == "retry" for case in obj):

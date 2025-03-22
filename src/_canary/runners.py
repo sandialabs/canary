@@ -119,8 +119,10 @@ class TestCaseRunner(AbstractTestRunner):
                     stdout.flush()
                     with case.rc_environ():
                         tic = time.monotonic()
+                        logging.debug(f"Submitting {case} for execution with command {case.cmd_line}")
                         proc = Popen(cmd, start_new_session=True, stdout=stdout, stderr=stderr)
                         metrics = self.get_process_metrics(proc)
+                        logging.debug(f"Waiting on {case} to fininsh")
                         while proc.poll() is None:
                             self.get_process_metrics(proc, metrics=metrics)
                             toc = time.monotonic()
@@ -168,6 +170,7 @@ class TestCaseRunner(AbstractTestRunner):
                 if metrics is not None:
                     case.add_measurement(**metrics)
             case.finish()
+            logging.debug(f"{case}: finished with status {case.status}")
         return
 
     def start_msg(
