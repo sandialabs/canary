@@ -196,6 +196,30 @@ test::plugin::yaml:
     when: always
 
 
+test::plugin::sierra:
+  stage: test
+  tags:
+  - cee.build
+  before_script:
+  - $CEE_PYTHON3 -m venv venv
+  - source venv/bin/activate
+  - python3 --version
+  script:
+  - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
+  - python3 -m pip install $STD_PIP_ARGS -e .[dev]
+  - git clone git@cee-gitlab.sandia.gov:ascic-test-infra/plugins/canary-sierra.git
+  # test -p PLUGIN_NAME
+  # @mvlopri: change describe to run an actual test.
+  - PYTHONPATH=`pwd`/canary-sierra/src:`pwd`/canary-sierra/mock canary -p canary_sierra describe ./canary-sierra/tests/adagio_solid_mech/adagio_patch_test_first.test
+  - cd canary-sierra
+  - python3 -m pip install --no-deps .
+  - cd $CI_PROJECT_DIR
+  - PYTHONPATH=`pwd`/canary-sierra/mock canary describe ./canary-sierra/tests/adagio_solid_mech/adagio_patch_test_first.test
+  rules:
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    when: always
+
+
 lint::check:
   stage: code analysis
   tags:
