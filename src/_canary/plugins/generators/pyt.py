@@ -160,13 +160,14 @@ class PYTTestGenerator(AbstractTestGenerator):
                     ),
                 )
                 case.launcher = sys.executable
+                enabled, reason = self.enable(
+                    testname=name, on_options=on_options, parameters=parameters
+                )
+                if test_mask is None and not enabled:
+                    test_mask = reason
+                    logging.debug(f"{case}: disabled because {reason!r}")
                 if test_mask is not None:
                     case.mask = test_mask
-                enabled, reason = self.enable(testname=name, on_options=on_options, parameters=parameters)
-                print(enabled, test_mask, reason)
-                if not enabled and test_mask is None:
-                    case.mask = reason
-                    logging.debug(f"{self}::{name} has been disabled")
                 if any([_[1] is not None for _ in modules]):
                     mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
                     for _, use in modules:
@@ -424,7 +425,9 @@ class PYTTestGenerator(AbstractTestGenerator):
         parameters: dict[str, Any] | None = None,
     ) -> tuple[bool, str | None]:
         for ns in self._enable:
-            result = ns.when.evaluate(testname=testname, on_options=on_options, parameters=parameters)
+            result = ns.when.evaluate(
+                testname=testname, on_options=on_options, parameters=parameters
+            )
             if ns.value is True and not result.value:
                 return False, result.reason
             elif ns.value is False and result.value:
