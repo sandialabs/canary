@@ -72,11 +72,10 @@ A CDash report of a test session can be generated after the session has complete
 .. code-block:: console
 
     $ cd TestResults
-    $ canary report cdash create -p PROJECT_NAME -b BUILD_NAME
+    $ canary report cdash create --site=SITE --build=BUILD_NAME
 
 The report can be uploaded to a CDash server via
 
 .. code-block:: console
 
-    $ cd TestResults
-    $ canary report cdash post URL
+    $ canary report cdash post --project=PROJECT_NAME --url=URL FILE [FILE ...]

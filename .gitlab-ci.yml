@@ -187,8 +187,8 @@ test::plugin::yaml:
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - git clone git@cee-gitlab.sandia.gov:ascic-test-infra/plugins/canary-yaml.git
   # test -p PLUGIN_NAME
-  - PYTHONPATH=`pwd`/canary-yaml/src canary -p canary_yaml run -w ./canary-yaml/tests
-  - cd canary-yaml
+  - PYTHONPATH=$CI_PROJECT_DIR/canary-yaml/src canary -p canary_yaml run -w ./canary-yaml/tests
+  - cd $CI_PROJECT_DIR/canary-yaml
   - python3 -m pip install --no-deps .
   - cd $CI_PROJECT_DIR
   - canary run -w ./canary-yaml/tests
@@ -211,11 +211,11 @@ test::plugin::sierra:
   - git clone git@cee-gitlab.sandia.gov:ascic-test-infra/plugins/canary-sierra.git
   # test -p PLUGIN_NAME
   # @mvlopri: change describe to run an actual test.
-  - PYTHONPATH=`pwd`/canary-sierra/src:`pwd`/canary-sierra/mock canary -p canary_sierra describe ./canary-sierra/tests/adagio_solid_mech/adagio_patch_test_first.test
-  - cd canary-sierra
+  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/src:$CI_PROJECT_DIR/canary-sierra/mock canary -p canary_sierra describe ./canary-sierra/tests/adagio_solid_mech/adagio_patch_test_first.test
+  - cd $CI_PROJECT_DIR/canary-sierra
   - python3 -m pip install --no-deps .
   - cd $CI_PROJECT_DIR
-  - PYTHONPATH=`pwd`/canary-sierra/mock canary describe ./canary-sierra/tests/adagio_solid_mech/adagio_patch_test_first.test
+  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/mock canary describe ./canary-sierra/tests/adagio_solid_mech/adagio_patch_test_first.test
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
