@@ -301,7 +301,11 @@ class Config:
         if os.getenv("CANARY_LEVEL") == "1":
             # no batching (default)
             snapshot["options"].pop("batch", None)
-        self.setup_hpc_connect(os.getenv("CANARY_HPCC_BACKEND") or snapshot["backend"])
+        self.setup_hpc_connect(
+            os.getenv("CANARY_HPCC_BACKEND")
+            or snapshot.get("scheduler")  # backward compatible
+            or snapshot.get("backend")
+        )
         self.options = argparse.Namespace(**snapshot["options"])
 
         if plugins := getattr(self.options, "plugins", None):
