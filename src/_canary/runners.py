@@ -79,6 +79,7 @@ class TestCaseRunner(AbstractTestRunner):
 
         def cancel(sig, frame):
             nonlocal proc
+            logging.debug(f"Cancelling due to captured signal {sig!r}")
             if proc is None:
                 return
             with warnings.catch_warnings():
@@ -132,6 +133,12 @@ class TestCaseRunner(AbstractTestRunner):
                                 raise TimeoutError
                             time.sleep(0.05)
                 finally:
+                    dt = toc - tic
+                    exit_code = 1 if proc is None else proc.returncode
+                    stdout.write(
+                        f"==> Finished running {case.display_name} "
+                        f"in {dt} s. with exit code {exit_code}\n"
+                    )
                     stdout.close()
                     if hasattr(stderr, "close"):
                         stderr.close()  # type: ignore
@@ -300,7 +307,7 @@ class BatchRunner(AbstractTestRunner):
         variables = dict(batch.variables)
         variables["CANARY_LEVEL"] = "1"
         variables["CANARY_DISABLE_KB"] = "1"
-        variables["CANARY_BATCH_SCHEDULER"] = "null"  # guard against infinite batch recursion
+        variables["CANARY_HPCC_BACKEND"] = "null"  # guard against infinite batch recursion
         if config.debug:
             variables["CANARY_DEBUG"] = "on"
             hpc_connect.set_debug(True)
@@ -359,12 +366,15 @@ class BatchRunner(AbstractTestRunner):
                 if case.status == "skipped":
                     pass
                 elif case.status == "running":
+                    logging.debug(f"{case}: cancelling (status: running)")
                     case.status.set("cancelled", "case failed to stop")
                     case.save()
                 elif case.start > 0 and case.stop < 0:
+                    logging.debug(f"{case}: cancelling (status: {case.status})")
                     case.status.set("cancelled", "case failed to stop")
                     case.save()
                 elif case.status == "ready":
+                    logging.debug(f"{case}: case failed to start")
                     case.status.set("not_run", "case failed to start")
                     case.save()
         return

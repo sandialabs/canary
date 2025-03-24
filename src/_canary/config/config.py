@@ -301,7 +301,7 @@ class Config:
         if os.getenv("CANARY_LEVEL") == "1":
             # no batching (default)
             snapshot["options"].pop("batch", None)
-        self.setup_hpc_connect(os.getenv("CANARY_BATCH_SCHEDULER") or snapshot["backend"])
+        self.setup_hpc_connect(os.getenv("CANARY_HPCC_BACKEND") or snapshot["backend"])
         self.options = argparse.Namespace(**snapshot["options"])
 
         if plugins := getattr(self.options, "plugins", None):
@@ -383,14 +383,30 @@ class Config:
         # batch runner sets the variable CANARY_LEVEL=1 to guard against this case.  But, if we are
         # running tests inside an existing test session and no batch arguments are given, we want
         # to use the original batch arguments.
+
+        # Order of precedence:
+        # 1. command line
+        # 2. environment
+        # 3. cached config
         batchopts = getattr(args, "batch", None) or {}
-        if cached_batchopts := getattr(self.options, "batch", None):
+        backend: str | None = None
+        if backend := batchopts.get("scheduler"):
+            if backend != "null" and getattr(args, "mode", None) != "w":
+                m = getattr(args, "mode", None)
+                raise ValueError(f"do not specify scheduler with mode={m}")
+        elif backend := os.getenv("CANARY_HPCC_BACKEND"):
+            if backend != "null" and getattr(args, "mode", None) != "w":
+                m = getattr(args, "mode", None)
+                raise ValueError(f"do not specify CANARY_HPCC_BACKEND with mode={m}")
+        elif os.getenv("CANARY_LEVEL") == "1":
+            backend = "null"
+        elif cached_batchopts := getattr(self.options, "batch", None):
+            m = getattr(args, "mode", "r")
+            backend = "null" if m == "r" else cached_batchopts.get("scheduler")
             batchopts = merge(cached_batchopts, batchopts)
-        if os.getenv("CANARY_LEVEL") == "1":
-            batchopts.clear()
-        backend = batchopts.get("scheduler")
         self.setup_hpc_connect(backend)
         if self.backend is None:
+            self.options.batch = {}
             batchopts.clear()
         args.batch = batchopts
 

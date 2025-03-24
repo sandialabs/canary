@@ -152,7 +152,7 @@ class Session:
         self.db = Database(self.config_dir, mode=mode)
         if mode in "rab":
             self.restore_settings()
-            self.load_test_generators()
+            self.load_testcase_generators()
             if mode != "b":
                 self.load_testcases()
         else:
@@ -261,15 +261,15 @@ class Session:
         self.cases.extend(cases.values())
         return
 
-    def dump_testfiles(self) -> None:
+    def dump_testcase_generators(self) -> None:
         """Dump each test file (test generator) in this session to ``file`` in json format"""
         logging.debug("Dumping test case generators")
         testfiles = [f.getstate() for f in self.generators]
         with self.db.open("files", mode="w") as file:
             json.dump(testfiles, file, indent=2)
 
-    def load_test_generators(self) -> None:
-        """Load test files (test generators) previously dumped by ``dump_testfiles``"""
+    def load_testcase_generators(self) -> None:
+        """Load test files (test generators) previously dumped by ``dump_testcase_generators``"""
         self.generators.clear()
         ctx = logging.context(colorize("@*{Loading} test case generators"), level=logging.DEBUG)
         ctx.start()
@@ -365,7 +365,7 @@ class Session:
             f.add(root, *paths, tolerant=True)
         f.prepare()
         self.generators = f.discover(pedantic=pedantic)
-        self.dump_testfiles()
+        self.dump_testcase_generators()
         logging.debug(f"Discovered {len(self.generators)} test files")
 
     def lock(
@@ -416,7 +416,8 @@ class Session:
             else:
                 case.mark_as_ready()
 
-        logging.info(colorize("@*{Selected} %d test cases" % (len(self.cases) - len(masked))))
+        n = len(self.cases) - len(masked)
+        logging.info(colorize("@*{Selected} %d test case%s" % (n, "" if n == 1 else "s")))
         if masked:
             self.report_excluded(masked)
 
@@ -462,7 +463,8 @@ class Session:
                 masked.append(case)
             else:
                 case.mark_as_ready()
-        logging.info(colorize("@*{Selected} %d test cases" % (len(cases) - len(masked))))
+        n = len(self.cases) - len(masked)
+        logging.info(colorize("@*{Selected} %d test case%s" % (n, "" if n == 1 else "s")))
         if masked:
             self.report_excluded(masked)
 
