@@ -290,7 +290,7 @@ class Session:
         logging.debug(f"Loading test session in {self.work_tree}")
         if config.session.work_tree is None:
             config.session.work_tree = self.work_tree
-        elif config.session.work_tree != self.work_tree:
+        elif not os.path.samefile(config.session.work_tree, self.work_tree):
             msg = "Expected config.session.work_tree=%r but got %s"
             raise RuntimeError(msg % (self.work_tree, config.session.work_tree))
         self.load_attrs()
