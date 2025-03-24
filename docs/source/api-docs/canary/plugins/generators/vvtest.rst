@@ -1,7 +1,7 @@
-launch
+vvtest
 ======
 
-.. automodule:: hpc_connect.launch
+.. automodule:: _canary.plugins.generators.vvtest
    :members:
    :undoc-members:
    :show-inheritance:

@@ -48,8 +48,16 @@ class TestBatch(AbstractTestCase):
     def __iter__(self):
         return iter(self.cases)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.cases)
+
+    def __repr__(self) -> str:
+        case_repr: str
+        if len(self.cases) <= 3:
+            case_repr = ",".join(repr(case) for case in self.cases)
+        else:
+            case_repr = f"{self.cases[0]!r},{self.cases[1]!r},...,{self.cases[-1]!r}"
+        return f"TestBatch({case_repr})"
 
     @property
     def variables(self) -> dict[str, str | None]:
@@ -77,6 +85,14 @@ class TestBatch(AbstractTestCase):
         group: list[dict[str, Any]] = [{"type": "cpus", "slots": 1} for _ in range(self.cpus)]
         # by default, only one resource group is returned
         return [group]
+
+    @property
+    def duration(self):
+        start = min(case.start for case in self)
+        stop = max(case.stop for case in self)
+        if start == -1 or stop == -1:
+            return -1
+        return stop - start
 
     def validate(self, cases: Sequence[TestCase]):
         errors = 0

@@ -14,7 +14,7 @@ For example, to run the example suite using the ``shell`` scheduler in 4 batches
 
 .. command-output:: canary run -b scheduler=shell -b count=4 .
     :cwd: /examples
-    :extraargs: -w
+    :setup: rm -rf TestResults
     :returncode: 30
     :nocache:
 

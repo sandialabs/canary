@@ -240,7 +240,7 @@ class BatchResourceQueue(ResourceQueue):
     def __init__(self, lock: threading.Lock) -> None:
         workers = int(config.getoption("workers", -1))
         super().__init__(lock=lock, workers=5 if workers < 0 else workers)
-        if config.scheduler is None:
+        if config.backend is None:
             raise ValueError("BatchResourceQueue requires a batch:scheduler")
         self.tmp_buffer: list[TestCase] = []
 
@@ -356,7 +356,7 @@ def factory(lock: threading.Lock, fail_fast: bool = False) -> ResourceQueue:
 
     """
     queue: ResourceQueue
-    if config.scheduler is None:
+    if config.backend is None:
         queue = DirectResourceQueue(lock)
     else:
         queue = BatchResourceQueue(lock)

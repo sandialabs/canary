@@ -1,7 +1,7 @@
-util
-====
+slurm
+=====
 
-.. automodule:: hpc_connect.util
+.. automodule:: hpc_connect.impl.slurm
    :members:
    :undoc-members:
    :show-inheritance:

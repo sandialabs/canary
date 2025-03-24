@@ -46,9 +46,8 @@ Discover
 
 During discovery test files are collected:
 
-.. command-output:: canary run --until=discover -k centered_space .
+.. command-output:: canary run --no-header --until=discover -k centered_space .
    :cwd: /examples
-   :extraargs: -rv -w --no-header
    :setup: rm -rf TestResults
 
 .. _lock:
@@ -58,9 +57,8 @@ Lock
 
 During the ``lock`` stage, test files are :ref:`filtered <usage-filter>`, ``parameterize`` statements are expanded, and dependency links created:
 
-.. command-output:: canary run --until=lock -k centered_space .
+.. command-output:: canary run --no-header --until=lock -k centered_space .
    :cwd: /examples
-   :extraargs: -rv -w --no-header
    :setup: rm -rf TestResults
 
 .. _batch:
@@ -86,9 +84,8 @@ Run
 
 During test execution, ``canary`` navigates to each test directory and runs the script:
 
-.. command-output:: canary run -k centered_space .
+.. command-output:: canary run --no-header -k centered_space .
    :cwd: /examples
-   :extraargs: -rv -w --no-header
    :nocache:
    :setup: rm -rf TestResults
 

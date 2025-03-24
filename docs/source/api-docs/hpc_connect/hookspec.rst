@@ -1,7 +1,7 @@
-submit
-======
+hookspec
+========
 
-.. automodule:: hpcc_slurm.submit
+.. automodule:: hpc_connect.hookspec
    :members:
    :undoc-members:
    :show-inheritance:

@@ -33,6 +33,9 @@ class PathSpec(argparse.Action):
 
     def __call__(self, parser, args, values, option_string=None):
         if self.dest == "f_pathspec":
+            work_tree = find_work_tree(os.getcwd())
+            if work_tree is not None:
+                raise ValueError(f"-f {values} is illegal in re-use mode")
             paths = self.read_paths(values)
             args.mode = "w"
             args.start = None
@@ -40,9 +43,10 @@ class PathSpec(argparse.Action):
             setdefault(args, "paths", {}).update(paths)
             return
 
-        assert self.dest == "pathspec"
-
         on_options, off_options, pathspec, script_args = self.parse(values)
+        if not pathspec and getattr(args, "f_pathspec", None):
+            # use values from file only
+            return
         if on_options:
             setdefault(args, "on_options", []).extend(on_options)
         if off_options:

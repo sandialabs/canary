@@ -208,7 +208,7 @@ def getuser() -> str:
     """Return the name of the logged on user"""
     try:
         return getpass.getuser()
-    except:  # noqa: E722; pragma: no cover
+    except Exception:  # pragma: no cover
         home = os.path.expanduser("~")
         if home != "~":
             return os.path.basename(home)
@@ -379,7 +379,7 @@ def force_symlink(src: str, dest: str, echo: Callable = lambda x: None) -> None:
     echo(f"link {src} -> {dest}\n")
     try:
         os.symlink(src, dest)
-    except OSError:
+    except (OSError, FileExistsError):
         remove(dest)
         os.symlink(src, dest)
 

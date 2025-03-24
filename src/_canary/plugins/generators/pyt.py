@@ -124,15 +124,12 @@ class PYTTestGenerator(AbstractTestGenerator):
         logging.trace(f"Generating test cases for {self} using the following test names: {names}")
         dependencies: dict[str, list[DependencyPatterns]] = {}
         for name in self.names():
-            test_mask = self.skipif_reason
-            enabled, reason = self.enable(testname=name, on_options=on_options)
-            if not enabled and test_mask is None:
-                test_mask = reason
-                logging.debug(f"{self}::{name} has been disabled")
+            skip_reason = self.skipif_reason
 
             cases: list[TestCase] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
+                test_mask: str | None = skip_reason
                 keywords = self.keywords(testname=name, parameters=parameters)
                 modules = self.modules(testname=name, on_options=on_options, parameters=parameters)
                 case = TestCase(
@@ -163,6 +160,12 @@ class PYTTestGenerator(AbstractTestGenerator):
                     ),
                 )
                 case.launcher = sys.executable
+                enabled, reason = self.enable(
+                    testname=name, on_options=on_options, parameters=parameters
+                )
+                if test_mask is None and not enabled:
+                    test_mask = reason
+                    logging.debug(f"{case}: disabled because {reason!r}")
                 if test_mask is not None:
                     case.mask = test_mask
                 if any([_[1] is not None for _ in modules]):
@@ -419,9 +422,12 @@ class PYTTestGenerator(AbstractTestGenerator):
         self,
         testname: str | None = None,
         on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> tuple[bool, str | None]:
         for ns in self._enable:
-            result = ns.when.evaluate(testname=testname, on_options=on_options)
+            result = ns.when.evaluate(
+                testname=testname, on_options=on_options, parameters=parameters
+            )
             if ns.value is True and not result.value:
                 return False, result.reason
             elif ns.value is False and result.value:

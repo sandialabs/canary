@@ -1,7 +1,7 @@
-shell_submit
+partitioning
 ============
 
-.. automodule:: hpc_connect.shell_submit
+.. automodule:: _canary.util.partitioning
    :members:
    :undoc-members:
    :show-inheritance:

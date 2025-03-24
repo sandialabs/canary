@@ -22,6 +22,7 @@ util
    misc
    module
    parallel
+   partitioning
    progress
    returncode
    rprobe

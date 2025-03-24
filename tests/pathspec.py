@@ -51,3 +51,46 @@ def test_pathspec_parse_new(tmpdir):
         assert args.on_options == ["baz"]
         assert args.off_options == ["bacon"]
         assert args.script_args == ["--foo", "--bar"]
+
+
+def test_run_from_file(tmpdir):
+    from _canary.main import CanaryCommand
+
+    with working_dir(tmpdir.strpath, create=True):
+        touchp("tests/regression/2D/test_1.pyt")
+        touchp("tests/regression/2D/test_2.pyt")
+        touchp("tests/verification/2D/test_1.pyt")
+        touchp("tests/verification/2D/test_2.pyt")
+        touchp("tests/verification/3D/test_1.pyt")
+        touchp("tests/verification/3D/test_2.pyt")
+        touchp("tests/prototype/a/test_1.pyt")
+        touchp("tests/prototype/a/test_2.pyt")
+        touchp("tests/prototype/b/test_1.pyt")
+        touchp("tests/prototype/b/test_2.pyt")
+        data = {
+            "root": "tests",
+            "paths": [
+                "regression/2D/test_1.pyt",
+                "verification/2D/test_1.pyt",
+                "verification/3D/test_1.pyt",
+                "prototype/a/test_1.pyt",
+                "prototype/b/test_1.pyt",
+            ],
+        }
+        file = os.path.join(os.getcwd(), "file.json")
+        with open(file, "w") as fh:
+            json.dump({"testpaths": [data]}, fh, indent=2)
+        command = CanaryCommand("run")
+        assert os.path.exists(file)
+        command("-f", file)
+        assert os.path.exists("TestResults/regression/2D/test_1")
+        assert os.path.exists("TestResults/verification/2D/test_1")
+        assert os.path.exists("TestResults/verification/3D/test_1")
+        assert os.path.exists("TestResults/prototype/a/test_1")
+        assert os.path.exists("TestResults/prototype/b/test_1")
+
+        assert not os.path.exists("TestResults/regression/2D/test_2")
+        assert not os.path.exists("TestResults/verification/2D/test_2")
+        assert not os.path.exists("TestResults/verification/3D/test_2")
+        assert not os.path.exists("TestResults/prototype/a/test_2")
+        assert not os.path.exists("TestResults/prototype/b/test_2")

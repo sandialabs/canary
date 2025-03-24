@@ -16,4 +16,4 @@ Example
 .. command-output:: canary run ./depends_on/basic
     :cwd: /examples
     :nocache:
-    :extraargs: -w
+    :setup: rm -rf TestResults

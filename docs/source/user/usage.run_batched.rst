@@ -59,7 +59,7 @@ Examples
 
   .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b count=4 .
     :cwd: /examples
-    :extraargs: -rv -w
+    :setup: rm -rf TestResults.Batched
     :returncode: 30
 
 
@@ -67,5 +67,5 @@ Examples
 
   .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b count=4 -b workers=1 .
     :cwd: /examples
-    :extraargs: -rv -w
+    :setup: rm -rf TestResults.Batched
     :returncode: 30

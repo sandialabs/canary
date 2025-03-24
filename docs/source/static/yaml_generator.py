@@ -5,8 +5,9 @@ from itertools import product
 from string import Template
 from typing import Any
 
-import canary
 import yaml
+
+import canary
 from _canary.util import graph
 from _canary.util.filesystem import set_executable
 from _canary.util.filesystem import working_dir
@@ -112,3 +113,8 @@ class YAMLTestCase(canary.TestCase):
                 fh.write("#!/usr/bin/env bash\n")
                 fh.write("\n".join(self.script))
             set_executable(self.exe)
+
+
+@canary.hookimpl
+def canary_testcase_generator():
+    return YAMLTestGenerator

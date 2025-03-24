@@ -27,8 +27,8 @@ def partition_by_count(cases: list["TestCase"]) -> list["TestBatch"] | None:
 def partition_consistent(cases: list["TestCase"]) -> list["TestBatch"] | None:
     batchopts = config.getoption("batch", {})
     if scheme := batchopts.get("scheme"):
-        if scheme == "isolate":
-            logging.info("Batching test cases using scheme=isolate")
+        if scheme == "isolated_sets":
+            logging.info("Batching test cases using scheme=isolated_sets")
             return partitioning.partition_x(cases)
     return None
 
@@ -50,7 +50,7 @@ def canary_configure(config: "Config") -> None:
     """Do some post configuration checks"""
     batchopts = config.getoption("batch")
     if batchopts:
-        if config.scheduler is None:
+        if config.backend is None:
             raise ValueError("Test batching requires a batch:scheduler")
         if scheme := batchopts.get("scheme"):
             if scheme == "count":
