@@ -10,6 +10,7 @@ from typing import Sequence
 from . import config
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
+from .third_party import color
 from .third_party.monkeypatch import monkeypatch
 from .util import logging
 
@@ -34,12 +35,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     with CanaryMain(argv) as m:
         parser = make_argument_parser()
+        parser.add_main_epilog(parser)
         for command in config.plugin_manager.get_subcommands():
             parser.add_command(command)
         with monkeypatch.context() as mp:
             mp.setattr(parser, "add_argument", parser.add_plugin_argument)
             config.plugin_manager.hook.canary_addoption(parser=parser)
         args = parser.parse_args(m.argv)
+        if args.color:
+            color.set_color_when(args.color)
+
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
             logging.emit(shlex.join(a) + "\n")
@@ -110,7 +115,11 @@ class CanaryCommand:
             args = parser.preparse(argv)
             for p in args.plugins:
                 config.plugin_manager.consider_plugin(p)
-            parser.add_command(self.command)
+            for command in config.plugin_manager.get_subcommands():
+                parser.add_command(command)
+            with monkeypatch.context() as mp:
+                mp.setattr(parser, "add_argument", parser.add_plugin_argument)
+                config.plugin_manager.hook.canary_addoption(parser=parser)
             args = parser.parse_args(argv)
             config.set_main_options(args)
             rc = self.command.execute(args)
@@ -165,10 +174,10 @@ class Profiler:
 
 def invoke_profiled_command(command, args):
     try:
-        nlines = int(args.lines)
+        nlines = int(args.profiling_lines or 20)
     except ValueError:
-        if args.lines != "all":
-            raise ValueError("Invalid number for --lines: %s" % args.lines)
+        if args.profiling_lines != "all":
+            raise ValueError("Invalid number for --lines: %s" % args.profiling_lines)
         nlines = -1
 
     with Profiler(nlines=nlines):

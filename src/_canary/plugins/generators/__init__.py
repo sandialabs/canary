@@ -1,5 +1,5 @@
 from . import ctest
 from . import pyt
-from . import vvt
+from . import vvtest
 
-plugins = [pyt, vvt, ctest]
+plugins = [pyt, vvtest, ctest]

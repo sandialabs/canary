@@ -3,6 +3,8 @@ import os
 import re
 from typing import TYPE_CHECKING
 
+from ....third_party.color import colorize
+from ....util import logging
 from ....util.time import time_in_seconds
 
 __all__ = [
@@ -30,12 +32,12 @@ def add_filter_arguments(parser: "Parser") -> None:
         metavar="expression",
         action="append",
         help="Only run tests matching given keyword expression. "
-        "For example: `-k 'key1 and not key2'`.",
+        "For example: `-k 'key1 and not key2'`.  The keyword ``:all:`` matches all tests",
     )
     group.add_argument(
         "-o",
         dest="on_options",
-        default=[],
+        default=None,
         metavar="option",
         action="append",
         help="Turn option(s) on, such as '-o dbg' or '-o intel'",
@@ -47,20 +49,13 @@ def add_filter_arguments(parser: "Parser") -> None:
         help="Filter tests by parameter name and value, such as '-p cpus=8' or '-p cpus<8'",
     )
     group.add_argument(
-        "-R",
+        "--search",
+        "--regex",
         dest="regex_filter",
         metavar="regex",
         help="Include tests containing the regular expression regex in at least 1 of its "
         "file assets.  regex is a python regular expression, see "
         "https://docs.python.org/3/library/re.html",
-    )
-    group.add_argument(
-        "--recurse-ctest",
-        action="store_true",
-        default=False,
-        help="Recurse CMake binary directory for test files.  CTest tests can be detected "
-        "from the root CTestTestfile.cmake, so this is option is not necessary unless there "
-        "is a mix of CTests and other test types in the binary directory",
     )
 
 
@@ -107,8 +102,8 @@ def add_resource_arguments(parser: "Parser") -> None:
         "--test-timeout",
         metavar="type:T",
         action=TimeoutResource,
-        help="Set the timeout for tests of type.  "
-        "Type is one of 'fast', 'long', 'default', or 'ctest'"
+        help=f"Set the timeout for tests of {bold('type')}.  "
+        "Type is one of 'fast', 'long', 'default', or 'ctest' "
         "(T accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: 5m]",
     )
     group.add_argument(
@@ -129,23 +124,21 @@ def add_resource_arguments(parser: "Parser") -> None:
 
 
 class TimeoutResource(argparse.Action):
+    _types = ("fast", "long", "default", "session")
+
     def __call__(self, parser, args, values, option_string=None):
-        if match := re.search(r"^(long|default|fast|ctest)[:=](.*)$", values):
+        if match := re.search(r"^(\w*)[:=](.*)$", values):
             type = match.group(1)
             value = time_in_seconds(match.group(2))
         else:
             raise ValueError(f"Incorrect test timeout spec: {values}, expected 'type:value'")
-        choices = ("fast", "long", "default", "ctest", "session")
-        if type.lower() not in choices:
-            s = ", ".join(repr(c) for c in choices)
-            raise ValueError(
-                f"argument {option_string}: invalid choice: {type!r} (choose from {s})"
-            )
-        elif type.lower() == "session":
+        if type.lower() not in self._types:
+            logging.debug(f"{option_string}: unknown test timeout type {type!r}")
+        if type.lower() == "session":
             args.session_timeout = value
         else:
             timeout_resources = getattr(args, self.dest, None) or {}
-            timeout_resources[type] = value
+            timeout_resources[type.lower()] = value
             setattr(args, self.dest, timeout_resources)
 
 
@@ -166,3 +159,9 @@ def load_session(root: str | None = None, mode: str = "r"):
 
     with logging.level(logging.WARNING):
         return Session(root or os.getcwd(), mode=mode)
+
+
+def bold(arg: str) -> str:
+    if os.getenv("COLOR_WHEN", "auto") == "never":
+        return f"**{arg}**"
+    return colorize("@*{%s}" % arg)

@@ -13,9 +13,10 @@ if TYPE_CHECKING:
     batch = _config.batch
     system = _config.system
     session = _config.session
-    scheduler = _config.scheduler
+    backend = _config.backend
     test = _config.test
     build = _config.build
+    null = _config.null
     options = _config.options
     resource_pool = _config.resource_pool
     plugin_manager = _config.plugin_manager
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
     snapshot = _config.snapshot
 else:
     # allow config to be lazily loaded
-    _config: Config = Config.factory()
+    _config: Config | None = None
 
     def __getattr__(name: str) -> Any:
         global _config

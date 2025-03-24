@@ -28,7 +28,8 @@ class CanaryPluginManager(pluggy.PluginManager):
         for subcommand in subcommands.plugins:
             self.register(subcommand)
         for generator in generators.plugins:
-            self.register(generator)
+            name = generator.__name__.split(".")[-1]
+            self.register(generator, name=name)
         for p in builtin.plugins:
             self.register(p)
         for p in reporters.plugins:
@@ -46,9 +47,9 @@ class CanaryPluginManager(pluggy.PluginManager):
         return hook()
 
     def load_from_env(self) -> None:
-        if plugins := os.getenv("_CANARY_PLUGINS"):
+        if plugins := os.getenv("CANARY_PLUGINS"):
             for plugin in plugins.split(","):
-                self.import_plugin(plugin)
+                self.consider_plugin(plugin)
 
     def consider_plugin(self, name: str) -> None:
         assert isinstance(name, str), f"module name as text required, got {name!r}"

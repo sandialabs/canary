@@ -6,6 +6,7 @@ from ...error import StopExecution
 from ...third_party.color import colorize
 from ...util import logging
 from ...util.banner import banner
+from ...util.filesystem import find_work_tree
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import PathSpec
@@ -43,11 +44,13 @@ class Find(CanarySubcommand):
         from ... import finder
         from ...session import Session
 
+        work_tree = find_work_tree(os.getcwd())
+        if work_tree is not None:
+            raise ValueError("find must be executed outside of a canary work tree")
         if args.print_files:
             logging.set_level(logging.ERROR)
         else:
             logging.emit(banner() + "\n")
-        parse_search_paths(args)
         f = finder.Finder()
         for root, paths in args.paths.items():
             f.add(root, *paths, tolerant=True)
@@ -96,16 +99,3 @@ def add_group_argument(group, name, help_string, add_short_arg=True):
         args.insert(0, f"-{name[0]}")
     kwargs = dict(dest=f"print_{name}", action="store_true", default=False, help=help_string)
     group.add_argument(*args, **kwargs)
-
-
-def parse_search_paths(args: argparse.Namespace) -> None:
-    on_options: list[str] = []
-    pathspec: list[str] = []
-    for item in args.pathspec:
-        if item.startswith("+"):
-            on_options.append(item[1:])
-        else:
-            pathspec.append(item)
-    args.pathspec = pathspec
-    args.on_options.extend(on_options)
-    PathSpec.parse_new_session(args)

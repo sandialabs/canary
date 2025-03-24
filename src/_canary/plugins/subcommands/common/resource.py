@@ -1,9 +1,11 @@
 import argparse
+import os
 import re
 from typing import Any
 
 from ....third_party.color import colorize
 from ....util import logging
+from ....util.string import csvsplit
 from ....util.string import strip_quotes
 from ....util.time import time_in_seconds
 
@@ -64,12 +66,11 @@ Defines resources required to batch and schedule test batches. The %(r_arg)s arg
 the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • count=N: Execute tests in N batches.  Sets scheme=count\n\n
 • duration=T: Execute tests in batches having runtimes of approximately T seconds.  Sets scheme=duration [default: 30 min]\n\n
-• scheme=S: Partition tests into batches using the scheme {duration, count, isolate} [default: None]\n\n
+• scheme=S: Partition tests into batches using the scheme {duration, count, isolated_sets} [default: None]\n\n
 • scheduler=S: Submit test batches to scheduler 'S'.\n\n
 • workers=N: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
-• option=option: Pass *option* to the scheduler.  If *option* contains commas, it is split into multiple options at the commas.
-• option:verb(atim)=option: Pass *option* to the scheduler exactly as it appears on the command line.
-""" % {"r_form": _bold("type=value"), "r_arg": _bold(f"{flag} resource")}
+• option=%(opt)s: Pass %(opt)s to the scheduler.  If %(opt)s contains commas, it is split into multiple options at the commas.\n\n
+""" % {"r_form": bold("type=value"), "r_arg": bold(f"{flag} resource"), "opt": bold("option")}
         return text
 
     @staticmethod
@@ -87,18 +88,21 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             return (type, int(raw))
         elif match := re.search(r"^scheme[:=](\w+)$", arg):
             raw = match.group(1)
-            if raw not in ("count", "duration", "isolate"):
-                raise ValueError(f"scheme={raw} not in (count, duration, isolate)")
+            if raw.startswith("isolate"):
+                raw = "isolated_sets"
+            elif raw == "t":
+                raw = "duration"
+            elif raw == "n":
+                raw = "count"
+            if raw not in ("count", "duration", "isolated_sets"):
+                raise ValueError(f"scheme={raw} not in (count, duration, isolated_sets)")
             return ("scheme", raw)
         elif match := re.search(r"^(runner|scheduler|type)[:=](\w+)$", arg):
             raw = match.group(2)
             return ("scheduler", raw)
-        elif match := re.search(r"^(option|args|scheduler_args):(verb|verbatim)[:=](.*)$", arg):
-            raw = strip_quotes(match.group(3))
-            return ("options", [raw])
         elif match := re.search(r"^(option|args|scheduler_args)[:=](.*)$", arg):
             raw = strip_quotes(match.group(2))
-            return ("options", [_.strip() for _ in raw.split(",") if _.split()])
+            return ("options", csvsplit(raw))
         else:
             raise ValueError(f"invalid resource arg: {arg!r}")
 
@@ -114,13 +118,15 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         elif key == "count" and batch.get("duration") is not None:
             old = batch.pop("duration")
             logging.warning(f"{opt} duration={old} being overridden by {opt} count={value}")
-        elif (key, value) == ("scheme", "isolate"):
+        elif (key, value) == ("scheme", "isolated_sets"):
             if batch.get("duration") is not None:
                 old = batch.pop("duration")
-                logging.warning(f"{opt} duration={old} being overridden by {opt} scheme=isolate")
+                logging.warning(
+                    f"{opt} duration={old} being overridden by {opt} scheme=isolated_sets"
+                )
             if batch.get("count") is not None:
                 old = batch.pop("count")
-                logging.warning(f"{opt} count={old} being overridden by {opt} scheme=isolate")
+                logging.warning(f"{opt} count={old} being overridden by {opt} scheme=isolated_sets")
         elif (key, value) == ("scheme", "count"):
             if batch.get("duration") is not None:
                 old = batch.pop("duration")
@@ -131,5 +137,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
                 logging.warning(f"{opt} count={old} being overridden by {opt} scheme=duration")
 
 
-def _bold(arg: str) -> str:
+def bold(arg: str) -> str:
+    if os.getenv("COLOR_WHEN", "auto") == "never":
+        return f"**{arg}**"
     return colorize("@*{%s}" % arg)

@@ -3,6 +3,7 @@ import glob
 import io
 import os
 import sys
+import warnings
 from string import Template
 from types import ModuleType
 from typing import Any
@@ -78,7 +79,6 @@ class PYTTestGenerator(AbstractTestGenerator):
         self._skipif_reason: str | None = None
         self._exclusive: FilterNamespace | None = None
         self._xstatus: FilterNamespace | None = None
-        self._stages: list[FilterNamespace] = []
         self.load()
 
     def __repr__(self) -> str:
@@ -124,15 +124,12 @@ class PYTTestGenerator(AbstractTestGenerator):
         logging.trace(f"Generating test cases for {self} using the following test names: {names}")
         dependencies: dict[str, list[DependencyPatterns]] = {}
         for name in self.names():
-            test_mask = self.skipif_reason
-            enabled, reason = self.enable(testname=name, on_options=on_options)
-            if not enabled and test_mask is None:
-                test_mask = reason
-                logging.debug(f"{self}::{name} has been disabled")
+            skip_reason = self.skipif_reason
 
             cases: list[TestCase] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
+                test_mask: str | None = skip_reason
                 keywords = self.keywords(testname=name, parameters=parameters)
                 modules = self.modules(testname=name, on_options=on_options, parameters=parameters)
                 case = TestCase(
@@ -161,9 +158,14 @@ class PYTTestGenerator(AbstractTestGenerator):
                     exclusive=self.exclusive(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
-                    stages=self.stages(testname=name, on_options=on_options, parameters=parameters),
                 )
                 case.launcher = sys.executable
+                enabled, reason = self.enable(
+                    testname=name, on_options=on_options, parameters=parameters
+                )
+                if test_mask is None and not enabled:
+                    test_mask = reason
+                    logging.debug(f"{case}: disabled because {reason!r}")
                 if test_mask is not None:
                     case.mask = test_mask
                 if any([_[1] is not None for _ in modules]):
@@ -207,7 +209,6 @@ class PYTTestGenerator(AbstractTestGenerator):
                     exclusive=self.exclusive(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
-                    stages=self.stages(testname=name, on_options=on_options, parameters=parameters),
                 )
                 parent.launcher = sys.executable
                 if test_mask is not None:
@@ -250,22 +251,6 @@ class PYTTestGenerator(AbstractTestGenerator):
                     case.unresolved_dependencies.append(dep)
 
     # -------------------------------------------------------------------------------- #
-
-    def stages(
-        self,
-        testname: str | None = None,
-        on_options: list[str] | None = None,
-        parameters: dict[str, Any] | None = None,
-    ) -> list[str]:
-        stages: set[str] = {"run"}
-        for ns in self._stages:
-            result = ns.when.evaluate(
-                testname=testname, parameters=parameters, on_options=on_options
-            )
-            if result.value:
-                stages.update(ns.value)
-        std_stages = {"run": 0, "post-process": 1, "post": 1, "analyze": 2, "baseline": 3}
-        return sorted(stages, key=lambda s: (std_stages.get(s, 100), s[0]))
 
     @property
     def skipif_reason(self) -> str | None:
@@ -437,9 +422,12 @@ class PYTTestGenerator(AbstractTestGenerator):
         self,
         testname: str | None = None,
         on_options: list[str] | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> tuple[bool, str | None]:
         for ns in self._enable:
-            result = ns.when.evaluate(testname=testname, on_options=on_options)
+            result = ns.when.evaluate(
+                testname=testname, on_options=on_options, parameters=parameters
+            )
             if ns.value is True and not result.value:
                 return False, result.reason
             elif ns.value is False and result.value:
@@ -694,11 +682,6 @@ class PYTTestGenerator(AbstractTestGenerator):
     ) -> None:
         self.add_sources("sources", *files, when=when)
 
-    def m_stages(self, *args: str, when: WhenType | None = None) -> None:
-        # For now just pass through, could add a when statement?
-        ns = FilterNamespace(set(args), when=when)
-        self._stages.append(ns)
-
     def m_generate_composite_base_case(
         self,
         *,
@@ -733,6 +716,9 @@ class PYTTestGenerator(AbstractTestGenerator):
     def m_skipif(self, arg: bool, *, reason: str) -> None:
         if arg:
             self.skipif_reason = reason
+
+    def m_stages(self, *args: str) -> None:
+        warnings.warn("stages: function deprecated", category=DeprecationWarning, stacklevel=2)
 
     def m_enable(
         self,
@@ -771,7 +757,6 @@ class PYTTestGenerator(AbstractTestGenerator):
                 "PYTTestGenerator.baseline: missing required argument 'src'/'dst' or 'flag'"
             )
         self._baseline.append(ns)
-        self.m_stages("baseline")
 
     def load(self):
         import _canary
@@ -889,6 +874,9 @@ class PYTTestGenerator(AbstractTestGenerator):
     def f_source(self, arg: str, *, when: WhenType | None = None):
         self.m_rcfile(arg, when=when)
 
+    def f_stages(self, *args: str) -> None:
+        warnings.warn("stages: function deprecated", category=DeprecationWarning, stacklevel=2)
+
     def f_artifact(self, file: str, *, when: WhenType | None = None, upon: str = "always") -> None:
         if upon not in ("always", "success", "failure"):
             raise ValueError("upon: invalid value, choose from 'always', 'success', 'failure'")
@@ -905,9 +893,6 @@ class PYTTestGenerator(AbstractTestGenerator):
 
     def f_sources(self, *args: str, when: WhenType | None = None):
         self.m_sources(*args, when=when)
-
-    def f_stages(self, *args: str, when: WhenType | None = None):
-        self.m_stages(*args, when=when)
 
     def f_testname(self, arg: str) -> None:
         self.m_name(arg)

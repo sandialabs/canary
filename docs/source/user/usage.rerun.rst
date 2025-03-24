@@ -43,7 +43,7 @@ Examples
 .. command-output:: canary run -d TestResults.Rerun ./status
     :cwd: /examples
     :returncode: 30
-    :extraargs: -rv -w
+    :setup: rm -rf TestResults.Rerun
 
 
 Rerun all failed tests
@@ -52,7 +52,6 @@ Rerun all failed tests
 .. command-output:: canary -C TestResults.Rerun run .
     :cwd: /examples
     :returncode: 30
-    :extraargs: -rv
 
 Rerun only the diffed tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -60,4 +59,3 @@ Rerun only the diffed tests
 .. command-output:: canary -C TestResults.Rerun run -k diff
     :cwd: /examples
     :returncode: 2
-    :extraargs: -rv

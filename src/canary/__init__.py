@@ -46,9 +46,10 @@ class TestParser(argparse.ArgumentParser):
 
 def make_argument_parser() -> TestParser:
     parser = TestParser()
-    parser.add_argument("--stage")
+    parser.add_argument("--stage", default="run")
     parser.add_argument("--baseline", action="store_true")
     group = parser.add_mutually_exclusive_group()
+    group.add_argument("-a", action="store_true")
     group.add_argument("--analyze", action="store_true")
     group.add_argument("--execute-analysis-sections", action="store_true")
     return parser

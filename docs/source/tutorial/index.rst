@@ -19,4 +19,3 @@ A Flexible, Extensible, and Scalable Framework for Scientific Applications
     Test dependencies <dependencies>
     Resource allocation <resource>
     batch
-    workflows

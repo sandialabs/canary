@@ -23,7 +23,6 @@ To run the test, navigate to ``examples/basic/first`` and execute ``canary run .
 .. command-output:: canary run .
    :cwd: /examples/basic/first
    :nocache:
-   :extraargs: -w
    :setup: rm -rf TestResults
 
 A test is considered to have successfully completed if its exit code is ``0``.  See :ref:`basics-status` for more details on test statuses.

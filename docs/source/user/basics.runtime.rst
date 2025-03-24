@@ -47,6 +47,6 @@ You may also want to increase the timeout applied to tests.  Do so by specifying
 
 .. code-block:: console
 
-   canary run --timeoutx-multiplier=X ...
+   canary run --timeout-multiplier=X ...
 
 In this case, the timeout for each test will be the ``X`` times the test's default timeout.

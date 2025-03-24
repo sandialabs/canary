@@ -1,3 +1,4 @@
+import argparse
 import dataclasses
 import importlib.util
 import io
@@ -18,6 +19,7 @@ from typing import Generator
 from typing import Type
 
 from ... import config
+from ...config.argparsing import Parser
 from ...enums import list_parameter_space
 from ...test.case import TestCase
 from ...test.case import TestMultiCase
@@ -665,7 +667,7 @@ def to_seconds(arg: str | int | float, round: bool = False, negatives: bool = Fa
 
 
 @typing.no_type_check
-def get_vvtest_attrs(case: "TestCase", stage: str = "run") -> dict:
+def get_vvtest_attrs(case: "TestCase") -> dict:
     attrs = {}
     compiler_spec = None
     if config.build.compiler.vendor is not None:
@@ -680,17 +682,28 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "run") -> dict:
     attrs["TESTROOT"] = case.work_tree
     attrs["VVTESTSRC"] = ""
     attrs["PROJECT"] = ""
-    attrs["OPTIONS"] = []  # FIXME
-    attrs["OPTIONS_OFF"] = []  # FIXME
+    attrs["OPTIONS"] = config.getoption("on_options") or []
+    attrs["OPTIONS_OFF"] = config.getoption("off_options") or []
     attrs["SRCDIR"] = case.file_dir
     attrs["TIMEOUT"] = case.timeout
     attrs["KEYWORDS"] = case.keywords
     attrs["diff_exit_status"] = 64
     attrs["skip_exit_status"] = 63
-    attrs["opt_analyze"] = "'--execute-analysis-sections' in sys.argv[1:]"
+
+    # tjfulle: the vvtest_util.opt_analyze and vvtest_util.is_analysis_only attributes seem to
+    # always be the same to me.  so far as I can tell, if you set -a/--analyze on the command line
+    # the runtime config 'analyze' is set to True.  When vvtest writes out vvtest_util.py it writes
+    #   - ``vvtest_util.is_analysis_only = rtconfig.getAttr("analyze")``; and
+    #   - ``vvtest_util.opt_analyze = '--execute-analysis-sections' in sys.argv[1:].
+    # ``--execute-analysis-sections`` is a appended to a test script's command line if
+    # rtconfig.getAttr("analyze") is True.  Thus, it seems that there is no differenece between
+    # ``opt_analyze`` and ``is_analysis_only``.  In canary, --execute-analysis-sections is added
+    # to the command if canary_testcase_modify below
+    analyze_check = "'--execute-analysis-sections' in sys.argv[1:]"
+    attrs["opt_analyze"] = attrs["is_analysis_only"] = analyze_check
+
     attrs["is_analyze"] = isinstance(case, TestMultiCase)
-    attrs["is_baseline"] = stage == "baseline"
-    attrs["is_analysis_only"] = stage == "analyze"
+    attrs["is_baseline"] = config.getoption("command") == "rebaseline"
     attrs["PARAM_DICT"] = case.parameters or {}
     for key, val in case.parameters.items():
         attrs[key] = val
@@ -726,7 +739,7 @@ def get_vvtest_attrs(case: "TestCase", stage: str = "run") -> dict:
 def write_vvtest_util(case: "TestCase", stage: str = "run") -> None:
     if not case.file_path.endswith(".vvt"):
         return
-    attrs = get_vvtest_attrs(case, stage=stage)
+    attrs = get_vvtest_attrs(case)
     file = os.path.abspath("./vvtest_util.py")
     if os.path.dirname(file) != case.working_directory:
         raise ValueError("Incorrect directory for writing vvtest_util")
@@ -779,3 +792,44 @@ def canary_testcase_finish(case: "TestCase") -> None:
         return
     f = os.path.join(case.working_directory, "execute.log")
     force_symlink(case.logfile(), f)
+
+
+class RerunAction(argparse.Action):
+    def __call__(self, parser, args, values, option_string=None):
+        keywords = getattr(args, "keyword_exprs", None) or []
+        keywords.append(":all:")
+        setattr(args, "keyword_exprs", keywords)
+
+
+@hookimpl
+def canary_addoption(parser: "Parser") -> None:
+    parser.add_argument(
+        "-R",
+        action=RerunAction,
+        nargs=0,
+        command="run",
+        group="vvtest options",
+        dest="vvtest_runall",
+        help="Rerun tests. Normally tests are not run if they previously completed.",
+    )
+    parser.add_argument(
+        "-a",
+        "--analyze",
+        action="store_true",
+        default=None,
+        command="run",
+        group="vvtest options",
+        dest="vvtest_analyze",
+        help="Only run the analysis sections of each test. Note that a test must be written to "
+        "support this option (using the vvtest_util.is_analysis_only flag) otherwise the whole "
+        "test is run.",
+    )
+
+
+@hookimpl
+def canary_testcase_modify(case: "TestCase") -> None:
+    if not case.file_path.endswith(".vvt"):
+        return
+    if config.getoption("vvtest_analyze"):
+        if config.session.level and "--execute-analysis-sections" not in case.postflags:
+            case.postflags.append("--execute-analysis-sections")

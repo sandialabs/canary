@@ -1,7 +1,7 @@
-partition
-=========
+proc
+====
 
-.. automodule:: _canary.partition
+.. automodule:: hpc_connect.util.proc
    :members:
    :undoc-members:
    :show-inheritance:

@@ -30,18 +30,6 @@ To install the latest development version, execute:
 python3 -m pip install "canary-wm git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/canary"
 ```
 
-To also download and install an HPC scheduler interface install as:
-
-```console
-python3 -m pip install "canary-wm[SCHEDULER] @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/canary"
-```
-
-where `SCHEDULER` is `slurm`, `pbs`, `flux`, or any comma-separated combination of the three, e.g.
-
-```console
-python3 -m pip install "canary-wm[slurm,pbs,flux] @ git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/canary"
-```
-
 To install the latest production version, execute:
 
 ```console
@@ -49,7 +37,7 @@ python3 -m pip install \
   --trusted-host=cee-gitlab.sandia.gov \
   --index-url=https://nexus.web.sandia.gov/repository/pypi-proxy/simple \
   --extra-index-url=https://cee-gitlab.sandia.gov/api/v4/projects/51750/packages/pypi/simple \
-  canary[pbs,slurm,flux]
+  canary-wm
 ```
 
 ## Developers
@@ -57,7 +45,7 @@ python3 -m pip install \
 For developers wanting to make modifications and/or contributions to `canary`, install in editable mode:
 
 ```console
-python3 -m pip install -e git+https://cee-gitlab.sandia.gov/ascic-test-infra/canary#egg=canary[flux,pbs,slurm]
+python3 -m pip install -e git+https://cee-gitlab.sandia.gov/ascic-test-infra/canary#egg=canary-wm[dev]
 ```
 
 which will leave a copy of `canary` in your Python distribution's `$prefix/src` directory.  Edits made to the source will be immediately visible by the Python interpreter.  Alternatively, the source can be cloned and then installed in editable mode:
@@ -65,7 +53,7 @@ which will leave a copy of `canary` in your Python distribution's `$prefix/src` 
 ```console
 git clone git@cee-gitlab.sandia.gov:ascic-test-infra/canary
 cd canary
-python3 -m pip install --editable .[dev,pbs,flux,slurm]
+python3 -m pip install --editable .[dev]
 ```
 
 To format code and run `canary`'s internal tests, execute

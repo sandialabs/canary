@@ -80,18 +80,7 @@ batch_schema = Schema(
     }
 )
 
-test_schema = Schema(
-    {
-        "test": {
-            "timeout": {
-                Optional("fast"): Use(time_in_seconds),
-                Optional("long"): Use(time_in_seconds),
-                Optional("default"): Use(time_in_seconds),
-                Optional("ctest"): Use(time_in_seconds),
-            }
-        }
-    }
-)
+test_schema = Schema({"test": {"timeout": {Optional(str): Use(time_in_seconds)}}})
 
 machine_schema = Schema({"machine": {Optional("cpu_count"): Use(int)}})
 python_schema = Schema({"python": {"executable": str, "version": str, "version_info": list}})

@@ -12,7 +12,6 @@ _canary
    generator
    main
    paramset
-   partition
    plugins/index
    queues
    runners

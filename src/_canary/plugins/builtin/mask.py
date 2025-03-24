@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from ...test.case import TestCase
 
 
-@hookimpl
+@hookimpl(tryfirst=True)
 def canary_testsuite_mask(
     cases: list["TestCase"],
     keyword_exprs: list[str] | None,
@@ -21,7 +21,6 @@ def canary_testsuite_mask(
     owners: set[str] | None,
     regex: str | None,
     case_specs: list[str] | None,
-    stage: str | None,
     start: str | None,
 ) -> None:
     """Filter test cases (mask test cases that don't meet a specific criteria)
@@ -42,15 +41,14 @@ def canary_testsuite_mask(
         logging.warning("Regular expression search can be slow for large test suites")
         rx = re.compile(regex)
 
-    owners = set(owners or [])
     no_filter_criteria = all(_ is None for _ in (keyword_exprs, parameter_expr, owners, regex))
 
-    explicit_start_path = start is not None
     if start is not None:
         if not os.path.isabs(start):
             start = os.path.join(config.session.work_tree, start)  # type: ignore
         start = os.path.normpath(start)
 
+    owners = set(owners or [])
     order = graph.static_order_ix(cases)
     for i in order:
         case = cases[i]
@@ -58,11 +56,11 @@ def canary_testsuite_mask(
         if case.masked():
             continue
 
-        if explicit_start_path and case.matches(start):
+        if start is not None and isrel(case.execfile, start):
             # won't mask
             continue
 
-        if start and not isrel(case.working_directory, start):
+        if start is not None and not isrel(case.working_directory, start):
             logging.debug(f"{case}: {case.working_directory=} but {start=}")
             case.mask = "Unreachable from start directory"
             continue
@@ -86,13 +84,17 @@ def canary_testsuite_mask(
         if keyword_exprs is not None:
             kwds = set(case.keywords)
             kwds.update(case.implicit_keywords)
-            for keyword_expr in keyword_exprs:
-                match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
-                if not match:
-                    case.mask = colorize("keyword expression @*{%r} did not match" % keyword_expr)
-                    break
-            if case.masked():
-                continue
+            kwd_all = contains_any(("__all__", ":all:"), keyword_exprs)
+            if not kwd_all:
+                for keyword_expr in keyword_exprs:
+                    match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
+                    if not match:
+                        case.mask = colorize(
+                            "keyword expression @*{%r} did not match" % keyword_expr
+                        )
+                        break
+                if case.masked():
+                    continue
 
         if parameter_expr:
             match = when.when(
@@ -102,10 +104,6 @@ def canary_testsuite_mask(
             if not match:
                 case.mask = colorize("parameter expression @*{%s} did not match" % parameter_expr)
                 continue
-
-        if stage and stage not in case.stages:
-            case.mask = f"{stage}: unsupported stage"
-            continue
 
         if case.dependencies:
             flags = case.dep_condition_flags()
@@ -124,7 +122,7 @@ def canary_testsuite_mask(
 
         # If we got this far and the case is not masked, only mask it if no filtering criteria were
         # specified
-        if no_filter_criteria and not case.status.satisfies(("pending", "ready")):
+        if no_filter_criteria and not case.status.satisfies(("created", "pending", "ready")):
             case.mask = f"previous status {case.status.value!r} is not 'ready'"
 
     for i in order:
@@ -133,5 +131,11 @@ def canary_testsuite_mask(
     ctx.stop()
 
 
-def isrel(path1: str, path2: str) -> bool:
-    return os.path.realpath(path1).startswith(os.path.realpath(path2))
+def isrel(path1: str | None, path2: str) -> bool:
+    if path1 is None:
+        return False
+    return os.path.abspath(path1).startswith(os.path.abspath(path2))
+
+
+def contains_any(elements: tuple[str, ...], test_elements: list[str]) -> bool:
+    return any(element in test_elements for element in elements)

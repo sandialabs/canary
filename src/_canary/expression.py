@@ -241,7 +241,7 @@ class ParameterExpression:
 
     expression: expr? EOF
     expr:       ident
-    ident:      ([a-zA-Z_]+\w(=|>=|>|<|<=|==|!=).*
+    ident:      ``([a-zA-Z_]+\w(=|>=|>|<|<=|==|!=).*``
 
     The semantics are:
 

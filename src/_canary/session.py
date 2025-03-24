@@ -1,5 +1,6 @@
 """Setup and manage the test session"""
 
+import atexit
 import io
 import json
 import multiprocessing
@@ -7,7 +8,6 @@ import os
 import random
 import signal
 import sys
-import tempfile
 import threading
 import time
 import traceback
@@ -48,11 +48,13 @@ from .third_party.lock import WriteTransaction
 from .util import glyphs
 from .util import keyboard
 from .util import logging
+from .util.compression import compress64
 from .util.filesystem import find_work_tree
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
+from .util.procutils import cleanup_children
 from .util.returncode import compute_returncode
 from .util.rprobe import cpu_count
 from .util.time import hhmmss
@@ -143,10 +145,14 @@ class Session:
         self.start = -1.0
         self.stop = -1.0
 
+        os.environ.setdefault("CANARY_LEVEL", "0")
+        os.environ["CANARY_WORK_TREE"] = self.work_tree
+        self.level = int(os.environ["CANARY_LEVEL"])
+
         self.db = Database(self.config_dir, mode=mode)
         if mode in "rab":
             self.restore_settings()
-            self.load_test_generators()
+            self.load_testcase_generators()
             if mode != "b":
                 self.load_testcases()
         else:
@@ -155,9 +161,6 @@ class Session:
 
         self.mode = mode
 
-        os.environ.setdefault("CANARY_LEVEL", "0")
-        os.environ["CANARY_WORK_TREE"] = self.work_tree
-        self.level = int(os.environ["CANARY_LEVEL"])
         if mode == "w":
             self.save(ini=True)
 
@@ -258,15 +261,15 @@ class Session:
         self.cases.extend(cases.values())
         return
 
-    def dump_testfiles(self) -> None:
+    def dump_testcase_generators(self) -> None:
         """Dump each test file (test generator) in this session to ``file`` in json format"""
         logging.debug("Dumping test case generators")
         testfiles = [f.getstate() for f in self.generators]
         with self.db.open("files", mode="w") as file:
             json.dump(testfiles, file, indent=2)
 
-    def load_test_generators(self) -> None:
-        """Load test files (test generators) previously dumped by ``dump_testfiles``"""
+    def load_testcase_generators(self) -> None:
+        """Load test files (test generators) previously dumped by ``dump_testcase_generators``"""
         self.generators.clear()
         ctx = logging.context(colorize("@*{Loading} test case generators"), level=logging.DEBUG)
         ctx.start()
@@ -311,6 +314,7 @@ class Session:
     def set_config_values(self):
         """Set ``section`` configuration values"""
         config.session.work_tree = self.work_tree
+        config.session.level = self.level
 
     def save(self, ini: bool = False) -> None:
         """Save session data, excluding data that is stored separately in the database"""
@@ -361,7 +365,7 @@ class Session:
             f.add(root, *paths, tolerant=True)
         f.prepare()
         self.generators = f.discover(pedantic=pedantic)
-        self.dump_testfiles()
+        self.dump_testcase_generators()
         logging.debug(f"Discovered {len(self.generators)} test files")
 
     def lock(
@@ -401,7 +405,6 @@ class Session:
             owners=owners,
             regex=regex,
             case_specs=None,
-            stage=None,
             start=None,
         )
         masked: list[TestCase] = []
@@ -413,7 +416,8 @@ class Session:
             else:
                 case.mark_as_ready()
 
-        logging.info(colorize("@*{Selected} %d test cases" % (len(self.cases) - len(masked))))
+        n = len(self.cases) - len(masked)
+        logging.info(colorize("@*{Selected} %d test case%s" % (n, "" if n == 1 else "s")))
         if masked:
             self.report_excluded(masked)
 
@@ -429,7 +433,6 @@ class Session:
         owners: set[str] | None = None,
         regex: str | None = None,
         start: str | None = None,
-        stage: str | None = None,
         case_specs: list[str] | None = None,
     ) -> None:
         """Filter test cases (mask test cases that don't meet a specific criteria)
@@ -451,7 +454,6 @@ class Session:
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
-            stage=stage,
             case_specs=case_specs,
             start=start,
         )
@@ -461,11 +463,12 @@ class Session:
                 masked.append(case)
             else:
                 case.mark_as_ready()
-        logging.info(colorize("@*{Selected} %d test cases" % (len(cases) - len(masked))))
+        n = len(self.cases) - len(masked)
+        logging.info(colorize("@*{Selected} %d test case%s" % (n, "" if n == 1 else "s")))
         if masked:
             self.report_excluded(masked)
 
-    def run(self, *, fail_fast: bool = False, stage: str | None = None) -> list[TestCase]:
+    def run(self, *, fail_fast: bool = False) -> list[TestCase]:
         """Run each test case in ``cases``.
 
         Args:
@@ -480,20 +483,19 @@ class Session:
         cases = self.get_ready()
         if not cases:
             raise StopExecution("No tests to run", 7)
-        queue = self.setup_queue(cases)
-        config.session.stage = stage = stage or "run"
-        os.environ["CANARY_STAGE"] = stage
+        atexit.register(cleanup_children)
+        queue = self.setup_queue(cases, fail_fast=fail_fast)
         with self.rc_environ():
             with working_dir(self.work_tree):
                 cleanup_queue = True
                 try:
                     queue_size = len(queue)
                     what = "batches" if isinstance(queue, BatchResourceQueue) else "test cases"
-                    p = " " if stage == "run" else f" stage {stage!r} for "
-                    logging.info(colorize("@*{Running}%s%d %s" % (p, queue_size, what)))
+                    logging.info(colorize("@*{Running} %d %s" % (queue_size, what)))
                     self.start = timestamp()
                     self.stop = -1.0
-                    self.process_queue(queue=queue, fail_fast=fail_fast, stage=stage)
+                    logging.debug("Start: processing queue")
+                    self.process_queue(queue=queue)
                 except ProcessPoolExecutorFailedToStart:
                     if self.level > 0:
                         # This can happen when the ProcessPoolExecutor fails to obtain a lock.
@@ -505,29 +507,29 @@ class Session:
                         self.returncode = compute_returncode(queue.cases())
                     raise
                 except KeyboardInterrupt:
-                    kill_child_processes(signal.SIGINT)
+                    logging.debug("keyboard interrupt: killing child processes and exiting")
                     self.returncode = signal.SIGINT.value
                     cleanup_queue = False
                     raise
                 except StopExecution as e:
-                    kill_child_processes(signal.SIGTERM)
+                    logging.debug("stop execution: killing child processes and exiting")
                     self.returncode = e.exit_code
                 except FailFast as e:
-                    kill_child_processes(signal.SIGTERM)
-                    name, code = e.args
+                    logging.debug("fail fast: killing child processes and exiting")
+                    code = compute_returncode(e.failed)
                     self.returncode = code
                     cleanup_queue = False
-                    raise StopExecution(f"fail_fast: {name}", code)
+                    names = ",".join(_.name for _ in e.failed)
+                    raise StopExecution(f"fail_fast: {names}", code)
                 except Exception:
+                    logging.debug("unknown failure: killing child processes and exiting")
                     logging.error(traceback.format_exc())
-                    kill_child_processes(signal.SIGTERM)
                     self.returncode = compute_returncode(queue.cases())
                     raise
                 else:
                     if logging.get_level() > logging.INFO:
                         queue.update_progress_bar(self.start, last=True)
                     self.returncode = compute_returncode(queue.cases())
-                finally:
                     self.exitstatus = self.returncode
                     queue.close(cleanup=cleanup_queue)
                     self.stop = timestamp()
@@ -537,6 +539,7 @@ class Session:
                     dt = self.stop - self.start
                     msg = colorize("@*{Finished} %d %s (%s)\n" % (queue_size, what, hhmmss(dt)))
                     logging.info(msg)
+                    atexit.unregister(cleanup_children)
         self.save()
         for case in self.cases:
             if case.defective():
@@ -554,14 +557,11 @@ class Session:
         os.environ.clear()
         os.environ.update(save_env)
 
-    def process_queue(self, *, queue: ResourceQueue, fail_fast: bool, stage: str) -> None:
+    def process_queue(self, *, queue: ResourceQueue) -> None:
         """Process the test queue, asynchronously
 
         Args:
           queue: the test queue to process
-          fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
-            continuing running until all tests have been run.
-          stage: the execution stage
 
         """
         futures: dict = {}
@@ -570,11 +570,14 @@ class Session:
         runner = r_factory()
         qsize = queue.qsize
         qrank = 0
+        ppe = None
         try:
+            with io.StringIO() as fh:
+                config.snapshot(fh)
+                os.environ["CANARYCFG64"] = compress64(fh.getvalue())
             context = multiprocessing.get_context(config.multiprocessing_context)
             with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
-                signal.signal(signal.SIGTERM, handle_signal)
-                signal.signal(signal.SIGINT, handle_signal)
+                signal.signal(signal.SIGTERM, signal.SIG_IGN)
                 while True:
                     key = keyboard.get_key()
                     if isinstance(key, str) and key in "sS":
@@ -591,10 +594,12 @@ class Session:
                         continue
                     except EmptyQueue:
                         break
-                    future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank, stage=stage)
+                    logging.debug(f"Submitting {obj} to process pool for execution", end="... ")
+                    future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank)
                     qrank += 1
-                    callback = partial(self.done_callback, iid, queue, fail_fast)
+                    callback = partial(self.done_callback, iid, queue)
                     future.add_done_callback(callback)
+                    logging.log(logging.DEBUG, "done")
                     futures[iid] = (obj, future)
         except BaseException:
             if ppe is None:
@@ -629,16 +634,13 @@ class Session:
             fh.write(json.dumps(hb) + "\n")
         return None
 
-    def done_callback(
-        self, iid: int, queue: ResourceQueue, fail_fast: bool, future: Future
-    ) -> None:
+    def done_callback(self, iid: int, queue: ResourceQueue, future: Future) -> None:
         """Function registered to the process pool executor to be called when a test (or batch of
         tests) completes
 
         Args:
           iid: the queue's internal ID of the test (or batch)
           queue: the active test queue
-          fail_fast: whether to stop the test session at the first failed test
           future: the future return by the process pool executor
 
         """
@@ -663,11 +665,8 @@ class Session:
             logging.error(f"Expected AbstractTestCase, got {obj.__class__.__name__}")
             return
         obj.refresh()
-        if isinstance(obj, TestCase):
-            if fail_fast and obj.status != "success":
-                code = compute_returncode([obj])
-                raise FailFast(str(obj), code)
-        else:
+        logging.debug(f"Finished {obj} ({obj.duration} s.)")
+        if not isinstance(obj, TestCase):
             assert isinstance(obj, TestBatch)
             if all(case.status == "retry" for case in obj):
                 queue.retry(iid)
@@ -682,11 +681,8 @@ class Session:
                     case.status.set("not_run", "test not run for unknown reasons")
                 elif case.start > 0 and case.stop < 0:
                     case.status.set("cancelled", "test case cancelled")
-            if fail_fast and any(_.status != "success" for _ in obj):
-                code = compute_returncode(obj.cases)
-                raise FailFast(str(obj), code)
 
-    def setup_queue(self, cases: list[TestCase]) -> ResourceQueue:
+    def setup_queue(self, cases: list[TestCase], fail_fast: bool = False) -> ResourceQueue:
         """Setup the test queue
 
         Args:
@@ -694,7 +690,7 @@ class Session:
 
         """
         kwds: dict[str, Any] = {}
-        queue: ResourceQueue = q_factory(global_session_lock)
+        queue: ResourceQueue = q_factory(global_session_lock, fail_fast=fail_fast)
         for case in cases:
             if case.status == "skipped":
                 case.save()
@@ -973,43 +969,14 @@ def is_base_process(process: psutil.Process) -> bool:
     ProcessPoolExecutor"""
     try:
         command = " ".join(process.cmdline())
-    except (psutil.ZombieProcess, ProcessLookupError):
+    except Exception:
         return False
     else:
         return f"{sys.executable} -c from multiprocessing" in command
 
 
-def kill_child_processes(sig: int, kill_delay: float = 0.1) -> None:
-    import warnings
-
-    if not config.debug:
-        warnings.filterwarnings("ignore")
-
-    with tempfile.TemporaryFile("w") as fh:
-        with logging.capture(sys.stdout if config.debug else fh):
-            process = psutil.Process(os.getpid())
-            children = sorted(
-                [_ for _ in process.children(recursive=True) if not is_base_process(_)],
-                key=lambda p: p.create_time(),
-                reverse=True,
-            )
-            for child in children:
-                if child.is_running():
-                    try:
-                        child.send_signal(sig)
-                    except psutil.NoSuchProcess:
-                        pass
-            time.sleep(kill_delay)
-            for child in children:
-                if child.is_running():
-                    try:
-                        child.send_signal(signal.SIGKILL)
-                    except psutil.NoSuchProcess:
-                        pass
-
-
 def handle_signal(sig, frame):
-    kill_child_processes(sig)
+    cleanup_children()
     raise SystemExit(sig)
 
 

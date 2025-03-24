@@ -30,8 +30,8 @@ if __name__ == '__main__':
                 print(open(file).read())
         assert rc == 0
         with working_dir("TestResults"):
-            run = CanaryCommand("run")
-            rc = run("--stage=baseline", ".")
+            rebaseline = CanaryCommand("rebaseline")
+            rc = rebaseline(".")
         assert rc == 0
         assert open("a.txt").read() == "a=1"
 
@@ -73,7 +73,7 @@ if __name__ == '__main__':
                 print(open(file).read())
         assert rc == 0
         with working_dir("TestResults"):
-            run = CanaryCommand("run")
-            rc = run("--stage=baseline", ".")
+            rebaseline = CanaryCommand("rebaseline")
+            rc = rebaseline(".")
         assert rc == 0
         assert open("a.txt").read() == "a=1"

@@ -272,9 +272,11 @@ class ResourcePool:
             raise
         else:
             self._stash = None
-        if logging.LEVEL == logging.DEBUG:
+        if logging.LEVEL <= logging.DEBUG:
             for type, n in totals.items():
                 N = sum([_["slots"] for local in self.pool for _ in local[type]]) + n
+                if n == 1 and type.endswith("s"):
+                    type = type[:-1]
                 logging.debug(f"Acquiring {n} {type} from {N} available")
         return acquired
 
@@ -296,8 +298,11 @@ class ResourcePool:
                 for rspec in rspecs:
                     n = _reclaim(type, rspec)
                     types[type] = types.setdefault(type, 0) + n
-        for type, n in types.items():
-            logging.debug(f"Reclaimed {n} {type}")
+        if logging.LEVEL <= logging.DEBUG:
+            for type, n in types.items():
+                if n == 1 and type.endswith("s"):
+                    type = type[:-1]
+                logging.debug(f"Reclaimed {n} {type}")
 
 
 class ResourceUnsatisfiable(Exception):

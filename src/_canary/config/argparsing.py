@@ -20,6 +20,10 @@ if TYPE_CHECKING:
 stat_names = pstats.Stats.sort_arg_dict_default
 
 
+def conditional_help(arg: str, suppress: bool = True) -> str:
+    return arg if not suppress else argparse.SUPPRESS
+
+
 class HelpFormatter(argparse.RawTextHelpFormatter):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -182,14 +186,33 @@ class Parser(argparse.ArgumentParser):
         return group
 
     def add_plugin_argument(self, *args, **kwargs):
-        parser = self.__subcommand_parsers.get(kwargs.pop("command", None)) or self
-        group_name = "plugin options"
-        for group in parser._action_groups:
-            if group.title == group_name:
-                break
+        parsers = []
+        if "command" in kwargs:
+            commands = kwargs.pop("command")
+            if isinstance(commands, str):
+                commands = [commands]
+            for command in set(commands):
+                parsers.append(self.__subcommand_parsers[command])
         else:
-            group = parser.add_argument_group(group_name)
-        group.add_argument(*args, **kwargs)
+            parsers = [self]
+        group_name = kwargs.pop("group", "plugin options")
+        for parser in parsers:
+            for group in parser._action_groups:
+                if group.title == group_name:
+                    break
+            else:
+                group = parser.add_argument_group(group_name)
+            group.add_argument(*args, **kwargs)
+
+    @staticmethod
+    def add_main_epilog(parser: "Parser") -> None:
+        epilog = """\
+more help:
+  canary help --all        list all commands and options
+  canary help --pathspec   help on the path specification syntax
+  canary docs              open http://ascic-test-infra.cee-gitlab.lan/canary in a browser
+"""
+        parser.epilog = epilog
 
 
 def identity(arg):
@@ -240,6 +263,7 @@ class ConfigMods(argparse.Action):
 
 def make_argument_parser(**kwargs):
     """Create an basic argument parser without any subcommands added."""
+    show_all = kwargs.pop("all", False)
     parser = Parser(
         formatter_class=HelpFormatter,
         description="canary - an application testing framework",
@@ -288,14 +312,16 @@ def make_argument_parser(**kwargs):
         "-d",
         "--debug",
         action="store_true",
-        default=False,
+        default=None,
         help="Debug mode [default: %(default)s]",
     )
     parser.add_argument(
         "--echo",
         action="store_true",
-        default=False,
-        help="Echo command line to the console [default: %(default)s]",
+        default=None,
+        help=conditional_help(
+            "Echo command line to the console [default: %(default)s]", suppress=not show_all
+        ),
     )
     parser.add_argument(
         "--color",
@@ -307,22 +333,29 @@ def make_argument_parser(**kwargs):
     group.add_argument(
         "--profile",
         action="store_true",
+        default=None,
         dest="canary_profile",
-        help="profile execution using cProfile",
+        help=conditional_help("profile execution using cProfile", suppress=not show_all),
     )
     stat_lines = list(zip(*(iter(stat_names),) * 7))
     group.add_argument(
         "--sorted-profile",
         default=None,
         metavar="stat",
-        help="profile and sort by one or more of:\n[%s]"
-        % ",\n ".join([", ".join(line) for line in stat_lines]),
+        help=conditional_help(
+            "profile and sort by one or more of:\n[%s]"
+            % ",\n ".join([", ".join(line) for line in stat_lines]),
+            suppress=not show_all,
+        ),
     )
     group.add_argument(
         "--lines",
-        default=20,
+        default=None,
+        dest="profiling_lines",
         action="store",
-        help="lines of profile output or 'all' [default: 20]",
+        help=conditional_help(
+            "lines of profile output or 'all' [default: 20]", suppress=not show_all
+        ),
     )
     group = parser.add_argument_group("runtime configuration")
     group.add_argument(
@@ -343,7 +376,7 @@ def make_argument_parser(**kwargs):
         "-e",
         dest="env_mods",
         metavar="var=val",
-        default={},
+        default=None,
         action=EnvironmentModification,
         default_scope="session",
         help="Add environment variable %s to the testing environment with value %s.  Accepts "

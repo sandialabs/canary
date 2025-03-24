@@ -7,6 +7,7 @@ import re
 import shlex
 import subprocess
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
 from typing import Type
@@ -24,6 +25,9 @@ from ...util.filesystem import which
 from ...util.filesystem import working_dir
 from ...util.time import time_in_seconds
 from ..hookspec import hookimpl
+
+if TYPE_CHECKING:
+    from ...config.config import Config
 
 warning_cache = set()
 
@@ -286,7 +290,7 @@ class CTestTestCase(TestCase):
         elif self.timeout_property is not None:
             timeout = self.timeout_property
         else:
-            timeout = config.test.timeout_ctest
+            timeout = getattr(config.test, "timeout_ctest", 1500.0)
         self._timeout = float(timeout)
 
     @property
@@ -335,7 +339,7 @@ class CTestTestCase(TestCase):
             kwds.append("ctest")
         return list(kwds)
 
-    def command(self, stage: str = "run") -> list[str]:
+    def command(self) -> list[str]:
         return [os.path.join(self.working_directory, "runtest")]
 
     def _command(self) -> list[str]:
@@ -396,8 +400,8 @@ class CTestTestCase(TestCase):
                 os.environ[key] = ";".join(values)
         os.environ["CTEST_RESOURCE_GROUP_COUNT"] = str(resource_group_count)
 
-    def setup(self, stage: str = "run") -> None:
-        super().setup(stage=stage)
+    def setup(self) -> None:
+        super().setup()
         with working_dir(self.working_directory):
             sh = which("sh")
             with open("runtest", "w") as fh:
@@ -406,16 +410,14 @@ class CTestTestCase(TestCase):
                 fh.write(shlex.join(self._command()))
             set_executable("runtest")
 
-    def finish(self, stage: str = "run") -> None:
-        if stage != "run":
-            return
-
-        self.update_run_stats()
+    def finish(self, update_stats: bool = True) -> None:
+        if update_stats:
+            self.update_run_stats()
         self.concatenate_logs()
-        file = self.logfile(stage)
+        file = self.logfile("run")
 
         if self.status.value in ("timeout", "skipped", "cancelled", "not_run"):
-            config.plugin_manager.hook.canary_testcase_finish(case=self, stage=stage)
+            config.plugin_manager.hook.canary_testcase_finish(case=self, stage="")
             self.save()
             return
 
@@ -451,7 +453,7 @@ class CTestTestCase(TestCase):
             elif self.status.value not in ("skipped",):
                 self.status.set("success")
 
-        config.plugin_manager.hook.canary_testcase_finish(case=self, stage=stage)
+        config.plugin_manager.hook.canary_testcase_finish(case=self, stage="")
         self.save()
 
     @property
@@ -548,7 +550,10 @@ def load(file: str) -> dict[str, Any]:
 
         try:
             with open(".ctest-json-v1.json", "w") as fh:
-                p = subprocess.Popen([ctest, "--show-only=json-v1"], stdout=fh)
+                args = [ctest, "--show-only=json-v1"]
+                if ctest_config := config.getoption("ctest_config"):
+                    args.extend(["-C", ctest_config])
+                p = subprocess.Popen(args, stdout=fh)
                 p.wait()
             with open(".ctest-json-v1.json", "r") as fh:
                 payload = json.load(fh)
@@ -683,3 +688,37 @@ def parse_environment_modification(environment_modification: list[str]) -> list[
 @hookimpl
 def canary_testcase_generator() -> Type[CTestTestGenerator]:
     return CTestTestGenerator
+
+
+@hookimpl
+def canary_configure(config: "Config"):
+    setattr(config.test, "timeout_ctest", 1500.0)
+
+
+@hookimpl
+def canary_addoption(parser) -> None:
+    parser.add_argument(
+        "--ctest-config",
+        metavar="cfg",
+        group="ctest options",
+        command=["run", "find"],
+        help="Choose configuration to test",
+    )
+    parser.add_argument(
+        "--ctest-test-timeout",
+        metavar="T",
+        type=time_in_seconds,
+        group="ctest options",
+        command="run",
+        help="Timeout for ctest tests [default: 1500 s.]",
+    )
+    parser.add_argument(
+        "--recurse-ctest",
+        default=None,
+        action="store_true",
+        group="ctest options",
+        command=["run", "find"],
+        help="Recurse CMake binary directory for test files.  CTest tests can be detected "
+        "from the root CTestTestfile.cmake, so this is option is not necessary unless there "
+        "is a mix of CTests and other test types in the binary directory",
+    )

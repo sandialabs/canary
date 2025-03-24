@@ -24,7 +24,6 @@ To run the test, navigate to the examples folder and run:
 .. command-output:: canary run -k second ./basic
     :cwd: /examples
     :nocache:
-    :extraargs: -rv -w
     :setup: rm -rf TestResults
 
 Here, the ``-k`` flag was used to select only the tests having the ``second`` keyword.

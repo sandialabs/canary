@@ -9,17 +9,18 @@ Consider the following YAML test input:
 
 .. code-block:: yaml
 
-    hello_world:
-      description: "A Hello world test"
-      script:
-      - echo "Hello, ${location}!"
-      - echo "n = ${n}"
-      keywords:
-      - "hello"
-      - "world"
-      parameters:
-        n: [2, 4, 8]
-        location: ["World", "U.S.A", "Canada", "Mexico"]
+    tests:
+      hello_world:
+        description: "A Hello world test"
+        script:
+        - echo "Hello, ${location}!"
+        - echo "n = ${n}"
+        keywords:
+        - "hello"
+        - "world"
+        parameters:
+          n: [2, 4, 8]
+          location: ["World", "U.S.A", "Canada", "Mexico"]
 
 The cartesian product of parameters should be taken and each combination used to generate a test case.  Each test case should execute the ``script``, first expanding variables of the form ``$variable`` or ``${variable}`` with the parameter values.
 
@@ -37,18 +38,18 @@ Example implementation
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python
-    :lines: 1-88
+    :lines: 1-72
 
 
 The ``YAMLTestGenerator.lock()`` returns a list of ``YAMLTestCase`` test cases, defined below:
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python
-    :lines: 89-127
+    :lines: 75-115
 
 
 The user defined test generator is registered using the :meth:`~_canary.plugins.hookspec.canary_testcase_generator` plugin hook:
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python
-    :lines: 128-
+    :lines: 117-

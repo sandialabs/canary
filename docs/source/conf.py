@@ -53,6 +53,7 @@ extensions = [
     "_canary.third_party.imagesvg",
 ]
 autodoc_member_order = "bysource"
+autodoc_default_options = {"ignore-module-all": True}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]

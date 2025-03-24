@@ -183,7 +183,7 @@ def test_config_show():
 def test_analyze(setup):
     with working_dir(setup.results_path), canary.config.override():
         run = CanaryCommand("run")
-        run("--stage=analyze", ".")
+        run("-k", "g", "--", "--stage=analyze")
 
 
 def test_tree():
