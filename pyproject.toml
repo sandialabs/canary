@@ -9,7 +9,7 @@ dependencies = [
   "PyYAML",
   "psutil",
   "pluggy",
-  "hpc-connect==0.4.0"
+  "hpc-connect==25.3.24+9e527a4"
 ]
 
 [project.scripts]
