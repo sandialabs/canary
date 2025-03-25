@@ -6,5 +6,4 @@ plugins.reporters.cdash
 
    cdash_html_summary
    gitlab_issue_generator
-   reporter
    xml_generator

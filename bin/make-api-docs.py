@@ -79,18 +79,6 @@ if __name__ == "__main__":
                 os.path.join(start, "../hpc-connect/src/hpc_connect"),
                 os.path.join(start, "docs/source/api-docs/hpc_connect"),
             )
-            make_api_docs(
-                os.path.join(start, "../hpc-connect/src/hpc_connect"),
-                os.path.join(start, "docs/source/api-docs/hpc_connect/hpc_connect"),
-            )
-            make_api_docs(
-                os.path.join(start, "../hpcc-slurm/src/hpcc_slurm"),
-                os.path.join(start, "docs/source/api-docs/hpc_connect/hpcc_slurm"),
-            )
-            make_api_docs(
-                os.path.join(start, "../hpcc-pbs/src/hpcc_pbs"),
-                os.path.join(start, "docs/source/api-docs/hpc_connect/hpcc_pbs"),
-            )
             break
         start = os.path.dirname(start)
         if start == os.path.sep:

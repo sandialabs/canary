@@ -4,6 +4,7 @@ util
 .. toctree::
    :maxdepth: 1
 
+   _difflib
    banner
    cdash
    collections
@@ -23,6 +24,7 @@ util
    module
    parallel
    partitioning
+   procutils
    progress
    returncode
    rprobe
