@@ -8,6 +8,7 @@ plugins.subcommands
    common/index
    config
    describe
+   docs
    edit
    fetch
    find
@@ -15,6 +16,7 @@ plugins.subcommands
    info
    location
    log
+   rebaseline
    report
    run
    status

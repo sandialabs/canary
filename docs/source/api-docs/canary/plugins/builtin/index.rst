@@ -5,4 +5,6 @@ plugins.builtin
    :maxdepth: 1
 
    email
+   mask
+   partitioning
    post_clean

@@ -15,10 +15,10 @@ if TYPE_CHECKING:
 
 @hookimpl
 def canary_subcommand() -> CanarySubcommand:
-    return Config()
+    return ConfigCmd()
 
 
-class Config(CanarySubcommand):
+class ConfigCmd(CanarySubcommand):
     name = "config"
     description = "Show configuration variable values"
 

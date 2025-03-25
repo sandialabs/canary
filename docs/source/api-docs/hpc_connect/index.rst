@@ -7,6 +7,7 @@ hpc_connect
    :maxdepth: 1
 
    hookspec
+   impl/index
    types
    util/index
-   impl/index
+   version
