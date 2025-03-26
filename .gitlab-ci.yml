@@ -71,11 +71,11 @@ test::integration::flux:
   - module load aue/gcc/12.1.0
   - module load aue/openmpi/4.1.6-gcc-12.1.0
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
-    #  - exit_code=0
-    #  - flux start canary run -w -b scheduler=flux -b scheme=isolated_sets ./examples || exit_code=$?
-    #  - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   - exit_code=0
   - flux start canary run -w -b scheduler=flux -b count=2 ./examples || exit_code=$?
+  - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+  - exit_code=0
+  - flux start canary run -w -b scheduler=flux -b scheme=isolated_sets ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
