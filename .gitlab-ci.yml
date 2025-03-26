@@ -268,9 +268,6 @@ lint::type_checking:
     when: always
     reports:
       codequality: codequality.json
-  rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-    when: always
 
 
 .pages:
