@@ -343,10 +343,13 @@ class BatchRunner(AbstractTestRunner):
                 if timeoutx := config.getoption("timeout_multiplier"):
                     qtime *= timeoutx
                 max_cpus = max(_.cpus for _ in batch)
+                max_gpus = max(_.gpus for _ in batch)
                 proc = config.backend.submit(
                     f"canary.{batch.id[:7]}",
                     [self.canary_invocation(batch)],
-                    nodes=config.backend.config.nodes_required(max_cpus),
+                    nodes=config.backend.config.nodes_required(
+                        max_cpus=max_cpus, max_gpus=max_gpus
+                    ),
                     scriptname=batch.submission_script_filename(),
                     output=batch.logfile(batch.id),
                     error=batch.logfile(batch.id),
