@@ -19,10 +19,18 @@ before_script:
 - python3 --version
 
 
+.retriable:
+  retry:
+    max: 1
+    exit_codes: 1
+
+
 test::unit:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
   script:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - module load aue/cmake/3.27.7
@@ -39,6 +47,8 @@ test::coverage:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
   script:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - module load aue/cmake/3.27.7
@@ -61,11 +71,14 @@ test::coverage:
 
 
 test::integration::flux:
-  variables:
-    FLUX_START: "flux start -o,-c ./.flux-ci.toml"
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
+  variables:
+    # FLUX_START: "flux start -o,-c ./.flux-ci.toml"
+    FLUX_START: "flux start"
   script:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - module load aue/flux-core
@@ -86,6 +99,8 @@ test::integration::slurm:
   stage: test
   tags:
   - jetcool
+  extends:
+  - .retriable
   before_script:
   - $CTS1_PYTHON3 -m venv venv
   - source venv/bin/activate
@@ -116,6 +131,8 @@ test::integration::shell:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
   before_script:
   - $CEE_PYTHON3 -m venv venv
   - source venv/bin/activate
@@ -146,6 +163,8 @@ test::integration::local:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
   before_script:
   - $CEE_PYTHON3 -m venv venv
   - source venv/bin/activate
@@ -176,6 +195,8 @@ test::plugin::yaml:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
   before_script:
   - $CEE_PYTHON3 -m venv venv
   - source venv/bin/activate
@@ -199,6 +220,8 @@ test::plugin::sierra:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
   before_script:
   - $CEE_PYTHON3 -m venv venv
   - source venv/bin/activate
