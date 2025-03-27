@@ -62,7 +62,7 @@ test::coverage:
 
 test::integration::flux:
   variables:
-    FLUX_START: "flux start -o,-c ./test-conf.toml"
+    FLUX_START: "flux start -o,-c ./.flux-ci.toml"
   stage: test
   tags:
   - cee.build
@@ -105,7 +105,7 @@ test::integration::slurm:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
   artifacts:
-    when: always
+    when: on_failure
     paths:
     - junit.xml
     reports:
@@ -135,7 +135,7 @@ test::integration::shell:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
   artifacts:
-    when: always
+    when: on_failure
     paths:
     - junit.xml
     reports:
@@ -165,7 +165,7 @@ test::integration::local:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
   artifacts:
-    when: always
+    when: on_failure
     paths:
     - junit.xml
     reports:
@@ -228,12 +228,12 @@ lint::check:
   - ruff --version
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
   - ./bin/ci/ruff-check --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" --output-format=junit --output-file=ruff.xml
-  - cat ruff.xml
+  - cat ruff.xml || true
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
   artifacts:
-    when: always
+    when: on_failure
     reports:
       junit: ruff.xml
 
