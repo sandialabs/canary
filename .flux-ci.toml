@@ -5,7 +5,7 @@
 [[resource.config]]
 hosts = "HOSTNAME"
 cores = "0-31"
-gpus = "0"
+# gpus = "0"
 
 # Immediately reject jobs with invalid jobspec or unsatisfiable resources
 [ingest.validator]
