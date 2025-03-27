@@ -11,6 +11,7 @@ variables:
   STD_PIP_ARGS: "--trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org"
   CEE_PYTHON3: /usr/local/anaconda/3-2024.02/bin/python3
   CTS1_PYTHON3: /projects/aue/hpc/builds/x86_64/rhel8/f6a36cb8/tooling-sprint-24.02/install/linux-rhel8-x86_64/gcc-10.3.0/python-3.11.6-qvlrkva/bin/python3
+  CEE_RESOURCES: "-c resource_pool:cpus:32"
 
 
 before_script:
@@ -145,7 +146,7 @@ test::integration::shell:
   - module load aue/openmpi/4.1.6-gcc-12.1.0
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - exit_code=0
-  - canary run -w -b scheduler=shell -b count=2 ./examples || exit_code=$?
+  - canary run -w $CEE_RESOURCES -b scheduler=shell -b count=2 ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   - canary -C TestResults report junit create -o $CI_PROJECT_DIR/junit.xml || true
   - canary -C TestResults report cdash create -d $CI_PROJECT_DIR/xml || true
@@ -177,7 +178,7 @@ test::integration::local:
   - module load aue/openmpi/4.1.6-gcc-12.1.0
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - exit_code=0
-  - canary run -w ./examples || exit_code=$?
+  - canary run -w $CEE_RESOURCES ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   - canary -C TestResults report junit create -o $CI_PROJECT_DIR/junit.xml || true
   - canary -C TestResults report cdash create -d $CI_PROJECT_DIR/xml || true
@@ -207,11 +208,11 @@ test::plugin::yaml:
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - git clone git@cee-gitlab.sandia.gov:ascic-test-infra/plugins/canary-yaml.git
   # test -p PLUGIN_NAME
-  - PYTHONPATH=$CI_PROJECT_DIR/canary-yaml/src canary -p canary_yaml run -w ./canary-yaml/tests
+  - PYTHONPATH=$CI_PROJECT_DIR/canary-yaml/src canary -p canary_yaml run -w $CEE_RESOURCES ./canary-yaml/tests
   - cd $CI_PROJECT_DIR/canary-yaml
   - python3 -m pip install --no-deps .
   - cd $CI_PROJECT_DIR
-  - canary run -w ./canary-yaml/tests
+  - canary run -w $CEE_RESOURCES ./canary-yaml/tests
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
