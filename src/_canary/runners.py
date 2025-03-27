@@ -119,7 +119,7 @@ class TestCaseRunner(AbstractTestRunner):
                         stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
                     stdout.flush()
                     with case.rc_environ():
-                        tic = time.monotonic()
+                        start_marker: float = time.monotonic()
                         logging.debug(
                             f"Submitting {case} for execution with command {case.cmd_line}"
                         )
@@ -127,17 +127,16 @@ class TestCaseRunner(AbstractTestRunner):
                         metrics = self.get_process_metrics(proc)
                         while proc.poll() is None:
                             self.get_process_metrics(proc, metrics=metrics)
-                            toc = time.monotonic()
-                            if timeout > 0 and toc - tic > timeout:
+                            if timeout > 0 and time.monotonic() - start_marker > timeout:
                                 os.kill(proc.pid, signal.SIGINT)
                                 raise TimeoutError
                             time.sleep(0.05)
                 finally:
-                    dt = toc - tic
+                    duration = time.monotonic() - start_marker
                     exit_code = 1 if proc is None else proc.returncode
                     stdout.write(
                         f"==> Finished running {case.display_name} "
-                        f"in {dt} s. with exit code {exit_code}\n"
+                        f"in {duration} s. with exit code {exit_code}\n"
                     )
                     stdout.close()
                     if hasattr(stderr, "close"):
