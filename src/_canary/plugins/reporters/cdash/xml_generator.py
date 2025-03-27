@@ -69,7 +69,7 @@ class CDashXMLReporter:
         track: str | None = None,
         buildstamp: str | None = None,
         generator: str | None = None,
-        no_split: bool | None = None,
+        chunk_size: int | None = None
     ) -> None:
         """Collect information and create reports"""
         self.meta = None
@@ -83,11 +83,13 @@ class CDashXMLReporter:
         else:
             self.buildstamp = self.validate_buildstamp(buildstamp)
         mkdirp(self.xml_dir)
-        if no_split:
+        if chunk_size:
+            for cases in chunked(self.data.cases, chunk_size):
+                self.write_test_xml(cases)
+        elif chunk_size is not None and chunk_size <= 0:
             self.write_test_xml(self.data.cases)
         else:
-            for cases in chunked(self.data.cases, 500):
-                self.write_test_xml(cases)
+            raise ValueError(f"invalid chunk_size {chunk_size}")
         self.write_notes_xml()
 
     @staticmethod
