@@ -75,7 +75,7 @@ test::integration::flux:
   - flux start canary run -w -b scheduler=flux -b count=2 ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   - exit_code=0
-  - HPC_CONNECT_ENABLE_FLUX_SUBMITN=1 flux start canary run -w -b scheduler=flux -b scheme=isolated_sets ./examples || exit_code=$?
+  - HPC_CONNECT_ENABLE_FLUX_SUBMITN=1 HPC_CONNECT_FLUX_SUBMITN_DELAY=0 flux start canary run -w -b scheduler=flux -b scheme=isolated_sets ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
