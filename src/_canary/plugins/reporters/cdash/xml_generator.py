@@ -69,7 +69,7 @@ class CDashXMLReporter:
         track: str | None = None,
         buildstamp: str | None = None,
         generator: str | None = None,
-        chunk_size: int | None = None
+        chunk_size: int | None = None,
     ) -> None:
         """Collect information and create reports"""
         self.meta = None

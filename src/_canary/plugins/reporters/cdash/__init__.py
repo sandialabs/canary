@@ -235,6 +235,6 @@ class CDashReport(CanaryReport):
             track=kwargs["track"],
             buildstamp=kwargs["buildstamp"],
             generator=kwargs.get("generator"),
-            chunk_size=kwargs.get("chunk_size")
+            chunk_size=kwargs.get("chunk_size"),
         )
         return
