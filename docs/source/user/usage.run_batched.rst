@@ -35,10 +35,12 @@ Batch scheduler
 * ``-b scheduler=S``: use scheduler ``S`` to run batches.
 * ``-b option=option``: pass *option* to the scheduler. If *option* contains commas, it is split into multiple options at the commas.  Eg, ``-b option="-q debug,-A ABC123"`` passes ``-q debug`` and ``-ABC123`` directly to the scheduler.
 
-The following schedulers are supported:
+The following schedulers are currently supported:
 
 * shell (run batches in subprocess of the current shell)
-* `slurm workload manager <https://slurm.schedmd.com/overview.html>`_
+* `slurm <https://slurm.schedmd.com/overview.html>`_
+* `flux <https://flux-framework.readthedocs.io>`_
+* PBS
 
 .. note::
 
