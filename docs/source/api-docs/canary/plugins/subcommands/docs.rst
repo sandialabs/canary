@@ -1,7 +1,7 @@
-flux
+docs
 ====
 
-.. automodule:: hpc_connect.impl.flux_hl
+.. automodule:: _canary.plugins.subcommands.docs
    :members:
    :undoc-members:
    :show-inheritance:

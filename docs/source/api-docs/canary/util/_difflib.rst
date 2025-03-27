@@ -1,7 +1,7 @@
-reporter
+_difflib
 ========
 
-.. automodule:: _canary.plugins.reporters.cdash
+.. automodule:: _canary.util._difflib
    :members:
    :undoc-members:
    :show-inheritance:

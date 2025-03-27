@@ -1,6 +1,7 @@
 """Setup and manage the test session"""
 
 import atexit
+import hashlib
 import io
 import json
 import multiprocessing
@@ -20,7 +21,6 @@ from functools import partial
 from typing import IO
 from typing import Any
 from typing import Generator
-from typing import Type
 
 import psutil
 
@@ -42,9 +42,7 @@ from .test.case import TestMultiCase
 from .test.case import from_state as testcase_from_state
 from .third_party.color import colorize
 from .third_party.lock import Lock
-from .third_party.lock import LockTransaction
-from .third_party.lock import ReadTransaction
-from .third_party.lock import WriteTransaction
+from .third_party.lock import LockError
 from .util import glyphs
 from .util import keyboard
 from .util import logging
@@ -322,7 +320,7 @@ class Session:
         if ini:
             file = os.path.join(self.config_dir, "config")
             with open(file, "w") as fh:
-                config.snapshot(fh)
+                config.snapshot(fh, pretty_print=True)
 
     def add_search_paths(self, search_paths: dict[str, list[str]] | list[str] | str) -> None:
         """Add paths to this session's search paths
@@ -573,7 +571,7 @@ class Session:
         ppe = None
         try:
             with io.StringIO() as fh:
-                config.snapshot(fh)
+                config.snapshot(fh, pretty_print=False)
                 os.environ["CANARYCFG64"] = compress64(fh.getvalue())
             context = multiprocessing.get_context(config.multiprocessing_context)
             with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
@@ -852,7 +850,7 @@ class Session:
         keys = sorted(reasons, key=lambda x: reasons[x])
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
-            logging.emit(f"{glyphs.bullet} {reasons[key]}: {reason}\n")
+            logging.emit(f"    {glyphs.bullet} {reasons[key]}: {reason}\n")
 
     def report(
         self,
@@ -936,7 +934,7 @@ class Database:
             force_remove(self.home)
         else:
             raise ValueError(f"{mode!r}: unknown file mode")
-        self.lock = Lock(self.join_path("lock"))
+        self.lockfile = self.join_path("lock")
         if mode == "w":
             with self.open("DB.TAG", "w") as fh:
                 fh.write(datetime.today().strftime("%c"))
@@ -948,14 +946,63 @@ class Database:
         return os.path.join(self.home, *p)
 
     @contextmanager
+    def read_lock(self, file: str) -> Generator[Lock, None, None]:
+        sha1 = hashlib.sha1(file.encode("utf-8")).digest()
+        lock_id = prefix_bits(sha1, bit_length(sys.maxsize))
+        lock = Lock(
+            self.lockfile,
+            start=lock_id,
+            length=1,
+            desc=file,
+        )
+        lock.acquire_read()
+        try:
+            yield lock
+        except LockError:
+            # This addresses the case where a nested lock attempt fails inside
+            # of this context manager
+            raise
+        except (Exception, KeyboardInterrupt):
+            lock.release_read()
+            raise
+        else:
+            lock.release_read()
+
+    @contextmanager
+    def write_lock(self, file: str) -> Generator[Lock, None, None]:
+        sha1 = hashlib.sha1(file.encode("utf-8")).digest()
+        lock_id = prefix_bits(sha1, bit_length(sys.maxsize))
+        lock = Lock(
+            self.lockfile,
+            start=lock_id,
+            length=1,
+            desc=file,
+        )
+        lock.acquire_write()
+        try:
+            yield lock
+        except LockError:
+            # This addresses the case where a nested lock attempt fails inside
+            # of this context manager
+            raise
+        except (Exception, KeyboardInterrupt):
+            lock.release_write()
+            raise
+        else:
+            lock.release_write()
+
+    @contextmanager
     def open(self, name: str, mode: str = "r") -> Generator[IO, None, None]:
         path = self.join_path(name)
         mkdirp(os.path.dirname(path))
-        transaction_type: Type[LockTransaction]
-        transaction_type = ReadTransaction if mode == "r" else WriteTransaction
-        with transaction_type(self.lock):
-            with open(path, mode) as fh:
-                yield fh
+        if mode == "r":
+            with self.read_lock(path):
+                with open(path, mode) as fh:
+                    yield fh
+        else:
+            with self.write_lock(path):
+                with open(path, mode) as fh:
+                    yield fh
 
 
 def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
@@ -985,6 +1032,27 @@ def json_dump(args):
     mkdirp(os.path.dirname(filename))
     with open(filename, "w") as fh:
         json.dump(data, fh, indent=2)
+
+
+def prefix_bits(byte_array: bytes, bits: int) -> int:
+    """Return the first <bits> bits of a byte array as an integer."""
+    b2i = lambda b: b  # In Python 3, indexing byte_array gives int
+    result = 0
+    n = 0
+    for i, b in enumerate(byte_array):
+        n += 8
+        result = (result << 8) | b2i(b)
+        if n >= bits:
+            break
+    result >>= n - bits
+    return result
+
+
+def bit_length(arg: int):
+    """Number of bits required to represent an integer in binary."""
+    s = bin(arg)
+    s = s.lstrip("-0b")
+    return len(s)
 
 
 class DirectoryExistsError(Exception):

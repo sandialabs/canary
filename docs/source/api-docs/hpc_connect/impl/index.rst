@@ -4,7 +4,7 @@ impl
 .. toctree::
    :maxdepth: 1
 
-   flux
+   flux_hl
    mpi
    pbs
    shell
