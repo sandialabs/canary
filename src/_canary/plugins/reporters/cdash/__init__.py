@@ -71,7 +71,14 @@ class CDashReport(CanaryReport):
             "build, provide this argument to identify the build yourself. "
             "Format: %%Y%%m%%d-%%H%%M-<track>",
         )
-
+        group.add_argument(
+            "--no-split",
+            dest="no_split",
+            default=False,
+            action="store_true",
+            help="The results will not be split into chunks of 500 entries per XML file. "
+            "Instead, all results will be in a single file.",
+        )
         p = sp.add_parser("post", help="Post CDash XML files")
         p.add_argument(
             "--project",
@@ -226,5 +233,6 @@ class CDashReport(CanaryReport):
             track=kwargs["track"],
             buildstamp=kwargs["buildstamp"],
             generator=kwargs.get("generator"),
+            no_split=kwargs.get("no_split"),
         )
         return
