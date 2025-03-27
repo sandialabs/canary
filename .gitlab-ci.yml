@@ -72,10 +72,10 @@ test::integration::flux:
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - HOSTNAME=$(hostname) sed -i "s/HOSTNAME/$HOSTNAME/g" .flux-ci.toml
   - exit_code=0
-  - $FLUX_START canary run -w -b scheduler=flux -b count=2 ./examples || exit_code=$?
+  - $FLUX_START canary -c resource_pool:cpus:32 -c resource_pool:gpus:0 run -w -b scheduler=flux -b count=2 ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   - exit_code=0
-  - HPC_CONNECT_ENABLE_FLUX_SUBMITN=1 $FLUX_START canary run -w -b scheduler=flux -b scheme=isolated_sets ./examples || exit_code=$?
+  - HPC_CONNECT_ENABLE_FLUX_SUBMITN=1 $FLUX_START canary -c resource_pool:cpus:32 -c resource_pool:gpus:0 run -w -b scheduler=flux -b scheme=isolated_sets ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
