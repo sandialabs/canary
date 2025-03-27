@@ -62,7 +62,7 @@ test::coverage:
 
 test::integration::flux:
   variables:
-    FLUX_START="flux start -o,-c ./test-conf.toml"
+    FLUX_START: "flux start -o,-c ./test-conf.toml"
   stage: test
   tags:
   - cee.build
