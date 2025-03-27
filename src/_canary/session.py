@@ -322,7 +322,7 @@ class Session:
         if ini:
             file = os.path.join(self.config_dir, "config")
             with open(file, "w") as fh:
-                config.snapshot(fh)
+                config.snapshot(fh, pretty_print=True)
 
     def add_search_paths(self, search_paths: dict[str, list[str]] | list[str] | str) -> None:
         """Add paths to this session's search paths
@@ -573,7 +573,7 @@ class Session:
         ppe = None
         try:
             with io.StringIO() as fh:
-                config.snapshot(fh)
+                config.snapshot(fh, pretty_print=False)
                 os.environ["CANARYCFG64"] = compress64(fh.getvalue())
             context = multiprocessing.get_context(config.multiprocessing_context)
             with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:

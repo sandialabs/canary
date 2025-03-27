@@ -329,7 +329,8 @@ class BatchRunner(AbstractTestRunner):
                 proc = config.backend.submitn(
                     [case.id for case in batch],
                     [[self.canary_invocation(case)] for case in batch],
-                    tasks=[case.cpus for case in batch],
+                    cpus=[case.cpus for case in batch],
+                    gpus=[case.gpus for case in batch],
                     scriptname=[os.path.join(scriptdir, f"{case.id}-inp.sh") for case in batch],
                     output=[os.path.join(scriptdir, f"{case.id}-out.txt") for case in batch],
                     error=[os.path.join(scriptdir, f"{case.id}-err.txt") for case in batch],
@@ -341,10 +342,14 @@ class BatchRunner(AbstractTestRunner):
                 qtime = self.qtime(batch)
                 if timeoutx := config.getoption("timeout_multiplier"):
                     qtime *= timeoutx
+                max_cpus = max(_.cpus for _ in batch)
+                max_gpus = max(_.gpus for _ in batch)
                 proc = config.backend.submit(
                     f"canary.{batch.id[:7]}",
                     [self.canary_invocation(batch)],
-                    tasks=max(_.cpus for _ in batch),
+                    nodes=config.backend.config.nodes_required(
+                        max_cpus=max_cpus, max_gpus=max_gpus
+                    ),
                     scriptname=batch.submission_script_filename(),
                     output=batch.logfile(batch.id),
                     error=batch.logfile(batch.id),

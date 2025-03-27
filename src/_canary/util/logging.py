@@ -144,7 +144,7 @@ def log(
     prefix: str | None = None,
     end: str = "\n",
     format: str | None = None,
-    ex: Any | None = None,
+    ex: Exception | None = None,
     rewind: bool = False,
 ) -> None:
     if level >= LEVEL:
@@ -176,16 +176,18 @@ def info(message: str, *, file: TextIO = sys.stdout, end: str = "\n") -> None:
     log(INFO, message, file=file, prefix="@*%s{==>} " % c, end=end)
 
 
-def warning(message: str, *, file: TextIO = sys.stderr, end: str = "\n") -> None:
+def warning(
+    message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Exception | None = None
+) -> None:
     c = level_color(WARNING)
-    log(WARNING, message, file=file, prefix="@*%s{==>} Warning: " % c, end=end)
+    log(WARNING, message, file=file, prefix="@*%s{==>} Warning: " % c, end=end, ex=ex)
 
 
 def error(
-    message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Any | None = None
+    message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Exception | None = None
 ) -> None:
     c = level_color(ERROR)
-    log(ERROR, message, file=file, prefix="@*%s{==>} Error: " % c, end=end)
+    log(ERROR, message, file=file, prefix="@*%s{==>} Error: " % c, end=end, ex=ex)
 
 
 def exception(message: str, ex: Exception, *, file: TextIO = sys.stderr, end: str = "\n") -> None:
@@ -194,7 +196,7 @@ def exception(message: str, ex: Exception, *, file: TextIO = sys.stderr, end: st
 
 
 def fatal(
-    message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Any | None = None
+    message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Exception | None = None
 ) -> None:
     c = level_color(FATAL)
     log(FATAL, message, file=file, prefix="@*%s{==>} Fatal: " % c, end=end, ex=ex)

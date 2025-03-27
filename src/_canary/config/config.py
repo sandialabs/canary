@@ -298,14 +298,25 @@ class Config:
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The
         # batch runner sets the variable CANARY_LEVEL=1 to guard against this case.
+        backend: str | None = None
         if os.getenv("CANARY_LEVEL") == "1":
-            # no batching (default)
+            backend = "null"
+        elif "CANARY_HPCC_BACKEND" in os.environ:
+            backend = os.environ["CANARY_HPCC_BACKEND"]
+        elif snapshot.get("scheduler") or snapshot.get("backend"):
+            backend = snapshot.get("scheduler") or snapshot.get("backend")
+        try:
+            self.setup_hpc_connect(backend)
+        except Exception as e:
+            # Since we are restoring from a snapshot, our backend was properly set up on creation
+            # but is now erroring on restoration.  This can happen, for example, if using the Flux
+            # backend to run tests (Flux requires being run in a Flux session) and now the user is
+            # running `canary status` outside of a Flux session.  We ignore the error.  If the
+            # backend is really needed (it will only be needed by `canary run`), an error will
+            # be thrown later if/when it is used.
+            logging.warning(f"Failed to setup hpc_connect for {backend=}", ex=e)
+        if self.backend is None:
             snapshot["options"].pop("batch", None)
-        self.setup_hpc_connect(
-            os.getenv("CANARY_HPCC_BACKEND")
-            or snapshot.get("scheduler")  # backward compatible
-            or snapshot.get("backend")
-        )
         self.options = argparse.Namespace(**snapshot["options"])
 
         if plugins := getattr(self.options, "plugins", None):
@@ -314,9 +325,9 @@ class Config:
 
         return
 
-    def snapshot(self, fh: TextIO) -> None:
+    def snapshot(self, fh: TextIO, pretty_print: bool = True) -> None:
         snapshot = self.getstate()
-        json.dump(snapshot, fh, indent=2)
+        json.dump(snapshot, fh, indent=2 if pretty_print else None)
 
     @classmethod
     def load_config(cls, scope: str, config: dict[str, Any]) -> None:
@@ -382,36 +393,14 @@ class Config:
         if "session" in env_mods:
             self.environment.update({"set": env_mods["session"]})
 
-        # We need to be careful when restoring the batch configuration.  If this session is being
-        # restored while running a batch, restoring the batch can lead to infinite recursion.  The
-        # batch runner sets the variable CANARY_LEVEL=1 to guard against this case.  But, if we are
-        # running tests inside an existing test session and no batch arguments are given, we want
-        # to use the original batch arguments.
-
-        # Order of precedence:
-        # 1. command line
-        # 2. environment
-        # 3. cached config
-        batchopts = getattr(args, "batch", None) or {}
-        backend: str | None = None
+        batchopts: dict = getattr(args, "batch", None) or {}
         if backend := batchopts.get("scheduler"):
-            if backend != "null" and getattr(args, "mode", None) != "w":
-                m = getattr(args, "mode", None)
-                raise ValueError(f"do not specify scheduler with mode={m}")
-        elif backend := os.getenv("CANARY_HPCC_BACKEND"):
-            if backend != "null" and getattr(args, "mode", None) != "w":
-                m = getattr(args, "mode", None)
-                raise ValueError(f"do not specify CANARY_HPCC_BACKEND with mode={m}")
-        elif os.getenv("CANARY_LEVEL") == "1":
-            backend = "null"
-        elif cached_batchopts := getattr(self.options, "batch", None):
-            m = getattr(args, "mode", "r")
-            backend = "null" if m == "r" else cached_batchopts.get("scheduler")
-            batchopts = merge(cached_batchopts, batchopts)
-        self.setup_hpc_connect(backend)
+            self.setup_hpc_connect(backend)
         if self.backend is None:
             self.options.batch = {}
             batchopts.clear()
+        elif cached_batchopts := getattr(self.options, "batch", None):
+            batchopts = merge(batchopts, cached_batchopts)
         args.batch = batchopts
 
         errors: int = 0
