@@ -1,3 +1,8 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+
 def get_entry_points(*, group: str):
     """Wrapper for ``importlib.metadata.entry_points``
 

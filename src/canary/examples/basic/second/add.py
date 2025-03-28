@@ -1,4 +1,9 @@
 #!/usr/bin/env python
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+#!/usr/bin/env python
 import argparse
 
 

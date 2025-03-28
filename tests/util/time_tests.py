@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 from _canary.plugins.generators.vvtest import to_seconds
 from _canary.util.time import pretty_seconds
 from _canary.util.time import time_in_seconds

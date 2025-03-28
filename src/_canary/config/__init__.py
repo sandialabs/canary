@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from typing import Any

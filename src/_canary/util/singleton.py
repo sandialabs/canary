@@ -1,3 +1,8 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+
 class Singleton:
     """Simple wrapper for lazily initialized singleton objects."""
 
