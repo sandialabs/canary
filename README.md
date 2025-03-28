@@ -64,7 +64,7 @@ To format code and run `canary`'s internal tests, execute
 
 ## License
 
-Canary is distributed under the terms of the MIT license, see [LICENSE-MIT](https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/LICENSE?ref_type=heads) and [COPYRIGHT](https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/COPYRIGHT?ref_type=heads).
+Canary is distributed under the terms of the MIT license, see [LICENSE](https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/LICENSE?ref_type=heads) and [COPYRIGHT](https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/COPYRIGHT?ref_type=heads).
 
 SPDX-License-Identifier: MIT
 
