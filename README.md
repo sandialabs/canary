@@ -61,3 +61,11 @@ To format code and run `canary`'s internal tests, execute
 ```console
 ./bin/pre-commit
 ```
+
+## License
+
+Canary is distributed under the terms of the MIT license, see [LICENSE-MIT](https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/LICENSE?ref_type=heads) and [COPYRIGHT](https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/COPYRIGHT?ref_type=heads).
+
+SPDX-License-Identifier: MIT
+
+SCR#:3170.0
