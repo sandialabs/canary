@@ -24,7 +24,7 @@ Consider the directives section of the test file ``examples/execute_and_analyze/
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
     :language: python
-    :lines: 3-8
+    :lines: 6-11
 
 The dependency graph for this test is
 
@@ -43,7 +43,7 @@ Test execution phases
 To take advantage of the execute and analyze pattern, a test should define separate functions for the parameterized and base test cases. For example, a test might define separate ``run_parameterized_case`` and ``analyze_composite_base_case`` functions as below:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
-    :lines: 9-22
+    :lines: 12-25
     :language: python
 
 The function ``run_parameterized_test`` is intended to be called for each parameterized child test  and the function ``analyze_composite_base_case`` the final composite base case (in which the children tests are made available in the ``canary.TestMultiInstance.dependencies`` attribute).
@@ -51,7 +51,7 @@ The function ``run_parameterized_test`` is intended to be called for each parame
 You can key off of the test instance type to determine which function to call:
 
 .. literalinclude:: /examples/execute_and_analyze/execute_and_analyze.pyt
-    :lines: 23-32
+    :lines: 26-35
     :language: python
 
 The full example

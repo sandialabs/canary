@@ -11,7 +11,7 @@ A test case is a concrete instantiation of a :ref:`test file <basics-testfile>` 
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
-    :lines: 4-6
+    :lines: 7-9
 
 would expand into two test instances with names
 
@@ -25,7 +25,7 @@ During a test session, ``canary`` creates a :ref:`unique test execution director
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
-    :lines: 8-10
+    :lines: 11-13
 
 The test instance object defines the following attributes and methods:
 

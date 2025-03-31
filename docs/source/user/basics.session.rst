@@ -41,7 +41,7 @@ We will use an example to demonstrate each phase of the testing process.  Consid
 
 .. literalinclude:: /examples/centered_space/centered_space.pyt
    :language: python
-   :lines: 1-11
+   :lines: 4-14
 
 .. _discover:
 

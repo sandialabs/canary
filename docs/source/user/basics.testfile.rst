@@ -63,7 +63,7 @@ Test files define one or more :ref:`test cases <basics-testcase>`.  In the simpl
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
-    :lines: 4-6
+    :lines: 7-9
 
 would expand into two test instances, one with the parameter ``a=1`` and one with ``a=4`` as shown.
 
@@ -74,7 +74,7 @@ Each test case would execute in its own directory and the test script should que
 
 .. literalinclude:: /examples/parameterize/parameterize1.pyt
     :language: python
-    :lines: 8-10
+    :lines: 11-13
 
 More generally, test files can define an arbitrary number of cases:
 
