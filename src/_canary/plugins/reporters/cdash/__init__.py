@@ -79,7 +79,7 @@ class CDashReport(CanaryReport):
             metavar="CHUNK_SIZE",
             action="store",
             help="The results will be split into chunks of N entries per XML file. "
-            "If N is 0 the XML will be not be split and will be stored as a single file.",
+            "If N is -1 the XML will be not be split and will be stored as a single file.",
         )
         p = sp.add_parser("post", help="Post CDash XML files")
         p.add_argument(

@@ -83,13 +83,16 @@ class CDashXMLReporter:
         else:
             self.buildstamp = self.validate_buildstamp(buildstamp)
         mkdirp(self.xml_dir)
-        if chunk_size:
-            for cases in chunked(self.data.cases, chunk_size):
-                self.write_test_xml(cases)
-        elif chunk_size is not None and chunk_size <= 0:
-            self.write_test_xml(self.data.cases)
-        else:
-            raise ValueError(f"invalid chunk_size {chunk_size}")
+        try:
+            if chunk_size > 0:  # type: ignore
+                for cases in chunked(self.data.cases, chunk_size):
+                    self.write_test_xml(cases)
+            elif chunk_size < 0:  # type: ignore
+                self.write_test_xml(self.data.cases)
+            else:
+                raise ValueError("chunk_size must be a positive integer or -1")
+        except ValueError as e:
+            raise ValueError(f"invalid chunk_size {chunk_size} \n{e}")
         self.write_notes_xml()
 
     @staticmethod
