@@ -103,7 +103,7 @@ class Parser(argparse.ArgumentParser):
                 if addopts:
                     if env_opts := os.getenv("CANARY_ADDOPTS"):
                         args[0:0] = shlex.split(env_opts)
-                    if env_opts := os.getenv(f"CANARY_ADD{opt.upper()}OPTS"):
+                    if env_opts := os.getenv(f"CANARY_{opt.upper()}_ADDOPTS"):
                         args[i:i] = shlex.split(env_opts)
                 return ns
             if isinstance(opt, str):
