@@ -48,6 +48,8 @@ def groupby_dep(cases: Sequence[TestCase]) -> list[set[TestCase]]:
 def partition_n(cases: Sequence[TestCase], n: int = 8) -> list[TestBatch]:
     """Partition test cases into ``n`` partitions"""
     partitions = defaultlist(_Partition, n)
+    if n == 1:
+        return [TestBatch(cases)]
     for group in groupby_dep(cases):
         partition = min(partitions, key=lambda p: p.cputime)
         partition.update(group)

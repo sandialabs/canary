@@ -116,7 +116,7 @@ class CanaryCommand:
                 reraise = True
             argv = [self.command.name] + list(args_in)
             parser = make_argument_parser()
-            args = parser.preparse(argv)
+            args = parser.preparse(argv, addopts=False)
             for p in args.plugins:
                 config.plugin_manager.consider_plugin(p)
             for command in config.plugin_manager.get_subcommands():

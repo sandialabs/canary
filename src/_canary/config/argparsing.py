@@ -4,6 +4,7 @@
 
 import argparse
 import json
+import os
 import pstats
 import re
 import shlex
@@ -79,7 +80,7 @@ class Parser(argparse.ArgumentParser):
     def convert_arg_line_to_args(self, arg_line: str) -> list[str]:
         return shlex.split(arg_line.split("#", 1)[0].strip())
 
-    def preparse(self, args: list[str]):
+    def preparse(self, args: list[str], addopts: bool = True):
         known_commands = [
             "run",
             "report",
@@ -99,6 +100,11 @@ class Parser(argparse.ArgumentParser):
             opt = args[i]
             i += 1
             if opt in known_commands:
+                if addopts:
+                    if env_opts := os.getenv("CANARY_ADDOPTS"):
+                        args[0:0] = shlex.split(env_opts)
+                    if env_opts := os.getenv(f"CANARY_ADD{opt.upper()}OPTS"):
+                        args[i:i] = shlex.split(env_opts)
                 return ns
             if isinstance(opt, str):
                 if opt == "-p":
