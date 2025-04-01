@@ -75,7 +75,16 @@ class CDashReport(CanaryReport):
             "build, provide this argument to identify the build yourself. "
             "Format: %%Y%%m%%d-%%H%%M-<track>",
         )
-
+        group.add_argument(
+            "-n",
+            dest="chunk_size",
+            default=500,
+            type=int,
+            metavar="CHUNK_SIZE",
+            action="store",
+            help="The results will be split into chunks of N entries per XML file. "
+            "If N is -1 the XML will be not be split and will be stored as a single file.",
+        )
         p = sp.add_parser("post", help="Post CDash XML files")
         p.add_argument(
             "--project",
@@ -230,5 +239,6 @@ class CDashReport(CanaryReport):
             track=kwargs["track"],
             buildstamp=kwargs["buildstamp"],
             generator=kwargs.get("generator"),
+            chunk_size=kwargs.get("chunk_size"),
         )
         return
