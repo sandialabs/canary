@@ -395,6 +395,18 @@ def make_argument_parser(**kwargs):
         "test: set environment variable only during test execution"
         % (colorize("@*{var}"), colorize("@*{val}"), colorize("@*{scope}")),
     )
+    group = parser.add_argument_group("results caching")
+    group.add_argument(
+        "--dont-cache",
+        dest="dont_cache",
+        default=False,
+        action="store_true",
+        help="Do not use nor store cache info",
+    )
+    group.add_argument(
+        "--cache-dir",
+        help="Store test case cache info in the given folder [default: ./.canary_cache]",
+    )
 
     return parser
 

@@ -289,7 +289,9 @@ class BatchRunner(AbstractTestRunner):
     def batch_options(self) -> list[str]:
         batch_options: list[str] = list(config.batch.default_options)
         if varargs := os.getenv("CANARY_BATCH_ARGS"):
-            logging.debug(f"Using batch arguments from environment: {varargs}")
+            warnings.warn(
+                "Use CANARY_RUN_ADDOPTS instead of CANARY_BATCH_ARGS", category=DeprecationWarning
+            )
             batch_options.extend(shlex.split(varargs))
         batchopts = config.getoption("batch", {})
         if args := batchopts.get("options"):

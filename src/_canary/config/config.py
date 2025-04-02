@@ -23,6 +23,7 @@ from ..util import logging
 from ..util.collections import merge
 from ..util.compression import expand64
 from ..util.filesystem import find_work_tree
+from ..util.filesystem import mkdirp
 from ..util.rprobe import cpu_count
 from . import _machine
 from .rpool import ResourcePool
@@ -218,6 +219,7 @@ class Config:
     multiprocessing_context: str = "spawn"
     log_level: str = "INFO"
     _config_dir: str | None = None
+    _cache_dir: str | None = None
     backend: hpc_connect.HPCBackend | None = None
     system: System = dataclasses.field(default_factory=System)
     session: SessionConfig = dataclasses.field(default_factory=SessionConfig)
@@ -275,6 +277,22 @@ class Config:
         if self._config_dir is None:
             self._config_dir = get_config_dir()
         return self._config_dir
+
+    @property
+    def cache_dir(self) -> str | None:
+        if self.getoption("dont_cache"):
+            return None
+        if self._cache_dir is None:
+            if d := self.getoption("cache_dir"):
+                self._cache_dir = os.path.expanduser(d)
+            elif d := os.getenv("CANARY_CACHE_DIR"):
+                self._cache_dir = os.path.expanduser(d)
+            else:
+                self._cache_dir = os.path.join(self.invocation_dir, ".canary_cache")
+        create_cache_dir(self._cache_dir)
+        if self._cache_dir in (os.devnull, "null"):
+            return None
+        return self._cache_dir
 
     @property
     def plugin_manager(self) -> CanaryPluginManager:
@@ -350,6 +368,8 @@ class Config:
                     config["log_level"] = items["log_level"]
                 if "multiprocessing_context" in items:
                     config["multiprocessing_context"] = items["multiprocessing_context"]
+                if "cache_dir" in items:
+                    config["cache_dir"] = items["cache_dir"]
             elif key == "test":
                 if user_defined_timeouts := items.get("timeout"):
                     for type, value in user_defined_timeouts.items():
@@ -514,7 +534,7 @@ class Config:
         option = getattr(self.options, key, None) or default
         return option
 
-    def getstate(self) -> dict[str, Any]:
+    def getstate(self, pretty: bool = False) -> dict[str, Any]:
         d: dict[str, Any] = {}
         for key, value in vars(self).items():
             if key == "_plugin_manager":
@@ -530,11 +550,13 @@ class Config:
             elif key == "backend":
                 d[key] = getattr(value, "name", None)
             else:
+                if pretty and key.startswith("_"):
+                    key = key[1:]
                 d.setdefault("config", {})[key] = value
         return d
 
     def describe(self, section: str | None = None) -> str:
-        state = self.getstate()
+        state = self.getstate(pretty=True)
         if section is not None:
             state = {section: state[section]}
         return yaml.dump(state, default_flow_style=False)
@@ -572,6 +594,20 @@ def get_config_dir() -> str | None:
     if config_dir in (os.devnull, "null"):
         return None
     return config_dir
+
+
+def create_cache_dir(path: str) -> None:
+    if path in (os.devnull, "null"):
+        return
+    path = os.path.expanduser(path)
+    file = os.path.join(path, "CACHEDIR.TAG")
+    if not os.path.exists(file):
+        mkdirp(path)
+        with open(file, "w") as fh:
+            fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
+            fh.write("# This file is a cache directory tag automatically created by canary.\n")
+            fh.write("# For information about cache directory tags ")
+            fh.write("see https://bford.info/cachedir/\n")
 
 
 def safe_loads(arg):

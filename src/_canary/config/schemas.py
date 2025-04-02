@@ -69,6 +69,7 @@ config_schema = Schema(
         "config": {
             Optional("debug"): Use(boolean),
             Optional("log_level"): log_levels,
+            Optional("cache_dir"): str,
             Optional("multiprocessing_context"): multiprocessing_contexts,
         }
     }

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     resource_pool = _config.resource_pool
     plugin_manager = _config.plugin_manager
     config_dir = _config.config_dir
+    cache_dir = _config.cache_dir
     debug = _config.debug
     multiprocessing_context = _config.multiprocessing_context
     getoption = _config.getoption

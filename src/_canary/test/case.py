@@ -40,7 +40,7 @@ from ..util.time import hhmmss
 from ..when import match_any
 from .atc import AbstractTestCase
 
-stats_version_info = (2, 0)
+stats_version_info = (3, 0)
 
 
 def stringify(arg: Any, float_fmt: str | None = None) -> str:
@@ -1054,7 +1054,7 @@ class TestCase(AbstractTestCase):
 
     def load_run_stats(self) -> SimpleNamespace | None:
         """Return statistics kept for this test"""
-        cache_dir = find_cache_dir(self.file_root)
+        cache_dir = config.cache_dir
         if cache_dir is None:
             return None
         file = os.path.join(cache_dir, f"timing/{self.id[:2]}/{self.id[2:]}.json")
@@ -1076,11 +1076,13 @@ class TestCase(AbstractTestCase):
 
     def update_run_stats(self) -> None:
         """store runtime statistics"""
+        if config.getoption("dont_cache"):
+            return
         if self.status.value not in ("success", "diffed"):
             return
         if self.duration < 0:
             return
-        cache_dir = find_cache_dir(self.file_root, create=True)
+        cache_dir = config.cache_dir
         if cache_dir is None:
             return
         stats = self.load_run_stats()
@@ -1103,7 +1105,9 @@ class TestCase(AbstractTestCase):
         file = os.path.join(cache_dir, f"timing/{self.id[:2]}/{self.id[2:]}.json")
         local = {
             "name": self.display_name,
-            "path": os.path.relpath(self.file, os.path.dirname(file)),
+            "id": self.id,
+            "root": self.file_root,
+            "path": self.file_path,
             "last_run": datetime.datetime.fromtimestamp(self.start).strftime("%c"),
             "count": count + 1,
             "mean": mean,
@@ -1661,42 +1665,6 @@ def clean_out_folder(folder: str) -> None:
         with fs.working_dir(folder):
             for f in os.listdir("."):
                 fs.force_remove(f)
-
-
-def find_cache_dir(start: str, create: bool = False) -> str | None:
-    cache_dir: str
-    if "CANARY_CACHE_DIR" in os.environ:
-        cache_dir = os.environ["CANARY_CACHE_DIR"]
-        if cache_dir in (os.devnull, "null"):
-            return None
-    else:
-        dirname = start
-        pjoin = os.path.join
-        while True:
-            if os.path.exists(pjoin(dirname, ".canary_cache/CACHEDIR.TAG")):
-                break
-            elif os.path.isdir(pjoin(dirname, ".git")) or os.path.isdir(pjoin(dirname, ".hg")):
-                # cache data at the project's root
-                break
-            dirname = os.path.dirname(dirname)
-            if dirname == os.path.sep:
-                dirname = start
-                break
-        cache_dir = pjoin(dirname, ".canary_cache")
-    if create:
-        make_cache_dir(cache_dir)
-    return cache_dir
-
-
-def make_cache_dir(dirname: str) -> None:
-    fs.mkdirp(dirname)
-    file = os.path.join(dirname, "CACHEDIR.TAG")
-    if not os.path.exists(file):
-        with open(file, "w") as fh:
-            fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
-            fh.write("# This file is a cache directory tag automatically created by canary.\n")
-            fh.write("# For information about cache directory tags ")
-            fh.write("see https://bford.info/cachedir/\n")
 
 
 class MissingSourceError(Exception):
