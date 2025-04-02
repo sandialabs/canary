@@ -231,9 +231,7 @@ test::plugin::sierra:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - git clone git@cee-gitlab.sandia.gov:ascic-test-infra/plugins/canary-sierra.git
-  # test -p PLUGIN_NAME
-  # @mvlopri: change describe to run an actual test.
-  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/src:$CI_PROJECT_DIR/canary-sierra/mock canary -p canary_sierra describe ./canary-sierra/tests/adagio_solid_mech/adagio_patch_test_first.test
+  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/src:$CI_PROJECT_DIR/canary-sierra/mock canary -p canary_sierra run ./canary-sierra/tests/
   - cd $CI_PROJECT_DIR/canary-sierra
   - python3 -m pip install --no-deps .
   - cd $CI_PROJECT_DIR
