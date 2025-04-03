@@ -60,21 +60,30 @@ Note: this command must be run from inside of a test session directory.
         parser.add_argument("testspec", help="Test name or test id")
 
     def execute(self, args: argparse.Namespace) -> int:
-        session = load_session()
+        from ...test.case import TestCase
+        from ...test.case import TestMultiCase
+        from ...test.case import from_id as testcase_from_id
 
-        for case in session.cases:
-            if case.matches(args.testspec):
-                f: str
-                if args.show_log:
-                    f = case.logfile()
-                elif args.show_input:
-                    f = case.file
-                elif args.show_source_dir:
-                    f = case.file_dir
-                elif args.show_working_directory:
-                    f = case.working_directory
-                else:
-                    f = case.working_directory
-                print(f)
-                return 0
-        raise ValueError(f"{args.testspec}: no matching test found in {session.work_tree}")
+        case: TestCase | TestMultiCase
+        if args.testspec.startswith("/"):
+            case = testcase_from_id(args.testspec[1:])
+        else:
+            session = load_session()
+            for case in session.cases:
+                if case.matches(args.testspec):
+                    break
+            else:
+                raise ValueError(f"{args.testspec}: no matching test found in {session.work_tree}")
+        f: str
+        if args.show_log:
+            f = case.logfile()
+        elif args.show_input:
+            f = case.file
+        elif args.show_source_dir:
+            f = case.file_dir
+        elif args.show_working_directory:
+            f = case.working_directory
+        else:
+            f = case.working_directory
+        print(f)
+        return 0

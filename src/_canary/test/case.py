@@ -1726,6 +1726,25 @@ def from_state(state: dict[str, Any]) -> TestCase | TestMultiCase:
     return case
 
 
+def from_lockfile(lockfile: str) -> TestCase | TestMultiCase:
+    with open(lockfile) as fh:
+        state = json.load(fh)
+    return from_state(state)
+
+
+def from_id(id: str) -> TestCase | TestMultiCase:
+    import glob
+
+    if config.session.work_tree is None:
+        raise ValueError(f"cannot find test case {id} outside a test session")
+    config_dir = os.path.join(config.session.work_tree, ".canary")
+    pat = os.path.join(config_dir, "objects/cases", id[:2], f"{id[2:]}*", TestCase._lockfile)
+    lockfiles = glob.glob(pat)
+    if lockfiles:
+        return from_lockfile(lockfiles[0])
+    raise ValueError(f"no test case associated with {id} found in {config.session.work_tree}")
+
+
 def clean_out_folder(folder: str) -> None:
     if os.path.exists(folder):
         with fs.working_dir(folder):

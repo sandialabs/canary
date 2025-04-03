@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import dataclasses
-import json
 import os
 import shlex
 from typing import Any
@@ -13,7 +12,7 @@ from typing import Type
 from ..status import Status
 from .case import TestCase
 from .case import TestMultiCase
-from .case import from_state as testcase_from_state
+from .case import from_lockfile as testcase_from_lockfile
 
 key_type = tuple[str, ...] | str
 index_type = tuple[int, ...] | int
@@ -320,10 +319,7 @@ def load(arg_path: str | None = None) -> TestInstance | TestMultiInstance:
         file = os.path.join(os.path.dirname(arg_path), dbf)
     else:
         raise ValueError(f"incorrect {arg_path=}")
-    case: TestCase | TestMultiCase
-    with open(file, "r") as fh:
-        state = json.load(fh)
-        case = testcase_from_state(state)
+    case: TestCase | TestMultiCase = testcase_from_lockfile(file)
     instance: TestInstance | TestMultiInstance
     if isinstance(case, TestMultiCase):
         instance = TestMultiInstance.from_case(case)

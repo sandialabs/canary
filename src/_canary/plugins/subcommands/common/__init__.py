@@ -3,10 +3,12 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import glob
 import os
 import re
 from typing import TYPE_CHECKING
 
+from .... import config
 from ....third_party.color import colorize
 from ....util import logging
 from ....util.time import time_in_seconds
@@ -26,6 +28,7 @@ from .pathspec import setdefault
 if TYPE_CHECKING:
     from ....config.argparsing import Parser
     from ....test.case import TestCase
+    from ....test.case import TestMultiCase
 
 
 def add_filter_arguments(parser: "Parser") -> None:
