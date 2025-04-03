@@ -416,7 +416,7 @@ class CTestTestCase(TestCase):
 
     def finish(self, update_stats: bool = True) -> None:
         if update_stats:
-            self.update_run_stats()
+            self.cache_last_run()
         self.concatenate_logs()
         file = self.logfile("run")
 

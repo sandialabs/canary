@@ -2,7 +2,7 @@
 
 set -e
 
-export CANARY_CACHE_DIR=null
+export CANARY_CACHE_DIR=/dev/null
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 

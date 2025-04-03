@@ -154,6 +154,103 @@ class Parameters(dict):
                     raise MutuallyExclusiveParametersError("nodes", other)
 
 
+class TestCaseCache:
+    """Simple class for caching information about a test case
+
+    schema:
+
+    .. code-block:: python
+
+      {
+        "cache": {
+          ".version": list[int],
+          "meta": {
+            "id": str,
+            "name": str,
+            "root": str,
+            "path": str,
+          },
+          "metrics": {
+            "time": {
+              "count": int,
+              "mean": float,
+              "min": float,
+              "max": float,
+              "variance": float,
+            },
+          },
+          "history": {
+            "last_run": str,
+            "success": int,
+            "fail": int,
+            ...
+          },
+        }
+      }
+
+
+    """
+
+    def __init__(self, case: "TestCase"):
+        self.version_info = [3, 0]
+        self.case: "TestCase" = case
+        self._data: dict | None = None
+        cache_dir = config.cache_dir
+        self.file: str | None = None
+        self.w_ok: bool = False
+        if cache_dir and os.path.isdir(cache_dir) and os.access(cache_dir, os.W_OK):
+            self.w_ok = True
+            self.file = os.path.join(cache_dir, f"cases/{case.id[:2]}/{case.id[2:]}.json")
+
+    def __getitem__(self, arg: str) -> Any:
+        return self.data[arg]
+
+    def get(self, arg: str) -> Any:
+        data = self.data
+        for key in arg.split(":"):
+            if key not in data:
+                return None
+            data = data[key]
+        return data
+
+    def setdefault(self, arg: str, default: Any) -> Any:
+        return self.data.setdefault(arg, default)
+
+    @property
+    def data(self) -> dict:
+        if self._data is None:
+            self.load()
+        assert self._data is not None
+        return self._data
+
+    def load(self) -> None:
+        case = self.case
+        self._data = {
+            ".version": self.version_info,
+            "meta": {
+                "name": case.display_name,
+                "id": case.id,
+                "root": case.file_root,
+                "path": case.file_path,
+            },
+        }
+        if self.file is not None:
+            try:
+                data = json.load(open(self.file))  # type: ignore
+                if "cache" in data and data["cache"].get(".version") == self.version_info:
+                    self._data.update(data["cache"])
+            except Exception:
+                ...
+        return
+
+    def dump(self) -> None:
+        if self.file is None:
+            return
+        mkdirp(os.path.dirname(self.file))
+        with open(self.file, "w") as fh:
+            json.dump({"cache": self.data}, fh, separators=(",", ":"))
+
+
 class TestCase(AbstractTestCase):
     """Manages the configuration, execution, and dependencies of a test case.
 
@@ -235,6 +332,7 @@ class TestCase(AbstractTestCase):
         self._work_tree: str | None = None
         self._working_directory: str | None = None
         self._path: str | None = None
+        self._cache: TestCaseCache | None = None
 
         # The process running the test case
         self._start: float = -1.0
@@ -245,8 +343,6 @@ class TestCase(AbstractTestCase):
         self._unresolved_dependencies: list[DependencyPatterns] = []
         self._dependencies: list["TestCase"] = []
         self._dep_done_criteria: list[str] = []
-
-        self._stats: SimpleNamespace | None = None
 
         self._launcher: str | None = None
         self._preflags: list[str] | None = None
@@ -530,20 +626,6 @@ class TestCase(AbstractTestCase):
     @dependencies.setter
     def dependencies(self, arg: list["TestCase"]) -> None:
         self._dependencies = arg
-
-    @property
-    def stats(self) -> SimpleNamespace | None:
-        """Basic running time information.  If run continually in the same session, this data can
-        be used in optimizing test submission.
-
-        """
-        if self._stats is None:
-            self._stats = self.load_run_stats()
-        return self._stats
-
-    @stats.setter
-    def stats(self, arg: dict[str, float]) -> None:
-        self._stats = SimpleNamespace(**arg)
 
     @property
     def timeout(self) -> float:
@@ -1005,9 +1087,10 @@ class TestCase(AbstractTestCase):
 
     @property
     def runtime(self) -> float | int:
-        if self.stats is None:
+        t = self.cache.get("metrics:time")
+        if t is None:
             return self.timeout
-        return self.stats.mean
+        return t["mean"]
 
     @property
     def pythonpath(self):
@@ -1028,12 +1111,19 @@ class TestCase(AbstractTestCase):
             self.name = f"{self._name}.{'.'.join(s_params)}"
             self.display_name = f"{self._display_name}[{','.join(s_params)}]"
 
+    @property
+    def cache(self) -> TestCaseCache:
+        if self._cache is None:
+            self._cache = TestCaseCache(self)
+        return self._cache
+
     def set_default_timeout(self) -> None:
         """Sets the default timeout.  If runtime statistics have been collected those will be used,
         otherwise the timeout will be based on the presence of the long or fast keywords
         """
-        if self.stats is not None:
-            max_runtime = self.stats.max
+        t = self.cache.get("metrics:time")
+        if t is not None:
+            max_runtime = t["max"]
             if max_runtime < 5.0:
                 timeout = 120.0
             elif max_runtime < 120.0:
@@ -1052,77 +1142,39 @@ class TestCase(AbstractTestCase):
             timeout = config.test.timeout_default
         self._timeout = float(timeout)
 
-    def load_run_stats(self) -> SimpleNamespace | None:
-        """Return statistics kept for this test"""
-        cache_dir = config.cache_dir
-        if cache_dir is None:
-            return None
-        file = os.path.join(cache_dir, f"timing/{self.id[:2]}/{self.id[2:]}.json")
-        if not os.path.exists(file):
-            return None
-        try:
-            data = json.load(open(file))
-            if "timing" not in data:
-                fs.force_remove(file)
-                return None
-            version = data["timing"].get("version")
-            if version != {"major": stats_version_info[0], "minor": stats_version_info[1]}:
-                fs.force_remove(file)
-                return None
-            return SimpleNamespace(**data["timing"]["local"])
-        except Exception:
-            fs.force_remove(file)
-        return None
-
-    def update_run_stats(self) -> None:
-        """store runtime statistics"""
-        if config.getoption("dont_cache"):
+    def cache_last_run(self) -> None:
+        """store relevant information for this run"""
+        if self.status.satisfies(("cancelled", "ready")):
             return
-        if self.status.value not in ("success", "diffed"):
-            return
-        if self.duration < 0:
-            return
-        cache_dir = config.cache_dir
-        if cache_dir is None:
-            return
-        stats = self.load_run_stats()
-        if stats is not None:
-            # Welford's single pass online algorithm to update statistics
-            count, mean, variance = stats.count, stats.mean, stats.variance
-            delta = self.duration - mean
-            mean += delta / (count + 1)
-            if count > 0:
+        history = self.cache.setdefault("history", {})
+        history["last_run"] = datetime.datetime.fromtimestamp(self.start).strftime("%c")
+        history[self.status.value] = history.get(self.status.value, 0) + 1
+        if self.duration > 0 and self.status.satisfies(("success", "xfail", "xdiff", "diff")):
+            count: int = 0
+            metrics = self.cache.setdefault("metrics", {})
+            t = metrics.setdefault("time", {})
+            if t:
+                # Welford's single pass online algorithm to update statistics
+                count, mean, variance = t["count"], t["mean"], t["variance"]
+                delta = self.duration - mean
+                mean += delta / (count + 1)
                 M2 = variance * count
                 delta2 = self.duration - mean
                 M2 += delta * delta2
                 variance = M2 / (count + 1)
-            minimum = min(stats.min, self.duration)
-            maximum = max(stats.max, self.duration)
-        else:
-            count = 0
-            variance = 0.0
-            mean = minimum = maximum = self.duration
-        file = os.path.join(cache_dir, f"timing/{self.id[:2]}/{self.id[2:]}.json")
-        local = {
-            "name": self.display_name,
-            "id": self.id,
-            "root": self.file_root,
-            "path": self.file_path,
-            "last_run": datetime.datetime.fromtimestamp(self.start).strftime("%c"),
-            "count": count + 1,
-            "mean": mean,
-            "min": minimum,
-            "max": maximum,
-            "variance": variance,
-        }
-        try:
-            fs.mkdirp(os.path.dirname(file))
-            version = {"major": stats_version_info[0], "minor": stats_version_info[1]}
-            with open(file, "w") as fh:
-                timing = {"timing": {"version": version, "local": local}}
-                json.dump(timing, fh, indent=2)
-        except Exception:
-            fs.force_remove(file)
+                minimum = min(t["min"], self.duration)
+                maximum = max(t["max"], self.duration)
+            else:
+                variance = 0.0
+                mean = minimum = maximum = self.duration
+            t["mean"] = mean
+            t["min"] = minimum
+            t["max"] = maximum
+            t["variance"] = variance
+            t["count"] = count + 1
+        self.cache.dump()
+
+    update_run_stats = cache_last_run
 
     def set_attribute(self, name: str, value: Any) -> None:
         if name in self.__dict__:
@@ -1440,7 +1492,7 @@ class TestCase(AbstractTestCase):
 
     def finish(self, update_stats: bool = True) -> None:
         if update_stats:
-            self.update_run_stats()
+            self.cache_last_run()
         self.concatenate_logs()
         config.plugin_manager.hook.canary_testcase_finish(case=self, stage="")
         self.save()
@@ -1480,8 +1532,7 @@ class TestCase(AbstractTestCase):
         state: dict[str, Any] = {"type": self.__class__.__name__}
         properties = state.setdefault("properties", {})
         for attr, value in self.__dict__.items():
-            if attr.startswith("__"):
-                # skip *really* private variables
+            if attr in ("_cache",):
                 continue
             private = attr.startswith("_")
             name = attr[1:] if private else attr

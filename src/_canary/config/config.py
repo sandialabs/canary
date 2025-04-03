@@ -262,6 +262,7 @@ class Config:
         user_defined_config: dict[str, Any] = {}
         cls.load_config("global", user_defined_config)
         cls.load_config("local", user_defined_config)
+        cls.load_config("environ", user_defined_config)
         kwds: dict[str, Any] = user_defined_config.pop("config", {})
         self = cls(**kwds)
         for section, items in user_defined_config.items():
@@ -280,8 +281,6 @@ class Config:
 
     @property
     def cache_dir(self) -> str | None:
-        if self.getoption("dont_cache"):
-            return None
         if self._cache_dir is None:
             if d := self.getoption("cache_dir"):
                 self._cache_dir = os.path.expanduser(d)
@@ -290,7 +289,7 @@ class Config:
             else:
                 self._cache_dir = os.path.join(self.invocation_dir, ".canary_cache")
         create_cache_dir(self._cache_dir)
-        if self._cache_dir in (os.devnull, "null"):
+        if self._cache_dir == os.devnull:
             return None
         return self._cache_dir
 
@@ -353,23 +352,25 @@ class Config:
 
     @classmethod
     def load_config(cls, scope: str, config: dict[str, Any]) -> None:
-        file = cls.config_file(scope)
-        if file is None or not os.path.exists(file):
-            return
-        logging.debug(f"Reading configuration from {file}")
-        file_data = cls.read_config(file)
-        for key, items in file_data.items():
+        data: dict
+        if scope == "environ":
+            data = cls.read_config_from_env()
+        else:
+            file = cls.config_file(scope)
+            if file is None or not os.path.exists(file):
+                return
+            logging.debug(f"Reading configuration from {file}")
+            data = cls.read_config(file)
+        for key, items in data.items():
             if key == "config":
                 if "debug" in items:
                     config["debug"] = bool(items["debug"])
-                if "_config_dir" in items:
-                    config["_config_dir"] = items["_config_dir"]
                 if "log_level" in items:
                     config["log_level"] = items["log_level"]
                 if "multiprocessing_context" in items:
                     config["multiprocessing_context"] = items["multiprocessing_context"]
                 if "cache_dir" in items:
-                    config["cache_dir"] = items["cache_dir"]
+                    config["_cache_dir"] = os.path.expanduser(items["cache_dir"])
             elif key == "test":
                 if user_defined_timeouts := items.get("timeout"):
                     for type, value in user_defined_timeouts.items():
@@ -508,6 +509,24 @@ class Config:
             config[section] = validated[section]
         return config
 
+    @classmethod
+    def read_config_from_env(cls) -> dict:
+        config: dict[str, Any] = {}
+        for key, value in os.environ.items():
+            if key == "CANARY_DEBUG":
+                section = config.setdefault("config", {})
+                section["debug"] = boolean(value)
+            elif key == "CANARY_LOG_LEVEL":
+                section = config.setdefault("config", {})
+                section["log_level"] = value
+            elif key == "CANARY_CACHE_DIR":
+                section = config.setdefault("config", {})
+                section["cache_dir"] = value
+            elif key == "CANARY_MULTIPROCESSING_CONTEXT":
+                section = config.setdefault("config", {})
+                section["multiprocessing_context"] = value
+        return config
+
     @staticmethod
     def config_file(scope: str) -> str | None:
         if scope == "global":
@@ -518,9 +537,8 @@ class Config:
             return os.path.abspath("./canary.yaml")
         return None
 
-    @classmethod
-    def save(cls, path: str, scope: str | None = None):
-        file = cls.config_file(scope or "local")
+    def save(self, path: str, scope: str | None = None):
+        file = self.config_file(scope or "local")
         assert file is not None
         section, key, value = path.split(":")
         with open(file, "r") as fh:
@@ -551,7 +569,10 @@ class Config:
                 d[key] = getattr(value, "name", None)
             else:
                 if pretty and key.startswith("_"):
+                    # print value given by getter
                     key = key[1:]
+                    if hasattr(self, key):
+                        value = getattr(self, key)
                 d.setdefault("config", {})[key] = value
         return d
 
@@ -591,13 +612,13 @@ def get_config_dir() -> str | None:
         config_dir = os.path.join(os.environ["XDG_CONFIG_HOME"], "canary")
     else:
         config_dir = os.path.expanduser("~/.config/canary")
-    if config_dir in (os.devnull, "null"):
+    if config_dir == os.devnull:
         return None
     return config_dir
 
 
 def create_cache_dir(path: str) -> None:
-    if path in (os.devnull, "null"):
+    if path == os.devnull:
         return
     path = os.path.expanduser(path)
     file = os.path.join(path, "CACHEDIR.TAG")
