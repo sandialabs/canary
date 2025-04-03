@@ -942,6 +942,11 @@ class TestCase(AbstractTestCase):
     def cmd_line(self) -> str:
         return shlex.join(self.command())
 
+    @cmd_line.setter
+    def cmd_line(self, arg: str) -> None:
+        # backward compatible
+        pass
+
     @property
     def start(self) -> float:
         return self._start

@@ -4,6 +4,7 @@
 
 import glob
 import os
+import sys
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -177,7 +178,8 @@ class CDashReport(CanaryReport):
         files = kwargs["files"] or []
         if files:
             url = CDashXMLReporter.post(cdash_url, cdash_project, *files)
-            print(url)
+            # write url to stdout so that tools can do cdash_url=$(canary report cdash post ...)
+            sys.stdout.write("%s\n" % url)
         else:
             if session is None:
                 raise ValueError("canary report html: session required")
@@ -186,7 +188,8 @@ class CDashReport(CanaryReport):
             if not files:
                 raise ValueError("canary report cdash post: no xml files to post")
             url = reporter.post(cdash_url, cdash_project, *files)
-            logging.info(f"Files uploaded to {url}")
+            # write url to stdout so that tools can do cdash_url=$(canary report cdash post ...)
+            sys.stdout.write("%s\n" % url)
         return
 
     def summary(self, session: "Session | None" = None, **kwargs: Any) -> None:
