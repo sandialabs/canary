@@ -5,6 +5,7 @@
 import dataclasses
 import json
 import os
+import shlex
 from typing import Any
 from typing import Generator
 from typing import Type
@@ -229,7 +230,7 @@ class TestInstance:
             start=case.start,
             stop=case.stop,
             id=case.id,
-            cmd_line=case.cmd_line,
+            cmd_line=shlex.join(case.command()),
             returncode=case.returncode,
             variables=case.variables,
             dependencies=dependencies,
@@ -290,7 +291,7 @@ class TestMultiInstance(TestInstance):
             start=case.start,
             stop=case.stop,
             id=case.id,
-            cmd_line=case.cmd_line,
+            cmd_line=shlex.join(case.command()),
             returncode=case.returncode,
             variables=case.variables,
             dependencies=dependencies,

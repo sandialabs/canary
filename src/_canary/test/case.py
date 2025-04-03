@@ -12,6 +12,7 @@ import json
 import math
 import os
 import re
+import shlex
 import sys
 import time
 from contextlib import contextmanager
@@ -232,6 +233,7 @@ class TestCaseCache:
                 "id": case.id,
                 "root": case.file_root,
                 "path": case.file_path,
+                "parameters": case.parameters,
             },
         }
         if self.file is not None:
@@ -328,7 +330,6 @@ class TestCase(AbstractTestCase):
         self._status: Status = Status()
         self._mask: str | None = None
         self._defect: str | None = None
-        self._cmd_line: str | None = None
         self._work_tree: str | None = None
         self._working_directory: str | None = None
         self._path: str | None = None
@@ -493,6 +494,10 @@ class TestCase(AbstractTestCase):
 
     def logfile(self, stage: str | None = None) -> str:
         return self.stdout(stage=stage)
+
+    @property
+    def execution_directory(self) -> str:
+        return self.working_directory
 
     @property
     def working_directory(self) -> str:
@@ -866,6 +871,9 @@ class TestCase(AbstractTestCase):
             cmd.extend(script_args)
         return cmd
 
+    def raw_command_line(self) -> str:
+        return shlex.join(self.command())
+
     @property
     def variables(self) -> dict[str, str]:
         return self._variables
@@ -931,12 +939,8 @@ class TestCase(AbstractTestCase):
         self._classname = arg
 
     @property
-    def cmd_line(self) -> str | None:
-        return self._cmd_line
-
-    @cmd_line.setter
-    def cmd_line(self, arg: str) -> None:
-        self._cmd_line = arg
+    def cmd_line(self) -> str:
+        return shlex.join(self.command())
 
     @property
     def start(self) -> float:
@@ -1149,7 +1153,7 @@ class TestCase(AbstractTestCase):
         history = self.cache.setdefault("history", {})
         history["last_run"] = datetime.datetime.fromtimestamp(self.start).strftime("%c")
         history[self.status.value] = history.get(self.status.value, 0) + 1
-        if self.duration > 0 and self.status.satisfies(("success", "xfail", "xdiff", "diff")):
+        if self.duration >= 0 and self.status.satisfies(("success", "xfail", "xdiff", "diff")):
             count: int = 0
             metrics = self.cache.setdefault("metrics", {})
             t = metrics.setdefault("time", {})
@@ -1416,7 +1420,12 @@ class TestCase(AbstractTestCase):
             return self.defect  # type: ignore
         elif not self.status.complete():
             return "Log not found"
-        text = io.open(self.logfile(), errors="ignore").read()
+        out = io.StringIO()
+        out.write(io.open(self.stdout(), errors="ignore").read())
+        if err := self.stderr():
+            out.write("\n")
+            out.write(io.open(err, errors="ignore").read())
+        text = out.getvalue()
         if compress:
             kb_to_keep = 2 if self.status == "success" else 300
             text = compress_str(text, kb_to_keep=kb_to_keep)

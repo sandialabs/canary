@@ -51,7 +51,7 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         assert "foo" in case.keywords
         assert "baz" in case.keywords
         assert case.launcher is None
-        command = case._command()
+        command = case.command()
         command[0] = os.path.basename(command[0])
         assert command == ["script.sh", "some-exe"]
         assert case.variables["CTEST_NUM_RANKS"] == "5"
@@ -59,7 +59,7 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
 
         case = cases[1]
         assert case.launcher.endswith("mpiexec")
-        command = case._command()
+        command = case.command()
         command[0] = os.path.basename(command[0])
         assert command == ["mpiexec", "-n", "4", "some-exe"]
         assert case.cpus == 4

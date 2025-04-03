@@ -116,18 +116,24 @@ class TestCaseRunner(AbstractTestRunner):
                     else:
                         stderr = subprocess.STDOUT
                     cmd = case.command()
-                    case.cmd_line = " ".join(cmd)
-                    stdout.write(f"==> Running {case.display_name} in {case.working_directory}\n")
-                    stdout.write(f"==> Command line: {case.cmd_line}\n")
+                    cmd_line = shlex.join(cmd)
+                    stdout.write(f"==> Running {case.display_name}\n")
+                    stdout.write(f"==> Working directory: {case.working_directory}\n")
+                    stdout.write(f"==> Execution directory: {case.execution_directory}\n")
+                    stdout.write(f"==> Command line: {cmd_line}\n")
                     if timeoutx:
                         stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
                     stdout.flush()
                     with case.rc_environ():
                         start_marker: float = time.monotonic()
-                        logging.debug(
-                            f"Submitting {case} for execution with command {case.cmd_line}"
+                        logging.debug(f"Submitting {case} for execution with command {cmd_line}")
+                        proc = Popen(
+                            cmd,
+                            start_new_session=True,
+                            stdout=stdout,
+                            stderr=stderr,
+                            cwd=case.execution_directory,
                         )
-                        proc = Popen(cmd, start_new_session=True, stdout=stdout, stderr=stderr)
                         metrics = self.get_process_metrics(proc)
                         while proc.poll() is None:
                             self.get_process_metrics(proc, metrics=metrics)
