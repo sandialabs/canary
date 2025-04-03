@@ -236,7 +236,7 @@ class TestCaseCache:
                 "parameters": case.parameters,
             },
         }
-        if self.file is not None:
+        if self.w_ok:
             try:
                 data = json.load(open(self.file))  # type: ignore
                 if "cache" in data and data["cache"].get(".version") == self.version_info:
@@ -246,8 +246,9 @@ class TestCaseCache:
         return
 
     def dump(self) -> None:
-        if self.file is None:
+        if not self.w_ok:
             return
+        assert self.file is not None
         mkdirp(os.path.dirname(self.file))
         with open(self.file, "w") as fh:
             json.dump({"cache": self.data}, fh, separators=(",", ":"))

@@ -288,9 +288,9 @@ class Config:
                 self._cache_dir = os.path.expanduser(d)
             else:
                 self._cache_dir = os.path.join(self.invocation_dir, ".canary_cache")
-        create_cache_dir(self._cache_dir)
-        if self._cache_dir == os.devnull:
+        if isnullpath(self._cache_dir):
             return None
+        create_cache_dir(self._cache_dir)
         return self._cache_dir
 
     @property
@@ -612,13 +612,13 @@ def get_config_dir() -> str | None:
         config_dir = os.path.join(os.environ["XDG_CONFIG_HOME"], "canary")
     else:
         config_dir = os.path.expanduser("~/.config/canary")
-    if config_dir == os.devnull:
+    if isnullpath(config_dir):
         return None
     return config_dir
 
 
 def create_cache_dir(path: str) -> None:
-    if path == os.devnull:
+    if isnullpath(path):
         return
     path = os.path.expanduser(path)
     file = os.path.join(path, "CACHEDIR.TAG")
@@ -650,3 +650,7 @@ def merge_namespaces(dest: argparse.Namespace, source: argparse.Namespace) -> ar
                 my_value = my_value.copy()
             setattr(dest, attr, merge(my_value, value))
     return dest
+
+
+def isnullpath(path: str) -> bool:
+    return path in ("null", os.devnull)
