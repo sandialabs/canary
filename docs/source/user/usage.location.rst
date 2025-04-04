@@ -22,4 +22,8 @@ where ``ID`` is the test ID that is printed by :ref:`canary status<basics-status
 
 .. note::
 
-    ``canary log`` should be run inside of a test session by either navigating to the session's directory or by ``canary -C PATH``.
+   ``ID`` must be prefixed by ``/``.
+
+.. note::
+
+    ``canary location`` should be run inside of a test session by either navigating to the session's directory or by ``canary -C PATH``.
