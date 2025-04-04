@@ -222,6 +222,8 @@ def console_main() -> int:
         logging.error("Keyboard interrupt.")
         return signal.SIGINT.value
     except SystemExit as e:
+        if e.code == 0:
+            return 0
         if reraise:
             traceback.print_exc()
         if isinstance(e.code, int):
