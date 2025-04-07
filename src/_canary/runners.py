@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import abc
 import io
 import json
@@ -112,18 +116,24 @@ class TestCaseRunner(AbstractTestRunner):
                     else:
                         stderr = subprocess.STDOUT
                     cmd = case.command()
-                    case.cmd_line = " ".join(cmd)
-                    stdout.write(f"==> Running {case.display_name} in {case.working_directory}\n")
-                    stdout.write(f"==> Command line: {case.cmd_line}\n")
+                    cmd_line = shlex.join(cmd)
+                    stdout.write(f"==> Running {case.display_name}\n")
+                    stdout.write(f"==> Working directory: {case.working_directory}\n")
+                    stdout.write(f"==> Execution directory: {case.execution_directory}\n")
+                    stdout.write(f"==> Command line: {cmd_line}\n")
                     if timeoutx:
                         stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
                     stdout.flush()
                     with case.rc_environ():
                         start_marker: float = time.monotonic()
-                        logging.debug(
-                            f"Submitting {case} for execution with command {case.cmd_line}"
+                        logging.debug(f"Submitting {case} for execution with command {cmd_line}")
+                        proc = Popen(
+                            cmd,
+                            start_new_session=True,
+                            stdout=stdout,
+                            stderr=stderr,
+                            cwd=case.execution_directory,
                         )
-                        proc = Popen(cmd, start_new_session=True, stdout=stdout, stderr=stderr)
                         metrics = self.get_process_metrics(proc)
                         while proc.poll() is None:
                             self.get_process_metrics(proc, metrics=metrics)
@@ -285,7 +295,11 @@ class BatchRunner(AbstractTestRunner):
     def batch_options(self) -> list[str]:
         batch_options: list[str] = list(config.batch.default_options)
         if varargs := os.getenv("CANARY_BATCH_ARGS"):
-            logging.debug(f"Using batch arguments from environment: {varargs}")
+            warnings.warn(
+                "Use CANARY_RUN_ADDOPTS instead of CANARY_BATCH_ARGS",
+                category=DeprecationWarning,
+                stacklevel=0,
+            )
             batch_options.extend(shlex.split(varargs))
         batchopts = config.getoption("batch", {})
         if args := batchopts.get("options"):
@@ -315,17 +329,18 @@ class BatchRunner(AbstractTestRunner):
             logging.debug(f"Submitting batch {batch.id[:7]}")
 
         batchopts = config.getoption("batch", {})
-        scheme = batchopts.get("scheme")
+        flat = not (batchopts["spec"]["layout"] == "closed")
         try:
             default_int_signal = signal.signal(signal.SIGINT, cancel)
             default_term_signal = signal.signal(signal.SIGTERM, cancel)
-            assert config.backend is not None
+            backend = config.backend
+            assert backend is not None
             proc: hpc_connect.HPCProcess | None = None
-            if scheme == "isolated_sets" and config.backend.supports_subscheduling:
+            if backend.supports_subscheduling and flat:
                 scriptdir = os.path.dirname(batch.submission_script_filename())
-                timeoutx = config.getoption("timeout_multipler", 1.0)
+                timeoutx = config.getoption("timeout_multiplier", 1.0)
                 variables.pop("CANARY_BATCH_ID", None)
-                proc = config.backend.submitn(
+                proc = backend.submitn(
                     [case.id for case in batch],
                     [[self.canary_invocation(case)] for case in batch],
                     cpus=[case.cpus for case in batch],
@@ -341,14 +356,10 @@ class BatchRunner(AbstractTestRunner):
                 qtime = self.qtime(batch)
                 if timeoutx := config.getoption("timeout_multiplier"):
                     qtime *= timeoutx
-                max_cpus = max(_.cpus for _ in batch)
-                max_gpus = max(_.gpus for _ in batch)
-                proc = config.backend.submit(
+                proc = backend.submit(
                     f"canary.{batch.id[:7]}",
                     [self.canary_invocation(batch)],
-                    nodes=config.backend.config.nodes_required(
-                        max_cpus=max_cpus, max_gpus=max_gpus
-                    ),
+                    nodes=nodes_required(batch),
                     scriptname=batch.submission_script_filename(),
                     output=batch.logfile(batch.id),
                     error=batch.logfile(batch.id),
@@ -360,7 +371,7 @@ class BatchRunner(AbstractTestRunner):
             while True:
                 if proc.poll() is not None:
                     break
-                time.sleep(config.backend.polling_frequency)
+                time.sleep(backend.polling_frequency)
         finally:
             signal.signal(signal.SIGINT, default_int_signal)
             signal.signal(signal.SIGTERM, default_term_signal)
@@ -431,11 +442,7 @@ class BatchRunner(AbstractTestRunner):
         fp.write("canary ")
 
         # The batch will be run in a compute node, so hpc_connect won't set the machine limits
-        nodes: int
-        if isinstance(arg, TestCase):
-            nodes = config.resource_pool.nodes_required(arg.required_resources())
-        else:
-            nodes = max(config.resource_pool.nodes_required(c.required_resources()) for c in arg)
+        nodes = nodes_required(arg)
         cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
         gpus_per_node = config.resource_pool.pinfo("gpus_per_node")
         if isinstance(arg, TestBatch):
@@ -480,12 +487,31 @@ class BatchRunner(AbstractTestRunner):
         return total_runtime
 
 
+def nodes_required(arg: TestCase | TestBatch) -> int:
+    nodes: int
+    if isinstance(arg, TestCase):
+        nodes = config.resource_pool.nodes_required(arg.required_resources())
+    else:
+        assert isinstance(arg, TestBatch)
+        nodes = max(config.resource_pool.nodes_required(c.required_resources()) for c in arg)
+        if nodes_per_batch := os.getenv("CANARY_NODES_PER_BATCH"):
+            nodes = max(nodes, int(nodes_per_batch))
+    return nodes
+
+
 def factory() -> "AbstractTestRunner":
     runner: "AbstractTestRunner"
     if config.backend is None:
         runner = TestCaseRunner()
     else:
         runner = BatchRunner()
+        if nodes_per_batch := os.getenv("CANARY_NODES_PER_BATCH"):
+            sys_node_count = config.resource_pool.pinfo("node_count")
+            if int(nodes_per_batch) > config.resource_pool.pinfo("node_count"):
+                raise ValueError(
+                    f"CANARY_NODES_PER_BATCH={nodes_per_batch} exceeds "
+                    f"node count of system ({sys_node_count})"
+                )
     return runner
 
 

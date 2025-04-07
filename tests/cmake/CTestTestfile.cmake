@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 add_test(attached_files "ls" "/")
 set_tests_properties(attached_files PROPERTIES ATTACHED_FILES "foo.txt;bar.txt")
 add_test(attached_files_on_fail "ls" "/")

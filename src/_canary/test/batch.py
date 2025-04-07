@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import glob
 import json
 import math
@@ -78,7 +82,7 @@ class TestBatch(AbstractTestCase):
         return self._runtime
 
     def size(self) -> float:
-        vec = [self.runtime, self.cpus]
+        vec = [self.runtime, self.cpus, self.gpus]
         return math.sqrt(sum(_**2 for _ in vec))
 
     def required_resources(self) -> list[list[dict[str, Any]]]:

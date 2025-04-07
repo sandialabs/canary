@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 .. _tutorial-batch-args:
 
 Sending options to the batch scheduler

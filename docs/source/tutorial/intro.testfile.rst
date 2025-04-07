@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 .. _tutorial-intro-testfile:
 
 What is a test file?

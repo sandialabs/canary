@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 nvtest 24.12.10 release notes
 =============================
 

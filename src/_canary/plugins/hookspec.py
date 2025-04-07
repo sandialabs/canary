@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 from typing import TYPE_CHECKING
 from typing import Type
 

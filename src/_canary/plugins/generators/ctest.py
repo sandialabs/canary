@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import argparse
 import copy
 import io
@@ -340,9 +344,6 @@ class CTestTestCase(TestCase):
         return list(kwds)
 
     def command(self) -> list[str]:
-        return [os.path.join(self.working_directory, "runtest")]
-
-    def _command(self) -> list[str]:
         command: list[str] = []
         if self.launcher:
             command.append(self.launcher)
@@ -407,12 +408,12 @@ class CTestTestCase(TestCase):
             with open("runtest", "w") as fh:
                 fh.write(f"#!{sh}\n")
                 fh.write(f"cd {self.execution_directory}\n")
-                fh.write(shlex.join(self._command()))
+                fh.write(shlex.join(self.command()))
             set_executable("runtest")
 
     def finish(self, update_stats: bool = True) -> None:
         if update_stats:
-            self.update_run_stats()
+            self.cache_last_run()
         self.concatenate_logs()
         file = self.logfile("run")
 

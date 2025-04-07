@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import typing
 
 from ..third_party.schema import And
@@ -65,6 +69,7 @@ config_schema = Schema(
         "config": {
             Optional("debug"): Use(boolean),
             Optional("log_level"): log_levels,
+            Optional("cache_dir"): str,
             Optional("multiprocessing_context"): multiprocessing_contexts,
         }
     }

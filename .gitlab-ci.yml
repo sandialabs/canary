@@ -86,10 +86,10 @@ test::integration::flux:
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - HOSTNAME=$(hostname) sed -i "s/HOSTNAME/$HOSTNAME/g" .flux-ci.toml
   - exit_code=0
-  - $FLUX_START canary run -w -b scheduler=flux -b count=2 ./examples || exit_code=$?
+  - $FLUX_START canary run -w -b scheduler=flux -b spec=count:2 ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   - exit_code=0
-  - $FLUX_START canary run -w -b scheduler=flux -b scheme=isolated_sets ./examples || exit_code=$?
+  - $FLUX_START canary run -w -b scheduler=flux -b spec=count:auto,layout:closed ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
@@ -114,6 +114,15 @@ test::integration::slurm:
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - exit_code=0
   - canary run -w -b scheduler=slurm ./examples || exit_code=$?
+  - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+  - exit_code=0
+  - canary run -w -b scheduler=slurm -b spec=count:3 ./examples || exit_code=$?
+  - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+  - exit_code=0
+  - canary run -w -b scheduler=slurm -b spec=count:3,layout:closed ./examples || exit_code=$?
+  - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+  - exit_code=0
+  - canary run -w -b scheduler=slurm -b spec=count:auto,layout:flat ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   - canary -C TestResults report junit create -o $CI_PROJECT_DIR/junit.xml || true
   - canary -C TestResults report cdash create -d $CI_PROJECT_DIR/xml || true
@@ -145,7 +154,7 @@ test::integration::shell:
   - module load aue/openmpi/4.1.6-gcc-12.1.0
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - exit_code=0
-  - canary run -w -b scheduler=shell -b count=2 ./examples || exit_code=$?
+  - canary run -w -b scheduler=shell -b spec=count:2 ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   - canary -C TestResults report junit create -o $CI_PROJECT_DIR/junit.xml || true
   - canary -C TestResults report cdash create -d $CI_PROJECT_DIR/xml || true

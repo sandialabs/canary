@@ -1,4 +1,9 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import argparse
+import glob
 import os
 import re
 from typing import TYPE_CHECKING
@@ -78,11 +83,7 @@ def add_work_tree_arguments(parser: "Parser") -> None:
 
 
 def add_resource_arguments(parser: "Parser") -> None:
-    from .resource import BatchResourceSetter
-    from .resource import DeprecatedResourceSetter
-
     group = parser.add_argument_group("resource control")
-    group.add_argument("-l", help=argparse.SUPPRESS, action=DeprecatedResourceSetter)
     group.add_argument(
         "--workers",
         metavar="N",
@@ -111,15 +112,6 @@ def add_resource_arguments(parser: "Parser") -> None:
         metavar="X",
         type=time_in_seconds,
         help="Set a timeout multiplier for all tests [default: 1.0]",
-    )
-
-    group = parser.add_argument_group("batch control")
-    group.add_argument(
-        "-b",
-        action=BatchResourceSetter,
-        metavar="resource",
-        dest="batch",
-        help=BatchResourceSetter.help_page("-b"),
     )
 
 

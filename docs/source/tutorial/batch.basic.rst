@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 .. _tutorial-batch-basic:
 
 Running tests in a batch scheduler

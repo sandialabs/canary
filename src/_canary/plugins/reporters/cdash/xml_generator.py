@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import argparse
 import importlib.resources as ir
 import json
@@ -247,7 +251,7 @@ class CDashXMLReporter:
             add_text_node(test_node, "Name", case.display_name)
             add_text_node(test_node, "Path", f"./{case.file_path}")
             add_text_node(test_node, "FullName", case.fullname)
-            add_text_node(test_node, "FullCommandLine", case.cmd_line)
+            add_text_node(test_node, "FullCommandLine", case.raw_command_line())
             results = doc.createElement("Results")
 
             add_measurement(results, name="Exit Code", value=exit_code)
@@ -257,7 +261,7 @@ class CDashXMLReporter:
             if fail_reason is not None:
                 add_measurement(results, name="Fail Reason", value=fail_reason)
             add_measurement(results, name="Completion Status", value=completion_status)
-            add_measurement(results, name="Command Line", cdata=case.cmd_line)
+            add_measurement(results, name="Command Line", cdata=case.raw_command_line())
             add_measurement(results, name="Processors", value=int(case.cpus or 1))
             if case.gpus:
                 add_measurement(results, name="GPUs", value=case.gpus)

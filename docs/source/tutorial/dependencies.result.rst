@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 .. _tutorial-dependencies-result:
 
 Controlling test execution based on dependency results

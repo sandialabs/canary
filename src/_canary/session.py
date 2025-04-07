@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 """Setup and manage the test session"""
 
 import atexit
@@ -850,7 +854,7 @@ class Session:
         keys = sorted(reasons, key=lambda x: reasons[x])
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
-            logging.emit(f"    {glyphs.bullet} {reasons[key]}: {reason}\n")
+            logging.emit(f"{3 * glyphs.bullet} {reasons[key]}: {reason}\n")
 
     def report(
         self,

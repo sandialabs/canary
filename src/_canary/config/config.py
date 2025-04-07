@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import argparse
 import dataclasses
 import io
@@ -19,6 +23,7 @@ from ..util import logging
 from ..util.collections import merge
 from ..util.compression import expand64
 from ..util.filesystem import find_work_tree
+from ..util.filesystem import mkdirp
 from ..util.rprobe import cpu_count
 from . import _machine
 from .rpool import ResourcePool
@@ -214,6 +219,7 @@ class Config:
     multiprocessing_context: str = "spawn"
     log_level: str = "INFO"
     _config_dir: str | None = None
+    _cache_dir: str | None = None
     backend: hpc_connect.HPCBackend | None = None
     system: System = dataclasses.field(default_factory=System)
     session: SessionConfig = dataclasses.field(default_factory=SessionConfig)
@@ -256,6 +262,7 @@ class Config:
         user_defined_config: dict[str, Any] = {}
         cls.load_config("global", user_defined_config)
         cls.load_config("local", user_defined_config)
+        cls.load_config("environ", user_defined_config)
         kwds: dict[str, Any] = user_defined_config.pop("config", {})
         self = cls(**kwds)
         for section, items in user_defined_config.items():
@@ -271,6 +278,20 @@ class Config:
         if self._config_dir is None:
             self._config_dir = get_config_dir()
         return self._config_dir
+
+    @property
+    def cache_dir(self) -> str | None:
+        if self._cache_dir is None:
+            if d := self.getoption("cache_dir"):
+                self._cache_dir = os.path.expanduser(d)
+            elif d := os.getenv("CANARY_CACHE_DIR"):
+                self._cache_dir = os.path.expanduser(d)
+            else:
+                self._cache_dir = os.path.join(self.invocation_dir, ".canary_cache")
+        if isnullpath(self._cache_dir):
+            return None
+        create_cache_dir(self._cache_dir)
+        return self._cache_dir
 
     @property
     def plugin_manager(self) -> CanaryPluginManager:
@@ -331,21 +352,25 @@ class Config:
 
     @classmethod
     def load_config(cls, scope: str, config: dict[str, Any]) -> None:
-        file = cls.config_file(scope)
-        if file is None or not os.path.exists(file):
-            return
-        logging.debug(f"Reading configuration from {file}")
-        file_data = cls.read_config(file)
-        for key, items in file_data.items():
+        data: dict
+        if scope == "environ":
+            data = cls.read_config_from_env()
+        else:
+            file = cls.config_file(scope)
+            if file is None or not os.path.exists(file):
+                return
+            logging.debug(f"Reading configuration from {file}")
+            data = cls.read_config(file)
+        for key, items in data.items():
             if key == "config":
                 if "debug" in items:
                     config["debug"] = bool(items["debug"])
-                if "_config_dir" in items:
-                    config["_config_dir"] = items["_config_dir"]
                 if "log_level" in items:
                     config["log_level"] = items["log_level"]
                 if "multiprocessing_context" in items:
                     config["multiprocessing_context"] = items["multiprocessing_context"]
+                if "cache_dir" in items:
+                    config["_cache_dir"] = os.path.expanduser(items["cache_dir"])
             elif key == "test":
                 if user_defined_timeouts := items.get("timeout"):
                     for type, value in user_defined_timeouts.items():
@@ -484,6 +509,24 @@ class Config:
             config[section] = validated[section]
         return config
 
+    @classmethod
+    def read_config_from_env(cls) -> dict:
+        config: dict[str, Any] = {}
+        for key, value in os.environ.items():
+            if key == "CANARY_DEBUG":
+                section = config.setdefault("config", {})
+                section["debug"] = boolean(value)
+            elif key == "CANARY_LOG_LEVEL":
+                section = config.setdefault("config", {})
+                section["log_level"] = value
+            elif key == "CANARY_CACHE_DIR":
+                section = config.setdefault("config", {})
+                section["cache_dir"] = value
+            elif key == "CANARY_MULTIPROCESSING_CONTEXT":
+                section = config.setdefault("config", {})
+                section["multiprocessing_context"] = value
+        return config
+
     @staticmethod
     def config_file(scope: str) -> str | None:
         if scope == "global":
@@ -494,9 +537,8 @@ class Config:
             return os.path.abspath("./canary.yaml")
         return None
 
-    @classmethod
-    def save(cls, path: str, scope: str | None = None):
-        file = cls.config_file(scope or "local")
+    def save(self, path: str, scope: str | None = None):
+        file = self.config_file(scope or "local")
         assert file is not None
         section, key, value = path.split(":")
         with open(file, "r") as fh:
@@ -510,7 +552,7 @@ class Config:
         option = getattr(self.options, key, None) or default
         return option
 
-    def getstate(self) -> dict[str, Any]:
+    def getstate(self, pretty: bool = False) -> dict[str, Any]:
         d: dict[str, Any] = {}
         for key, value in vars(self).items():
             if key == "_plugin_manager":
@@ -526,11 +568,16 @@ class Config:
             elif key == "backend":
                 d[key] = getattr(value, "name", None)
             else:
+                if pretty and key.startswith("_"):
+                    # print value given by getter
+                    key = key[1:]
+                    if hasattr(self, key):
+                        value = getattr(self, key)
                 d.setdefault("config", {})[key] = value
         return d
 
     def describe(self, section: str | None = None) -> str:
-        state = self.getstate()
+        state = self.getstate(pretty=True)
         if section is not None:
             state = {section: state[section]}
         return yaml.dump(state, default_flow_style=False)
@@ -565,9 +612,23 @@ def get_config_dir() -> str | None:
         config_dir = os.path.join(os.environ["XDG_CONFIG_HOME"], "canary")
     else:
         config_dir = os.path.expanduser("~/.config/canary")
-    if config_dir in (os.devnull, "null"):
+    if isnullpath(config_dir):
         return None
     return config_dir
+
+
+def create_cache_dir(path: str) -> None:
+    if isnullpath(path):
+        return
+    path = os.path.expanduser(path)
+    file = os.path.join(path, "CACHEDIR.TAG")
+    if not os.path.exists(file):
+        mkdirp(path)
+        with open(file, "w") as fh:
+            fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
+            fh.write("# This file is a cache directory tag automatically created by canary.\n")
+            fh.write("# For information about cache directory tags ")
+            fh.write("see https://bford.info/cachedir/\n")
 
 
 def safe_loads(arg):
@@ -589,3 +650,7 @@ def merge_namespaces(dest: argparse.Namespace, source: argparse.Namespace) -> ar
                 my_value = my_value.copy()
             setattr(dest, attr, merge(my_value, value))
     return dest
+
+
+def isnullpath(path: str) -> bool:
+    return path in ("null", os.devnull)

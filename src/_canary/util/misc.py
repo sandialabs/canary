@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 from argparse import Namespace
 from types import SimpleNamespace
 from typing import Any

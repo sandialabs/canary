@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 .. _tutorial-parameterize-first:
 
 Getting started with parameterization

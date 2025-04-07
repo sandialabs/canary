@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 # VVT: name : test2
 # VVT: name : test4
 # VVT: parameterize (autotype, testname="test4") : arg1 = pear plum

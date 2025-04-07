@@ -1,5 +1,10 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import argparse
 import json
+import os
 import pstats
 import re
 import shlex
@@ -36,7 +41,11 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
         lines = []
         for line in text.split("\n\n"):
             line = self._whitespace_matcher.sub(" ", line).strip()
-            wrapped = textwrap.wrap(line, width)
+            indent = ""
+            if line.startswith("[pad]"):
+                line = line[5:]
+                indent = "  "
+            wrapped = textwrap.wrap(line, width, initial_indent=indent, subsequent_indent=indent)
             lines.extend(wrapped or ["\n"])
         return lines
 
@@ -75,7 +84,7 @@ class Parser(argparse.ArgumentParser):
     def convert_arg_line_to_args(self, arg_line: str) -> list[str]:
         return shlex.split(arg_line.split("#", 1)[0].strip())
 
-    def preparse(self, args: list[str]):
+    def preparse(self, args: list[str], addopts: bool = True):
         known_commands = [
             "run",
             "report",
@@ -95,6 +104,11 @@ class Parser(argparse.ArgumentParser):
             opt = args[i]
             i += 1
             if opt in known_commands:
+                if addopts:
+                    if env_opts := os.getenv("CANARY_ADDOPTS"):
+                        args[0:0] = shlex.split(env_opts)
+                    if env_opts := os.getenv(f"CANARY_{opt.upper()}_ADDOPTS"):
+                        args[i:i] = shlex.split(env_opts)
                 return ns
             if isinstance(opt, str):
                 if opt == "-p":
@@ -185,6 +199,13 @@ class Parser(argparse.ArgumentParser):
             group = self.add_argument_group(group_name)
         return group
 
+    def add_plugin_argument_group(self, *args, **kwargs):
+        if "command" in kwargs:
+            parser = self.__subcommand_parsers[kwargs.pop("command")]
+        else:
+            parser = self
+        return super(Parser, parser).add_argument_group(*args, **kwargs)
+
     def add_plugin_argument(self, *args, **kwargs):
         parsers = []
         if "command" in kwargs:
@@ -201,7 +222,7 @@ class Parser(argparse.ArgumentParser):
                 if group.title == group_name:
                     break
             else:
-                group = parser.add_argument_group(group_name)
+                group = super(Parser, parser).add_argument_group(group_name)
             group.add_argument(*args, **kwargs)
 
     @staticmethod
@@ -384,6 +405,10 @@ def make_argument_parser(**kwargs):
         "session: set environment variable for whole session; "
         "test: set environment variable only during test execution"
         % (colorize("@*{var}"), colorize("@*{val}"), colorize("@*{scope}")),
+    )
+    parser.add_argument(
+        "--cache-dir",
+        help="Store test case cache info in the given folder [default: .canary_cache/]",
     )
 
     return parser
