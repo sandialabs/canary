@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import math
+import statistics
 from graphlib import TopologicalSorter
 from typing import Sequence
 
@@ -15,10 +16,172 @@ from ..util.collections import defaultlist
 size_t = tuple[int, int]
 
 
+AUTO = 1027  # automically choose batch size
+ATOMIC = 1028  # One test per batch
+
+
+def partition_n_closed(cases: Sequence[TestCase], n: int = 8) -> list[TestBatch]:
+    """Partition tests cases into ``n`` "closed" partitions such that each partition is independent
+    of any other partition.  This applies that each partition may have test cases dependent on other
+    cases in the partition (intra-partition dependencies).
+
+    A note on the value of ``n``:
+
+    * If ``n == ATOMIC``, tests are put into individual batches
+    * If ``n == AUTO``, tests are put into batches automatically
+    * If ``n >= 1``, tests are put into *at most* ``n`` batches, though it may be less.
+
+    """
+    if n <= 0:
+        raise ValueError(f"Cannot create closed batches with count {n=}")
+    if n == ATOMIC:
+        raise ValueError("Cannot create closed batches with one test per batch")
+    if n == 1:
+        return [TestBatch(cases)]
+    groups = groupby_dep(cases)
+    if n == AUTO:
+        batches: list[TestBatch] = [TestBatch(list(group)) for group in groups if len(group) > 1]
+        mean_batch_length = statistics.mean([b.size() for b in batches])
+        p: _Partition = _Partition()
+        for group in groups:
+            if len(group) == 1:
+                p.update(group)
+                if p.size() >= mean_batch_length:
+                    batches.append(TestBatch(list(p)))
+                    p.clear()
+        if p:
+            batches.append(TestBatch(list(p)))
+        return batches
+    else:
+        partitions = defaultlist(_Partition, n)
+        for group in groups:
+            partition = min(partitions, key=lambda p: p.size())
+            partition.update(group)
+        return [TestBatch(p) for p in partitions if len(p)]
+
+
+def partition_n(cases: Sequence[TestCase], n: int = 8, nodes: str = "any") -> list[TestBatch]:
+    """Partition tests cases into ``n`` partitions such that each partition has no
+    intra-dependencies.  Partitions can depend on other partitions.
+
+    A note on the value of ``n``:
+
+    * If ``n == ATOMIC``, tests are put into individual batches
+    * If ``n == AUTO``, tests are batched such that each batch contains no inter-batch dependencies
+    * If ``n >= 1``, tests are put into *at most* ``n`` batches, though it may be less.
+
+    """
+    assert nodes in ("any", "same")
+    if n == ATOMIC:
+        return [TestBatch([case]) for case in cases]
+    elif n == 1:
+        return [TestBatch(cases)]
+    graph = {}
+    for case in cases:
+        graph[case] = case.dependencies
+    ts = TopologicalSorter(graph)
+    ts.prepare()
+    sizes: list[float] = []
+    groups: list[list[TestCase]] = []
+    while ts.is_active():
+        ready = ts.get_ready()
+        if nodes == "same":
+            node_groups: dict[int, list[TestCase]] = {}
+            for case in ready:
+                node_groups.setdefault(case.nodes, []).append(case)
+            groups.extend(node_groups.values())
+        else:
+            groups.append(list(ready))
+        sizes.append(sum(c.size() for c in groups[-1] if not c.masked()))
+        ts.done(*ready)
+    if n == AUTO:
+        return [TestBatch(list(group)) for group in groups]
+    if len(groups) > n:
+        raise ValueError(f"At least {len(groups)} required to partition test cases")
+    # determine the number of batches each partition will receive
+    total_size = sum(sizes)
+    ix = sorted(range(len(groups)), key=lambda i: sizes[i])
+    groups = [groups[i] for i in ix]
+    sizes = [sizes[i] for i in ix]
+    nbatches_each = [max(1, math.floor(n * t / total_size)) for t in sizes[:-1]]
+    nbatches_each.append(n - sum(nbatches_each))
+    batches: list[TestBatch] = []
+    for i, group in enumerate(groups):
+        ps = defaultlist(_Partition, nbatches_each[i])
+        for case in group:
+            p = min(ps, key=lambda p: p.size())
+            p.add(case)
+        batches.extend([TestBatch(p) for p in ps if len(p)])
+    return batches
+
+
+def partition_t(
+    cases: Sequence[TestCase], t: float = 60 * 30, nodes: str = "any"
+) -> list[TestBatch]:
+    """Partition test cases by tiling them in the 2D space defined by num_cpus x run_time"""
+    logging.debug(f"Partitioning {len(cases)} test cases")
+
+    def _pack_ready_nodes(packer: "Packer", batches: list[TestBatch], ready: list[TestCase]):
+        blocks = [Block(case.id, case.cpus, math.ceil(runtime(case))) for case in ready]
+        cpus = max(block.size[0] for block in blocks)
+        nodes_reqd = math.ceil(cpus / cpus_per_node)
+        width = nodes_reqd * cpus_per_node
+        for i, block in enumerate(blocks):
+            if ready[i].exclusive:
+                block.width = width
+        max_height = max(block.size[1] for block in blocks)
+        height = int(max(max_height, t))
+        packer.pack(blocks, width, height)
+        batches.append(TestBatch([map[b.id] for b in blocks if b.fit], runtime=float(height)))
+        unfit = [block for block in blocks if not block.fit]
+        while unfit:
+            cpus = max(block.size[0] for block in unfit)
+            nodes_reqd = math.ceil(cpus / cpus_per_node)
+            width = nodes_reqd * cpus_per_node
+            max_height = max(block.size[1] for block in unfit)
+            height = int(max(max_height, t))
+            packer.pack(unfit, width, height)
+            batches.append(TestBatch([map[b.id] for b in unfit if b.fit], runtime=float(height)))
+            tmp = [block for block in unfit if not block.fit]
+            if len(tmp) == len(unfit):
+                raise RuntimeError("Unable to partition blocks")
+            unfit = tmp
+
+    cpus_per_node: int = int(config.resource_pool.pinfo("cpus_per_node"))
+    map: dict[str, TestCase] = {case.id: case for case in cases}
+    graph: dict[TestCase, list[TestCase]] = {}
+    for case in cases:
+        graph[case] = case.dependencies
+    ts = TopologicalSorter(graph)
+    ts.prepare()
+    packer = Packer()
+    batches: list[TestBatch] = []
+    while ts.is_active():
+        ready = sorted(ts.get_ready(), key=lambda c: c.size(), reverse=True)
+        if nodes == "same":
+            node_groups: dict[int, list[TestCase]] = {}
+            for case in ready:
+                node_groups.setdefault(case.nodes, []).append(case)
+            for group in node_groups.values():
+                _pack_ready_nodes(packer, batches, group)
+        else:
+            _pack_ready_nodes(packer, batches, ready)
+        ts.done(*ready)
+    if len(cases) != sum([len(b) for b in batches]):
+        raise ValueError("Incorrect partition lengths!")
+    logging.debug(f"Partitioned {len(cases)} test cases in to {len(batches)} batches")
+    return [b for b in batches if len(b)]
+
+
 class _Partition(set):
-    @property
-    def cputime(self):
-        return sum(case.cpus * case.runtime for case in self if not case.masked())
+    def size(self):
+        vector = [0.0, 0.0, 0.0]
+        for case in self:
+            if not case.masked():
+                vector[0] += case.cpus
+                vector[1] += case.gpus
+                vector[2] += case.runtime
+        return math.sqrt(sum(x**2 for x in vector))
 
 
 def groupby_dep(cases: Sequence[TestCase]) -> list[set[TestCase]]:
@@ -43,35 +206,6 @@ def groupby_dep(cases: Sequence[TestCase]) -> list[set[TestCase]]:
     if len(cases) != sum([len(group) for group in groups]):
         raise ValueError("Incorrect partition lengths!")
     return groups
-
-
-def partition_n(cases: Sequence[TestCase], n: int = 8) -> list[TestBatch]:
-    """Partition test cases into ``n`` partitions"""
-    partitions = defaultlist(_Partition, n)
-    if n == 1:
-        return [TestBatch(cases)]
-    for group in groupby_dep(cases):
-        partition = min(partitions, key=lambda p: p.cputime)
-        partition.update(group)
-    return [TestBatch(p) for p in partitions if len(p)]
-
-
-def partition_x(cases: Sequence[TestCase]) -> list[TestBatch]:
-    """Partition tests cases such that each partition has no intra-dependencies.  Partitions can
-    depend on other partitions
-
-    """
-    graph = {}
-    for case in cases:
-        graph[case] = case.dependencies
-    ts = TopologicalSorter(graph)
-    ts.prepare()
-    partitions: list[list[TestCase]] = []
-    while ts.is_active():
-        ready = ts.get_ready()
-        partitions.append(list(ready))
-        ts.done(*ready)
-    return [TestBatch(p) for p in partitions if len(p)]
 
 
 # modified from https://gist.github.com/shihrer/aa90d023ae0f7662919f
@@ -265,50 +399,6 @@ def runtime(case: TestCase) -> float:
     elif t <= 300.0:
         return 2.0 * t
     return 1.25 * t
-
-
-def autopartition(cases: Sequence[TestCase], t: float = 60 * 30) -> list[TestBatch]:
-    logging.debug(f"Partitioning {len(cases)} test cases")
-    cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
-    map = {case.id: case for case in cases}
-    graph: dict[TestCase, list[TestCase]] = {}
-    for case in cases:
-        graph[case] = case.dependencies
-    ts = TopologicalSorter(graph)
-    ts.prepare()
-    packer = Packer()
-    partitions: list[TestBatch] = []
-    while ts.is_active():
-        ready = sorted(ts.get_ready(), key=lambda c: c.size(), reverse=True)
-        blocks = [Block(case.id, case.cpus, math.ceil(runtime(case))) for case in ready]
-        cpus = max(block.size[0] for block in blocks)
-        nodes = math.ceil(cpus / cpus_per_node)
-        width = nodes * cpus_per_node
-        for i, block in enumerate(blocks):
-            if ready[i].exclusive:
-                block.width = width
-        max_height = max(block.size[1] for block in blocks)
-        height = int(max(max_height, t))
-        packer.pack(blocks, width, height)
-        partitions.append(TestBatch([map[b.id] for b in blocks if b.fit], runtime=float(height)))
-        unfit = [block for block in blocks if not block.fit]
-        while unfit:
-            cpus = max(block.size[0] for block in unfit)
-            nodes = math.ceil(cpus / cpus_per_node)
-            width = nodes * cpus_per_node
-            max_height = max(block.size[1] for block in unfit)
-            height = int(max(max_height, t))
-            packer.pack(unfit, width, height)
-            partitions.append(TestBatch([map[b.id] for b in unfit if b.fit], runtime=float(height)))
-            tmp = [block for block in unfit if not block.fit]
-            if len(tmp) == len(unfit):
-                raise RuntimeError("Unable to partition blocks")
-            unfit = tmp
-        ts.done(*ready)
-    if len(cases) != sum([len(partition) for partition in partitions]):
-        raise ValueError("Incorrect partition lengths!")
-    logging.debug(f"Partitioned {len(cases)} test cases in to {len(partitions)} partitions")
-    return [p for p in partitions if len(p)]
 
 
 def packed_perimeter(cases: Sequence[TestCase]) -> size_t:

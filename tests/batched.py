@@ -28,7 +28,7 @@ if __name__ == '__main__':
                 )
 
         run = CanaryCommand("run")
-        rc = run("-w", "-b", "count=4", "-b", "scheduler=none", ".")
+        rc = run("-w", "-b", "spec=count:4", "-b", "scheduler=none", ".")
         dirs = os.listdir("TestResults")
         expected = [".canary"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
@@ -57,7 +57,7 @@ if __name__ == '__main__':
                 )
 
         run = CanaryCommand("run")
-        args = ["-w", "-b", "count=4", "-b", "scheduler=none"]
+        args = ["-w", "-b", "spec=count:4", "-b", "scheduler=none"]
         args.extend(["-b", "args='-l place=scatter:excl,-q debug,-A XYZ123'"])
         args.append(".")
         rc = run(*args)

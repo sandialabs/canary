@@ -296,7 +296,9 @@ class BatchRunner(AbstractTestRunner):
         batch_options: list[str] = list(config.batch.default_options)
         if varargs := os.getenv("CANARY_BATCH_ARGS"):
             warnings.warn(
-                "Use CANARY_RUN_ADDOPTS instead of CANARY_BATCH_ARGS", category=DeprecationWarning
+                "Use CANARY_RUN_ADDOPTS instead of CANARY_BATCH_ARGS",
+                category=DeprecationWarning,
+                stacklevel=0,
             )
             batch_options.extend(shlex.split(varargs))
         batchopts = config.getoption("batch", {})
@@ -327,16 +329,16 @@ class BatchRunner(AbstractTestRunner):
             logging.debug(f"Submitting batch {batch.id[:7]}")
 
         batchopts = config.getoption("batch", {})
-        scheme = batchopts.get("scheme")
+        flat = not (batchopts["spec"]["layout"] == "closed")
         try:
             default_int_signal = signal.signal(signal.SIGINT, cancel)
             default_term_signal = signal.signal(signal.SIGTERM, cancel)
             backend = config.backend
             assert backend is not None
             proc: hpc_connect.HPCProcess | None = None
-            if scheme == "isolated_sets" and backend.supports_subscheduling:
+            if backend.supports_subscheduling and flat:
                 scriptdir = os.path.dirname(batch.submission_script_filename())
-                timeoutx = config.getoption("timeout_multipler", 1.0)
+                timeoutx = config.getoption("timeout_multiplier", 1.0)
                 variables.pop("CANARY_BATCH_ID", None)
                 proc = backend.submitn(
                     [case.id for case in batch],

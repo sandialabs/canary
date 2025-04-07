@@ -44,6 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.add_command(command)
         with monkeypatch.context() as mp:
             mp.setattr(parser, "add_argument", parser.add_plugin_argument)
+            mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
             config.plugin_manager.hook.canary_addoption(parser=parser)
         args = parser.parse_args(m.argv)
         if args.color:
@@ -123,6 +124,7 @@ class CanaryCommand:
                 parser.add_command(command)
             with monkeypatch.context() as mp:
                 mp.setattr(parser, "add_argument", parser.add_plugin_argument)
+                mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
                 config.plugin_manager.hook.canary_addoption(parser=parser)
             args = parser.parse_args(argv)
             config.set_main_options(args)

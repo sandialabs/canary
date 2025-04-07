@@ -11,27 +11,32 @@ Tests can be run under a workload manager (scheduler) such as Slurm or PBS by ad
 
 .. code-block:: console
 
-  canary run [-b (count=N|length=T)] -b scheduler=SCHEDULER ...
+  canary run [-b spec=(duration:T|count:{atomic,auto,N})[,layout:{flat,closed}][,nodes:{any,same}]] -b scheduler=SCHEDULER -b workers=N ...
 
 When run in "batch" mode, ``canary`` will group tests into "batches" and submit each batch to ``SCHEDULER``.
 
 Batching options
 ----------------
 
-Batch size
+Batch spec
 ..........
 
-* ``-b count=N``: group tests into ``N`` batches, each having approximately the same runtime.
-* ``-b length=T``: group tests into batches having runtime approximately equal to ``T`` seconds.  Accepts Go's duration format eg ``1s``, ``1h``, ``4h30m30s``, etc, are accepted.
+* if ``duration:T``: create batches with approximate run length of ``T`` seconds
+* if ``count:atomic``: one test per batch
+* if ``count:auto``: auto batch depending on other options
+* if ``count:N``: create at most ``N`` batches
 
-By default, tests are batched into groups based as follows:
+* if ``layout:flat``: batches have no intra-batch dependencies but may have inter-batch dependencies
+* if ``layout:closed``: batch have no inter-batch dependencies but may have intra-batch dependencies
 
-1. group cases by the number of compute nodes required to run; and
-2. partition each group into batches that complete in the time specified by ``-b length=T``.  A default length of 30 minutes is used if not otherwise specified.
+* if ``nodes:any``: tests are batch with respect to node count of test cases
+* if ``nodes:same``: tests are batched with tests having the same node count
+
+The default batch spec is ``duration:30m,nodes:any,layout:flat``.
 
 .. note::
 
-   ``-b count=N`` and ``-b length=T`` are mutually exclusive.
+   ``-b layout=count:N`` and ``-b layout=duration:T`` are mutually exclusive.
 
 Batch scheduler
 ...............
@@ -63,7 +68,7 @@ Examples
 
 * Run the canary example suite in 4 batches
 
-  .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b count=4 .
+  .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b layout=count:4 .
     :cwd: /examples
     :setup: rm -rf TestResults.Batched
     :returncode: 30
@@ -71,7 +76,7 @@ Examples
 
 * Run the canary example suite in 4 batches, running tests in serial in each batch
 
-  .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b count=4 -b workers=1 .
+  .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b layout=count:4 -b workers=1 .
     :cwd: /examples
     :setup: rm -rf TestResults.Batched
     :returncode: 30

@@ -41,7 +41,11 @@ class HelpFormatter(argparse.RawTextHelpFormatter):
         lines = []
         for line in text.split("\n\n"):
             line = self._whitespace_matcher.sub(" ", line).strip()
-            wrapped = textwrap.wrap(line, width)
+            indent = ""
+            if line.startswith("[pad]"):
+                line = line[5:]
+                indent = "  "
+            wrapped = textwrap.wrap(line, width, initial_indent=indent, subsequent_indent=indent)
             lines.extend(wrapped or ["\n"])
         return lines
 
@@ -195,6 +199,13 @@ class Parser(argparse.ArgumentParser):
             group = self.add_argument_group(group_name)
         return group
 
+    def add_plugin_argument_group(self, *args, **kwargs):
+        if "command" in kwargs:
+            parser = self.__subcommand_parsers[kwargs.pop("command")]
+        else:
+            parser = self
+        return super(Parser, parser).add_argument_group(*args, **kwargs)
+
     def add_plugin_argument(self, *args, **kwargs):
         parsers = []
         if "command" in kwargs:
@@ -211,7 +222,7 @@ class Parser(argparse.ArgumentParser):
                 if group.title == group_name:
                     break
             else:
-                group = parser.add_argument_group(group_name)
+                group = super(Parser, parser).add_argument_group(group_name)
             group.add_argument(*args, **kwargs)
 
     @staticmethod
