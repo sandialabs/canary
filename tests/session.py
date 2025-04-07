@@ -52,7 +52,10 @@ def test_session_bfilter(tmpdir):
     p = paths()
     with working_dir(tmpdir.strpath, create=True):
         with config.override():
-            config.options.batch = {"scheduler": "none", "count": 2, "scheme": "count"}
+            config.options.batch = {
+                "scheduler": "none",
+                "spec": {"count": 2, "duration": None, "layout": "flat", "nodes": "any"},
+            }
             config.setup_hpc_connect("none")
             s = session.Session("tests", mode="w", force=True)
             s.add_search_paths([os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")])

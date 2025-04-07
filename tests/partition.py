@@ -25,20 +25,6 @@ def generate_files(tmpdir):
     yield workdir
 
 
-def test_partition_x(generate_files):
-    workdir = generate_files
-    f = finder.Finder()
-    f.add(workdir)
-    f.prepare()
-    files = f.discover()
-    cases = finder.generate_test_cases(files)
-    assert len([c for c in cases if c.status != "masked"]) == num_cases
-    partitions = p.partition_x(cases)
-    assert len(partitions) == 2
-    assert len(partitions[0]) == num_cases - num_base_cases
-    assert len(partitions[1]) == num_base_cases
-
-
 def test_partition_n(generate_files):
     workdir = generate_files
     f = finder.Finder()
@@ -50,9 +36,11 @@ def test_partition_n(generate_files):
     partitions = p.partition_n(cases, n=5)
     assert len(partitions) == 5
     assert sum(len(_) for _ in partitions) == num_cases
+    partitions = p.partition_n(cases, n=p.ATOMIC)
+    assert len(partitions) == num_cases
 
 
-def test_autopartition(generate_files):
+def test_partition_t(generate_files):
     workdir = generate_files
     f = finder.Finder()
     f.add(workdir)
@@ -60,5 +48,7 @@ def test_autopartition(generate_files):
     files = f.discover()
     cases = finder.generate_test_cases(files)
     assert len([c for c in cases if c.status != "masked"]) == num_cases
-    partitions = p.autopartition(cases, t=15 * 60)  # 5x long test case duration
+    partitions = p.partition_t(cases, t=15 * 60)  # 5x long test case duration
+    assert sum(len(_) for _ in partitions) == num_cases
+    partitions = p.partition_t(cases, t=15 * 60, nodes="match")
     assert sum(len(_) for _ in partitions) == num_cases
