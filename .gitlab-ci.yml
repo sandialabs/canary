@@ -237,16 +237,16 @@ test::plugin::sierra:
   - source venv/bin/activate
   - python3 --version
   script:
-  - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - git clone git@cee-gitlab.sandia.gov:ascic-test-infra/plugins/canary-sierra.git
-  # test -p PLUGIN_NAME
-  # @mvlopri: change describe to run an actual test.
-  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/src:$CI_PROJECT_DIR/canary-sierra/mock canary -p canary_sierra describe ./canary-sierra/tests/adagio_solid_mech/adagio_patch_test_first.test
+  - export PATH=$CI_PROJECT_DIR/canary-sierra/mock/bin:$PATH
+  - ls $CI_PROJECT_DIR/canary-sierra/mock/bin
+  - which nem_spread
+  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/src:$CI_PROJECT_DIR/canary-sierra/mock canary -p canary_sierra run ./canary-sierra/tests/
   - cd $CI_PROJECT_DIR/canary-sierra
   - python3 -m pip install --no-deps .
   - cd $CI_PROJECT_DIR
-  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/mock canary describe ./canary-sierra/tests/adagio_solid_mech/adagio_patch_test_first.test
+  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/mock canary run -w ./canary-sierra/tests
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
