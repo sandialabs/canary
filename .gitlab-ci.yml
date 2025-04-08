@@ -237,7 +237,7 @@ test::plugin::sierra:
   - source venv/bin/activate
   - python3 --version
   script:
-  - export PATH=$CI_PROJECT_PATH/mock/bin:$PATH
+  - export PATH=$CI_PROJECT_DIR/mock/bin:$PATH
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - git clone git@cee-gitlab.sandia.gov:ascic-test-infra/plugins/canary-sierra.git
