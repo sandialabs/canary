@@ -11,6 +11,7 @@ import signal
 import subprocess
 import time
 import warnings
+from datetime import datetime
 from itertools import repeat
 from typing import Any
 from typing import TextIO
@@ -30,6 +31,7 @@ from .test.case import TestCase
 from .third_party.color import colorize
 from .util import logging
 from .util.filesystem import working_dir
+from .util.misc import digits
 from .util.time import hhmmss
 from .util.time import timestamp
 
@@ -42,14 +44,24 @@ class AbstractTestRunner:
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
         config.null()
         verbose = logging.get_level() <= logging.INFO
-        prefix = colorize("@*b{==>} ")
         qsize = kwargs.get("qsize")
         qrank = kwargs.get("qrank")
+        id: str
+        pretty_name: str
+        if isinstance(case, TestCase):
+            id = colorize("@b{%s}" % case.id[:7])
+            pretty_name = case.pretty_repr()
         if verbose:
-            logging.emit("%s%s\n" % (prefix, self.start_msg(case, qsize=qsize, qrank=qrank)))
+            f = io.StringIO()
+            f.write(colorize("@*b{==>} "))
+            f.write(self.start_msg(case, qsize=qsize, qrank=qrank))
+            logging.emit(f.getvalue() + "\n")
         self.run(case)
         if verbose:
-            logging.emit("%s%s\n" % (prefix, self.end_msg(case, qsize=qsize, qrank=qrank)))
+            f.seek(0)
+            f.write(colorize("@*b{==>} "))
+            f.write(self.end_msg(case, qsize=qsize, qrank=qrank))
+            logging.emit(f.getvalue() + "\n")
         return None
 
     @abc.abstractmethod
@@ -126,7 +138,7 @@ class TestCaseRunner(AbstractTestRunner):
                     stdout.flush()
                     with case.rc_environ():
                         start_marker: float = time.monotonic()
-                        logging.debug(f"Submitting {case} for execution with command {cmd_line}")
+                        logging.trace(f"Submitting {case} for execution with command {cmd_line}")
                         proc = Popen(
                             cmd,
                             start_new_session=True,
@@ -187,7 +199,7 @@ class TestCaseRunner(AbstractTestRunner):
                 if metrics is not None:
                     case.add_measurement(**metrics)
             case.finish()
-            logging.debug(f"{case}: finished with status {case.status}")
+            logging.trace(f"{case}: finished with status {case.status}")
         return
 
     def start_msg(
@@ -198,6 +210,10 @@ class TestCaseRunner(AbstractTestRunner):
     ) -> str:
         assert isinstance(case, TestCase)
         f = io.StringIO()
+        if config.debug or os.getenv("GITLAB_CI"):
+            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            if qrank is not None and qsize is not None:
+                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
         id = colorize("@b{%s}" % case.id[:7])
         f.write(f"Starting {id}: {case.pretty_repr()}")
         return f.getvalue()
@@ -210,6 +226,10 @@ class TestCaseRunner(AbstractTestRunner):
     ) -> str:
         assert isinstance(case, TestCase)
         f = io.StringIO()
+        if config.debug or os.getenv("GITLAB_CI"):
+            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            if qrank is not None and qsize is not None:
+                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
         id = colorize("@b{%s}" % case.id[:7])
         f.write(f"Finished {id}: {case.pretty_repr()} {case.status.cname}")
         return f.getvalue()
@@ -315,7 +335,7 @@ class BatchRunner(AbstractTestRunner):
                 return
             proc.cancel()
 
-        logging.debug(f"Running batch {batch.id[:7]}")
+        logging.trace(f"Running batch {batch.id[:7]}")
         start = time.monotonic()
         variables = dict(batch.variables)
         variables["CANARY_LEVEL"] = "1"
@@ -326,7 +346,7 @@ class BatchRunner(AbstractTestRunner):
             hpc_connect.set_debug(True)
 
         if config.debug:
-            logging.debug(f"Submitting batch {batch.id[:7]}")
+            logging.trace(f"Submitting batch {batch.id[:7]}")
 
         batchopts = config.getoption("batch", {})
         flat = not (batchopts["spec"]["layout"] == "closed")
@@ -401,10 +421,14 @@ class BatchRunner(AbstractTestRunner):
         qrank: int | None = None,
     ) -> str:
         assert isinstance(batch, TestBatch)
-        n = len(batch.cases)
         f = io.StringIO()
+        if config.debug or os.getenv("GITLAB_CI"):
+            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            if qrank is not None and qsize is not None:
+                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        n = len(batch.cases)
         id = colorize("@b{%s}" % batch.id[:7])
-        f.write(f"Submitting batch {id}: {n} tests")
+        f.write(f"Submitting batch {id}: {n} test{'' if n == 1 else 's'}")
         return f.getvalue()
 
     def end_msg(
@@ -420,10 +444,16 @@ class BatchRunner(AbstractTestRunner):
         fmt = "@%s{%d %s}"
         colors = Status.colors
         st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
-        duration: float | None = batch.total_duration if batch.total_duration > 0 else None
+
         f = io.StringIO()
+        if config.debug or os.getenv("GITLAB_CI"):
+            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            if qrank is not None and qsize is not None:
+                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
         id = colorize("@b{%s}" % batch.id[:7])
-        f.write(f"Finished batch {id}: {st_stat} ")
+        f.write(f"Finished batch {id}: {st_stat}")
+
+        duration: float | None = batch.total_duration if batch.total_duration > 0 else None
         f.write(f"(time: {hhmmss(duration, threshold=0)}")
         if any(_.start > 0 for _ in batch.cases) and any(_.stop > 0 for _ in batch.cases):
             ti = min(_.start for _ in batch.cases if _.start > 0)

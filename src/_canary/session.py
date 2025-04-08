@@ -235,6 +235,7 @@ class Session:
         ctx.start()
         with self.db.open("cases/index", "r") as fh:
             index = json.load(fh)["index"]
+        ids = list(ids or [])
         if ids:
             # Be sure that if an ID is loaded that its dependencies are accessible
             i: int = 0
