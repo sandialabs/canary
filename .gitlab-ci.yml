@@ -245,7 +245,7 @@ test::plugin::sierra:
   - cd $CI_PROJECT_DIR/canary-sierra
   - python3 -m pip install --no-deps .
   - cd $CI_PROJECT_DIR
-  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/mock canary run ./tests
+  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/mock canary run ./canary-sierra/tests
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
