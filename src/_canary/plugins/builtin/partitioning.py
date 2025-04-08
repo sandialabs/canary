@@ -40,8 +40,8 @@ def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
         assert spec["count"] is not None
         count = int(spec["count"])
         logging.debug(f"Batching test cases using count={count}")
-        if layout == "closed":
-            return partitioning.partition_n_closed(cases, n=count)
+        if layout == "atomic":
+            return partitioning.partition_n_atomic(cases, n=count)
         return partitioning.partition_n(cases, n=count, nodes=nodes)
 
 
@@ -94,8 +94,8 @@ def validate_and_set_defaults(batchopts: dict) -> None:
         spec["layout"] = "flat"
     if spec["duration"] is not None and spec["count"] is not None:
         raise ValueError("batch spec: duration not allowed with count")
-    if spec["layout"] == "closed" and spec["nodes"] == "same":
-        raise ValueError("batch spec: layout:closed not allowed with nodes:same")
+    if spec["layout"] == "atomic" and spec["nodes"] == "same":
+        raise ValueError("batch spec: layout:atomic not allowed with nodes:same")
     batchopts["spec"] = spec
 
 
@@ -127,18 +127,18 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • workers=N: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
 • option=%(opt)s: Pass %(opt)s to the scheduler.  If %(opt)s contains commas, it is split into multiple options at the commas.\n\n
 • spec=%(spec)s: Batch spec with possible option:value pairs:\n\n
-[pad]%(count)s: Batch count.  atomic: one test per batch.  N>=1: split into at most N batches.\n\n
+[pad]%(count)s: Batch count.  max: one test per batch.  N>=1: split into at most N batches.\n\n
 [pad]%(duration)s: Group tests into batches with total runtime approximate T seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s).\n\n
-[pad]%(layout)s: flat: batches may bepend on other batches. closed: each batch includes all dependencies and is self-contained.\n\n
+[pad]%(layout)s: flat: batches may bepend on other batches. atomic: each batch includes all dependencies and is self-contained.\n\n
 [pad]%(nodes)s: any: ignore node counts when batching.  same: all tests in batch require same node count.
 """ % {
             "r_form": bold("type=value"),
             "r_arg": bold(f"{flag} resource"),
             "opt": bold("option"),
             "spec": bold("option:value[,option:value...]"),
-            "count": bold("count:{atomic,auto,N}}"),
+            "count": bold("count:{max,auto,N}}"),
             "duration": bold("duration:T"),
-            "layout": bold("layout:{flat,closed}}"),
+            "layout": bold("layout:{flat,atomic}}"),
             "nodes": bold("nodes:{any,same}}"),
         }
         return text
@@ -149,7 +149,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         for arg in csvsplit(spec_arg):
             if match := re.search(r"^nodes:(any|same)$", arg.lower()):
                 spec["nodes"] = match.group(1)
-            elif match := re.search(r"^layout:(flat|closed)$", arg.lower()):
+            elif match := re.search(r"^layout:(flat|atomic)$", arg.lower()):
                 spec["layout"] = match.group(1)
             elif match := re.search(r"^count:([-]?\d+)$", arg.lower()):
                 count = int(match.group(1))
@@ -158,8 +158,8 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
                 spec["count"] = count
             elif match := re.search(r"^count:auto$", arg.lower()):
                 spec["count"] = partitioning.AUTO
-            elif match := re.search(r"^count:atomic$", arg.lower()):
-                spec["count"] = partitioning.ATOMIC
+            elif match := re.search(r"^count:max$", arg.lower()):
+                spec["count"] = partitioning.ONE_PER_BATCH
             elif match := re.search(r"^duration:(.*)$", arg.lower()):
                 duration = time_in_seconds(match.group(1))
                 if duration <= 0:

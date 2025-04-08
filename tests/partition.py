@@ -36,7 +36,7 @@ def test_partition_n(generate_files):
     partitions = p.partition_n(cases, n=5)
     assert len(partitions) == 5
     assert sum(len(_) for _ in partitions) == num_cases
-    partitions = p.partition_n(cases, n=p.ATOMIC)
+    partitions = p.partition_n(cases, n=p.ONE_PER_BATCH)
     assert len(partitions) == num_cases
 
 

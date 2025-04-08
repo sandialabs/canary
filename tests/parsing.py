@@ -52,14 +52,14 @@ def test_batch_options():
     assert args.batch["spec"]["count"] == 1
     args = parser.parse_args(["-b", "spec=duration:1"])
     assert args.batch["spec"]["duration"] == 1.0
-    args = parser.parse_args(["-b", "spec=layout:closed"])
-    assert args.batch["spec"]["layout"] == "closed"
+    args = parser.parse_args(["-b", "spec=layout:atomic"])
+    assert args.batch["spec"]["layout"] == "atomic"
     args = parser.parse_args(["-b", "spec=layout:flat"])
     assert args.batch["spec"]["layout"] == "flat"
     args = parser.parse_args(["-b", "spec=count:auto"])
     assert args.batch["spec"]["count"] == partitioning.AUTO
-    args = parser.parse_args(["-b", "spec=count:atomic"])
-    assert args.batch["spec"]["count"] == partitioning.ATOMIC
+    args = parser.parse_args(["-b", "spec=count:max"])
+    assert args.batch["spec"]["count"] == partitioning.ONE_PER_BATCH
 
     args = parser.parse_args(["-b", "scheduler=shell"])
     validate_and_set_defaults(args.batch)

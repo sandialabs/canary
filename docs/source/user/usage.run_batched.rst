@@ -11,7 +11,7 @@ Tests can be run under a workload manager (scheduler) such as Slurm or PBS by ad
 
 .. code-block:: console
 
-  canary run [-b spec=(duration:T|count:{atomic,auto,N})[,layout:{flat,closed}][,nodes:{any,same}]] -b scheduler=SCHEDULER -b workers=N ...
+  canary run [-b spec=(duration:T|count:{max,auto,N})[,layout:{flat,atomic}][,nodes:{any,same}]] -b scheduler=SCHEDULER -b workers=N ...
 
 When run in "batch" mode, ``canary`` will group tests into "batches" and submit each batch to ``SCHEDULER``.
 
@@ -22,12 +22,12 @@ Batch spec
 ..........
 
 * if ``duration:T``: create batches with approximate run length of ``T`` seconds
-* if ``count:atomic``: one test per batch
+* if ``count:max``: one test per batch
 * if ``count:auto``: auto batch depending on other options
 * if ``count:N``: create at most ``N`` batches
 
 * if ``layout:flat``: batches have no intra-batch dependencies but may have inter-batch dependencies
-* if ``layout:closed``: batch have no inter-batch dependencies but may have intra-batch dependencies
+* if ``layout:atomic``: batch have no inter-batch dependencies but may have intra-batch dependencies
 
 * if ``nodes:any``: tests are batch with respect to node count of test cases
 * if ``nodes:same``: tests are batched with tests having the same node count

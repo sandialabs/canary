@@ -17,25 +17,25 @@ size_t = tuple[int, int]
 
 
 AUTO = 1027  # automically choose batch size
-ATOMIC = 1028  # One test per batch
+ONE_PER_BATCH = 1028  # One test per batch
 
 
-def partition_n_closed(cases: Sequence[TestCase], n: int = 8) -> list[TestBatch]:
-    """Partition tests cases into ``n`` "closed" partitions such that each partition is independent
+def partition_n_atomic(cases: Sequence[TestCase], n: int = 8) -> list[TestBatch]:
+    """Partition tests cases into ``n`` "atomic" partitions such that each partition is independent
     of any other partition.  This applies that each partition may have test cases dependent on other
     cases in the partition (intra-partition dependencies).
 
     A note on the value of ``n``:
 
-    * If ``n == ATOMIC``, tests are put into individual batches
+    * If ``n == ONE_PER_BATCH``, tests are put into individual batches
     * If ``n == AUTO``, tests are put into batches automatically
     * If ``n >= 1``, tests are put into *at most* ``n`` batches, though it may be less.
 
     """
     if n <= 0:
-        raise ValueError(f"Cannot create closed batches with count {n=}")
-    if n == ATOMIC:
-        raise ValueError("Cannot create closed batches with one test per batch")
+        raise ValueError(f"Cannot create atomic batches with count {n=}")
+    if n == ONE_PER_BATCH:
+        raise ValueError("Cannot create atomic batches with one test per batch")
     if n == 1:
         return [TestBatch(cases)]
     groups = groupby_dep(cases)
@@ -66,13 +66,13 @@ def partition_n(cases: Sequence[TestCase], n: int = 8, nodes: str = "any") -> li
 
     A note on the value of ``n``:
 
-    * If ``n == ATOMIC``, tests are put into individual batches
+    * If ``n == ONE_PER_BATCH``, tests are put into individual batches
     * If ``n == AUTO``, tests are batched such that each batch contains no inter-batch dependencies
     * If ``n >= 1``, tests are put into *at most* ``n`` batches, though it may be less.
 
     """
     assert nodes in ("any", "same")
-    if n == ATOMIC:
+    if n == ONE_PER_BATCH:
         return [TestBatch([case]) for case in cases]
     elif n == 1:
         return [TestBatch(cases)]
