@@ -36,7 +36,7 @@ The default batch spec is ``duration:30m,nodes:any,layout:flat``.
 
 .. note::
 
-   ``-b layout=count:N`` and ``-b layout=duration:T`` are mutually exclusive.
+   ``-b spec=count:N`` and ``-b spec=duration:T`` are mutually exclusive.
 
 Batch scheduler
 ...............
@@ -68,7 +68,7 @@ Examples
 
 * Run the canary example suite in 4 batches
 
-  .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b layout=count:4 .
+  .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b spec=count:4 .
     :cwd: /examples
     :setup: rm -rf TestResults.Batched
     :returncode: 30
@@ -76,7 +76,7 @@ Examples
 
 * Run the canary example suite in 4 batches, running tests in serial in each batch
 
-  .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b layout=count:4 -b workers=1 .
+  .. command-output:: canary run -d TestResults.Batched --workers=1 -b scheduler=shell -b spec=count:4 -b workers=1 .
     :cwd: /examples
     :setup: rm -rf TestResults.Batched
     :returncode: 30
