@@ -9,4 +9,3 @@ plugins.subcommands.common
    :maxdepth: 1
 
    pathspec
-   resource
