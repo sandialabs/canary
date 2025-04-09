@@ -1,5 +1,10 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import glob
 import os
+import sys
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -71,7 +76,16 @@ class CDashReport(CanaryReport):
             "build, provide this argument to identify the build yourself. "
             "Format: %%Y%%m%%d-%%H%%M-<track>",
         )
-
+        group.add_argument(
+            "-n",
+            dest="chunk_size",
+            default=500,
+            type=int,
+            metavar="CHUNK_SIZE",
+            action="store",
+            help="The results will be split into chunks of N entries per XML file. "
+            "If N is -1 the XML will be not be split and will be stored as a single file.",
+        )
         p = sp.add_parser("post", help="Post CDash XML files")
         p.add_argument(
             "--project",
@@ -164,7 +178,8 @@ class CDashReport(CanaryReport):
         files = kwargs["files"] or []
         if files:
             url = CDashXMLReporter.post(cdash_url, cdash_project, *files)
-            print(url)
+            # write url to stdout so that tools can do cdash_url=$(canary report cdash post ...)
+            sys.stdout.write("%s\n" % url)
         else:
             if session is None:
                 raise ValueError("canary report html: session required")
@@ -173,7 +188,8 @@ class CDashReport(CanaryReport):
             if not files:
                 raise ValueError("canary report cdash post: no xml files to post")
             url = reporter.post(cdash_url, cdash_project, *files)
-            logging.info(f"Files uploaded to {url}")
+            # write url to stdout so that tools can do cdash_url=$(canary report cdash post ...)
+            sys.stdout.write("%s\n" % url)
         return
 
     def summary(self, session: "Session | None" = None, **kwargs: Any) -> None:
@@ -226,5 +242,6 @@ class CDashReport(CanaryReport):
             track=kwargs["track"],
             buildstamp=kwargs["buildstamp"],
             generator=kwargs.get("generator"),
+            chunk_size=kwargs.get("chunk_size"),
         )
         return

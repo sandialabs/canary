@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 .. _basics-session:
 
 The test session
@@ -37,7 +41,7 @@ We will use an example to demonstrate each phase of the testing process.  Consid
 
 .. literalinclude:: /examples/centered_space/centered_space.pyt
    :language: python
-   :lines: 1-11
+   :lines: 4-14
 
 .. _discover:
 
@@ -69,13 +73,13 @@ Batch
 [Optional] Group test cases into batches to run in a batch runner.  The default batching scheme is to:
 
 1. group cases by the number of compute nodes required to run; and
-2. partition each group into batches that complete in a set time (defined by the ``-b length=T`` option).
+2. partition each group into batches that complete in a set time (defined by the ``-b spec=duration:T`` option).
 
 .. note::
 
    A test is always batched with tests requiring the same node count.
 
-Optionally, a fixed number of batches can be requested (``-b count=N``).
+Optionally, a fixed number of batches can be requested (``-b spec=count:N``).
 
 .. _run:
 

@@ -1,0 +1,67 @@
+Intellectual Property Notice
+----------------------------
+
+Canary is licensed under the MIT license.
+
+SPDX usage
+------------
+
+Individual files contain SPDX tags instead of the full license text.
+This enables machine processing of license information based on the SPDX
+License Identifiers that are available here: https://spdx.org/licenses/
+
+Files that are dual-licensed as Apache-2.0 OR MIT contain the following
+text in the license header:
+
+    SPDX-License-Identifier: MIT
+
+External Packages
+-----------------
+
+Canary bundles some external packages in _canary/third_party. These packages are covered
+by various permissive licenses. A summary listing follows. See the license included with each
+package for full details.
+
+PackageName: argparsewriter
+PackageHomePage: https://github.com/spack/spack
+PackageLicenseDeclared: MIT
+
+PackageName: colify
+PackageHomePage: https://github.com/spack/spack
+PackageLicenseDeclared: MIT 
+
+PackageName: color
+PackageHomePage: https://github.com/spack/spack
+PackageLicenseDeclared: MIT 
+
+PackageName: ctest_log_parser
+PackageHomePage: https://github.com/Kitware/CMake
+PackageLicenseDeclared: BSD-3-Clause
+
+PackageName: distro
+PackageHomePage: https://pypi.python.org/pypi/distro
+PackageLicenseDeclared: Apache-2.0
+
+PackageName: docstring_parser
+PackageHomePage: https://pypi.python.org/pypi/docstring_parser
+PackageLicenseDeclared: BSD
+
+PackageName: imagesvg
+PackageHomePage: https://github.com/sphinx-contrib/imagesvg
+PackageLicenseDeclared: BSD
+
+PackageName: lock
+PackageHomePage: https://github.com/spack/spack
+PackageLicenseDeclared: MIT
+
+PackageName: monkeypatch
+PackageHomePage: https://github.com/pytest-dev/pytest
+PackageLicenseDeclared: MIT
+
+PackageName: programoutput
+PackageHomePage: https://pypi.org/project/sphinxcontrib-programoutput/
+PackageLicenseDeclared: BSD
+
+PackageName: schema
+PackageHomePage: https://pypi.org/project/schema/
+PackageLicenseDeclared: MIT

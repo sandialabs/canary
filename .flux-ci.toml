@@ -1,0 +1,12 @@
+[resource]
+
+# replace HOSTNAME with the machine(s) that will host brokers.
+# If more than one, the first MUST have a broker launched on it
+[[resource.config]]
+hosts = "HOSTNAME"
+cores = "0-31"
+# gpus = "0"
+
+# Immediately reject jobs with invalid jobspec or unsatisfiable resources
+[ingest.validator]
+plugins = [ "jobspec", "feasibility" ]

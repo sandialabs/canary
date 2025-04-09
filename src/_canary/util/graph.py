@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import sys
 from graphlib import TopologicalSorter
 from pathlib import Path

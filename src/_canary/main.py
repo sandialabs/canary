@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import argparse
 import os
 import shlex
@@ -40,6 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.add_command(command)
         with monkeypatch.context() as mp:
             mp.setattr(parser, "add_argument", parser.add_plugin_argument)
+            mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
             config.plugin_manager.hook.canary_addoption(parser=parser)
         args = parser.parse_args(m.argv)
         if args.color:
@@ -112,13 +117,14 @@ class CanaryCommand:
                 reraise = True
             argv = [self.command.name] + list(args_in)
             parser = make_argument_parser()
-            args = parser.preparse(argv)
+            args = parser.preparse(argv, addopts=False)
             for p in args.plugins:
                 config.plugin_manager.consider_plugin(p)
             for command in config.plugin_manager.get_subcommands():
                 parser.add_command(command)
             with monkeypatch.context() as mp:
                 mp.setattr(parser, "add_argument", parser.add_plugin_argument)
+                mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
                 config.plugin_manager.hook.canary_addoption(parser=parser)
             args = parser.parse_args(argv)
             config.set_main_options(args)
@@ -218,6 +224,8 @@ def console_main() -> int:
         logging.error("Keyboard interrupt.")
         return signal.SIGINT.value
     except SystemExit as e:
+        if e.code == 0:
+            return 0
         if reraise:
             traceback.print_exc()
         if isinstance(e.code, int):

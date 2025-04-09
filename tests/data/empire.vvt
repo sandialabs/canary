@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+#!/usr/bin/env python3
 # Supported Platforms
 # VVT: enable (testname="not run_cable_pregen",platform="TLCC2 or CTS1 or ceelan or iDarwin")
 # VVT: enable (testname="run_cable_pregen")

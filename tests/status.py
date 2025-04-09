@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import _canary.status as status
 from _canary.error import diff_exit_status
 from _canary.error import fail_exit_status

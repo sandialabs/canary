@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 Installing canary
 =================
 
@@ -9,4 +13,4 @@ Installing canary
       --trusted-host=cee-gitlab.sandia.gov \
       --index-url=https://nexus.web.sandia.gov/repository/pypi-proxy/simple \
       --extra-index-url=https://cee-gitlab.sandia.gov/api/v4/projects/51750/packages/pypi/simple \
-      canary[pbs,slurm,flux]
+      canary-wm

@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import multiprocessing
 import os
 import random
@@ -36,6 +40,8 @@ def test_concurrency(tmpdir):
         create_db()
         a, b = 0, 20
         workers = os.cpu_count() - 1
+        workers = 100
+        a, b = 0, 200
         with multiprocessing.Pool(workers) as pool:
             pool.map(insert_db, range(a, b))
         with multiprocessing.Pool(workers) as pool:

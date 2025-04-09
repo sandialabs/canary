@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 plugins.subcommands.common
 ==========================
 
@@ -5,4 +9,3 @@ plugins.subcommands.common
    :maxdepth: 1
 
    pathspec
-   resource

@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 .. _extending-generator:
 
 User defined test generator
@@ -38,18 +42,18 @@ Example implementation
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python
-    :lines: 1-72
+    :lines: 1-75
 
 
 The ``YAMLTestGenerator.lock()`` returns a list of ``YAMLTestCase`` test cases, defined below:
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python
-    :lines: 75-115
+    :lines: 78-118
 
 
 The user defined test generator is registered using the :meth:`~_canary.plugins.hookspec.canary_testcase_generator` plugin hook:
 
 .. literalinclude:: /static/yaml_generator.py
     :language: python
-    :lines: 117-
+    :lines: 120-

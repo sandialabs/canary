@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import _canary.plugins.generators.pyt as pyt
 import _canary.plugins.generators.vvtest as vvt
 import _canary.test.case as tc

@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 """Module for finding the user's preferred text editor.
 
 Defines one function, editor(), which invokes the editor defined by the

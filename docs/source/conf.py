@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 # Configuration file for the Sphinx documentation builder.
 #
 # This file only contains a selection of the most common options. For a full
@@ -87,6 +91,7 @@ exclude_patterns = [
 # a list of builtin themes.
 #
 html_theme = "pydata_sphinx_theme"
+html_logo = "icon/Canary_icon3_color_800.svg"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 from _canary.main import CanaryCommand
 from _canary.util.filesystem import working_dir
 

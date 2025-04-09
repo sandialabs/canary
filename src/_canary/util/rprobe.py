@@ -1,3 +1,8 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+import functools
 import os
 import re
 import shutil
@@ -5,6 +10,7 @@ import subprocess
 import sys
 
 
+@functools.cache
 def cpu_count(default: int = 4) -> int:
     """Determine the number of processors on the current machine.
     Returns the 'default' if the probes fail.

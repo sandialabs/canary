@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 .. _basics-copy-and-link:
 
 Copying and linking resource files into the test execution directory

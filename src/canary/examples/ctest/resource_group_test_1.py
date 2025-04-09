@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
 import os
 
 assert os.environ["CTEST_RESOURCE_GROUP_COUNT"] == "2"

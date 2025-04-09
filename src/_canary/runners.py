@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import abc
 import io
 import json
@@ -7,6 +11,7 @@ import signal
 import subprocess
 import time
 import warnings
+from datetime import datetime
 from itertools import repeat
 from typing import Any
 from typing import TextIO
@@ -26,6 +31,7 @@ from .test.case import TestCase
 from .third_party.color import colorize
 from .util import logging
 from .util.filesystem import working_dir
+from .util.misc import digits
 from .util.time import hhmmss
 from .util.time import timestamp
 
@@ -38,14 +44,24 @@ class AbstractTestRunner:
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
         config.null()
         verbose = logging.get_level() <= logging.INFO
-        prefix = colorize("@*b{==>} ")
         qsize = kwargs.get("qsize")
         qrank = kwargs.get("qrank")
+        id: str
+        pretty_name: str
+        if isinstance(case, TestCase):
+            id = colorize("@b{%s}" % case.id[:7])
+            pretty_name = case.pretty_repr()
         if verbose:
-            logging.emit("%s%s\n" % (prefix, self.start_msg(case, qsize=qsize, qrank=qrank)))
+            f = io.StringIO()
+            f.write(colorize("@*b{==>} "))
+            f.write(self.start_msg(case, qsize=qsize, qrank=qrank))
+            logging.emit(f.getvalue() + "\n")
         self.run(case)
         if verbose:
-            logging.emit("%s%s\n" % (prefix, self.end_msg(case, qsize=qsize, qrank=qrank)))
+            f.seek(0)
+            f.write(colorize("@*b{==>} "))
+            f.write(self.end_msg(case, qsize=qsize, qrank=qrank))
+            logging.emit(f.getvalue() + "\n")
         return None
 
     @abc.abstractmethod
@@ -112,32 +128,37 @@ class TestCaseRunner(AbstractTestRunner):
                     else:
                         stderr = subprocess.STDOUT
                     cmd = case.command()
-                    case.cmd_line = " ".join(cmd)
-                    stdout.write(f"==> Running {case.display_name} in {case.working_directory}\n")
-                    stdout.write(f"==> Command line: {case.cmd_line}\n")
+                    cmd_line = shlex.join(cmd)
+                    stdout.write(f"==> Running {case.display_name}\n")
+                    stdout.write(f"==> Working directory: {case.working_directory}\n")
+                    stdout.write(f"==> Execution directory: {case.execution_directory}\n")
+                    stdout.write(f"==> Command line: {cmd_line}\n")
                     if timeoutx:
                         stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
                     stdout.flush()
                     with case.rc_environ():
-                        tic = time.monotonic()
-                        logging.debug(
-                            f"Submitting {case} for execution with command {case.cmd_line}"
+                        start_marker: float = time.monotonic()
+                        logging.trace(f"Submitting {case} for execution with command {cmd_line}")
+                        proc = Popen(
+                            cmd,
+                            start_new_session=True,
+                            stdout=stdout,
+                            stderr=stderr,
+                            cwd=case.execution_directory,
                         )
-                        proc = Popen(cmd, start_new_session=True, stdout=stdout, stderr=stderr)
                         metrics = self.get_process_metrics(proc)
                         while proc.poll() is None:
                             self.get_process_metrics(proc, metrics=metrics)
-                            toc = time.monotonic()
-                            if timeout > 0 and toc - tic > timeout:
+                            if timeout > 0 and time.monotonic() - start_marker > timeout:
                                 os.kill(proc.pid, signal.SIGINT)
                                 raise TimeoutError
                             time.sleep(0.05)
                 finally:
-                    dt = toc - tic
+                    duration = time.monotonic() - start_marker
                     exit_code = 1 if proc is None else proc.returncode
                     stdout.write(
                         f"==> Finished running {case.display_name} "
-                        f"in {dt} s. with exit code {exit_code}\n"
+                        f"in {duration} s. with exit code {exit_code}\n"
                     )
                     stdout.close()
                     if hasattr(stderr, "close"):
@@ -178,7 +199,7 @@ class TestCaseRunner(AbstractTestRunner):
                 if metrics is not None:
                     case.add_measurement(**metrics)
             case.finish()
-            logging.debug(f"{case}: finished with status {case.status}")
+            logging.trace(f"{case}: finished with status {case.status}")
         return
 
     def start_msg(
@@ -189,6 +210,10 @@ class TestCaseRunner(AbstractTestRunner):
     ) -> str:
         assert isinstance(case, TestCase)
         f = io.StringIO()
+        if config.debug or os.getenv("GITLAB_CI"):
+            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            if qrank is not None and qsize is not None:
+                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
         id = colorize("@b{%s}" % case.id[:7])
         f.write(f"Starting {id}: {case.pretty_repr()}")
         return f.getvalue()
@@ -201,6 +226,10 @@ class TestCaseRunner(AbstractTestRunner):
     ) -> str:
         assert isinstance(case, TestCase)
         f = io.StringIO()
+        if config.debug or os.getenv("GITLAB_CI"):
+            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            if qrank is not None and qsize is not None:
+                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
         id = colorize("@b{%s}" % case.id[:7])
         f.write(f"Finished {id}: {case.pretty_repr()} {case.status.cname}")
         return f.getvalue()
@@ -286,7 +315,11 @@ class BatchRunner(AbstractTestRunner):
     def batch_options(self) -> list[str]:
         batch_options: list[str] = list(config.batch.default_options)
         if varargs := os.getenv("CANARY_BATCH_ARGS"):
-            logging.debug(f"Using batch arguments from environment: {varargs}")
+            warnings.warn(
+                "Use CANARY_RUN_ADDOPTS instead of CANARY_BATCH_ARGS",
+                category=DeprecationWarning,
+                stacklevel=0,
+            )
             batch_options.extend(shlex.split(varargs))
         batchopts = config.getoption("batch", {})
         if args := batchopts.get("options"):
@@ -302,7 +335,7 @@ class BatchRunner(AbstractTestRunner):
                 return
             proc.cancel()
 
-        logging.debug(f"Running batch {batch.id[:7]}")
+        logging.trace(f"Running batch {batch.id[:7]}")
         start = time.monotonic()
         variables = dict(batch.variables)
         variables["CANARY_LEVEL"] = "1"
@@ -313,23 +346,25 @@ class BatchRunner(AbstractTestRunner):
             hpc_connect.set_debug(True)
 
         if config.debug:
-            logging.debug(f"Submitting batch {batch.id[:7]}")
+            logging.trace(f"Submitting batch {batch.id[:7]}")
 
         batchopts = config.getoption("batch", {})
-        scheme = batchopts.get("scheme")
+        flat = not (batchopts["spec"]["layout"] == "closed")
         try:
             default_int_signal = signal.signal(signal.SIGINT, cancel)
             default_term_signal = signal.signal(signal.SIGTERM, cancel)
-            assert config.backend is not None
+            backend = config.backend
+            assert backend is not None
             proc: hpc_connect.HPCProcess | None = None
-            if scheme == "isolated_sets" and config.backend.supports_subscheduling:
+            if backend.supports_subscheduling and flat:
                 scriptdir = os.path.dirname(batch.submission_script_filename())
-                timeoutx = config.getoption("timeout_multipler", 1.0)
+                timeoutx = config.getoption("timeout_multiplier", 1.0)
                 variables.pop("CANARY_BATCH_ID", None)
-                proc = config.backend.submitn(
+                proc = backend.submitn(
                     [case.id for case in batch],
                     [[self.canary_invocation(case)] for case in batch],
-                    tasks=[case.cpus for case in batch],
+                    cpus=[case.cpus for case in batch],
+                    gpus=[case.gpus for case in batch],
                     scriptname=[os.path.join(scriptdir, f"{case.id}-inp.sh") for case in batch],
                     output=[os.path.join(scriptdir, f"{case.id}-out.txt") for case in batch],
                     error=[os.path.join(scriptdir, f"{case.id}-err.txt") for case in batch],
@@ -341,10 +376,10 @@ class BatchRunner(AbstractTestRunner):
                 qtime = self.qtime(batch)
                 if timeoutx := config.getoption("timeout_multiplier"):
                     qtime *= timeoutx
-                proc = config.backend.submit(
+                proc = backend.submit(
                     f"canary.{batch.id[:7]}",
                     [self.canary_invocation(batch)],
-                    tasks=max(_.cpus for _ in batch),
+                    nodes=nodes_required(batch),
                     scriptname=batch.submission_script_filename(),
                     output=batch.logfile(batch.id),
                     error=batch.logfile(batch.id),
@@ -356,7 +391,7 @@ class BatchRunner(AbstractTestRunner):
             while True:
                 if proc.poll() is not None:
                     break
-                time.sleep(config.backend.polling_frequency)
+                time.sleep(backend.polling_frequency)
         finally:
             signal.signal(signal.SIGINT, default_int_signal)
             signal.signal(signal.SIGTERM, default_term_signal)
@@ -386,10 +421,14 @@ class BatchRunner(AbstractTestRunner):
         qrank: int | None = None,
     ) -> str:
         assert isinstance(batch, TestBatch)
-        n = len(batch.cases)
         f = io.StringIO()
+        if config.debug or os.getenv("GITLAB_CI"):
+            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            if qrank is not None and qsize is not None:
+                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        n = len(batch.cases)
         id = colorize("@b{%s}" % batch.id[:7])
-        f.write(f"Submitting batch {id}: {n} tests")
+        f.write(f"Submitting batch {id}: {n} test{'' if n == 1 else 's'}")
         return f.getvalue()
 
     def end_msg(
@@ -405,10 +444,16 @@ class BatchRunner(AbstractTestRunner):
         fmt = "@%s{%d %s}"
         colors = Status.colors
         st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
-        duration: float | None = batch.total_duration if batch.total_duration > 0 else None
+
         f = io.StringIO()
+        if config.debug or os.getenv("GITLAB_CI"):
+            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            if qrank is not None and qsize is not None:
+                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
         id = colorize("@b{%s}" % batch.id[:7])
-        f.write(f"Finished batch {id}: {st_stat} ")
+        f.write(f"Finished batch {id}: {st_stat}")
+
+        duration: float | None = batch.total_duration if batch.total_duration > 0 else None
         f.write(f"(time: {hhmmss(duration, threshold=0)}")
         if any(_.start > 0 for _ in batch.cases) and any(_.stop > 0 for _ in batch.cases):
             ti = min(_.start for _ in batch.cases if _.start > 0)
@@ -427,11 +472,7 @@ class BatchRunner(AbstractTestRunner):
         fp.write("canary ")
 
         # The batch will be run in a compute node, so hpc_connect won't set the machine limits
-        nodes: int
-        if isinstance(arg, TestCase):
-            nodes = config.resource_pool.nodes_required(arg.required_resources())
-        else:
-            nodes = max(config.resource_pool.nodes_required(c.required_resources()) for c in arg)
+        nodes = nodes_required(arg)
         cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
         gpus_per_node = config.resource_pool.pinfo("gpus_per_node")
         if isinstance(arg, TestBatch):
@@ -476,12 +517,31 @@ class BatchRunner(AbstractTestRunner):
         return total_runtime
 
 
+def nodes_required(arg: TestCase | TestBatch) -> int:
+    nodes: int
+    if isinstance(arg, TestCase):
+        nodes = config.resource_pool.nodes_required(arg.required_resources())
+    else:
+        assert isinstance(arg, TestBatch)
+        nodes = max(config.resource_pool.nodes_required(c.required_resources()) for c in arg)
+        if nodes_per_batch := os.getenv("CANARY_NODES_PER_BATCH"):
+            nodes = max(nodes, int(nodes_per_batch))
+    return nodes
+
+
 def factory() -> "AbstractTestRunner":
     runner: "AbstractTestRunner"
     if config.backend is None:
         runner = TestCaseRunner()
     else:
         runner = BatchRunner()
+        if nodes_per_batch := os.getenv("CANARY_NODES_PER_BATCH"):
+            sys_node_count = config.resource_pool.pinfo("node_count")
+            if int(nodes_per_batch) > config.resource_pool.pinfo("node_count"):
+                raise ValueError(
+                    f"CANARY_NODES_PER_BATCH={nodes_per_batch} exceeds "
+                    f"node count of system ({sys_node_count})"
+                )
     return runner
 
 

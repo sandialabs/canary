@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 """\
 Before running a test, ``canary`` reads the test file looking for "test
 directives".   Test directives are instructions for how to setup and allocate

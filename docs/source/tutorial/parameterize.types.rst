@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 .. _tutorial-parameterize-types:
 
 Types of parameterizations
@@ -61,7 +65,7 @@ Example
 
 .. literalinclude:: /examples/centered_space/centered_space.pyt
     :language: python
-    :lines: 1-19
+    :lines: 4-23
 
 will produce two test cases, one with ``a=1`` and another with ``a=4``, each executed in their own test directory:
 

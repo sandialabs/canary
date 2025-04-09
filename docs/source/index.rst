@@ -1,3 +1,7 @@
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
 :html_theme.sidebar_secondary.remove: true
 
 .. template taken from Pandas

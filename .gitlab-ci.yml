@@ -19,10 +19,18 @@ before_script:
 - python3 --version
 
 
+.retriable:
+  retry:
+    max: 1
+    exit_codes: 1
+
+
 test::unit:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
   script:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - module load aue/cmake/3.27.7
@@ -39,6 +47,8 @@ test::coverage:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
   script:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - module load aue/cmake/3.27.7
@@ -64,18 +74,22 @@ test::integration::flux:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
+  variables:
+    FLUX_START: "flux start -o,-c ./.flux-ci.toml"
+    HPCC_POLLING_FREQUENCY: "1s"
+    HPC_CONNECT_ENABLE_FLUX_SUBMITN: 1
   script:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - module load aue/flux-core
-  - module load aue/cmake/3.27.7
-  - module load aue/gcc/12.1.0
-  - module load aue/openmpi/4.1.6-gcc-12.1.0
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
-    #  - exit_code=0
-    #  - flux start canary run -w -b scheduler=flux -b scheme=isolated_sets ./examples || exit_code=$?
-    #  - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+  - HOSTNAME=$(hostname) sed -i "s/HOSTNAME/$HOSTNAME/g" .flux-ci.toml
   - exit_code=0
-  - flux start canary run -w -b scheduler=flux -b count=2 ./examples || exit_code=$?
+  - $FLUX_START canary run -w -b scheduler=flux -b spec=count:2 ./examples || exit_code=$?
+  - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+  - exit_code=0
+  - $FLUX_START canary run -w -b scheduler=flux -b spec=count:auto,layout:atomic ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
@@ -86,6 +100,8 @@ test::integration::slurm:
   stage: test
   tags:
   - jetcool
+  extends:
+  - .retriable
   before_script:
   - $CTS1_PYTHON3 -m venv venv
   - source venv/bin/activate
@@ -99,13 +115,22 @@ test::integration::slurm:
   - exit_code=0
   - canary run -w -b scheduler=slurm ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+  - exit_code=0
+  - canary run -w -b scheduler=slurm -b spec=count:3 ./examples || exit_code=$?
+  - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+  - exit_code=0
+  - canary run -w -b scheduler=slurm -b spec=count:3,layout:atomic ./examples || exit_code=$?
+  - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+  - exit_code=0
+  - canary run -w -b scheduler=slurm -b spec=count:auto,layout:flat ./examples || exit_code=$?
+  - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   - canary -C TestResults report junit create -o $CI_PROJECT_DIR/junit.xml || true
   - canary -C TestResults report cdash create -d $CI_PROJECT_DIR/xml || true
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
   artifacts:
-    when: always
+    when: on_failure
     paths:
     - junit.xml
     reports:
@@ -116,6 +141,8 @@ test::integration::shell:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
   before_script:
   - $CEE_PYTHON3 -m venv venv
   - source venv/bin/activate
@@ -127,7 +154,7 @@ test::integration::shell:
   - module load aue/openmpi/4.1.6-gcc-12.1.0
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - exit_code=0
-  - canary run -w -b scheduler=shell -b count=2 ./examples || exit_code=$?
+  - canary run -w -b scheduler=shell -b spec=count:2 ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   - canary -C TestResults report junit create -o $CI_PROJECT_DIR/junit.xml || true
   - canary -C TestResults report cdash create -d $CI_PROJECT_DIR/xml || true
@@ -135,7 +162,7 @@ test::integration::shell:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
   artifacts:
-    when: always
+    when: on_failure
     paths:
     - junit.xml
     reports:
@@ -146,6 +173,8 @@ test::integration::local:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
   before_script:
   - $CEE_PYTHON3 -m venv venv
   - source venv/bin/activate
@@ -165,7 +194,7 @@ test::integration::local:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
   artifacts:
-    when: always
+    when: on_failure
     paths:
     - junit.xml
     reports:
@@ -176,6 +205,8 @@ test::plugin::yaml:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
   before_script:
   - $CEE_PYTHON3 -m venv venv
   - source venv/bin/activate
@@ -199,21 +230,23 @@ test::plugin::sierra:
   stage: test
   tags:
   - cee.build
+  extends:
+  - .retriable
   before_script:
   - $CEE_PYTHON3 -m venv venv
   - source venv/bin/activate
   - python3 --version
   script:
-  - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - git clone git@cee-gitlab.sandia.gov:ascic-test-infra/plugins/canary-sierra.git
-  # test -p PLUGIN_NAME
-  # @mvlopri: change describe to run an actual test.
-  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/src:$CI_PROJECT_DIR/canary-sierra/mock canary -p canary_sierra describe ./canary-sierra/tests/adagio_solid_mech/adagio_patch_test_first.test
+  - export PATH=$CI_PROJECT_DIR/canary-sierra/mock/bin:$PATH
+  - ls $CI_PROJECT_DIR/canary-sierra/mock/bin
+  - which nem_spread
+  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/src:$CI_PROJECT_DIR/canary-sierra/mock canary -p canary_sierra run ./canary-sierra/tests/
   - cd $CI_PROJECT_DIR/canary-sierra
   - python3 -m pip install --no-deps .
   - cd $CI_PROJECT_DIR
-  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/mock canary describe ./canary-sierra/tests/adagio_solid_mech/adagio_patch_test_first.test
+  - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/mock canary run -w ./canary-sierra/tests
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
@@ -228,12 +261,12 @@ lint::check:
   - ruff --version
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
   - ./bin/ci/ruff-check --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" --output-format=junit --output-file=ruff.xml
-  - cat ruff.xml
+  - cat ruff.xml || true
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     when: always
   artifacts:
-    when: always
+    when: on_failure
     reports:
       junit: ruff.xml
 
@@ -268,9 +301,6 @@ lint::type_checking:
     when: always
     reports:
       codequality: codequality.json
-  rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-    when: always
 
 
 .pages:

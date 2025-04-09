@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import abc
 import io
 import math
@@ -333,19 +337,6 @@ class BatchResourceQueue(ResourceQueue):
 
     def failed(self) -> list[TestCase]:
         return [_ for batch in self._finished.values() for _ in batch if _.status != "success"]
-
-
-def idjoin(ids: list[int], threshold: int = 4) -> str:
-    if len(ids) <= threshold:
-        return ",".join(str(_) for _ in ids)
-    i = int(min(threshold / 2, 3))
-    return idjoin(ids[:i]) + ",...," + idjoin(ids[-i:])
-
-
-def le(arg1: tuple[int, ...], arg2: tuple[int, ...]) -> bool:
-    if len(arg1) != len(arg2):
-        raise ValueError(f"lengths of operands must be equal ({len(arg1)}, {len(arg2)})")
-    return all(a <= b for a, b in zip(arg1, arg2))
 
 
 def factory(lock: threading.Lock, fail_fast: bool = False) -> ResourceQueue:
