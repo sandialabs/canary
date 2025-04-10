@@ -30,9 +30,9 @@ def canary_subcommand() -> CanarySubcommand:
 class Run(CanarySubcommand):
     name = "run"
     description = "Find and run tests from a pathspec"
+    epilog = "See canary help --pathspec for help on the path specification"
 
     def setup_parser(self, parser: "Parser") -> None:
-        parser.epilog = "See canary help --pathspec for help on the path specification"
         add_work_tree_arguments(parser)
         add_filter_arguments(parser)
         group = parser.add_argument_group("console reporting")

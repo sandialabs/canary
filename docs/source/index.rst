@@ -25,7 +25,7 @@ canary
 
 **Speed**: Hierarchical parallelism is used to run tests asynchronously, optimizing resource utilization and speeding up the testing process.  See :ref:`basics-resource` for more.
 
-**Python**: Test files are written in `Python <python.org>`_, giving developers access to the full Python ecosystem.
+**Python**: Test files are written in `Python <https://www.python.org>`_, giving developers access to the full Python ecosystem.
 
 **Integration**: ``canary`` :ref:`integrates<integrations>` with popular developer tools like :ref:`CMake <integrations-cmake>`, :ref:`CDash <integrations-cdash>`, :ref:`CTest <integrations-ctest>`, and :ref:`GitLab <integrations-gitlab>`, streamlining the testing and continuous integration (CI) processes.
 

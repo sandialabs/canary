@@ -7,13 +7,17 @@
 Integrate with CMake
 ====================
 
-The ``Canary.cmake`` plugin integrates ``canary`` with CMake projects. This
-plugin provides three main functions: ``add_canary_test``, ``add_canary_target``, and
-``write_canary_config``.
+``Canary.cmake`` can be included in CMake projects and provides three main functions:
+``add_canary_test``, ``add_canary_target``, and ``write_canary_config``.
 
 To use the ``canary`` CMake integration:
 
-1. Copy the ``Canary.cmake`` file into your project's CMake modules directory.
+1. Fetch the ``Canary.cmake`` file into your project's CMake modules directory:
+
+   .. code-block:: console
+
+     canary fetch Canary.cmake
+
 2. Include the module in your ``CMakeLists.txt``:
 
    .. code-block:: cmake

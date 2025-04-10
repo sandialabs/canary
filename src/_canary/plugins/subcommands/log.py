@@ -22,9 +22,9 @@ def canary_subcommand() -> CanarySubcommand:
 class Log(CanarySubcommand):
     name = "log"
     description = "Show the test case's log file"
-    epilog = "Note: this command must be run from inside of a test session directory."
 
     def setup_parser(self, parser: "Parser") -> None:
+        parser.epilog = self.in_session_note()
         parser.add_argument("testspec", help="Test name, /TEST_ID, or ^BATCH_ID")
 
     def execute(self, args: argparse.Namespace) -> int:

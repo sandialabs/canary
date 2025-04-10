@@ -22,9 +22,9 @@ def canary_subcommand() -> CanarySubcommand:
 class Status(CanarySubcommand):
     name = "status"
     description = "Print information about a test run"
-    epilog = "Note: this command must be run from inside of a test session directory."
 
     def setup_parser(self, parser: "Parser"):
+        parser.epilog = self.in_session_note()
         parser.add_argument(
             "--durations",
             nargs="?",

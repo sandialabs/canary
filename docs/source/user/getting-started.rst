@@ -7,15 +7,29 @@
 Getting started
 ===============
 
-``canary`` finds and runs tests defined in Python files having a ``.pyt`` extension.  The tests are run in their own execution directory (default: ``./TestResults/<test-name>``), and return code captured.  A return code of ``0`` indicates ``success`` and any other return code indicates failure.
+``canary`` identifies and executes tests defined from multiple sources.  Each test runs in its own execution directory, with the default location being ``./TestResults/<test-name>``, and return code captured.  A return code of ``0`` indicates ``success``, while any other return code indicates a failure of some kind.  Python files having a ``.pyt`` extension are the native test format which will be used in the examples.
 
 .. note::
 
-   All of the examples can be found in the ``/examples`` directory of the ``canary`` repository.  If you don't have a copy of the examples, they can be obtained by cloning ``canary``:
+   If ``canary`` is not installed on your system, you can install it as:
 
    .. code-block:: console
 
-      git clone https://cee-gitlab.sandia.gov/ascic-test-infra/canary
+      python3 -m venv venv
+      source ./venv/bin/activate
+      python3 -m pip install \
+      --trusted-host=cee-gitlab.sandia.gov \
+      --index-url=https://nexus.web.sandia.gov/repository/pypi-proxy/simple \
+      --extra-index-url=https://cee-gitlab.sandia.gov/api/v4/projects/51750/packages/pypi/simple \
+      canary-wm
+
+.. note::
+
+   All of the examples in the documentation can be obtained by the ``canary fetch`` command:
+
+   .. code-block:: console
+
+      canary fetch examples
 
 .. _getting-started-first:
 
@@ -50,6 +64,10 @@ By default, only failed tests appear in the output, which is why the output abov
     :cwd: /examples/TestResults
 
 .. _getting-started-second:
+
+.. note::
+
+   ``canary run`` creates and executes tests in a folder named ``TestResults``.  If this folder exists, ``canary run`` will issue an error that a test session already exists.  To start a new test session, you can either move or delete ``TestResults`` manually, or instruct ``canary`` to remove it automatically by passing ``-w`` to ``canary run``.
 
 A second test
 -------------
