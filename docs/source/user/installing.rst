@@ -26,7 +26,7 @@ Basic installation
 
    .. code-block:: console
 
-      python3 -m pip install git+ssh://git@cee-gitlab.gov/alegra/tools/canary
+      python3 -m pip install "canary-wm git+ssh://git@cee-gitlab.gov/ascic-test-infra/canary"
 
 
 Editable installation
