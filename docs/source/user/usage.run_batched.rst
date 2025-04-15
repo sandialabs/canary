@@ -27,9 +27,9 @@ Batch spec
 * if ``count:N``: create at most ``N`` batches
 
 * if ``layout:flat``: batches have no intra-batch dependencies but may have inter-batch dependencies
-* if ``layout:atomic``: batch have no inter-batch dependencies but may have intra-batch dependencies
+* if ``layout:atomic``: batches are independent of other batches, ie, batches have no inter-batch dependencies but may have intra-batch dependencies
 
-* if ``nodes:any``: tests are batch with respect to node count of test cases
+* if ``nodes:any``: tests are batched without respect to node count of test cases
 * if ``nodes:same``: tests are batched with tests having the same node count
 
 The default batch spec is ``duration:30m,nodes:any,layout:flat``.

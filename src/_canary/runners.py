@@ -349,7 +349,7 @@ class BatchRunner(AbstractTestRunner):
             logging.trace(f"Submitting batch {batch.id[:7]}")
 
         batchopts = config.getoption("batch", {})
-        flat = not (batchopts["spec"]["layout"] == "closed")
+        flat = batchopts["spec"]["layout"] == "flat"
         try:
             default_int_signal = signal.signal(signal.SIGINT, cancel)
             default_term_signal = signal.signal(signal.SIGTERM, cancel)
