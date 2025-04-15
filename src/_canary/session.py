@@ -179,8 +179,9 @@ class Session:
     def casespecs_view(cls, path: str, case_specs: list[str]) -> "Session":
         """Create a view of this session that only includes cases in ``batch_id``"""
         self = cls(path, mode="a+")
+        case_specs.sort()
         with self.db.open("cases/index", "r") as fh:
-            index = json.load(fh)["index"]
+            index = sorted(json.load(fh)["index"].keys())
         ids: list[str] = []
         for case_spec in case_specs:
             if case_spec.startswith("/"):
