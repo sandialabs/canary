@@ -1,11 +1,11 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import copy
 import math
 import pickle
 from typing import Any
+from typing import Iterable
 
 from ..util import logging
 from ..util.rprobe import cpu_count
@@ -154,16 +154,16 @@ class ResourcePool:
         if item == "node_count":
             return len(self.pool)
         if item.endswith("_per_node"):
-            key = item[:-9]
+            arg = item[:-9]
             for local in self.pool:
-                if key in local:
+                if key := contains(local, (arg, f"{arg}s")):
                     return len(local[key])
             return 0
         if item.endswith("_count"):
-            key = item[:-6] + "s"
             count = 0
+            arg = item[:-6]
             for local in self.pool:
-                if key in local:
+                if key := contains(local, (arg, f"{arg}s")):
                     count += len(local[key])
             return 0
         raise KeyError(item)
@@ -307,6 +307,13 @@ class ResourcePool:
                 if n == 1 and type.endswith("s"):
                     type = type[:-1]
                 logging.debug(f"Reclaimed {n} {type}")
+
+
+def contains(sequence: Iterable[Any], args: tuple[Any, ...]) -> Any:
+    for arg in args:
+        if arg in sequence:
+            return arg
+    return None
 
 
 class ResourceUnsatisfiable(Exception):
