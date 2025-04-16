@@ -165,7 +165,7 @@ class ResourcePool:
             for local in self.pool:
                 if key := contains(local, (arg, f"{arg}s")):
                     count += len(local[key])
-            return 0
+            return count
         raise KeyError(item)
 
     def getstate(self) -> list[dict[str, Any]]:
