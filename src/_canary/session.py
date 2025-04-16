@@ -64,6 +64,15 @@ from .util.time import timestamp
 
 global_session_lock = threading.Lock()
 
+# Session modes are analogous to file modes
+session_modes = (
+    "w",  # create a new session (write)
+    "a",  # open an existing session to modify (append)
+    "a+",  # open an existing session to modify, don't reload test cases (lazily loaded as needed)
+    "r",  # open an existing session to read (read-only)
+    "r+",  # open an existing session to read, don't reload test cases (lazyily-loaded as needed)
+)
+
 
 class Session:
     """Open the test session and return a corresponding object.
@@ -119,7 +128,7 @@ class Session:
     default_worktree = "./TestResults"
 
     def __init__(self, path: str, mode: str = "r", force: bool = False) -> None:
-        if mode not in "arwb":
+        if mode not in session_modes:
             raise ValueError(f"invalid mode: {mode!r}")
         self.work_tree: str
         if mode == "w":
@@ -152,10 +161,10 @@ class Session:
         self.level = int(os.environ["CANARY_LEVEL"])
 
         self.db = Database(self.config_dir, mode=mode)
-        if mode in "rab":
+        if mode in ("r", "r+", "a", "a+"):
             self.restore_settings()
             self.load_testcase_generators()
-            if mode != "b":
+            if not mode.endswith("+"):
                 self.load_testcases()
         else:
             self.initialize()
@@ -163,8 +172,31 @@ class Session:
 
         self.mode = mode
 
-        if mode == "w":
+        if self.mode == "w":
             self.save(ini=True)
+
+    @classmethod
+    def casespecs_view(cls, path: str, case_specs: list[str]) -> "Session":
+        """Create a view of this session that only includes cases in ``batch_id``"""
+        self = cls(path, mode="a+")
+        case_specs.sort()
+        with self.db.open("cases/index", "r") as fh:
+            index = sorted(json.load(fh)["index"].keys())
+        ids: list[str] = []
+        for case_spec in case_specs:
+            if case_spec.startswith("/"):
+                case_spec = case_spec[1:]
+            for item in index:
+                if item.startswith(case_spec):
+                    ids.append(item)
+                    break
+        self.load_testcases(ids=ids)
+        for case in self.cases:
+            if case.pending() and not all(dep.id in ids for dep in case.dependencies):
+                case.mask = "one or more missing dependencies"
+            else:
+                case.mark_as_ready()
+        return self
 
     @classmethod
     def batch_view(cls, path: str, batch_id: str) -> "Session":
@@ -174,12 +206,10 @@ class Session:
             raise ValueError(f"could not find index for batch {batch_id}")
         expected = len(batch_case_ids)
         logging.info(f"Selecting {expected} tests from batch {batch_id}")
-        self = cls(path, mode="b")
+        self = cls(path, mode="a+")
         self.load_testcases(ids=batch_case_ids)
         for case in self.cases:
-            if case.id not in batch_case_ids:
-                case.mask = f"case not in batch {batch_id}"
-            elif case.masked():
+            if case.masked():
                 logging.warning(f"{case}: unexpected mask: {case.mask}")
             elif case.pending():
                 if not all(dep.id in batch_case_ids for dep in case.dependencies):
@@ -932,7 +962,7 @@ class Database:
 
     def __init__(self, directory: str, mode="a") -> None:
         self.home = os.path.join(os.path.abspath(directory), "objects")
-        if mode in "rab":
+        if mode in ("r", "r+", "a", "a+"):
             if not os.path.exists(self.home):
                 raise FileNotFoundError(self.home)
         elif mode == "w":
