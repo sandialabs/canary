@@ -396,6 +396,8 @@ class Config:
             self.log_level = data.pop("log_level").upper()
             level = logging.get_level(self.log_level)
             logging.set_level(level)
+        if "warnings" in data:
+            logging.set_warning_level(data.pop("warnings"))
         for key, val in data.items():
             setattr(self, key, val)
 
@@ -413,6 +415,9 @@ class Config:
             self.debug = True
             self.log_level = logging.get_level_name(log_levels[3])
             logging.set_level(logging.DEBUG)
+
+        if args.warnings:
+            logging.set_warning_level(args.warnings)
 
         env_mods = getattr(args, "env_mods") or {}
         if "session" in env_mods:

@@ -282,7 +282,11 @@ class Session:
             # see TestCase.lockfile for file pattern
             file = self.db.join_path("cases", id[:2], id[2:], TestCase._lockfile)
             with self.db.open(file) as fh:
-                state = json.load(fh)
+                try:
+                    state = json.load(fh)
+                except json.JSONDecodeError:
+                    logging.warning(f"Unable to load {file}!")
+                    continue
             state["properties"]["work_tree"] = self.work_tree
             case = testcase_from_state(state)
             # update dependencies manually so that the dependencies are consistent across the suite

@@ -23,6 +23,7 @@ class Status:
         "running",
         "cancelled",
         "not_run",
+        "unknown",
         "success",
         "xfail",
         "xdiff",
@@ -38,6 +39,8 @@ class Status:
         "ready": "b",
         "running": "c",
         "cancelled": "y",
+        "not_run": "R",
+        "unknown": "R",
         "success": "G",
         "xfail": "c",
         "xdiff": "c",
@@ -45,7 +48,6 @@ class Status:
         "diffed": "y",
         "failed": "R",
         "timeout": "R",
-        "not_run": "R",
     }
 
     def __init__(self, arg: str = "created", details: str | None = None) -> None:
@@ -104,6 +106,7 @@ class Status:
             "failed": glyphs.ballotx,
             "timeout": glyphs.ballotx,
             "not_run": glyphs.ballotx,
+            "unknown": glyphs.ballotx,
         }
         glyph = map[status]
         color = Status.colors[status]

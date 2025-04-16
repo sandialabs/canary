@@ -1358,10 +1358,15 @@ class TestCase(AbstractTestCase):
             except Exception:
                 time.sleep(delay)
                 delay *= 2
-        raise ValueError(f"Failed to load {file} after {tries} attempts")
+        raise FailedToLoadLockfileError(f"Failed to load {file} after {tries} attempts")
 
     def refresh(self, propagate: bool = True) -> None:
-        state = self._load_lockfile()
+        try:
+            state = self._load_lockfile()
+        except FailedToLoadLockfileError:
+            self.status.set("unknown", details="Lockfile failed to load on refresh")
+            self.save()
+            return
         keep = (
             "start",
             "stop",
@@ -1765,3 +1770,7 @@ class InvalidTypeError(Exception):
 class MutuallyExclusiveParametersError(Exception):
     def __init__(self, name1, name2):
         super().__init__(f"{name1} and {name2} are mutually exclusive parameters")
+
+
+class FailedToLoadLockfileError(Exception):
+    pass
