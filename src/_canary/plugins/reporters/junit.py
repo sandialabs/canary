@@ -120,7 +120,16 @@ class JunitDocument(xdom.Document):
         testcase.setAttribute("classname", case.classname)
         testcase.setAttribute("time", str(case.duration))
         testcase.setAttribute("file", getattr(case, "relpath", case.file_path))
-        not_done = ("retry", "created", "pending", "ready", "running", "cancelled", "not_run")
+        not_done = (
+            "retry",
+            "created",
+            "pending",
+            "ready",
+            "running",
+            "cancelled",
+            "not_run",
+            "unknown",
+        )
         if case.status.value in ("failed", "timeout", "diffed"):
             failure = self.create_element("failure")
             failure.setAttribute("message", f"Test case status: {case.status.value}")
