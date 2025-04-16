@@ -8,7 +8,7 @@ import canary
 from _canary.plugins.generators.pyt import PYTTestGenerator
 
 
-def test_issue_47(tmpdir):
+def test_issue_62(tmpdir):
     with canary.filesystem.working_dir(os.path.dirname(__file__)):
         file = PYTTestGenerator(".", "issue-62.pyt")
         cases = file.lock(on_options=[])
