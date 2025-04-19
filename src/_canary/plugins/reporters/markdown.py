@@ -52,14 +52,8 @@ class MarkdownReport(CanaryReport):
     def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
         if case.masked():
             return
-        fh.write(f"**Test:** {case.display_name}\n\n")
-        if case.defective():
-            fh.write("**Status:** Defective\n\n")
-        else:
-            fh.write(f"**Status:** {case.status.name}\n\n")
-        fh.write(f"**Exit code:** {case.returncode}\n\n")
-        fh.write(f"**ID:** {case.id}\n\n")
-        fh.write(f"**Duration:** {case.duration:.4f}\n\n")
+        fh.write(f"# {case.display_name}\n\n")
+        self.render_test_info_table(case, fh)
         fh.write("## Test output\n")
         fh.write("\n```console\n")
         if case.defective():
@@ -78,6 +72,20 @@ class MarkdownReport(CanaryReport):
         else:
             fh.write("Error log file does not exist\n")
         fh.write("```\n")
+
+    def render_test_info_table(self, case: TestCase, fh: TextIO) -> None:
+        info : dict[str, str] = {
+            "**Status**": "Defective" if case.defective() else case.status.name,
+            "**Exit code**": str(case.returncode),
+            "**ID**": str(case.id),
+            "**Location**": case.working_directory,
+            "**Duration**": f"{case.duration:.4f}",
+            }
+        fh.write("|||\n|---|---|\n")
+        for key, val in info.items():
+            fh.write(f"|{key.center(15, ' ')}| {val} |\n")
+        fh.write("\n")
+
 
     def generate_index(self, session: "Session", fh: TextIO) -> None:
         fh.write("# Canary Summary\n\n")
