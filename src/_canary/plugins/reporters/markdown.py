@@ -43,7 +43,11 @@ class MarkdownReport(CanaryReport):
         for case in session.active_cases():
             file = os.path.join(self.md_dir, f"{case.id}.md")
             with open(file, "w") as fh:
-                self.generate_case_file(case, fh)
+                try:
+                    self.generate_case_file(case, fh)
+                except Exception as e:
+                    ex = e if logging.DEBUG >= logging.get_level() else None
+                    logging.warning(f"Issue writing report for test case ID:{case.id}", ex=ex)
         with open(self.index, "w") as fh:
             self.generate_index(session, fh)
         f = os.path.relpath(self.index, config.invocation_dir)
