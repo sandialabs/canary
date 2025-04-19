@@ -52,13 +52,13 @@ class MarkdownReport(CanaryReport):
     def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
         if case.masked():
             return
-        fh.write(f"**Test:** {case.display_name}\n")
+        fh.write(f"**Test:** {case.display_name}\n\n")
         if case.defective():
-            fh.write("**Status:** Defective\n")
+            fh.write("**Status:** Defective\n\n")
         else:
-            fh.write(f"**Status:** {case.status.name}\n")
-        fh.write(f"**Exit code:** {case.returncode}\n")
-        fh.write(f"**ID:** {case.id}\n")
+            fh.write(f"**Status:** {case.status.name}\n\n")
+        fh.write(f"**Exit code:** {case.returncode}\n\n")
+        fh.write(f"**ID:** {case.id}\n\n")
         fh.write(f"**Duration:** {case.duration:.4f}\n\n")
         fh.write("## Test output\n")
         fh.write("\n```console\n")
