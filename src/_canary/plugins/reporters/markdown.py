@@ -69,6 +69,14 @@ class MarkdownReport(CanaryReport):
                 fh.write(fp.read().strip() + "\n")
         else:
             fh.write("Log file does not exist\n")
+        fh.write("```\n\n")
+        fh.write("## Test error output\n")
+        fh.write("\n```console\n")
+        if os.path.exists(case.stderr()):
+            with open(case.stderr()) as fp:
+                fh.write(fp.read().strip() + "\n")
+        else:
+            fh.write("Error log file does not exist\n")
         fh.write("```\n")
 
     def generate_index(self, session: "Session", fh: TextIO) -> None:
