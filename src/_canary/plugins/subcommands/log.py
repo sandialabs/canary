@@ -45,7 +45,6 @@ class Log(CanarySubcommand):
             return case.logfile(stage=stage)
 
     def execute(self, args: argparse.Namespace) -> int:
-
         from ...test.batch import TestBatch
         from ...test.case import from_id as testcase_from_id
 
