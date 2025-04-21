@@ -70,26 +70,26 @@ class MarkdownReport(CanaryReport):
         fh.write("```\n\n")
         fh.write("## Test error output\n")
         fh.write("\n```console\n")
-        if os.path.exists(case.stderr()):
-            with open(case.stderr()) as fp:
+        stderr = case.stderr() or ""
+        if stderr and os.path.exists(stderr):
+            with open(stderr) as fp:
                 fh.write(fp.read().strip() + "\n")
         else:
             fh.write("Error log file does not exist\n")
         fh.write("```\n")
 
     def render_test_info_table(self, case: TestCase, fh: TextIO) -> None:
-        info : dict[str, str] = {
+        info: dict[str, str] = {
             "**Status**": "Defective" if case.defective() else case.status.name,
             "**Exit code**": str(case.returncode),
             "**ID**": str(case.id),
             "**Location**": case.working_directory,
             "**Duration**": f"{case.duration:.4f}",
-            }
+        }
         fh.write("|||\n|---|---|\n")
         for key, val in info.items():
             fh.write(f"|{key.center(15, ' ')}| {val} |\n")
         fh.write("\n")
-
 
     def generate_index(self, session: "Session", fh: TextIO) -> None:
         fh.write("# Canary Summary\n\n")
