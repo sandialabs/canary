@@ -43,7 +43,11 @@ class MarkdownReport(CanaryReport):
         for case in session.active_cases():
             file = os.path.join(self.md_dir, f"{case.id}.md")
             with open(file, "w") as fh:
-                self.generate_case_file(case, fh)
+                try:
+                    self.generate_case_file(case, fh)
+                except Exception as e:
+                    ex = e if logging.DEBUG >= logging.get_level() else None
+                    logging.warning(f"Issue writing report for test case ID:{case.id}", ex=ex)
         with open(self.index, "w") as fh:
             self.generate_index(session, fh)
         f = os.path.relpath(self.index, config.invocation_dir)
@@ -52,14 +56,8 @@ class MarkdownReport(CanaryReport):
     def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
         if case.masked():
             return
-        fh.write(f"**Test:** {case.display_name}\n")
-        if case.defective():
-            fh.write("**Status:** Defective\n")
-        else:
-            fh.write(f"**Status:** {case.status.name}\n")
-        fh.write(f"**Exit code:** {case.returncode}\n")
-        fh.write(f"**ID:** {case.id}\n")
-        fh.write(f"**Duration:** {case.duration:.4f}\n\n")
+        fh.write(f"# {case.display_name}\n\n")
+        self.render_test_info_table(case, fh)
         fh.write("## Test output\n")
         fh.write("\n```console\n")
         if case.defective():
@@ -69,7 +67,29 @@ class MarkdownReport(CanaryReport):
                 fh.write(fp.read().strip() + "\n")
         else:
             fh.write("Log file does not exist\n")
+        fh.write("```\n\n")
+        fh.write("## Test error output\n")
+        fh.write("\n```console\n")
+        stderr = case.stderr() or ""
+        if stderr and os.path.exists(stderr):
+            with open(stderr) as fp:
+                fh.write(fp.read().strip() + "\n")
+        else:
+            fh.write("Error log file does not exist\n")
         fh.write("```\n")
+
+    def render_test_info_table(self, case: TestCase, fh: TextIO) -> None:
+        info: dict[str, str] = {
+            "**Status**": "Defective" if case.defective() else case.status.name,
+            "**Exit code**": str(case.returncode),
+            "**ID**": str(case.id),
+            "**Location**": case.working_directory,
+            "**Duration**": f"{case.duration:.4f}",
+        }
+        fh.write("|||\n|---|---|\n")
+        for key, val in info.items():
+            fh.write(f"|{key.center(15, ' ')}| {val} |\n")
+        fh.write("\n")
 
     def generate_index(self, session: "Session", fh: TextIO) -> None:
         fh.write("# Canary Summary\n\n")
