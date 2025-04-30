@@ -33,7 +33,7 @@ class Status(CanarySubcommand):
             metavar="N",
             help="Show N slowest test durations (N<0 for all) [default: 10]",
         )
-        group.add_argument(
+        parser.add_argument(
             "--format",
             default="short",
             action="store",
