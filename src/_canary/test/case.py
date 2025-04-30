@@ -1303,15 +1303,27 @@ class TestCase(AbstractTestCase):
 
         i = self.display_name.find("[")
         if i == -1:
-            return colorize("@*{%s}" % test_name)
+            # No parameters to colorize.
+            return test_name
+
         # Find the parameter chunks in the display name because it's
         # easier to do it there.
         parts = self.display_name[i + 1 : -1].split(",")
         colors = itertools.cycle("bmgycr")
         for j, part in enumerate(parts):
             color = next(colors)
-            k = test_name.find(part)
-            test_name = test_name[:k] + colorize("@%s{%s}" % (color, part)) + test_name[k+len(part):]
+            # If we're using the full path or display name, every parameter
+            # will start with one of [ , . and will end with one of ] , . $
+            # This whole regex stuff is to make it so we will correctly
+            # color "foo.bar_np=42.np=4" where "np=4" is nested in "bar_np=42".
+            pre_pattern = r"(\[|\,|\.)"
+            post_pattern = r"(\]|\,|\.|$)"
+            pattern = pre_pattern + re.escape(part) + post_pattern
+            match = re.search(pattern, test_name)
+            if match is not None:
+                start, end = match.span()
+                test_name = test_name[:start+1] + colorize("@%s{%s}" % (color, part)) + test_name[start+1+len(part):]
+
         return test_name
 
     def copy(self) -> "TestCase":
