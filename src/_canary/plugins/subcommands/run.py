@@ -49,6 +49,12 @@ class Run(CanarySubcommand):
             help="Disable summary [default: %(default)s]",
         )
         group.add_argument(
+            "--full-path",
+            default=None,
+            action="store_true",
+            help="Print test's full path instead of just test name [default: %(default)s]",
+        )
+        group.add_argument(
             "--durations",
             type=int,
             metavar="N",

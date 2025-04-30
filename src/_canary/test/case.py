@@ -1294,6 +1294,8 @@ class TestCase(AbstractTestCase):
         return False
 
     def pretty_repr(self) -> str:
+        if config.getoption("full_path"):
+            return self.path
         family = colorize("@*{%s}" % self.family)
         i = self.display_name.find("[")
         if i == -1:
