@@ -33,11 +33,12 @@ class Status(CanarySubcommand):
             metavar="N",
             help="Show N slowest test durations (N<0 for all) [default: 10]",
         )
-        parser.add_argument(
-            "--full-path",
-            default=None,
-            action="store_true",
-            help="Print test's full path instead of just test name [default: %(default)s]",
+        group.add_argument(
+            "--format",
+            default="short",
+            action="store",
+            choices=["short", "long"],
+            help="Change the format of the test case's name as printed to the screen. Options are 'short' and 'long' [default: %(default)s]",
         )
         parser.add_argument(
             "-r",

@@ -1294,18 +1294,25 @@ class TestCase(AbstractTestCase):
         return False
 
     def pretty_repr(self) -> str:
-        if config.getoption("full_path"):
-            return self.path
-        family = colorize("@*{%s}" % self.family)
+        test_name = None
+        format_opt = config.getoption("format")
+        if format_opt == "long":
+            test_name = self.path
+        elif format_opt == "short":
+            test_name = self.display_name
+
         i = self.display_name.find("[")
         if i == -1:
-            return family
+            return colorize("@*{%s}" % test_name)
+        # Find the parameter chunks in the display name because it's
+        # easier to do it there.
         parts = self.display_name[i + 1 : -1].split(",")
         colors = itertools.cycle("bmgycr")
         for j, part in enumerate(parts):
             color = next(colors)
-            parts[j] = colorize("@%s{%s}" % (color, part))
-        return f"{family}[{','.join(parts)}]"
+            k = test_name.find(part)
+            test_name = test_name[:k] + colorize("@%s{%s}" % (color, part)) + test_name[k+len(part):]
+        return test_name
 
     def copy(self) -> "TestCase":
         return deepcopy(self)
