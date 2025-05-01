@@ -1301,6 +1301,9 @@ class TestCase(AbstractTestCase):
         elif format_opt == "short":
             test_name = self.display_name
 
+        if test_name is None:
+            raise Exception(f"Invalid format argument: {repr(test_name)}")
+
         i = self.display_name.find("[")
         if i == -1:
             # No parameters to colorize.
