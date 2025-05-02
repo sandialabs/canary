@@ -1295,7 +1295,7 @@ class TestCase(AbstractTestCase):
 
     def pretty_repr(self) -> str:
         test_name = None
-        format_opt = config.getoption("format")
+        format_opt = config.getoption("format", "short")
         if format_opt == "long":
             test_name = self.path
         elif format_opt == "short":
