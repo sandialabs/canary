@@ -1325,7 +1325,11 @@ class TestCase(AbstractTestCase):
             match = re.search(pattern, test_name)
             if match is not None:
                 start, end = match.span()
-                test_name = test_name[:start+1] + colorize("@%s{%s}" % (color, part)) + test_name[start+1+len(part):]
+                test_name = (
+                    test_name[: start + 1]
+                    + colorize("@%s{%s}" % (color, part))
+                    + test_name[start + 1 + len(part) :]
+                )
 
         return test_name
 
