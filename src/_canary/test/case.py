@@ -1294,16 +1294,44 @@ class TestCase(AbstractTestCase):
         return False
 
     def pretty_repr(self) -> str:
-        family = colorize("@*{%s}" % self.family)
+        test_name = None
+        format_opt = config.getoption("format", "short")
+        if format_opt == "long":
+            test_name = self.path
+        elif format_opt == "short":
+            test_name = self.display_name
+
+        if test_name is None:
+            raise Exception(f"Invalid format argument: {repr(test_name)}")
+
         i = self.display_name.find("[")
         if i == -1:
-            return family
+            # No parameters to colorize.
+            return test_name
+
+        # Find the parameter chunks in the display name because it's
+        # easier to do it there.
         parts = self.display_name[i + 1 : -1].split(",")
         colors = itertools.cycle("bmgycr")
         for j, part in enumerate(parts):
             color = next(colors)
-            parts[j] = colorize("@%s{%s}" % (color, part))
-        return f"{family}[{','.join(parts)}]"
+            # If we're using the full path or display name, every parameter
+            # will start with one of [ , . and will end with one of ] , . $
+            # This whole regex stuff is to make it so we will correctly
+            # color "foo.bar_np=42.np=4" where "np=4" is nested in "bar_np=42".
+            pre_pattern = r"(\[|\,|\.)"
+            post_pattern = r"(\]|\,|\.|$)"
+            pattern = pre_pattern + re.escape(part) + post_pattern
+            match = re.search(pattern, test_name)
+            if match is not None:
+                start, end = match.span()
+                test_name = (
+                    test_name[: start + 1]
+                    + colorize("@%s{%s}" % (color, part))
+                    + test_name[start + 1 + len(part) :]
+                )
+
+        return test_name
 
     def copy(self) -> "TestCase":
         return deepcopy(self)

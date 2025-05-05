@@ -49,6 +49,13 @@ class Run(CanarySubcommand):
             help="Disable summary [default: %(default)s]",
         )
         group.add_argument(
+            "--format",
+            default="short",
+            action="store",
+            choices=["short", "long"],
+            help="Change the format of the test case's name as printed to the screen. Options are 'short' and 'long' [default: %(default)s]",
+        )
+        group.add_argument(
             "--durations",
             type=int,
             metavar="N",
