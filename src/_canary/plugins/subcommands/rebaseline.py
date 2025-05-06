@@ -27,14 +27,20 @@ class Rebaseline(CanarySubcommand):
     description = "Rebaseline tests"
 
     def setup_parser(self, parser: "Parser") -> None:
+        parser.epilog = self.in_session_note()
         add_filter_arguments(parser)
         PathSpec.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
         from ...session import Session
 
-        if args.work_tree is None:
+        if getattr(args, "work_tree", None) is None:
             raise ValueError("rebaseline must be executed in a canary work tree")
+
+        if not args.keyword_exprs and not args.start and not args.parameter_expr:
+            # Rebaseline diffed tests by default
+            args.keyword_exprs = "diff"
+
         logging.emit(banner() + "\n")
         session = Session(args.work_tree, mode="r")
         session.filter(

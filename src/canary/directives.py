@@ -158,7 +158,7 @@ def baseline(
     when: WhenType | None = None,
     flag: str | None = None,
 ) -> None:
-    """Rebaseline a test by running ``canary run --stage=baseline ...`` in the test session directory (or one of its subdirectories)
+    """Rebaseline a test by running ``canary rebaseline ...`` in the test session directory (or one of its subdirectories)
 
     Usage
     -----
@@ -214,7 +214,7 @@ def baseline(
 
        $ canary run [options]
        $ cd $(canary -C TestResults location /TESTID)
-       $ canary run --stage=baseline .
+       $ canary rebaseline .
 
 
     """

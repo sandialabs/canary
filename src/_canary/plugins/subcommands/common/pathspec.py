@@ -112,7 +112,7 @@ class PathSpec(argparse.Action):
         )
         parser.add_argument(
             "pathspec",
-            metavar="pathspec [--] [user args]...",
+            metavar="pathspec [--] [user args...]",
             action=PathSpec,
             nargs=argparse.REMAINDER,
             help="Test file[s] or directories to search",
