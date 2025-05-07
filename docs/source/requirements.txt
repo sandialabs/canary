@@ -10,7 +10,7 @@ isort==6.0.1
 black==25.1.0
 flake8==7.2.0
 mypy==1.11.1
-hpc-connect==2025.5.7
+hpc-connect==25.5.7
 ruff==0.9.3
 PyYAML==6.0.2
 psutil==6.1.0
