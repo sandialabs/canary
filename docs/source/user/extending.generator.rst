@@ -34,7 +34,7 @@ test files.
 .. note::
 
     The completed test file generator can be seen at
-    https://cee-gitlab.sandia.gov/ascic-test-infra/plugins/canary-yaml
+    https://github.com/sandialabs/canary-yaml
 
 
 Example implementation

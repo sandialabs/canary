@@ -22,7 +22,7 @@ A test case's timeout can be set by the :ref:`timeout <directive-timeout>` direc
    import canary
    canary.directives.timeout(5 * 60)
 
-If the timeout is not explicitly set, it is set based on the presence of the ``fast`` and ``long`` keywords in a manner similar to `vvtest <https://cee-gitlab.sandia.gov/scidev/vvtest>`_:
+If the timeout is not explicitly set, it is set based on the presence of the ``fast`` and ``long`` keywords in a manner similar to `vvtest <https://github.com/sandialabs/vvtest>`_:
 
 * If a test is marked ``fast``, its timeout defaults to 30 seconds.
 * If a test is marked ``long``, its timeout defaults to 10 minutes.
