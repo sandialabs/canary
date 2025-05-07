@@ -1,1 +1,5 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 # VVT: parameterize (autotype) : input,dim = flyer_2d_z,2D flyer_2d_y,2D flyer_3d,3D flyer_2d_y_eul,2D flyer_2d_z_eul,2D flyer_3d_eul,3D
