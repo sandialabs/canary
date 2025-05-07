@@ -263,8 +263,11 @@ class ParameterExpression:
 
     @staticmethod
     def parse_expr(expr: str) -> str:
+        TokenInfo = tokenize.TokenInfo
+        parts: list[tokenize.TokenInfo] = []
         tokens = get_tokens(expr)
-        parts = []
+        STRLIKE = (tokenize.STRING, tokenize.NAME)
+        KEYWORDS = ("and", "or", "else", "if")
         while True:
             try:
                 token = next(tokens)
@@ -274,29 +277,45 @@ class ParameterExpression:
                 break
             elif token.type in (tokenize.ENCODING, tokenize.NEWLINE):
                 continue
+            elif token.type in STRLIKE and token.string in KEYWORDS:
+                token = TokenInfo(tokenize.STRING, token.string, token.start, token.end, token.line)
+                parts.append(token)
+            elif token.type in STRLIKE and parts and parts[-1].type == tokenize.NUMBER:
+                # This situation can arise for something like `dimension = 2D`
+                start = parts[-1].start
+                string = repr(f"{parts[-1].string}{token.string}")
+                parts[-1] = TokenInfo(tokenize.STRING, string, start, token.end, token.line)
             elif token.type in (tokenize.STRING, tokenize.NUMBER):
-                parts.append(token.string)
+                parts.append(token)
             elif token.type == tokenize.NAME:
-                if parts and parts[-1] in ("==", "!=", ">", ">=", "<", "<="):
-                    parts.append(f"{token.string!r}")
+                if parts and parts[-1].type == tokenize.OP:
+                    # This situation can arise for something like `var = val`
+                    string = repr(token.string)
+                    token = TokenInfo(tokenize.STRING, string, token.start, token.end, token.line)
+                    parts.append(token)
                 else:
-                    parts.append(token.string)
+                    parts.append(token)
             elif token.type == tokenize.OP:
-                string = token.string
-                if string == "=":
-                    string = "=="
-                elif string == "!":
+                if token.string == "=":
+                    token = TokenInfo(tokenize.OP, "==", token.start, token.end, token.line)
+                elif token.string == "!":
+                    # This situation can arise for something like `!cpus`
+                    start = token.start
                     token = next(tokens)
                     assert token.type == tokenize.NAME
                     string = f"not_defined({token.string!r})"
-                parts.append(string)
+                    token = TokenInfo(tokenize.ENDMARKER, string, start, token.end, token.line)
+                parts.append(token)
             elif token.type == tokenize.ERRORTOKEN and token.string == "!":
+                start = token.start
                 token = next(tokens)
                 assert token.type == tokenize.NAME
-                parts.append(f"not_defined({token.string!r})")
+                string = f"not_defined({token.string!r})"
+                token = TokenInfo(tokenize.ENDMARKER, string, start, token.end, token.line)
+                parts.append(token)
             else:
                 raise ValueError(f"Unknown token type {token} in parameter expression {expr}")
-        return " ".join(parts)
+        return " ".join(_.string for _ in parts)
 
     def evaluate(self, parameters: dict[str, Any]) -> bool:
         global_vars = dict(parameters)

@@ -22,6 +22,7 @@ from ..third_party.color import cprint
 from .term import terminal_size
 from .time import hhmmss
 
+SUPPRESS = -10
 TRACE = 0
 DEBUG = 10
 INFO = 20
@@ -34,6 +35,7 @@ ALWAYS = 100
 LEVEL = WARNING
 TIMESTAMP = False
 FORMAT = "%(prefix)s%(timestamp)s%(message)s"
+WARNINGS = WARNING
 
 
 builtin_print = print
@@ -86,6 +88,17 @@ def set_level(level: int) -> None:
     global LEVEL
     assert level in log_levels
     LEVEL = level
+
+
+def set_warning_level(level: str) -> None:
+    global WARNINGS
+    assert level in ("all", "ignore", "error")
+    if level == "all":
+        WARNINGS = WARNING
+    elif level == "ignore":
+        WARNINGS = SUPPRESS
+    elif level == "error":
+        WARNINGS = ERROR
 
 
 def set_format(format: str) -> None:
@@ -151,6 +164,8 @@ def log(
     ex: Exception | None = None,
     rewind: bool = False,
 ) -> None:
+    if level == SUPPRESS:
+        return
     if level >= LEVEL:
         text = format_message(message, end=end, prefix=prefix, format=format, rewind=rewind)
         emit(text, file=file)
@@ -184,7 +199,7 @@ def warning(
     message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Exception | None = None
 ) -> None:
     c = level_color(WARNING)
-    log(WARNING, message, file=file, prefix="@*%s{==>} Warning: " % c, end=end, ex=ex)
+    log(WARNINGS, message, file=file, prefix="@*%s{==>} Warning: " % c, end=end, ex=ex)
 
 
 def error(

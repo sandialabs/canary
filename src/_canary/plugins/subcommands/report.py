@@ -23,11 +23,11 @@ def canary_subcommand() -> CanarySubcommand:
 class Report(CanarySubcommand):
     name = "report"
     description = "Create and post test reports"
-    epilog = "Note: this command must be run from inside of a test session directory."
 
     def setup_parser(self, parser: "Parser") -> None:
         from ... import config
 
+        parser.epilog = self.in_session_note()
         subparsers = parser.add_subparsers(dest="type", metavar="subcommands")
         for report in config.plugin_manager.hook.canary_session_report():
             parent = subparsers.add_parser(report.type, help=report.description)

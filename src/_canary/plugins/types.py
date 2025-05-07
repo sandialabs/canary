@@ -17,6 +17,7 @@ class CanarySubcommand:
     Args:
       name: Subcommand name (e.g., ``canary my-subcommand``)
       description: Subcommand description, shown in ``canary --help``
+      in_session: Subcommand should be exected inside a test session folder
       execute: Called when the subcommand is invoked
       setup_parser: Called when the subcommand parser is initialized
       epilog: Epilog printed for ``canary my-subcommand --help``
@@ -34,6 +35,12 @@ class CanarySubcommand:
 
     def execute(self, args: Namespace) -> int:
         raise NotImplementedError
+
+    def in_session_note(self) -> str | None:
+        note = f"Note: ``canary {self.name}`` must be executed within a test session folder. "
+        note += "You can do this by either navigating to the folder or by specifying the path "
+        note += f"with ``canary -C PATH {self.name} ...``"
+        return note
 
 
 class CanaryReport:

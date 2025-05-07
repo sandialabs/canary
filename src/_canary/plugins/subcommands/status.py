@@ -22,9 +22,9 @@ def canary_subcommand() -> CanarySubcommand:
 class Status(CanarySubcommand):
     name = "status"
     description = "Print information about a test run"
-    epilog = "Note: this command must be run from inside of a test session directory."
 
     def setup_parser(self, parser: "Parser"):
+        parser.epilog = self.in_session_note()
         parser.add_argument(
             "--durations",
             nargs="?",
@@ -32,6 +32,13 @@ class Status(CanarySubcommand):
             const=10,
             metavar="N",
             help="Show N slowest test durations (N<0 for all) [default: 10]",
+        )
+        parser.add_argument(
+            "--format",
+            default="short",
+            action="store",
+            choices=["short", "long"],
+            help="Change the format of the test case's name as printed to the screen. Options are 'short' and 'long' [default: %(default)s]",
         )
         parser.add_argument(
             "-r",

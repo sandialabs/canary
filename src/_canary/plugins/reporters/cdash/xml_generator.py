@@ -223,12 +223,12 @@ class CDashXMLReporter:
                 status = "failed"
                 exit_code = "Diffed"
                 completion_status = "Completed"
-                fail_reason = "Test diffed"
+                fail_reason = case.status.details or "Test diffed"
             elif case.status == "failed":
                 status = "failed"
                 exit_code = "Failed"
                 completion_status = "Completed"
-                fail_reason = "Test execution failed"
+                fail_reason = case.status.details or "Test execution failed"
             elif case.status == "timeout":
                 status = "failed"
                 exit_code = completion_status = "Timeout"
@@ -236,12 +236,17 @@ class CDashXMLReporter:
                 status = "failed"
                 exit_code = "Not Run"
                 completion_status = "Completed"
-                fail_reason = "Test case was unexpectedly not run"
+                fail_reason = case.status.details or "Test case was unexpectedly not run"
             elif case.status == "cancelled":
                 status = "failed"
                 exit_code = "Cancelled"
                 completion_status = "Completed"
-                fail_reason = "Test case was cancelled"
+                fail_reason = case.status.details or "Test case was cancelled"
+            elif case.status == "unknown":
+                status = "failed"
+                exit_code = "Unknown"
+                completion_status = "Completed"
+                fail_reason = case.status.details or "Test case was unexpectedly not run"
             else:
                 status = "failed"
                 exit_code = "No Status"

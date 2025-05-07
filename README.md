@@ -27,17 +27,13 @@ Python 3.10+
 To install the latest development version, execute:
 
 ```console
-python3 -m pip install "canary-wm git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/canary"
+python3 -m pip install "canary-wm git+ssh://git@github.com/sandialabs/canary"
 ```
 
 To install the latest production version, execute:
 
 ```console
-python3 -m pip install \
-  --trusted-host=cee-gitlab.sandia.gov \
-  --index-url=https://nexus.web.sandia.gov/repository/pypi-proxy/simple \
-  --extra-index-url=https://cee-gitlab.sandia.gov/api/v4/projects/51750/packages/pypi/simple \
-  canary-wm
+python3 -m pip install canary-wm
 ```
 
 ## Developers
@@ -45,13 +41,13 @@ python3 -m pip install \
 For developers wanting to make modifications and/or contributions to `canary`, install in editable mode:
 
 ```console
-python3 -m pip install -e git+https://cee-gitlab.sandia.gov/ascic-test-infra/canary#egg=canary-wm[dev]
+python3 -m pip install -e git+https://github.com/sandialabs/canary#egg=canary-wm[dev]
 ```
 
 which will leave a copy of `canary` in your Python distribution's `$prefix/src` directory.  Edits made to the source will be immediately visible by the Python interpreter.  Alternatively, the source can be cloned and then installed in editable mode:
 
 ```console
-git clone git@cee-gitlab.sandia.gov:ascic-test-infra/canary
+git clone git@github.com:sandialabs/canary
 cd canary
 python3 -m pip install --editable .[dev]
 ```
@@ -64,7 +60,8 @@ To format code and run `canary`'s internal tests, execute
 
 ## License
 
-Canary is distributed under the terms of the MIT license, see [LICENSE](https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/LICENSE?ref_type=heads) and [COPYRIGHT](https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/blob/main/COPYRIGHT?ref_type=heads).
+https://github.com/matmodlab/matmodlab2/blob/master/LICENSE
+Canary is distributed under the terms of the MIT license, see [LICENSE](https://github.com/sandialabs/canary/blob/main/LICENSE) and [COPYRIGHT](https://github.com/sandialabs/canary/blob/main/COPYRIGHT).
 
 SPDX-License-Identifier: MIT
 

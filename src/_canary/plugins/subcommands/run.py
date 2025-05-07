@@ -30,9 +30,9 @@ def canary_subcommand() -> CanarySubcommand:
 class Run(CanarySubcommand):
     name = "run"
     description = "Find and run tests from a pathspec"
+    epilog = "See canary help --pathspec for help on the path specification"
 
     def setup_parser(self, parser: "Parser") -> None:
-        parser.epilog = "See canary help --pathspec for help on the path specification"
         add_work_tree_arguments(parser)
         add_filter_arguments(parser)
         group = parser.add_argument_group("console reporting")
@@ -47,6 +47,13 @@ class Run(CanarySubcommand):
             default=None,
             action="store_true",
             help="Disable summary [default: %(default)s]",
+        )
+        group.add_argument(
+            "--format",
+            default="short",
+            action="store",
+            choices=["short", "long"],
+            help="Change the format of the test case's name as printed to the screen. Options are 'short' and 'long' [default: %(default)s]",
         )
         group.add_argument(
             "--durations",
@@ -135,17 +142,20 @@ class Run(CanarySubcommand):
                 if until == "lock":
                     logging.info("Done freezing test cases")
                     return 0
-
         elif args.mode == "a":
-            session = Session(args.work_tree, mode=args.mode)
-            # use args here instead of config.getoption so that in-session runs can be filtered
-            # with options not used during sesssion setup
-            session.filter(
-                start=args.start,
-                keyword_exprs=args.keyword_exprs,
-                parameter_expr=args.parameter_expr,
-                case_specs=getattr(args, "case_specs", None),
-            )
+            case_specs = getattr(args, "case_specs", None)
+            if case_specs and all([_.startswith("/") for _ in case_specs]):
+                session = Session.casespecs_view(args.work_tree, case_specs)
+            else:
+                session = Session(args.work_tree, mode=args.mode)
+                # use args here instead of config.getoption so that in-session runs can be filtered
+                # with options not used during sesssion setup
+                session.filter(
+                    start=args.start,
+                    keyword_exprs=args.keyword_exprs,
+                    parameter_expr=args.parameter_expr,
+                    case_specs=getattr(args, "case_specs", None),
+                )
         else:
             assert args.mode == "b"
             session = Session.batch_view(args.work_tree, args.batch_id)

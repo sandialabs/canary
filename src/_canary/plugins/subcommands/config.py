@@ -29,6 +29,12 @@ class ConfigCmd(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         sp = parser.add_subparsers(dest="subcommand")
         p = sp.add_parser("show", help="Show the current configuration")
+        p.add_argument(
+            "-p",
+            action="store_true",
+            default=False,
+            help="Show paths to canary configuration files",
+        )
         p.add_argument("section", nargs="?", help="Show only this section")
         p = sp.add_parser("add", help="Show the current configuration")
         p.add_argument(
@@ -50,7 +56,17 @@ class ConfigCmd(CanarySubcommand):
             load_session(root=root)
         if args.subcommand == "show":
             text: str
-            if args.section in ("plugins", "plugin"):
+            if args.p:
+                import yaml
+
+                paths = {}
+                paths["global"] = config.config_file("global")
+                paths["local"] = os.path.relpath(config.config_file("local") or "canary.yaml")
+                with io.StringIO() as fp:
+                    yaml.dump({"configuration paths": paths}, fp, default_flow_style=False)
+                    text = fp.getvalue()
+                    do_pretty_print = False
+            elif args.section in ("plugins", "plugin"):
                 text = get_active_plugin_description()
                 do_pretty_print = False
             else:

@@ -103,7 +103,7 @@ html_sidebars = {"index": ["search-button-field"], "**": ["search-button-field",
 html_theme_options = {
     "navigation_depth": 4,
     "show_toc_level": 1,
-    "gitlab_url": "https://cee-gitlab.sandia.gov/ascic-test-infra/canary",
+    "githum_url": "https://github.com/sandialabs/canary",
     "navbar_start": ["navbar-logo"],
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "logo": {"text": f"canary {version}"},

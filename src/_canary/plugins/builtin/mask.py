@@ -102,7 +102,7 @@ def canary_testsuite_mask(
 
         if parameter_expr:
             match = when.when(
-                f"parameters={parameter_expr!r}",
+                {"parameters": parameter_expr},
                 parameters=case.parameters | case.implicit_parameters,
             )
             if not match:
