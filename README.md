@@ -2,7 +2,7 @@
 
 `canary` is a python package providing an application testing framework designed to test scientific applications.
 
-- **Documentation:** http://ascic-test-infra.cee-gitlab.lan/canary/
+- **Documentation:** https://canary-wm.readthedocs.io/en/production/
 
  `canary` is inspired by [vvtest](https://github.com/sandialabs/vvtest) and designed to run tests on diverse hardware from laptops to super computing clusters.  `canary` not only validates the functionality of your application but can also serve as a workflow manager for analysts.  A "test" is an executable script with extension `.pyt` or `.vvt`.  If the exit code upon executing the script is `0`, the test is considered to have passed, otherwise a non-passing status will be assigned.  `canary`'s methodology is simple: given a path on the filesystem, `canary` recursively searches for test scripts, sets up the tests described in each script, executes them, and reports the results.
 
