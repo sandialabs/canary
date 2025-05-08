@@ -9,7 +9,7 @@ dependencies = [
   "PyYAML",
   "psutil",
   "pluggy",
-  "hpc-connect"
+  "hpc-connect@git+https://github.com/sandialabs/hpc-connect"
 ]
 
 [project.scripts]
