@@ -76,7 +76,7 @@ class CDashReport(CanaryReport):
             "build, provide this argument to identify the build yourself. "
             "Format: %%Y%%m%%d-%%H%%M-<track>",
         )
-        group.add_argument(
+        p.add_argument(
             "-n",
             dest="chunk_size",
             default=500,
