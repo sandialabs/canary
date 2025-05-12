@@ -2,9 +2,11 @@
 
 import argparse
 import datetime
+import glob
 import io
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Generator
@@ -22,8 +24,16 @@ def main() -> int:
         raise ValueError(f"namemap {f} not found!")
     namemap = json.load(open(f))
 
-    df = datetime.datetime.strptime(args.date_from, "%Y-%m-%d")
-    dt = datetime.datetime.strptime(args.date_to, "%Y-%m-%d")
+    df: datetime.datetime
+    if args.date_from is None:
+        df = infer_date_from()
+    else:
+        df = datetime.datetime.strptime(args.date_from, "%Y-%m-%d")
+    dt: datetime.datetime
+    if args.date_to is None:
+        dt = datetime.datetime.now()
+    else:
+        dt = datetime.datetime.strptime(args.date_to, "%Y-%m-%d")
 
     logging.debug(f"Reading merge requests for {args.project}")
     merge_requests: list[dict] = []
@@ -78,7 +88,6 @@ def main() -> int:
         authors=authors,
         project=args.project,
         version=args.version,
-        output=args.output,
     )
 
 
@@ -90,7 +99,6 @@ def write_changelog(
     authors: dict[tuple[str, str], int],
     project: str = "canary",
     version: str | None = None,
-    output: str | None = None,
 ) -> None:
     version = version or "UNKNOWN-VERSION"
     file = io.StringIO()
@@ -119,11 +127,15 @@ def write_changelog(
         fmt = "* `!{iid} <{url}>`__: {title}\n"
         file.write(fmt.format(iid=mr["iid"], url=mr["web_url"], title=mr["title"]))
 
-    if output is None:
-        print(file.getvalue())
-    else:
-        with open(output, "w") as fh:
-            fh.write(file.getvalue())
+    output_dir = os.path.join(os.path.dirname(__file__), "../docs/source/release")
+    assert os.path.exists(output_dir)
+    output = os.path.join(output_dir, f"{version}.rst")
+    with open(output, "w") as fh:
+        fh.write(file.getvalue())
+
+    index = os.path.join(output_dir, "index.rst")
+    with open(index, "a") as fh:
+        fh.write(f"    {version}.rst\n")
 
     return 0
 
@@ -133,13 +145,11 @@ def make_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--from",
         dest="date_from",
-        required=True,
         help="Generate changelog from this date forward, use YYYY-MM-DD",
     )
     parser.add_argument(
         "--to",
         dest="date_to",
-        required=True,
         help="Generate changelog up to this date, use YYYY-MM-DD",
     )
     parser.add_argument(
@@ -247,6 +257,17 @@ def date_in_range(date: datetime.datetime, start: datetime.datetime, end: dateti
     if (date.year, date.month, date.day) > (end.year, end.month, end.day):
         return False
     return True
+
+
+def infer_date_from() -> datetime.datetime:
+    dir = os.path.join(os.path.dirname(__file__), "../docs/source/release")
+    dates: list[datetime.datetime] = []
+    for file in glob.glob(os.path.join(dir, "[0-9]*.rst")):
+        root = os.path.splitext(os.path.basename(file))[0]
+        dates.append(datetime.datetime.strptime(root, "%Y.%m.%d"))
+    dates.sort()
+    return dates[-1]
+
 
 
 if __name__ == "__main__":

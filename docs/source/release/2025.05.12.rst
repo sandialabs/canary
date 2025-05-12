@@ -1,0 +1,52 @@
+canary 2025.05.12 release notes
+===============================
+
+.. contents::
+
+SYNOPSIS
+
+Authors
+-------
+
+* Tim Fuller (79)
+* Mario LoPrinzi (6)
+* Matthew Mosby (22)
+* Scot Swan (7)
+
+A total of 4 authors contributed 114 commits to this release.
+
+Issues closed for 2025.05.12
+----------------------------
+
+* `#63 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/63>`__: hpc_connect flux backend issues
+* `#64 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/64>`__: Ability to restrict parameter based on other parameters
+* `#65 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/65>`__: Feedback on "Getting Started" documentation
+* `#66 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/66>`__: .gitlab-ci.yml breaks when no python files change
+* `#67 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/67>`__: Add license to source files
+* `#69 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/69>`__: CDash reporting with TestCase using different output files
+* `#70 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/70>`__: CDash Reporting of test.sh
+* `#71 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/71>`__: batching options interface
+* `#72 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/72>`__: Markdown report needs more data
+* `#73 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/73>`__: `canary location` performance and unexpected output
+* `#74 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/74>`__: Direct access to local test path request
+* `#77 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/77>`__: Performance of running specific tests by their ID
+* `#78 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/78>`__: config.resource_pool.pinfo(".*_count") does not return correct value
+* `#79 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/79>`__: Session won't load if any test case lock files are corrupt
+* `#80 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/80>`__: Failure to filter based on parameter
+* `#81 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/81>`__: add option to print full path in run and status
+* `#82 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/82>`__: Rebaseline functionality fails
+
+Merge requests for 2025.05.12
+-----------------------------
+
+* `!44 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/44>`__: update hpc-connect API to the simplified cpus/gpus/nodes interface
+* `!45 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/45>`__: use byte ranges when locking database files
+* `!46 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/46>`__: update CI flux job to maintain fair resource usage
+* `!47 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/47>`__: Add funtionality to not split the XML into chunks.
+* `!48 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/48>`__: Turn on the running of canary-sierra testing
+* `!50 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/50>`__: batch layout implementation
+* `!51 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/51>`__: Resolve "Performance of running specific tests by their ID"
+* `!52 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/52>`__: Resolve "config.resource_pool.pinfo(".*_count") does not return correct value"
+* `!53 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/53>`__: Resolve "Session won't load if any test case lock files are corrupt"
+* `!54 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/54>`__: Add stderr output to `canary log` and Markdown reports
+* `!55 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/55>`__: Resolve "add option to print full path in run and status"

@@ -15,3 +15,4 @@ For full details, refer to the `commit logs <https://cee-gitlab.sandia.gov/ascic
     2024.12.10.rst
     2025.01.22.rst
     2025.03.25.rst
+    2025.05.12.rst
