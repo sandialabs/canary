@@ -8,6 +8,7 @@ util
 .. toctree::
    :maxdepth: 1
 
+   collections
    dynamic_version
    proc
    tengine

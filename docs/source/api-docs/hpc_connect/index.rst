@@ -2,16 +2,17 @@
 
    SPDX-License-Identifier: MIT
 
-.. _hpc-connect:
-
 hpc_connect
 ===========
 
 .. toctree::
    :maxdepth: 1
 
+   _launch
+   config
    hookspec
    impl/index
+   pluginmanager
    types
    util/index
    version
