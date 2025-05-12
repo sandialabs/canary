@@ -2,11 +2,9 @@
 
 import argparse
 import datetime
-import glob
 import io
 import json
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import Generator
@@ -18,54 +16,71 @@ from urllib.request import urlopen
 def main() -> int:
     parser = make_argument_parser()
     args = parser.parse_args()
-
     f = Path(args.name_map)
     if not f.exists():
         raise ValueError(f"namemap {f} not found!")
     namemap = json.load(open(f))
-
-    df: datetime.datetime
-    if args.date_from is None:
-        df = infer_date_from()
-    else:
-        df = datetime.datetime.strptime(args.date_from, "%Y-%m-%d")
-    dt: datetime.datetime
-    if args.date_to is None:
-        dt = datetime.datetime.now()
-    else:
-        dt = datetime.datetime.strptime(args.date_to, "%Y-%m-%d")
-
-    logging.debug(f"Reading merge requests for {args.project}")
-    merge_requests: list[dict] = []
-    for mr in get_merge_requests(
-        project_id=args.project_id,
+    df = datetime.datetime.strptime(args.date_from, "%Y-%m-%d")
+    dt = datetime.datetime.strptime(args.date_to, "%Y-%m-%d")
+    changelog = make_changelog(
+        project=args.project,
         access_token=args.access_token,
         api_v4_url=args.api_v4_url,
+        namemap=namemap,
+        version=args.version,
+        date_from=df,
+        date_to=dt,
+    )
+    if args.output is None:
+        print(changelog)
+    else:
+        with open(args.output, "w") as fh:
+            fh.write(changelog)
+    return 0
+
+
+def make_changelog(
+    *,
+    project: str,
+    project_id: int,
+    access_token: str,
+    api_v4_url: str,
+    namemap: dict,
+    version: str | None = None,
+    date_from: datetime.datetime,
+    date_to: datetime.datetime,
+) -> str:
+    logging.debug(f"Reading merge requests for {project}")
+    merge_requests: list[dict] = []
+    for mr in get_merge_requests(
+        project_id=project_id,
+        access_token=access_token,
+        api_v4_url=api_v4_url,
         state="merged",
     ):
         dm = datetime.datetime.fromisoformat(mr["merged_at"])
-        if date_in_range(dm, df, dt):
+        if date_in_range(dm, date_from, date_to):
             merge_requests.append(mr)
 
-    logging.debug(f"Reading issues for {args.project}")
+    logging.debug(f"Reading issues for {project}")
     issues: list[dict] = []
     for issue in get_issues(
-        project_id=args.project_id,
-        access_token=args.access_token,
-        api_v4_url=args.api_v4_url,
+        project_id=project_id,
+        access_token=access_token,
+        api_v4_url=api_v4_url,
         state="closed",
     ):
         dc = datetime.datetime.fromisoformat(issue["closed_at"])
-        if date_in_range(dc, df, dt):
+        if date_in_range(dc, date_from, date_to):
             issues.append(issue)
 
-    logging.debug(f"Reading commits for {args.project}")
+    logging.debug(f"Reading commits for {project}")
     commits: list[dict] = []
     for commit in get_commits(
-        project_id=args.project_id, access_token=args.access_token, api_v4_url=args.api_v4_url
+        project_id=project_id, access_token=access_token, api_v4_url=api_v4_url
     ):
         dc = datetime.datetime.fromisoformat(commit["authored_date"])
-        if date_in_range(dc, df, dt):
+        if date_in_range(dc, date_from, date_to):
             commits.append(commit)
 
     authors: dict[tuple[str, str], int] = {}
@@ -81,27 +96,30 @@ def main() -> int:
         authors.setdefault((first, last), 0)
         authors[(first, last)] += 1
 
+    file = io.StringIO()
     write_changelog(
+        file,
         commits=commits,
         issues=issues,
         merge_requests=merge_requests,
         authors=authors,
-        project=args.project,
-        version=args.version,
+        project=project,
+        version=version,
     )
+    return file.getvalue()
 
 
 def write_changelog(
+    file: io.StringIO,
     *,
     commits: list[dict],
     issues: list[dict],
     merge_requests: list[dict],
     authors: dict[tuple[str, str], int],
-    project: str = "canary",
+    project: str,
     version: str | None = None,
 ) -> None:
     version = version or "UNKNOWN-VERSION"
-    file = io.StringIO()
     title = f"{project} {version} release notes"
     file.write("{title}\n{rule}\n\n".format(title=title, rule="=" * len(title)))
     file.write(".. contents::\n\n")
@@ -127,17 +145,7 @@ def write_changelog(
         fmt = "* `!{iid} <{url}>`__: {title}\n"
         file.write(fmt.format(iid=mr["iid"], url=mr["web_url"], title=mr["title"]))
 
-    output_dir = os.path.join(os.path.dirname(__file__), "../docs/source/release")
-    assert os.path.exists(output_dir)
-    output = os.path.join(output_dir, f"{version}.rst")
-    with open(output, "w") as fh:
-        fh.write(file.getvalue())
-
-    index = os.path.join(output_dir, "index.rst")
-    with open(index, "a") as fh:
-        fh.write(f"    {version}.rst\n")
-
-    return 0
+    return
 
 
 def make_argument_parser() -> argparse.ArgumentParser:
@@ -145,42 +153,40 @@ def make_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--from",
         dest="date_from",
+        required=True,
         help="Generate changelog from this date forward, use YYYY-MM-DD",
     )
     parser.add_argument(
         "--to",
         dest="date_to",
+        required=True,
         help="Generate changelog up to this date, use YYYY-MM-DD",
     )
     parser.add_argument(
         "--project",
         default="canary",
+        required=True,
         help="The GitLab project name [default: %(default)s]",
     )
     parser.add_argument(
         "--api-v4-url",
-        default="https://cee-gitlab.sandia.gov/api/v4",
+        required=True,
         help="The GitLab API v4 root URL [default: %(default)s]",
     )
     parser.add_argument(
         "--project-id",
-        default=49982,
+        required=True,
         type=int,
         help="The GitLab ID of the project [default: %(default)s]",
     )
     parser.add_argument(
-        "-A",
         "--access-token",
-        default="pzQ82ejiS1DrmRYmPKu3",
+        required=True,
         help="The GitLab API access token [default: %(default)s]",
     )
     parser.add_argument("-o", dest="output", help="Write output to this file")
     parser.add_argument("--version", help="Generate changelog for this version")
-    parser.add_argument(
-        "--name-map",
-        default=Path(__file__).parent / "../.namemap",
-        help="Author name map [default: %(default)s]",
-    )
+    parser.add_argument("--name-map", default=None, help="Author name map [default: %(default)s]")
     return parser
 
 
@@ -251,23 +257,14 @@ def get_commits(
     return
 
 
-def date_in_range(date: datetime.datetime, start: datetime.datetime, end: datetime.datetime) -> bool:
+def date_in_range(
+    date: datetime.datetime, start: datetime.datetime, end: datetime.datetime
+) -> bool:
     if (date.year, date.month, date.day) < (start.year, start.month, start.day):
         return False
     if (date.year, date.month, date.day) > (end.year, end.month, end.day):
         return False
     return True
-
-
-def infer_date_from() -> datetime.datetime:
-    dir = os.path.join(os.path.dirname(__file__), "../docs/source/release")
-    dates: list[datetime.datetime] = []
-    for file in glob.glob(os.path.join(dir, "[0-9]*.rst")):
-        root = os.path.splitext(os.path.basename(file))[0]
-        dates.append(datetime.datetime.strptime(root, "%Y.%m.%d"))
-    dates.sort()
-    return dates[-1]
-
 
 
 if __name__ == "__main__":
