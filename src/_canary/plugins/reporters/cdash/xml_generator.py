@@ -134,16 +134,19 @@ class CDashXMLReporter:
         server = cdash.server(url, project)
         ns = CDashXMLReporter.read_site_info(files[0])
         upload_errors = 0
+        buildid = None
         for file in files:
-            upload_errors += server.upload(
+            payload = server.upload(
                 filename=file,
                 sitename=ns.site,
                 buildname=ns.buildname,
                 buildstamp=ns.buildstamp,
             )
+            buildid = buildid or payload["buildid"]
+            upload_error = 0 if payload["status"] == "OK" else 1
+            upload_errors += upload_error
         if upload_errors:
             logging.warning(f"{upload_errors} files failed to upload to CDash")
-        buildid = server.buildid(sitename=ns.site, buildname=ns.buildname, buildstamp=ns.buildstamp)
         if buildid is None:
             return None
         return f"{url}/buildSummary.php?buildid={buildid}"

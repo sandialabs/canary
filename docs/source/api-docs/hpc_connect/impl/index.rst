@@ -9,7 +9,8 @@ impl
    :maxdepth: 1
 
    flux_hl
-   mpi
+   launch
    pbs
    shell
    slurm
+   srun

@@ -1294,14 +1294,13 @@ class TestCase(AbstractTestCase):
         return False
 
     def pretty_repr(self) -> str:
-        test_name = None
+        test_name: str
         format_opt = config.getoption("format", "short")
         if format_opt == "long":
             test_name = self.path
         elif format_opt == "short":
             test_name = self.display_name
-
-        if test_name is None:
+        else:
             raise Exception(f"Invalid format argument: {repr(test_name)}")
 
         i = self.display_name.find("[")

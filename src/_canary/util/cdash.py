@@ -114,6 +114,12 @@ class server:
     def put(url, file):
         from .. import config
 
+        def get_text(doc, tag):
+            try:
+                return doc.getElementsByTagName(tag)[0].firstChild.data.strip()
+            except AttributeError:
+                return None
+
         with no_proxy():
             # Proxy settings must be turned off to submit to CDash
             curl = Executable("curl")
@@ -124,25 +130,25 @@ class server:
             args.extend(["--data-binary", f"@{file}"])
             efile = "cdash-put-err.txt"
             try:
+                payload = {"status": "NA", "message": None, "buildid": None}
                 with open(efile, "w") as fh:
                     result = curl(*args, output=str, error=fh)
                 doc = dom.parseString(result.get_output())
-                stat = doc.getElementsByTagName("status")[0].firstChild.data.strip()
-                status = 0 if stat == "OK" else 1
+                payload["status"] = get_text(doc, "status")
+                payload["buildid"] = get_text(doc, "buildId")
             except xml.parsers.expat.ExpatError as e:
-                doc = None
-                m = e.args[0]
-                status = 1
+                payload["message"] = e.args[0]
             finally:
-                if doc is None:
+                if payload["status"] == "NA":
+                    m = payload["message"]
                     logging.error(f"Failed to upload {os.path.basename(file)}: {m}")
-                elif status:
-                    m = doc.getElementsByTagName("message")[0].firstChild.data.strip()
+                elif payload["status"] != "OK":
+                    m = payload["message"] = get_text(doc, "message")
                     lines = "\n    ".join([_.rstrip() for _ in open(efile).readlines()])
                     logging.error(f"Failed to upload {os.path.basename(file)}: {m}\n    {lines}")
                 if not config.debug:
                     force_remove(efile)
-            return status
+            return payload
 
     @staticmethod
     def get(url, raw=False):

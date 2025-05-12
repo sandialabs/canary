@@ -7,10 +7,18 @@ import io
 import os
 
 
+copyright = """\
+.. Copyright NTESS. See COPYRIGHT file for details.
+
+   SPDX-License-Identifier: MIT
+
+"""
+
+
 def module_name(name) -> str:
     if not name.endswith(".py"):
         return None
-    elif name in ("__init__.py", "_version.py", "__main__.py"):
+    elif name in ("__init__.py", "_version.py", "__main__.py", "flux_api.py"):
         return None
     return os.path.splitext(name)[0]
 
@@ -40,13 +48,14 @@ def make_api_docs(source_dir: str, dest_dir: str, skip_dirs: list[str] | None = 
         data = package_data.setdefault(namespace, {})
         data["modules"] = [module_name(f) for f in files if module_name(f)]
         data["packages"] = [
-            d for d in dirs if d not in ("__pycache__", "third_party", "validators")
+            d for d in dirs if d not in ("__pycache__", "third_party", "validators", "templates")
         ]
 
     for namespace, data in package_data.items():
         dest = os.path.join(dest_dir, namespace.replace(".", os.path.sep).lstrip(os.path.sep))
         title = pkgname if namespace == "." else namespace
         fp = io.StringIO()
+        fp.write(copyright)
         fp.write(f"{title}\n{'=' * len(title)}\n\n.. toctree::\n   :maxdepth: 1\n\n")
         items = data["modules"] + [f"{p}/index" for p in data["packages"]]
         for item in sorted(items):
@@ -59,6 +68,7 @@ def make_api_docs(source_dir: str, dest_dir: str, skip_dirs: list[str] | None = 
             name = f"{pkgname}.{module}" if namespace == "." else f"{pkgname}.{namespace}.{module}"
             fp = io.StringIO()
             fp.write(f"""\
+{copyright}
 {module}
 {"=" * len(module)}
 
