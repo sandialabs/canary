@@ -728,7 +728,7 @@ class TestCase(AbstractTestCase):
         if self._status == "pending":
             if not self.dependencies:
                 raise ValueError(f"{self!r}: should never have a pending case without dependencies")
-            self.check_if_ready()
+            self.set_dependency_based_status()
         return self._status
 
     @status.setter
@@ -742,10 +742,17 @@ class TestCase(AbstractTestCase):
         if self._status == "pending" and not self.dependencies:
             raise ValueError(f"{self!r}: should never have a pending case without dependencies")
 
-    def check_if_ready(self) -> None:
+    def ready_to_run(self) -> bool:
+        # Determine if dependent cases have completed and, if so, flip status to 'ready'
+        if not self.dependencies:
+            return True
+        flags = self.dep_condition_flags()
+        return all(flag == "can_run" for flag in flags)
+
+    def set_dependency_based_status(self) -> None:
         # Determine if dependent cases have completed and, if so, flip status to 'ready'
         flags = self.dep_condition_flags()
-        if all(flag == "ready" for flag in flags):
+        if all(flag == "can_run" for flag in flags):
             self._status.set("ready")
             return
         for i, flag in enumerate(flags):
@@ -771,9 +778,9 @@ class TestCase(AbstractTestCase):
                 break
 
     def dep_condition_flags(self) -> list[str]:
-        # Determine if dependent cases have completed and, if so, flip status to 'ready'
+        # Determine if dependent cases have completed and, if so, flip status to 'can_run'
         expected = self.dep_done_criteria
-        flags: list[str] = [""] * len(self.dependencies)
+        flags: list[str] = ["none"] * len(self.dependencies)
         for i, dep in enumerate(self.dependencies):
             if dep.masked() and dep.status.value in ("created", "ready", "pending"):
                 flags[i] = "wont_run"
@@ -781,9 +788,9 @@ class TestCase(AbstractTestCase):
                 # Still pending on this case
                 flags[i] = "pending"
             elif expected[i] in (None, dep.status.value, "*"):
-                flags[i] = "ready"
+                flags[i] = "can_run"
             elif match_any(expected[i], [dep.status.value, dep.status.name]):
-                flags[i] = "ready"
+                flags[i] = "can_run"
             else:
                 flags[i] = "wont_run"
         return flags
@@ -1613,9 +1620,14 @@ class TestCase(AbstractTestCase):
                 properties[name] = [ParameterSet(p["keys"], p["values"]) for p in value]
             elif name == "dependencies":
                 for i, dep_state in enumerate(value):
-                    value[i] = factory(dep_state.pop("type"))
-                    value[i].setstate(dep_state)
-                properties[name] = value
+                    if isinstance(dep_state, dict):
+                        dep = factory(dep_state.pop("type"))
+                        dep.setstate(dep_state)
+                        properties["dependencies"][i] = dep
+                    elif not hasattr(dep_state, "required_resources"):
+                        raise TypeError(
+                            f"Dependency {dep_state!r} does not appear to be a TestCase"
+                        )
             elif name == "status":
                 properties[name] = Status(value["value"], details=value["details"])
         if "dependencies" in properties:

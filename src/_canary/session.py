@@ -59,6 +59,7 @@ from .util.graph import TopologicalSorter
 from .util.procutils import cleanup_children
 from .util.returncode import compute_returncode
 from .util.rprobe import cpu_count
+from .util.string import pluralize
 from .util.time import hhmmss
 from .util.time import timestamp
 
@@ -192,31 +193,37 @@ class Session:
                     break
         self.load_testcases(ids=ids)
         for case in self.cases:
-            if case.pending() and not all(dep.id in ids for dep in case.dependencies):
+            if case.id not in ids:
+                case.mask = "case not requested"
+                continue
+            case.mark_as_ready()
+            if not case.status.satisfies(("pending", "ready")):
+                logging.error(f"{case}: will not run: {case.status.details}")
+            elif case.pending() and not all(dep.id in ids for dep in case.dependencies):
                 case.mask = "one or more missing dependencies"
-            else:
-                case.mark_as_ready()
         return self
 
     @classmethod
     def batch_view(cls, path: str, batch_id: str) -> "Session":
         """Create a view of this session that only includes cases in ``batch_id``"""
-        batch_case_ids = TestBatch.loadindex(batch_id)
-        if batch_case_ids is None:
+        ids = TestBatch.loadindex(batch_id)
+        if ids is None:
             raise ValueError(f"could not find index for batch {batch_id}")
-        expected = len(batch_case_ids)
-        logging.info(f"Selecting {expected} tests from batch {batch_id}")
+        expected = len(ids)
+        logging.info(f"Selecting {expected} {pluralize('test', expected)} from batch {batch_id}")
         self = cls(path, mode="a+")
-        self.load_testcases(ids=batch_case_ids)
+        self.load_testcases(ids=ids)
         for case in self.cases:
-            if case.masked():
-                logging.warning(f"{case}: unexpected mask: {case.mask}")
-            elif case.pending():
-                if not all(dep.id in batch_case_ids for dep in case.dependencies):
-                    case.mask = "one or more missing dependencies"
-        for case in self.cases:
-            if not case.masked():
-                case.mark_as_ready()
+            if case.id not in ids:
+                case.mask = f"case not in batch {batch_id}"
+                continue
+            case.mark_as_ready()
+            if not case.status.satisfies(("pending", "ready")):
+                logging.error(f"{case}: will not run: {case.status.details}")
+            elif case.pending() and not all(_.id in ids for _ in case.dependencies):
+                case.mask = "one or more missing dependencies"
+        ready = len(self.get_ready())
+        logging.info(f"Selected {ready} {pluralize('test', expected)} from batch {batch_id}")
         return self
 
     def get_ready(self) -> list[TestCase]:
@@ -264,20 +271,20 @@ class Session:
         ctx = logging.context(colorize("@*{Loading} test cases"), level=logging.DEBUG)
         ctx.start()
         with self.db.open("cases/index", "r") as fh:
+            # index format: {ID: [DEPS_IDS]}
             index = json.load(fh)["index"]
-        ids = list(ids or [])
+        ids_to_load: set[str] = set()
         if ids:
-            # Be sure that if an ID is loaded that its dependencies are accessible
-            i: int = 0
-            while i < len(ids):
-                ids.extend(index[ids[i]])
-                i += 1
+            # we must not only load the requested IDs, but also their dependencies
+            for id in ids:
+                ids_to_load.add(id)
+                ids_to_load.update(index[id])
         ts: TopologicalSorter = TopologicalSorter()
         cases: dict[str, TestCase | TestMultiCase] = {}
         for id, deps in index.items():
             ts.add(id, *deps)
         for id in ts.static_order():
-            if ids and id not in ids:
+            if ids_to_load and id not in ids_to_load:
                 continue
             # see TestCase.lockfile for file pattern
             file = self.db.join_path("cases", id[:2], id[2:], TestCase._lockfile)
@@ -288,11 +295,11 @@ class Session:
                     logging.warning(f"Unable to load {file}!")
                     continue
             state["properties"]["work_tree"] = self.work_tree
-            case = testcase_from_state(state)
-            # update dependencies manually so that the dependencies are consistent across the suite
-            for i, dep in enumerate(case.dependencies):
-                case.dependencies[i] = cases[dep.id]
-            cases[case.id] = case
+            for i, dep_state in enumerate(state["properties"]["dependencies"]):
+                # assign dependencies from existing dependencies
+                state["properties"]["dependencies"][i] = cases[dep_state["properties"]["id"]]
+            cases[id] = testcase_from_state(state)
+            assert id == cases[id].id
         ctx.stop()
         self.cases.clear()
         self.cases.extend(cases.values())
@@ -527,7 +534,10 @@ class Session:
                 cleanup_queue = True
                 try:
                     queue_size = len(queue)
-                    what = "batches" if isinstance(queue, BatchResourceQueue) else "test cases"
+                    what = pluralize(
+                        "batch" if isinstance(queue, BatchResourceQueue) else "test case",
+                        queue_size,
+                    )
                     logging.info(colorize("@*{Running} %d %s" % (queue_size, what)))
                     self.start = timestamp()
                     self.stop = -1.0
