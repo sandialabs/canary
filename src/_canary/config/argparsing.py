@@ -98,6 +98,9 @@ class Parser(argparse.ArgumentParser):
             "config",
         ]
         ns = argparse.Namespace(plugins=[], debug=False, C=None)
+        if addopts:
+            if env_opts := os.getenv("CANARY_ADDOPTS"):
+                args[0:0] = shlex.split(env_opts)
         i = 0
         n = len(args)
         while i < n:
@@ -105,8 +108,6 @@ class Parser(argparse.ArgumentParser):
             i += 1
             if opt in known_commands:
                 if addopts:
-                    if env_opts := os.getenv("CANARY_ADDOPTS"):
-                        args[0:0] = shlex.split(env_opts)
                     if env_opts := os.getenv(f"CANARY_{opt.upper()}_ADDOPTS"):
                         args[i:i] = shlex.split(env_opts)
                 return ns
