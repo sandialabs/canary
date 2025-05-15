@@ -95,7 +95,7 @@ class EnvironmentModifications:
 
 
 class SessionConfig:
-    __slots__ = ("work_tree", "stage", "level")
+    __slots__ = ("work_tree", "stage", "level", "mode")
 
     def __init__(
         self,
@@ -103,10 +103,12 @@ class SessionConfig:
         work_tree: str | None = None,
         level: int | None = None,
         stage: str | None = None,
+        mode: str | None = None,
     ):
         self.work_tree = work_tree
         self.stage = stage
         self.level = level
+        self.mode = mode
 
     def __repr__(self) -> str:
         kwds = [f"{key.lstrip('_')}={value!r}" for key, value in vars(self).items()]
@@ -118,6 +120,7 @@ class SessionConfig:
         # these are set during the process
         d["stage"] = None
         d["level"] = None
+        d["mode"] = None
         return d
 
 

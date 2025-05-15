@@ -802,7 +802,16 @@ class RerunAction(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
         keywords = getattr(args, "keyword_exprs", None) or []
         keywords.append(":all:")
-        setattr(args, "keyword_exprs", keywords)
+        args.keyword_exprs = list(keywords)
+        setattr(args, self.dest, True)
+
+
+class AnalyzeAction(argparse.Action):
+    def __call__(self, parser, args, values, option_string=None):
+        script_args = getattr(args, "script_args", None) or []
+        script_args.append("--execute-analysis-sections")
+        args.script_args = list(script_args)
+        setattr(args, self.dest, True)
 
 
 @hookimpl
@@ -819,8 +828,8 @@ def canary_addoption(parser: "Parser") -> None:
     parser.add_argument(
         "-a",
         "--analyze",
-        action="store_true",
-        default=None,
+        action=AnalyzeAction,
+        nargs=0,
         command="run",
         group="vvtest options",
         dest="vvtest_analyze",
@@ -828,12 +837,3 @@ def canary_addoption(parser: "Parser") -> None:
         "support this option (using the vvtest_util.is_analysis_only flag) otherwise the whole "
         "test is run.",
     )
-
-
-@hookimpl
-def canary_testcase_modify(case: "TestCase") -> None:
-    if not case.file_path.endswith(".vvt"):
-        return
-    if config.getoption("vvtest_analyze"):
-        if config.session.level and "--execute-analysis-sections" not in case.postflags:
-            case.postflags.append("--execute-analysis-sections")

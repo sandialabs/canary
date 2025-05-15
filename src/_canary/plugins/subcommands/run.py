@@ -163,6 +163,6 @@ class Run(CanarySubcommand):
         if not config.getoption("no_summary"):
             logging.emit(session.summary(include_pass=False))
         if p := config.getoption("durations"):
-            logging.emit(session.durations(p))
+            logging.emit(session.durations(N=p))
         logging.emit(session.footer())
         return session.exitstatus

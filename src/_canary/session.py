@@ -131,6 +131,7 @@ class Session:
     def __init__(self, path: str, mode: str = "r", force: bool = False) -> None:
         if mode not in session_modes:
             raise ValueError(f"invalid mode: {mode!r}")
+        self.mode = mode
         self.work_tree: str
         if mode == "w":
             path = os.path.abspath(path)
@@ -170,8 +171,6 @@ class Session:
         else:
             self.initialize()
             config.plugin_manager.hook.canary_session_start(session=self)
-
-        self.mode = mode
 
         if self.mode == "w":
             self.save(ini=True)
@@ -359,6 +358,7 @@ class Session:
         """Set ``section`` configuration values"""
         config.session.work_tree = self.work_tree
         config.session.level = self.level
+        config.session.mode = self.mode
 
     def save(self, ini: bool = False) -> None:
         """Save session data, excluding data that is stored separately in the database"""
@@ -845,7 +845,7 @@ class Session:
         """Return a string describing the ``N`` slowest tests"""
         cases = cases or self.active_cases()
         string = io.StringIO()
-        cases = [c for c in cases if c.duration > 0]
+        cases = [c for c in cases if c.duration >= 0]
         sorted_cases = sorted(cases, key=lambda x: x.duration)
         if N > 0:
             sorted_cases = sorted_cases[-N:]

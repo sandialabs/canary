@@ -33,8 +33,9 @@ class Executable:
     """
 
     def __init__(self, name: str | Path) -> None:
+        name, *default_args = shlex.split(str(name))
         self.file = Executable.find(name)
-        self.default_args: list[str] = []
+        self.default_args: list[str] = list(default_args)
         self.default_env: dict[str, str] = {}
         self.returncode: int = -1
 

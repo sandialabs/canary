@@ -55,7 +55,8 @@ class PathSpec(argparse.Action):
             setdefault(args, "on_options", []).extend(on_options)
         if off_options:
             setdefault(args, "off_options", []).extend(off_options)
-        args.script_args = script_args or None
+        if script_args:
+            setdefault(args, "script_args", []).extend(script_args)
         args.pathspec = pathspec
 
         work_tree = find_work_tree(os.getcwd())
