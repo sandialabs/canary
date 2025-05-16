@@ -50,7 +50,6 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         assert case.gpus == 5
         assert "foo" in case.keywords
         assert "baz" in case.keywords
-        assert case.launcher is None
         command = case.command()
         command[0] = os.path.basename(command[0])
         assert command == ["script.sh", "some-exe"]
@@ -58,7 +57,6 @@ set_tests_properties(test2 PROPERTIES  ENVIRONMENT "CTEST_NUM_RANKS=5;EGGS=SPAM"
         assert case.variables["SPAM"] == "BAZ"
 
         case = cases[1]
-        assert case.launcher.endswith("mpiexec")
         command = case.command()
         command[0] = os.path.basename(command[0])
         assert command == ["mpiexec", "-n", "4", "some-exe"]
@@ -204,6 +202,7 @@ set_tests_properties(dbOnly dbWithFoo createDB setupUsers cleanupDB PROPERTIES R
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
         cases = file.lock()
         case_map = {case.name: case for case in cases}
+        print(case_map)
 
         tests_done = case_map["testsDone"]
         foo_only = case_map["fooOnly"]

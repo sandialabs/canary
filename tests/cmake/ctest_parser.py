@@ -29,7 +29,7 @@ def test_parse_np():
     assert ctg.parse_np(["-np512"]) == 512
     assert ctg.parse_np(["-c404"]) == 404
     assert ctg.parse_np(["--np=45"]) == 45
-    assert ctg.parse_np(["--some-arg=4", "--other=foo"]) == 1
+    assert ctg.parse_np(["--some-arg=4", "--other=foo"]) is None
 
 
 def find_property(properties: list[dict], name: str) -> Any:
