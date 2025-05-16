@@ -346,11 +346,6 @@ class TestCase(AbstractTestCase):
         self._dependencies: list["TestCase"] = []
         self._dep_done_criteria: list[str] = []
 
-        self._launcher: str | None = None
-        self._preflags: list[str] | None = None
-        self._exe: str | None = None
-        self._postflags: list[str] | None = None
-
         # Environment variables specific to this case
         self._variables: dict[str, str] = {}
         self._environment_modifications: list[dict[str, str]] = []
@@ -831,53 +826,11 @@ class TestCase(AbstractTestCase):
     def url(self, arg: str) -> None:
         self._url = arg
 
-    @property
-    def launcher(self) -> str | None:
-        return self._launcher
-
-    @launcher.setter
-    def launcher(self, arg: str | None) -> None:
-        self._launcher = arg
-
-    @property
-    def preflags(self) -> list[str]:
-        return self._preflags or []
-
-    @preflags.setter
-    def preflags(self, arg: list[str]) -> None:
-        self._preflags = arg
-
-    @property
-    def postflags(self) -> list[str]:
-        if self._postflags is None:
-            self._postflags = []
-        return self._postflags
-
-    @postflags.setter
-    def postflags(self, arg: list[str]) -> None:
-        self._postflags = arg
-
-    @property
-    def exe(self) -> str:
-        if self._exe is None:
-            self._exe = os.path.basename(self.file)
-        assert self._exe is not None
-        return self._exe
-
-    @exe.setter
-    def exe(self, arg: str) -> None:
-        self._exe = arg
-
     def command(self) -> list[str]:
-        cmd: list[str] = []
-        if self.launcher:
-            cmd.append(self.launcher)
-            cmd.extend(self.preflags or [])
-        cmd.append(self.exe)
-        cmd.extend(self.postflags or [])
+        command = [sys.executable, os.path.basename(self.file)]
         if script_args := config.getoption("script_args"):
-            cmd.extend(script_args)
-        return cmd
+            command.extend(script_args)
+        return command
 
     def raw_command_line(self) -> str:
         return shlex.join(self.command())
@@ -1652,7 +1605,7 @@ class TestMultiCase(TestCase):
         file_root: str | None = None,
         file_path: str | None = None,
         *,
-        flag: str = "--analyze",
+        flag: str | None = None,
         paramsets: list[ParameterSet] | None = None,
         family: str | None = None,
         keywords: list[str] = [],
@@ -1683,46 +1636,31 @@ class TestMultiCase(TestCase):
             artifacts=artifacts,
             exclusive=exclusive,
         )
-        if flag.startswith("-"):
+        self.cmd: list[str]
+        if flag is None:
+            self.cmd = [sys.executable, os.path.basename(self.file)]
+        elif flag.startswith("-"):
             # for the base case, call back on the test file with ``flag`` on the command line
-            self.launcher = sys.executable
-            self.exe = os.path.basename(self.file)
-            self.postflags.append(flag)
+            self.cmd = [sys.executable, os.path.basename(self.file), flag]
         else:
             src = flag if os.path.exists(flag) else os.path.join(self.file_dir, flag)
             if not os.path.exists(src):
                 logging.warning(f"{self}: analyze script {flag} not found")
-            self.exe = os.path.basename(flag)
-            self.launcher = None
+            self.cmd = [os.path.basename(flag)]
             # flag is a script to run during analysis, check if it is going to be copied/linked
             for asset in self.assets:
-                if asset.action in ("link", "copy") and self.exe == os.path.basename(asset.src):
+                if asset.action in ("link", "copy") and self.cmd[0] == os.path.basename(asset.src):
                     break
             else:
                 asset = Asset(src=os.path.abspath(src), dst=None, action="link")
                 self.assets.append(asset)
-        self._flag = flag
         self._paramsets = paramsets
 
-    @property
-    def flag(self) -> str:
-        assert self._flag is not None
-        return self._flag
-
-    @flag.setter
-    def flag(self, arg: str) -> None:
-        self._flag = arg
-
     def command(self) -> list[str]:
-        cmd: list[str] = []
-        if self.launcher:
-            cmd.append(self.launcher)
-            cmd.extend(self.preflags or [])
-        cmd.append(self.exe)
-        cmd.extend(self.postflags or [])
+        command = list(self.cmd)
         if script_args := config.getoption("script_args"):
-            cmd.extend(script_args)
-        return cmd
+            command.extend(script_args)
+        return command
 
     @property
     def paramsets(self) -> list[ParameterSet]:

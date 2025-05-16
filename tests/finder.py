@@ -194,7 +194,6 @@ def test_analyze(tmpdir):
     files = f.discover()
     cases = finder.generate_test_cases(files)
     assert len([c for c in cases if not c.masked()]) == 10
-    assert cases[-1].postflags == ["--base"]
     assert all(case in cases[-1].dependencies for case in cases[:-1])
 
 

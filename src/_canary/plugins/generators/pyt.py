@@ -6,7 +6,6 @@ import fnmatch
 import glob
 import io
 import os
-import sys
 import warnings
 from string import Template
 from types import ModuleType
@@ -163,7 +162,6 @@ class PYTTestGenerator(AbstractTestGenerator):
                         testname=name, on_options=on_options, parameters=parameters
                     ),
                 )
-                case.launcher = sys.executable
                 enabled, reason = self.enable(
                     testname=name, on_options=on_options, parameters=parameters
                 )
@@ -186,17 +184,14 @@ class PYTTestGenerator(AbstractTestGenerator):
                 dependencies[case.id] = self.depends_on(testname=name, parameters=parameters)
                 cases.append(case)
 
-            generate_composite_base_case = self.generate_composite_base_case(
-                testname=name, on_options=on_options
-            )
-            if generate_composite_base_case:
+            if ns := self.generate_composite_base_case(testname=name, on_options=on_options):
                 # add previous cases as dependencies
                 modules = self.modules(testname=name, on_options=on_options)
                 parent = TestMultiCase(
                     self.root,
                     self.path,
                     paramsets=paramsets,
-                    flag=generate_composite_base_case,
+                    flag=ns.value,
                     family=name,
                     keywords=self.keywords(testname=name),
                     timeout=self.timeout(testname=name),
@@ -214,7 +209,6 @@ class PYTTestGenerator(AbstractTestGenerator):
                         testname=name, on_options=on_options, parameters=parameters
                     ),
                 )
-                parent.launcher = sys.executable
                 if test_mask is not None:
                     case.mask = test_mask
                 if any([_[1] is not None for _ in modules]):
@@ -399,13 +393,13 @@ class PYTTestGenerator(AbstractTestGenerator):
 
     def generate_composite_base_case(
         self, testname: str | None = None, on_options: list[str] | None = None
-    ) -> str:
+    ) -> FilterNamespace | None:
         for ns in self._generate_composite_base_case:
             result = ns.when.evaluate(testname=testname, on_options=on_options)
             if not result.value:
                 continue
-            return ns.value
-        return ""
+            return ns
+        return None
 
     def timeout(
         self,
@@ -695,13 +689,15 @@ class PYTTestGenerator(AbstractTestGenerator):
     ) -> None:
         if flag is not None and script is not None:
             raise ValueError(
-                "PYTTestGenerator.generate_composite_base_case: 'script' and 'flag' keyword arguments are mutually exclusive"
+                "PYTTestGenerator.generate_composite_base_case: "
+                "'script' and 'flag' keyword arguments are mutually exclusive"
             )
+        arg: str | None = None
         if script is not None:
-            string = script
-        else:
-            string = flag or "--base"
-        ns = FilterNamespace(string, when=when)
+            arg = script
+        elif flag is not None:
+            arg = flag
+        ns = FilterNamespace(arg, when=when)
         self._generate_composite_base_case.append(ns)
 
     def m_name(self, arg: str) -> None:
