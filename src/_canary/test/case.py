@@ -827,10 +827,29 @@ class TestCase(AbstractTestCase):
         self._url = arg
 
     def command(self) -> list[str]:
-        command = [sys.executable, os.path.basename(self.file)]
+        command: list[str]
+        if hasattr(self, "exe"):
+            command = self._commandv1()
+        else:
+            command = [sys.executable, os.path.basename(self.file)]
         if script_args := config.getoption("script_args"):
             command.extend(script_args)
         return command
+
+    def _commandv1(self) -> list[str]:
+        import warnings
+
+        warnings.warn(
+            "Test cases requiring their own `exe` should be refactored to define `command` instead",
+            category=DeprecationWarning,
+        )
+        cmd: list[str] = []
+        if launcher := getattr(self, "launcher", None):
+            cmd.append(launcher)
+            cmd.extend(getattr(self, "preflags", None) or [])
+        cmd.append(self.exe)  # type: ignore
+        cmd.extend(getattr(self, "postflags", None) or [])
+        return cmd
 
     def raw_command_line(self) -> str:
         return shlex.join(self.command())
