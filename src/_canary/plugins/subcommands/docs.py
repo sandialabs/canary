@@ -19,5 +19,5 @@ class Docs(CanarySubcommand):
     description = "open canary documentation in a web browser"
 
     def execute(self, args: "argparse.Namespace") -> int:
-        webbrowser.open("http://ascic-test-infra.cee-gitlab.lan/canary")
+        webbrowser.open("https://canary-wm.readthedocs.io/en/production/")
         return 0
