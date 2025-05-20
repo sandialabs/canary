@@ -852,8 +852,7 @@ class Session:
         kwds = {"t": glyphs.turtle, "N": N}
         string.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
         for case in sorted_cases:
-            id = colorize("@*b{%s}" % case.id[:7])
-            string.write("  %6.2f   %s    %s\n" % (case.duration, id, case.pretty_repr()))
+            string.write("  %6.2f   %s\n" % (case.duration, case.format("%id   %X")))
         string.write("\n")
         return string.getvalue()
 

@@ -17,6 +17,7 @@ import sys
 import time
 from contextlib import contextmanager
 from copy import deepcopy
+from functools import lru_cache
 from types import SimpleNamespace
 from typing import IO
 from typing import Any
@@ -1208,19 +1209,41 @@ class TestCase(AbstractTestCase):
 
     def describe(self) -> str:
         """Write a string describing the test case"""
-        id = colorize("@*b{%s}" % self.id[:7])
-        if self.masked():
-            string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.mask)
-            return colorize(string)
-        if self.defective():
-            string = "@*r{DEFECT (NOOP)} %s %s: %s" % (id, self.pretty_repr(), self.defect)
-            return colorize(string)
-        string = "%s %s %s" % (self.status.cname, id, self.pretty_repr())
+        format_spec: str = "%sn %id %X"
         if self.duration >= 0:
-            string += f" ({hhmmss(self.duration)})"
-        if self.status.details:
-            string += ": %s" % self.status.details
-        return string
+            format_spec += " (%d)"
+        if self.state().details:
+            format_spec += ": %sd"
+        return self.format(format_spec)
+
+    def state(self) -> SimpleNamespace:
+        state = SimpleNamespace(value=self.status.cname, details=self.status.details)
+        if self.masked():
+            state.value = "@*c{EXCLUDED}"
+            state.details = self.mask
+        elif self.defective():
+            state.value = "@*r{DEFECT (NOOP)}"
+            state.details = self.defect
+        return state
+
+    def format(self, format_spec: str) -> str:
+        state = self.state()
+        replacements = {
+            "%id": "@*b{%s}" % self.id[:7],
+            "%p": self.pretty_path(),
+            "%n": self.pretty_name(),
+            "%sn": state.value,
+            "%sd": state.details or "unknown",
+            "%d": hhmmss(None if self.duration < 0 else self.duration),
+        }
+        if config.getoption("format", "short") == "long":
+            replacements["%X"] = replacements["%p"]
+        else:
+            replacements["%X"] = replacements["%n"]
+        formatted_text = format_spec
+        for placeholder, value in replacements.items():
+            formatted_text = formatted_text.replace(placeholder, value)
+        return colorize(formatted_text.strip())
 
     def mark_as_ready(self) -> None:
         self._status.set("ready" if not self.dependencies else "pending")
@@ -1268,34 +1291,23 @@ class TestCase(AbstractTestCase):
             return True
         return False
 
-    def pretty_repr(self) -> str:
-        name: str
-        format_opt = config.getoption("format", "short")
-        if format_opt == "long":
-            name = self.path
-        elif format_opt == "short":
-            name = self.display_name
-        else:
-            raise ValueError(f"Invalid format argument: {name!r}")
+    def pretty_path(self) -> str:
+        return self.pretty_repr(what=self.path)
 
+    def pretty_name(self) -> str:
+        return self.pretty_repr(what=self.display_name)
+
+    def pretty_repr(self, what: str | None = None) -> str:
+        """Colorize parameter specs in `what`"""
+        what = what or self.display_name
         i = self.display_name.find("[")
         if i == -1:
             # No parameters to colorize.
-            return name
-
+            return what
         # Find the parameter chunks in the display name because it's
         # easier to do it there.
         parts = self.display_name[i + 1 : -1].split(",")
-        colors = itertools.cycle("bmgycr")
-        for part in parts:
-            # If we're using the full path or display name, every parameter
-            # will start with one of [ , . and will end with one of ] , . $
-            # This whole regex stuff is to make it so we will correctly
-            # color "foo.bar_np=42.np=4" where "np=4" is nested in "bar_np=42".
-            pretty = colorize("@%s{%s}" % (next(colors), part))
-            pattern = r"(\[|\,|\.)%s(\]|\,|\.|$)" % re.escape(part)
-            name = re.sub(pattern, "\\1%s\\2" % pretty, name)
-        return name
+        return cached_pretty_repr(self.id, what, tuple(parts))
 
     def copy(self) -> "TestCase":
         return deepcopy(self)
@@ -1467,7 +1479,7 @@ class TestCase(AbstractTestCase):
     def do_baseline(self) -> None:
         if not self.baseline:
             return
-        logging.info(f"Rebaselining {self.pretty_repr()}")
+        logging.info(self.format("Rebaselining %X"))
         with fs.working_dir(self.working_directory):
             for arg in self.baseline:
                 if isinstance(arg, str):
@@ -1486,14 +1498,6 @@ class TestCase(AbstractTestCase):
                     if os.path.exists(src):
                         logging.emit(f"    Replacing {b} with {a}\n")
                         copyfile(src, dst)
-
-    def start_msg(self) -> str:
-        id = colorize("@b{%s}" % self.id[:7])
-        return "STARTING: {0} {1}".format(id, self.pretty_repr())
-
-    def end_msg(self) -> str:
-        id = colorize("@b{%s}" % self.id[:7])
-        return "FINISHED: {0} {1} {2}".format(id, self.pretty_repr(), self.status.cname)
 
     def concatenate_logs(self) -> None:
         with open(self.logfile(), "w") as fh:
@@ -1602,6 +1606,20 @@ class TestCase(AbstractTestCase):
             elif value is not None:
                 setattr(self, name, value)
         return
+
+
+@lru_cache
+def cached_pretty_repr(id: str, what: str, parts: tuple[str]) -> str:
+    colors = itertools.cycle("bmgycr")
+    for part in parts:
+        # If we're using the full path or display name, every parameter
+        # will start with one of [ , . and will end with one of ] , . $
+        # This whole regex stuff is to make it so we will correctly
+        # color "foo.bar_np=42.np=4" where "np=4" is nested in "bar_np=42".
+        pretty = colorize("@%s{%s}" % (next(colors), part))
+        pattern = r"(\[|\,|\.)%s(\]|\,|\.|$)" % re.escape(part)
+        what = re.sub(pattern, "\\1%s\\2" % pretty, what)
+    return what
 
 
 class TestMultiCase(TestCase):

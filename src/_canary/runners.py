@@ -209,8 +209,7 @@ class TestCaseRunner(AbstractTestRunner):
             f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
                 f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        id = colorize("@b{%s}" % case.id[:7])
-        f.write(f"Starting {id}: {case.pretty_repr()}")
+        f.write(case.format("Starting %id: %X"))
         return f.getvalue()
 
     def end_msg(
@@ -225,8 +224,7 @@ class TestCaseRunner(AbstractTestRunner):
             f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
                 f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        id = colorize("@b{%s}" % case.id[:7])
-        f.write(f"Finished {id}: {case.pretty_repr()} {case.status.cname}")
+        f.write(case.format("Finished %id: %X %sn"))
         return f.getvalue()
 
     def get_process_metrics(

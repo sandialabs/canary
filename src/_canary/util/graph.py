@@ -54,13 +54,13 @@ def print_case(
         pointers = [tee] * (len(dependencies) - 1) + [last]
         for pointer, dependency in zip(pointers, dependencies):
             if dependency.dependencies:
-                yield prefix + pointer + dependency.pretty_repr()
+                yield prefix + pointer + dependency.pretty_name()
                 extension = branch if pointer == tee else space
                 yield from inner(dependency, prefix=prefix + extension, level=level - 1)
             else:
-                yield prefix + pointer + dependency.pretty_repr()
+                yield prefix + pointer + dependency.pretty_name()
 
-    file.write(f"{tee if not end else last}{indent}{case.pretty_repr()}\n")
+    file.write(f"{tee if not end else last}{indent}{case.pretty_name()}\n")
     iterator = inner(case, level=level)
     for line in iterator:
         file.write(f"{branch}{indent}{line}\n")

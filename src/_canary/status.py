@@ -90,7 +90,7 @@ class Status:
         return self.value in arg
 
     @staticmethod
-    def glyph(status):
+    def glyph(status: str) -> str:
         map = {
             "created": glyphs.mdash,
             "retry": glyphs.retry,
@@ -107,6 +107,8 @@ class Status:
             "timeout": glyphs.ballotx,
             "not_run": glyphs.ballotx,
             "unknown": glyphs.ballotx,
+            "masked": glyphs.masked,
+            "defective": glyphs.ballotx,
         }
         glyph = map[status]
         color = Status.colors[status]
