@@ -812,6 +812,7 @@ class AnalyzeAction(argparse.Action):
         script_args.append("--execute-analysis-sections")
         args.script_args = list(script_args)
         setattr(args, self.dest, True)
+        setattr(args, "dont_restage", True)
 
 
 @hookimpl
