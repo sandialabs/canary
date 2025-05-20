@@ -16,6 +16,8 @@ class Status:
     """The status of a ``canary`` test case."""
 
     members = (
+        "masked",
+        "invalid",
         "created",
         "retry",
         "pending",
@@ -33,6 +35,8 @@ class Status:
         "timeout",
     )
     colors = {
+        "masked": "m",
+        "invalid": "r",
         "created": "b",
         "retry": "r",
         "pending": "b",
@@ -108,7 +112,7 @@ class Status:
             "not_run": glyphs.ballotx,
             "unknown": glyphs.ballotx,
             "masked": glyphs.masked,
-            "defective": glyphs.ballotx,
+            "invalid": glyphs.ballotx,
         }
         glyph = map[status]
         color = Status.colors[status]

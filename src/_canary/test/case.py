@@ -330,7 +330,6 @@ class TestCase(AbstractTestCase):
         self._display_name: str | None = None
         self._id: str | None = None
         self._status: Status = Status()
-        self._mask: str | None = None
         self._defect: str | None = None
         self._work_tree: str | None = None
         self._working_directory: str | None = None
@@ -797,16 +796,19 @@ class TestCase(AbstractTestCase):
     def activated(self) -> bool:
         return not self.inactive()
 
+    def wont_run(self) -> bool:
+        return self.status.satisfies(("masked", "invalid"))
+
     @property
     def mask(self) -> str | None:
-        return self._mask
+        return self.status.details if self.status == "masked" else None
 
     @mask.setter
     def mask(self, arg: str) -> None:
-        self._mask = arg
+        self.status.set("masked", arg)
 
     def masked(self) -> bool:
-        return self._mask is not None
+        return self.status == "masked"
 
     @property
     def defect(self) -> str | None:
@@ -1246,6 +1248,8 @@ class TestCase(AbstractTestCase):
         return colorize(formatted_text.strip())
 
     def mark_as_ready(self) -> None:
+        if not self.wont_run():
+            return
         self._status.set("ready" if not self.dependencies else "pending")
 
     def skipped(self) -> bool:

@@ -92,7 +92,7 @@ def partition_n(cases: Sequence[TestCase], n: int = 8, nodes: str = "any") -> li
             groups.extend(node_groups.values())
         else:
             groups.append(list(ready))
-        sizes.append(sum(c.size() for c in groups[-1] if not c.masked()))
+        sizes.append(sum(c.size() for c in groups[-1] if not c.wont_run()))
         ts.done(*ready)
     if n == AUTO:
         return [TestBatch(list(group)) for group in groups]
@@ -177,7 +177,7 @@ class _Partition(set):
     def size(self):
         vector = [0.0, 0.0, 0.0]
         for case in self:
-            if not case.masked():
+            if not case.wont_run():
                 vector[0] += case.cpus
                 vector[1] += case.gpus
                 vector[2] += case.runtime
