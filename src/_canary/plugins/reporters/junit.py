@@ -165,11 +165,11 @@ def gather_statistics(cases: list[TestCase]) -> SimpleNamespace:
         if case.masked():
             continue
         stats.num_tests += 1
-        if case.status.value in ("diffed", "failed", "timeout"):
+        if case.status.satisfies(("diffed", "failed", "timeout")):
             stats.num_failed += 1
-        elif case.status.value in ("cancelled", "not_run", "skipped"):
+        elif case.status.satisfies(("cancelled", "not_run", "skipped")):
             stats.num_skipped += 1
-        elif case.status.value in ("retry", "created", "pending", "ready", "running"):
+        elif case.status.satisfies(("retry", "created", "pending", "ready", "running", "invalid")):
             stats.num_error += 1
         if case.status.complete():
             if case.start > 0 and case.start < stats.start:

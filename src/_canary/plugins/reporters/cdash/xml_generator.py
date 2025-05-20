@@ -199,18 +199,17 @@ class CDashXMLReporter:
         for case in cases:
             add_text_node(testlist, "Test", f"./{case.fullname}")
         l1.appendChild(testlist)
-        not_done = ("retry", "created", "pending", "ready", "running")
         success = ("success", "xfail", "xdiff")
 
         status: str
         for case in cases:
             exit_value = case.returncode
             fail_reason = None
-            if case.masked() or case.status.value in not_done:
+            if case.status.satisfies(("retry", "created", "pending", "ready", "running", "masked")):
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.defective():
+            elif case.status == "invalid":
                 status = "notdone"
                 exit_code = "Initialization Error"
                 completion_status = "notrun"

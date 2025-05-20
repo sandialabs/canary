@@ -60,8 +60,8 @@ class MarkdownReport(CanaryReport):
         self.render_test_info_table(case, fh)
         fh.write("## Test output\n")
         fh.write("\n```console\n")
-        if case.defective():
-            fh.write(f"{case.defect}\n")
+        if case.status == "invalid":
+            fh.write(f"{case.status.details}\n")
         elif os.path.exists(case.logfile()):
             with open(case.logfile()) as fp:
                 fh.write(fp.read().strip() + "\n")
@@ -80,7 +80,7 @@ class MarkdownReport(CanaryReport):
 
     def render_test_info_table(self, case: TestCase, fh: TextIO) -> None:
         info: dict[str, str] = {
-            "**Status**": "Defective" if case.defective() else case.status.name,
+            "**Status**": case.status.name,
             "**Exit code**": str(case.returncode),
             "**ID**": str(case.id),
             "**Location**": case.working_directory,
@@ -94,16 +94,16 @@ class MarkdownReport(CanaryReport):
     def generate_index(self, session: "Session", fh: TextIO) -> None:
         fh.write("# Canary Summary\n\n")
         fh.write(
-            "| Site | Project | Not Run | Timeout | Fail | Diff | Pass | Defective | Cancelled | Total |\n"
+            "| Site | Project | Not Run | Timeout | Fail | Diff | Pass | Invalid | Cancelled | Total |\n"
         )
         fh.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
         totals: dict[str, list[TestCase]] = {}
         for case in session.active_cases():
-            group = "Defective" if case.defective() else case.status.name.title()
+            group = case.status.name.title()
             totals.setdefault(group, []).append(case)
         fh.write(f"| {config.system.host} ")
         fh.write(f"| {config.build.project} ")
-        for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Defective", "Cancelled"):
+        for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Invalid", "Cancelled"):
             if group not in totals:
                 fh.write("| 0 ")
             else:
@@ -120,7 +120,7 @@ class MarkdownReport(CanaryReport):
             self.generate_all_tests_index(totals, fp)
 
     def generate_group_index(self, cases, fh: TextIO) -> None:
-        key = "Defective" if cases[0].defective() else cases[0].status.name
+        key = cases[0].status.name
         fh.write(f"# {key} Summary\n\n")
         fh.write("| Test | ID | Duration | Status |\n")
         fh.write("| --- | --- | --- | --- |\n")
@@ -130,7 +130,7 @@ class MarkdownReport(CanaryReport):
                 raise ValueError(f"{file}: markdown file not found")
             link = f"[{case.display_name}](./{os.path.basename(file)})"
             duration = f"{case.duration:.2f}"
-            status = "Defective" if case.defective() else case.status.name
+            status = case.status.name
             fh.write(f"| {link} | {case.id} | {duration} | {status} |\n")
 
     def generate_all_tests_index(self, totals: dict, fh: TextIO) -> None:
@@ -144,6 +144,6 @@ class MarkdownReport(CanaryReport):
                     raise ValueError(f"{file}: markdown file not found")
                 link = f"[{case.display_name}](./{os.path.basename(file)})"
                 duration = f"{case.duration:.2f}"
-                status = "Defective" if case.defective() else case.status.name
+                status = case.status.name
                 fh.write(f"| {link} | {duration} | {status} |\n")
         fh.write("\n")
