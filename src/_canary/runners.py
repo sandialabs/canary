@@ -46,11 +46,6 @@ class AbstractTestRunner:
         verbose = logging.get_level() <= logging.INFO
         qsize = kwargs.get("qsize")
         qrank = kwargs.get("qrank")
-        id: str
-        pretty_name: str
-        if isinstance(case, TestCase):
-            id = colorize("@b{%s}" % case.id[:7])
-            pretty_name = case.pretty_repr()
         if verbose:
             f = io.StringIO()
             f.write(colorize("@*b{==>} "))
@@ -410,7 +405,7 @@ class BatchRunner(AbstractTestRunner):
                     case.save()
                 elif case.status == "ready":
                     logging.debug(f"{case}: case failed to start")
-                    case.status.set("not_run", "case failed to start")
+                    case.status.set("not_run", f"case failed to start (batch: {batch.id})")
                     case.save()
         return
 
