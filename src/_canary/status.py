@@ -35,7 +35,7 @@ class Status:
         "timeout",
     )
     colors = {
-        "masked": "m",
+        "masked": "c",
         "invalid": "r",
         "created": "b",
         "retry": "r",
@@ -137,7 +137,11 @@ class Status:
 
     @property
     def name(self) -> str:
-        if self.value == "success":
+        if self.value == "masked":
+            return "EXCLUDED"
+        elif self.value == "invalid":
+            return "INVALID (NOOP)"
+        elif self.value == "success":
             return "PASS"
         elif self.value == "diffed":
             return "DIFF"

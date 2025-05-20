@@ -330,7 +330,6 @@ class TestCase(AbstractTestCase):
         self._display_name: str | None = None
         self._id: str | None = None
         self._status: Status = Status()
-        self._defect: str | None = None
         self._work_tree: str | None = None
         self._working_directory: str | None = None
         self._path: str | None = None
@@ -790,11 +789,8 @@ class TestCase(AbstractTestCase):
                 flags[i] = "wont_run"
         return flags
 
-    def inactive(self) -> bool:
-        return self.masked() or self.defective()
-
     def activated(self) -> bool:
-        return not self.inactive()
+        return not self.wont_run()
 
     def wont_run(self) -> bool:
         return self.status.satisfies(("masked", "invalid"))
@@ -812,14 +808,17 @@ class TestCase(AbstractTestCase):
 
     @property
     def defect(self) -> str | None:
-        return self._defect
+        return self.status.details if self.status == "invalid" else None
 
     @defect.setter
     def defect(self, arg: str) -> None:
-        self._defect = arg
+        self.status.set("invalid", arg)
 
     def defective(self) -> bool:
-        return self._defect is not None
+        return self.status == "invalid"
+
+    def invalid(self) -> bool:
+        return self.status == "invalid"
 
     @property
     def url(self) -> str | None:
@@ -1214,22 +1213,12 @@ class TestCase(AbstractTestCase):
         format_spec: str = "%sn %id %X"
         if self.duration >= 0:
             format_spec += " (%d)"
-        if self.state().details:
+        if self.status.details:
             format_spec += ": %sd"
         return self.format(format_spec)
 
-    def state(self) -> SimpleNamespace:
-        state = SimpleNamespace(value=self.status.cname, details=self.status.details)
-        if self.masked():
-            state.value = "@*c{EXCLUDED}"
-            state.details = self.mask
-        elif self.defective():
-            state.value = "@*r{DEFECT (NOOP)}"
-            state.details = self.defect
-        return state
-
     def format(self, format_spec: str) -> str:
-        state = self.state()
+        state = self.status
         replacements = {
             "%id": "@*b{%s}" % self.id[:7],
             "%p": self.pretty_path(),
@@ -1248,7 +1237,7 @@ class TestCase(AbstractTestCase):
         return colorize(formatted_text.strip())
 
     def mark_as_ready(self) -> None:
-        if not self.wont_run():
+        if self.wont_run():
             return
         self._status.set("ready" if not self.dependencies else "pending")
 
@@ -1259,10 +1248,10 @@ class TestCase(AbstractTestCase):
         return self.status.complete()
 
     def ready(self) -> bool:
-        return not self.inactive() and self.status == "ready"
+        return not self.wont_run() and self.status == "ready"
 
     def pending(self) -> bool:
-        return not self.inactive() and self.status == "pending"
+        return not self.wont_run() and self.status == "pending"
 
     def matches(self, pattern) -> bool:
         if pattern.startswith("/") and self.id.startswith(pattern[1:]):
@@ -1435,8 +1424,8 @@ class TestCase(AbstractTestCase):
     def output(self, compress: bool = False) -> str:
         if self.status == "skipped":
             return f"Test skipped.  Reason: {self.status.details}"
-        elif self.defective():
-            return self.defect  # type: ignore
+        elif self.status == "invalid":
+            return f"Invalid test.  Reason: {self.status.details}"
         elif not self.status.complete():
             return "Log not found"
         out = io.StringIO()

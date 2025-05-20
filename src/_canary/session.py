@@ -455,7 +455,7 @@ class Session:
         for case in self.cases:
             if env_mods:
                 case.add_default_env(**env_mods)
-            if case.masked() or case.defective():
+            if case.wont_run():
                 masked.append(case)
             else:
                 case.mark_as_ready()
@@ -503,7 +503,7 @@ class Session:
         )
         masked: list[TestCase] = []
         for case in cases:
-            if case.masked() or case.defective():
+            if case.wont_run():
                 masked.append(case)
             else:
                 case.mark_as_ready()
@@ -589,7 +589,8 @@ class Session:
                     atexit.unregister(cleanup_children)
         self.save()
         for case in self.cases:
-            if case.defective():
+            # we wont run invalid cases, but we want to include them in reports
+            if case.status == "invalid":
                 cases.append(case)
         return cases
 
@@ -779,14 +780,7 @@ class Session:
             return file.getvalue()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            if case.defective():
-                totals.setdefault("defective", []).append(case)
-            else:
-                totals.setdefault(case.status.value, []).append(case)
-        if "defective" in totals:
-            for case in sorted(totals["defective"], key=lambda t: t.name):
-                description = case.describe()
-                file.write("%s %s\n" % (glyphs.ballotx, description))
+            totals.setdefault(case.status.value, []).append(case)
         for status in Status.members:
             if not include_pass and status == "success":
                 continue
@@ -814,10 +808,7 @@ class Session:
                 duration = finish - start
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            if case.defective():
-                totals.setdefault("defective", []).append(case)
-            else:
-                totals.setdefault(case.status.value, []).append(case)
+            totals.setdefault(case.status.value, []).append(case)
         N = len(cases)
         summary = ["@*b{%d total}" % N]
         for member in Status.colors:
@@ -826,9 +817,6 @@ class Session:
                 c = Status.colors[member]
                 stat = totals[member][0].status.name
                 summary.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-        if "defective" in totals:
-            n = len(totals["defective"])
-            summary.append(colorize("@*r{%d defective}" % n))
         emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
         x, y = random.sample(emojis, 2)
         kwds = {
@@ -862,21 +850,7 @@ class Session:
         file = io.StringIO()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            if case.masked():
-                totals.setdefault("masked", []).append(case)
-            elif case.defective():
-                totals.setdefault("defective", []).append(case)
-            else:
-                totals.setdefault(case.status.value, []).append(case)
-        if "masked" in totals:
-            for case in sort_cases_by(totals["masked"], field=sortby):
-                description = case.describe()
-                file.write("%s %s\n" % (glyphs.masked, description))
-        if "defective" in totals:
-            for case in sort_cases_by(totals["defective"], field=sortby):
-                description = case.describe()
-                glyph = colorize("@*r{%s}" % glyphs.ballotx)
-                file.write("%s %s\n" % (glyph, description))
+            totals.setdefault(case.status.value, []).append(case)
         for member in Status.members:
             if member in totals:
                 for case in sort_cases_by(totals[member], field=sortby):
@@ -891,10 +865,8 @@ class Session:
         logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
         reasons: dict[str | None, int] = {}
         for case in excluded_cases:
-            if case.masked():
-                reasons[case.mask] = reasons.get(case.mask, 0) + 1
-            elif case.defective():
-                reasons[case.defect] = reasons.get(case.defect, 0) + 1
+            if case.status.satisfies(("masked", "invalid")):
+                reasons[case.status.details] = reasons.get(case.status.details, 0) + 1
         keys = sorted(reasons, key=lambda x: reasons[x])
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
@@ -944,7 +916,7 @@ class Session:
                     cases_to_show.append(case)
                 elif "t" in rc and case.status == "timeout":
                     cases_to_show.append(case)
-                elif "n" in rc and case.defective():
+                elif "n" in rc and case.status == "invalid":
                     cases_to_show.append(case)
                 elif "n" in rc and case.status.value in (
                     "ready",

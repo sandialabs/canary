@@ -209,7 +209,7 @@ class CDashXMLReporter:
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.defective():
+            elif case.status == "invalid":
                 status = "notdone"
                 exit_code = "Initialization Error"
                 completion_status = "notrun"
