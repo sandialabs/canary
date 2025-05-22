@@ -46,11 +46,6 @@ class AbstractTestRunner:
         verbose = logging.get_level() <= logging.INFO
         qsize = kwargs.get("qsize")
         qrank = kwargs.get("qrank")
-        id: str
-        pretty_name: str
-        if isinstance(case, TestCase):
-            id = colorize("@b{%s}" % case.id[:7])
-            pretty_name = case.pretty_repr()
         if verbose:
             f = io.StringIO()
             f.write(colorize("@*b{==>} "))
@@ -214,8 +209,7 @@ class TestCaseRunner(AbstractTestRunner):
             f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
                 f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        id = colorize("@b{%s}" % case.id[:7])
-        f.write(f"Starting {id}: {case.pretty_repr()}")
+        f.write(case.format("Starting %id: %X"))
         return f.getvalue()
 
     def end_msg(
@@ -230,8 +224,7 @@ class TestCaseRunner(AbstractTestRunner):
             f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
                 f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        id = colorize("@b{%s}" % case.id[:7])
-        f.write(f"Finished {id}: {case.pretty_repr()} {case.status.cname}")
+        f.write(case.format("Finished %id: %X %sN"))
         return f.getvalue()
 
     def get_process_metrics(
@@ -410,7 +403,7 @@ class BatchRunner(AbstractTestRunner):
                     case.save()
                 elif case.status == "ready":
                     logging.debug(f"{case}: case failed to start")
-                    case.status.set("not_run", "case failed to start")
+                    case.status.set("not_run", f"case failed to start (batch: {batch.id})")
                     case.save()
         return
 

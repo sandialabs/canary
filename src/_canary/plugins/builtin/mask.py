@@ -60,7 +60,7 @@ def canary_testsuite_mask(
         if case.masked():
             continue
 
-        if start is not None and isrel(case.execfile, start):
+        if start is not None and no_filter_criteria and isrel(case.execfile, start):
             # won't mask
             continue
 
@@ -128,9 +128,6 @@ def canary_testsuite_mask(
         # specified
         if no_filter_criteria and not case.status.satisfies(("created", "pending", "ready")):
             case.mask = f"previous status {case.status.value!r} is not 'ready'"
-
-    for i in order:
-        config.plugin_manager.hook.canary_testcase_modify(case=cases[i])
 
     ctx.stop()
 

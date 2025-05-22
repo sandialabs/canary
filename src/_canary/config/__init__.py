@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     working_dir = _config.working_dir
     set_main_options = _config.set_main_options
     describe = _config.describe
+    getstate = _config.getstate
     config_file = _config.config_file
     save = _config.save
     snapshot = _config.snapshot

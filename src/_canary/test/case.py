@@ -17,6 +17,7 @@ import sys
 import time
 from contextlib import contextmanager
 from copy import deepcopy
+from functools import lru_cache
 from types import SimpleNamespace
 from typing import IO
 from typing import Any
@@ -329,8 +330,6 @@ class TestCase(AbstractTestCase):
         self._display_name: str | None = None
         self._id: str | None = None
         self._status: Status = Status()
-        self._mask: str | None = None
-        self._defect: str | None = None
         self._work_tree: str | None = None
         self._working_directory: str | None = None
         self._path: str | None = None
@@ -345,11 +344,6 @@ class TestCase(AbstractTestCase):
         self._unresolved_dependencies: list[DependencyPatterns] = []
         self._dependencies: list["TestCase"] = []
         self._dep_done_criteria: list[str] = []
-
-        self._launcher: str | None = None
-        self._preflags: list[str] | None = None
-        self._exe: str | None = None
-        self._postflags: list[str] | None = None
 
         # Environment variables specific to this case
         self._variables: dict[str, str] = {}
@@ -728,7 +722,7 @@ class TestCase(AbstractTestCase):
         if self._status == "pending":
             if not self.dependencies:
                 raise ValueError(f"{self!r}: should never have a pending case without dependencies")
-            self.check_if_ready()
+            self.set_dependency_based_status()
         return self._status
 
     @status.setter
@@ -742,10 +736,17 @@ class TestCase(AbstractTestCase):
         if self._status == "pending" and not self.dependencies:
             raise ValueError(f"{self!r}: should never have a pending case without dependencies")
 
-    def check_if_ready(self) -> None:
+    def ready_to_run(self) -> bool:
+        # Determine if dependent cases have completed and, if so, flip status to 'ready'
+        if not self.dependencies:
+            return True
+        flags = self.dep_condition_flags()
+        return all(flag == "can_run" for flag in flags)
+
+    def set_dependency_based_status(self) -> None:
         # Determine if dependent cases have completed and, if so, flip status to 'ready'
         flags = self.dep_condition_flags()
-        if all(flag == "ready" for flag in flags):
+        if all(flag == "can_run" for flag in flags):
             self._status.set("ready")
             return
         for i, flag in enumerate(flags):
@@ -771,9 +772,9 @@ class TestCase(AbstractTestCase):
                 break
 
     def dep_condition_flags(self) -> list[str]:
-        # Determine if dependent cases have completed and, if so, flip status to 'ready'
+        # Determine if dependent cases have completed and, if so, flip status to 'can_run'
         expected = self.dep_done_criteria
-        flags: list[str] = [""] * len(self.dependencies)
+        flags: list[str] = ["none"] * len(self.dependencies)
         for i, dep in enumerate(self.dependencies):
             if dep.masked() and dep.status.value in ("created", "ready", "pending"):
                 flags[i] = "wont_run"
@@ -781,40 +782,43 @@ class TestCase(AbstractTestCase):
                 # Still pending on this case
                 flags[i] = "pending"
             elif expected[i] in (None, dep.status.value, "*"):
-                flags[i] = "ready"
+                flags[i] = "can_run"
             elif match_any(expected[i], [dep.status.value, dep.status.name]):
-                flags[i] = "ready"
+                flags[i] = "can_run"
             else:
                 flags[i] = "wont_run"
         return flags
 
-    def inactive(self) -> bool:
-        return self.masked() or self.defective()
-
     def activated(self) -> bool:
-        return not self.inactive()
+        return not self.wont_run()
+
+    def wont_run(self) -> bool:
+        return self.status.satisfies(("masked", "invalid"))
 
     @property
     def mask(self) -> str | None:
-        return self._mask
+        return self.status.details if self.status == "masked" else None
 
     @mask.setter
     def mask(self, arg: str) -> None:
-        self._mask = arg
+        self.status.set("masked", arg)
 
     def masked(self) -> bool:
-        return self._mask is not None
+        return self.status == "masked"
 
     @property
     def defect(self) -> str | None:
-        return self._defect
+        return self.status.details if self.status == "invalid" else None
 
     @defect.setter
     def defect(self, arg: str) -> None:
-        self._defect = arg
+        self.status.set("invalid", arg)
 
     def defective(self) -> bool:
-        return self._defect is not None
+        return self.status == "invalid"
+
+    def invalid(self) -> bool:
+        return self.status == "invalid"
 
     @property
     def url(self) -> str | None:
@@ -824,52 +828,29 @@ class TestCase(AbstractTestCase):
     def url(self, arg: str) -> None:
         self._url = arg
 
-    @property
-    def launcher(self) -> str | None:
-        return self._launcher
-
-    @launcher.setter
-    def launcher(self, arg: str | None) -> None:
-        self._launcher = arg
-
-    @property
-    def preflags(self) -> list[str]:
-        return self._preflags or []
-
-    @preflags.setter
-    def preflags(self, arg: list[str]) -> None:
-        self._preflags = arg
-
-    @property
-    def postflags(self) -> list[str]:
-        if self._postflags is None:
-            self._postflags = []
-        return self._postflags
-
-    @postflags.setter
-    def postflags(self, arg: list[str]) -> None:
-        self._postflags = arg
-
-    @property
-    def exe(self) -> str:
-        if self._exe is None:
-            self._exe = os.path.basename(self.file)
-        assert self._exe is not None
-        return self._exe
-
-    @exe.setter
-    def exe(self, arg: str) -> None:
-        self._exe = arg
-
     def command(self) -> list[str]:
-        cmd: list[str] = []
-        if self.launcher:
-            cmd.append(self.launcher)
-            cmd.extend(self.preflags or [])
-        cmd.append(self.exe)
-        cmd.extend(self.postflags or [])
+        command: list[str]
+        if hasattr(self, "exe"):
+            command = self._commandv1()
+        else:
+            command = [sys.executable, os.path.basename(self.file)]
         if script_args := config.getoption("script_args"):
-            cmd.extend(script_args)
+            command.extend(script_args)
+        return command
+
+    def _commandv1(self) -> list[str]:
+        import warnings
+
+        warnings.warn(
+            "Test cases requiring their own `exe` should be refactored to define `command` instead",
+            category=DeprecationWarning,
+        )
+        cmd: list[str] = []
+        if launcher := getattr(self, "launcher", None):
+            cmd.append(launcher)
+            cmd.extend(getattr(self, "preflags", None) or [])
+        cmd.append(self.exe)  # type: ignore
+        cmd.extend(getattr(self, "postflags", None) or [])
         return cmd
 
     def raw_command_line(self) -> str:
@@ -1207,7 +1188,11 @@ class TestCase(AbstractTestCase):
         entry: dict[str, str] = dict(name=name, value=value, action=action, sep=sep)
         self.environment_modifications.append(entry)
 
-    def add_measurement(self, **kwds: Any) -> None:
+    def add_measurement(
+        self, _arg1: str | None = None, _arg2: Any | None = None, /, **kwds: Any
+    ) -> None:
+        if _arg1 is not None:
+            self.measurements[_arg1] = _arg2
         self.measurements.update(kwds)
 
     def update(self, **attrs: Any) -> None:
@@ -1229,25 +1214,36 @@ class TestCase(AbstractTestCase):
 
     def describe(self) -> str:
         """Write a string describing the test case"""
-        id = colorize("@*b{%s}" % self.id[:7])
-        if self.masked():
-            string = "@*c{EXCLUDED} %s %s: %s" % (id, self.pretty_repr(), self.mask)
-            return colorize(string)
-        if self.defective():
-            string = "@*r{DEFECT (NOOP)} %s %s: %s" % (id, self.pretty_repr(), self.defect)
-            return colorize(string)
-        string = "%s %s %s" % (self.status.cname, id, self.pretty_repr())
+        format_spec: str = "%sN %id %X"
         if self.duration >= 0:
-            string += f" ({hhmmss(self.duration)})"
-        if self.status == "skipped":
-            string += " skip reason: %s" % self.status.details or "unknown"
-        elif self.status == "failed":
-            string += " fail reason: %s" % self.status.details or "unknown"
-        elif self.status == "diffed":
-            string += " diff reason: %s" % self.status.details or "unknown"
-        return string
+            format_spec += " (%d)"
+        if self.status.details:
+            format_spec += ": %sd"
+        return self.format(format_spec)
+
+    def format(self, format_spec: str) -> str:
+        state = self.status
+        replacements = {
+            "%id": "@*b{%s}" % self.id[:7],
+            "%p": self.pretty_path(),
+            "%n": self.pretty_name(),
+            "%sN": self.status.cname,
+            "%sn": state.value,
+            "%sd": state.details or "unknown",
+            "%d": hhmmss(None if self.duration < 0 else self.duration),
+        }
+        if config.getoption("format", "short") == "long":
+            replacements["%X"] = replacements["%p"]
+        else:
+            replacements["%X"] = replacements["%n"]
+        formatted_text = format_spec
+        for placeholder, value in replacements.items():
+            formatted_text = formatted_text.replace(placeholder, value)
+        return colorize(formatted_text.strip())
 
     def mark_as_ready(self) -> None:
+        if self.wont_run():
+            return
         self._status.set("ready" if not self.dependencies else "pending")
 
     def skipped(self) -> bool:
@@ -1257,10 +1253,10 @@ class TestCase(AbstractTestCase):
         return self.status.complete()
 
     def ready(self) -> bool:
-        return not self.inactive() and self.status == "ready"
+        return not self.wont_run() and self.status == "ready"
 
     def pending(self) -> bool:
-        return not self.inactive() and self.status == "pending"
+        return not self.wont_run() and self.status == "pending"
 
     def matches(self, pattern) -> bool:
         if pattern.startswith("/") and self.id.startswith(pattern[1:]):
@@ -1293,44 +1289,23 @@ class TestCase(AbstractTestCase):
             return True
         return False
 
-    def pretty_repr(self) -> str:
-        test_name: str
-        format_opt = config.getoption("format", "short")
-        if format_opt == "long":
-            test_name = self.path
-        elif format_opt == "short":
-            test_name = self.display_name
-        else:
-            raise Exception(f"Invalid format argument: {repr(test_name)}")
+    def pretty_path(self) -> str:
+        return self.pretty_repr(what=self.path)
 
+    def pretty_name(self) -> str:
+        return self.pretty_repr(what=self.display_name)
+
+    def pretty_repr(self, what: str | None = None) -> str:
+        """Colorize parameter specs in `what`"""
+        what = what or self.display_name
         i = self.display_name.find("[")
         if i == -1:
             # No parameters to colorize.
-            return test_name
-
+            return what
         # Find the parameter chunks in the display name because it's
         # easier to do it there.
         parts = self.display_name[i + 1 : -1].split(",")
-        colors = itertools.cycle("bmgycr")
-        for j, part in enumerate(parts):
-            color = next(colors)
-            # If we're using the full path or display name, every parameter
-            # will start with one of [ , . and will end with one of ] , . $
-            # This whole regex stuff is to make it so we will correctly
-            # color "foo.bar_np=42.np=4" where "np=4" is nested in "bar_np=42".
-            pre_pattern = r"(\[|\,|\.)"
-            post_pattern = r"(\]|\,|\.|$)"
-            pattern = pre_pattern + re.escape(part) + post_pattern
-            match = re.search(pattern, test_name)
-            if match is not None:
-                start, end = match.span()
-                test_name = (
-                    test_name[: start + 1]
-                    + colorize("@%s{%s}" % (color, part))
-                    + test_name[start + 1 + len(part) :]
-                )
-
-        return test_name
+        return cached_pretty_repr(self.id, what, tuple(parts))
 
     def copy(self) -> "TestCase":
         return deepcopy(self)
@@ -1454,8 +1429,8 @@ class TestCase(AbstractTestCase):
     def output(self, compress: bool = False) -> str:
         if self.status == "skipped":
             return f"Test skipped.  Reason: {self.status.details}"
-        elif self.defective():
-            return self.defect  # type: ignore
+        elif self.status == "invalid":
+            return f"Invalid test.  Reason: {self.status.details}"
         elif not self.status.complete():
             return "Log not found"
         out = io.StringIO()
@@ -1502,7 +1477,7 @@ class TestCase(AbstractTestCase):
     def do_baseline(self) -> None:
         if not self.baseline:
             return
-        logging.info(f"Rebaselining {self.pretty_repr()}")
+        logging.info(self.format("Rebaselining %X"))
         with fs.working_dir(self.working_directory):
             for arg in self.baseline:
                 if isinstance(arg, str):
@@ -1521,14 +1496,6 @@ class TestCase(AbstractTestCase):
                     if os.path.exists(src):
                         logging.emit(f"    Replacing {b} with {a}\n")
                         copyfile(src, dst)
-
-    def start_msg(self) -> str:
-        id = colorize("@b{%s}" % self.id[:7])
-        return "STARTING: {0} {1}".format(id, self.pretty_repr())
-
-    def end_msg(self) -> str:
-        id = colorize("@b{%s}" % self.id[:7])
-        return "FINISHED: {0} {1} {2}".format(id, self.pretty_repr(), self.status.cname)
 
     def concatenate_logs(self) -> None:
         with open(self.logfile(), "w") as fh:
@@ -1613,9 +1580,14 @@ class TestCase(AbstractTestCase):
                 properties[name] = [ParameterSet(p["keys"], p["values"]) for p in value]
             elif name == "dependencies":
                 for i, dep_state in enumerate(value):
-                    value[i] = factory(dep_state.pop("type"))
-                    value[i].setstate(dep_state)
-                properties[name] = value
+                    if isinstance(dep_state, dict):
+                        dep = factory(dep_state.pop("type"))
+                        dep.setstate(dep_state)
+                        properties["dependencies"][i] = dep
+                    elif not hasattr(dep_state, "required_resources"):
+                        raise TypeError(
+                            f"Dependency {dep_state!r} does not appear to be a TestCase"
+                        )
             elif name == "status":
                 properties[name] = Status(value["value"], details=value["details"])
         if "dependencies" in properties:
@@ -1634,13 +1606,27 @@ class TestCase(AbstractTestCase):
         return
 
 
+@lru_cache
+def cached_pretty_repr(id: str, what: str, parts: tuple[str]) -> str:
+    colors = itertools.cycle("bmgycr")
+    for part in parts:
+        # If we're using the full path or display name, every parameter
+        # will start with one of [ , . and will end with one of ] , . $
+        # This whole regex stuff is to make it so we will correctly
+        # color "foo.bar_np=42.np=4" where "np=4" is nested in "bar_np=42".
+        pretty = colorize("@%s{%s}" % (next(colors), part))
+        pattern = r"(\[|\,|\.)%s(\]|\,|\.|$)" % re.escape(part)
+        what = re.sub(pattern, "\\1%s\\2" % pretty, what)
+    return what
+
+
 class TestMultiCase(TestCase):
     def __init__(
         self,
         file_root: str | None = None,
         file_path: str | None = None,
         *,
-        flag: str = "--analyze",
+        flag: str | None = None,
         paramsets: list[ParameterSet] | None = None,
         family: str | None = None,
         keywords: list[str] = [],
@@ -1671,46 +1657,31 @@ class TestMultiCase(TestCase):
             artifacts=artifacts,
             exclusive=exclusive,
         )
-        if flag.startswith("-"):
+        self.cmd: list[str]
+        if flag is None:
+            self.cmd = [sys.executable, os.path.basename(self.file)]
+        elif flag.startswith("-"):
             # for the base case, call back on the test file with ``flag`` on the command line
-            self.launcher = sys.executable
-            self.exe = os.path.basename(self.file)
-            self.postflags.append(flag)
+            self.cmd = [sys.executable, os.path.basename(self.file), flag]
         else:
             src = flag if os.path.exists(flag) else os.path.join(self.file_dir, flag)
             if not os.path.exists(src):
                 logging.warning(f"{self}: analyze script {flag} not found")
-            self.exe = os.path.basename(flag)
-            self.launcher = None
+            self.cmd = [os.path.basename(flag)]
             # flag is a script to run during analysis, check if it is going to be copied/linked
             for asset in self.assets:
-                if asset.action in ("link", "copy") and self.exe == os.path.basename(asset.src):
+                if asset.action in ("link", "copy") and self.cmd[0] == os.path.basename(asset.src):
                     break
             else:
                 asset = Asset(src=os.path.abspath(src), dst=None, action="link")
                 self.assets.append(asset)
-        self._flag = flag
         self._paramsets = paramsets
 
-    @property
-    def flag(self) -> str:
-        assert self._flag is not None
-        return self._flag
-
-    @flag.setter
-    def flag(self, arg: str) -> None:
-        self._flag = arg
-
     def command(self) -> list[str]:
-        cmd: list[str] = []
-        if self.launcher:
-            cmd.append(self.launcher)
-            cmd.extend(self.preflags or [])
-        cmd.append(self.exe)
-        cmd.extend(self.postflags or [])
+        command = list(self.cmd)
         if script_args := config.getoption("script_args"):
-            cmd.extend(script_args)
-        return cmd
+            command.extend(script_args)
+        return command
 
     @property
     def paramsets(self) -> list[ParameterSet]:

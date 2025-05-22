@@ -62,3 +62,13 @@ def csvsplit(expr: str) -> list[str]:
         raise ValueError(f"mismatched quotes in {expr!r}")
 
     return result
+
+
+def pluralize(word: str, n: int):
+    if n == 1:
+        return word
+    elif word.endswith(("s", "sh", "ss", "z", "x", "ch")):
+        return f"{word}es"
+    elif word.endswith("y"):
+        return f"{word[:-1]}ies"
+    return f"{word}s"

@@ -11,6 +11,7 @@ from ...third_party.color import colorize
 from ...util import logging
 from ...util.banner import banner
 from ...util.filesystem import find_work_tree
+from ...util.graph import static_order
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import PathSpec
@@ -76,6 +77,8 @@ class Find(CanarySubcommand):
             stage=None,
             start=None,
         )
+        for case in static_order(cases):
+            config.plugin_manager.hook.canary_testcase_modify(case=case)
         cases_to_run = [case for case in cases if not case.masked()]
         masked = [case for case in cases if case.masked()]
         logging.info(colorize("@*{Selected} %d test cases" % (len(cases) - len(masked))))

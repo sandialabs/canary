@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import argparse
 import copy
 import io
 import json
@@ -23,7 +22,6 @@ from ...test.case import TestCase
 from ...util import graph
 from ...util import logging
 from ...util.filesystem import force_remove
-from ...util.filesystem import is_exe
 from ...util.filesystem import set_executable
 from ...util.filesystem import which
 from ...util.filesystem import working_dir
@@ -210,21 +208,11 @@ class CTestTestCase(TestCase):
         self._ctestfile = ctestfile
         self.ctest_working_directory = working_directory
         self.timeout_property = timeout
-
-        if command is not None:
-            with working_dir(self.execution_directory):
-                ns = parse_test_args(command)
-
-            self.assets = []
-            self.launcher = ns.launcher
-            self.preflags = ns.preflags
-            self.exe = ns.command
-            self.postflags = ns.postflags
-
+        self.cmd: list[str] = command or []
         if processors is not None:
             self.parameters["cpus"] = processors
-        elif self.preflags:
-            self.parameters["cpus"] = parse_np(self.preflags)
+        elif np := parse_np(self.cmd):
+            self.parameters["cpus"] = np
 
         if depends:
             self.unresolved_dependencies.extend(
@@ -344,13 +332,7 @@ class CTestTestCase(TestCase):
         return list(kwds)
 
     def command(self) -> list[str]:
-        command: list[str] = []
-        if self.launcher:
-            command.append(self.launcher)
-            command.extend(self.preflags or [])
-        command.append(self.exe)
-        command.extend(self.postflags or [])
-        return command
+        return list(self.cmd)
 
     def apply_environment_modifications(self, mods: list[dict[str, str]]) -> None:
         for em in mods:
@@ -491,38 +473,7 @@ class CTestTestCase(TestCase):
         self._will_fail = bool(arg)
 
 
-def is_mpi_launcher(arg: str) -> bool:
-    launchers = ("mpiexec", "mpirun", "srun", "jsrun")
-    return is_exe(arg) and arg.endswith(launchers)
-
-
-def parse_test_args(args: list[str]) -> argparse.Namespace:
-    """Look for command and or mpi runner"""
-    ns = argparse.Namespace(launcher=None, preflags=None)
-    iter_args = iter(args)
-    arg = next(iter_args)
-    if is_mpi_launcher(arg):
-        ns.launcher = arg
-        ns.preflags = []
-        for arg in iter_args:
-            if is_exe(arg):
-                break
-            elif is_exe(os.path.abspath(arg)):
-                arg = os.path.abspath(arg)
-            else:
-                ns.preflags.append(arg)
-        else:
-            s = " ".join(args)
-            logging.debug(f"Unable to find test program in {s}")
-            ns.launcher = None
-            arg = args[0]
-            iter_args = iter(args[1:])
-    ns.command = arg
-    ns.postflags = list(iter_args)
-    return ns
-
-
-def parse_np(args: list[str]) -> int:
+def parse_np(args: list[str]) -> int | None:
     for i, arg in enumerate(args):
         if re.search("^-(n|np|c)$", arg):
             return int(args[i + 1])
@@ -532,7 +483,7 @@ def parse_np(args: list[str]) -> int:
             return int(match.group(2))
         elif match := re.search("^--np=([0-9]+)$", arg):
             return int(match.group(1))
-    return 1
+    return None
 
 
 def load(file: str) -> dict[str, Any]:

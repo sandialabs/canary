@@ -56,9 +56,11 @@ from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
+from .util.graph import static_order
 from .util.procutils import cleanup_children
 from .util.returncode import compute_returncode
 from .util.rprobe import cpu_count
+from .util.string import pluralize
 from .util.time import hhmmss
 from .util.time import timestamp
 
@@ -130,6 +132,7 @@ class Session:
     def __init__(self, path: str, mode: str = "r", force: bool = False) -> None:
         if mode not in session_modes:
             raise ValueError(f"invalid mode: {mode!r}")
+        self.mode = mode
         self.work_tree: str
         if mode == "w":
             path = os.path.abspath(path)
@@ -165,12 +168,12 @@ class Session:
             self.restore_settings()
             self.load_testcase_generators()
             if not mode.endswith("+"):
-                self.load_testcases()
+                self.cases.clear()
+                cases = self.load_testcases()
+                self.cases.extend(cases)
         else:
             self.initialize()
             config.plugin_manager.hook.canary_session_start(session=self)
-
-        self.mode = mode
 
         if self.mode == "w":
             self.save(ini=True)
@@ -190,33 +193,41 @@ class Session:
                 if item.startswith(case_spec):
                     ids.append(item)
                     break
-        self.load_testcases(ids=ids)
+        self.cases.clear()
+        cases = self.load_testcases(ids=ids)
+        self.cases.extend(cases)
         for case in self.cases:
-            if case.pending() and not all(dep.id in ids for dep in case.dependencies):
+            if case.id not in ids:
+                case.mask = "case not requested"
+                continue
+            case.mark_as_ready()
+            if not case.status.satisfies(("pending", "ready")):
+                logging.error(f"{case}: will not run: {case.status.details}")
+            elif case.pending() and not all(dep.id in ids for dep in case.dependencies):
                 case.mask = "one or more missing dependencies"
-            else:
-                case.mark_as_ready()
         return self
 
     @classmethod
     def batch_view(cls, path: str, batch_id: str) -> "Session":
         """Create a view of this session that only includes cases in ``batch_id``"""
-        batch_case_ids = TestBatch.loadindex(batch_id)
-        if batch_case_ids is None:
+        ids = TestBatch.loadindex(batch_id)
+        if ids is None:
             raise ValueError(f"could not find index for batch {batch_id}")
-        expected = len(batch_case_ids)
-        logging.info(f"Selecting {expected} tests from batch {batch_id}")
+        expected = len(ids)
+        logging.info(f"Selecting {expected} {pluralize('test', expected)} from batch {batch_id}")
         self = cls(path, mode="a+")
-        self.load_testcases(ids=batch_case_ids)
-        for case in self.cases:
-            if case.masked():
-                logging.warning(f"{case}: unexpected mask: {case.mask}")
-            elif case.pending():
-                if not all(dep.id in batch_case_ids for dep in case.dependencies):
-                    case.mask = "one or more missing dependencies"
-        for case in self.cases:
-            if not case.masked():
-                case.mark_as_ready()
+        self.cases.clear()
+        for case in self.load_testcases(ids=ids):
+            if case.id not in ids:
+                continue
+            case.mark_as_ready()
+            if not case.status.satisfies(("pending", "ready")):
+                logging.error(f"{case}: will not run: {case.status.details}")
+            elif case.pending() and not all(_.id in ids for _ in case.dependencies):
+                case.mask = "one or more missing dependencies"
+            self.cases.append(case)
+        ready = len(self.get_ready())
+        logging.info(f"Selected {ready} {pluralize('test', expected)} from batch {batch_id}")
         return self
 
     def get_ready(self) -> list[TestCase]:
@@ -257,27 +268,27 @@ class Session:
             with self.db.open("cases/index", "w") as fh:
                 json.dump({"index": index}, fh, indent=2)
 
-    def load_testcases(self, ids: list[str] | None = None) -> None:
+    def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
         """Load test cases previously dumpped by ``dump_testcases``.  Dependency resolution is also
         performed
         """
         ctx = logging.context(colorize("@*{Loading} test cases"), level=logging.DEBUG)
         ctx.start()
         with self.db.open("cases/index", "r") as fh:
+            # index format: {ID: [DEPS_IDS]}
             index = json.load(fh)["index"]
-        ids = list(ids or [])
+        ids_to_load: set[str] = set()
         if ids:
-            # Be sure that if an ID is loaded that its dependencies are accessible
-            i: int = 0
-            while i < len(ids):
-                ids.extend(index[ids[i]])
-                i += 1
+            # we must not only load the requested IDs, but also their dependencies
+            for id in ids:
+                ids_to_load.add(id)
+                ids_to_load.update(index[id])
         ts: TopologicalSorter = TopologicalSorter()
         cases: dict[str, TestCase | TestMultiCase] = {}
         for id, deps in index.items():
             ts.add(id, *deps)
         for id in ts.static_order():
-            if ids and id not in ids:
+            if ids_to_load and id not in ids_to_load:
                 continue
             # see TestCase.lockfile for file pattern
             file = self.db.join_path("cases", id[:2], id[2:], TestCase._lockfile)
@@ -288,15 +299,13 @@ class Session:
                     logging.warning(f"Unable to load {file}!")
                     continue
             state["properties"]["work_tree"] = self.work_tree
-            case = testcase_from_state(state)
-            # update dependencies manually so that the dependencies are consistent across the suite
-            for i, dep in enumerate(case.dependencies):
-                case.dependencies[i] = cases[dep.id]
-            cases[case.id] = case
+            for i, dep_state in enumerate(state["properties"]["dependencies"]):
+                # assign dependencies from existing dependencies
+                state["properties"]["dependencies"][i] = cases[dep_state["properties"]["id"]]
+            cases[id] = testcase_from_state(state)
+            assert id == cases[id].id
         ctx.stop()
-        self.cases.clear()
-        self.cases.extend(cases.values())
-        return
+        return list(cases.values())
 
     def dump_testcase_generators(self) -> None:
         """Dump each test file (test generator) in this session to ``file`` in json format"""
@@ -352,6 +361,7 @@ class Session:
         """Set ``section`` configuration values"""
         config.session.work_tree = self.work_tree
         config.session.level = self.level
+        config.session.mode = self.mode
 
     def save(self, ini: bool = False) -> None:
         """Save session data, excluding data that is stored separately in the database"""
@@ -444,17 +454,20 @@ class Session:
             case_specs=None,
             start=None,
         )
+        for case in static_order(self.cases):
+            config.plugin_manager.hook.canary_testcase_modify(case=case)
+
         masked: list[TestCase] = []
         for case in self.cases:
             if env_mods:
                 case.add_default_env(**env_mods)
-            if case.masked() or case.defective():
+            if case.wont_run():
                 masked.append(case)
             else:
                 case.mark_as_ready()
 
         n = len(self.cases) - len(masked)
-        logging.info(colorize("@*{Selected} %d test case%s" % (n, "" if n == 1 else "s")))
+        logging.info(colorize("@*{Selected} %d test %s" % (n, pluralize("case", n))))
         if masked:
             self.report_excluded(masked)
 
@@ -494,14 +507,16 @@ class Session:
             case_specs=case_specs,
             start=start,
         )
+        for case in static_order(self.cases):
+            config.plugin_manager.hook.canary_testcase_modify(case=case)
         masked: list[TestCase] = []
         for case in cases:
-            if case.masked() or case.defective():
+            if case.wont_run():
                 masked.append(case)
             else:
                 case.mark_as_ready()
         n = len(self.cases) - len(masked)
-        logging.info(colorize("@*{Selected} %d test case%s" % (n, "" if n == 1 else "s")))
+        logging.info(colorize("@*{Selected} %d test %s" % (n, pluralize("case", n))))
         if masked:
             self.report_excluded(masked)
 
@@ -527,7 +542,10 @@ class Session:
                 cleanup_queue = True
                 try:
                     queue_size = len(queue)
-                    what = "batches" if isinstance(queue, BatchResourceQueue) else "test cases"
+                    what = pluralize(
+                        "batch" if isinstance(queue, BatchResourceQueue) else "test case",
+                        queue_size,
+                    )
                     logging.info(colorize("@*{Running} %d %s" % (queue_size, what)))
                     self.start = timestamp()
                     self.stop = -1.0
@@ -579,7 +597,8 @@ class Session:
                     atexit.unregister(cleanup_children)
         self.save()
         for case in self.cases:
-            if case.defective():
+            # we wont run invalid cases, but we want to include them in reports
+            if case.status == "invalid":
                 cases.append(case)
         return cases
 
@@ -769,14 +788,7 @@ class Session:
             return file.getvalue()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            if case.defective():
-                totals.setdefault("defective", []).append(case)
-            else:
-                totals.setdefault(case.status.value, []).append(case)
-        if "defective" in totals:
-            for case in sorted(totals["defective"], key=lambda t: t.name):
-                description = case.describe()
-                file.write("%s %s\n" % (glyphs.ballotx, description))
+            totals.setdefault(case.status.value, []).append(case)
         for status in Status.members:
             if not include_pass and status == "success":
                 continue
@@ -804,10 +816,7 @@ class Session:
                 duration = finish - start
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            if case.defective():
-                totals.setdefault("defective", []).append(case)
-            else:
-                totals.setdefault(case.status.value, []).append(case)
+            totals.setdefault(case.status.value, []).append(case)
         N = len(cases)
         summary = ["@*b{%d total}" % N]
         for member in Status.colors:
@@ -816,9 +825,6 @@ class Session:
                 c = Status.colors[member]
                 stat = totals[member][0].status.name
                 summary.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-        if "defective" in totals:
-            n = len(totals["defective"])
-            summary.append(colorize("@*r{%d defective}" % n))
         emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
         x, y = random.sample(emojis, 2)
         kwds = {
@@ -835,15 +841,14 @@ class Session:
         """Return a string describing the ``N`` slowest tests"""
         cases = cases or self.active_cases()
         string = io.StringIO()
-        cases = [c for c in cases if c.duration > 0]
+        cases = [c for c in cases if c.duration >= 0]
         sorted_cases = sorted(cases, key=lambda x: x.duration)
         if N > 0:
             sorted_cases = sorted_cases[-N:]
         kwds = {"t": glyphs.turtle, "N": N}
         string.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
         for case in sorted_cases:
-            id = colorize("@*b{%s}" % case.id[:7])
-            string.write("  %6.2f   %s    %s\n" % (case.duration, id, case.pretty_repr()))
+            string.write("  %6.2f   %s\n" % (case.duration, case.format("%id   %X")))
         string.write("\n")
         return string.getvalue()
 
@@ -853,21 +858,7 @@ class Session:
         file = io.StringIO()
         totals: dict[str, list[TestCase]] = {}
         for case in cases:
-            if case.masked():
-                totals.setdefault("masked", []).append(case)
-            elif case.defective():
-                totals.setdefault("defective", []).append(case)
-            else:
-                totals.setdefault(case.status.value, []).append(case)
-        if "masked" in totals:
-            for case in sort_cases_by(totals["masked"], field=sortby):
-                description = case.describe()
-                file.write("%s %s\n" % (glyphs.masked, description))
-        if "defective" in totals:
-            for case in sort_cases_by(totals["defective"], field=sortby):
-                description = case.describe()
-                glyph = colorize("@*r{%s}" % glyphs.ballotx)
-                file.write("%s %s\n" % (glyph, description))
+            totals.setdefault(case.status.value, []).append(case)
         for member in Status.members:
             if member in totals:
                 for case in sort_cases_by(totals[member], field=sortby):
@@ -882,10 +873,8 @@ class Session:
         logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
         reasons: dict[str | None, int] = {}
         for case in excluded_cases:
-            if case.masked():
-                reasons[case.mask] = reasons.get(case.mask, 0) + 1
-            elif case.defective():
-                reasons[case.defect] = reasons.get(case.defect, 0) + 1
+            if case.status.satisfies(("masked", "invalid")):
+                reasons[case.status.details] = reasons.get(case.status.details, 0) + 1
         keys = sorted(reasons, key=lambda x: reasons[x])
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
@@ -935,7 +924,7 @@ class Session:
                     cases_to_show.append(case)
                 elif "t" in rc and case.status == "timeout":
                     cases_to_show.append(case)
-                elif "n" in rc and case.defective():
+                elif "n" in rc and case.status == "invalid":
                     cases_to_show.append(case)
                 elif "n" in rc and case.status.value in (
                     "ready",

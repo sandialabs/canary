@@ -70,17 +70,14 @@ class HTMLReport(CanaryReport):
         fh.write("<html>\n")
         fh.write("<body>\n<table>\n")
         fh.write(f"<tr><td><b>Test:</b> {case.display_name}</td></tr>\n")
-        if case.defective():
-            fh.write("<tr><td><b>Status:</b> Defective</td></tr>\n")
-        else:
-            fh.write(f"<tr><td><b>Status:</b> {case.status.name}</td></tr>\n")
+        fh.write(f"<tr><td><b>Status:</b> {case.status.name}</td></tr>\n")
         fh.write(f"<tr><td><b>Exit code:</b> {case.returncode}</td></tr>\n")
         fh.write(f"<tr><td><b>ID:</b> {case.id}</td></tr>\n")
         fh.write(f"<tr><td><b>Duration:</b> {case.duration}</td></tr>\n")
         fh.write("</table>\n")
         fh.write("<h2>Test output</h2>\n<pre>\n")
-        if case.defective():
-            fh.write(f"{case.defect}\n")
+        if case.status == "invalid":
+            fh.write(f"{case.status.details}\n")
         elif os.path.exists(case.logfile()):
             with open(case.logfile()) as fp:
                 fh.write(fp.read())
@@ -101,7 +98,7 @@ class HTMLReport(CanaryReport):
             "Fail",
             "Diff",
             "Pass",
-            "Defective",
+            "Invalid",
             "Cancelled",
             "Total",
         ):
@@ -109,12 +106,12 @@ class HTMLReport(CanaryReport):
         fh.write("</tr>\n")
         totals: dict[str, list[TestCase]] = {}
         for case in session.active_cases():
-            group = "Defective" if case.defective() else case.status.name.title()
+            group = case.status.name.title()
             totals.setdefault(group, []).append(case)
         fh.write("<tr>")
         fh.write(f"<td>{config.system.host}</td>")
         fh.write(f"<td>{config.build.project}</td>")
-        for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Defective", "Cancelled"):
+        for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Invalid", "Cancelled"):
             if group not in totals:
                 fh.write("<td>0</td>")
             else:
@@ -133,7 +130,7 @@ class HTMLReport(CanaryReport):
     def generate_group_index(self, cases, fh: TextIO) -> None:
         fh.write("<html>\n")
         fh.write(self.head)
-        key = "Defective" if cases[0].defective() else cases[0].status.name
+        key = cases[0].status.name
         fh.write(f"<body>\n<h1> {key} Summary </h1>\n")
         fh.write('<table class="sortable">\n')
         fh.write("<thead><tr><th>Test</th><th>Duration</th><th>Status</th></tr></thead>\n")
@@ -143,7 +140,7 @@ class HTMLReport(CanaryReport):
             if not os.path.exists(file):
                 raise ValueError(f"{file}: html file not found")
             link = f'<a href="file://{file}">{case.display_name}</a>'
-            html_name = "Defective" if case.defective() else case.status.html_name
+            html_name = case.status.html_name
             fh.write(f"<tr><td>{link}</td><td>{case.duration:.2f}</td><td>{html_name}</td></tr>\n")
         fh.write("</tbody>")
         fh.write("</table>\n</body>\n</html>")
@@ -159,7 +156,7 @@ class HTMLReport(CanaryReport):
                 if not os.path.exists(file):
                     raise ValueError(f"{file}: html file not found")
                 link = f'<a href="file://{file}">{case.display_name}</a>'
-                html_name = "Defective" if case.defective() else case.status.html_name
+                html_name = case.status.html_name
                 fh.write(
                     f"<tr><td>{link}</td><td>{case.duration:.2f}</td><td>{html_name}</td></tr>\n"
                 )
