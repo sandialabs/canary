@@ -60,7 +60,7 @@ def canary_testsuite_mask(
         if case.masked():
             continue
 
-        if start is not None and isrel(case.execfile, start):
+        if start is not None and no_filter_criteria and isrel(case.execfile, start):
             # won't mask
             continue
 

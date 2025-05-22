@@ -168,7 +168,9 @@ class Session:
             self.restore_settings()
             self.load_testcase_generators()
             if not mode.endswith("+"):
-                self.load_testcases()
+                self.cases.clear()
+                cases = self.load_testcases()
+                self.cases.extend(cases)
         else:
             self.initialize()
             config.plugin_manager.hook.canary_session_start(session=self)
@@ -191,7 +193,9 @@ class Session:
                 if item.startswith(case_spec):
                     ids.append(item)
                     break
-        self.load_testcases(ids=ids)
+        self.cases.clear()
+        cases = self.load_testcases(ids=ids)
+        self.cases.extend(cases)
         for case in self.cases:
             if case.id not in ids:
                 case.mask = "case not requested"
@@ -212,16 +216,16 @@ class Session:
         expected = len(ids)
         logging.info(f"Selecting {expected} {pluralize('test', expected)} from batch {batch_id}")
         self = cls(path, mode="a+")
-        self.load_testcases(ids=ids)
-        for case in self.cases:
+        self.cases.clear()
+        for case in self.load_testcases(ids=ids):
             if case.id not in ids:
-                case.mask = f"case not in batch {batch_id}"
                 continue
             case.mark_as_ready()
             if not case.status.satisfies(("pending", "ready")):
                 logging.error(f"{case}: will not run: {case.status.details}")
             elif case.pending() and not all(_.id in ids for _ in case.dependencies):
                 case.mask = "one or more missing dependencies"
+            self.cases.append(case)
         ready = len(self.get_ready())
         logging.info(f"Selected {ready} {pluralize('test', expected)} from batch {batch_id}")
         return self
@@ -264,7 +268,7 @@ class Session:
             with self.db.open("cases/index", "w") as fh:
                 json.dump({"index": index}, fh, indent=2)
 
-    def load_testcases(self, ids: list[str] | None = None) -> None:
+    def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
         """Load test cases previously dumpped by ``dump_testcases``.  Dependency resolution is also
         performed
         """
@@ -301,9 +305,7 @@ class Session:
             cases[id] = testcase_from_state(state)
             assert id == cases[id].id
         ctx.stop()
-        self.cases.clear()
-        self.cases.extend(cases.values())
-        return
+        return list(cases.values())
 
     def dump_testcase_generators(self) -> None:
         """Dump each test file (test generator) in this session to ``file`` in json format"""
@@ -465,7 +467,7 @@ class Session:
                 case.mark_as_ready()
 
         n = len(self.cases) - len(masked)
-        logging.info(colorize("@*{Selected} %d test case%s" % (n, "" if n == 1 else "s")))
+        logging.info(colorize("@*{Selected} %d test %s" % (n, pluralize("case", n))))
         if masked:
             self.report_excluded(masked)
 
@@ -514,7 +516,7 @@ class Session:
             else:
                 case.mark_as_ready()
         n = len(self.cases) - len(masked)
-        logging.info(colorize("@*{Selected} %d test case%s" % (n, "" if n == 1 else "s")))
+        logging.info(colorize("@*{Selected} %d test %s" % (n, pluralize("case", n))))
         if masked:
             self.report_excluded(masked)
 
