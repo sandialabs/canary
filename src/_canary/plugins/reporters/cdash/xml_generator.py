@@ -273,7 +273,8 @@ class CDashXMLReporter:
             if case.gpus:
                 add_measurement(results, name="GPUs", value=case.gpus)
             if url := getattr(case, "url", None):
-                add_measurement(results, name="Script", cdata=url)
+                cdata = f'<a class="cdash-link" href={url}> {case.name} </a>'
+                add_measurement(results, name="Script", cdata=cdata)
             if case.measurements:
                 for name, measurement in case.measurements.items():
                     if isinstance(measurement, (str, int, float)):
