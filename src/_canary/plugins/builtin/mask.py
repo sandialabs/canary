@@ -129,9 +129,6 @@ def canary_testsuite_mask(
         if no_filter_criteria and not case.status.satisfies(("created", "pending", "ready")):
             case.mask = f"previous status {case.status.value!r} is not 'ready'"
 
-    for i in order:
-        config.plugin_manager.hook.canary_testcase_modify(case=cases[i])
-
     ctx.stop()
 
 

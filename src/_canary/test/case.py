@@ -1188,7 +1188,11 @@ class TestCase(AbstractTestCase):
         entry: dict[str, str] = dict(name=name, value=value, action=action, sep=sep)
         self.environment_modifications.append(entry)
 
-    def add_measurement(self, **kwds: Any) -> None:
+    def add_measurement(
+        self, _arg1: str | None = None, _arg2: Any | None = None, /, **kwds: Any
+    ) -> None:
+        if _arg1 is not None:
+            self.measurements[_arg1] = _arg2
         self.measurements.update(kwds)
 
     def update(self, **attrs: Any) -> None:
@@ -1210,7 +1214,7 @@ class TestCase(AbstractTestCase):
 
     def describe(self) -> str:
         """Write a string describing the test case"""
-        format_spec: str = "%sn %id %X"
+        format_spec: str = "%sN %id %X"
         if self.duration >= 0:
             format_spec += " (%d)"
         if self.status.details:
@@ -1223,6 +1227,7 @@ class TestCase(AbstractTestCase):
             "%id": "@*b{%s}" % self.id[:7],
             "%p": self.pretty_path(),
             "%n": self.pretty_name(),
+            "%sN": self.status.cname,
             "%sn": state.value,
             "%sd": state.details or "unknown",
             "%d": hhmmss(None if self.duration < 0 else self.duration),

@@ -224,7 +224,7 @@ class TestCaseRunner(AbstractTestRunner):
             f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
                 f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        f.write(case.format("Finished %id: %X %sn"))
+        f.write(case.format("Finished %id: %X %sN"))
         return f.getvalue()
 
     def get_process_metrics(

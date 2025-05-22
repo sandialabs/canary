@@ -56,6 +56,7 @@ from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
+from .util.graph import static_order
 from .util.procutils import cleanup_children
 from .util.returncode import compute_returncode
 from .util.rprobe import cpu_count
@@ -451,6 +452,9 @@ class Session:
             case_specs=None,
             start=None,
         )
+        for case in static_order(self.cases):
+            config.plugin_manager.hook.canary_testcase_modify(case=case)
+
         masked: list[TestCase] = []
         for case in self.cases:
             if env_mods:
@@ -501,6 +505,8 @@ class Session:
             case_specs=case_specs,
             start=start,
         )
+        for case in static_order(self.cases):
+            config.plugin_manager.hook.canary_testcase_modify(case=case)
         masked: list[TestCase] = []
         for case in cases:
             if case.wont_run():

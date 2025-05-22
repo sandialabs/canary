@@ -9,7 +9,9 @@ import os
 import time
 import xml.dom.minidom as xdom
 from graphlib import TopologicalSorter
+from typing import IO
 from typing import TYPE_CHECKING
+from typing import Any
 
 from .... import config
 from ....test.case import TestCase
@@ -33,7 +35,11 @@ class CDashXMLReporter:
         if session:
             for case in session.active_cases():
                 self.data.add_test(case)
-        dest = dest or os.path.join("." if not session else session.work_tree, "CDASH")
+        if dest is None:
+            dest = os.path.join("." if not session else session.work_tree, "CDASH")
+        assert dest is not None
+        if not os.path.isabs(dest):
+            dest = os.path.join(config.invocation_dir, dest)
         self.xml_dir = os.path.abspath(dest)
         self.xml_files: list[str] = []
         self.notes: dict[str, str] = {}
@@ -76,7 +82,7 @@ class CDashXMLReporter:
         chunk_size: int | None = None,
     ) -> None:
         """Collect information and create reports"""
-        self.meta = None
+        self.meta: dict[str, Any] | None = None
         self.buildname = buildname
         self.site = site or os.uname().nodename
         self.generator = generator or f"canary version {canary_version}"
@@ -151,8 +157,8 @@ class CDashXMLReporter:
             return None
         return f"{url}/buildSummary.php?buildid={buildid}"
 
-    @property
-    def site_node(self):
+    def create_document(self) -> xdom.Document:
+        doc = xdom.Document()
         if self.meta is None:
             self.meta = {}
             host = os.uname().nodename
@@ -174,10 +180,11 @@ class CDashXMLReporter:
             self.meta["OSRelease"] = os_release
             self.meta["OSVersion"] = os_version
             self.meta["OSPlatform"] = os_platform
-        el = xdom.Document().createElement("Site")
+        el = doc.createElement("Site")
         for key, value in self.meta.items():
-            add_attr(el, key, value)
-        return el
+            el.setAttribute(key, str("" if value is None else value))
+        doc.appendChild(el)
+        return doc
 
     def write_test_xml(self, cases: list[TestCase]) -> str:
         i = 0
@@ -190,8 +197,8 @@ class CDashXMLReporter:
         logging.log(logging.INFO, f"WRITING: {len(cases)} test cases to {f}", prefix=None)
         starttime = self.data.start
 
-        doc = xdom.Document()
-        root = self.site_node
+        doc = self.create_document()
+        root = doc.firstChild
         l1 = doc.createElement("Testing")
         add_text_node(l1, "StartDateTime", strftimestamp(starttime))
         add_text_node(l1, "StartTestTime", int(starttime))
@@ -261,29 +268,30 @@ class CDashXMLReporter:
             add_text_node(test_node, "FullCommandLine", case.raw_command_line())
             results = doc.createElement("Results")
 
-            add_measurement(results, name="Exit Code", value=exit_code)
-            add_measurement(results, name="Exit Value", value=str(exit_value))
+            add_named_measurement(results, "Exit Code", exit_code)
+            add_named_measurement(results, "Exit Value", str(exit_value))
             duration = case.stop - case.start
-            add_measurement(results, name="Execution Time", value=duration)
+            add_named_measurement(results, "Execution Time", duration)
             if fail_reason is not None:
-                add_measurement(results, name="Fail Reason", value=fail_reason)
-            add_measurement(results, name="Completion Status", value=completion_status)
-            add_measurement(results, name="Command Line", cdata=case.raw_command_line())
-            add_measurement(results, name="Processors", value=int(case.cpus or 1))
+                add_named_measurement(results, "Fail Reason", fail_reason)
+            add_named_measurement(results, "Completion Status", completion_status)
+            add_named_measurement(results, "Command Line", case.raw_command_line(), type="cdata")
+            add_named_measurement(results, "Processors", int(case.cpus or 1))
             if case.gpus:
-                add_measurement(results, name="GPUs", value=case.gpus)
+                add_named_measurement(results, "GPUs", case.gpus)
             if url := getattr(case, "url", None):
-                cdata = f'<a class="cdash-link" href={url}> {case.name} </a>'
-                add_measurement(results, name="Script", cdata=cdata)
+                add_named_measurement(results, "Test Script", url, type="text/link")
             if case.measurements:
-                for name, measurement in case.measurements.items():
-                    if isinstance(measurement, (str, int, float)):
-                        add_measurement(results, name=name.title(), value=measurement)
+                for name, value in case.measurements.items():
+                    if isinstance(value, str) and value.startswith(("https://", "http://")):
+                        add_named_measurement(results, name.title(), value, type="text/link")
+                    elif isinstance(value, (str, int, float)):
+                        add_named_measurement(results, name.title(), value)
                     else:
-                        add_measurement(results, name=name.title(), value=json.dumps(measurement))
+                        add_named_measurement(results, name.title(), json.dumps(value))
             add_measurement(
                 results,
-                value=case.output(compress=True),
+                case.output(compress=True),
                 encoding="base64",
                 compression="gzip",
             )
@@ -297,8 +305,8 @@ class CDashXMLReporter:
 
             l1.appendChild(test_node)
 
-        root.appendChild(l1)
-        doc.appendChild(root)
+        root.appendChild(l1)  # type: ignore
+        doc.appendChild(root)  # type: ignore
 
         with open(filename, "w") as fh:
             self.dump_xml(doc, fh)
@@ -313,8 +321,8 @@ class CDashXMLReporter:
         filename = unique_file(self.xml_dir, "Notes", ".xml")
         f = os.path.relpath(filename, config.invocation_dir)
         logging.log(logging.INFO, f"WRITING: Notes.xml to {f}", prefix=None)
-        doc = xdom.Document()
-        root = self.site_node
+        doc = self.create_document()
+        root = doc.firstChild
         notes_el = doc.createElement("Notes")
         for name, text in self.notes.items():
             t = timestamp()
@@ -325,14 +333,14 @@ class CDashXMLReporter:
             add_text_node(el, "DateTime", s)
             add_text_node(el, "Text", text)
             notes_el.appendChild(el)
-        root.appendChild(notes_el)
-        doc.appendChild(root)
+        root.appendChild(notes_el)  # type: ignore
+        doc.appendChild(root)  # type: ignore
         with open(filename, "w") as fh:
             self.dump_xml(doc, fh)
         self.validate_xml(filename, schema="Notes.xsd")
         return filename
 
-    def dump_xml(self, document, stream):
+    def dump_xml(self, document: xdom.Document, stream: IO[Any]):
         stream.write(document.toprettyxml(indent="", newl=""))
 
     def validate_xml(self, file: str, *, schema: str) -> None:
@@ -346,59 +354,55 @@ class CDashXMLReporter:
             xml_schema.validate(file)
 
 
-def add_text_node(parent_node, child_name, content, **attrs):
-    doc = xdom.Document()
-    child = doc.createElement(child_name)
-    text = str("" if content is None else content)
-    text_node = doc.createTextNode(text)
-    child.appendChild(text_node)
-    for key, value in attrs.items():
-        child.setAttribute(key, str("" if value is None else value))
-    parent_node.appendChild(child)
+def add_text_node(parent: xdom.Element, name: str, value: Any, **attrs: Any) -> None:
+    child = xdom.Element(name)
+    child.ownerDocument = parent.ownerDocument
+    for key, val in attrs.items():
+        child.setAttribute(key, str(val))
+    text = xdom.Text()
+    text.data = str(value)
+    child.appendChild(text)
+    parent.appendChild(child)
     return
 
 
-def add_attr(node, name, value):
-    node.setAttribute(name, str("" if value is None else value))
-
-
-def alert_node(title, item):
-    doc = xdom.Document()
-    root = doc.createElement(title)
-    add_text_node(root, "BuildLogLine", item["line_no"])
-    add_text_node(root, "Text", item["text"])
-    add_text_node(root, "SourceFile", item["source_file"])
-    add_text_node(root, "SourceLineNumber", item["source_line_no"])
-    add_text_node(root, "PreContext", item["pre_context"])
-    add_text_node(root, "PostContext", item["post_context"])
-    add_text_node(root, "Repeat", 0)
-    return root
-
-
-def add_measurement(parent, name=None, value=None, cdata=None, **attrs):
-    type = attrs.pop("type", None)
-    if name is not None:
-        if isinstance(value, (float, int)):
-            type = "numeric/double"
-        else:
-            type = "text/string"
-    key = "Measurement" if name is None else "NamedMeasurement"
-    doc = xdom.Document()
-    l1 = doc.createElement(key)
-    if type is not None:
-        l1.setAttribute("type", type)
-    if name is not None:
-        l1.setAttribute("name", name)
-    l2 = doc.createElement("Value")
+def add_cdata_node(parent: xdom.Element, name: str, value: Any, **attrs: Any) -> None:
+    child = xdom.Element(name)
+    child.ownerDocument = parent.ownerDocument
     for key, val in attrs.items():
-        l2.setAttribute(key, str("" if val is None else val))
-    if cdata is not None:
-        text_node = doc.createCDATASection(cdata)
+        child.setAttribute(key, str(val))
+    text = xdom.CDATASection()
+    text.data = str(value)
+    child.appendChild(text)
+    parent.appendChild(child)
+    return
+
+
+def add_measurement(parent: xdom.Element, arg: str, **attrs: str) -> None:
+    measurement = xdom.Element("Measurement")
+    measurement.ownerDocument = parent.ownerDocument
+    add_text_node(measurement, "Value", arg, **attrs)
+    parent.appendChild(measurement)
+
+
+def add_named_measurement(
+    parent: xdom.Element,
+    name: str,
+    arg: str | float | int | None,
+    type: str | None = None,
+) -> None:
+    measurement = xdom.Element("NamedMeasurement")
+    measurement.ownerDocument = parent.ownerDocument
+    if type == "cdata":
+        type = "text/string"
+        add_cdata_node(measurement, "Value", arg)
     else:
-        text_node = doc.createTextNode(str("" if value is None else value))
-    l2.appendChild(text_node)
-    l1.appendChild(l2)
-    parent.appendChild(l1)
+        if type is None:
+            type = "numeric/double" if isinstance(arg, (float, int)) else "text/string"
+        add_text_node(measurement, "Value", arg)
+    measurement.setAttribute("name", name)
+    measurement.setAttribute("type", type)
+    parent.appendChild(measurement)
 
 
 def unique_file(dirname: str, filename: str, ext: str) -> str:
