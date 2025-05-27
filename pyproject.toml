@@ -12,6 +12,11 @@ dependencies = [
   "hpc-connect@git+https://github.com/sandialabs/hpc-connect"
 ]
 
+[project.urls]
+Repository = "https://github.com/sandialabs/canary"
+Documentation = "https://canary-wm.readthedocs.io/en/production/"
+Issues = "https://github.com/sandialabs/canary/issues"
+
 [project.scripts]
 nvtest = "canary:console_main"
 canary = "canary:console_main"
