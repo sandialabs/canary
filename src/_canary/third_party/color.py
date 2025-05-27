@@ -237,6 +237,12 @@ def cextra(string):
     return len("".join(re.findall(r"\033[^m]*m", string)))
 
 
+def ccenter(string, width, fillchar=" "):
+    fillin = "*" * clen(string)
+    centered = fillin.center(width, fillchar)
+    return centered.replace(fillin, string)
+
+
 def cwrite(string, stream=sys.stderr, color=None):
     """Replace all color expressions in string with ANSI control
     codes and write the result to the stream.  If color is
