@@ -26,7 +26,7 @@ Basic installation
 
    .. code-block:: console
 
-      python3 -m pip install "canary-wm git+ssh://git@cee-gitlab.gov/ascic-test-infra/canary"
+      python3 -m pip install "canary-wm git+ssh://git@github.com/sandialabs/canary"
 
 
 Editable installation
@@ -45,7 +45,7 @@ An "editable installation" installs package dependencies, metadata, and wrappers
 
    .. code-block:: console
 
-      python3 -m pip install -e git+ssh://git@cee-gitlab.gov/alegra/tools/canary#egg=canary
+      python3 -m pip install -e git+ssh://git@github.com/sandialabs/canary#egg=canary
 
 Alternatively, the package can be installed from a source checkout:
 
@@ -60,7 +60,7 @@ Alternatively, the package can be installed from a source checkout:
 
    .. code-block:: console
 
-      git clone git@cee-gitlab.gov:alegra/tools/canary
+      git clone git@github.com:sandialabs/canary
 
 3. Install via ``pip`` into the virtual environment with the ``-e`` flag
 
