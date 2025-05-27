@@ -588,12 +588,12 @@ class Session:
                     self.exitstatus = self.returncode
                     queue.close(cleanup=cleanup_queue)
                     self.stop = timestamp()
-                    config.plugin_manager.hook.canary_session_finish(
-                        session=self, exitstatus=self.exitstatus
-                    )
                     dt = self.stop - self.start
                     msg = colorize("@*{Finished} %d %s (%s)\n" % (queue_size, what, hhmmss(dt)))
                     logging.info(msg)
+                    config.plugin_manager.hook.canary_session_finish(
+                        session=self, exitstatus=self.exitstatus
+                    )
                     atexit.unregister(cleanup_children)
         self.save()
         for case in self.cases:

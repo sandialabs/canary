@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import argparse
 import copy
 import io
 import json
@@ -674,3 +675,18 @@ def canary_addoption(parser) -> None:
         "from the root CTestTestfile.cmake, so this is option is not necessary unless there "
         "is a mix of CTests and other test types in the binary directory",
     )
+    parser.add_argument(
+        "--output-on-failure",
+        nargs=0,
+        default=None,
+        action=MapToShowCapture,
+        group="ctest options",
+        command="run",
+        help="Alias for --show-capture=all",
+    )
+
+
+class MapToShowCapture(argparse.Action):
+    def __call__(self, parser, args, values, option_string=None):
+        args.show_capture = "all"
+        setattr(args, self.dest, True)
