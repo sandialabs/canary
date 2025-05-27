@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 
 from ..util import logging
-from ..util.misc import plural
+from ..util.string import pluralize
 from ..util.time import pretty_seconds
 
 if sys.platform != "win32":
@@ -164,7 +164,7 @@ def _attempts_str(wait_time, nattempts):
     if nattempts <= 1:
         return ""
 
-    attempts = plural(nattempts, "attempt")
+    attempts = pluralize("attempt", nattempts)
     return " after {} and {}".format(pretty_seconds(wait_time), attempts)
 
 

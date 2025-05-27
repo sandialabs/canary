@@ -32,6 +32,7 @@ from .third_party.color import colorize
 from .util import logging
 from .util.filesystem import working_dir
 from .util.misc import digits
+from .util.string import pluralize
 from .util.time import hhmmss
 from .util.time import timestamp
 
@@ -60,7 +61,7 @@ class AbstractTestRunner:
         return None
 
     @abc.abstractmethod
-    def run(self, case: AbstractTestCase) -> None: ...
+    def run(self, obj: AbstractTestCase, **kwargs: Any) -> None: ...
 
     @abc.abstractmethod
     def start_msg(
@@ -85,7 +86,8 @@ class TestCaseRunner(AbstractTestRunner):
     def __init__(self) -> None:
         super().__init__()
 
-    def run(self, case: "AbstractTestCase") -> None:
+    def run(self, obj: "AbstractTestCase", **kwargs: Any) -> None:
+        case = obj
         assert isinstance(case, TestCase)
 
         def cancel(sig, frame):
@@ -319,7 +321,8 @@ class BatchRunner(AbstractTestRunner):
             batch_options.extend(args)
         return batch_options
 
-    def run(self, batch: AbstractTestCase) -> None:
+    def run(self, obj: AbstractTestCase, **kwargs: Any) -> None:
+        batch = obj
         assert isinstance(batch, TestBatch)
 
         def cancel(sig, frame):
@@ -327,6 +330,10 @@ class BatchRunner(AbstractTestRunner):
             if proc is None:
                 return
             proc.cancel()
+
+        allow_retry: bool = True
+        if "allow_retry" in kwargs:
+            allow_retry = bool(kwargs["allow_retry"])
 
         logging.trace(f"Running batch {batch.id[:7]}")
         start = time.monotonic()
@@ -381,15 +388,29 @@ class BatchRunner(AbstractTestRunner):
                     qtime=qtime,
                 )
             assert proc is not None
+            npoll: int = 0
             while True:
-                if proc.poll() is not None:
-                    break
                 time.sleep(backend.polling_frequency)
+                if proc.poll() is not None:
+                    if proc.returncode == 0 and npoll < 5:
+                        batch.refresh()
+                        nostart = [_.status.satisfies(("ready", "pending")) for _ in batch.cases]
+                        if all(nostart):
+                            # Give the scheduler a moment to catch up
+                            proc.returncode = None
+                            time.sleep(1 * (2**npoll))
+                            continue
+                    break
+                npoll += 1
         finally:
             signal.signal(signal.SIGINT, default_int_signal)
             signal.signal(signal.SIGTERM, default_term_signal)
             batch.total_duration = time.monotonic() - start
             batch.refresh()
+            if allow_retry and all([_.status.satisfies(("ready", "pending")) for _ in batch.cases]):
+                logging.warning(f"All test cases failed to start.  Retrying batch {batch.id}")
+                cancel(None, None)
+                return self.run(batch, allow_retry=False)
             for case in batch.cases:
                 if case.status == "skipped":
                     pass
@@ -421,7 +442,7 @@ class BatchRunner(AbstractTestRunner):
                 f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
         n = len(batch.cases)
         id = colorize("@b{%s}" % batch.id[:7])
-        f.write(f"Submitting batch {id}: {n} test{'' if n == 1 else 's'}")
+        f.write(f"Submitting batch {id}: {n} {pluralize('test', n)}")
         return f.getvalue()
 
     def end_msg(
