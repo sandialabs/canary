@@ -19,11 +19,6 @@ canary = "canary:console_main"
 [project.optional-dependencies]
 requests = ["requests"]
 dev = ["ruff", "mypy", "pytest", "sphinx", "pydata-sphinx-theme", "sphinx_design", "coverage", "xmlschema"]
-# backward compatible options that are now either required or builtin to hpc-connect
-flux = []
-slurm = []
-pbs = []
-psutil = []
 
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
