@@ -30,6 +30,8 @@ from .test.case import MissingSourceError
 from .test.case import TestCase
 from .third_party.color import colorize
 from .util import logging
+from .util.filesystem import force_remove
+from .util.filesystem import touchp
 from .util.filesystem import working_dir
 from .util.misc import digits
 from .util.string import pluralize
@@ -322,7 +324,7 @@ class BatchRunner(AbstractTestRunner):
         return batch_options
 
     def run(self, obj: AbstractTestCase, **kwargs: Any) -> None:
-        batch = obj
+        batch: TestBatch = obj
         assert isinstance(batch, TestBatch)
 
         def cancel(sig, frame):
@@ -351,6 +353,8 @@ class BatchRunner(AbstractTestRunner):
         batchopts = config.getoption("batch", {})
         flat = batchopts["spec"]["layout"] == "flat"
         try:
+            breadcrumb = os.path.join(batch.stage(batch.id), ".running")
+            touchp(breadcrumb)
             default_int_signal = signal.signal(signal.SIGINT, cancel)
             default_term_signal = signal.signal(signal.SIGTERM, cancel)
             backend = config.backend
@@ -399,16 +403,18 @@ class BatchRunner(AbstractTestRunner):
                             # Give the scheduler a moment to catch up
                             proc.returncode = None
                             time.sleep(1 * (2**npoll))
+                            logging.warning(f"Batch {batch.id}: cases appear stalled, re-polling")
                             continue
                     break
                 npoll += 1
         finally:
+            force_remove(breadcrumb)
             signal.signal(signal.SIGINT, default_int_signal)
             signal.signal(signal.SIGTERM, default_term_signal)
             batch.total_duration = time.monotonic() - start
             batch.refresh()
             if allow_retry and all([_.status.satisfies(("ready", "pending")) for _ in batch.cases]):
-                logging.warning(f"All test cases failed to start.  Retrying batch {batch.id}")
+                logging.warning(f"Batch {batch.id}: cases failed to start, retrying")
                 cancel(None, None)
                 return self.run(batch, allow_retry=False)
             for case in batch.cases:
