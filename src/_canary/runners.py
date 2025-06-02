@@ -392,21 +392,22 @@ class BatchRunner(AbstractTestRunner):
                     qtime=qtime,
                 )
             assert proc is not None
-            npoll: int = 0
+            poll_count: int = 0
             while True:
                 time.sleep(backend.polling_frequency)
-                if proc.poll() is not None:
-                    if proc.returncode == 0 and npoll < 5:
+                returncode = proc.poll()
+                poll_count += 1
+                if returncode is not None:
+                    if proc.returncode == 0 and poll_count < 5:
                         batch.refresh()
                         nostart = [_.status.satisfies(("ready", "pending")) for _ in batch.cases]
                         if all(nostart):
                             # Give the scheduler a moment to catch up
                             proc.returncode = None
-                            time.sleep(1 * (2**npoll))
+                            time.sleep(1 * (2**poll_count))
                             logging.warning(f"Batch {batch.id}: cases appear stalled, re-polling")
                             continue
                     break
-                npoll += 1
         finally:
             force_remove(breadcrumb)
             signal.signal(signal.SIGINT, default_int_signal)
@@ -415,7 +416,8 @@ class BatchRunner(AbstractTestRunner):
             batch.refresh()
             if allow_retry and all([_.status.satisfies(("ready", "pending")) for _ in batch.cases]):
                 logging.warning(f"Batch {batch.id}: cases failed to start, retrying")
-                cancel(None, None)
+                if proc is not None:
+                    proc.cancel()
                 return self.run(batch, allow_retry=False)
             for case in batch.cases:
                 if case.status == "skipped":
