@@ -776,7 +776,9 @@ class Session:
                 return True
         return False
 
-    def summary(self, cases: list[TestCase] | None = None, include_pass: bool = True) -> str:
+    def summary(
+        self, cases: list[TestCase] | None = None, include_pass: bool = True, truncate: int = -1
+    ) -> str:
         """Return a summary of the completed test cases.  if ``include_pass is True``, include
         passed tests in the summary
 
@@ -794,8 +796,19 @@ class Session:
                 continue
             glyph = Status.glyph(status)
             if status in totals:
+                n: int = 0
                 for case in sorted(totals[status], key=lambda t: t.name):
                     file.write("%s %s\n" % (glyph, case.describe()))
+                    n += 1
+                    if truncate > 0 and truncate == n:
+                        cname = case.status.cname
+                        bullets = colorize("@*{%s}" % (3 * "."))
+                        fmt = "%s %s %s truncating summary to the first %d entries. "
+                        alert = io.StringIO()
+                        alert.write(fmt % (glyph, cname, bullets, truncate))
+                        alert.write(colorize("See @*{canary status} for the full summary\n"))
+                        file.write(alert.getvalue())
+                        break
         string = file.getvalue()
         if string.strip():
             string = colorize("@*{Short test summary info}\n") + string + "\n"

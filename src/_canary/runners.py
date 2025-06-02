@@ -375,23 +375,10 @@ class BatchRunner(AbstractTestRunner):
                 batch.jobid = proc.jobid
             if logging.get_level() <= logging.INFO:
                 logging.emit(self.start_msg(batch, **kwargs) + "\n")
-            poll_count: int = 0
             while True:
-                time.sleep(backend.polling_frequency)
-                returncode = proc.poll()
-                poll_count += 1
-                if returncode is not None:
-                    if proc.returncode == 0 and poll_count < 2:
-                        batch.refresh()
-                        nostart = [_.status.satisfies(("ready", "pending")) for _ in batch.cases]
-                        if all(nostart):
-                            # Give the scheduler a moment to catch up
-                            proc.returncode = None
-                            time.sleep(1 * (2**poll_count))
-                            fmt = "Batch %id (jobid=%j): cases appear stalled, re-polling"
-                            logging.warning(batch.format(fmt))
-                            continue
+                if proc.poll() is not None:
                     break
+                time.sleep(backend.polling_frequency)
         finally:
             force_remove(breadcrumb)
             signal.signal(signal.SIGINT, default_int_signal)
@@ -416,6 +403,8 @@ class BatchRunner(AbstractTestRunner):
                     logging.debug(f"{case}: case failed to start")
                     case.status.set("not_run", f"case failed to start (batch: {batch.id})")
                     case.save()
+            if rc := getattr(proc, "returncode", None):
+                logging.error(batch.format(f"Batch %id: batch processing exited with code {rc}"))
             if logging.get_level() <= logging.INFO:
                 logging.emit(self.end_msg(batch, **kwargs) + "\n")
         return

@@ -161,7 +161,7 @@ class Run(CanarySubcommand):
             session = Session.batch_view(args.work_tree, args.batch_id)
         session.run(fail_fast=config.getoption("fail_fast") or False)
         if not config.getoption("no_summary"):
-            logging.emit(session.summary(include_pass=False))
+            logging.emit(session.summary(include_pass=False, truncate=10))
         if p := config.getoption("durations"):
             logging.emit(session.durations(N=p))
         logging.emit(session.footer())
