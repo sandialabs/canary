@@ -63,7 +63,7 @@ class TestCaseRunner(AbstractTestRunner):
 
         def cancel(sig, frame):
             nonlocal proc
-            logging.debug(f"Cancelling due to captured signal {sig!r}")
+            logging.info(f"Cancelling run due to captured signal {sig!r}")
             if proc is not None:
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore")
@@ -111,7 +111,7 @@ class TestCaseRunner(AbstractTestRunner):
                     stdout.flush()
                     with case.rc_environ():
                         start_marker: float = time.monotonic()
-                        logging.trace(f"Submitting {case} for execution with command {cmd_line}")
+                        logging.debug(f"Submitting {case} for execution with command {cmd_line}")
                         proc = Popen(
                             cmd,
                             start_new_session=True,
@@ -309,17 +309,16 @@ class BatchRunner(AbstractTestRunner):
 
         def cancel(sig, frame):
             nonlocal proc
+            logging.info(f"Cancelling run due to captured signal {sig!r}")
             if proc is not None:
+                logging.info("Cancelling hpc-connect process")
                 proc.cancel()
             if sig == signal.SIGINT:
                 raise KeyboardInterrupt
             elif sig == signal.SIGTERM:
                 os._exit(1)
 
-        allow_retry: bool = True
-        if "allow_retry" in kwargs:
-            allow_retry = bool(kwargs["allow_retry"])
-
+        allow_retry: bool = bool(kwargs.pop("allow_retry", True))
         logging.trace(f"Running batch {batch.id[:7]}")
         start = time.monotonic()
         variables = dict(batch.variables)
@@ -333,8 +332,6 @@ class BatchRunner(AbstractTestRunner):
         batchopts = config.getoption("batch", {})
         flat = batchopts["spec"]["layout"] == "flat"
         try:
-            if logging.get_level() <= logging.INFO:
-                logging.emit(self.start_msg(batch, **kwargs) + "\n")
             breadcrumb = os.path.join(batch.stage(batch.id), ".running")
             touchp(breadcrumb)
             default_int_signal = signal.signal(signal.SIGINT, cancel)
@@ -342,6 +339,7 @@ class BatchRunner(AbstractTestRunner):
             backend = config.backend
             assert backend is not None
             proc: hpc_connect.HPCProcess | None = None
+            logging.debug(f"Submitting batch {batch.id}")
             if backend.supports_subscheduling and flat:
                 scriptdir = os.path.dirname(batch.submission_script_filename())
                 timeoutx = config.getoption("timeout_multiplier", 1.0)
@@ -376,7 +374,8 @@ class BatchRunner(AbstractTestRunner):
             assert proc is not None
             if hasattr(proc, "jobid"):
                 batch.jobid = proc.jobid
-                logging.emit(batch.format("@*b{==>} Submitted batch %id with jobid %j") + "\n")
+            if logging.get_level() <= logging.INFO:
+                logging.emit(self.start_msg(batch, **kwargs) + "\n")
             poll_count: int = 0
             while True:
                 time.sleep(backend.polling_frequency)
@@ -390,7 +389,8 @@ class BatchRunner(AbstractTestRunner):
                             # Give the scheduler a moment to catch up
                             proc.returncode = None
                             time.sleep(1 * (2**poll_count))
-                            logging.warning(f"Batch {batch.id}: cases appear stalled, re-polling")
+                            fmt = "Batch %id (jobid=%j): cases appear stalled, re-polling"
+                            logging.warning(batch.format(fmt))
                             continue
                     break
         finally:
@@ -400,7 +400,7 @@ class BatchRunner(AbstractTestRunner):
             batch.total_duration = time.monotonic() - start
             batch.refresh()
             if allow_retry and all([_.status.satisfies(("ready", "pending")) for _ in batch.cases]):
-                logging.warning(f"Batch {batch.id}: cases failed to start, retrying")
+                logging.warning(batch.format("Batch %id: cases failed to start, retrying"))
                 if proc is not None:
                     proc.cancel()
                 return self.run(batch, allow_retry=False, **kwargs)
@@ -428,6 +428,7 @@ class BatchRunner(AbstractTestRunner):
         batch: AbstractTestCase,
         qsize: int | None = None,
         qrank: int | None = None,
+        **kwargs: Any,
     ) -> str:
         assert isinstance(batch, TestBatch)
         fmt = io.StringIO()
@@ -437,6 +438,8 @@ class BatchRunner(AbstractTestRunner):
             if qrank is not None and qsize is not None:
                 fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
         fmt.write(f"Submitting batch %id: %l {pluralize('test', len(batch))}")
+        if batch.jobid or True:
+            fmt.write(" (jobid: %j)")
         return batch.format(fmt.getvalue()).strip()
 
     def end_msg(
@@ -444,6 +447,7 @@ class BatchRunner(AbstractTestRunner):
         batch: AbstractTestCase,
         qsize: int | None = None,
         qrank: int | None = None,
+        **kwargs: Any,
     ) -> str:
         assert isinstance(batch, TestBatch)
         fmt = io.StringIO()
@@ -453,7 +457,7 @@ class BatchRunner(AbstractTestRunner):
             if qrank is not None and qsize is not None:
                 fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
         times = batch.times()
-        fmt.write("Finished batch %id: %bs (time: {hhmmss(times[0], threshold=0)}")
+        fmt.write(f"Finished batch %id: %bs (time: {hhmmss(times[0], threshold=0)}")
         if times[1]:
             fmt.write(f", running: {hhmmss(times[1], threshold=0)}")
         if times[2]:
