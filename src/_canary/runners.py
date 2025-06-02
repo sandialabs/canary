@@ -318,7 +318,6 @@ class BatchRunner(AbstractTestRunner):
             elif sig == signal.SIGTERM:
                 os._exit(1)
 
-        allow_retry: bool = bool(kwargs.pop("allow_retry", True))
         logging.trace(f"Running batch {batch.id[:7]}")
         start = time.monotonic()
         variables = dict(batch.variables)
@@ -382,7 +381,7 @@ class BatchRunner(AbstractTestRunner):
                 returncode = proc.poll()
                 poll_count += 1
                 if returncode is not None:
-                    if proc.returncode == 0 and poll_count < 5:
+                    if proc.returncode == 0 and poll_count < 2:
                         batch.refresh()
                         nostart = [_.status.satisfies(("ready", "pending")) for _ in batch.cases]
                         if all(nostart):
@@ -399,11 +398,9 @@ class BatchRunner(AbstractTestRunner):
             signal.signal(signal.SIGTERM, default_term_signal)
             batch.total_duration = time.monotonic() - start
             batch.refresh()
-            if allow_retry and all([_.status.satisfies(("ready", "pending")) for _ in batch.cases]):
-                logging.warning(batch.format("Batch %id: cases failed to start, retrying"))
-                if proc is not None:
-                    proc.cancel()
-                return self.run(batch, allow_retry=False, **kwargs)
+            if all([_.status.satisfies(("ready", "pending")) for _ in batch.cases]):
+                fmt = "Batch %id: no test cases have started; check %p for any emitted scheduler log files."
+                logging.warning(batch.format(fmt))
             for case in batch.cases:
                 if case.status == "skipped":
                     pass
