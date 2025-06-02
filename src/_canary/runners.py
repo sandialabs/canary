@@ -23,12 +23,10 @@ from . import config
 from .error import diff_exit_status
 from .error import skip_exit_status
 from .error import timeout_exit_status
-from .status import Status
 from .test.atc import AbstractTestCase
 from .test.batch import TestBatch
 from .test.case import MissingSourceError
 from .test.case import TestCase
-from .third_party.color import colorize
 from .util import logging
 from .util.filesystem import force_remove
 from .util.filesystem import touchp
@@ -46,40 +44,11 @@ class AbstractTestRunner:
 
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
         config.null()
-        verbose = logging.get_level() <= logging.INFO
-        qsize = kwargs.get("qsize")
-        qrank = kwargs.get("qrank")
-        if verbose:
-            f = io.StringIO()
-            f.write(colorize("@*b{==>} "))
-            f.write(self.start_msg(case, qsize=qsize, qrank=qrank))
-            logging.emit(f.getvalue() + "\n")
-        self.run(case)
-        if verbose:
-            f.seek(0)
-            f.write(colorize("@*b{==>} "))
-            f.write(self.end_msg(case, qsize=qsize, qrank=qrank))
-            logging.emit(f.getvalue() + "\n")
+        self.run(case, **kwargs)
         return None
 
     @abc.abstractmethod
     def run(self, obj: AbstractTestCase, **kwargs: Any) -> None: ...
-
-    @abc.abstractmethod
-    def start_msg(
-        self,
-        case: AbstractTestCase,
-        qsize: int | None = None,
-        qrank: int | None = None,
-    ) -> str: ...
-
-    @abc.abstractmethod
-    def end_msg(
-        self,
-        case: AbstractTestCase,
-        qsize: int | None = None,
-        qrank: int | None = None,
-    ) -> str: ...
 
 
 class TestCaseRunner(AbstractTestRunner):
@@ -109,6 +78,8 @@ class TestCaseRunner(AbstractTestRunner):
                 os._exit(1)
 
         try:
+            if logging.get_level() <= logging.INFO:
+                logging.emit(self.start_msg(case, **kwargs) + "\n")
             default_int_handler = signal.signal(signal.SIGINT, cancel)
             default_term_handler = signal.signal(signal.SIGTERM, cancel)
 
@@ -194,6 +165,8 @@ class TestCaseRunner(AbstractTestRunner):
             else:
                 case.status.set_from_code(case.returncode)
         finally:
+            if logging.get_level() <= logging.INFO:
+                logging.emit(self.end_msg(case, **kwargs) + "\n")
             signal.signal(signal.SIGINT, default_int_handler)
             signal.signal(signal.SIGTERM, default_term_handler)
             if case.status != "skipped":
@@ -209,30 +182,34 @@ class TestCaseRunner(AbstractTestRunner):
         case: AbstractTestCase,
         qsize: int | None = None,
         qrank: int | None = None,
+        **kwargs: Any,
     ) -> str:
         assert isinstance(case, TestCase)
-        f = io.StringIO()
+        fmt = io.StringIO()
+        fmt.write("@*b{==>} ")
         if config.debug or os.getenv("GITLAB_CI"):
-            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
-                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        f.write(case.format("Starting %id: %X"))
-        return f.getvalue()
+                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        fmt.write("Starting %id: %X")
+        return case.format(fmt.getvalue()).strip()
 
     def end_msg(
         self,
         case: AbstractTestCase,
         qsize: int | None = None,
         qrank: int | None = None,
+        **kwargs: Any,
     ) -> str:
         assert isinstance(case, TestCase)
-        f = io.StringIO()
+        fmt = io.StringIO()
+        fmt.write("@*b{==>} ")
         if config.debug or os.getenv("GITLAB_CI"):
-            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
-                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        f.write(case.format("Finished %id: %X %sN"))
-        return f.getvalue()
+                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        fmt.write("Finished %id: %X %sN")
+        return case.format(fmt.getvalue()).strip()
 
     def get_process_metrics(
         self, proc: psutil.Popen, metrics: dict[str, Any] | None = None
@@ -353,12 +330,11 @@ class BatchRunner(AbstractTestRunner):
             variables["CANARY_DEBUG"] = "on"
             hpc_connect.set_debug(True)
 
-        if config.debug:
-            logging.trace(f"Submitting batch {batch.id[:7]}")
-
         batchopts = config.getoption("batch", {})
         flat = batchopts["spec"]["layout"] == "flat"
         try:
+            if logging.get_level() <= logging.INFO:
+                logging.emit(self.start_msg(batch, **kwargs) + "\n")
             breadcrumb = os.path.join(batch.stage(batch.id), ".running")
             touchp(breadcrumb)
             default_int_signal = signal.signal(signal.SIGINT, cancel)
@@ -398,6 +374,9 @@ class BatchRunner(AbstractTestRunner):
                     qtime=qtime,
                 )
             assert proc is not None
+            if hasattr(proc, "jobid"):
+                batch.jobid = proc.jobid
+                logging.emit(batch.format("@*b{==>} Submitted batch %id with jobid %j") + "\n")
             poll_count: int = 0
             while True:
                 time.sleep(backend.polling_frequency)
@@ -424,7 +403,7 @@ class BatchRunner(AbstractTestRunner):
                 logging.warning(f"Batch {batch.id}: cases failed to start, retrying")
                 if proc is not None:
                     proc.cancel()
-                return self.run(batch, allow_retry=False)
+                return self.run(batch, allow_retry=False, **kwargs)
             for case in batch.cases:
                 if case.status == "skipped":
                     pass
@@ -440,6 +419,8 @@ class BatchRunner(AbstractTestRunner):
                     logging.debug(f"{case}: case failed to start")
                     case.status.set("not_run", f"case failed to start (batch: {batch.id})")
                     case.save()
+            if logging.get_level() <= logging.INFO:
+                logging.emit(self.end_msg(batch, **kwargs) + "\n")
         return
 
     def start_msg(
@@ -449,15 +430,14 @@ class BatchRunner(AbstractTestRunner):
         qrank: int | None = None,
     ) -> str:
         assert isinstance(batch, TestBatch)
-        f = io.StringIO()
+        fmt = io.StringIO()
+        fmt.write("@*b{==>} ")
         if config.debug or os.getenv("GITLAB_CI"):
-            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
-                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        n = len(batch.cases)
-        id = colorize("@b{%s}" % batch.id[:7])
-        f.write(f"Submitting batch {id}: {n} {pluralize('test', n)}")
-        return f.getvalue()
+                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        fmt.write(f"Submitting batch %id: %l {pluralize('test', len(batch))}")
+        return batch.format(fmt.getvalue()).strip()
 
     def end_msg(
         self,
@@ -466,32 +446,20 @@ class BatchRunner(AbstractTestRunner):
         qrank: int | None = None,
     ) -> str:
         assert isinstance(batch, TestBatch)
-        stat: dict[str, int] = {}
-        for case in batch.cases:
-            stat[case.status.value] = stat.get(case.status.value, 0) + 1
-        fmt = "@%s{%d %s}"
-        colors = Status.colors
-        st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
-
-        f = io.StringIO()
+        fmt = io.StringIO()
+        fmt.write("@*b{==>} ")
         if config.debug or os.getenv("GITLAB_CI"):
-            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
-                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        id = colorize("@b{%s}" % batch.id[:7])
-        f.write(f"Finished batch {id}: {st_stat}")
-
-        duration: float | None = batch.total_duration if batch.total_duration > 0 else None
-        f.write(f"(time: {hhmmss(duration, threshold=0)}")
-        if any(_.start > 0 for _ in batch.cases) and any(_.stop > 0 for _ in batch.cases):
-            ti = min(_.start for _ in batch.cases if _.start > 0)
-            tf = max(_.stop for _ in batch.cases if _.stop > 0)
-            f.write(f", running: {hhmmss(tf - ti, threshold=0)}")
-            if duration:
-                time_in_queue = max(duration - (tf - ti), 0)
-                f.write(f", queued: {hhmmss(time_in_queue, threshold=0)}")
-        f.write(")")
-        return f.getvalue()
+                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        times = batch.times()
+        fmt.write("Finished batch %id: %bs (time: {hhmmss(times[0], threshold=0)}")
+        if times[1]:
+            fmt.write(f", running: {hhmmss(times[1], threshold=0)}")
+        if times[2]:
+            fmt.write(f", queued: {hhmmss(times[2], threshold=0)}")
+        fmt.write(")")
+        return batch.format(fmt.getvalue()).strip()
 
     def canary_invocation(self, arg: TestBatch | TestCase) -> str:
         """Write the canary invocation used to run this batch."""
