@@ -95,15 +95,18 @@ class TestCaseRunner(AbstractTestRunner):
         def cancel(sig, frame):
             nonlocal proc
             logging.debug(f"Cancelling due to captured signal {sig!r}")
-            if proc is None:
-                return
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore")
-                try:
-                    if proc.is_running():
-                        proc.send_signal(sig)
-                except Exception:
-                    pass
+            if proc is not None:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore")
+                    try:
+                        if proc.is_running():
+                            proc.send_signal(sig)
+                    except Exception:
+                        pass
+            if sig == signal.SIGINT:
+                raise KeyboardInterrupt
+            elif sig == signal.SIGTERM:
+                os._exit(1)
 
         try:
             default_int_handler = signal.signal(signal.SIGINT, cancel)
@@ -324,14 +327,17 @@ class BatchRunner(AbstractTestRunner):
         return batch_options
 
     def run(self, obj: AbstractTestCase, **kwargs: Any) -> None:
-        batch: TestBatch = obj
+        batch: TestBatch = obj  # type: ignore
         assert isinstance(batch, TestBatch)
 
         def cancel(sig, frame):
             nonlocal proc
-            if proc is None:
-                return
-            proc.cancel()
+            if proc is not None:
+                proc.cancel()
+            if sig == signal.SIGINT:
+                raise KeyboardInterrupt
+            elif sig == signal.SIGTERM:
+                os._exit(1)
 
         allow_retry: bool = True
         if "allow_retry" in kwargs:
