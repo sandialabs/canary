@@ -67,7 +67,7 @@ class AbstractTestCase(abc.ABC):
 
     @status.setter
     @abc.abstractmethod
-    def status(self, arg: list[str]) -> None: ...
+    def status(self, arg: dict[str, str]) -> None: ...
 
     @property
     @abc.abstractmethod

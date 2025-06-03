@@ -260,7 +260,8 @@ class BatchResourceQueue(ResourceQueue):
                 "No test batches generated (this should never happen, "
                 "the default batching scheme should have been used)"
             )
-        logging.info(f"Generated {len(batches)} batches")
+        fmt = "@*{Generated} %d batches from %d test cases"
+        logging.info(color.colorize(fmt % (len(batches), len(self.tmp_buffer))))
         for batch in batches:
             super().put(batch)
 
