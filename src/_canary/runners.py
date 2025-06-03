@@ -423,8 +423,8 @@ class BatchRunner(AbstractTestRunner):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
                 fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        fmt.write(f"Submitting batch %id: %l {pluralize('test', len(batch))}")
-        if batch.jobid or True:
+        fmt.write(f"Submitted batch %id: %l {pluralize('test', len(batch))}")
+        if batch.jobid:
             fmt.write(" (jobid: %j)")
         return batch.format(fmt.getvalue()).strip()
 
