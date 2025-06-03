@@ -194,11 +194,8 @@ class Session:
                     ids.append(item)
                     break
         self.cases.clear()
-        cases = self.load_testcases(ids=ids)
-        self.cases.extend(cases)
-        for case in self.cases:
+        for case in self.load_testcases(ids=ids):
             if case.id not in ids:
-                case.mask = "case not requested"
                 continue
             case.mark_as_ready()
             if not case.status.satisfies(("pending", "ready")):

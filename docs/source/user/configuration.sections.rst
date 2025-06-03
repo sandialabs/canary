@@ -33,7 +33,7 @@ Set batch settings.
 test:timeout
 ------------
 
-Set test timeouts.
+Set test timeouts based on :ref:`keywords<directive-keywords>`.  The ``fast`` and ``long`` timeouts are applied to tests having ``fast`` or ``long`` :ref:`keywords<directive-keywords>`, otherwise the ``default`` timeout is applied.
 
 .. code-block:: yaml
 
@@ -42,6 +42,18 @@ Set test timeouts.
        fast: T  # (number or str) default: 30s
        long: T  # (number or str) default: 10m
        default: T  # (number or str) default: 5m
+
+.. note::
+
+  Users can specify custom timeouts associated with keywords by adding them to the ``test:timeout`` configuration. For instance, to set a timeout of 1 second for tests labeled with the ``unit_test`` keyword, simply define the ``test:timeout:unit_test`` setting as follows:
+
+  .. code-block:: yaml
+
+     test:
+       timeout:
+         unit_test: 1s
+
+  The same can be accomplished on the command line: ``canary -c test:timeout:unit_test:1s ...``.
 
 environment
 -----------
