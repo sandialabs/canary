@@ -202,6 +202,7 @@ class Session:
                 logging.error(f"{case}: will not run: {case.status.details}")
             elif case.pending() and not all(dep.id in ids for dep in case.dependencies):
                 case.mask = "one or more missing dependencies"
+            self.cases.append(case)
         return self
 
     @classmethod
