@@ -11,9 +11,11 @@ from typing import Sequence
 
 from .. import config
 from ..status import Status
+from ..third_party.color import colorize
 from ..util import logging
 from ..util.filesystem import mkdirp
 from ..util.hash import hashit
+from ..util.time import hhmmss
 from .atc import AbstractTestCase
 from .case import TestCase
 
@@ -42,6 +44,7 @@ class TestBatch(AbstractTestCase):
         self.max_gpus_required = max([case.gpus for case in self.cases])
         self._runtime: float | None = runtime
         self._status: Status
+        self._jobid: str | None = None
         for case in self.cases:
             if any(dep not in self.cases for dep in case.dependencies):
                 self._status = Status("pending")
@@ -135,6 +138,14 @@ class TestBatch(AbstractTestCase):
         self._gpus = arg
 
     @property
+    def jobid(self) -> str | None:
+        return self._jobid
+
+    @jobid.setter
+    def jobid(self, arg: str) -> None:
+        self._jobid = arg
+
+    @property
     def status(self) -> Status:
         if self._status.value == "pending":
             # Determine if dependent cases have completed and, if so, flip status to 'ready'
@@ -179,6 +190,57 @@ class TestBatch(AbstractTestCase):
         mkdirp(os.path.dirname(f))
         with open(f, "w") as fh:
             json.dump([case.id for case in self], fh, indent=2)
+
+    def _combined_status(self) -> str:
+        """Return a string like
+
+        1 success, 2 fail, 3 timeout
+
+        """
+        stat: dict[str, int] = {}
+        for case in self.cases:
+            stat[case.status.value] = stat.get(case.status.value, 0) + 1
+        colors = Status.colors
+        return ", ".join(colorize("@%s{%d %s}" % (colors[v], n, v)) for (v, n) in stat.items())
+
+    def format(self, format_spec: str) -> str:
+        state = self.status
+        times = self.times()
+        replacements: dict[str, str] = {
+            "%id": "@*b{%s}" % self.id[:7],
+            "%p": self.path,
+            "%n": repr(self),
+            "%sN": self.status.cname,
+            "%sn": state.value,
+            "%sd": state.details or "unknown",
+            "%l": str(len(self)),
+            "%bs": self._combined_status(),
+            "%d": hhmmss(times[0], threshold=0),  # duration
+            "%tr": hhmmss(times[1], threshold=0),  # running time
+            "%tq": hhmmss(times[2], threshold=0),  # time in queue
+            "%j": self.jobid or "none",
+        }
+        if config.getoption("format", "short") == "long":
+            replacements["%X"] = replacements["%p"]
+        else:
+            replacements["%X"] = replacements["%n"]
+        formatted_text = format_spec
+        for placeholder, value in replacements.items():
+            formatted_text = formatted_text.replace(placeholder, value)
+        return colorize(formatted_text.strip())
+
+    def times(self) -> tuple[float | None, float | None, float | None]:
+        """Return total, running, and time in queue"""
+        duration: float | None = self.total_duration if self.total_duration > 0 else None
+        running: float | None = None
+        time_in_queue: float | None = None
+        if any(_.start > 0 for _ in self.cases) and any(_.stop > 0 for _ in self.cases):
+            ti = min(_.start for _ in self.cases if _.start > 0)
+            tf = max(_.stop for _ in self.cases if _.stop > 0)
+            running = tf - ti
+            if duration:
+                time_in_queue = max(duration - (tf - ti), 0)
+        return duration, running, time_in_queue
 
     @staticmethod
     def loadindex(batch_id: str) -> list[str] | None:

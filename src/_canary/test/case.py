@@ -1110,7 +1110,8 @@ class TestCase(AbstractTestCase):
 
     def set_default_timeout(self) -> None:
         """Sets the default timeout.  If runtime statistics have been collected those will be used,
-        otherwise the timeout will be based on the presence of the long or fast keywords
+        otherwise the timeout will be based on the presence of duration-like keywords (fast and
+        long being the builtin defaults)
         """
         t = self.cache.get("metrics:time")
         if t is not None:
@@ -1125,12 +1126,13 @@ class TestCase(AbstractTestCase):
                 timeout = 1800.0
             else:
                 timeout = 2.0 * max_runtime
-        elif "fast" in self.keywords:
-            timeout = config.test.timeout_fast
-        elif "long" in self.keywords:
-            timeout = config.test.timeout_long
         else:
-            timeout = config.test.timeout_default
+            for keyword in self.keywords:
+                if t := getattr(config.test, f"timeout_{keyword}", None):
+                    timeout = float(t)
+                    break
+            else:
+                timeout = config.test.timeout_default
         self._timeout = float(timeout)
 
     def cache_last_run(self) -> None:

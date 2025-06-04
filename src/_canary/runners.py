@@ -23,13 +23,13 @@ from . import config
 from .error import diff_exit_status
 from .error import skip_exit_status
 from .error import timeout_exit_status
-from .status import Status
 from .test.atc import AbstractTestCase
 from .test.batch import TestBatch
 from .test.case import MissingSourceError
 from .test.case import TestCase
-from .third_party.color import colorize
 from .util import logging
+from .util.filesystem import force_remove
+from .util.filesystem import touchp
 from .util.filesystem import working_dir
 from .util.misc import digits
 from .util.string import pluralize
@@ -44,40 +44,11 @@ class AbstractTestRunner:
 
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
         config.null()
-        verbose = logging.get_level() <= logging.INFO
-        qsize = kwargs.get("qsize")
-        qrank = kwargs.get("qrank")
-        if verbose:
-            f = io.StringIO()
-            f.write(colorize("@*b{==>} "))
-            f.write(self.start_msg(case, qsize=qsize, qrank=qrank))
-            logging.emit(f.getvalue() + "\n")
-        self.run(case)
-        if verbose:
-            f.seek(0)
-            f.write(colorize("@*b{==>} "))
-            f.write(self.end_msg(case, qsize=qsize, qrank=qrank))
-            logging.emit(f.getvalue() + "\n")
+        self.run(case, **kwargs)
         return None
 
     @abc.abstractmethod
     def run(self, obj: AbstractTestCase, **kwargs: Any) -> None: ...
-
-    @abc.abstractmethod
-    def start_msg(
-        self,
-        case: AbstractTestCase,
-        qsize: int | None = None,
-        qrank: int | None = None,
-    ) -> str: ...
-
-    @abc.abstractmethod
-    def end_msg(
-        self,
-        case: AbstractTestCase,
-        qsize: int | None = None,
-        qrank: int | None = None,
-    ) -> str: ...
 
 
 class TestCaseRunner(AbstractTestRunner):
@@ -92,18 +63,23 @@ class TestCaseRunner(AbstractTestRunner):
 
         def cancel(sig, frame):
             nonlocal proc
-            logging.debug(f"Cancelling due to captured signal {sig!r}")
-            if proc is None:
-                return
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore")
-                try:
-                    if proc.is_running():
-                        proc.send_signal(sig)
-                except Exception:
-                    pass
+            logging.info(f"Cancelling run due to captured signal {sig!r}")
+            if proc is not None:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore")
+                    try:
+                        if proc.is_running():
+                            proc.send_signal(sig)
+                    except Exception:
+                        pass
+            if sig == signal.SIGINT:
+                raise KeyboardInterrupt
+            elif sig == signal.SIGTERM:
+                os._exit(1)
 
         try:
+            if logging.get_level() <= logging.INFO:
+                logging.emit(self.start_msg(case, **kwargs) + "\n")
             default_int_handler = signal.signal(signal.SIGINT, cancel)
             default_term_handler = signal.signal(signal.SIGTERM, cancel)
 
@@ -135,7 +111,7 @@ class TestCaseRunner(AbstractTestRunner):
                     stdout.flush()
                     with case.rc_environ():
                         start_marker: float = time.monotonic()
-                        logging.trace(f"Submitting {case} for execution with command {cmd_line}")
+                        logging.debug(f"Submitting {case} for execution with command {cmd_line}")
                         proc = Popen(
                             cmd,
                             start_new_session=True,
@@ -189,6 +165,8 @@ class TestCaseRunner(AbstractTestRunner):
             else:
                 case.status.set_from_code(case.returncode)
         finally:
+            if logging.get_level() <= logging.INFO:
+                logging.emit(self.end_msg(case, **kwargs) + "\n")
             signal.signal(signal.SIGINT, default_int_handler)
             signal.signal(signal.SIGTERM, default_term_handler)
             if case.status != "skipped":
@@ -204,30 +182,34 @@ class TestCaseRunner(AbstractTestRunner):
         case: AbstractTestCase,
         qsize: int | None = None,
         qrank: int | None = None,
+        **kwargs: Any,
     ) -> str:
         assert isinstance(case, TestCase)
-        f = io.StringIO()
+        fmt = io.StringIO()
+        fmt.write("@*b{==>} ")
         if config.debug or os.getenv("GITLAB_CI"):
-            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
-                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        f.write(case.format("Starting %id: %X"))
-        return f.getvalue()
+                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        fmt.write("Starting %id: %X")
+        return case.format(fmt.getvalue()).strip()
 
     def end_msg(
         self,
         case: AbstractTestCase,
         qsize: int | None = None,
         qrank: int | None = None,
+        **kwargs: Any,
     ) -> str:
         assert isinstance(case, TestCase)
-        f = io.StringIO()
+        fmt = io.StringIO()
+        fmt.write("@*b{==>} ")
         if config.debug or os.getenv("GITLAB_CI"):
-            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
-                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        f.write(case.format("Finished %id: %X %sN"))
-        return f.getvalue()
+                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        fmt.write("Finished %id: %X %sN")
+        return case.format(fmt.getvalue()).strip()
 
     def get_process_metrics(
         self, proc: psutil.Popen, metrics: dict[str, Any] | None = None
@@ -322,18 +304,19 @@ class BatchRunner(AbstractTestRunner):
         return batch_options
 
     def run(self, obj: AbstractTestCase, **kwargs: Any) -> None:
-        batch = obj
+        batch: TestBatch = obj  # type: ignore
         assert isinstance(batch, TestBatch)
 
         def cancel(sig, frame):
             nonlocal proc
-            if proc is None:
-                return
-            proc.cancel()
-
-        allow_retry: bool = True
-        if "allow_retry" in kwargs:
-            allow_retry = bool(kwargs["allow_retry"])
+            logging.info(f"Cancelling run due to captured signal {sig!r}")
+            if proc is not None:
+                logging.info("Cancelling hpc-connect process")
+                proc.cancel()
+            if sig == signal.SIGINT:
+                raise KeyboardInterrupt
+            elif sig == signal.SIGTERM:
+                os._exit(1)
 
         logging.trace(f"Running batch {batch.id[:7]}")
         start = time.monotonic()
@@ -345,17 +328,17 @@ class BatchRunner(AbstractTestRunner):
             variables["CANARY_DEBUG"] = "on"
             hpc_connect.set_debug(True)
 
-        if config.debug:
-            logging.trace(f"Submitting batch {batch.id[:7]}")
-
         batchopts = config.getoption("batch", {})
         flat = batchopts["spec"]["layout"] == "flat"
         try:
+            breadcrumb = os.path.join(batch.stage(batch.id), ".running")
+            touchp(breadcrumb)
             default_int_signal = signal.signal(signal.SIGINT, cancel)
             default_term_signal = signal.signal(signal.SIGTERM, cancel)
             backend = config.backend
             assert backend is not None
             proc: hpc_connect.HPCProcess | None = None
+            logging.debug(f"Submitting batch {batch.id}")
             if backend.supports_subscheduling and flat:
                 scriptdir = os.path.dirname(batch.submission_script_filename())
                 timeoutx = config.getoption("timeout_multiplier", 1.0)
@@ -388,29 +371,23 @@ class BatchRunner(AbstractTestRunner):
                     qtime=qtime,
                 )
             assert proc is not None
-            npoll: int = 0
+            if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
+                batch.jobid = proc.jobid
+            if logging.get_level() <= logging.INFO:
+                logging.emit(self.start_msg(batch, **kwargs) + "\n")
             while True:
-                time.sleep(backend.polling_frequency)
                 if proc.poll() is not None:
-                    if proc.returncode == 0 and npoll < 5:
-                        batch.refresh()
-                        nostart = [_.status.satisfies(("ready", "pending")) for _ in batch.cases]
-                        if all(nostart):
-                            # Give the scheduler a moment to catch up
-                            proc.returncode = None
-                            time.sleep(1 * (2**npoll))
-                            continue
                     break
-                npoll += 1
+                time.sleep(backend.polling_frequency)
         finally:
+            force_remove(breadcrumb)
             signal.signal(signal.SIGINT, default_int_signal)
             signal.signal(signal.SIGTERM, default_term_signal)
             batch.total_duration = time.monotonic() - start
             batch.refresh()
-            if allow_retry and all([_.status.satisfies(("ready", "pending")) for _ in batch.cases]):
-                logging.warning(f"All test cases failed to start.  Retrying batch {batch.id}")
-                cancel(None, None)
-                return self.run(batch, allow_retry=False)
+            if all([_.status.satisfies(("ready", "pending")) for _ in batch.cases]):
+                fmt = "Batch %id: no test cases have started; check %p for any emitted scheduler log files."
+                logging.warning(batch.format(fmt))
             for case in batch.cases:
                 if case.status == "skipped":
                     pass
@@ -426,6 +403,10 @@ class BatchRunner(AbstractTestRunner):
                     logging.debug(f"{case}: case failed to start")
                     case.status.set("not_run", f"case failed to start (batch: {batch.id})")
                     case.save()
+            if rc := getattr(proc, "returncode", None):
+                logging.error(batch.format(f"Batch %id: batch processing exited with code {rc}"))
+            if logging.get_level() <= logging.INFO:
+                logging.emit(self.end_msg(batch, **kwargs) + "\n")
         return
 
     def start_msg(
@@ -433,51 +414,42 @@ class BatchRunner(AbstractTestRunner):
         batch: AbstractTestCase,
         qsize: int | None = None,
         qrank: int | None = None,
+        **kwargs: Any,
     ) -> str:
         assert isinstance(batch, TestBatch)
-        f = io.StringIO()
+        fmt = io.StringIO()
+        fmt.write("@*b{==>} ")
         if config.debug or os.getenv("GITLAB_CI"):
-            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
-                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        n = len(batch.cases)
-        id = colorize("@b{%s}" % batch.id[:7])
-        f.write(f"Submitting batch {id}: {n} {pluralize('test', n)}")
-        return f.getvalue()
+                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        fmt.write(f"Submitted batch %id: %l {pluralize('test', len(batch))}")
+        if batch.jobid:
+            fmt.write(" (jobid: %j)")
+        return batch.format(fmt.getvalue()).strip()
 
     def end_msg(
         self,
         batch: AbstractTestCase,
         qsize: int | None = None,
         qrank: int | None = None,
+        **kwargs: Any,
     ) -> str:
         assert isinstance(batch, TestBatch)
-        stat: dict[str, int] = {}
-        for case in batch.cases:
-            stat[case.status.value] = stat.get(case.status.value, 0) + 1
-        fmt = "@%s{%d %s}"
-        colors = Status.colors
-        st_stat = ", ".join(colorize(fmt % (colors[n], v, n)) for (n, v) in stat.items())
-
-        f = io.StringIO()
+        fmt = io.StringIO()
+        fmt.write("@*b{==>} ")
         if config.debug or os.getenv("GITLAB_CI"):
-            f.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
-                f.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        id = colorize("@b{%s}" % batch.id[:7])
-        f.write(f"Finished batch {id}: {st_stat}")
-
-        duration: float | None = batch.total_duration if batch.total_duration > 0 else None
-        f.write(f"(time: {hhmmss(duration, threshold=0)}")
-        if any(_.start > 0 for _ in batch.cases) and any(_.stop > 0 for _ in batch.cases):
-            ti = min(_.start for _ in batch.cases if _.start > 0)
-            tf = max(_.stop for _ in batch.cases if _.stop > 0)
-            f.write(f", running: {hhmmss(tf - ti, threshold=0)}")
-            if duration:
-                time_in_queue = max(duration - (tf - ti), 0)
-                f.write(f", queued: {hhmmss(time_in_queue, threshold=0)}")
-        f.write(")")
-        return f.getvalue()
+                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        times = batch.times()
+        fmt.write(f"Finished batch %id: %bs (time: {hhmmss(times[0], threshold=0)}")
+        if times[1]:
+            fmt.write(f", running: {hhmmss(times[1], threshold=0)}")
+        if times[2]:
+            fmt.write(f", queued: {hhmmss(times[2], threshold=0)}")
+        fmt.write(")")
+        return batch.format(fmt.getvalue()).strip()
 
     def canary_invocation(self, arg: TestBatch | TestCase) -> str:
         """Write the canary invocation used to run this batch."""
