@@ -371,7 +371,7 @@ class BatchRunner(AbstractTestRunner):
                     qtime=qtime,
                 )
             assert proc is not None
-            if hasattr(proc, "jobid"):
+            if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
                 batch.jobid = proc.jobid
             if logging.get_level() <= logging.INFO:
                 logging.emit(self.start_msg(batch, **kwargs) + "\n")

@@ -194,17 +194,15 @@ class Session:
                     ids.append(item)
                     break
         self.cases.clear()
-        cases = self.load_testcases(ids=ids)
-        self.cases.extend(cases)
-        for case in self.cases:
+        for case in self.load_testcases(ids=ids):
             if case.id not in ids:
-                case.mask = "case not requested"
                 continue
             case.mark_as_ready()
             if not case.status.satisfies(("pending", "ready")):
                 logging.error(f"{case}: will not run: {case.status.details}")
             elif case.pending() and not all(dep.id in ids for dep in case.dependencies):
                 case.mask = "one or more missing dependencies"
+            self.cases.append(case)
         return self
 
     @classmethod

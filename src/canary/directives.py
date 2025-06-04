@@ -1399,6 +1399,16 @@ def timeout(arg: str | float | int, *, when: WhenType | None = None) -> None:
     * ``parameters``: Restrict processing of the directive to certain parameter
       names and values
 
+    Notes
+    -----
+
+    The timeout for a test is determined based on the following rules:
+
+    * if the test has an explicit timeout set by ``canary.directives.timeout``, use it;
+    * if the test has a keyword that appears in the ``test:timeout:`` configuration section,
+      use it;
+    * otherwise, use a the default timeout.
+
     """
 
 
