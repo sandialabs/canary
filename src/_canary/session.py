@@ -441,10 +441,9 @@ class Session:
           env_mods: Environment variables to be defined in a tests execution environment.
 
         """
-        self.cases.clear()
-        self.cases.extend(finder.generate_test_cases(self.generators, on_options=on_options))
+        cases = finder.generate_test_cases(self.generators, on_options=on_options)
         config.plugin_manager.hook.canary_testsuite_mask(
-            cases=self.cases,
+            cases=cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,
@@ -452,19 +451,21 @@ class Session:
             case_specs=None,
             start=None,
         )
-        for case in static_order(self.cases):
+        for case in static_order(cases):
             config.plugin_manager.hook.canary_testcase_modify(case=case)
 
+        self.cases.clear()
         masked: list[TestCase] = []
-        for case in self.cases:
+        for case in cases:
             if env_mods:
                 case.add_default_env(**env_mods)
             if case.wont_run():
                 masked.append(case)
             else:
                 case.mark_as_ready()
+                self.cases.append(case)
 
-        n = len(self.cases) - len(masked)
+        n = len(cases) - len(masked)
         logging.info(colorize("@*{Selected} %d test %s" % (n, pluralize("case", n))))
         if masked:
             self.report_excluded(masked)
@@ -760,13 +761,6 @@ class Session:
             for batch in queue.queued():
                 batch.save()
         return queue
-
-    def batch_logfile(self, batch_id: str) -> str:
-        """Get the path of the batch log file"""
-        path = TestBatch.logfile(batch_id)
-        if not os.path.exists(path):
-            raise FileNotFoundError(path)
-        return path
 
     def is_test_case(self, spec: str) -> bool:
         for case in self.cases:

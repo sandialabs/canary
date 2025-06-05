@@ -273,6 +273,9 @@ class CTestTestCase(TestCase):
         if timeout_signal_name is not None:
             warn_unsupported_ctest_option("timeout_signal_name")
 
+        # concatenate stdout and stderr
+        self.efile = None
+
     def set_default_timeout(self) -> None:
         """Sets the default timeout which is 1500 for CMake generated files."""
         timeout: float
@@ -397,8 +400,8 @@ class CTestTestCase(TestCase):
     def finish(self, update_stats: bool = True) -> None:
         if update_stats:
             self.cache_last_run()
-        self.concatenate_logs()
-        file = self.logfile("run")
+
+        output = self.output()
 
         if self.status.value in ("timeout", "skipped", "cancelled", "not_run"):
             config.plugin_manager.hook.canary_testcase_finish(case=self, stage="")
@@ -407,12 +410,14 @@ class CTestTestCase(TestCase):
 
         if self.pass_regular_expression is not None:
             for regex in self.pass_regular_expression:
-                if file_contains(file, regex):
+                if re.search(regex, output, re.MULTILINE):
                     self.status.set("success")
                     break
             else:
                 regex = ", ".join(self.pass_regular_expression)
-                self.status.set("failed", f"Regular expressions {regex} not found in {file}")
+                self.status.set(
+                    "failed", f"Regular expressions {regex} not found in {self.stdout_file}"
+                )
 
         if self.skip_return_code is not None:
             if self.returncode == self.skip_return_code:
@@ -420,14 +425,18 @@ class CTestTestCase(TestCase):
 
         if self.skip_regular_expression is not None:
             for regex in self.skip_regular_expression:
-                if file_contains(file, regex):
-                    self.status.set("skipped", f"Regular expression {regex!r} found in {file}")
+                if re.search(regex, output, re.MULTILINE):
+                    self.status.set(
+                        "skipped", f"Regular expression {regex!r} found in {self.stdout_file}"
+                    )
                     break
 
         if self.fail_regular_expression is not None:
             for regex in self.fail_regular_expression:
-                if file_contains(file, regex):
-                    self.status.set("failed", f"Regular expression {regex!r} found in {file}")
+                if re.search(regex, output, re.MULTILINE):
+                    self.status.set(
+                        "failed", f"Regular expression {regex!r} found in {self.stdout_file}"
+                    )
                     break
 
         # invert logic
@@ -592,14 +601,6 @@ def find_cmake():
             return None
         return cmake
     return None
-
-
-def file_contains(file, pattern) -> bool:
-    with open(file, "r") as fh:
-        for line in fh:
-            if re.search(pattern, line):
-                return True
-    return False
 
 
 def parse_resource_groups(resource_groups: list[dict[str, list]]) -> list[list[dict[str, Any]]]:

@@ -76,7 +76,7 @@ Note: this command must be run from inside of a test session directory.
                 raise ValueError(f"{args.testspec}: no matching test found in {session.work_tree}")
         f: str
         if args.show_log:
-            f = case.logfile()
+            f = case.stdout_file
         elif args.show_input:
             f = case.file
         elif args.show_source_dir:

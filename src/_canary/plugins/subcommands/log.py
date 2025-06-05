@@ -35,14 +35,11 @@ class Log(CanarySubcommand):
             help="Display test stderr if it exists",
         )
 
-    def _log_from_args(
-        self, case: TestCase, args: argparse.Namespace, stage: str | None = None
-    ) -> str:
+    def get_logfile(self, case: TestCase, args: argparse.Namespace) -> str:
         if args.error:
-            stderr = case.stderr(stage=stage) or ""
-            return stderr
+            return case.stderr_file or ""
         else:
-            return case.logfile(stage=stage)
+            return case.stdout_file
 
     def execute(self, args: argparse.Namespace) -> int:
         from ...test.batch import TestBatch
@@ -51,9 +48,7 @@ class Log(CanarySubcommand):
         file: str
         if args.testspec.startswith("/"):
             case = testcase_from_id(args.testspec[1:])
-            file = self._log_from_args(case, args)
-            if not os.path.isfile(file):
-                file = self._log_from_args(case, args, stage="run")
+            file = self.get_logfile(case, args)
             display_file(file)
             return 0
 
@@ -65,7 +60,7 @@ class Log(CanarySubcommand):
         session = load_session()
         for case in session.cases:
             if case.matches(args.testspec):
-                file = self._log_from_args(case, args)
+                file = self.get_logfile(case, args)
                 display_file(file)
                 return 0
 
