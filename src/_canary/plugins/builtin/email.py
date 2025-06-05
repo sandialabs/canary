@@ -21,18 +21,18 @@ if TYPE_CHECKING:
 def canary_addoption(parser: Parser) -> None:
     parser.add_argument(
         "--mail-to",
-        help="Send a test session summary to the comma separated list of email addresses",
         command="run",
+        help="Send a test session summary to the comma separated list of email addresses",
     )
     parser.add_argument(
         "--mail-from",
-        help="Send mail from this user",
         command="run",
+        help="Send mail from this user",
     )
 
 
-@hookimpl
-def canary_session_post_finalize(session: "Session") -> None:
+@hookimpl(trylast=True)
+def canary_session_finish(session: "Session", exitstatus: int) -> None:
     mail_to = config.getoption("mail_to")
     if mail_to is None:
         return
