@@ -19,27 +19,27 @@ if TYPE_CHECKING:
     from ..test.case import TestCase
 
 project_name = "canary"
-_hookspec = pluggy.HookspecMarker(project_name)
+hookspec = pluggy.HookspecMarker(project_name)
 hookimpl = pluggy.HookimplMarker(project_name)
 
 
-@_hookspec
+@hookspec
 def canary_testcase_generator() -> Type["AbstractTestGenerator"]:
     """Returns an implementation of AbstractTestGenerator"""
     raise NotImplementedError
 
 
-@_hookspec
+@hookspec
 def canary_addoption(parser: "Parser") -> None:
     """Register new command line options or modify existing ones."""
 
 
-@_hookspec
+@hookspec
 def canary_configure(config: "Config") -> None:
     """Perform custom configuration of the test environment"""
 
 
-@_hookspec
+@hookspec
 def canary_subcommand() -> CanarySubcommand:
     """Register Canary subcommands
 
@@ -69,25 +69,25 @@ def canary_subcommand() -> CanarySubcommand:
     raise NotImplementedError
 
 
-@_hookspec
+@hookspec
 def canary_session_start(session: "Session") -> None:
     """Called after the session object has been created and before performing collection and
     entering the run test loop."""
 
 
-@_hookspec
+@hookspec
 def canary_session_finish(session: "Session", exitstatus: int) -> None:
     """Called after the test session has finished allowing plugins to perform custom actions after
     all tests have been run."""
 
 
-@_hookspec
+@hookspec
 def canary_session_report() -> CanaryReport:
     """Register Canary report type"""
     raise NotImplementedError
 
 
-@_hookspec
+@hookspec
 def canary_testsuite_mask(
     cases: list["TestCase"],
     keyword_exprs: list[str],
@@ -108,21 +108,21 @@ def canary_testsuite_mask(
     """
 
 
-@_hookspec(firstresult=True)
+@hookspec(firstresult=True)
 def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
     pass
 
 
-@_hookspec
+@hookspec
 def canary_testcase_modify(case: "TestCase", stage: str = "run") -> None:
     """Modify the test case before the test run."""
 
 
-@_hookspec
+@hookspec
 def canary_testcase_setup(case: "TestCase", stage: str = "run") -> None:
     """Called after the test case's working directory has been setup"""
 
 
-@_hookspec
-def canary_testcase_teardown(case: "TestCase", stage: str = "run") -> None:
+@hookspec
+def canary_testcase_finish(case: "TestCase", stage: str = "run") -> None:
     """Call user plugin after the test has ran"""

@@ -14,7 +14,6 @@ import warnings
 from datetime import datetime
 from itertools import repeat
 from typing import Any
-from typing import TextIO
 
 import hpc_connect
 import psutil
@@ -94,30 +93,25 @@ class TestCaseRunner(AbstractTestRunner):
                 timeout *= timeoutx
             with working_dir(case.working_directory):
                 try:
-                    stdout = open(case.stdout("run"), "w")
-                    stderr: TextIO | int
-                    if f := case.stderr("run"):
-                        stderr = open(f, "w")
-                    else:
-                        stderr = subprocess.STDOUT
                     cmd = case.command()
                     cmd_line = shlex.join(cmd)
-                    stdout.write(f"==> Running {case.display_name}\n")
-                    stdout.write(f"==> Working directory: {case.working_directory}\n")
-                    stdout.write(f"==> Execution directory: {case.execution_directory}\n")
-                    stdout.write(f"==> Command line: {cmd_line}\n")
+                    case.stdout.write(f"==> Running {case.display_name}\n")
+                    case.stdout.write(f"==> Working directory: {case.working_directory}\n")
+                    case.stdout.write(f"==> Execution directory: {case.execution_directory}\n")
+                    case.stdout.write(f"==> Command line: {cmd_line}\n")
                     if timeoutx:
-                        stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
-                    stdout.flush()
+                        case.stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
+                    case.stdout.flush()
                     with case.rc_environ():
                         start_marker: float = time.monotonic()
                         logging.debug(f"Submitting {case} for execution with command {cmd_line}")
                         proc = Popen(
                             cmd,
                             start_new_session=True,
-                            stdout=stdout,
-                            stderr=stderr,
+                            stdout=case.stdout,
+                            stderr=subprocess.STDOUT if case.efile is None else case.stderr,
                             cwd=case.execution_directory,
+                            encoding="utf-8",
                         )
                         metrics = self.get_process_metrics(proc)
                         while proc.poll() is None:
@@ -129,13 +123,11 @@ class TestCaseRunner(AbstractTestRunner):
                 finally:
                     duration = time.monotonic() - start_marker
                     exit_code = 1 if proc is None else proc.returncode
-                    stdout.write(
+                    case.stdout.write(
                         f"==> Finished running {case.display_name} "
                         f"in {duration} s. with exit code {exit_code}\n"
                     )
-                    stdout.close()
-                    if hasattr(stderr, "close"):
-                        stderr.close()  # type: ignore
+                    case.stdout.flush()
         except MissingSourceError as e:
             case.returncode = skip_exit_status
             case.status.set("skipped", f"{case}: resource file {e.args[0]} not found")

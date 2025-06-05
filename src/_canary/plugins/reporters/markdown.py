@@ -60,23 +60,8 @@ class MarkdownReport(CanaryReport):
         self.render_test_info_table(case, fh)
         fh.write("## Test output\n")
         fh.write("\n```console\n")
-        if case.status == "invalid":
-            fh.write(f"{case.status.details}\n")
-        elif os.path.exists(case.logfile()):
-            with open(case.logfile()) as fp:
-                fh.write(fp.read().strip() + "\n")
-        else:
-            fh.write("Log file does not exist\n")
+        fh.write(case.output())
         fh.write("```\n\n")
-        fh.write("## Test error output\n")
-        fh.write("\n```console\n")
-        stderr = case.stderr() or ""
-        if stderr and os.path.exists(stderr):
-            with open(stderr) as fp:
-                fh.write(fp.read().strip() + "\n")
-        else:
-            fh.write("Error log file does not exist\n")
-        fh.write("```\n")
 
     def render_test_info_table(self, case: TestCase, fh: TextIO) -> None:
         info: dict[str, str] = {

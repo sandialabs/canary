@@ -66,7 +66,6 @@ def test_session_bfilter(tmpdir):
             d1 = os.listdir("tests/.canary/batches")[0]
             d2 = os.listdir(os.path.join("tests/.canary/batches", d1))[0]
             id = d1 + d2
-            s.batch_logfile(id)
             with working_dir("tests"):
                 s = session.Session.batch_view(".", id)
 

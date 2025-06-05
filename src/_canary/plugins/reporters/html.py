@@ -76,13 +76,7 @@ class HTMLReport(CanaryReport):
         fh.write(f"<tr><td><b>Duration:</b> {case.duration}</td></tr>\n")
         fh.write("</table>\n")
         fh.write("<h2>Test output</h2>\n<pre>\n")
-        if case.status == "invalid":
-            fh.write(f"{case.status.details}\n")
-        elif os.path.exists(case.logfile()):
-            with open(case.logfile()) as fp:
-                fh.write(fp.read())
-        else:
-            fh.write("Log file does not exist\n")
+        fh.write(case.output())
         fh.write("</pre>\n</body>\n</html>\n")
 
     def generate_index(self, session: "Session", fh: TextIO) -> None:

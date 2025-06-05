@@ -14,7 +14,6 @@ from io import StringIO
 from typing import IO
 from typing import Any
 from typing import Generator
-from typing import TextIO
 
 from ..third_party.color import cescape
 from ..third_party.color import clen
@@ -136,6 +135,7 @@ def format_message(
     prefix: str | None = None,
     format: str | None = None,
     rewind: bool = False,
+    color: bool | None = None,
 ) -> str:
     if format == "center":
         _, width = terminal_size()
@@ -148,7 +148,7 @@ def format_message(
     file = StringIO()
     if rewind:
         file.write("\r")
-    cprint(text, stream=file, end=end)
+    cprint(text, stream=file, end=end, color=color)
     file.flush()
     return file.getvalue()
 
@@ -157,17 +157,22 @@ def log(
     level: int,
     message: str,
     *,
-    file: TextIO = sys.stdout,
+    file: IO[Any] = sys.stdout,
     prefix: str | None = None,
     end: str = "\n",
     format: str | None = None,
     ex: Exception | None = None,
     rewind: bool = False,
+    color: bool | None = None,
 ) -> None:
     if level == SUPPRESS:
         return
     if level >= LEVEL:
-        text = format_message(message, end=end, prefix=prefix, format=format, rewind=rewind)
+        if not file.isatty():
+            color = False
+        text = format_message(
+            message, end=end, prefix=prefix, format=format, rewind=rewind, color=color
+        )
         emit(text, file=file)
     if ex is not None:
         exc, tb = ex.__class__, ex.__traceback__
@@ -175,47 +180,47 @@ def log(
         emit("\n".join(lines) + "\n", file=sys.stderr)
 
 
-def emit(message: str, *, file: TextIO = sys.stdout) -> None:
+def emit(message: str, *, file: IO[Any] = sys.stdout) -> None:
     file.write(message)
     file.flush()
 
 
-def trace(message: str, *, file: TextIO = sys.stdout, end: str = "\n") -> None:
+def trace(message: str, *, file: IO[Any] = sys.stdout, end: str = "\n") -> None:
     c = level_color(TRACE)
     log(TRACE, message, file=file, prefix="@*%s{==>} " % c, end=end)
 
 
-def debug(message: str, *, file: TextIO = sys.stdout, end: str = "\n") -> None:
+def debug(message: str, *, file: IO[Any] = sys.stdout, end: str = "\n") -> None:
     c = level_color(DEBUG)
     log(DEBUG, message, file=file, prefix="@*%s{==>} " % c, end=end)
 
 
-def info(message: str, *, file: TextIO = sys.stdout, end: str = "\n") -> None:
+def info(message: str, *, file: IO[Any] = sys.stdout, end: str = "\n") -> None:
     c = level_color(INFO)
     log(INFO, message, file=file, prefix="@*%s{==>} " % c, end=end)
 
 
 def warning(
-    message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Exception | None = None
+    message: str, *, file: IO[Any] = sys.stderr, end: str = "\n", ex: Exception | None = None
 ) -> None:
     c = level_color(WARNING)
     log(WARNINGS, message, file=file, prefix="@*%s{==>} Warning: " % c, end=end, ex=ex)
 
 
 def error(
-    message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Exception | None = None
+    message: str, *, file: IO[Any] = sys.stderr, end: str = "\n", ex: Exception | None = None
 ) -> None:
     c = level_color(ERROR)
     log(ERROR, message, file=file, prefix="@*%s{==>} Error: " % c, end=end, ex=ex)
 
 
-def exception(message: str, ex: Exception, *, file: TextIO = sys.stderr, end: str = "\n") -> None:
+def exception(message: str, ex: Exception, *, file: IO[Any] = sys.stderr, end: str = "\n") -> None:
     c = level_color(ERROR)
     log(ERROR, message, file=file, prefix="@*%s{==>} Error: " % c, end=end, ex=ex)
 
 
 def fatal(
-    message: str, *, file: TextIO = sys.stderr, end: str = "\n", ex: Exception | None = None
+    message: str, *, file: IO[Any] = sys.stderr, end: str = "\n", ex: Exception | None = None
 ) -> None:
     c = level_color(FATAL)
     log(FATAL, message, file=file, prefix="@*%s{==>} Fatal: " % c, end=end, ex=ex)
@@ -268,7 +273,7 @@ def hline(
     label: str | None = None,
     char: str = "-",
     max_width: int = 64,
-    file: TextIO = sys.stdout,
+    file: IO[Any] = sys.stdout,
     end: str = "\n",
 ) -> None:
     """Draw a labeled horizontal line.
@@ -300,7 +305,7 @@ def fileno(file_or_fd):
     return file_or_fd.fileno()
 
 
-def streamify(arg: TextIO | str, mode: str) -> tuple[IO[Any], bool]:
+def streamify(arg: IO[Any] | str, mode: str) -> tuple[IO[Any], bool]:
     if isinstance(arg, str):
         return open(arg, mode), True
     else:
@@ -309,8 +314,8 @@ def streamify(arg: TextIO | str, mode: str) -> tuple[IO[Any], bool]:
 
 @contextmanager
 def redirect_stdout(
-    to: str | IO[Any] = os.devnull, stdout: TextIO | None = None
-) -> Generator[TextIO, None, None]:
+    to: str | IO[Any] = os.devnull, stdout: IO[Any] | None = None
+) -> Generator[IO[Any], None, None]:
     stdout = stdout or sys.stdout
     stdout_fd = fileno(stdout)
     # copy stdout_fd before it is overwritten
@@ -332,7 +337,7 @@ def merged_stderr_stdout():  # $ exec 2>&1
 
 
 @contextmanager
-def capture(file_like: str | TextIO, mode: str = "w") -> Generator[None, None, None]:
+def capture(file_like: str | IO[Any], mode: str = "w") -> Generator[None, None, None]:
     if file_like is None:
         yield
     else:
@@ -352,7 +357,7 @@ def reset():
 
 
 class context:
-    def __init__(self, message: str, *, file: TextIO = sys.stdout, level=INFO) -> None:
+    def __init__(self, message: str, *, file: IO[Any] = sys.stdout, level=INFO) -> None:
         self._start = -1.0
         self.message = message
         self.file = file

@@ -380,6 +380,11 @@ class TestCase(AbstractTestCase):
         if artifacts is not None:
             self.artifacts = artifacts
 
+        self.ofile = "canary-out.txt"
+        self.efile: str | None = "canary-err.txt"
+        self._stdout: IO[Any] | None = None
+        self._stderr: IO[Any] | None = None
+
     def __hash__(self) -> int:
         return hash(self.id)
 
@@ -480,15 +485,34 @@ class TestCase(AbstractTestCase):
         else:
             return os.path.join(self.work_tree, self.path, os.path.basename(self.file))
 
-    def stdout(self, stage: str | None = None) -> str:
-        p = "-" if stage is None else f"-{stage}-"
-        return os.path.join(self.working_directory, f"canary{p}out.txt")
+    @property
+    def stdout_file(self) -> str:
+        return os.path.join(self.working_directory, self.ofile)
 
-    def stderr(self, stage: str | None = None) -> str | None:
-        return None
+    @property
+    def stderr_file(self) -> str | None:
+        if self.efile is None:
+            return None
+        return os.path.join(self.working_directory, self.efile)
 
-    def logfile(self, stage: str | None = None) -> str:
-        return self.stdout(stage=stage)
+    @property
+    def stdout(self) -> IO[Any]:
+        if self._stdout is None:
+            mode = "w" if not os.path.exists(self.stdout_file) else "a"
+            self._stdout = open(self.stdout_file, mode)
+        assert self._stdout is not None
+        return self._stdout
+
+    @property
+    def stderr(self) -> IO[Any]:
+        if self._stderr is None:
+            if self.stderr_file is None:
+                self._stderr = self.stdout
+            else:
+                mode = "w" if not os.path.exists(self.stderr_file) else "a"
+                self._stderr = open(self.stderr_file, mode)
+        assert self._stderr is not None
+        return self._stderr
 
     @property
     def execution_directory(self) -> str:
@@ -1319,6 +1343,8 @@ class TestCase(AbstractTestCase):
             assert len(self.dependencies) == len(self.dep_done_criteria)
 
     def copy_sources_to_workdir(self) -> None:
+        cwd = os.getcwd()
+        assert cwd == self.working_directory
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
         for asset in self.assets:
             if asset.action not in ("copy", "link"):
@@ -1331,9 +1357,11 @@ class TestCase(AbstractTestCase):
             else:
                 dst = os.path.join(self.working_directory, asset.dst)
             if asset.action == "copy" or copy_all_resources:
-                fs.force_copy(asset.src, dst, echo=logging.info)
+                logging.info(f"copying {asset.src} to {dst}", file=self.stdout)
+                fs.force_copy(asset.src, dst)
             else:
-                fs.force_symlink(asset.src, dst, echo=logging.info)
+                logging.info(f"linking {asset.src} to {dst}", file=self.stdout)
+                fs.force_symlink(asset.src, dst)
 
     def save(self):
         lockfile = self.lockfile
@@ -1433,18 +1461,28 @@ class TestCase(AbstractTestCase):
             return f"Test skipped.  Reason: {self.status.details}"
         elif self.status == "invalid":
             return f"Invalid test.  Reason: {self.status.details}"
-        elif not self.status.complete():
+        elif not os.path.exists(self.stdout_file):
             return "Log not found"
         out = io.StringIO()
-        out.write(io.open(self.stdout(), errors="ignore").read())
-        if err := self.stderr():
-            out.write("\n")
-            out.write(io.open(err, errors="ignore").read())
+        out.write(open(self.stdout_file, errors="ignore").read())
+        if self.stderr_file and os.path.exists(self.stderr_file):
+            out.write("\nCaptured stderr:\n")
+            out.write(open(self.stderr_file, errors="ignore").read())
         text = out.getvalue()
         if compress:
             kb_to_keep = 2 if self.status == "success" else 300
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
+
+    def close_files(self) -> None:
+        if self._stdout is not None:
+            if not self._stdout.closed:
+                self._stdout.close()
+            self._stdout = None
+        if self._stderr is not None:
+            if not self._stderr.closed:
+                self._stderr.close()
+            self._stderr = None
 
     def setup(self) -> None:
         if len(self.dependencies) != len(self.dep_done_criteria):
@@ -1454,7 +1492,8 @@ class TestCase(AbstractTestCase):
         logging.trace(f"Setting up {self}")
         self.work_tree = config.session.work_tree
         fs.mkdirp(self.working_directory)
-        clean_out_folder(self.working_directory)
+        self.close_files()
+        fs.clean_out_folder(self.working_directory)
         with fs.working_dir(self.working_directory, create=True):
             self.setup_working_directory()
         with fs.working_dir(self.working_directory, create=True):
@@ -1463,18 +1502,21 @@ class TestCase(AbstractTestCase):
         logging.trace(f"Done setting up {self}")
 
     def setup_working_directory(self) -> None:
+        cwd = os.getcwd()
+        assert cwd == self.working_directory
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
-        with logging.capture(self.logfile("setup"), mode="w"):
-            with logging.timestamps():
-                logging.info(f"Preparing test: {self.name}")
-                logging.info(f"Directory: {os.getcwd()}")
-                logging.info("Cleaning work directory...")
-                logging.info("Linking and copying working files...")
-                if copy_all_resources:
-                    fs.force_copy(self.file, os.path.basename(self.file), echo=logging.info)
-                else:
-                    fs.force_symlink(self.file, os.path.basename(self.file), echo=logging.info)
-                self.copy_sources_to_workdir()
+        with logging.timestamps():
+            logging.info(f"Preparing test: {self.name}", file=self.stdout)
+            logging.info(f"Directory: {os.getcwd()}", file=self.stdout)
+            logging.info("Cleaning work directory...", file=self.stdout)
+            logging.info("Linking and copying working files...", file=self.stdout)
+            if copy_all_resources:
+                logging.info(f"copying {self.file} to {cwd}", file=self.stdout)
+                fs.force_copy(self.file, os.path.basename(self.file))
+            else:
+                logging.info(f"linking {self.file} to {cwd}", file=self.stdout)
+                fs.force_symlink(self.file, os.path.basename(self.file))
+            self.copy_sources_to_workdir()
 
     def do_baseline(self) -> None:
         if not self.baseline:
@@ -1499,17 +1541,9 @@ class TestCase(AbstractTestCase):
                         logging.emit(f"    Replacing {b} with {a}\n")
                         copyfile(src, dst)
 
-    def concatenate_logs(self) -> None:
-        with open(self.logfile(), "w") as fh:
-            for stage in ("setup", "run", "analyze"):
-                file = self.logfile(stage)
-                if os.path.exists(file):
-                    fh.write(open(file).read())
-
     def finish(self, update_stats: bool = True) -> None:
         if update_stats:
             self.cache_last_run()
-        self.concatenate_logs()
         config.plugin_manager.hook.canary_testcase_finish(case=self, stage="")
         self.save()
 
@@ -1517,9 +1551,9 @@ class TestCase(AbstractTestCase):
         keep = set([os.path.basename(a.src) if a.dst is None else a.dst for a in self.assets])
         keep.add(os.path.basename(self.file))
         keep.add("testcase.lock")
-        keep.add(os.path.basename(self.stdout()))
-        if self.stderr():
-            keep.add(os.path.basename(self.stderr()))  # type: ignore
+        keep.add(self.ofile)
+        if self.efile is not None:
+            keep.add(self.efile)
         with fs.working_dir(self.working_directory):
             files = os.listdir(".")
             for file in files:
@@ -1548,7 +1582,7 @@ class TestCase(AbstractTestCase):
         state: dict[str, Any] = {"type": self.__class__.__name__}
         properties = state.setdefault("properties", {})
         for attr, value in self.__dict__.items():
-            if attr in ("_cache",):
+            if attr in ("_cache", "_stdout", "_stderr"):
                 continue
             private = attr.startswith("_")
             name = attr[1:] if private else attr
@@ -1748,13 +1782,6 @@ def from_id(id: str) -> TestCase | TestMultiCase:
     if lockfiles:
         return from_lockfile(lockfiles[0])
     raise ValueError(f"no test case associated with {id} found in {config.session.work_tree}")
-
-
-def clean_out_folder(folder: str) -> None:
-    if os.path.exists(folder):
-        with fs.working_dir(folder):
-            for f in os.listdir("."):
-                fs.force_remove(f)
 
 
 class MissingSourceError(Exception):
