@@ -9,6 +9,7 @@ import os
 import shlex
 import signal
 import subprocess
+import sys
 import time
 import warnings
 from datetime import datetime
@@ -55,6 +56,7 @@ class TestCaseRunner(AbstractTestRunner):
 
     def __init__(self) -> None:
         super().__init__()
+        self.tee_output = config.getoption("capture") == "tee"
 
     def run(self, obj: "AbstractTestCase", **kwargs: Any) -> None:
         case = obj
@@ -108,13 +110,13 @@ class TestCaseRunner(AbstractTestRunner):
                         proc = Popen(
                             cmd,
                             start_new_session=True,
-                            stdout=case.stdout,
-                            stderr=subprocess.STDOUT if case.efile is None else case.stderr,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
                             cwd=case.execution_directory,
-                            encoding="utf-8",
                         )
                         metrics = self.get_process_metrics(proc)
                         while proc.poll() is None:
+                            self.tee_tescase_output(proc, case)
                             self.get_process_metrics(proc, metrics=metrics)
                             if timeout > 0 and time.monotonic() - start_marker > timeout:
                                 os.kill(proc.pid, signal.SIGINT)
@@ -168,6 +170,19 @@ class TestCaseRunner(AbstractTestRunner):
             case.finish()
             logging.trace(f"{case}: finished with status {case.status}")
         return
+
+    def tee_tescase_output(self, proc: psutil.Popen, case: TestCase) -> None:
+        text = os.read(proc.stdout.fileno(), 1024).decode("utf-8")
+        case.stdout.write(text)
+        if self.tee_output:
+            sys.stdout.write(text)
+        text = os.read(proc.stderr.fileno(), 1024).decode("utf-8")
+        if case.stderr:
+            case.stderr.write(text)
+        else:
+            case.stdout.write(text)
+        if self.tee_output:
+            sys.stderr.write(text)
 
     def start_msg(
         self,
