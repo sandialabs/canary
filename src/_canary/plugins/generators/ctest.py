@@ -683,11 +683,11 @@ def canary_addoption(parser) -> None:
         action=MapToShowCapture,
         group="ctest options",
         command="run",
-        help="Alias for --show-capture=all",
+        help="Alias for --show-capture",
     )
 
 
 class MapToShowCapture(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
-        args.show_capture = "all"
+        args.show_capture = True
         setattr(args, self.dest, True)
