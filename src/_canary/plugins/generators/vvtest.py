@@ -32,7 +32,6 @@ from ...util import logging
 from ...util import scalar
 from ...util import string
 from ...util.executable import Executable
-from ...util.filesystem import force_symlink
 from ...util.filesystem import working_dir
 from ..hookspec import hookimpl
 from .pyt import PYTTestGenerator
@@ -782,20 +781,16 @@ def canary_testcase_generator() -> Type[VVTTestGenerator]:
 
 
 @hookimpl
-def canary_testcase_setup(case: "TestCase", stage: str = "run") -> None:
-    if not case.file_path.endswith(".vvt"):
-        return
-    write_vvtest_util(case)
-    f = os.path.join(case.working_directory, "execute.log")
-    force_symlink(case.logfile(stage), f)
+def canary_testcase_modify(case: "TestCase", stage: str = "run") -> None:
+    if case.file_path.endswith(".vvt"):
+        case.ofile = "execute.log"
+        case.efile = None
 
 
 @hookimpl
-def canary_testcase_finish(case: "TestCase") -> None:
-    if not case.file_path.endswith(".vvt"):
-        return
-    f = os.path.join(case.working_directory, "execute.log")
-    force_symlink(case.logfile(), f)
+def canary_testcase_setup(case: "TestCase", stage: str = "run") -> None:
+    if case.file_path.endswith(".vvt"):
+        write_vvtest_util(case)
 
 
 class RerunAction(argparse.Action):

@@ -186,6 +186,8 @@ class TestInstance:
     returncode: int
     variables: dict[str, str]
     dependencies: list["TestInstance"]
+    ofile: str
+    efile: str | None
 
     @property
     def analyze(self) -> bool:
@@ -198,7 +200,7 @@ class TestInstance:
         return False
 
     def logfile(self, stage: str = "run") -> str:
-        return os.path.join(self.working_directory, f"canary-{stage}-out.txt")
+        return os.path.join(self.working_directory, self.ofile)
 
     @classmethod
     def from_case(cls: Type["TestInstance"], case: TestCase) -> "TestInstance":
@@ -233,6 +235,8 @@ class TestInstance:
             returncode=case.returncode,
             variables=case.variables,
             dependencies=dependencies,
+            ofile=case.ofile,
+            efile=case.efile,
         )
         return self
 
@@ -294,6 +298,8 @@ class TestMultiInstance(TestInstance):
             returncode=case.returncode,
             variables=case.variables,
             dependencies=dependencies,
+            ofile=case.ofile,
+            efile=case.efile,
         )
         return self
 

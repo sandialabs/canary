@@ -88,7 +88,7 @@ def describe_testcase(case: TestCase, indent: str = "") -> int:
         case.work_tree = "."
     d = dict(vars(case))
     d["status"] = (case.status.value, case.status.details)
-    d["logfile"] = case.logfile()
+    d["logfile"] = case.stdout_file
     print(f"{indent}{case}")
     for key in sorted(d):
         if not key.startswith("_"):
