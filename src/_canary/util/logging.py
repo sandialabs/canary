@@ -369,12 +369,13 @@ class context:
         log(self.level, self.message, file=self.file, prefix=self.prefix, end="...")
         return self
 
-    def stop(self):
-        end = "... done (%.2fs.)\n" % (time.monotonic() - self._start)
+    def stop(self, failed: bool = False):
+        state = "failed" if failed else "done"
+        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - self._start)
         log(self.level, self.message, file=self.file, prefix=self.prefix, end=end, rewind=True)
 
     def __enter__(self) -> "context":
         return self.start()
 
     def __exit__(self, *args) -> None:
-        self.stop()
+        self.stop(failed=args[0] is not None)

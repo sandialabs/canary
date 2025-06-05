@@ -67,48 +67,46 @@ class Finder:
         errors = 0
         for root, paths in self.roots.items():
             relroot = os.path.relpath(root, config.invocation_dir)
-            ctx = logging.context(colorize("@*{Searching} %s for test generators" % relroot))
-            ctx.start()
-            if os.path.isfile(root):
-                try:
-                    f = AbstractTestGenerator.factory(root)
-                except Exception as e:
-                    errors += 1
-                    logging.exception(f"Failed to parse {root}", e)
-                else:
-                    root = f.root
-                    generators = tree.setdefault(root, set())
-                    generators.add(f)
-            elif vcs := self.meta[root].get("vcs"):
-                generators = tree.setdefault(root, set())
-                p_generators, p_errors = vcfind(root, type=vcs)
-                generators.update(p_generators)
-                errors += p_errors
-            elif paths is not None:
-                generators = tree.setdefault(root, set())
-                for path in paths:
-                    p = os.path.join(root, path)
-                    if os.path.isfile(p):
-                        try:
-                            f = AbstractTestGenerator.factory(root, path)
-                        except Exception as e:
-                            errors += 1
-                            logging.exception(f"Failed to parse {root}/{path}", e)
-                        else:
-                            generators.add(f)
-                    elif os.path.isdir(p):
-                        p_generators, p_errors = rfind(root, subdir=path)
-                        generators.update(p_generators)
-                        errors += p_errors
-                    else:
+            with logging.context(colorize("@*{Searching} %s for test generators" % relroot)):
+                if os.path.isfile(root):
+                    try:
+                        f = AbstractTestGenerator.factory(root)
+                    except Exception as e:
                         errors += 1
-                        logging.error(f"No such file: {path}")
-            else:
-                generators = tree.setdefault(root, set())
-                p_generators, p_errors = rfind(root)
-                generators.update(p_generators)
-                errors += p_errors
-            ctx.stop()
+                        logging.exception(f"Failed to parse {root}", e)
+                    else:
+                        root = f.root
+                        generators = tree.setdefault(root, set())
+                        generators.add(f)
+                elif vcs := self.meta[root].get("vcs"):
+                    generators = tree.setdefault(root, set())
+                    p_generators, p_errors = vcfind(root, type=vcs)
+                    generators.update(p_generators)
+                    errors += p_errors
+                elif paths is not None:
+                    generators = tree.setdefault(root, set())
+                    for path in paths:
+                        p = os.path.join(root, path)
+                        if os.path.isfile(p):
+                            try:
+                                f = AbstractTestGenerator.factory(root, path)
+                            except Exception as e:
+                                errors += 1
+                                logging.exception(f"Failed to parse {root}/{path}", e)
+                            else:
+                                generators.add(f)
+                        elif os.path.isdir(p):
+                            p_generators, p_errors = rfind(root, subdir=path)
+                            generators.update(p_generators)
+                            errors += p_errors
+                        else:
+                            errors += 1
+                            logging.error(f"No such file: {path}")
+                else:
+                    generators = tree.setdefault(root, set())
+                    p_generators, p_errors = rfind(root)
+                    generators.update(p_generators)
+                    errors += p_errors
             logging.debug(f"Found {len(generators)} test files in {root}")
         n = sum([len(_) for _ in tree.values()])
         nr = len(tree)
@@ -217,16 +215,14 @@ def generate_test_cases(
 ) -> list[TestCase]:
     """Generate test cases and filter based on criteria"""
 
-    ctx = logging.context(colorize("@*{Generating} test cases"))
-    ctx.start()
-    locked: list[list[TestCase]]
-    if config.debug:
-        locked = [f.lock(on_options) for f in generators]
-    else:
-        locked = starmap(lock_file, [(f, on_options) for f in generators])
-    cases: list[TestCase] = [case for group in locked for case in group if case]
-    nc, ng = len(cases), len(generators)
-    ctx.stop()
+    with logging.context(colorize("@*{Generating} test cases")):
+        locked: list[list[TestCase]]
+        if config.debug:
+            locked = [f.lock(on_options) for f in generators]
+        else:
+            locked = starmap(lock_file, [(f, on_options) for f in generators])
+        cases: list[TestCase] = [case for group in locked for case in group if case]
+        nc, ng = len(cases), len(generators)
     logging.info(colorize("@*{Generated} %d test cases from %d generators" % (nc, ng)))
 
     duplicates = find_duplicates(cases)
