@@ -187,7 +187,9 @@ class PYTTestGenerator(AbstractTestGenerator):
             if ns := self.generate_composite_base_case(testname=name, on_options=on_options):
                 # add previous cases as dependencies
                 if not any(paramsets):
-                    raise ValueError("Generation of composite base case requires at least parameter")
+                    raise ValueError(
+                        "Generation of composite base case requires at least parameter"
+                    )
                 modules = self.modules(testname=name, on_options=on_options)
                 parent = TestMultiCase(
                     self.root,

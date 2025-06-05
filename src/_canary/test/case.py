@@ -17,10 +17,10 @@ import sys
 import time
 from contextlib import contextmanager
 from copy import deepcopy
-from functools import lru_cache
 from types import SimpleNamespace
 from typing import IO
 from typing import Any
+from typing import Callable
 from typing import Generator
 from typing import Type
 
@@ -124,6 +124,13 @@ class Parameters(dict):
     def __setitem__(self, key, value):
         self.validate_known_resource_types(key, value)
         super().__setitem__(key, value)
+
+    def sorted_items(
+        self, predicate: Callable | None = None
+    ) -> Generator[tuple[Any, Any], None, None]:
+        for key in sorted(self):
+            value = self[key] if not predicate else predicate(self[key])
+            yield key, value
 
     def validate_known_resource_types(self, key: str, value: Any) -> None:
         if key.lower() in config.resource_pool.types:
@@ -1120,9 +1127,7 @@ class TestCase(AbstractTestCase):
         self.name = self.family
         self.display_name = self.family
         if self.parameters:
-            keys = sorted(self.parameters.keys())
-            s_vals = [stringify(self.parameters[k]) for k in keys]
-            s_params = [f"{k}={s_vals[i]}" for (i, k) in enumerate(keys)]
+            s_params = [f"{k}={v}" for k, v in self.parameters.sorted_items(predicate=stringify)]
             self.name = f"{self._name}.{'.'.join(s_params)}"
             self.display_name = f"{self._display_name}[{','.join(s_params)}]"
 
@@ -1322,16 +1327,20 @@ class TestCase(AbstractTestCase):
         return self.pretty_repr(what=self.display_name)
 
     def pretty_repr(self, what: str | None = None) -> str:
-        """Colorize parameter specs in `what`"""
+        """Colorize parameter specs in `what`
+
+        Parmater specs will always be of the form [var=val,***,var=val] or var=val.***.var=val
+
+        """
         what = what or self.display_name
-        i = self.display_name.find("[")
-        if i == -1:
-            # No parameters to colorize.
+        if not self.parameters:
             return what
-        # Find the parameter chunks in the display name because it's
-        # easier to do it there.
-        parts = self.display_name[i + 1 : -1].split(",")
-        return cached_pretty_repr(self.id, what, tuple(parts))
+        colors = itertools.cycle("bmgycr")
+        for key, value in self.parameters.sorted_items(predicate=stringify):
+            old = f"{key}={value}"
+            new = colorize("@%s{%s}" % (next(colors), old))
+            what = re.sub("\\b%s\\b" % re.escape(old), new, what)
+        return what
 
     def copy(self) -> "TestCase":
         return deepcopy(self)
@@ -1640,20 +1649,6 @@ class TestCase(AbstractTestCase):
             elif value is not None:
                 setattr(self, name, value)
         return
-
-
-@lru_cache
-def cached_pretty_repr(id: str, what: str, parts: tuple[str]) -> str:
-    colors = itertools.cycle("bmgycr")
-    for part in parts:
-        # If we're using the full path or display name, every parameter
-        # will start with one of [ , . and will end with one of ] , . $
-        # This whole regex stuff is to make it so we will correctly
-        # color "foo.bar_np=42.np=4" where "np=4" is nested in "bar_np=42".
-        pretty = colorize("@%s{%s}" % (next(colors), part))
-        pattern = r"(\[|\,|\.)%s(\]|\,|\.|$)" % re.escape(part)
-        what = re.sub(pattern, "\\1%s\\2" % pretty, what)
-    return what
 
 
 class TestMultiCase(TestCase):
