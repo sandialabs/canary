@@ -1353,7 +1353,12 @@ class TestCase(AbstractTestCase):
 
     def copy_sources_to_workdir(self) -> None:
         cwd = os.getcwd()
-        assert cwd == self.working_directory
+        if cwd != self.working_directory:
+            raise RuntimeError(
+                "copy_sources_to_workdir should always be called *inside* the working directory.\n"
+                f"\t{self.working_directory=}\n"
+                f"\t{cwd=}"
+            )
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
         for asset in self.assets:
             if asset.action not in ("copy", "link"):
@@ -1505,14 +1510,18 @@ class TestCase(AbstractTestCase):
         fs.clean_out_folder(self.working_directory)
         with fs.working_dir(self.working_directory, create=True):
             self.setup_working_directory()
-        with fs.working_dir(self.working_directory, create=True):
             config.plugin_manager.hook.canary_testcase_setup(case=self, stage="")
         self.save()
         logging.trace(f"Done setting up {self}")
 
     def setup_working_directory(self) -> None:
         cwd = os.getcwd()
-        assert cwd == self.working_directory
+        if cwd != self.working_directory:
+            raise RuntimeError(
+                "setup_working_directory should always be called *inside* the working directory.\n"
+                f"\t{self.working_directory=}\n"
+                f"\t{cwd=}"
+            )
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
         with logging.timestamps():
             logging.info(f"Preparing test: {self.name}", file=self.stdout)
