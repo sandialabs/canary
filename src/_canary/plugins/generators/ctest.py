@@ -689,5 +689,5 @@ def canary_addoption(parser) -> None:
 
 class MapToShowCapture(argparse.Action):
     def __call__(self, parser, args, values, option_string=None):
-        args.show_capture = True
+        args.show_capture = "oe"
         setattr(args, self.dest, True)
