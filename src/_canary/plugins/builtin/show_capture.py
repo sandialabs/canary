@@ -49,14 +49,10 @@ def canary_session_finish(session: "Session", exitstatus: int) -> None:
     if what in ("no", None):
         return
     cases = session.active_cases()
-    failed = [
-        case for case in cases if not case.status.satisfies(("success", "xdiff", "xfail"))
-    ]
+    failed = [case for case in cases if not case.status.satisfies(("success", "xdiff", "xfail"))]
     if failed:
         _, width = terminal_size()
-        print(
-            ccenter(colorize(" @*R{%d Test failures} " % len(failed)), width, "="), end="\n\n"
-        )
+        print(ccenter(colorize(" @*R{%d Test failures} " % len(failed)), width, "="), end="\n\n")
         for case in failed:
             show_capture(case, what=what)
 

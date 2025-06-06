@@ -87,6 +87,32 @@ def canary_session_report() -> CanaryReport:
     raise NotImplementedError
 
 
+@hookspec(firstresult=True)
+def canary_discover_generators(
+    root: str, paths: list[str] | None
+) -> tuple[list["AbstractTestGenerator"], int]:
+    """Discover test cases in root
+
+    Args:
+      root: Search directory or path to single test file
+      paths: Test file paths relative to root
+
+    Returns:
+      list[AbstractTestGenerator]: list of generators found
+      int: number of parsing errors encountered
+
+    Notes:
+      - If ``root`` is the path to a file then ``paths`` will be ``None`` and a single test
+        generator will be returned.
+      - If ``paths`` is ``None``, then ``root`` should be searched recursively for any test
+        generators
+      - Otherwise, each ``path`` in ``paths`` is a file relative to ``root`` representing a test
+        generator
+
+    """
+    raise NotImplementedError
+
+
 @hookspec
 def canary_testsuite_mask(
     cases: list["TestCase"],
@@ -110,7 +136,7 @@ def canary_testsuite_mask(
 
 @hookspec(firstresult=True)
 def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
-    pass
+    """Batch test cases"""
 
 
 @hookspec
