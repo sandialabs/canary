@@ -15,11 +15,6 @@ def test():
     add = canary.Executable("./add.py")
     result = add("2", "3", stdout=str)
     assert int(result.get_output()) == 5, "Bummer, test failed."
-    import time
-
-    for i in range(24):
-        print(i)
-        time.sleep(0.01)
     print("Test passed!")
 
 

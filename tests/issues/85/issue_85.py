@@ -18,6 +18,6 @@ def test_issue_85(tmpdir):
             generator.lock()
         except ValueError as e:
             match = re.search(
-                "Generation of composite base case requires at least parameter", e.args[0]
+                "Generation of composite base case requires at least one parameter", e.args[0]
             )
             assert match is not None
