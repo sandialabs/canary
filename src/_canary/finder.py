@@ -12,10 +12,8 @@ from .generator import AbstractTestGenerator
 from .test.case import TestCase
 from .third_party.colify import colified
 from .third_party.color import colorize
-from .util import filesystem as fs
 from .util import graph
 from .util import logging
-from .util.executable import Executable
 from .util.parallel import starmap
 from .util.term import terminal_size
 from .util.time import hhmmss
@@ -28,7 +26,6 @@ class Finder:
 
     def __init__(self) -> None:
         self.roots: dict[str, list[str] | None] = {}
-        self.meta: dict[str, dict[str, Any]] = {}
         self._ready = False
 
     def prepare(self):
@@ -36,9 +33,9 @@ class Finder:
 
     def add(self, root: str, *paths: str, **kwargs: Any) -> None:
         tolerant: bool = kwargs.get("tolerant", False)
+        vcs: str | None = None
         if self._ready:
             raise ValueError("Cannot call add() after calling prepare()")
-        vcs: str | None = None
         if root.startswith(("git@", "repo@")):
             vcs, _, f = root.partition("@")
             root = os.path.abspath(f)
@@ -46,141 +43,45 @@ class Finder:
                 raise ValueError(f"{vcs}@ and paths are mutually exclusive")
         else:
             root = os.path.abspath(root)
-        self.roots.setdefault(root, None)
-        self.meta.setdefault(root, {})["vcs"] = vcs
-        if paths and self.roots[root] is None:
-            self.roots[root] = []
-        for path in paths:
-            file = os.path.join(root, path)
-            if not os.path.exists(file):
-                if tolerant:
-                    logging.warning(f"{path} not found in {root}")
-                    continue
-                else:
-                    raise ValueError(f"{path} not found in {root}")
-            self.roots[root].append(path)  # type: ignore
+        if vcs is not None:
+            if root in self.roots:
+                raise ValueError(f"non-vcs root {root!r} already added to tree")
+            self.roots[f"{vcs}@{root}"] = None
+        else:
+            self.roots.setdefault(root, None)
+            if paths and self.roots[root] is None:
+                self.roots[root] = []
+            for path in paths:
+                file = os.path.join(root, path)
+                if not os.path.exists(file):
+                    if tolerant:
+                        logging.warning(f"{path} not found in {root}")
+                        continue
+                    else:
+                        raise ValueError(f"{path} not found in {root}")
+                self.roots[root].append(path)  # type: ignore
 
     def discover(self, pedantic: bool = True) -> list[AbstractTestGenerator]:
-        tree: dict[str, set[AbstractTestGenerator]] = {}
         if not self._ready:
             raise ValueError("Cannot call discover() before calling prepare()")
-        errors = 0
+        errors: int = 0
+        generators: set[AbstractTestGenerator] = set()
         for root, paths in self.roots.items():
-            relroot = os.path.relpath(root, config.invocation_dir)
-            with logging.context(colorize("@*{Searching} %s for test generators" % relroot)):
-                if os.path.isfile(root):
-                    try:
-                        f = AbstractTestGenerator.factory(root)
-                    except Exception as e:
-                        errors += 1
-                        logging.exception(f"Failed to parse {root}", e)
-                    else:
-                        root = f.root
-                        generators = tree.setdefault(root, set())
-                        generators.add(f)
-                elif vcs := self.meta[root].get("vcs"):
-                    generators = tree.setdefault(root, set())
-                    p_generators, p_errors = vcfind(root, type=vcs)
-                    generators.update(p_generators)
-                    errors += p_errors
-                elif paths is not None:
-                    generators = tree.setdefault(root, set())
-                    for path in paths:
-                        p = os.path.join(root, path)
-                        if os.path.isfile(p):
-                            try:
-                                f = AbstractTestGenerator.factory(root, path)
-                            except Exception as e:
-                                errors += 1
-                                logging.exception(f"Failed to parse {root}/{path}", e)
-                            else:
-                                generators.add(f)
-                        elif os.path.isdir(p):
-                            p_generators, p_errors = rfind(root, subdir=path)
-                            generators.update(p_generators)
-                            errors += p_errors
-                        else:
-                            errors += 1
-                            logging.error(f"No such file: {path}")
-                else:
-                    generators = tree.setdefault(root, set())
-                    p_generators, p_errors = rfind(root)
-                    generators.update(p_generators)
-                    errors += p_errors
-            logging.debug(f"Found {len(generators)} test files in {root}")
-        n = sum([len(_) for _ in tree.values()])
-        nr = len(tree)
+            found, e = config.plugin_manager.hook.canary_discover_generators(root=root, paths=paths)
+            generators.update(found)
+            errors += e
+            logging.debug(f"Found {len(found)} test files in {root}")
+        files: list[AbstractTestGenerator] = list(generators)
+        n = len(files)
+        nr = len(set(f.root for f in files))
         if pedantic and errors:
             raise ValueError("Stopping due to previous parsing errors")
         logging.debug(f"Found {n} test files in {nr} search roots")
-        files: list[AbstractTestGenerator] = [file for files in tree.values() for file in files]
         return files
 
     @property
     def search_paths(self) -> list[str]:
         return [root for root in self.roots]
-
-
-def vcfind(root: str, type: str) -> tuple[list[AbstractTestGenerator], int]:
-    """Find files in version control repository (only git supported)"""
-    files: list[str]
-    if type == "git":
-        files = git_ls(root)
-    elif type == "repo":
-        files = repo_ls(root)
-    errors: int = 0
-    generators: list[AbstractTestGenerator] = []
-    with fs.working_dir(root):
-        gen_types = config.plugin_manager.get_generators()
-        for file in files:
-            for gen_type in gen_types:
-                if gen_type.matches(file):
-                    try:
-                        generators.append(gen_type(root, file))
-                    except Exception as e:
-                        errors += 1
-                        logging.exception(f"Failed to parse {root}/{file}", e)
-                    break
-    return generators, errors
-
-
-def rfind(root: str, subdir: str | None = None) -> tuple[list[AbstractTestGenerator], int]:
-    def skip(directory):
-        if os.path.basename(directory).startswith("."):
-            return True
-        elif os.path.basename(directory) in skip_dirs:
-            return True
-        if os.path.exists(os.path.join(directory, ".canary/SESSION.TAG")):
-            return True
-        return False
-
-    start = root if subdir is None else os.path.join(root, subdir)
-    errors: int = 0
-    gen_types = config.plugin_manager.get_generators()
-    generators: list[AbstractTestGenerator] = []
-    for dirname, dirs, files in os.walk(start):
-        if skip(dirname):
-            del dirs[:]
-            continue
-        try:
-            for f in files:
-                file = os.path.join(dirname, f)
-                for gen_type in gen_types:
-                    if gen_type.matches(file):
-                        try:
-                            generator = gen_type(root, os.path.relpath(file, root))
-                        except Exception as e:
-                            errors += 1
-                            logging.exception(f"Failed to parse {file}", e)
-                        else:
-                            generators.append(generator)
-                            if generator.stop_recursion():
-                                raise StopRecursion
-                        break
-        except StopRecursion:
-            del dirs[:]
-            continue
-    return generators, errors
 
 
 def resolve_dependencies(cases: list[TestCase]) -> None:
@@ -316,21 +217,3 @@ class FinderError(Exception):
 
 def lock_file(file: AbstractTestGenerator, on_options: list[str] | None):
     return file.lock(on_options=on_options)
-
-
-def git_ls(root: str) -> list[str]:
-    git = Executable("git")
-    with fs.working_dir(root):
-        result = git("ls-files", "--recurse-submodules", stdout=str)
-    return [f.strip() for f in result.get_output().split("\n") if f.split()]
-
-
-def repo_ls(root: str) -> list[str]:
-    repo = Executable("repo")
-    with fs.working_dir(root):
-        result = repo("-c", "git ls-files --recurse-submodules", stdout=str)
-    return [f.strip() for f in result.get_output().split("\n") if f.split()]
-
-
-class StopRecursion(Exception):
-    pass
