@@ -14,6 +14,7 @@ import time
 import warnings
 from datetime import datetime
 from itertools import repeat
+from typing import IO
 from typing import Any
 
 import hpc_connect
@@ -107,16 +108,19 @@ class TestCaseRunner(AbstractTestRunner):
                     with case.rc_environ():
                         start_marker: float = time.monotonic()
                         logging.debug(f"Submitting {case} for execution with command {cmd_line}")
-                        proc = Popen(
-                            cmd,
-                            start_new_session=True,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            cwd=case.execution_directory,
-                        )
+                        cwd = case.execution_directory
+                        stdout: IO[Any] | int
+                        stderr: IO[Any] | int
+                        if self.tee_output:
+                            stdout = stderr = subprocess.PIPE
+                        else:
+                            stdout = case.stdout
+                            stderr = subprocess.STDOUT if case.efile is None else case.stderr
+                        proc = Popen(cmd, stdout=stdout, stderr=stderr, cwd=cwd)
                         metrics = self.get_process_metrics(proc)
                         while proc.poll() is None:
-                            self.tee_tescase_output(proc, case)
+                            if self.tee_output:
+                                self.test_testcase_output(proc, case)
                             self.get_process_metrics(proc, metrics=metrics)
                             if timeout > 0 and time.monotonic() - start_marker > timeout:
                                 os.kill(proc.pid, signal.SIGINT)
@@ -171,7 +175,7 @@ class TestCaseRunner(AbstractTestRunner):
             logging.trace(f"{case}: finished with status {case.status}")
         return
 
-    def tee_tescase_output(self, proc: psutil.Popen, case: TestCase) -> None:
+    def test_testcase_output(self, proc: psutil.Popen, case: TestCase) -> None:
         text = os.read(proc.stdout.fileno(), 1024).decode("utf-8")
         case.stdout.write(text)
         if self.tee_output:
