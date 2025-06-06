@@ -12,7 +12,9 @@ skip_dirs = ["__nvcache__", "__pycache__", ".git", ".svn", ".canary"]
 
 
 @hookimpl(trylast=True)
-def canary_discover_generators(root: str, paths: list[str] | None) -> tuple[list[AbstractTestGenerator], int]:
+def canary_discover_generators(
+    root: str, paths: list[str] | None
+) -> tuple[list[AbstractTestGenerator], int]:
     relroot = os.path.relpath(root, config.invocation_dir)
     generators: list[AbstractTestGenerator] = []
     errors: int = 0
