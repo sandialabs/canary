@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import os
+import re
 import sys
 from typing import Any
 from typing import TextIO
@@ -18,8 +19,6 @@ from .util.parallel import starmap
 from .util.term import terminal_size
 from .util.time import hhmmss
 
-skip_dirs = ["__nvcache__", "__pycache__", ".git", ".svn", ".canary"]
-
 
 class Finder:
     version_info = (1, 0, 3)
@@ -33,20 +32,20 @@ class Finder:
 
     def add(self, root: str, *paths: str, **kwargs: Any) -> None:
         tolerant: bool = kwargs.get("tolerant", False)
-        vcs: str | None = None
+        special: str | None = None
         if self._ready:
             raise ValueError("Cannot call add() after calling prepare()")
-        if root.startswith(("git@", "repo@")):
-            vcs, _, f = root.partition("@")
+        if match := re.search("^(\w+)@(.*)", root):
+            special, f = match.groups()
             root = os.path.abspath(f)
             if paths:
-                raise ValueError(f"{vcs}@ and paths are mutually exclusive")
+                raise ValueError(f"{special}@ and paths are mutually exclusive")
         else:
             root = os.path.abspath(root)
-        if vcs is not None:
+        if special is not None:
             if root in self.roots:
-                raise ValueError(f"non-vcs root {root!r} already added to tree")
-            self.roots[f"{vcs}@{root}"] = None
+                raise ValueError(f"non-qualified root {root!r} already added to tree")
+            self.roots[f"{special}@{root}"] = None
         else:
             self.roots.setdefault(root, None)
             if paths and self.roots[root] is None:
