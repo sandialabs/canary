@@ -64,6 +64,8 @@ def vcfind(root: str) -> tuple[list[AbstractTestGenerator], int]:
         files = git_ls(root)
     elif type == "repo":
         files = repo_ls(root)
+    else:
+        raise ValueError("Unknown vc type {type!r}, choose from git, repo")
     errors: int = 0
     generators: list[AbstractTestGenerator] = []
     with working_dir(root):
