@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import dataclasses
+import io
 import os
 import shlex
 from typing import Any
@@ -201,6 +202,18 @@ class TestInstance:
 
     def logfile(self, stage: str = "run") -> str:
         return os.path.join(self.working_directory, self.ofile)
+
+    def output(self) -> str:
+        fo = io.StringIO()
+        if self.ofile and os.path.exists(os.path.join(self.working_directory, self.ofile)):
+            fo.write("Captured stdout:\n")
+            with open(os.path.join(self.working_directory, self.ofile)) as fh:
+                fo.write(fh.read())
+        if self.efile and os.path.exists(os.path.join(self.working_directory, self.efile)):
+            fo.write("\nCaptured stderr:\n")
+            with open(os.path.join(self.working_directory, self.efile)) as fh:
+                fo.write(fh.read())
+        return fo.getvalue()
 
     @classmethod
     def from_case(cls: Type["TestInstance"], case: TestCase) -> "TestInstance":
