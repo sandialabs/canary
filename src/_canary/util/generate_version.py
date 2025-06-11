@@ -61,5 +61,5 @@ def __getattr__(name):
         major, minor, micro, local = version_components_from_git()
         with open(os.path.join(os.path.dirname(__file__), "../version.py"), "w") as fh:
             write_version_file(fh, major, minor, micro, local)
-        return f"{major}.{minor}.{micro}+{local}"
+        return f"{major}.{minor}.{micro}"
     raise AttributeError(name)
