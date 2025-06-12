@@ -4,42 +4,21 @@
 
 """Setup and manage the test session"""
 
-import atexit
 import hashlib
-import io
 import json
 import multiprocessing
 import os
-import random
-import signal
 import sys
-import threading
-import time
-import traceback
-from concurrent.futures import Future
-from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
 from datetime import datetime
-from functools import partial
 from typing import IO
 from typing import Any
 from typing import Generator
 
-import psutil
-
 from . import config
 from . import finder
-from .error import FailFast
 from .error import StopExecution
 from .generator import AbstractTestGenerator
-from .queues import BatchResourceQueue
-from .queues import Busy as BusyQueue
-from .queues import Empty as EmptyQueue
-from .queues import ResourceQueue
-from .queues import factory as q_factory
-from .runners import factory as r_factory
-from .status import Status
 from .test.batch import TestBatch
 from .test.case import TestCase
 from .test.case import TestMultiCase
@@ -47,24 +26,16 @@ from .test.case import from_state as testcase_from_state
 from .third_party.color import colorize
 from .third_party.lock import Lock
 from .third_party.lock import LockError
-from .util import glyphs
-from .util import keyboard
 from .util import logging
-from .util.compression import compress64
 from .util.filesystem import find_work_tree
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
-from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
 from .util.graph import static_order
 from .util.procutils import cleanup_children
-from .util.returncode import compute_returncode
 from .util.rprobe import cpu_count
 from .util.string import pluralize
-from .util.time import hhmmss
 from .util.time import timestamp
-
-global_session_lock = threading.Lock()
 
 # Session modes are analogous to file modes
 session_modes = (
@@ -149,7 +120,6 @@ class Session:
                 raise NotASession("not a canary session (or any of the parent directories)")
             self.work_tree = root
         self.config_dir = os.path.join(self.work_tree, ".canary")
-        self.log_dir = os.path.join(self.config_dir, "logs")
         self.search_paths: dict[str, list[str]] = {}
         self.generators: list[AbstractTestGenerator] = list()
         self.cases: list[TestCase] = list()
@@ -455,21 +425,13 @@ class Session:
             config.plugin_manager.hook.canary_testcase_modify(case=case)
 
         self.cases.clear()
-        masked: list[TestCase] = []
         for case in cases:
             if env_mods:
                 case.add_default_env(**env_mods)
-            if case.wont_run():
-                masked.append(case)
-            else:
+            if not case.wont_run():
                 case.mark_as_ready()
                 self.cases.append(case)
-
-        n = len(cases) - len(masked)
-        logging.info(colorize("@*{Selected} %d test %s" % (n, pluralize("case", n))))
-        if masked:
-            self.report_excluded(masked)
-
+        config.plugin_manager.hook.canary_collectreport(cases=cases)
         if not self.get_ready():
             raise StopExecution("No tests to run", 7)
 
@@ -508,16 +470,10 @@ class Session:
         )
         for case in static_order(self.cases):
             config.plugin_manager.hook.canary_testcase_modify(case=case)
-        masked: list[TestCase] = []
         for case in cases:
-            if case.wont_run():
-                masked.append(case)
-            else:
+            if not case.wont_run():
                 case.mark_as_ready()
-        n = len(self.cases) - len(masked)
-        logging.info(colorize("@*{Selected} %d test %s" % (n, pluralize("case", n))))
-        if masked:
-            self.report_excluded(masked)
+        config.plugin_manager.hook.canary_collectreport(cases=cases)
 
     def run(self, *, fail_fast: bool = False) -> list[TestCase]:
         """Run each test case in ``cases``.
@@ -534,419 +490,20 @@ class Session:
         cases = self.get_ready()
         if not cases:
             raise StopExecution("No tests to run", 7)
-        atexit.register(cleanup_children)
-        queue = self.setup_queue(cases, fail_fast=fail_fast)
-        with self.rc_environ():
-            with working_dir(self.work_tree):
-                cleanup_queue = True
-                try:
-                    queue_size = len(queue)
-                    what = pluralize(
-                        "batch" if isinstance(queue, BatchResourceQueue) else "test case",
-                        queue_size,
-                    )
-                    logging.info(colorize("@*{Running} %d %s" % (queue_size, what)))
-                    self.start = timestamp()
-                    self.stop = -1.0
-                    logging.debug("Start: processing queue")
-                    self.process_queue(queue=queue)
-                except ProcessPoolExecutorFailedToStart:
-                    if self.level > 0:
-                        # This can happen when the ProcessPoolExecutor fails to obtain a lock.
-                        self.returncode = -3
-                        for case in queue.cases():
-                            case.status.set("retry")
-                            case.save()
-                    else:
-                        self.returncode = compute_returncode(queue.cases())
-                    raise
-                except KeyboardInterrupt:
-                    logging.debug("keyboard interrupt: killing child processes and exiting")
-                    self.returncode = signal.SIGINT.value
-                    cleanup_queue = False
-                    raise
-                except StopExecution as e:
-                    logging.debug("stop execution: killing child processes and exiting")
-                    self.returncode = e.exit_code
-                except FailFast as e:
-                    logging.debug("fail fast: killing child processes and exiting")
-                    code = compute_returncode(e.failed)
-                    self.returncode = code
-                    cleanup_queue = False
-                    names = ",".join(_.name for _ in e.failed)
-                    raise StopExecution(f"fail_fast: {names}", code)
-                except Exception:
-                    logging.debug("unknown failure: killing child processes and exiting")
-                    logging.error(traceback.format_exc())
-                    self.returncode = compute_returncode(queue.cases())
-                    raise
-                else:
-                    if logging.get_level() > logging.INFO:
-                        queue.update_progress_bar(self.start, last=True)
-                    self.returncode = compute_returncode(queue.cases())
-                    self.exitstatus = self.returncode
-                    queue.close(cleanup=cleanup_queue)
-                    self.stop = timestamp()
-                    dt = self.stop - self.start
-                    msg = colorize("@*{Finished} %d %s (%s)\n" % (queue_size, what, hhmmss(dt)))
-                    logging.info(msg)
-                    config.plugin_manager.hook.canary_session_finish(
-                        session=self, exitstatus=self.exitstatus
-                    )
-                    atexit.unregister(cleanup_children)
+        self.start = timestamp()
+        rc = config.plugin_manager.hook.canary_runtests(
+            session=self, cases=cases, fail_fast=fail_fast
+        )
+        self.stop = timestamp()
+        self.returncode = rc
+        self.exitstatus = rc
+        config.plugin_manager.hook.canary_session_finish(session=self, exitstatus=self.exitstatus)
         self.save()
         for case in self.cases:
             # we wont run invalid cases, but we want to include them in reports
             if case.status == "invalid":
                 cases.append(case)
         return cases
-
-    @contextmanager
-    def rc_environ(self, **variables) -> Generator[None, None, None]:
-        """Set the runtime environment"""
-        save_env = os.environ.copy()
-        os.environ.update(variables)
-        level = logging.get_level()
-        os.environ["CANARY_LOG_LEVEL"] = logging.get_level_name(level)
-        yield
-        os.environ.clear()
-        os.environ.update(save_env)
-
-    def process_queue(self, *, queue: ResourceQueue) -> None:
-        """Process the test queue, asynchronously
-
-        Args:
-          queue: the test queue to process
-
-        """
-        futures: dict = {}
-        duration = lambda: timestamp() - self.start
-        timeout = float(config.getoption("session_timeout", -1))
-        runner = r_factory()
-        qsize = queue.qsize
-        qrank = 0
-        ppe = None
-        try:
-            with io.StringIO() as fh:
-                config.snapshot(fh, pretty_print=False)
-                os.environ["CANARYCFG64"] = compress64(fh.getvalue())
-            context = multiprocessing.get_context(config.multiprocessing_context)
-            with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
-                signal.signal(signal.SIGTERM, signal.SIG_IGN)
-                while True:
-                    key = keyboard.get_key()
-                    if isinstance(key, str) and key in "sS":
-                        logging.emit(queue.status(start=self.start))
-                    if logging.get_level() > logging.INFO:
-                        queue.update_progress_bar(self.start)
-                    if timeout >= 0.0 and duration() > timeout:
-                        raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
-                    try:
-                        iid, obj = queue.get()
-                        self.heartbeat(queue)
-                    except BusyQueue:
-                        time.sleep(0.01)
-                        continue
-                    except EmptyQueue:
-                        break
-                    logging.debug(f"Submitting {obj} to process pool for execution", end="... ")
-                    future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank)
-                    qrank += 1
-                    callback = partial(self.done_callback, iid, queue)
-                    future.add_done_callback(callback)
-                    logging.log(logging.DEBUG, "done")
-                    futures[iid] = (obj, future)
-        except BaseException:
-            if ppe is None:
-                raise ProcessPoolExecutorFailedToStart
-            raise
-        finally:
-            if ppe is not None:
-                ppe.shutdown(cancel_futures=True)
-
-    def heartbeat(self, queue: ResourceQueue) -> None:
-        """Take a heartbeat of the simulation by dumping the case, cpu, and gpu IDs that are
-        currently busy
-
-        """
-        if not config.debug:
-            return None
-        if isinstance(queue, BatchResourceQueue):
-            return None
-        hb: dict[str, Any] = {"date": datetime.now().strftime("%c")}
-        busy = queue.busy()
-        hb["busy"] = [case.id for case in busy]
-        hb["busy cpus"] = [cpu_id for case in busy for cpu_id in case.cpu_ids]
-        hb["busy gpus"] = [gpu_id for case in busy for gpu_id in case.gpu_ids]
-        file: str
-        if "CANARY_BATCH_ID" in os.environ:
-            batch_id = os.environ["CANARY_BATCH_ID"]
-            file = os.path.join(self.log_dir, f"hb.{batch_id}.json")
-        else:
-            file = os.path.join(self.log_dir, "hb.json")
-        mkdirp(os.path.dirname(file))
-        with open(file, "a") as fh:
-            fh.write(json.dumps(hb) + "\n")
-        return None
-
-    def done_callback(self, iid: int, queue: ResourceQueue, future: Future) -> None:
-        """Function registered to the process pool executor to be called when a test (or batch of
-        tests) completes
-
-        Args:
-          iid: the queue's internal ID of the test (or batch)
-          queue: the active test queue
-          future: the future return by the process pool executor
-
-        """
-        if future.cancelled():
-            return
-        try:
-            future.result()
-        except BrokenProcessPool:
-            # The future was probably killed by fail_fast or a keyboard interrupt
-            return
-        except BrokenPipeError:
-            # something bad happened.  On some HPCs we have seen:
-            # BrokenPipeError: [Errno 108] Cannot send after transport endpoint shutdown
-            # Seems to be a filesystem issue, punt for now
-            return
-
-        # The case (or batch) was run in a subprocess.  The object must be
-        # refreshed so that the state in this main thread is up to date.
-
-        obj: TestCase | TestBatch = queue.done(iid)
-        if not isinstance(obj, (TestBatch, TestCase)):
-            logging.error(f"Expected AbstractTestCase, got {obj.__class__.__name__}")
-            return
-        obj.refresh()
-        logging.debug(f"Finished {obj} ({obj.duration} s.)")
-        if not isinstance(obj, TestCase):
-            assert isinstance(obj, TestBatch)
-            if all(case.status == "retry" for case in obj):
-                queue.retry(iid)
-                return
-            for case in obj:
-                if case.status == "running":
-                    # Job was cancelled
-                    case.status.set("cancelled", "batch cancelled")
-                elif case.status == "skipped":
-                    pass
-                elif case.status == "ready":
-                    case.status.set("not_run", "test not run for unknown reasons")
-                elif case.start > 0 and case.stop < 0:
-                    case.status.set("cancelled", "test case cancelled")
-
-    def setup_queue(self, cases: list[TestCase], fail_fast: bool = False) -> ResourceQueue:
-        """Setup the test queue
-
-        Args:
-          cases: the test cases to run
-
-        """
-        kwds: dict[str, Any] = {}
-        queue: ResourceQueue = q_factory(global_session_lock, fail_fast=fail_fast)
-        for case in cases:
-            if case.status == "skipped":
-                case.save()
-            elif not case.status.satisfies(("ready", "pending")):
-                raise ValueError(f"{case}: case is not ready or pending")
-            # elif case.work_tree is None:
-            #    raise ValueError(f"{case}: exec root is not set")
-        queue.put(*[case for case in cases if case.status.satisfies(("ready", "pending"))])
-        queue.prepare(**kwds)
-        if queue.empty():
-            raise ValueError("There are no cases to run in this session")
-        if isinstance(queue, BatchResourceQueue):
-            for batch in queue.queued():
-                batch.save()
-        return queue
-
-    def is_test_case(self, spec: str) -> bool:
-        for case in self.cases:
-            if case.matches(spec):
-                return True
-        return False
-
-    def summary(
-        self, cases: list[TestCase] | None = None, include_pass: bool = True, truncate: int = -1
-    ) -> str:
-        """Return a summary of the completed test cases.  if ``include_pass is True``, include
-        passed tests in the summary
-
-        """
-        cases = cases or self.active_cases()
-        file = io.StringIO()
-        if not cases:
-            file.write("Nothing to report\n")
-            return file.getvalue()
-        totals: dict[str, list[TestCase]] = {}
-        for case in cases:
-            totals.setdefault(case.status.value, []).append(case)
-        for status in Status.members:
-            if not include_pass and status == "success":
-                continue
-            glyph = Status.glyph(status)
-            if status in totals:
-                n: int = 0
-                for case in sorted(totals[status], key=lambda t: t.name):
-                    file.write("%s %s\n" % (glyph, case.describe()))
-                    n += 1
-                    if truncate > 0 and truncate == n:
-                        cname = case.status.cname
-                        bullets = colorize("@*{%s}" % (3 * "."))
-                        fmt = "%s %s %s truncating summary to the first %d entries. "
-                        alert = io.StringIO()
-                        alert.write(fmt % (glyph, cname, bullets, truncate))
-                        alert.write(colorize("See @*{canary status} for the full summary\n"))
-                        file.write(alert.getvalue())
-                        break
-        string = file.getvalue()
-        if string.strip():
-            string = colorize("@*{Short test summary info}\n") + string + "\n"
-        return string
-
-    def footer(
-        self, cases: list[TestCase] | None = None, duration: float = -1, title="Session done"
-    ) -> str:
-        """Return a short, high-level, summary of test results"""
-        cases = cases or self.active_cases()
-        string = io.StringIO()
-        if duration == -1:
-            has_a = any(_.start for _ in cases if _.start > 0)
-            has_b = any(_.stop for _ in cases if _.stop > 0)
-            if has_a and has_b:
-                finish = max(_.stop for _ in cases if _.stop > 0)
-                start = min(_.start for _ in cases if _.start > 0)
-                duration = finish - start
-        totals: dict[str, list[TestCase]] = {}
-        for case in cases:
-            totals.setdefault(case.status.value, []).append(case)
-        N = len(cases)
-        summary = ["@*b{%d total}" % N]
-        for member in Status.colors:
-            n = len(totals.get(member, []))
-            if n:
-                c = Status.colors[member]
-                stat = totals[member][0].status.name
-                summary.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-        emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
-        x, y = random.sample(emojis, 2)
-        kwds = {
-            "x": x,
-            "y": y,
-            "s": ", ".join(summary),
-            "t": hhmmss(None if duration < 0 else duration),
-            "title": title,
-        }
-        string.write(colorize("%(x)s%(x)s @*{%(title)s} -- %(s)s in @*{%(t)s}\n" % kwds))
-        return string.getvalue()
-
-    def durations(self, cases: list[TestCase] | None = None, N: int = 10) -> str:
-        """Return a string describing the ``N`` slowest tests"""
-        cases = cases or self.active_cases()
-        string = io.StringIO()
-        cases = [c for c in cases if c.duration >= 0]
-        sorted_cases = sorted(cases, key=lambda x: x.duration)
-        if N > 0:
-            sorted_cases = sorted_cases[-N:]
-        kwds = {"t": glyphs.turtle, "N": N}
-        string.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
-        for case in sorted_cases:
-            string.write("  %6.2f   %s\n" % (case.duration, case.format("%id   %X")))
-        string.write("\n")
-        return string.getvalue()
-
-    def status(self, cases: list[TestCase] | None = None, sortby: str = "duration") -> str:
-        """Return a string describing the status of each test (grouped by status)"""
-        cases = cases or self.active_cases()
-        file = io.StringIO()
-        totals: dict[str, list[TestCase]] = {}
-        for case in cases:
-            totals.setdefault(case.status.value, []).append(case)
-        for member in Status.members:
-            if member in totals:
-                for case in sort_cases_by(totals[member], field=sortby):
-                    glyph = Status.glyph(case.status.value)
-                    description = case.describe()
-                    file.write("%s %s\n" % (glyph, description))
-        return file.getvalue()
-
-    @staticmethod
-    def report_excluded(excluded_cases: list[TestCase]) -> None:
-        n = len(excluded_cases)
-        logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
-        reasons: dict[str | None, int] = {}
-        for case in excluded_cases:
-            if case.status.satisfies(("masked", "invalid")):
-                reasons[case.status.details] = reasons.get(case.status.details, 0) + 1
-        keys = sorted(reasons, key=lambda x: reasons[x])
-        for key in reversed(keys):
-            reason = key if key is None else key.lstrip()
-            logging.emit(f"{3 * glyphs.bullet} {reasons[key]}: {reason}\n")
-
-    def report(
-        self,
-        report_chars: str,
-        sortby: str = "durations",
-        durations: int | None = None,
-        pathspec: str | None = None,
-    ) -> str:
-        cases: list[TestCase] = self.cases
-        cases_to_show: list[TestCase]
-        rc = set(report_chars)
-        if pathspec is not None:
-            if TestCase.spec_like(pathspec):
-                cases = [c for c in cases if c.matches(pathspec)]
-                rc.add("A")
-            else:
-                pathspec = os.path.abspath(pathspec)
-                if pathspec != self.work_tree:
-                    cases = [c for c in cases if c.working_directory.startswith(pathspec)]
-        if "A" in rc:
-            if "x" in rc:
-                cases_to_show = cases
-            else:
-                cases_to_show = [c for c in cases if not c.masked()]
-        elif "a" in rc:
-            if "x" in rc:
-                cases_to_show = [c for c in cases if c.status != "success"]
-            else:
-                cases_to_show = [c for c in cases if not c.masked() and c.status != "success"]
-        else:
-            cases_to_show = []
-            for case in cases:
-                if case.masked():
-                    if "x" in rc:
-                        cases_to_show.append(case)
-                elif "s" in rc and case.status == "skipped":
-                    cases_to_show.append(case)
-                elif "p" in rc and case.status.value in ("success", "xdiff", "xfail"):
-                    cases_to_show.append(case)
-                elif "f" in rc and case.status == "failed":
-                    cases_to_show.append(case)
-                elif "d" in rc and case.status == "diffed":
-                    cases_to_show.append(case)
-                elif "t" in rc and case.status == "timeout":
-                    cases_to_show.append(case)
-                elif "n" in rc and case.status == "invalid":
-                    cases_to_show.append(case)
-                elif "n" in rc and case.status.value in (
-                    "ready",
-                    "created",
-                    "pending",
-                    "cancelled",
-                    "not_run",
-                ):
-                    cases_to_show.append(case)
-        file = io.StringIO()
-        if cases_to_show:
-            file.write(self.status(cases=cases_to_show, sortby=sortby) + "\n")
-        if durations:
-            file.write(self.durations(cases=cases_to_show, N=int(durations)) + "\n")
-        s = self.footer(cases=cases_to_show, title="Summary")
-        file.write(s + "\n")
-        return file.getvalue()
 
 
 class Database:
@@ -1038,23 +595,6 @@ class Database:
                     yield fh
 
 
-def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
-    if cases and isinstance(getattr(cases[0], field), str):
-        return sorted(cases, key=lambda case: getattr(case, field).lower())
-    return sorted(cases, key=lambda case: getattr(case, field))
-
-
-def is_base_process(process: psutil.Process) -> bool:
-    """Check if process is one of the resource tracking processes launched by the
-    ProcessPoolExecutor"""
-    try:
-        command = " ".join(process.cmdline())
-    except Exception:
-        return False
-    else:
-        return f"{sys.executable} -c from multiprocessing" in command
-
-
 def handle_signal(sig, frame):
     cleanup_children()
     raise SystemExit(sig)
@@ -1093,8 +633,4 @@ class DirectoryExistsError(Exception):
 
 
 class NotASession(Exception):
-    pass
-
-
-class ProcessPoolExecutorFailedToStart(Exception):
     pass

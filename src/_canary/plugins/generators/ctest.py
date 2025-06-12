@@ -404,8 +404,6 @@ class CTestTestCase(TestCase):
         output = self.output()
 
         if self.status.value in ("timeout", "skipped", "cancelled", "not_run"):
-            config.plugin_manager.hook.canary_testcase_finish(case=self, stage="")
-            self.save()
             return
 
         if self.pass_regular_expression is not None:
@@ -445,9 +443,6 @@ class CTestTestCase(TestCase):
                 self.status.set("failed", "Test case marked will_fail but succeeded")
             elif self.status.value not in ("skipped",):
                 self.status.set("success")
-
-        config.plugin_manager.hook.canary_testcase_finish(case=self, stage="")
-        self.save()
 
     @property
     def resource_groups(self) -> list[list[dict[str, Any]]]:

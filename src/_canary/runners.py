@@ -9,42 +9,41 @@ import os
 import shlex
 import signal
 import subprocess
-import sys
 import time
 import warnings
 from datetime import datetime
 from itertools import repeat
-from typing import IO
 from typing import Any
 
 import hpc_connect
 import psutil
 
 from . import config
-from .error import diff_exit_status
-from .error import skip_exit_status
-from .error import timeout_exit_status
 from .test.atc import AbstractTestCase
 from .test.batch import TestBatch
-from .test.case import MissingSourceError
 from .test.case import TestCase
 from .util import logging
 from .util.filesystem import force_remove
 from .util.filesystem import touchp
-from .util.filesystem import working_dir
 from .util.misc import digits
 from .util.string import pluralize
 from .util.time import hhmmss
-from .util.time import timestamp
 
 HAVE_PSUTIL = True
 
 
 class AbstractTestRunner:
+    """Abstract class for running ``AbstractTestCase``.  This class exists for two reasons:
+
+    1. To provide a __call__ method to ``ProcessPoolExuctor.submit``
+    2. To provide a mechanism for a TestBatch to call back to canary to run the the cases in it
+
+    """
+
     scheduled = False
 
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
-        config.null()
+        config.null()  # Make sure config is loaded, since this may be called in a new subprocess
         self.run(case, **kwargs)
         return None
 
@@ -55,231 +54,15 @@ class AbstractTestRunner:
 class TestCaseRunner(AbstractTestRunner):
     """The default runner for running a single :class:`~TestCase`"""
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.tee_output = config.getoption("capture") == "tee"
-
     def run(self, obj: "AbstractTestCase", **kwargs: Any) -> None:
-        case = obj
-        assert isinstance(case, TestCase)
-
-        def cancel(sig, frame):
-            nonlocal proc
-            logging.info(f"Cancelling run due to captured signal {sig!r}")
-            if proc is not None:
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore")
-                    try:
-                        if proc.is_running():
-                            proc.send_signal(sig)
-                    except Exception:
-                        pass
-            if sig == signal.SIGINT:
-                raise KeyboardInterrupt
-            elif sig == signal.SIGTERM:
-                os._exit(1)
-
+        assert isinstance(obj, TestCase)
         try:
-            if logging.get_level() <= logging.INFO:
-                logging.emit(self.start_msg(case, **kwargs) + "\n")
-            default_int_handler = signal.signal(signal.SIGINT, cancel)
-            default_term_handler = signal.signal(signal.SIGTERM, cancel)
-
-            proc: psutil.Popen | None = None
-            metrics: dict[str, Any] | None = None
-            case.start = timestamp()
-            if not config.getoption("dont_restage"):
-                case.setup()
-            case.status.set("running")
-            timeout = case.timeout
-            if timeoutx := config.getoption("timeout_multiplier"):
-                timeout *= timeoutx
-            with working_dir(case.working_directory):
-                try:
-                    cmd = case.command()
-                    cmd_line = shlex.join(cmd)
-                    case.stdout.write(f"==> Running {case.display_name}\n")
-                    case.stdout.write(f"==> Working directory: {case.working_directory}\n")
-                    case.stdout.write(f"==> Execution directory: {case.execution_directory}\n")
-                    case.stdout.write(f"==> Command line: {cmd_line}\n")
-                    if timeoutx:
-                        case.stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
-                    case.stdout.flush()
-                    with case.rc_environ():
-                        start_marker: float = time.monotonic()
-                        logging.debug(f"Submitting {case} for execution with command {cmd_line}")
-                        cwd = case.execution_directory
-                        stdout: IO[Any] | int
-                        stderr: IO[Any] | int
-                        if self.tee_output:
-                            stdout = stderr = subprocess.PIPE
-                        else:
-                            stdout = case.stdout
-                            stderr = subprocess.STDOUT if case.efile is None else case.stderr
-                        proc = Popen(cmd, stdout=stdout, stderr=stderr, cwd=cwd)
-                        metrics = self.get_process_metrics(proc)
-                        while proc.poll() is None:
-                            if self.tee_output:
-                                self.test_testcase_output(proc, case)
-                            self.get_process_metrics(proc, metrics=metrics)
-                            if timeout > 0 and time.monotonic() - start_marker > timeout:
-                                os.kill(proc.pid, signal.SIGINT)
-                                raise TimeoutError
-                            time.sleep(0.05)
-                finally:
-                    duration = time.monotonic() - start_marker
-                    exit_code = 1 if proc is None else proc.returncode
-                    case.stdout.write(
-                        f"==> Finished running {case.display_name} "
-                        f"in {duration} s. with exit code {exit_code}\n"
-                    )
-                    case.stdout.flush()
-        except MissingSourceError as e:
-            case.returncode = skip_exit_status
-            case.status.set("skipped", f"{case}: resource file {e.args[0]} not found")
-        except TimeoutError:
-            case.returncode = timeout_exit_status
-            case.status.set("timeout", f"{case} failed to finish in {timeout:.2f}s.")
-        except BaseException:
-            case.returncode = 1
-            case.status.set("failed", "unknown failure")
-            raise
-        else:
-            case.returncode = proc.returncode
-            if case.xstatus == diff_exit_status:
-                if case.returncode != diff_exit_status:
-                    case.status.set("failed", f"expected {case.name} to diff")
-                else:
-                    case.status.set("xdiff")
-            elif case.xstatus != 0:
-                # Expected to fail
-                code = case.xstatus
-                if code > 0 and case.returncode != code:
-                    case.status.set("failed", f"expected {case.name} to exit with code={code}")
-                elif case.returncode == 0:
-                    case.status.set("failed", f"expected {case.name} to exit with code != 0")
-                else:
-                    case.status.set("xfail")
-            else:
-                case.status.set_from_code(case.returncode)
+            config.plugin_manager.hook.canary_testcase_setup(case=obj)
+            config.plugin_manager.hook.canary_testcase_run(
+                case=obj, qsize=kwargs.get("qsize", 1), qrank=kwargs.get("qrank", 1)
+            )
         finally:
-            if logging.get_level() <= logging.INFO:
-                logging.emit(self.end_msg(case, **kwargs) + "\n")
-            signal.signal(signal.SIGINT, default_int_handler)
-            signal.signal(signal.SIGTERM, default_term_handler)
-            if case.status != "skipped":
-                case.stop = timestamp()
-                if metrics is not None:
-                    case.add_measurement(**metrics)
-            case.finish()
-            logging.trace(f"{case}: finished with status {case.status}")
-        return
-
-    def test_testcase_output(self, proc: psutil.Popen, case: TestCase) -> None:
-        text = os.read(proc.stdout.fileno(), 1024).decode("utf-8")
-        case.stdout.write(text)
-        if self.tee_output:
-            sys.stdout.write(text)
-        text = os.read(proc.stderr.fileno(), 1024).decode("utf-8")
-        if case.stderr:
-            case.stderr.write(text)
-        else:
-            case.stdout.write(text)
-        if self.tee_output:
-            sys.stderr.write(text)
-
-    def start_msg(
-        self,
-        case: AbstractTestCase,
-        qsize: int | None = None,
-        qrank: int | None = None,
-        **kwargs: Any,
-    ) -> str:
-        assert isinstance(case, TestCase)
-        fmt = io.StringIO()
-        fmt.write("@*b{==>} ")
-        if config.debug or os.getenv("GITLAB_CI"):
-            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-            if qrank is not None and qsize is not None:
-                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        fmt.write("Starting %id: %X")
-        return case.format(fmt.getvalue()).strip()
-
-    def end_msg(
-        self,
-        case: AbstractTestCase,
-        qsize: int | None = None,
-        qrank: int | None = None,
-        **kwargs: Any,
-    ) -> str:
-        assert isinstance(case, TestCase)
-        fmt = io.StringIO()
-        fmt.write("@*b{==>} ")
-        if config.debug or os.getenv("GITLAB_CI"):
-            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-            if qrank is not None and qsize is not None:
-                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-        fmt.write("Finished %id: %X %sN")
-        return case.format(fmt.getvalue()).strip()
-
-    def get_process_metrics(
-        self, proc: psutil.Popen, metrics: dict[str, Any] | None = None
-    ) -> dict[str, Any] | None:
-        # Collect process information
-        metrics = metrics or {}
-        try:
-            valid_names = set(psutil._as_dict_attrnames)
-            skip_names = {
-                "cmdline",
-                "cpu_affinity",
-                "net_connections",
-                "cwd",
-                "environ",
-                "exe",
-                "gids",
-                "ionice",
-                "memory_full_info",
-                "memory_maps",
-                "threads",
-                "name",
-                "nice",
-                "pid",
-                "ppid",
-                "status",
-                "terminal",
-                "uids",
-                "username",
-            }
-            names = valid_names - skip_names
-            new_metrics = proc.as_dict(names)
-        except psutil.NoSuchProcess:
-            logging.debug(f"Process with PID {proc.pid} does not exist.")
-        except psutil.AccessDenied:
-            logging.debug(f"Access denied to process with PID {proc.pid}.")
-        except psutil.ZombieProcess:
-            logging.debug(f"Process with PID {proc.pid} is a Zombie process.")
-        else:
-            for name, metric in new_metrics.items():
-                if name == "open_files":
-                    files = metrics.setdefault("open_files", [])
-                    for f in metric:
-                        if f[0] not in files:
-                            files.append(f[0])
-                elif name == "cpu_times":
-                    metrics["cpu_times"] = {"user": metric.user, "system": metric.system}
-                elif name in ("num_threads", "cpu_percent", "num_fds", "memory_percent"):
-                    n = metrics.setdefault(name, 0)
-                    metrics[name] = max(n, metric)
-                elif name == "memory_info":
-                    for key, val in metric._asdict().items():
-                        n = metrics.setdefault(name, {}).setdefault(key, 0)
-                        metrics[name][key] = max(n, val)
-                elif hasattr(metric, "_asdict"):
-                    metrics[name] = dict(metric._asdict())
-                else:
-                    metrics[name] = metric
-        finally:
-            return metrics
+            config.plugin_manager.hook.canary_testcase_finish(case=obj)
 
 
 class BatchRunner(AbstractTestRunner):

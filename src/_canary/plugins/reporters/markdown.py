@@ -14,25 +14,25 @@ from ...util import logging
 from ...util.filesystem import force_remove
 from ...util.filesystem import mkdirp
 from ..hookspec import hookimpl
-from ..types import CanaryReport
+from ..types import CanaryReporter
 
 if TYPE_CHECKING:
     from ...session import Session
 
 
 @hookimpl
-def canary_session_report() -> CanaryReport:
-    return MarkdownReport()
+def canary_session_reporter() -> CanaryReporter:
+    return MarkdownReporter()
 
 
-class MarkdownReport(CanaryReport):
+class MarkdownReporter(CanaryReporter):
     type = "markdown"
     description = "Markdown reporter"
     multipage = True
 
     def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
         if session is None:
-            raise ValueError("canary report html: session required")
+            raise ValueError("canary report markdown: session required")
 
         dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=session.work_tree)
         self.md_dir = os.path.join(dest, "MARKDOWN")

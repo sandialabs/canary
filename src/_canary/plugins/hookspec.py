@@ -7,7 +7,7 @@ from typing import Type
 
 import pluggy
 
-from .types import CanaryReport
+from .types import CanaryReporter
 from .types import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -81,10 +81,35 @@ def canary_session_finish(session: "Session", exitstatus: int) -> None:
     all tests have been run."""
 
 
+@hookspec(firstresult=True)
+def canary_runtests(cases: list["TestCase"], fail_fast: bool) -> int:
+    raise NotImplementedError
+
+
 @hookspec
-def canary_session_report() -> CanaryReport:
+def canary_runtests_summary(cases: list["TestCase"], include_pass: bool, truncate: int) -> None: ...
+
+
+@hookspec
+def canary_session_reporter() -> CanaryReporter:
     """Register Canary report type"""
     raise NotImplementedError
+
+
+@hookspec
+def canary_statusreport(
+    session: "Session",
+    report_chars: str,
+    sortby: str,
+    durations: int,
+    pathspec: str,
+) -> None:
+    pass
+
+
+@hookspec
+def canary_collectreport(cases: list["TestCase"]) -> None:
+    pass
 
 
 @hookspec(firstresult=True)
@@ -145,10 +170,43 @@ def canary_testcase_modify(case: "TestCase", stage: str = "run") -> None:
 
 
 @hookspec
-def canary_testcase_setup(case: "TestCase", stage: str = "run") -> None:
-    """Called after the test case's working directory has been setup"""
+def canary_testcase_setup(case: "TestCase") -> None:
+    """Called to perform the setup phase for a test case.
+
+    The default implementation runs ``case.setup()``.
+
+    Args:
+        The test case.
+
+    Note:
+      This function is called inside the test case's working directory
+
+    """
+
+
+@hookspec(firstresult=True)
+def canary_testcase_run(case: "TestCase", qsize: int, qrank: int) -> None:
+    """Called to run the test case
+
+    Args:
+        The test case.
+
+    Note:
+      This function is called inside the test case's working directory
+
+    """
 
 
 @hookspec
-def canary_testcase_finish(case: "TestCase", stage: str = "run") -> None:
-    """Call user plugin after the test has ran"""
+def canary_testcase_finish(case: "TestCase") -> None:
+    """Called to perform the finishing tasks for the test case
+
+    The default implementation runs ``case.finish()``
+
+    Args:
+        The test case.
+
+    Note:
+      This function is called inside the test case's working directory
+
+    """

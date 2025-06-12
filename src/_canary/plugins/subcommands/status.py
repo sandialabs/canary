@@ -5,7 +5,7 @@
 import argparse
 from typing import TYPE_CHECKING
 
-from ...util import logging
+from ... import config
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import load_session
@@ -73,6 +73,11 @@ class Status(CanarySubcommand):
             rc = "dftns"
         else:
             rc = "".join(args.report_chars)
-        report = session.report(rc, sortby=args.sort_by, durations=args.durations)
-        logging.emit(report)
+        config.plugin_manager.hook.canary_statusreport(
+            session=session,
+            report_chars=rc,
+            sortby=args.sort_by,
+            durations=args.durations,
+            pathspec=None,
+        )
         return 0

@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import dataclasses
-import datetime
 import fnmatch
 import hashlib
 import io
@@ -13,10 +12,14 @@ import math
 import os
 import re
 import shlex
+import signal
+import subprocess
 import sys
 import time
+import warnings
 from contextlib import contextmanager
 from copy import deepcopy
+from datetime import datetime
 from types import SimpleNamespace
 from typing import IO
 from typing import Any
@@ -24,7 +27,12 @@ from typing import Callable
 from typing import Generator
 from typing import Type
 
+import psutil
+
 from .. import config
+from ..error import diff_exit_status
+from ..error import skip_exit_status
+from ..error import timeout_exit_status
 from ..paramset import ParameterSet
 from ..status import Status
 from ..third_party.color import colorize
@@ -36,9 +44,12 @@ from ..util.filesystem import copyfile
 from ..util.filesystem import max_name_length
 from ..util.filesystem import mkdirp
 from ..util.misc import boolean
+from ..util.misc import digits
 from ..util.module import load as load_module
+from ..util.procutils import get_process_metrics
 from ..util.shell import source_rcfile
 from ..util.time import hhmmss
+from ..util.time import timestamp
 from ..when import match_any
 from .atc import AbstractTestCase
 
@@ -1169,7 +1180,7 @@ class TestCase(AbstractTestCase):
         if self.status.satisfies(("cancelled", "ready")):
             return
         history = self.cache.setdefault("history", {})
-        history["last_run"] = datetime.datetime.fromtimestamp(self.start).strftime("%c")
+        history["last_run"] = datetime.fromtimestamp(self.start).strftime("%c")
         history[self.status.value] = history.get(self.status.value, 0) + 1
         if self.duration >= 0 and self.status.satisfies(("success", "xfail", "xdiff", "diff")):
             count: int = 0
@@ -1510,8 +1521,6 @@ class TestCase(AbstractTestCase):
         fs.clean_out_folder(self.working_directory)
         with fs.working_dir(self.working_directory, create=True):
             self.setup_working_directory()
-            config.plugin_manager.hook.canary_testcase_setup(case=self, stage="")
-        self.save()
         logging.trace(f"Done setting up {self}")
 
     def setup_working_directory(self) -> None:
@@ -1562,8 +1571,6 @@ class TestCase(AbstractTestCase):
     def finish(self, update_stats: bool = True) -> None:
         if update_stats:
             self.cache_last_run()
-        config.plugin_manager.hook.canary_testcase_finish(case=self, stage="")
-        self.save()
 
     def teardown(self) -> None:
         keep = set([os.path.basename(a.src) if a.dst is None else a.dst for a in self.assets])
@@ -1658,6 +1665,129 @@ class TestCase(AbstractTestCase):
             elif value is not None:
                 setattr(self, name, value)
         return
+
+    def run(self, qsize: int = 1, qrank: int = 1) -> None:
+        """Run the test case"""
+
+        def cancel(sig, frame):
+            nonlocal proc
+            logging.info(f"Cancelling run due to captured signal {sig!r}")
+            if proc is not None:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore")
+                    try:
+                        if proc.is_running():
+                            proc.send_signal(sig)
+                    except Exception:
+                        pass
+            if sig == signal.SIGINT:
+                raise KeyboardInterrupt
+            elif sig == signal.SIGTERM:
+                os._exit(1)
+
+        if logging.get_level() <= logging.INFO:
+            fmt = io.StringIO()
+            fmt.write("@*b{==>} ")
+            if config.debug or os.getenv("GITLAB_CI"):
+                fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+                if qrank is not None and qsize is not None:
+                    fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+            fmt.write("Starting %id: %X")
+            logging.emit(self.format(fmt.getvalue()).strip() + "\n")
+
+        tee_output = config.getoption("capture") == "tee"
+        try:
+            default_int_handler = signal.signal(signal.SIGINT, cancel)
+            default_term_handler = signal.signal(signal.SIGTERM, cancel)
+
+            proc: psutil.Popen | None = None
+            metrics: dict[str, Any] | None = None
+            self.start = timestamp()
+            self.status.set("running")
+            timeout = self.timeout
+            if timeoutx := config.getoption("timeout_multiplier"):
+                timeout *= timeoutx
+            cmd = self.command()
+            cmd_line = shlex.join(cmd)
+            with fs.working_dir(self.working_directory):
+                with self.rc_environ():
+                    start_marker: float = time.monotonic()
+                    logging.debug(f"Submitting {self} for execution with command {cmd_line}")
+                    cwd = self.execution_directory
+                    stdout: IO[Any] | int
+                    stderr: IO[Any] | int
+                    if tee_output:
+                        stdout = stderr = subprocess.PIPE
+                    else:
+                        stdout = self.stdout
+                        stderr = subprocess.STDOUT if self.efile is None else self.stderr
+                    proc = psutil.Popen(cmd, stdout=stdout, stderr=stderr, cwd=cwd)
+                    metrics = get_process_metrics(proc)
+                    while proc.poll() is None:
+                        if tee_output:
+                            self.tee_run_output(proc)
+                        get_process_metrics(proc, metrics=metrics)
+                        if timeout > 0 and time.monotonic() - start_marker > timeout:
+                            os.kill(proc.pid, signal.SIGINT)
+                            raise TimeoutError
+                        time.sleep(0.05)
+        except MissingSourceError as e:
+            self.returncode = skip_exit_status
+            self.status.set("skipped", f"{self}: resource file {e.args[0]} not found")
+        except TimeoutError:
+            self.returncode = timeout_exit_status
+            self.status.set("timeout", f"{self} failed to finish in {timeout:.2f}s.")
+        except BaseException:
+            self.returncode = 1
+            self.status.set("failed", "unknown failure")
+            raise
+        else:
+            self.returncode = proc.returncode
+            if self.xstatus == diff_exit_status:
+                if self.returncode != diff_exit_status:
+                    self.status.set("failed", f"expected {self.name} to diff")
+                else:
+                    self.status.set("xdiff")
+            elif self.xstatus != 0:
+                # Expected to fail
+                code = self.xstatus
+                if code > 0 and self.returncode != code:
+                    self.status.set("failed", f"expected {self.name} to exit with code={code}")
+                elif self.returncode == 0:
+                    self.status.set("failed", f"expected {self.name} to exit with code != 0")
+                else:
+                    self.status.set("xfail")
+            else:
+                self.status.set_from_code(self.returncode)
+        finally:
+            if logging.get_level() <= logging.INFO:
+                fmt = io.StringIO()
+                fmt.write("@*b{==>} ")
+                if config.debug or os.getenv("GITLAB_CI"):
+                    fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+                    if qrank is not None and qsize is not None:
+                        fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+                fmt.write("Finished %id: %X %sN")
+                logging.emit(self.format(fmt.getvalue()).strip() + "\n")
+            signal.signal(signal.SIGINT, default_int_handler)
+            signal.signal(signal.SIGTERM, default_term_handler)
+            if self.status != "skipped":
+                self.stop = timestamp()
+                if metrics is not None:
+                    self.add_measurement(**metrics)
+            logging.trace(f"{self}: finished with status {self.status}")
+        return
+
+    def tee_run_output(self, proc: psutil.Popen) -> None:
+        text = os.read(proc.stdout.fileno(), 1024).decode("utf-8")
+        self.stdout.write(text)
+        sys.stdout.write(text)
+        text = os.read(proc.stderr.fileno(), 1024).decode("utf-8")
+        if self.stderr:
+            self.stderr.write(text)
+        else:
+            self.stdout.write(text)
+        sys.stderr.write(text)
 
 
 class TestMultiCase(TestCase):
