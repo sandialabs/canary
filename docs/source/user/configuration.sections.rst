@@ -28,7 +28,17 @@ Set batch settings.
 .. code-block:: yaml
 
    batch:
-     length: 1800 # (float)
+     duration: 1800 # (float)
+     default_options: []  # (list of str)
+
+plugins
+-------
+
+Plugins to load
+
+.. code-block:: yaml
+
+   plugins: []  # (list of str)
 
 test:timeout
 ------------

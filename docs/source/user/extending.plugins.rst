@@ -15,13 +15,14 @@ Plugin discovery
 ``canary`` loads plugin modules in the following order:
 
 * Builtin plugins.
+* Plugins specified by the ``CANARY_PLUGINS=plugin_1,...,plugin_n`` environment variable.
 * Plugins registered through `setuptools entry points <https://docs.pytest.org/en/7.1.x/how-to/writing_plugins.html#setuptools-entry-points>`_ ``canary`` looks up the ``canary`` entrypoint to discover its plugins.  Make your plugin available by defining it in your ``pyproject.toml``:
 
   .. code-block:: toml
 
      [project.entry-points.canary]
      plugin_name = "myproject.pluginmodule"
-
+* Plugins specified in the ``plugins`` configuration field.
 * Local plugins specified by the ``-p NAME`` command line option.  ``NAME`` is the name of the python module containing the plugins and must be importable.
 
 Writing plugins

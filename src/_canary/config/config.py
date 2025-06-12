@@ -31,6 +31,7 @@ from .schemas import batch_schema
 from .schemas import build_schema
 from .schemas import config_schema
 from .schemas import environment_schema
+from .schemas import plugin_schema
 from .schemas import resource_schema
 from .schemas import test_schema
 
@@ -39,6 +40,7 @@ section_schemas: dict[str, Schema] = {
     "batch": batch_schema,
     "config": config_schema,
     "environment": environment_schema,
+    "plugins": plugin_schema,
     "resource_pool": resource_schema,
     "test": test_schema,
 }
@@ -378,6 +380,8 @@ class Config:
                 if user_defined_timeouts := items.get("timeout"):
                     for type, value in user_defined_timeouts.items():
                         config.setdefault("test", {})[f"timeout_{type}"] = value
+            elif key == "plugins":
+                config.setdefault("plugin_manager", {}).setdefault("plugins", []).extend(items)
             elif key in section_schemas:
                 config[key] = items
 
