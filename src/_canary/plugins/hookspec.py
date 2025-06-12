@@ -170,10 +170,43 @@ def canary_testcase_modify(case: "TestCase", stage: str = "run") -> None:
 
 
 @hookspec
-def canary_testcase_setup(case: "TestCase", stage: str = "run") -> None:
-    """Called after the test case's working directory has been setup"""
+def canary_testcase_setup(case: "TestCase") -> None:
+    """Called to perform the setup phase for a test case.
+
+    The default implementation runs ``case.setup()``.
+
+    Args:
+        The test case.
+
+    Note:
+      This function is called inside the test case's working directory
+
+    """
+
+
+@hookspec(firstresult=True)
+def canary_testcase_run(case: "TestCase", qsize: int, qrank: int) -> None:
+    """Called to run the test case
+
+    Args:
+        The test case.
+
+    Note:
+      This function is called inside the test case's working directory
+
+    """
 
 
 @hookspec
-def canary_testcase_finish(case: "TestCase", stage: str = "run") -> None:
-    """Call user plugin after the test has ran"""
+def canary_testcase_finish(case: "TestCase") -> None:
+    """Called to perform the finishing tasks for the test case
+
+    The default implementation runs ``case.finish()``
+
+    Args:
+        The test case.
+
+    Note:
+      This function is called inside the test case's working directory
+
+    """

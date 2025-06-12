@@ -8,6 +8,7 @@ from . import email
 from . import mask
 from . import partitioning
 from . import post_clean
+from . import runtest_protocol
 from . import runtests
 from . import runtests_summary
 from . import show_capture
@@ -19,6 +20,7 @@ plugins = [
     mask,
     partitioning,
     post_clean,
+    runtest_protocol,
     runtests,
     runtests_summary,
     collectreport,

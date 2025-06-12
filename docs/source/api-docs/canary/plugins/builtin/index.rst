@@ -14,6 +14,7 @@ plugins.builtin
    mask
    partitioning
    post_clean
+   runtest_protocol
    runtests
    runtests_summary
    show_capture
