@@ -10,7 +10,7 @@ from typing import Any
 
 from ....util import logging
 from ...hookspec import hookimpl
-from ...types import CanaryReport
+from ...types import CanaryReporter
 from .cdash_html_summary import cdash_summary
 from .gitlab_issue_generator import create_issues_from_failed_tests
 from .xml_generator import CDashXMLReporter
@@ -21,11 +21,11 @@ if TYPE_CHECKING:
 
 
 @hookimpl
-def canary_session_report() -> CanaryReport:
-    return CDashReport()
+def canary_session_reporter() -> CanaryReporter:
+    return CDashReporter()
 
 
-class CDashReport(CanaryReport):
+class CDashReporter(CanaryReporter):
     type = "cdash"
     description = "CDash reporter"
     multipage = True

@@ -14,24 +14,24 @@ from typing import Any
 from ...test.case import TestCase
 from ...util.filesystem import mkdirp
 from ..hookspec import hookimpl
-from ..types import CanaryReport
+from ..types import CanaryReporter
 
 if TYPE_CHECKING:
     from ...session import Session
 
 
 @hookimpl
-def canary_session_report() -> CanaryReport:
-    return JunitReport()
+def canary_session_reporter() -> CanaryReporter:
+    return JunitReporter()
 
 
-class JunitReport(CanaryReport):
+class JunitReporter(CanaryReporter):
     type = "junit"
     description = "JUnit reporter"
 
     def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
         if session is None:
-            raise ValueError("canary report html: session required")
+            raise ValueError("canary report junit: session required")
 
         doc = JunitDocument()
         root = doc.create_testsuite_element(

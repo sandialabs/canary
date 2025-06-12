@@ -12,7 +12,7 @@ from ...test.case import TestCase
 from ...util import gitlab
 from ...util import logging
 from ..hookspec import hookimpl
-from ..types import CanaryReport
+from ..types import CanaryReporter
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -20,11 +20,11 @@ if TYPE_CHECKING:
 
 
 @hookimpl
-def canary_session_report() -> CanaryReport:
-    return GitLabMRReport()
+def canary_session_reporter() -> CanaryReporter:
+    return GitLabMRReporter()
 
 
-class GitLabMRReport(CanaryReport):
+class GitLabMRReporter(CanaryReporter):
     type = "gitlab-mr"
     description = "GitLab reporter"
 

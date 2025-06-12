@@ -7,7 +7,7 @@ from typing import Type
 
 import pluggy
 
-from .types import CanaryReport
+from .types import CanaryReporter
 from .types import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -87,7 +87,7 @@ def canary_runtests(cases: "TestCase", fail_fast: bool = False) -> int:
 
 
 @hookspec
-def canary_session_report() -> CanaryReport:
+def canary_session_reporter() -> CanaryReporter:
     """Register Canary report type"""
     raise NotImplementedError
 
