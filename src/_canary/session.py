@@ -5,11 +5,9 @@
 """Setup and manage the test session"""
 
 import hashlib
-import io
 import json
 import multiprocessing
 import os
-import random
 import sys
 from contextlib import contextmanager
 from datetime import datetime
@@ -17,13 +15,10 @@ from typing import IO
 from typing import Any
 from typing import Generator
 
-import psutil
-
 from . import config
 from . import finder
 from .error import StopExecution
 from .generator import AbstractTestGenerator
-from .status import Status
 from .test.batch import TestBatch
 from .test.case import TestCase
 from .test.case import TestMultiCase
@@ -31,7 +26,6 @@ from .test.case import from_state as testcase_from_state
 from .third_party.color import colorize
 from .third_party.lock import Lock
 from .third_party.lock import LockError
-from .util import glyphs
 from .util import logging
 from .util.filesystem import find_work_tree
 from .util.filesystem import force_remove
@@ -41,7 +35,6 @@ from .util.graph import static_order
 from .util.procutils import cleanup_children
 from .util.rprobe import cpu_count
 from .util.string import pluralize
-from .util.time import hhmmss
 from .util.time import timestamp
 
 # Session modes are analogous to file modes
@@ -432,21 +425,13 @@ class Session:
             config.plugin_manager.hook.canary_testcase_modify(case=case)
 
         self.cases.clear()
-        masked: list[TestCase] = []
         for case in cases:
             if env_mods:
                 case.add_default_env(**env_mods)
-            if case.wont_run():
-                masked.append(case)
-            else:
+            if not case.wont_run():
                 case.mark_as_ready()
                 self.cases.append(case)
-
-        n = len(cases) - len(masked)
-        logging.info(colorize("@*{Selected} %d test %s" % (n, pluralize("case", n))))
-        if masked:
-            self.report_excluded(masked)
-
+        config.plugin_manager.hook.canary_collectreport(cases=cases)
         if not self.get_ready():
             raise StopExecution("No tests to run", 7)
 
@@ -485,16 +470,10 @@ class Session:
         )
         for case in static_order(self.cases):
             config.plugin_manager.hook.canary_testcase_modify(case=case)
-        masked: list[TestCase] = []
         for case in cases:
-            if case.wont_run():
-                masked.append(case)
-            else:
+            if not case.wont_run():
                 case.mark_as_ready()
-        n = len(self.cases) - len(masked)
-        logging.info(colorize("@*{Selected} %d test %s" % (n, pluralize("case", n))))
-        if masked:
-            self.report_excluded(masked)
+        config.plugin_manager.hook.canary_collectreport(cases=cases)
 
     def run(self, *, fail_fast: bool = False) -> list[TestCase]:
         """Run each test case in ``cases``.
@@ -525,186 +504,6 @@ class Session:
             if case.status == "invalid":
                 cases.append(case)
         return cases
-
-    def summary(
-        self, cases: list[TestCase] | None = None, include_pass: bool = True, truncate: int = -1
-    ) -> str:
-        """Return a summary of the completed test cases.  if ``include_pass is True``, include
-        passed tests in the summary
-
-        """
-        cases = cases or self.active_cases()
-        file = io.StringIO()
-        if not cases:
-            file.write("Nothing to report\n")
-            return file.getvalue()
-        totals: dict[str, list[TestCase]] = {}
-        for case in cases:
-            totals.setdefault(case.status.value, []).append(case)
-        for status in Status.members:
-            if not include_pass and status == "success":
-                continue
-            glyph = Status.glyph(status)
-            if status in totals:
-                n: int = 0
-                for case in sorted(totals[status], key=lambda t: t.name):
-                    file.write("%s %s\n" % (glyph, case.describe()))
-                    n += 1
-                    if truncate > 0 and truncate == n:
-                        cname = case.status.cname
-                        bullets = colorize("@*{%s}" % (3 * "."))
-                        fmt = "%s %s %s truncating summary to the first %d entries. "
-                        alert = io.StringIO()
-                        alert.write(fmt % (glyph, cname, bullets, truncate))
-                        alert.write(colorize("See @*{canary status} for the full summary\n"))
-                        file.write(alert.getvalue())
-                        break
-        string = file.getvalue()
-        if string.strip():
-            string = colorize("@*{Short test summary info}\n") + string + "\n"
-        return string
-
-    def footer(
-        self, cases: list[TestCase] | None = None, duration: float = -1, title="Session done"
-    ) -> str:
-        """Return a short, high-level, summary of test results"""
-        cases = cases or self.active_cases()
-        string = io.StringIO()
-        if duration == -1:
-            has_a = any(_.start for _ in cases if _.start > 0)
-            has_b = any(_.stop for _ in cases if _.stop > 0)
-            if has_a and has_b:
-                finish = max(_.stop for _ in cases if _.stop > 0)
-                start = min(_.start for _ in cases if _.start > 0)
-                duration = finish - start
-        totals: dict[str, list[TestCase]] = {}
-        for case in cases:
-            totals.setdefault(case.status.value, []).append(case)
-        N = len(cases)
-        summary = ["@*b{%d total}" % N]
-        for member in Status.colors:
-            n = len(totals.get(member, []))
-            if n:
-                c = Status.colors[member]
-                stat = totals[member][0].status.name
-                summary.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
-        emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
-        x, y = random.sample(emojis, 2)
-        kwds = {
-            "x": x,
-            "y": y,
-            "s": ", ".join(summary),
-            "t": hhmmss(None if duration < 0 else duration),
-            "title": title,
-        }
-        string.write(colorize("%(x)s%(x)s @*{%(title)s} -- %(s)s in @*{%(t)s}\n" % kwds))
-        return string.getvalue()
-
-    def durations(self, cases: list[TestCase] | None = None, N: int = 10) -> str:
-        """Return a string describing the ``N`` slowest tests"""
-        cases = cases or self.active_cases()
-        string = io.StringIO()
-        cases = [c for c in cases if c.duration >= 0]
-        sorted_cases = sorted(cases, key=lambda x: x.duration)
-        if N > 0:
-            sorted_cases = sorted_cases[-N:]
-        kwds = {"t": glyphs.turtle, "N": N}
-        string.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
-        for case in sorted_cases:
-            string.write("  %6.2f   %s\n" % (case.duration, case.format("%id   %X")))
-        string.write("\n")
-        return string.getvalue()
-
-    def status(self, cases: list[TestCase] | None = None, sortby: str = "duration") -> str:
-        """Return a string describing the status of each test (grouped by status)"""
-        cases = cases or self.active_cases()
-        file = io.StringIO()
-        totals: dict[str, list[TestCase]] = {}
-        for case in cases:
-            totals.setdefault(case.status.value, []).append(case)
-        for member in Status.members:
-            if member in totals:
-                for case in sort_cases_by(totals[member], field=sortby):
-                    glyph = Status.glyph(case.status.value)
-                    description = case.describe()
-                    file.write("%s %s\n" % (glyph, description))
-        return file.getvalue()
-
-    @staticmethod
-    def report_excluded(excluded_cases: list[TestCase]) -> None:
-        n = len(excluded_cases)
-        logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
-        reasons: dict[str | None, int] = {}
-        for case in excluded_cases:
-            if case.status.satisfies(("masked", "invalid")):
-                reasons[case.status.details] = reasons.get(case.status.details, 0) + 1
-        keys = sorted(reasons, key=lambda x: reasons[x])
-        for key in reversed(keys):
-            reason = key if key is None else key.lstrip()
-            logging.emit(f"{3 * glyphs.bullet} {reasons[key]}: {reason}\n")
-
-    def report(
-        self,
-        report_chars: str,
-        sortby: str = "durations",
-        durations: int | None = None,
-        pathspec: str | None = None,
-    ) -> str:
-        cases: list[TestCase] = self.cases
-        cases_to_show: list[TestCase]
-        rc = set(report_chars)
-        if pathspec is not None:
-            if TestCase.spec_like(pathspec):
-                cases = [c for c in cases if c.matches(pathspec)]
-                rc.add("A")
-            else:
-                pathspec = os.path.abspath(pathspec)
-                if pathspec != self.work_tree:
-                    cases = [c for c in cases if c.working_directory.startswith(pathspec)]
-        if "A" in rc:
-            if "x" in rc:
-                cases_to_show = cases
-            else:
-                cases_to_show = [c for c in cases if not c.masked()]
-        elif "a" in rc:
-            if "x" in rc:
-                cases_to_show = [c for c in cases if c.status != "success"]
-            else:
-                cases_to_show = [c for c in cases if not c.masked() and c.status != "success"]
-        else:
-            cases_to_show = []
-            for case in cases:
-                if case.masked():
-                    if "x" in rc:
-                        cases_to_show.append(case)
-                elif "s" in rc and case.status == "skipped":
-                    cases_to_show.append(case)
-                elif "p" in rc and case.status.value in ("success", "xdiff", "xfail"):
-                    cases_to_show.append(case)
-                elif "f" in rc and case.status == "failed":
-                    cases_to_show.append(case)
-                elif "d" in rc and case.status == "diffed":
-                    cases_to_show.append(case)
-                elif "t" in rc and case.status == "timeout":
-                    cases_to_show.append(case)
-                elif "n" in rc and case.status == "invalid":
-                    cases_to_show.append(case)
-                elif "n" in rc and case.status.value in (
-                    "ready",
-                    "created",
-                    "pending",
-                    "cancelled",
-                    "not_run",
-                ):
-                    cases_to_show.append(case)
-        file = io.StringIO()
-        if cases_to_show:
-            file.write(self.status(cases=cases_to_show, sortby=sortby) + "\n")
-        if durations:
-            file.write(self.durations(cases=cases_to_show, N=int(durations)) + "\n")
-        s = self.footer(cases=cases_to_show, title="Summary")
-        file.write(s + "\n")
-        return file.getvalue()
 
 
 class Database:
@@ -794,23 +593,6 @@ class Database:
             with self.write_lock(path):
                 with open(path, mode) as fh:
                     yield fh
-
-
-def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
-    if cases and isinstance(getattr(cases[0], field), str):
-        return sorted(cases, key=lambda case: getattr(case, field).lower())
-    return sorted(cases, key=lambda case: getattr(case, field))
-
-
-def is_base_process(process: psutil.Process) -> bool:
-    """Check if process is one of the resource tracking processes launched by the
-    ProcessPoolExecutor"""
-    try:
-        command = " ".join(process.cmdline())
-    except Exception:
-        return False
-    else:
-        return f"{sys.executable} -c from multiprocessing" in command
 
 
 def handle_signal(sig, frame):

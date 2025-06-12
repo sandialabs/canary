@@ -82,14 +82,34 @@ def canary_session_finish(session: "Session", exitstatus: int) -> None:
 
 
 @hookspec(firstresult=True)
-def canary_runtests(cases: "TestCase", fail_fast: bool = False) -> int:
+def canary_runtests(cases: list["TestCase"], fail_fast: bool) -> int:
     raise NotImplementedError
+
+
+@hookspec
+def canary_runtests_summary(cases: list["TestCase"], include_pass: bool, truncate: int) -> None: ...
 
 
 @hookspec
 def canary_session_reporter() -> CanaryReporter:
     """Register Canary report type"""
     raise NotImplementedError
+
+
+@hookspec
+def canary_statusreport(
+    session: "Session",
+    report_chars: str,
+    sortby: str,
+    durations: int,
+    pathspec: str,
+) -> None:
+    pass
+
+
+@hookspec
+def canary_collectreport(cases: list["TestCase"]) -> None:
+    pass
 
 
 @hookspec(firstresult=True)
