@@ -44,6 +44,7 @@ def canary_testcase_run(case: TestCase, qsize: int, qrank: int) -> Generator[Any
         f"in {duration} s. with exit code {case.returncode}\n"
     )
     case.stdout.flush()
+    case.save()
     return res
 
 
