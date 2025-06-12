@@ -14,18 +14,18 @@ from ...util import logging
 from ...util.filesystem import force_remove
 from ...util.filesystem import mkdirp
 from ..hookspec import hookimpl
-from ..types import CanaryReport
+from ..types import CanaryReporter
 
 if TYPE_CHECKING:
     from ...session import Session
 
 
 @hookimpl
-def canary_session_report() -> CanaryReport:
-    return HTMLReport()
+def canary_session_reporter() -> CanaryReporter:
+    return HTMLReporter()
 
 
-class HTMLReport(CanaryReport):
+class HTMLReporter(CanaryReporter):
     type = "html"
     description = "HTML reporter"
     multipage = True

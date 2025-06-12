@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from ...util import logging
 from ..hookspec import hookimpl
-from ..types import CanaryReport
+from ..types import CanaryReporter
 from ..types import CanarySubcommand
 
 if TYPE_CHECKING:
@@ -29,18 +29,18 @@ class Report(CanarySubcommand):
 
         parser.epilog = self.in_session_note()
         subparsers = parser.add_subparsers(dest="type", metavar="subcommands")
-        for report in config.plugin_manager.hook.canary_session_report():
-            parent = subparsers.add_parser(report.type, help=report.description)
-            report.setup_parser(parent)
+        for reporter in config.plugin_manager.hook.canary_session_reporter():
+            parent = subparsers.add_parser(reporter.type, help=reporter.description)
+            reporter.setup_parser(parent)
 
     def execute(self, args: Namespace) -> int:
         from ... import config
         from ...session import NotASession
         from ...session import Session
 
-        report: CanaryReport
-        for report in config.plugin_manager.hook.canary_session_report():
-            if report.type == args.type:
+        reporter: CanaryReporter
+        for reporter in config.plugin_manager.hook.canary_session_reporter():
+            if reporter.type == args.type:
                 break
         else:
             raise ValueError(f"canary report: unknown report type {args.type!r}")
@@ -52,6 +52,6 @@ class Report(CanarySubcommand):
         except NotASession:
             session = None
         kwargs = vars(args)
-        action = getattr(report, args.action.replace("-", "_"), report.not_implemented)
+        action = getattr(reporter, args.action.replace("-", "_"), reporter.not_implemented)
         action(session, **kwargs)
         return 0

@@ -781,16 +781,17 @@ def canary_testcase_generator() -> Type[VVTTestGenerator]:
 
 
 @hookimpl
-def canary_testcase_modify(case: "TestCase", stage: str = "run") -> None:
+def canary_testcase_modify(case: "TestCase") -> None:
     if case.file_path.endswith(".vvt"):
         case.ofile = "execute.log"
         case.efile = None
 
 
 @hookimpl
-def canary_testcase_setup(case: "TestCase", stage: str = "run") -> None:
+def canary_testcase_setup(case: "TestCase") -> None:
     if case.file_path.endswith(".vvt"):
-        write_vvtest_util(case)
+        with working_dir(case.working_directory):
+            write_vvtest_util(case)
 
 
 class RerunAction(argparse.Action):

@@ -43,7 +43,7 @@ class CanarySubcommand:
         return note
 
 
-class CanaryReport:
+class CanaryReporter:
     """Canary reporter class
 
     Args:
