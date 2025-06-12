@@ -378,11 +378,6 @@ class Config:
                 if user_defined_timeouts := items.get("timeout"):
                     for type, value in user_defined_timeouts.items():
                         config.setdefault("test", {})[f"timeout_{type}"] = value
-            elif key == "batch":
-                if "duration" in items:
-                    config["batch_duration"] = items["duration"]
-                elif "length" in items:
-                    config["batch_duration"] = items["length"]
             elif key in section_schemas:
                 config[key] = items
 
