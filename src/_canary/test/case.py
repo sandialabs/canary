@@ -1668,6 +1668,7 @@ class TestCase(AbstractTestCase):
 
     def run(self, qsize: int = 1, qrank: int = 1) -> None:
         """Run the test case"""
+
         def cancel(sig, frame):
             nonlocal proc
             logging.info(f"Cancelling run due to captured signal {sig!r}")
