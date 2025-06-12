@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 from ...test.case import TestCase
 from ...third_party.color import colorize
 from ...util import glyphs

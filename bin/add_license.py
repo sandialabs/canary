@@ -19,7 +19,7 @@ def add_python_license(file):
             lines = content.splitlines(keepends=True)
             fh.write(lines[0])
             fh.write(license)
-            fh.write("".join(lines))
+            fh.write("".join(lines[1:]))
         else:
             fh.write(license)
             fh.write(content)
