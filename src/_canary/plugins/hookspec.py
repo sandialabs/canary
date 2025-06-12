@@ -97,13 +97,7 @@ def canary_session_reporter() -> CanaryReporter:
 
 
 @hookspec
-def canary_statusreport(
-    session: "Session",
-    report_chars: str,
-    sortby: str,
-    durations: int,
-    pathspec: str,
-) -> None:
+def canary_statusreport(session: "Session") -> None:
     pass
 
 

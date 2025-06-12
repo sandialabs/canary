@@ -43,9 +43,8 @@ class Status(CanarySubcommand):
         parser.add_argument(
             "-r",
             dest="report_chars",
-            action="append",
-            choices=("p", "t", "d", "f", "n", "s", "x", "a", "A"),
-            default=None,
+            action=ReportCharAction,
+            default="dftns",
             metavar="char",
             help="Show test summary info as specified by chars: "
             "(p)assed, "
@@ -68,16 +67,14 @@ class Status(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         session = load_session()
-        rc: str
-        if not args.report_chars:
-            rc = "dftns"
-        else:
-            rc = "".join(args.report_chars)
-        config.plugin_manager.hook.canary_statusreport(
-            session=session,
-            report_chars=rc,
-            sortby=args.sort_by,
-            durations=args.durations,
-            pathspec=None,
-        )
+        config.plugin_manager.hook.canary_statusreport(session=session)
         return 0
+
+
+class ReportCharAction(argparse.Action):
+    chars = "pftdfnsxaA"
+    def __call__(self, parser, args, values, option_string=None):
+        for value in values:
+            if value not in self.chars:
+                parser.error(f"Invalid report char {value!r}, choose any from {self.chars!r}")
+        setattr(args, self.dest, values)

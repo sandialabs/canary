@@ -6,6 +6,7 @@ import io
 import os
 from typing import TYPE_CHECKING
 
+from ... import config
 from ...status import Status
 from ...test.case import TestCase
 from ...util import logging
@@ -16,14 +17,10 @@ if TYPE_CHECKING:
 
 
 @hookimpl(specname="canary_statusreport", tryfirst=True)
-def runtest_report_status(
-    session: "Session",
-    report_chars: str,
-    sortby: str | None,
-    durations: int | None,
-    pathspec: str | None,
-) -> None:
-    cases_to_show = determine_cases_to_show(session, report_chars, pathspec)
+def runtest_report_status(session: "Session") -> None:
+    report_chars = config.getoption("report_chars") or "dftns"
+    sortby = config.getoption("sort_by", "duration")
+    cases_to_show = determine_cases_to_show(session, report_chars)
     if cases_to_show:
         file = io.StringIO()
         totals: dict[str, list[TestCase]] = {}
@@ -40,13 +37,7 @@ def runtest_report_status(
 
 
 @hookimpl(specname="canary_statusreport", trylast=True)
-def runtest_report_footer(
-    session: "Session",
-    report_chars: str,
-    sortby: str | None,
-    durations: int | None,
-    pathspec: str | None,
-) -> None:
+def runtest_report_footer(session: "Session") -> None:
     """Return a short, high-level, summary of test results"""
     from .runtests_summary import print_runtest_footer
 
@@ -55,16 +46,10 @@ def runtest_report_footer(
 
 
 @hookimpl(specname="canary_statusreport")
-def print_testcase_durations(
-    session: "Session",
-    report_chars: str,
-    sortby: str | None,
-    durations: int | None,
-    pathspec: str | None,
-) -> None:
+def print_testcase_durations(session: "Session") -> None:
     from .runtests_summary import print_testcase_durations as _print_testcase_durations
 
-    if durations:
+    if durations := config.getoption("durations"):
         _print_testcase_durations(session.active_cases(), True, -1, N=durations)
 
 
@@ -75,7 +60,7 @@ def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
 
 
 def determine_cases_to_show(
-    session: "Session", report_chars: str, pathspec: str | None
+    session: "Session", report_chars: str, pathspec: str | None = None
 ) -> list[TestCase]:
     cases: list[TestCase] = session.cases
     cases_to_show: list[TestCase]

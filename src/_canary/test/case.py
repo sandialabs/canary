@@ -1702,8 +1702,6 @@ class TestCase(AbstractTestCase):
 
             proc: psutil.Popen | None = None
             metrics: dict[str, Any] | None = None
-            self.start = timestamp()
-            self.status.set("running")
             timeout = self.timeout
             if timeoutx := config.getoption("timeout_multiplier"):
                 timeout *= timeoutx
@@ -1721,6 +1719,8 @@ class TestCase(AbstractTestCase):
                     else:
                         stdout = self.stdout
                         stderr = subprocess.STDOUT if self.efile is None else self.stderr
+                    self.start = timestamp()
+                    self.status.set("running")
                     proc = psutil.Popen(cmd, stdout=stdout, stderr=stderr, cwd=cwd)
                     metrics = get_process_metrics(proc)
                     while proc.poll() is None:
