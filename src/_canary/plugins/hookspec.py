@@ -81,6 +81,11 @@ def canary_session_finish(session: "Session", exitstatus: int) -> None:
     all tests have been run."""
 
 
+@hookspec(firstresult=True)
+def canary_runtests(cases: "TestCase", fail_fast: bool = False) -> int:
+    raise NotImplementedError
+
+
 @hookspec
 def canary_session_report() -> CanaryReport:
     """Register Canary report type"""
