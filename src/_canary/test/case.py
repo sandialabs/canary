@@ -1364,7 +1364,7 @@ class TestCase(AbstractTestCase):
 
     def copy_sources_to_workdir(self) -> None:
         cwd = os.getcwd()
-        if cwd != self.working_directory:
+        if not os.path.samefile(cwd, self.working_directory):
             raise RuntimeError(
                 "copy_sources_to_workdir should always be called *inside* the working directory.\n"
                 f"\t{self.working_directory=}\n"
@@ -1525,7 +1525,7 @@ class TestCase(AbstractTestCase):
 
     def setup_working_directory(self) -> None:
         cwd = os.getcwd()
-        if cwd != self.working_directory:
+        if not os.path.samefile(cwd, self.working_directory):
             raise RuntimeError(
                 "setup_working_directory should always be called *inside* the working directory.\n"
                 f"\t{self.working_directory=}\n"
