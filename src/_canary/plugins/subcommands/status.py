@@ -73,6 +73,7 @@ class Status(CanarySubcommand):
 
 class ReportCharAction(argparse.Action):
     chars = "pftdfnsxaA"
+
     def __call__(self, parser, args, values, option_string=None):
         for value in values:
             if value not in self.chars:

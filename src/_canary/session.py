@@ -218,6 +218,8 @@ class Session:
         with self.db.open("session", "r") as file:
             attrs = json.load(file)
         for var, value in attrs.items():
+            if var in ("mode",):
+                continue
             setattr(self, var, value)
 
     def dump_testcases(self) -> None:
