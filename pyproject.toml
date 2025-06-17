@@ -1,41 +1,118 @@
-[project]
-name = "canary-wm"
-dynamic = ["version"]
-readme = "README.md"
-license = {"file" = "LICENSE"}
-description = "canary: application testing with Python"
-requires-python = ">=3.10"
-dependencies = [
-  "PyYAML",
-  "psutil",
-  "pluggy",
-  "hpc-connect@git+https://github.com/sandialabs/hpc-connect"
-]
-
-[project.urls]
-Repository = "https://github.com/sandialabs/canary"
-Documentation = "https://canary-wm.readthedocs.io/en/production/"
-Issues = "https://github.com/sandialabs/canary/issues"
-
-[project.scripts]
-nvtest = "canary:console_main"
-canary = "canary:console_main"
-
-[project.optional-dependencies]
-requests = ["requests"]
-dev = ["ruff", "mypy", "pytest", "sphinx", "pydata-sphinx-theme", "sphinx_design", "coverage", "xmlschema"]
-# backward compatible options that are now either required or builtin to hpc-connect
-flux = []
-slurm = []
-pbs = []
-psutil = []
-
 [build-system]
-requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
 build-backend = "setuptools.build_meta"
 
+requires = [ "setuptools>=64", "setuptools-scm[toml]>=6.2.3" ]
+
+[project]
+name = "canary-wm"
+description = "canary: application testing with Python"
+readme = "README.md"
+keywords = [ "test", "unittest" ]
+license = { "file" = "LICENSE" }
+authors = [
+    { name = "Tim Fuller" },
+    { name = "Others (See AUTHORS)" },
+]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 6 - Mature",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Utilities",
+]
+
+dynamic = [ "version" ]
+dependencies = [
+    "hpc-connect @ git+https://github.com/sandialabs/hpc-connect",
+    "pluggy>=1.5",
+    "psutil",
+    "pyyaml",
+]
+
+optional-dependencies.dev = [
+    "coverage",
+    "mypy",
+    "pydata-sphinx-theme",
+    "pytest",
+    "ruff",
+    "sphinx",
+    "sphinx-design",
+    "xmlschema",
+]
+# backward compatible options that are now either required or builtin to hpc-connect
+optional-dependencies.flux = [  ]
+optional-dependencies.pbs = [  ]
+optional-dependencies.psutil = [  ]
+optional-dependencies.requests = [ "requests" ]
+optional-dependencies.slurm = [  ]
+urls.Documentation = "https://canary-wm.readthedocs.io/en/production/"
+urls.Issues = "https://github.com/sandialabs/canary/issues"
+urls.Repository = "https://github.com/sandialabs/canary"
+scripts.canary = "canary:console_main"
+scripts.nvtest = "canary:console_main"
+
 [tool.setuptools.dynamic]
-version = {attr = "_canary.util.generate_version.__generate_dynamic_version__"}
+version = { attr = "_canary.util.generate_version.__generate_dynamic_version__" }
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+format.indent-style = "space"
+format.quote-style = "double"
+format.line-ending = "auto"
+format.skip-magic-trailing-comma = false
+format.docstring-code-line-length = "dynamic"
+format.docstring-code-format = false
+lint.select = [ "F", "I" ]
+lint.ignore = [ "E731", "E741", "F841" ]
+lint.per-file-ignores."src/_canary/abc/__init__.py" = [ "F401" ]
+lint.per-file-ignores."src/_canary/command/__init__.py" = [ "F401" ]
+lint.per-file-ignores."src/_canary/plugins/*/__init__.py" = [ "F401", "F403", "F405" ]
+lint.per-file-ignores."src/_canary/plugins/__init__.py" = [ "F401", "F403", "F405" ]
+lint.per-file-ignores."src/_canary/third_party/*.py" = [ "F401", "F403", "F405" ]
+lint.per-file-ignores."src/canary/__init__.py" = [ "F401" ]
+lint.isort.force-single-line = true
+
+[tool.check-wheel-contents]
+# W009: Wheel contains multiple toplevel library entries
+ignore = "W009"
+
+[tool.pyproject-fmt]
+indent = 4
+max_supported_python = "3.14"
+
+[tool.pytest.ini_options]
+testpaths = [ "tests" ]
+norecursedirs = "mock"
+addopts = "-ra --durations=10"
+cache_dir = ".cache/pytest"
+python_files = "*.py"
+filterwarnings = [ "ignore::DeprecationWarning" ]
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[tool.coverage.run]
+branch = true
+omit = [ "*/third_party/*" ]
+source = [ "_canary" ]
+command_line = "-m pytest"
+
+[tool.coverage.html]
+directory = "html.cov"
 
 [tool.mypy]
 exclude = [
@@ -45,7 +122,7 @@ exclude = [
     "src/_canary/third_party/monkeypatch.py",
     "src/_canary/third_party/cloudpickle.py",
     "src/_canary/third_party/docstring_parser/*",
-    "src/_canary/third_party/imagesvg/*"
+    "src/_canary/third_party/imagesvg/*",
 ]
 
 [[tool.mypy.overrides]]
@@ -105,57 +182,5 @@ module = "psutil"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["_canary.third_party.*"]
+module = [ "_canary.third_party.*" ]
 ignore_errors = true
-
-# check-wheel-contents is executed by the build-and-inspect-python-package action.
-[tool.check-wheel-contents]
-# W009: Wheel contains multiple toplevel library entries
-ignore = "W009"
-
-[tool.ruff]
-target-version = "py311"
-line-length = 100
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
-docstring-code-format = false
-docstring-code-line-length = "dynamic"
-
-[tool.ruff.lint.isort]
-force-single-line = true
-
-[tool.ruff.lint]
-ignore = ["E741", "F841", "E731"]
-select = ["F", "I"]
-
-[tool.ruff.lint.per-file-ignores]
-"src/canary/__init__.py" = ["F401"]
-"src/_canary/abc/__init__.py" = ["F401"]
-"src/_canary/command/__init__.py" = ["F401"]
-"src/_canary/third_party/*.py" = ["F401", "F403", "F405"]
-"src/_canary/plugins/__init__.py" = ["F401", "F403", "F405"]
-"src/_canary/plugins/*/__init__.py" = ["F401", "F403", "F405"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-norecursedirs = "mock"
-addopts = "-ra --durations=10"
-cache_dir = ".cache/pytest"
-python_files = "*.py"
-filterwarnings = ["ignore::DeprecationWarning"]
-
-[tool.coverage.xml]
-output = "coverage.xml"
-
-[tool.coverage.run]
-branch = true
-omit = ["*/third_party/*"]
-source = ["_canary"]
-command_line = "-m pytest"
-
-[tool.coverage.html]
-directory = "html.cov"
