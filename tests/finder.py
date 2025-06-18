@@ -276,13 +276,13 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
 
             # with cpus<3, some of the cases will be filtered
             cases = finder.generate_test_cases(files, on_options=["baz"])
-            mask(cases, keyword_exprs=["test and unit"], parameter_expr="cpus < 3", owners=["me"])
+            mask(cases, keyword_exprs=["test and unit"], parameter_expr="cpus < 2", owners=["me"])
             assert len(cases) == 7
             assert isinstance(cases[-1], tc.TestMultiCase)
             assert cases[-1].masked()
             for case in cases[:-1]:
                 assert isinstance(case, tc.TestCase)
-                if case.cpus == 3:
+                if case.cpus == 2:
                     assert case.masked()
                 else:
                     assert not case.masked()
@@ -296,7 +296,7 @@ def test_vvt_generator(tmpdir):
 # VVT: name: baz
 # VVT: analyze : --analyze
 # VVT: keywords: test unit
-# VVT: parameterize (options=baz) : np=1
+# VVT: parameterize (options=baz) : np=1 2 3
 # VVT: parameterize : a,b,c=1,11,111 2,22,222 3,33,333
 """
             )
