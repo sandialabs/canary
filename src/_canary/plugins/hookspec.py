@@ -159,7 +159,7 @@ def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
 
 
 @hookspec
-def canary_testcase_modify(case: "TestCase", stage: str = "run") -> None:
+def canary_testcase_modify(case: "TestCase") -> None:
     """Modify the test case before the test run."""
 
 

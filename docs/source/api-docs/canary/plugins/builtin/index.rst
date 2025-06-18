@@ -8,14 +8,11 @@ plugins.builtin
 .. toctree::
    :maxdepth: 1
 
-   collectreport
    discover
    email
    mask
    partitioning
    post_clean
+   reporting
    runtest_protocol
    runtests
-   runtests_summary
-   show_capture
-   statusreport
