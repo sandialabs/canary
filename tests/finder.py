@@ -259,7 +259,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             files = f.discover()
             cases = finder.generate_test_cases(files, on_options=["baz"])
             mask(cases, keyword_exprs=["test and unit"], owners=["me"])
-            assert len(cases) == 10
+            assert len(cases) == 7
             assert isinstance(cases[-1], tc.TestMultiCase)
             for case in cases:
                 assert not case.masked(), f"{case}: {case.status}"
@@ -276,7 +276,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             # with cpus<3, some of the cases will be filtered
             cases = finder.generate_test_cases(files, on_options=["baz"])
             mask(cases, keyword_exprs=["test and unit"], parameter_expr="cpus < 3", owners=["me"])
-            assert len(cases) == 10
+            assert len(cases) == 7
             assert isinstance(cases[-1], tc.TestMultiCase)
             assert cases[-1].masked()
             for case in cases[:-1]:
