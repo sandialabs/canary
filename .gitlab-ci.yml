@@ -5,6 +5,7 @@ stages:
 
 variables:
   GET_SOURCES_ATTEMPTS: 3
+  GIT_SSL_NO_VERIFY: 'true'
   PIP_INDEX: https://nexus.web.sandia.gov/repository/pypi-proxy/pypi
   PIP_INDEX_URL: https://nexus.web.sandia.gov/repository/pypi-proxy/simple
   PIP_TRUSTED_HOST: nexus.web.sandia.gov
