@@ -2,9 +2,6 @@ name: Python package
 
 on: [push]
 
-env:
-  CANARY_RUN_EXAMPLES_TEST: True
-
 jobs:
   build:
 
