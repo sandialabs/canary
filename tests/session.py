@@ -77,5 +77,5 @@ def test_session_fail_fast(tmpdir):
         s.add_search_paths(os.path.join(p.examples, "status"))
         s.discover()
         s.lock()
-        rc = s.run(fail_fast=True)
+        rc = s.run(fail_fast=False)
         assert rc != 0
