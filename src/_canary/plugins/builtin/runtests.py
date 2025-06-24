@@ -141,9 +141,6 @@ def setup_queue(cases: list[TestCase], fail_fast: bool = False) -> ResourceQueue
     queue.prepare(**kwds)
     if queue.empty():
         raise ValueError("There are no cases to run in this session")
-    if isinstance(queue, BatchResourceQueue):
-        for batch in queue.queued():
-            batch.save()
     return queue
 
 

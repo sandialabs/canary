@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from . import batch_protocol
 from . import discover
 from . import email
 from . import mask
@@ -12,6 +13,7 @@ from . import runtest_protocol
 from . import runtests
 
 plugins = [
+    batch_protocol,
     discover,
     email,
     mask,

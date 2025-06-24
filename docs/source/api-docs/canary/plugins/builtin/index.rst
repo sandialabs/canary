@@ -8,6 +8,7 @@ plugins.builtin
 .. toctree::
    :maxdepth: 1
 
+   batch_protocol
    discover
    email
    mask
