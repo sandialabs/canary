@@ -26,6 +26,7 @@ from ...third_party.color import colorize
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
 from ...util import logging
+from ...util.string import stringify
 from ...util.time import time_in_seconds
 from ..hookspec import hookimpl
 
@@ -515,7 +516,9 @@ class PYTTestGenerator(AbstractTestGenerator):
         on_options: list[str] | None = None,
         parameters: dict[str, Any] | None = None,
     ) -> list[DependencyPatterns]:
-        kwds = dict(parameters) if parameters else {}
+        kwds: dict[str, Any] = {}
+        if parameters:
+            kwds.update({k: stringify(v) for k, v in parameters.items()})
         if testname:
             kwds["name"] = testname
         for key in list(kwds.keys()):
