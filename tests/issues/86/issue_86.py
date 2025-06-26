@@ -17,6 +17,6 @@ def test_issue_86():
     generator = ctg.CTestTestGenerator(file)
     cases = generator.lock()
     for case in cases:
-        assert case.command()[0] == "/bin/echo"
+        assert os.path.basename(case.command()[0]) == "echo"
         assert case.command()[-1] == "yaml"
     force_remove(os.path.join(os.path.dirname(__file__), "Testing"))

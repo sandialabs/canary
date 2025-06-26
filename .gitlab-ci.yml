@@ -32,6 +32,8 @@ test::unit:
   - cee.build
   extends:
   - .retriable
+  variables:
+    CANARY_RUN_EXAMPLES_TEST: "on"
   script:
   - module use /projects/aue/modules/cee/x86_64/rhel8 > /dev/null 2>&1 || true
   - module load aue/cmake/3.27.7
