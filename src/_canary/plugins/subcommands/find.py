@@ -37,8 +37,6 @@ class Find(CanarySubcommand):
         add_group_argument(group, "paths", "Print file paths, grouped by root", False)
         add_group_argument(group, "files", "Print file paths", False)
         add_group_argument(group, "graph", "Print DAG of test cases")
-        add_group_argument(group, "keywords", "Show available keywords", False)
-        add_group_argument(group, "options", "Show options", False)
         add_group_argument(group, "json", "Write cases to lock file", False)
         parser.add_argument(
             "--owner", dest="owners", action="append", help="Show tests owned by 'owner'"
@@ -93,11 +91,7 @@ class Find(CanarySubcommand):
         if not cases_to_run:
             raise StopExecution("No tests to run", 7)
         cases_to_run.sort(key=lambda x: x.name)
-        if args.print_keywords:
-            finder.pprint_keywords(cases_to_run)
-        elif args.pring_options:
-            finder.pprint_options(cases_to_run)
-        elif args.print_paths:
+        if args.print_paths:
             finder.pprint_paths(cases_to_run)
         elif args.print_files:
             finder.pprint_files(cases_to_run)
