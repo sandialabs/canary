@@ -8,13 +8,11 @@ import os
 from typing import TYPE_CHECKING
 
 from ...error import StopExecution
-from ...test.case import TestCase
 from ...third_party.color import colorize
 from ...util import logging
 from ...util.banner import banner
 from ...util.filesystem import find_work_tree
 from ...util.graph import static_order
-from ...util.string import stringify
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import PathSpec

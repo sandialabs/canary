@@ -10,7 +10,6 @@ from ..hookspec import hookimpl
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
     from ...session import Session
-    from ...test.case import TestCase
 
 
 @hookimpl
