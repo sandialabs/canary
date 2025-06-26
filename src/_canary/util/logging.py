@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import datetime
+import inspect
 import math
 import os
 import sys
@@ -137,6 +138,8 @@ def format_message(
     rewind: bool = False,
     color: bool | None = None,
 ) -> str:
+    if plugin := determine_plugin():
+        message += f" (from plugin: {plugin.__name__})"
     if format == "center":
         _, width = terminal_size()
         dots = "." * clen(message)
@@ -347,6 +350,20 @@ def capture(file_like: str | IO[Any], mode: str = "w") -> Generator[None, None, 
                 yield
         if fown:
             file.close()
+
+
+def determine_plugin() -> Any | None:
+    from .. import config
+
+    if LEVEL > DEBUG:
+        return None
+    stack = inspect.stack()
+    for frame_info in stack[::-1]:
+        filename = frame_info.frame.f_code.co_filename
+        for plugin in config.plugin_manager.get_plugins():
+            if plugin and plugin.__file__ == filename:
+                return plugin
+    return None
 
 
 def reset():
