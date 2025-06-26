@@ -350,7 +350,6 @@ class TestCase(AbstractTestCase):
         self._unresolved_dependencies: list[DependencyPatterns] = []
         self._dependencies: list["TestCase"] = []
         self._dep_done_criteria: list[str] = []
-        self._successors: list["TestCase"] = []
 
         # Environment variables specific to this case
         self._variables: dict[str, str] = {}
@@ -633,8 +632,6 @@ class TestCase(AbstractTestCase):
             self.dependencies.append(case)
             self.dep_done_criteria.append(expected_result)
             assert len(self.dependencies) == len(self.dep_done_criteria)
-            if self not in case._successors:
-                case._successors.append(self)
 
     @property
     def unresolved_dependencies(self) -> list[DependencyPatterns]:
@@ -666,21 +663,6 @@ class TestCase(AbstractTestCase):
     def dependencies(self, arg: list["TestCase"]) -> None:
         self._dependencies.clear()
         self._dependencies.extend(arg)
-        for case in arg:
-            if self not in case._successors:
-                case._successors.append(self)
-
-    def successors(self) -> list["TestCase"]:
-        """This test's successors"""
-        successors: set["TestCase"] = set()
-        self._find_successors(successors)
-        return list(successors)
-
-    def _find_successors(self, successors: set["TestCase"]) -> None:
-        for case in self._successors:
-            if case not in successors:
-                successors.add(case)
-                case._find_successors(successors)
 
     @property
     def timeout(self) -> float:
@@ -1614,7 +1596,7 @@ class TestCase(AbstractTestCase):
         state: dict[str, Any] = {"type": self.__class__.__name__}
         properties = state.setdefault("properties", {})
         for attr, value in self.__dict__.items():
-            if attr in ("_cache", "_stdout", "_stderr", "_successors"):
+            if attr in ("_cache", "_stdout", "_stderr"):
                 continue
             private = attr.startswith("_")
             name = attr[1:] if private else attr
