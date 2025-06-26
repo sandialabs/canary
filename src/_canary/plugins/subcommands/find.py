@@ -38,6 +38,7 @@ class Find(CanarySubcommand):
         add_group_argument(group, "files", "Print file paths", False)
         add_group_argument(group, "graph", "Print DAG of test cases")
         add_group_argument(group, "keywords", "Show available keywords", False)
+        add_group_argument(group, "options", "Show options", False)
         add_group_argument(group, "json", "Write cases to lock file", False)
         parser.add_argument(
             "--owner", dest="owners", action="append", help="Show tests owned by 'owner'"
@@ -86,7 +87,7 @@ class Find(CanarySubcommand):
             with open("testcases.lock", "w") as fh:
                 json.dump({"testcases": tests}, fh, indent=2)
             logging.info("Test cases written to testcases.lock")
-            return
+            return 0
         elif not args.print_files:
             config.plugin_manager.hook.canary_collectreport(cases=cases)
         if not cases_to_run:
@@ -94,6 +95,8 @@ class Find(CanarySubcommand):
         cases_to_run.sort(key=lambda x: x.name)
         if args.print_keywords:
             finder.pprint_keywords(cases_to_run)
+        elif args.pring_options:
+            finder.pprint_options(cases_to_run)
         elif args.print_paths:
             finder.pprint_paths(cases_to_run)
         elif args.print_files:

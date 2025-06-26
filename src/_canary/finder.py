@@ -182,6 +182,18 @@ def pprint_keywords(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
         file.write(cols + "\n")
 
 
+def pprint_options(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+    unique_opts: dict[str, set[str]] = dict()
+    for case in cases:
+        unique_opts.setdefault(case.file_root, set()).update(case.keywords)
+    _, max_width = terminal_size()
+    for root, kwds in unique_kwds.items():
+        label = colorize("@m{%s}" % root)
+        logging.hline(label, max_width=max_width, file=file)
+        cols = colified(sorted(kwds), indent=2, width=max_width)
+        file.write(cols + "\n")
+
+
 def pprint_graph(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
     graph.print(cases, file=file)
 
