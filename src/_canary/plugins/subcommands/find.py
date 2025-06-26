@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import json
 import os
 from typing import TYPE_CHECKING
 
@@ -38,14 +37,6 @@ class Find(CanarySubcommand):
         add_group_argument(group, "files", "Print file paths", False)
         add_group_argument(group, "graph", "Print DAG of test cases")
         add_group_argument(group, "keywords", "Show available keywords", False)
-        group.add_argument(
-            "-j",
-            dest="json",
-            nargs="?",
-            const="tests.json",
-            default=None,
-            help="Write the output to a json file that can be passed to canary run",
-        )
         parser.add_argument(
             "--owner", dest="owners", action="append", help="Show tests owned by 'owner'"
         )
@@ -93,14 +84,7 @@ class Find(CanarySubcommand):
         if not cases_to_run:
             raise StopExecution("No tests to run", 7)
         cases_to_run.sort(key=lambda x: x.name)
-        if args.json:
-            tests: list[str] = []
-            for case in cases_to_run:
-                spec = f"{case.file_root}:{case.file_path}:{case.id}"
-                tests.append(spec)
-            with open(args.json, "w") as fh:
-                json.dump({"testspecs": tests}, fh, indent=2)
-        elif args.print_keywords:
+        if args.print_keywords:
             finder.pprint_keywords(cases_to_run)
         elif args.print_paths:
             finder.pprint_paths(cases_to_run)
