@@ -197,7 +197,7 @@ def determine_plugin_from_tb(tb: traceback.StackSummary) -> None | Any:
     for frame in tb[::-1]:
         # Check if the frame corresponds to a registered plugin
         for plugin in config.plugin_manager.get_plugins():
-            if frame.filename == plugin.__file__:
+            if plugin and frame.filename == plugin.__file__:
                 return plugin
     return None
 
