@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import json
 import os
 from typing import TYPE_CHECKING
 
@@ -37,6 +38,7 @@ class Find(CanarySubcommand):
         add_group_argument(group, "files", "Print file paths", False)
         add_group_argument(group, "graph", "Print DAG of test cases")
         add_group_argument(group, "keywords", "Show available keywords", False)
+        add_group_argument(group, "json", "Write cases to lock file", False)
         parser.add_argument(
             "--owner", dest="owners", action="append", help="Show tests owned by 'owner'"
         )
@@ -79,7 +81,13 @@ class Find(CanarySubcommand):
         for case in static_order(cases):
             config.plugin_manager.hook.canary_testcase_modify(case=case)
         cases_to_run = [case for case in cases if not case.wont_run()]
-        if not args.print_files:
+        if args.print_json:
+            tests = [case.getstate() for case in cases_to_run]
+            with open("testcases.lock", "w") as fh:
+                json.dump({"testcases": tests}, fh, indent=2)
+            logging.info("Test cases written to testcases.lock")
+            return
+        elif not args.print_files:
             config.plugin_manager.hook.canary_collectreport(cases=cases)
         if not cases_to_run:
             raise StopExecution("No tests to run", 7)
