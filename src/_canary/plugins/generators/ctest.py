@@ -478,16 +478,32 @@ class CTestTestCase(TestCase):
         self._will_fail = bool(arg)
 
 
+def safeint(arg: str) -> None | int:
+    try:
+        return int(arg)
+    except (ValueError, TypeError):
+        return None
+
+
 def parse_np(args: list[str]) -> int | None:
-    for i, arg in enumerate(args):
+    iterargs = iter(args)
+    while True:
+        try:
+            arg = next(iterargs)
+        except StopIteration:
+            break
         if re.search("^-(n|np|c)$", arg):
-            return int(args[i + 1])
+            if i := safeint(next(iterargs)):
+                return i
         elif re.search("^--np$", arg):
-            return int(args[i + 1])
+            if i := safeint(next(iterargs)):
+                return i
         elif match := re.search("^-(n|np|c)([0-9]+)$", arg):
-            return int(match.group(2))
+            if i := int(match.group(2)):
+                return i
         elif match := re.search("^--np=([0-9]+)$", arg):
-            return int(match.group(1))
+            if i := int(match.group(1)):
+                return i
     return None
 
 
