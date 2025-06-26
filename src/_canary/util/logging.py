@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import datetime
+import inspect
 import math
 import os
 import sys
@@ -33,7 +34,8 @@ ALWAYS = 100
 
 LEVEL = WARNING
 TIMESTAMP = False
-FORMAT = "%(prefix)s%(timestamp)s%(message)s"
+PLUGIN = False
+FORMAT = "%(prefix)s%(timestamp)s%(message)s%(plugin)s"
 WARNINGS = WARNING
 
 
@@ -57,7 +59,7 @@ level_name_map: dict[int, str] = {
 }
 
 
-def get_timestamp():
+def get_timestamp() -> str:
     """Get a string timestamp"""
     if TIMESTAMP:
         return datetime.datetime.now().strftime("[%Y-%m-%d-%H:%M:%S.%f] ")
@@ -143,7 +145,12 @@ def format_message(
         tmp = f" {dots} ".center(width, "-")
         message = tmp.replace(dots, message)
         format = "%(message)s"
-    kwds = {"prefix": prefix or "", "timestamp": get_timestamp(), "message": cescape(str(message))}
+    kwds = {
+        "prefix": prefix or "",
+        "timestamp": get_timestamp(),
+        "message": cescape(str(message)),
+        "plugin": get_plugin(),
+    }
     text = (format or FORMAT) % kwds
     file = StringIO()
     if rewind:
@@ -347,6 +354,26 @@ def capture(file_like: str | IO[Any], mode: str = "w") -> Generator[None, None, 
                 yield
         if fown:
             file.close()
+
+
+def get_plugin() -> str:
+    if LEVEL <= DEBUG:
+        if plugin := determine_plugin():
+            return " (from plugin: @*{%s::%s})" % (plugin.__name__, plugin.f_name)
+    return ""
+
+
+def determine_plugin() -> Any | None:
+    from .. import config
+
+    stack = inspect.stack()
+    for frame_info in stack:
+        filename = frame_info.frame.f_code.co_filename
+        for plugin in config.plugin_manager.get_plugins():
+            if plugin and plugin.__file__ == filename:
+                plugin.f_name = frame_info.frame.f_code.co_name
+                return plugin
+    return None
 
 
 def reset():
