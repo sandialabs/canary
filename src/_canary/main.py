@@ -248,6 +248,6 @@ def console_main() -> int:
         tb = traceback.extract_tb(e.__traceback__)
         err = str(e)
         if plugin := determine_plugin_from_tb(tb):
-            err += f".  This error originated in the {plugin.__name__} plugin."
+            err += f" (from plugin: {plugin.__name__})"
         logging.error(err)
         return 3
