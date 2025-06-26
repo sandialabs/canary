@@ -96,6 +96,13 @@ class CTestTestGenerator(AbstractTestGenerator):
         graph.print(cases, file=file)
         return file.getvalue()
 
+    def info(self) -> dict[str, Any]:
+        info: dict[str, Any] = super().info()
+        tests = self.load()
+        for details in tests.values():
+            info.setdefault("keywords", []).extend(details.get("labels", []))
+        return info
+
     def load(self) -> dict:
         """Load and transform the tests loaded from CMake into a form understood by nvtest
 
