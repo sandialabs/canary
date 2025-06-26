@@ -27,7 +27,7 @@ Python 3.10+
 To install the latest development version, execute:
 
 ```console
-python3 -m pip install "canary-wm git+ssh://git@github.com/sandialabs/canary"
+python3 -m pip install "canary-wm@git+ssh://git@github.com/sandialabs/canary"
 ```
 
 To install the latest production version, execute:

@@ -7,6 +7,7 @@ import os
 from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
+from typing import Any
 
 if TYPE_CHECKING:
     from .test.case import TestCase
@@ -73,6 +74,11 @@ class AbstractTestGenerator(ABC):
     @abstractmethod
     def describe(self, on_options: list[str] | None = None) -> str:
         """Return a description of the test"""
+
+    def info(self) -> dict[str, Any]:
+        info: dict[str, Any] = {}
+        info["type"] = self.__class__.__name__
+        return info
 
     @abstractmethod
     def lock(self, on_options: list[str] | None = None) -> list["TestCase"]:

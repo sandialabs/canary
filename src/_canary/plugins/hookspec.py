@@ -159,7 +159,7 @@ def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
 
 
 @hookspec
-def canary_testcase_modify(case: "TestCase", stage: str = "run") -> None:
+def canary_testcase_modify(case: "TestCase") -> None:
     """Modify the test case before the test run."""
 
 
@@ -202,5 +202,39 @@ def canary_testcase_finish(case: "TestCase") -> None:
 
     Note:
       This function is called inside the test case's working directory
+
+    """
+
+
+@hookspec
+def canary_testbatch_setup(batch: "TestBatch") -> None:
+    """Called to perform the setup phase for a batch of test cases.
+
+    The default implementation runs ``batch.setup()``.
+
+    Args:
+        The test case batch.
+
+    """
+
+
+@hookspec(firstresult=True)
+def canary_testbatch_run(batch: "TestBatch", qsize: int, qrank: int) -> None:
+    """Called to run the test case batch
+
+    Args:
+        The test case batch.
+
+    """
+
+
+@hookspec
+def canary_testbatch_finish(batch: "TestBatch") -> None:
+    """Called to perform the finishing tasks for the test case batch
+
+    The default implementation runs ``batch.finish()``
+
+    Args:
+        The test case.
 
     """

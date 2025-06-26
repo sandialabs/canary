@@ -239,7 +239,7 @@ class Session:
                 json.dump({"index": index}, fh, indent=2)
 
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
-        """Load test cases previously dumpped by ``dump_testcases``.  Dependency resolution is also
+        """Load test cases previously dumped by ``dump_testcases``.  Dependency resolution is also
         performed
         """
         ctx = logging.context(colorize("@*{Loading} test cases"), level=logging.DEBUG)
