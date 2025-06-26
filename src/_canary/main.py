@@ -128,6 +128,7 @@ class CanaryCommand:
                 config.plugin_manager.hook.canary_addoption(parser=parser)
             args = parser.parse_args(argv)
             config.set_main_options(args)
+            config.plugin_manager.hook.canary_configure(config=config)
             rc = self.command.execute(args)
             self.returncode = rc
         except Exception:
