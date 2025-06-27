@@ -33,7 +33,8 @@ class Info(CanarySubcommand):
         import _canary.finder as finder
 
         f = finder.Finder()
-        for path in args.paths:
+        paths = args.paths or ["."]
+        for path in paths:
             f.add(path)
         f.prepare()
         files = f.discover()
