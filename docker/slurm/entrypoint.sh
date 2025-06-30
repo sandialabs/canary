@@ -124,8 +124,4 @@ echo "Done!"
 
 echo
 echo
-echo "Running tests..."
-echo
-echo
-./tests.sh
 exec "$@"
