@@ -10,7 +10,7 @@ ENV SLURM_ROOT      ${SLURM_ROOT}
 ENV SLURM_CONFDIR   ${SLURM_CONFDIR}
 
 # Dependency install
-RUN dnf install -y dnf-plugins-core && dnf config-manager --set-enabled crb && \
+RUN dnf install -y dnf-plugins-core && \
     dnf update -y && dnf install -y \
     munge \
     munge-devel \
