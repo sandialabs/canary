@@ -98,6 +98,6 @@ RUN chmod g-w /etc && \
 WORKDIR /root
 
 # Run entrypoint script for initial container setup
-COPY entrypoint.sh example.job .
+COPY entrypoint.sh example.job test.sh .
 ENTRYPOINT ["./entrypoint.sh"]
 CMD ["bash"]
