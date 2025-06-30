@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import glob
 import os
 import re
 from typing import TYPE_CHECKING
@@ -62,6 +61,21 @@ def add_filter_arguments(parser: "Parser") -> None:
         "file assets.  regex is a python regular expression, see "
         "https://docs.python.org/3/library/re.html",
     )
+    group.add_argument(
+        "--rerun-failed",
+        nargs=0,
+        const=True,
+        default=False,
+        action=RerunFailed,
+        help="Rerun failed tests [default: False]",
+    )
+
+
+class RerunFailed(argparse.Action):
+    def __call__(self, parser, args, values, option_string=None):
+        keyword_exprs = getattr(args, "keyword_exprs") or []
+        keyword_exprs.append("not success")
+        args.keyword_exprs = keyword_exprs
 
 
 def add_work_tree_arguments(parser: "Parser") -> None:
