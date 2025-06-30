@@ -14,7 +14,7 @@ jobs:
 
     steps:
       - name: Checkout code
-      - uses: actions/checkout@v4
+        uses: actions/checkout@v4
       
       - name: Build the Slurm Docker Image
         run: |
@@ -25,3 +25,9 @@ jobs:
       - name: Run tests
         run: |
           docker run --rm slurm-test /bin/bash -c "source /canary/bin/activate && canary fetch examples && canary run -b scheduler=slurm examples/"
+    
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: /root/examples/TestResults
