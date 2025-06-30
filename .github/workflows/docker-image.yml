@@ -10,7 +10,7 @@ jobs:
 
   build:
 
-    runs-on: redhat/ubi9:latest-source
+    runs-on: ubuntu:latest
 
     steps:
     - name: Checkout code
