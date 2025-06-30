@@ -18,6 +18,7 @@ from typing import Generator
 from . import config
 from . import finder
 from .error import StopExecution
+from .error import notests_exit_status
 from .generator import AbstractTestGenerator
 from .test.batch import TestBatch
 from .test.case import TestCase
@@ -435,7 +436,7 @@ class Session:
                 self.cases.append(case)
         config.plugin_manager.hook.canary_collectreport(cases=cases)
         if not self.get_ready():
-            raise StopExecution("No tests to run", 7)
+            raise StopExecution("No tests to run", notests_exit_status)
 
         self.dump_testcases()
 
@@ -491,7 +492,7 @@ class Session:
         """
         cases = self.get_ready()
         if not cases:
-            raise StopExecution("No tests to run", 7)
+            raise StopExecution("No tests to run", notests_exit_status)
         self.start = timestamp()
         rc = config.plugin_manager.hook.canary_runtests(
             session=self, cases=cases, fail_fast=fail_fast
