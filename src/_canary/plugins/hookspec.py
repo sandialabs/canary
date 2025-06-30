@@ -141,6 +141,7 @@ def canary_testsuite_mask(
     regex: str | None,
     case_specs: list[str] | None,
     start: str | None,
+    ignore_dependencies: bool,
 ) -> None:
     """Filter test cases (mask test cases that don't meet a specific criteria)
 

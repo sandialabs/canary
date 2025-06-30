@@ -134,10 +134,12 @@ def generate_test_cases(
                 logging.emit(f"  - {case.display_name}: {case.file_path}\n")
         raise ValueError("Duplicate test IDs in test suite")
 
-    if config.debug and any(
-        not case.status.satisfies(("masked", "invalid", "created")) for case in cases
-    ):
-        raise ValueError("One or more test cases is not in created state")
+    if config.debug:
+        for case in cases:
+            if case.wont_run():
+                continue
+            if not case.status == "created":
+                raise ValueError("One or more test cases is not in created state")
 
     resolve_dependencies(cases)
 

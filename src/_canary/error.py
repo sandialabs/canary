@@ -8,6 +8,7 @@ skip_exit_status = 63
 diff_exit_status = 64
 fail_exit_status = 65
 timeout_exit_status = 66
+notests_exit_status = 7
 
 
 class MyException(Exception):

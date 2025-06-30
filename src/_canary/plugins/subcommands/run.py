@@ -147,10 +147,10 @@ class Run(CanarySubcommand):
             if case_specs and all([_.startswith("/") for _ in case_specs]):
                 session = Session.casespecs_view(args.work_tree, case_specs)
             else:
-                session = Session(args.work_tree, mode=args.mode)
                 # use args here instead of config.getoption so that in-session runs can be filtered
                 # with options not used during sesssion setup
-                session.filter(
+                session = Session.filter_view(
+                    args.work_tree,
                     start=args.start,
                     keyword_exprs=args.keyword_exprs,
                     parameter_expr=args.parameter_expr,

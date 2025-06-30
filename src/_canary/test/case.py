@@ -340,6 +340,7 @@ class TestCase(AbstractTestCase):
         self._working_directory: str | None = None
         self._path: str | None = None
         self._cache: TestCaseCache | None = None
+        self._mask: str | None = None
 
         # The process running the test case
         self._start: float = -1.0
@@ -813,9 +814,9 @@ class TestCase(AbstractTestCase):
         expected = self.dep_done_criteria
         flags: list[str] = ["none"] * len(self.dependencies)
         for i, dep in enumerate(self.dependencies):
-            if dep.masked() and dep.status.value in ("created", "ready", "pending"):
+            if dep.masked() and dep.status.satisfies(("created", "ready", "pending")):
                 flags[i] = "wont_run"
-            elif dep.status.value in ("created", "ready", "pending", "running"):
+            elif dep.status.satisfies(("created", "ready", "pending", "running")):
                 # Still pending on this case
                 flags[i] = "pending"
             elif expected[i] in (None, dep.status.value, "*"):
@@ -830,29 +831,30 @@ class TestCase(AbstractTestCase):
         return not self.wont_run()
 
     def wont_run(self) -> bool:
-        return self.status.satisfies(("masked", "invalid"))
+        if self.masked():
+            return True
+        elif self.invalid():
+            return True
+        return False
 
     @property
     def mask(self) -> str | None:
-        return self.status.details if self.status == "masked" else None
+        return self._mask
 
     @mask.setter
     def mask(self, arg: str) -> None:
-        self.status.set("masked", arg)
+        self._mask = arg
 
     def masked(self) -> bool:
-        return self.status == "masked"
+        return self.mask is not None
 
     @property
     def defect(self) -> str | None:
-        return self.status.details if self.status == "invalid" else None
+        return None if self.status != "invalid" else self.status.details
 
     @defect.setter
     def defect(self, arg: str) -> None:
-        self.status.set("invalid", arg)
-
-    def defective(self) -> bool:
-        return self.status == "invalid"
+        self.status.set("invalid", details=arg)
 
     def invalid(self) -> bool:
         return self.status == "invalid"

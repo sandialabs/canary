@@ -127,7 +127,9 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
         logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
         reasons: dict[str | None, int] = {}
         for case in excluded:
-            if case.status.satisfies(("masked", "invalid")):
+            if case.mask:
+                reasons[case.mask] = reasons.get(case.mask, 0) + 1
+            elif case.status == "invalid":
                 reasons[case.status.details] = reasons.get(case.status.details, 0) + 1
         keys = sorted(reasons, key=lambda x: reasons[x])
         for key in reversed(keys):
