@@ -50,6 +50,7 @@ RUN dnf repolist --all && \
     libmount-devel \
     mpich \
     mpich-devel \
+    git \
     # Database stuff
     mariadb \
     mariadb-server \
