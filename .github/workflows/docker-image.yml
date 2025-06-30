@@ -1,0 +1,33 @@
+name: Docker CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  build:
+
+    runs-on: redhat/ubi9:latest-source
+
+    steps:
+    - name: Checkout code
+    - uses: actions/checkout@v4
+    
+    - name: Build the Slurm Docker Image
+      run: |
+        BRANCH_NAME=${GITHUB_REF#refs/heads/}
+        echo "Building for branch: $BRANCH_NAME"
+        docker build --file docker/slurm/Dockerfile --build-arg BRANCH_NAME=$BRANCH_NAME --tag slurm-test
+        
+    - name: Run tests
+      run: |
+        docker run --rm slurm-test source /canary/bin/activate && canary fetch examples && canary run -b scheduler=slurm examples/
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: /root/examples/TestResults
