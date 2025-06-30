@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM redhat/ubi9:9.5.0
+FROM --platform=$BUILDPLATFORM redhat/ubi9:9.5-source
 
 ARG SLURM_VERSION=23.02.7
 ARG SLURM_ROOT=/opt/slurm-${SLURM_VERSION}
