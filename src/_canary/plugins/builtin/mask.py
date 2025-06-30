@@ -26,6 +26,7 @@ def canary_testsuite_mask(
     regex: str | None,
     case_specs: list[str] | None,
     start: str | None,
+    ignore_dependencies: bool = True,
 ) -> None:
     """Filter test cases (mask test cases that don't meet a specific criteria)
 
@@ -109,7 +110,7 @@ def canary_testsuite_mask(
                 case.mask = colorize("parameter expression @*{%s} did not match" % parameter_expr)
                 continue
 
-        if case.dependencies:
+        if case.dependencies and not ignore_dependencies:
             flags = case.dep_condition_flags()
             if any([flag == "wont_run" for flag in flags]):
                 case.mask = "one or more dependencies not satisfied"

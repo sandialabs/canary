@@ -16,7 +16,6 @@ class Status:
     """The status of a ``canary`` test case."""
 
     members = (
-        "masked",
         "invalid",
         "created",
         "retry",
@@ -35,7 +34,6 @@ class Status:
         "timeout",
     )
     colors = {
-        "masked": "c",
         "invalid": "r",
         "created": "b",
         "retry": "r",
@@ -111,7 +109,6 @@ class Status:
             "timeout": glyphs.ballotx,
             "not_run": glyphs.ballotx,
             "unknown": glyphs.ballotx,
-            "masked": glyphs.masked,
             "invalid": glyphs.ballotx,
         }
         glyph = map[status]
@@ -137,9 +134,7 @@ class Status:
 
     @property
     def name(self) -> str:
-        if self.value == "masked":
-            return "EXCLUDED"
-        elif self.value == "invalid":
+        if self.value == "invalid":
             return "INVALID (NOOP)"
         elif self.value == "success":
             return "PASS"

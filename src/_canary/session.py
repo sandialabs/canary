@@ -150,6 +150,48 @@ class Session:
             self.save(ini=True)
 
     @classmethod
+    def filter_view(
+        cls,
+        path: str,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: set[str] | None = None,
+        regex: str | None = None,
+        start: str | None = None,
+        case_specs: list[str] | None = None,
+    ) -> "Session":
+        """Create a view of this session that only includes cases resulting from filtering
+        operations"""
+        self = cls(path, mode="a+")
+        cases = self.load_testcases()
+        config.plugin_manager.hook.canary_testsuite_mask(
+            cases=cases,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+            case_specs=case_specs,
+            start=start,
+            ignore_dependencies=True,
+        )
+        for case in static_order(cases):
+            config.plugin_manager.hook.canary_testcase_modify(case=case)
+        self.cases.clear()
+        for case in static_order(cases):
+            if case.wont_run():
+                continue
+            if case.dependencies:
+                flags = case.dep_condition_flags()
+                if any([flag == "wont_run" for flag in flags]):
+                    case.mask = "one or more dependencies not satisfied"
+            if not case.masked():
+                case.mark_as_ready()
+            if not case.status.satisfies(("pending", "ready")):
+                logging.error(f"{case}: will not run: {case.status.details}")
+            self.cases.append(case)
+        return self
+
+    @classmethod
     def casespecs_view(cls, path: str, case_specs: list[str]) -> "Session":
         """Create a view of this session that only includes cases in ``batch_id``"""
         self = cls(path, mode="a+")
@@ -423,6 +465,7 @@ class Session:
             regex=regex,
             case_specs=None,
             start=None,
+            ignore_dependencies=False,
         )
         for case in static_order(cases):
             config.plugin_manager.hook.canary_testcase_modify(case=case)
@@ -470,8 +513,9 @@ class Session:
             regex=regex,
             case_specs=case_specs,
             start=start,
+            ignore_dependencies=False,
         )
-        for case in static_order(self.cases):
+        for case in static_order(cases):
             config.plugin_manager.hook.canary_testcase_modify(case=case)
         for case in cases:
             if not case.wont_run():

@@ -212,11 +212,15 @@ class CDashXMLReporter:
         for case in cases:
             exit_value = case.returncode
             fail_reason = None
-            if case.status.satisfies(("retry", "created", "pending", "ready", "running", "masked")):
+            if case.status.satisfies(("retry", "created", "pending", "ready", "running")):
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.status == "invalid":
+            elif case.masked():
+                status = "notdone"
+                exit_code = "Not Done"
+                completion_status = "notrun"
+            elif case.invalid():
                 status = "notdone"
                 exit_code = "Initialization Error"
                 completion_status = "notrun"

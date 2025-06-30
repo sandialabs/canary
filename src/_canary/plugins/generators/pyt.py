@@ -93,6 +93,9 @@ class PYTTestGenerator(AbstractTestGenerator):
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")
         file.write(f"Keywords: {', '.join(self.keywords())}\n")
+        options = self._option_expressions()
+        if options:
+            file.write(f"Recognized options: {', '.join(options)}\n")
         if self._sources:
             file.write("Source files:\n")
             grouped: dict[str, list[tuple[str, str]]] = {}
@@ -108,23 +111,30 @@ class PYTTestGenerator(AbstractTestGenerator):
                         file.write(f" -> {dst}")
                     file.write("\n")
         cases: list[TestCase] = self.lock(on_options=on_options)
-        file.write(f"{len(cases)} test case{'' if len(cases) <= 1 else 's'}:\n")
+        file.write(
+            f"{len(cases)} test case{'' if len(cases) <= 1 else 's'} using default options:\n"
+        )
         graph.print(cases, file=file)
         return file.getvalue()
 
     def info(self) -> dict[str, Any]:
         info: dict[str, Any] = super().info()
         info["keywords"] = self.keywords(raw=True)
-        info["options"] = []
+        info["options"] = self._option_expressions()
+        return info
+
+    def _option_expressions(self) -> list[str]:
+        """Return a list of option expressions that this generator recognizes"""
+        option_expressions: set[str] = set()
         for name, attr in vars(self).items():
             if isinstance(attr, FilterNamespace):
                 if attr.when.option_expr:
-                    info.setdefault("options", []).append(attr.when.option_expr)
+                    option_expressions.add(attr.when.option_expr)
             elif isinstance(attr, list) and len(attr) and isinstance(attr[0], FilterNamespace):
                 for a in attr:
                     if a.when.option_expr:
-                        info.setdefault("options", []).append(a.when.option_expr)
-        return info
+                        option_expressions.add(a.when.option_expr)
+        return list(option_expressions)
 
     def lock(self, on_options: list[str] | None = None) -> list[TestCase]:
         try:

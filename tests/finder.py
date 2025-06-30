@@ -30,6 +30,7 @@ def mask(
         regex=regex,
         case_specs=case_specs,
         start=start,
+        ignore_dependencies=False,
     )
 
 
