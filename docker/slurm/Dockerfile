@@ -50,13 +50,8 @@ RUN dnf config-manager --set-enabled ubi-9-codeready-builder-rpms && \
     lua-devel \
     libmount \
     libmount-devel \
-    mpich \
-    mpich-devel \
     # Database stuff
     mariadb \
-    mariadb-server \
-    mariadb-pam \
-    mariadb-devel \
     && dnf clean all && rm -rf /var/cache/dnf
 
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
