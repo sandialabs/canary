@@ -10,7 +10,7 @@ ENV SLURM_ROOT      ${SLURM_ROOT}
 ENV SLURM_CONFDIR   ${SLURM_CONFDIR}
 
 # Dependency install
-RUN dnf repolist --all
+RUN dnf repolist --all && \
     dnf config-manager --set-enabled ubi-9-codeready-builder-rpms && \
     dnf config-manager --set-enabled ubi-9-baseos-rpms && \
     dnf config-manager --set-enabled ubi-9-appstream-rpms && \
