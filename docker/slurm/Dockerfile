@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM cee-gitlab.sandia.gov:4567/innersource/docker/rocky9:latest
+FROM --platform=$BUILDPLATFORM redhat/ubi9:latest-source
 
 ARG SLURM_VERSION=23.02.7
 ARG SLURM_ROOT=/opt/slurm-${SLURM_VERSION}
