@@ -18,7 +18,7 @@ jobs:
           echo "Building for branch: $BRANCH_NAME"
           docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file docker/standalone/Dockerfile --tag unit-test ./docker/standalone
       - name: Run unit tests
-        run: docker run --rm unit-test /bin/bash -c "./test.sh"
+        run: docker run --rm unit-test ./test.sh
 
   slurm:
     runs-on: ubuntu-latest
