@@ -12,7 +12,7 @@ ENV SLURM_CONFDIR   ${SLURM_CONFDIR}
 # Dependency install
 RUN dnf repolist --all && \
     dnf install -y dnf-plugins-core && dnf config-manager --set-enabled crb && \
-    dnf update -y && dnf install -y --best --skip-broken \
+    dnf update -y && dnf install -y --best \
     munge \
     munge-devel \
     numactl \
