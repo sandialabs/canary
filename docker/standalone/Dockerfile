@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM cee-gitlab.sandia.gov:4567/innersource/docker/ubi9:latest
+FROM --platform=$BUILDPLATFORM rockylinux:9.3
 
 ARG BRANCH_NAME
 
