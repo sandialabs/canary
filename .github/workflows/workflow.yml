@@ -10,37 +10,26 @@ jobs:
 
   unit:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10"]
-
     steps:
       - uses: actions/checkout@v4
-      - name: Set up dependencies
-        run: apt-get update && apt-get install gcc cmake mpich
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      # You can test your matrix by printing the current Python version
-      - name: Display Python version
-        run: python -c "import sys; print(sys.version)"
-      - name: Pytest
-        run: | 
-          pip install .[dev]
-          pytest tests
-  
+      - name: Build canary image
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          echo "Building for branch: $BRANCH_NAME"
+          docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file docker/standalone/Dockerfile --tag unit-test ./docker/standalone
+      - name: Run unit tests
+        run: docker run --rm unit-test /bin/bash -c "./test.sh"
+
   slurm:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Build the Slurm Docker image
         run: |
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "Building for branch: $BRANCH_NAME"
           docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file docker/slurm/Dockerfile --tag slurm-test ./docker/slurm
-          
       - name: Run Slurm tests
         run: |
           docker run --rm slurm-test /bin/bash -c "./test.sh"
-
