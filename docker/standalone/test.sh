@@ -1,7 +1,5 @@
 source /canary/bin/activate
-cd /canary/src/
+cd /canary/src/canary-wm/
 
-pwd
 pytest tests
 
-echo "Tests ran"
