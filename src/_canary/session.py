@@ -32,6 +32,7 @@ from .util.filesystem import find_work_tree
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.graph import TopologicalSorter
+from .util.graph import find_reachable_nodes
 from .util.graph import static_order
 from .util.procutils import cleanup_children
 from .util.rprobe import cpu_count
@@ -294,8 +295,7 @@ class Session:
         if ids:
             # we must not only load the requested IDs, but also their dependencies
             for id in ids:
-                ids_to_load.add(id)
-                ids_to_load.update(index[id])
+                ids_to_load.update(find_reachable_nodes(index, id))
         ts: TopologicalSorter = TopologicalSorter()
         cases: dict[str, TestCase | TestMultiCase] = {}
         for id, deps in index.items():

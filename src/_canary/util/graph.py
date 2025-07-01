@@ -87,3 +87,47 @@ def print(cases: list["TestCase"], file: str | Path | TextIO = sys.stdout) -> No
         print_case(case, file=file, end=i == len(cases) - 1)
     if fown:
         file.close()
+
+
+def find_reachable_nodes(graph: dict[str, list[str]], id: str) -> list[str]:
+    """Retrieve all direct and indirect dependencies for a given entity ID from a dependency graph.
+
+    This function performs a depth-first search (DFS) on the provided dependency graph,
+    starting from the specified entity ID. It returns a list of all unique entity IDs that
+    are either the specified entity or are dependencies of it, including indirect dependencies.
+
+    Args:
+        graph: A dictionary where keys are test case IDs and values are lists of
+           dependency IDs.
+           Example: {'A': ['B', 'C'], 'B': ['D'], 'C': ['D', 'E'], 'D': [], 'E': ['F'], 'F': []}
+        id: The ID of the test case for which to retrieve dependencies.
+
+    Returns:
+        A list of IDs representing the specified entity and all of its direct and
+          indirect dependencies. The order of IDs in the list is not guaranteed.
+
+    Example:
+        >>> graph = {
+        ...     'A': ['B', 'C'],
+        ...     'B': ['D'],
+        ...     'C': ['D', 'E'],
+        ...     'D': [],
+        ...     'E': ['F'],
+        ...     'F': []
+        ... }
+        >>> find_reachable_nodes(graph, 'A')
+        ['A', 'B', 'D', 'C', 'E', 'F']
+    """
+    dependencies = set()
+
+    def dfs(current_id):
+        # If the current ID has already been visited, return
+        if current_id in dependencies:
+            return
+        dependencies.add(current_id)
+        # Recursively visit all dependencies
+        for dependency in graph.get(current_id, []):
+            dfs(dependency)
+
+    dfs(id)
+    return sorted(dependencies)
