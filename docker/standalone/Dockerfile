@@ -21,4 +21,4 @@ RUN python3 -m venv canary && \
     python3 -m pip install -e git+https://git@github.com/sandialabs/canary@$BRANCH_NAME#egg=canary-wm[dev]
 
 COPY test.sh .
-ENTRYPOINT ["/bin/bash", "-c", "exec /bin/bash"]
+ENTRYPOINT ["/bin/bash", "-c"]
