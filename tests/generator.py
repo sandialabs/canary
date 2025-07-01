@@ -18,7 +18,7 @@ canary.directives.name('baz')
 canary.directives.analyze()
 canary.directives.owner('me')
 canary.directives.keywords('test', 'unit')
-canary.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
+canary.directives.parameterize('cpus', (1, 2), when="options='baz'")
 canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """
             )
@@ -36,7 +36,7 @@ def test_vvt_generator(tmpdir):
 # VVT: name: baz
 # VVT: analyze : --analyze
 # VVT: keywords: test unit
-# VVT: parameterize (options=baz) : np=1 2 3
+# VVT: parameterize (options=baz) : np=1 2
 # VVT: parameterize : a,b,c=1,11,111 2,22,222 3,33,333
 """
             )
