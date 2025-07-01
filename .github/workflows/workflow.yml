@@ -16,6 +16,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - name: Set up dependencies
+        run: apt-get update && apt-get install gcc cmake mpich
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
