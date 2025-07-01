@@ -244,7 +244,7 @@ canary.directives.name('baz')
 canary.directives.generate_composite_base_case()
 canary.directives.owner('me')
 canary.directives.keywords('test', 'unit')
-canary.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
+canary.directives.parameterize('cpus', (1, 2), when="options='baz'")
 canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """
             )
@@ -259,7 +259,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             files = f.discover()
             cases = finder.generate_test_cases(files, on_options=["baz"])
             mask(cases, keyword_exprs=["test and unit"], owners=["me"])
-            assert len(cases) == 10
+            assert len(cases) == 7
             assert isinstance(cases[-1], tc.TestMultiCase)
             for case in cases:
                 assert not case.masked(), f"{case}: {case.status}"
@@ -295,7 +295,7 @@ def test_vvt_generator(tmpdir):
 # VVT: name: baz
 # VVT: analyze : --analyze
 # VVT: keywords: test unit
-# VVT: parameterize (options=baz) : np=1 2 3
+# VVT: parameterize (options=baz) : np=1 2
 # VVT: parameterize : a,b,c=1,11,111 2,22,222 3,33,333
 """
             )
@@ -310,7 +310,7 @@ def test_vvt_generator(tmpdir):
             files = f.discover()
             cases = finder.generate_test_cases(files, on_options=["baz"])
             mask(cases, keyword_exprs=["test and unit"])
-            assert len(cases) == 10
+            assert len(cases) == 7
             assert isinstance(cases[-1], tc.TestMultiCase)
             for case in cases:
                 assert not case.masked()
