@@ -60,12 +60,6 @@ RUN dnf repolist --all && \
 
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
 
-# Canary install
-RUN python3 -m venv canary && \
-    . canary/bin/activate && \
-    python -m pip install --upgrade pip==25.1.1 && \
-    python3 -m pip install "canary-wm@git+https://git@github.com/sandialabs/canary@$BRANCH_NAME"
-
 # Slurm install
 RUN useradd -M slurm
 
@@ -94,6 +88,12 @@ RUN chmod g-w /etc && \
     chmod +t /etc && \
     chown slurm:slurm /opt/slurm-23.02.7/etc/cgroup.conf && \
     chown -R mysql:mysql /var/lib/mysql
+
+# Canary install
+RUN python3 -m venv canary && \
+    . canary/bin/activate && \
+    python -m pip install --upgrade pip==25.1.1 && \
+    python3 -m pip install "canary-wm@git+https://git@github.com/sandialabs/canary@$BRANCH_NAME"
 
 WORKDIR /root
 
