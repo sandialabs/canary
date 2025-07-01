@@ -7,21 +7,37 @@ on:
     branches: [ "main" ]
 
 jobs:
-  test:
 
+  unit:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10"]
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Build the Slurm Docker Image
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # You can test your matrix by printing the current Python version
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Pytest
+        run: | 
+          pip install .[dev]
+          pytest tests
+  
+  slurm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build the Slurm Docker image
         run: |
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "Building for branch: $BRANCH_NAME"
           docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file docker/slurm/Dockerfile --tag slurm-test ./docker/slurm
           
-      - name: Run tests
+      - name: Run Slurm tests
         run: |
           docker run --rm slurm-test /bin/bash -c "./test.sh"
 
