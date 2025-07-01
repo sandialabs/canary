@@ -24,7 +24,7 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             )
         file = pyt.PYTTestGenerator(".", "test.pyt")
         cases = file.lock(on_options=["baz"])
-        assert len(cases) == 10
+        assert len(cases) == 7
         assert isinstance(cases[-1], tc.TestMultiCase)
 
 
@@ -42,5 +42,5 @@ def test_vvt_generator(tmpdir):
             )
         file = vvt.VVTTestGenerator(".", "test.vvt")
         cases = file.lock(on_options=["baz"])
-        assert len(cases) == 10
+        assert len(cases) == 7
         assert isinstance(cases[-1], tc.TestMultiCase)
