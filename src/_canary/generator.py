@@ -59,6 +59,9 @@ class AbstractTestGenerator(ABC):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = os.path.splitext(os.path.basename(self.path))[0]
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(file={self.file!r})"
+
     def stop_recursion(self) -> bool:
         return False
 
@@ -71,9 +74,9 @@ class AbstractTestGenerator(ABC):
     def always_matches(cls, path: str) -> bool:
         return cls.matches(path)
 
-    @abstractmethod
     def describe(self, on_options: list[str] | None = None) -> str:
         """Return a description of the test"""
+        return repr(self)
 
     def info(self) -> dict[str, Any]:
         info: dict[str, Any] = {}

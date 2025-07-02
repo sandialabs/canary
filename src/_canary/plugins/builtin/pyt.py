@@ -85,9 +85,6 @@ class PYTTestGenerator(AbstractTestGenerator):
         self._xstatus: FilterNamespace | None = None
         self.load()
 
-    def __repr__(self) -> str:
-        return self.file
-
     def describe(self, on_options: list[str] | None = None) -> str:
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
