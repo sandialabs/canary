@@ -9,7 +9,7 @@ from typing import Any
 from . import config
 from .test.atc import AbstractTestCase
 from .test.batch import TestBatch
-from .test.case import TestCase
+from .testcase import TestCase
 
 
 class AbstractTestRunner:

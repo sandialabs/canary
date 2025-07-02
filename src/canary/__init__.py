@@ -24,10 +24,10 @@ from _canary.plugins.hookspec import hookimpl
 from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
 from _canary.session import Session
-from _canary.test.case import TestCase
 from _canary.test.instance import TestInstance
 from _canary.test.instance import TestMultiInstance
 from _canary.test.instance import load as load_instance
+from _canary.testcase import TestCase
 from _canary.util import _difflib as difflib
 from _canary.util import filesystem
 from _canary.util import logging

@@ -29,30 +29,30 @@ from typing import Type
 
 import psutil
 
-from .. import config
-from ..error import diff_exit_status
-from ..error import skip_exit_status
-from ..error import timeout_exit_status
-from ..paramset import ParameterSet
-from ..status import Status
-from ..third_party.color import colorize
-from ..util import filesystem as fs
-from ..util import logging
-from ..util.compression import compress_str
-from ..util.executable import Executable
-from ..util.filesystem import copyfile
-from ..util.filesystem import max_name_length
-from ..util.filesystem import mkdirp
-from ..util.misc import boolean
-from ..util.misc import digits
-from ..util.module import load as load_module
-from ..util.procutils import get_process_metrics
-from ..util.shell import source_rcfile
-from ..util.string import stringify
-from ..util.time import hhmmss
-from ..util.time import timestamp
-from ..when import match_any
-from .atc import AbstractTestCase
+from . import config
+from .error import diff_exit_status
+from .error import skip_exit_status
+from .error import timeout_exit_status
+from .paramset import ParameterSet
+from .status import Status
+from .test.atc import AbstractTestCase
+from .third_party.color import colorize
+from .util import filesystem as fs
+from .util import logging
+from .util.compression import compress_str
+from .util.executable import Executable
+from .util.filesystem import copyfile
+from .util.filesystem import max_name_length
+from .util.filesystem import mkdirp
+from .util.misc import boolean
+from .util.misc import digits
+from .util.module import load as load_module
+from .util.procutils import get_process_metrics
+from .util.shell import source_rcfile
+from .util.string import stringify
+from .util.time import hhmmss
+from .util.time import timestamp
+from .when import match_any
 
 stats_version_info = (3, 0)
 

@@ -8,7 +8,7 @@ from typing import Any
 from typing import Generator
 
 from ... import config
-from ...test.case import TestCase
+from ...testcase import TestCase
 from ...util.filesystem import working_dir
 from ..hookspec import hookimpl
 

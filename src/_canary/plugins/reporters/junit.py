@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from typing import Any
 
-from ...test.case import TestCase
+from ...testcase import TestCase
 from ...util.filesystem import mkdirp
 from ..hookspec import hookimpl
 from ..types import CanaryReporter

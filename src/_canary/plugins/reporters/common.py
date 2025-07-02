@@ -6,7 +6,7 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
-from ...test.case import TestCase
+from ...testcase import TestCase
 from ...util import logging
 
 if TYPE_CHECKING:

@@ -76,6 +76,7 @@ class Find(CanarySubcommand):
             case_specs=None,
             stage=None,
             start=None,
+            ignore_dependencies=False,
         )
         for case in static_order(cases):
             config.plugin_manager.hook.canary_testcase_modify(case=case)

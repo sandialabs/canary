@@ -25,8 +25,8 @@ from typing import Type
 from ... import config
 from ...config.argparsing import Parser
 from ...enums import list_parameter_space
-from ...test.case import TestCase
-from ...test.case import TestMultiCase
+from ...testcase import TestCase
+from ...testcase import TestMultiCase
 from ...third_party.color import colorize
 from ...util import logging
 from ...util import scalar

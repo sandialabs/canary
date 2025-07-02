@@ -20,6 +20,7 @@ import hpc_connect
 
 from .. import config
 from ..status import Status
+from ..testcase import TestCase
 from ..third_party.color import colorize
 from ..util import logging
 from ..util.filesystem import force_remove
@@ -30,7 +31,6 @@ from ..util.misc import digits
 from ..util.string import pluralize
 from ..util.time import hhmmss
 from .atc import AbstractTestCase
-from .case import TestCase
 
 
 class TestBatch(AbstractTestCase):

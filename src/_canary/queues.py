@@ -13,7 +13,7 @@ from typing import Callable
 from . import config
 from .error import FailFast
 from .test.batch import TestBatch
-from .test.case import TestCase
+from .testcase import TestCase
 from .third_party import color
 from .util import logging
 from .util.progress import progress

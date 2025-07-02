@@ -4,7 +4,7 @@
 
 import _canary.plugins.generators.pyt as pyt
 import _canary.plugins.generators.vvtest as vvt
-import _canary.test.case as tc
+import _canary.testcase as tc
 from _canary.util.filesystem import working_dir
 
 

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from ..generator import AbstractTestGenerator
     from ..session import Session
     from ..test.batch import TestBatch
-    from ..test.case import TestCase
+    from ..testcase import TestCase
 
 project_name = "canary"
 hookspec = pluggy.HookspecMarker(project_name)

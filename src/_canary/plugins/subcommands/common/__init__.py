@@ -25,7 +25,7 @@ from .pathspec import setdefault
 
 if TYPE_CHECKING:
     from ....config.argparsing import Parser
-    from ....test.case import TestCase
+    from ....testcase import TestCase
 
 
 def add_filter_arguments(parser: "Parser") -> None:

@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 from .... import config
-from ....test.case import TestCase
-from ....test.case import factory as testcase_factory
+from ....testcase import TestCase
+from ....testcase import factory as testcase_factory
 from ....util import cdash
 from ....util import logging
 from ....util.filesystem import mkdirp

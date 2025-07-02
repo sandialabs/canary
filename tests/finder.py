@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import _canary.config as config
-import _canary.test.case as tc
+import _canary.testcase as tc
 import canary
 from _canary import finder
 from _canary.util.filesystem import mkdirp

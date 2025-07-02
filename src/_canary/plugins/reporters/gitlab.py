@@ -8,7 +8,7 @@ import re
 from typing import TYPE_CHECKING
 from typing import Any
 
-from ...test.case import TestCase
+from ...testcase import TestCase
 from ...util import gitlab
 from ...util import logging
 from ..hookspec import hookimpl

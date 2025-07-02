@@ -10,7 +10,7 @@ from typing import TextIO
 
 from . import config
 from .generator import AbstractTestGenerator
-from .test.case import TestCase
+from .testcase import TestCase
 from .third_party.colify import colified
 from .third_party.color import colorize
 from .util import graph

@@ -14,7 +14,7 @@ from ...util import logging
 from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
-    from ...test.case import TestCase
+    from ...testcase import TestCase
 
 
 @hookimpl(tryfirst=True)
@@ -26,7 +26,7 @@ def canary_testsuite_mask(
     regex: str | None,
     case_specs: list[str] | None,
     start: str | None,
-    ignore_dependencies: bool = True,
+    ignore_dependencies: bool,
 ) -> None:
     """Filter test cases (mask test cases that don't meet a specific criteria)
 

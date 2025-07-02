@@ -9,7 +9,7 @@ from typing import Sequence
 
 from .. import config
 from ..test.batch import TestBatch
-from ..test.case import TestCase
+from ..testcase import TestCase
 from ..util import logging
 from ..util.collections import defaultlist
 
