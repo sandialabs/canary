@@ -374,7 +374,7 @@ def depends_on(
        canary.directives.depends_on("baz")
 
        def test():
-           self = canary.test.instance
+           self = canary.testinstance
            baz = self.dependencies[0]
            print(f"baz's results can be found in {baz.working directory}")
 
@@ -403,7 +403,7 @@ def depends_on(
        canary.directives.depends_on("baz", result="*")
 
        def test():
-           self = canary.test.instance
+           self = canary.testinstance
            baz = self.dependencies[0]
            print(f"baz's results can be found in {baz.working directory}")
 
@@ -432,7 +432,7 @@ def depends_on(
        canary.directives.depends_on("baz.cpus=1")
 
        def test():
-           self = canary.test.instance
+           self = canary.testinstance
            baz = self.dependencies[0]
            print(f"baz's results can be found in {baz.working directory}")
 
@@ -561,7 +561,7 @@ def generate_composite_base_case(
        # VVT: parameterize : a,b = 1,2 3,4
 
     will run an analysis job after jobs ``[a=1,b=3]`` and ``[a=2,b=4]`` have run
-    to completion.  The ``canary.test.instance`` and ``vvtest_util`` modules
+    to completion.  The ``canary.testinstance`` and ``vvtest_util`` modules
     will contain information regarding the previously run jobs so that a
     collective analysis can be performed.
 
