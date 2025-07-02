@@ -20,8 +20,8 @@ RUN python3 -m venv canary && \
     python3 -m pip install --upgrade pip==25.1.1 && \
     python3 -m pip install -e git+https://git@github.com/alexknigge/canary@$BRANCH_NAME#egg=canary-wm[dev]
 
-RUN git clone --depth=2 --branch=releases/v0.23 https://github.com/spack/spack.git ~/spack && \
-    . spack/share/spack/setup-env.sh
+RUN git clone --depth=2 --branch=releases/v0.23 https://github.com/spack/spack.git /spack && \
+    . /spack/share/spack/setup-env.sh
 
 RUN spack install flux-sched    
 
