@@ -4,7 +4,7 @@
 
 import sys
 
-import _canary.plugins.generators.vvtest as vvtest
+import _canary.plugins.builtin.vvtest as vvtest
 import canary
 from _canary.enums import list_parameter_space
 

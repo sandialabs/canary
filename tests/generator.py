@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
-import _canary.plugins.generators.pyt as pyt
-import _canary.plugins.generators.vvtest as vvt
+import _canary.plugins.builtin.pyt as pyt
+import _canary.plugins.builtin.vvtest as vvt
 import _canary.testcase as tc
 from _canary.util.filesystem import working_dir
 

@@ -11,7 +11,6 @@ from typing import Type
 import pluggy
 
 from . import builtin
-from . import generators
 from . import hookspec
 from . import reporters
 from . import subcommands
@@ -31,12 +30,11 @@ class CanaryPluginManager(pluggy.PluginManager):
         self = cls(hookspec.project_name)
         self.add_hookspecs(hookspec)
         for subcommand in subcommands.plugins:
-            self.register(subcommand)
-        for generator in generators.plugins:
-            name = generator.__name__.split(".")[-1]
-            self.register(generator, name=name)
+            name = subcommand.__name__.split(".")[-1].lower()
+            self.register(subcommand, name=name)
         for p in builtin.plugins:
-            self.register(p)
+            name = p.__name__.split(".")[-1].lower()
+            self.register(p, name=name)
         for p in reporters.plugins:
             self.register(p)
         self.load_setuptools_entrypoints(hookspec.project_name)
