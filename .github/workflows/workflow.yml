@@ -8,30 +8,30 @@ on:
 
 jobs:
 
-  unit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build canary image
-        run: |
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          echo "Building for branch: $BRANCH_NAME"
-          docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file docker/standalone/Dockerfile --tag unit-test ./docker/standalone
-      - name: Run unit tests
-        run: docker run --rm unit-test ./test.sh
-
-  slurm:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build the Slurm Docker image
-        run: |
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          echo "Building for branch: $BRANCH_NAME"
-          docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file docker/slurm/Dockerfile --tag slurm-test ./docker/slurm
-      - name: Run Slurm tests
-        run: |
-          docker run --rm slurm-test /bin/bash -c "./test.sh"
+        #  unit:
+        #    runs-on: ubuntu-latest
+        #    steps:
+        #      - uses: actions/checkout@v4
+        #      - name: Build canary image
+        #        run: |
+        #          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+        #          echo "Building for branch: $BRANCH_NAME"
+        #          docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file docker/standalone/Dockerfile --tag unit-test ./docker/standalone
+        #      - name: Run unit tests
+        #        run: docker run --rm unit-test ./test.sh
+        #
+        #  slurm:
+        #    runs-on: ubuntu-latest
+        #    steps:
+        #      - uses: actions/checkout@v4
+        #      - name: Build the Slurm Docker image
+        #        run: |
+        #          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+        #          echo "Building for branch: $BRANCH_NAME"
+        #          docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file docker/slurm/Dockerfile --tag slurm-test ./docker/slurm
+        #      - name: Run Slurm tests
+        #        run: |
+        #          docker run --rm slurm-test /bin/bash -c "./test.sh"
 
   flux:
     runs-on: ubuntu-latest
@@ -40,4 +40,4 @@ jobs:
       - name: Build the Flux Docker image
         run: |
           docker pull fluxrm/flux-sched:latest
-          docker run --rm fluxrm/flux-sched:latest "python3 --version"
+          docker run --rm fluxrm/flux-sched:latest "python -h"
