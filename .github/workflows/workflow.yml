@@ -40,4 +40,4 @@ jobs:
       - name: Build the Flux Docker image
         run: |
           docker pull fluxrm/flux-sched:latest
-          docker run --rm fluxrm/flux-sched:latest "python -h"
+          docker run --rm fluxrm/flux-sched:latest docker/flux/test.sh
