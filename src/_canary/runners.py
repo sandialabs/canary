@@ -7,7 +7,7 @@ import os
 from typing import Any
 
 from . import config
-from .test.atc import AbstractTestCase
+from .atc import AbstractTestCase
 from .test.batch import TestBatch
 from .testcase import TestCase
 

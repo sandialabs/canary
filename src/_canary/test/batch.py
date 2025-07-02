@@ -19,6 +19,7 @@ from typing import Sequence
 import hpc_connect
 
 from .. import config
+from ..atc import AbstractTestCase
 from ..status import Status
 from ..testcase import TestCase
 from ..third_party.color import colorize
@@ -30,7 +31,6 @@ from ..util.hash import hashit
 from ..util.misc import digits
 from ..util.string import pluralize
 from ..util.time import hhmmss
-from .atc import AbstractTestCase
 
 
 class TestBatch(AbstractTestCase):

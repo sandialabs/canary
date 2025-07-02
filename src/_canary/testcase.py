@@ -30,12 +30,12 @@ from typing import Type
 import psutil
 
 from . import config
+from .atc import AbstractTestCase
 from .error import diff_exit_status
 from .error import skip_exit_status
 from .error import timeout_exit_status
 from .paramset import ParameterSet
 from .status import Status
-from .test.atc import AbstractTestCase
 from .third_party.color import colorize
 from .util import filesystem as fs
 from .util import logging
