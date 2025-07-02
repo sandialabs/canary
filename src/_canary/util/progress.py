@@ -5,7 +5,7 @@
 import statistics
 
 from ..status import Status
-from ..test.case import TestCase
+from ..testcase import TestCase
 from . import logging
 
 

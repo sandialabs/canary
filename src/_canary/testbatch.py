@@ -18,19 +18,19 @@ from typing import Sequence
 
 import hpc_connect
 
-from .. import config
-from ..status import Status
-from ..third_party.color import colorize
-from ..util import logging
-from ..util.filesystem import force_remove
-from ..util.filesystem import mkdirp
-from ..util.filesystem import touchp
-from ..util.hash import hashit
-from ..util.misc import digits
-from ..util.string import pluralize
-from ..util.time import hhmmss
+from . import config
 from .atc import AbstractTestCase
-from .case import TestCase
+from .status import Status
+from .testcase import TestCase
+from .third_party.color import colorize
+from .util import logging
+from .util.filesystem import force_remove
+from .util.filesystem import mkdirp
+from .util.filesystem import touchp
+from .util.hash import hashit
+from .util.misc import digits
+from .util.string import pluralize
+from .util.time import hhmmss
 
 
 class TestBatch(AbstractTestCase):
@@ -85,7 +85,7 @@ class TestBatch(AbstractTestCase):
 
     @property
     def runtime(self) -> float:
-        from ..util import partitioning
+        from .util import partitioning
 
         if self._runtime is None:
             if len(self.cases) == 1:

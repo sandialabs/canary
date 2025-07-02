@@ -20,10 +20,10 @@ from . import finder
 from .error import StopExecution
 from .error import notests_exit_status
 from .generator import AbstractTestGenerator
-from .test.batch import TestBatch
-from .test.case import TestCase
-from .test.case import TestMultiCase
-from .test.case import from_state as testcase_from_state
+from .testbatch import TestBatch
+from .testcase import TestCase
+from .testcase import TestMultiCase
+from .testcase import from_state as testcase_from_state
 from .third_party.color import colorize
 from .third_party.lock import Lock
 from .third_party.lock import LockError

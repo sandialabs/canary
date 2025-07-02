@@ -19,9 +19,9 @@ from ... import when as m_when
 from ...error import diff_exit_status
 from ...generator import AbstractTestGenerator
 from ...paramset import ParameterSet
-from ...test.case import DependencyPatterns
-from ...test.case import TestCase
-from ...test.case import TestMultiCase
+from ...testcase import DependencyPatterns
+from ...testcase import TestCase
+from ...testcase import TestMultiCase
 from ...third_party.color import colorize
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph

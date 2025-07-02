@@ -8,8 +8,8 @@ import pytest
 
 import _canary.config.schemas as schemas
 import canary
+from _canary.atc import AbstractTestCase
 from _canary.status import Status
-from _canary.test.atc import AbstractTestCase
 from _canary.third_party.schema import SchemaError
 
 

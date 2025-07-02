@@ -7,9 +7,9 @@ import os
 from typing import Any
 
 from . import config
-from .test.atc import AbstractTestCase
-from .test.batch import TestBatch
-from .test.case import TestCase
+from .atc import AbstractTestCase
+from .testbatch import TestBatch
+from .testcase import TestCase
 
 
 class AbstractTestRunner:

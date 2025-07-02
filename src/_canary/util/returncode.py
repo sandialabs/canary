@@ -4,7 +4,7 @@
 
 from typing import Sequence
 
-from ..test.case import TestCase
+from ..testcase import TestCase
 from . import logging
 
 

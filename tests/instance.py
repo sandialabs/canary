@@ -4,7 +4,7 @@
 
 import os
 
-import _canary.test.instance as inst
+import _canary.testinstance as inst
 import canary
 from _canary import finder
 from _canary.util.filesystem import mkdirp

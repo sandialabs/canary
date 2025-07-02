@@ -18,8 +18,8 @@ from typing import Type
 
 from ... import config
 from ...generator import AbstractTestGenerator
-from ...test.case import DependencyPatterns
-from ...test.case import TestCase
+from ...testcase import DependencyPatterns
+from ...testcase import TestCase
 from ...util import graph
 from ...util import logging
 from ...util.filesystem import force_remove

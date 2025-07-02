@@ -20,8 +20,8 @@ from ..hookspec import hookimpl
 if TYPE_CHECKING:
     from ...config import Config
     from ...config.argparsing import Parser
-    from ...test.batch import TestBatch
-    from ...test.case import TestCase
+    from ...testbatch import TestBatch
+    from ...testcase import TestCase
 
 
 @hookimpl(trylast=True)

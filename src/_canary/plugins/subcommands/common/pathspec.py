@@ -9,7 +9,7 @@ import os
 from ....config.argparsing import Parser
 from ....config.schemas import testpaths_schema
 from ....finder import is_test_file
-from ....test.case import TestCase
+from ....testcase import TestCase
 from ....third_party.color import colorize
 from ....util.filesystem import find_work_tree
 from ....util.filesystem import working_dir

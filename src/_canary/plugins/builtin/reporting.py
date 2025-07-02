@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from ... import config
 from ...status import Status
-from ...test.case import TestCase
+from ...testcase import TestCase
 from ...third_party.color import ccenter
 from ...third_party.color import colorize
 from ...util import glyphs
@@ -23,7 +23,7 @@ from ..hookspec import hookimpl
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
     from ...session import Session
-    from ...test.case import TestCase
+    from ...testcase import TestCase
 
 
 @hookimpl(specname="canary_runtests_summary", tryfirst=True)

@@ -10,7 +10,7 @@ from typing import Sequence
 from typing import TextIO
 
 if TYPE_CHECKING:
-    from ..test.case import TestCase
+    from ..testcase import TestCase
 
 builtin_print = print
 

@@ -10,10 +10,10 @@ from typing import Any
 from typing import Generator
 from typing import Type
 
-from ..status import Status
-from .case import TestCase
-from .case import TestMultiCase
-from .case import from_lockfile as testcase_from_lockfile
+from .status import Status
+from .testcase import TestCase
+from .testcase import TestMultiCase
+from .testcase import from_lockfile as testcase_from_lockfile
 
 key_type = tuple[str, ...] | str
 index_type = tuple[int, ...] | int
