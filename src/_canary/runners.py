@@ -39,7 +39,7 @@ class TestCaseRunner(AbstractTestRunner):
         try:
             config.plugin_manager.hook.canary_testcase_setup(case=obj)
             config.plugin_manager.hook.canary_testcase_run(
-                case=obj, qsize=kwargs.get("qsize", 1), qrank=kwargs.get("qrank", 1)
+                case=obj, qsize=kwargs.get("qsize", 1), qrank=kwargs.get("qrank", 0)
             )
         finally:
             config.plugin_manager.hook.canary_testcase_finish(case=obj)
@@ -64,7 +64,7 @@ class BatchRunner(AbstractTestRunner):
         try:
             config.plugin_manager.hook.canary_testbatch_setup(batch=obj)
             config.plugin_manager.hook.canary_testbatch_run(
-                batch=obj, qsize=kwargs.get("qsize", 1), qrank=kwargs.get("qrank", 1)
+                batch=obj, qsize=kwargs.get("qsize", 1), qrank=kwargs.get("qrank", 0)
             )
         finally:
             config.plugin_manager.hook.canary_testbatch_finish(batch=obj)

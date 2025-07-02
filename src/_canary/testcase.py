@@ -1657,7 +1657,7 @@ class TestCase(AbstractTestCase):
                 setattr(self, name, value)
         return
 
-    def run(self, qsize: int = 1, qrank: int = 1) -> None:
+    def run(self, qsize: int = 1, qrank: int = 0) -> None:
         """Run the test case"""
 
         def cancel(sig, frame):
