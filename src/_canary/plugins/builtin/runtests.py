@@ -27,7 +27,7 @@ from ...queues import BatchResourceQueue
 from ...queues import Busy as BusyQueue
 from ...queues import Empty as EmptyQueue
 from ...queues import ResourceQueue
-from ...test.batch import TestBatch
+from ...testbatch import TestBatch
 from ...testcase import TestCase
 from ...third_party.color import colorize
 from ...util import keyboard

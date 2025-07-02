@@ -42,7 +42,7 @@ class Log(CanarySubcommand):
             return case.stdout_file
 
     def execute(self, args: argparse.Namespace) -> int:
-        from ...test.batch import TestBatch
+        from ...testbatch import TestBatch
         from ...testcase import from_id as testcase_from_id
 
         file: str

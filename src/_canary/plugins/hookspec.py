@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from ..config.config import Config
     from ..generator import AbstractTestGenerator
     from ..session import Session
-    from ..test.batch import TestBatch
+    from ..testbatch import TestBatch
     from ..testcase import TestCase
 
 project_name = "canary"

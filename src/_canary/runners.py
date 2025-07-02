@@ -8,7 +8,7 @@ from typing import Any
 
 from . import config
 from .atc import AbstractTestCase
-from .test.batch import TestBatch
+from .testbatch import TestBatch
 from .testcase import TestCase
 
 

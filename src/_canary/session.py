@@ -20,7 +20,7 @@ from . import finder
 from .error import StopExecution
 from .error import notests_exit_status
 from .generator import AbstractTestGenerator
-from .test.batch import TestBatch
+from .testbatch import TestBatch
 from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_state as testcase_from_state

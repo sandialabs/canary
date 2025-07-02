@@ -8,7 +8,7 @@ from graphlib import TopologicalSorter
 from typing import Sequence
 
 from .. import config
-from ..test.batch import TestBatch
+from ..testbatch import TestBatch
 from ..testcase import TestCase
 from ..util import logging
 from ..util.collections import defaultlist
