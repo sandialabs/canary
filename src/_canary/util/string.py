@@ -4,6 +4,7 @@
 
 import io
 import tokenize
+from typing import Any
 from typing import Generator
 
 
@@ -72,3 +73,16 @@ def pluralize(word: str, n: int):
     elif word.endswith("y"):
         return f"{word[:-1]}ies"
     return f"{word}s"
+
+
+def stringify(arg: Any, float_fmt: str | None = None) -> str:
+    """Turn the thing into a string"""
+    if hasattr(arg, "string"):
+        return arg.string
+    if isinstance(arg, float) and float_fmt is not None:
+        return float_fmt % arg
+    elif isinstance(arg, float):
+        return f"{arg:g}"
+    elif isinstance(arg, int):
+        return f"{arg:d}"
+    return str(arg)

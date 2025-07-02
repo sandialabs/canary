@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import dataclasses
-import datetime
 import fnmatch
 import hashlib
 import io
@@ -13,18 +12,27 @@ import math
 import os
 import re
 import shlex
+import signal
+import subprocess
 import sys
 import time
+import warnings
 from contextlib import contextmanager
 from copy import deepcopy
-from functools import lru_cache
+from datetime import datetime
 from types import SimpleNamespace
 from typing import IO
 from typing import Any
+from typing import Callable
 from typing import Generator
 from typing import Type
 
+import psutil
+
 from .. import config
+from ..error import diff_exit_status
+from ..error import skip_exit_status
+from ..error import timeout_exit_status
 from ..paramset import ParameterSet
 from ..status import Status
 from ..third_party.color import colorize
@@ -36,26 +44,17 @@ from ..util.filesystem import copyfile
 from ..util.filesystem import max_name_length
 from ..util.filesystem import mkdirp
 from ..util.misc import boolean
+from ..util.misc import digits
 from ..util.module import load as load_module
+from ..util.procutils import get_process_metrics
 from ..util.shell import source_rcfile
+from ..util.string import stringify
 from ..util.time import hhmmss
+from ..util.time import timestamp
 from ..when import match_any
 from .atc import AbstractTestCase
 
 stats_version_info = (3, 0)
-
-
-def stringify(arg: Any, float_fmt: str | None = None) -> str:
-    """Turn the thing into a string"""
-    if hasattr(arg, "string"):
-        return arg.string
-    if isinstance(arg, float) and float_fmt is not None:
-        return float_fmt % arg
-    elif isinstance(arg, float):
-        return f"{arg:g}"
-    elif isinstance(arg, int):
-        return f"{arg:d}"
-    return str(arg)
 
 
 @dataclasses.dataclass
@@ -124,6 +123,13 @@ class Parameters(dict):
     def __setitem__(self, key, value):
         self.validate_known_resource_types(key, value)
         super().__setitem__(key, value)
+
+    def sorted_items(
+        self, predicate: Callable | None = None
+    ) -> Generator[tuple[Any, Any], None, None]:
+        for key in sorted(self):
+            value = self[key] if not predicate else predicate(self[key])
+            yield key, value
 
     def validate_known_resource_types(self, key: str, value: Any) -> None:
         if key.lower() in config.resource_pool.types:
@@ -380,6 +386,11 @@ class TestCase(AbstractTestCase):
         if artifacts is not None:
             self.artifacts = artifacts
 
+        self.ofile = "canary-out.txt"
+        self.efile: str | None = "canary-err.txt"
+        self._stdout: IO[Any] | None = None
+        self._stderr: IO[Any] | None = None
+
     def __hash__(self) -> int:
         return hash(self.id)
 
@@ -480,15 +491,34 @@ class TestCase(AbstractTestCase):
         else:
             return os.path.join(self.work_tree, self.path, os.path.basename(self.file))
 
-    def stdout(self, stage: str | None = None) -> str:
-        p = "-" if stage is None else f"-{stage}-"
-        return os.path.join(self.working_directory, f"canary{p}out.txt")
+    @property
+    def stdout_file(self) -> str:
+        return os.path.join(self.working_directory, self.ofile)
 
-    def stderr(self, stage: str | None = None) -> str | None:
-        return None
+    @property
+    def stderr_file(self) -> str | None:
+        if self.efile is None:
+            return None
+        return os.path.join(self.working_directory, self.efile)
 
-    def logfile(self, stage: str | None = None) -> str:
-        return self.stdout(stage=stage)
+    @property
+    def stdout(self) -> IO[Any]:
+        if self._stdout is None:
+            mode = "w" if not os.path.exists(self.stdout_file) else "a"
+            self._stdout = open(self.stdout_file, mode)
+        assert self._stdout is not None
+        return self._stdout
+
+    @property
+    def stderr(self) -> IO[Any]:
+        if self._stderr is None:
+            if self.stderr_file is None:
+                self._stderr = self.stdout
+            else:
+                mode = "w" if not os.path.exists(self.stderr_file) else "a"
+                self._stderr = open(self.stderr_file, mode)
+        assert self._stderr is not None
+        return self._stderr
 
     @property
     def execution_directory(self) -> str:
@@ -597,6 +627,12 @@ class TestCase(AbstractTestCase):
         self._parameters.clear()
         self._parameters.update(arg)
 
+    def add_dependency(self, case: "TestCase", /, expected_result: str = "success") -> None:
+        if case not in self.dependencies:
+            self.dependencies.append(case)
+            self.dep_done_criteria.append(expected_result)
+            assert len(self.dependencies) == len(self.dep_done_criteria)
+
     @property
     def unresolved_dependencies(self) -> list[DependencyPatterns]:
         """List of dependency patterns that must be resolved before running"""
@@ -625,7 +661,8 @@ class TestCase(AbstractTestCase):
 
     @dependencies.setter
     def dependencies(self, arg: list["TestCase"]) -> None:
-        self._dependencies = arg
+        self._dependencies.clear()
+        self._dependencies.extend(arg)
 
     @property
     def timeout(self) -> float:
@@ -1096,9 +1133,7 @@ class TestCase(AbstractTestCase):
         self.name = self.family
         self.display_name = self.family
         if self.parameters:
-            keys = sorted(self.parameters.keys())
-            s_vals = [stringify(self.parameters[k]) for k in keys]
-            s_params = [f"{k}={s_vals[i]}" for (i, k) in enumerate(keys)]
+            s_params = [f"{k}={v}" for k, v in self.parameters.sorted_items(predicate=stringify)]
             self.name = f"{self._name}.{'.'.join(s_params)}"
             self.display_name = f"{self._display_name}[{','.join(s_params)}]"
 
@@ -1110,7 +1145,8 @@ class TestCase(AbstractTestCase):
 
     def set_default_timeout(self) -> None:
         """Sets the default timeout.  If runtime statistics have been collected those will be used,
-        otherwise the timeout will be based on the presence of the long or fast keywords
+        otherwise the timeout will be based on the presence of duration-like keywords (fast and
+        long being the builtin defaults)
         """
         t = self.cache.get("metrics:time")
         if t is not None:
@@ -1125,12 +1161,13 @@ class TestCase(AbstractTestCase):
                 timeout = 1800.0
             else:
                 timeout = 2.0 * max_runtime
-        elif "fast" in self.keywords:
-            timeout = config.test.timeout_fast
-        elif "long" in self.keywords:
-            timeout = config.test.timeout_long
         else:
-            timeout = config.test.timeout_default
+            for keyword in self.keywords:
+                if t := getattr(config.test, f"timeout_{keyword}", None):
+                    timeout = float(t)
+                    break
+            else:
+                timeout = config.test.timeout_default
         self._timeout = float(timeout)
 
     def cache_last_run(self) -> None:
@@ -1138,7 +1175,7 @@ class TestCase(AbstractTestCase):
         if self.status.satisfies(("cancelled", "ready")):
             return
         history = self.cache.setdefault("history", {})
-        history["last_run"] = datetime.datetime.fromtimestamp(self.start).strftime("%c")
+        history["last_run"] = datetime.fromtimestamp(self.start).strftime("%c")
         history[self.status.value] = history.get(self.status.value, 0) + 1
         if self.duration >= 0 and self.status.satisfies(("success", "xfail", "xdiff", "diff")):
             count: int = 0
@@ -1296,27 +1333,32 @@ class TestCase(AbstractTestCase):
         return self.pretty_repr(what=self.display_name)
 
     def pretty_repr(self, what: str | None = None) -> str:
-        """Colorize parameter specs in `what`"""
+        """Colorize parameter specs in `what`
+
+        Parmater specs will always be of the form [var=val,***,var=val] or var=val.***.var=val
+
+        """
         what = what or self.display_name
-        i = self.display_name.find("[")
-        if i == -1:
-            # No parameters to colorize.
+        if not self.parameters:
             return what
-        # Find the parameter chunks in the display name because it's
-        # easier to do it there.
-        parts = self.display_name[i + 1 : -1].split(",")
-        return cached_pretty_repr(self.id, what, tuple(parts))
+        colors = itertools.cycle("bmgycr")
+        for key, value in self.parameters.sorted_items(predicate=stringify):
+            old = f"{key}={value}"
+            new = colorize("@%s{%s}" % (next(colors), old))
+            what = re.sub("\\b%s\\b" % re.escape(old), new, what)
+        return what
 
     def copy(self) -> "TestCase":
         return deepcopy(self)
 
-    def add_dependency(self, case: "TestCase", /, expected_result: str = "success") -> None:
-        if case not in self.dependencies:
-            self.dependencies.append(case)
-            self.dep_done_criteria.append(expected_result)
-            assert len(self.dependencies) == len(self.dep_done_criteria)
-
     def copy_sources_to_workdir(self) -> None:
+        cwd = os.getcwd()
+        if not os.path.samefile(cwd, self.working_directory):
+            raise RuntimeError(
+                "copy_sources_to_workdir should always be called *inside* the working directory.\n"
+                f"\t{self.working_directory=}\n"
+                f"\t{cwd=}"
+            )
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
         for asset in self.assets:
             if asset.action not in ("copy", "link"):
@@ -1329,9 +1371,11 @@ class TestCase(AbstractTestCase):
             else:
                 dst = os.path.join(self.working_directory, asset.dst)
             if asset.action == "copy" or copy_all_resources:
-                fs.force_copy(asset.src, dst, echo=logging.info)
+                logging.info(f"copying {asset.src} to {dst}", file=self.stdout)
+                fs.force_copy(asset.src, dst)
             else:
-                fs.force_symlink(asset.src, dst, echo=logging.info)
+                logging.info(f"linking {asset.src} to {dst}", file=self.stdout)
+                fs.force_symlink(asset.src, dst)
 
     def save(self):
         lockfile = self.lockfile
@@ -1431,18 +1475,28 @@ class TestCase(AbstractTestCase):
             return f"Test skipped.  Reason: {self.status.details}"
         elif self.status == "invalid":
             return f"Invalid test.  Reason: {self.status.details}"
-        elif not self.status.complete():
+        elif not os.path.exists(self.stdout_file):
             return "Log not found"
         out = io.StringIO()
-        out.write(io.open(self.stdout(), errors="ignore").read())
-        if err := self.stderr():
-            out.write("\n")
-            out.write(io.open(err, errors="ignore").read())
+        out.write(open(self.stdout_file, errors="ignore").read())
+        if self.stderr_file and os.path.exists(self.stderr_file):
+            out.write("\nCaptured stderr:\n")
+            out.write(open(self.stderr_file, errors="ignore").read())
         text = out.getvalue()
         if compress:
             kb_to_keep = 2 if self.status == "success" else 300
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
+
+    def close_files(self) -> None:
+        if self._stdout is not None:
+            if not self._stdout.closed:
+                self._stdout.close()
+            self._stdout = None
+        if self._stderr is not None:
+            if not self._stderr.closed:
+                self._stderr.close()
+            self._stderr = None
 
     def setup(self) -> None:
         if len(self.dependencies) != len(self.dep_done_criteria):
@@ -1452,27 +1506,33 @@ class TestCase(AbstractTestCase):
         logging.trace(f"Setting up {self}")
         self.work_tree = config.session.work_tree
         fs.mkdirp(self.working_directory)
-        clean_out_folder(self.working_directory)
+        self.close_files()
+        fs.clean_out_folder(self.working_directory)
         with fs.working_dir(self.working_directory, create=True):
             self.setup_working_directory()
-        with fs.working_dir(self.working_directory, create=True):
-            config.plugin_manager.hook.canary_testcase_setup(case=self, stage="")
-        self.save()
         logging.trace(f"Done setting up {self}")
 
     def setup_working_directory(self) -> None:
+        cwd = os.getcwd()
+        if not os.path.samefile(cwd, self.working_directory):
+            raise RuntimeError(
+                "setup_working_directory should always be called *inside* the working directory.\n"
+                f"\t{self.working_directory=}\n"
+                f"\t{cwd=}"
+            )
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
-        with logging.capture(self.logfile("setup"), mode="w"):
-            with logging.timestamps():
-                logging.info(f"Preparing test: {self.name}")
-                logging.info(f"Directory: {os.getcwd()}")
-                logging.info("Cleaning work directory...")
-                logging.info("Linking and copying working files...")
-                if copy_all_resources:
-                    fs.force_copy(self.file, os.path.basename(self.file), echo=logging.info)
-                else:
-                    fs.force_symlink(self.file, os.path.basename(self.file), echo=logging.info)
-                self.copy_sources_to_workdir()
+        with logging.timestamps():
+            logging.info(f"Preparing test: {self.name}", file=self.stdout)
+            logging.info(f"Directory: {os.getcwd()}", file=self.stdout)
+            logging.info("Cleaning work directory...", file=self.stdout)
+            logging.info("Linking and copying working files...", file=self.stdout)
+            if copy_all_resources:
+                logging.info(f"copying {self.file} to {cwd}", file=self.stdout)
+                fs.force_copy(self.file, os.path.basename(self.file))
+            else:
+                logging.info(f"linking {self.file} to {cwd}", file=self.stdout)
+                fs.force_symlink(self.file, os.path.basename(self.file))
+            self.copy_sources_to_workdir()
 
     def do_baseline(self) -> None:
         if not self.baseline:
@@ -1497,27 +1557,17 @@ class TestCase(AbstractTestCase):
                         logging.emit(f"    Replacing {b} with {a}\n")
                         copyfile(src, dst)
 
-    def concatenate_logs(self) -> None:
-        with open(self.logfile(), "w") as fh:
-            for stage in ("setup", "run", "analyze"):
-                file = self.logfile(stage)
-                if os.path.exists(file):
-                    fh.write(open(file).read())
-
     def finish(self, update_stats: bool = True) -> None:
         if update_stats:
             self.cache_last_run()
-        self.concatenate_logs()
-        config.plugin_manager.hook.canary_testcase_finish(case=self, stage="")
-        self.save()
 
     def teardown(self) -> None:
         keep = set([os.path.basename(a.src) if a.dst is None else a.dst for a in self.assets])
         keep.add(os.path.basename(self.file))
         keep.add("testcase.lock")
-        keep.add(os.path.basename(self.stdout()))
-        if self.stderr():
-            keep.add(os.path.basename(self.stderr()))  # type: ignore
+        keep.add(self.ofile)
+        if self.efile is not None:
+            keep.add(self.efile)
         with fs.working_dir(self.working_directory):
             files = os.listdir(".")
             for file in files:
@@ -1546,7 +1596,7 @@ class TestCase(AbstractTestCase):
         state: dict[str, Any] = {"type": self.__class__.__name__}
         properties = state.setdefault("properties", {})
         for attr, value in self.__dict__.items():
-            if attr in ("_cache",):
+            if attr in ("_cache", "_stdout", "_stderr"):
                 continue
             private = attr.startswith("_")
             name = attr[1:] if private else attr
@@ -1605,19 +1655,128 @@ class TestCase(AbstractTestCase):
                 setattr(self, name, value)
         return
 
+    def run(self, qsize: int = 1, qrank: int = 1) -> None:
+        """Run the test case"""
 
-@lru_cache
-def cached_pretty_repr(id: str, what: str, parts: tuple[str]) -> str:
-    colors = itertools.cycle("bmgycr")
-    for part in parts:
-        # If we're using the full path or display name, every parameter
-        # will start with one of [ , . and will end with one of ] , . $
-        # This whole regex stuff is to make it so we will correctly
-        # color "foo.bar_np=42.np=4" where "np=4" is nested in "bar_np=42".
-        pretty = colorize("@%s{%s}" % (next(colors), part))
-        pattern = r"(\[|\,|\.)%s(\]|\,|\.|$)" % re.escape(part)
-        what = re.sub(pattern, "\\1%s\\2" % pretty, what)
-    return what
+        def cancel(sig, frame):
+            nonlocal proc
+            logging.info(f"Cancelling run due to captured signal {sig!r}")
+            if proc is not None:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore")
+                    try:
+                        if proc.is_running():
+                            proc.send_signal(sig)
+                    except Exception:
+                        pass
+            if sig == signal.SIGINT:
+                raise KeyboardInterrupt
+            elif sig == signal.SIGTERM:
+                os._exit(1)
+
+        if logging.get_level() <= logging.INFO:
+            fmt = io.StringIO()
+            fmt.write("@*b{==>} ")
+            if config.debug or os.getenv("GITLAB_CI"):
+                fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+                if qrank is not None and qsize is not None:
+                    fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+            fmt.write("Starting %id: %X")
+            logging.emit(self.format(fmt.getvalue()).strip() + "\n")
+
+        tee_output = config.getoption("capture") == "tee"
+        try:
+            default_int_handler = signal.signal(signal.SIGINT, cancel)
+            default_term_handler = signal.signal(signal.SIGTERM, cancel)
+
+            proc: psutil.Popen | None = None
+            metrics: dict[str, Any] | None = None
+            timeout = self.timeout
+            if timeoutx := config.getoption("timeout_multiplier"):
+                timeout *= timeoutx
+            cmd = self.command()
+            cmd_line = shlex.join(cmd)
+            with fs.working_dir(self.working_directory):
+                with self.rc_environ():
+                    start_marker: float = time.monotonic()
+                    logging.debug(f"Submitting {self} for execution with command {cmd_line}")
+                    cwd = self.execution_directory
+                    stdout: IO[Any] | int
+                    stderr: IO[Any] | int
+                    if tee_output:
+                        stdout = stderr = subprocess.PIPE
+                    else:
+                        stdout = self.stdout
+                        stderr = subprocess.STDOUT if self.efile is None else self.stderr
+                    self.start = timestamp()
+                    self.status.set("running")
+                    proc = psutil.Popen(cmd, stdout=stdout, stderr=stderr, cwd=cwd)
+                    metrics = get_process_metrics(proc)
+                    while proc.poll() is None:
+                        if tee_output:
+                            self.tee_run_output(proc)
+                        get_process_metrics(proc, metrics=metrics)
+                        if timeout > 0 and time.monotonic() - start_marker > timeout:
+                            os.kill(proc.pid, signal.SIGINT)
+                            raise TimeoutError
+                        time.sleep(0.05)
+        except MissingSourceError as e:
+            self.returncode = skip_exit_status
+            self.status.set("skipped", f"{self}: resource file {e.args[0]} not found")
+        except TimeoutError:
+            self.returncode = timeout_exit_status
+            self.status.set("timeout", f"{self} failed to finish in {timeout:.2f}s.")
+        except BaseException:
+            self.returncode = 1
+            self.status.set("failed", "unknown failure")
+            raise
+        else:
+            self.returncode = proc.returncode
+            if self.xstatus == diff_exit_status:
+                if self.returncode != diff_exit_status:
+                    self.status.set("failed", f"expected {self.name} to diff")
+                else:
+                    self.status.set("xdiff")
+            elif self.xstatus != 0:
+                # Expected to fail
+                code = self.xstatus
+                if code > 0 and self.returncode != code:
+                    self.status.set("failed", f"expected {self.name} to exit with code={code}")
+                elif self.returncode == 0:
+                    self.status.set("failed", f"expected {self.name} to exit with code != 0")
+                else:
+                    self.status.set("xfail")
+            else:
+                self.status.set_from_code(self.returncode)
+        finally:
+            if logging.get_level() <= logging.INFO:
+                fmt = io.StringIO()
+                fmt.write("@*b{==>} ")
+                if config.debug or os.getenv("GITLAB_CI"):
+                    fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+                    if qrank is not None and qsize is not None:
+                        fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+                fmt.write("Finished %id: %X %sN")
+                logging.emit(self.format(fmt.getvalue()).strip() + "\n")
+            signal.signal(signal.SIGINT, default_int_handler)
+            signal.signal(signal.SIGTERM, default_term_handler)
+            if self.status != "skipped":
+                self.stop = timestamp()
+                if metrics is not None:
+                    self.add_measurement(**metrics)
+            logging.trace(f"{self}: finished with status {self.status}")
+        return
+
+    def tee_run_output(self, proc: psutil.Popen) -> None:
+        text = os.read(proc.stdout.fileno(), 1024).decode("utf-8")
+        self.stdout.write(text)
+        sys.stdout.write(text)
+        text = os.read(proc.stderr.fileno(), 1024).decode("utf-8")
+        if self.stderr:
+            self.stderr.write(text)
+        else:
+            self.stdout.write(text)
+        sys.stderr.write(text)
 
 
 class TestMultiCase(TestCase):
@@ -1746,13 +1905,6 @@ def from_id(id: str) -> TestCase | TestMultiCase:
     if lockfiles:
         return from_lockfile(lockfiles[0])
     raise ValueError(f"no test case associated with {id} found in {config.session.work_tree}")
-
-
-def clean_out_folder(folder: str) -> None:
-    if os.path.exists(folder):
-        with fs.working_dir(folder):
-            for f in os.listdir("."):
-                fs.force_remove(f)
 
 
 class MissingSourceError(Exception):

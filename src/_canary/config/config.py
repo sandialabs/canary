@@ -31,6 +31,7 @@ from .schemas import batch_schema
 from .schemas import build_schema
 from .schemas import config_schema
 from .schemas import environment_schema
+from .schemas import plugin_schema
 from .schemas import resource_schema
 from .schemas import test_schema
 
@@ -39,6 +40,7 @@ section_schemas: dict[str, Schema] = {
     "batch": batch_schema,
     "config": config_schema,
     "environment": environment_schema,
+    "plugins": plugin_schema,
     "resource_pool": resource_schema,
     "test": test_schema,
 }
@@ -238,7 +240,18 @@ class Config:
 
     @classmethod
     def factory(cls) -> "Config":
-        """Create the configuration object"""
+        """Create the configuration object.
+
+        Initializes a new Config instance, restoring its state from environment variables or a
+        configuration file if available.
+
+        Returns:
+            A new instance of Config with restored values.
+
+        Raises:
+            RuntimeError: If an inconsistent configuration state is detected.
+            FileNotFoundError: If the configuration file does not exist.
+        """
         self = cls.create()
         if cfg := os.getenv("CANARYCFG64"):
             with io.StringIO() as fh:
@@ -262,6 +275,14 @@ class Config:
 
     @classmethod
     def create(cls) -> "Config":
+        """Create a new Config instance with user-defined settings.
+
+        Loads configuration settings from global, local, and environment sources, populating the
+        Config instance with these values.
+
+        Returns:
+            A new instance of Config populated with user-defined settings.
+        """
         user_defined_config: dict[str, Any] = {}
         cls.load_config("global", user_defined_config)
         cls.load_config("local", user_defined_config)
@@ -278,12 +299,26 @@ class Config:
 
     @property
     def config_dir(self) -> str | None:
+        """Get the directory for configuration files.
+
+        Lazily initializes the configuration directory path if it has not been set previously.
+
+        Returns:
+            The path to the configuration directory or None if not set.
+        """
         if self._config_dir is None:
             self._config_dir = get_config_dir()
         return self._config_dir
 
     @property
     def cache_dir(self) -> str | None:
+        """Get the directory for cache files.
+
+        Lazily initializes the cache directory path, creating it if necessary.
+
+        Returns:
+            The path to the cache directory or None if not set.
+        """
         if self._cache_dir is None:
             if d := self.getoption("cache_dir"):
                 self._cache_dir = os.path.expanduser(d)
@@ -298,15 +333,35 @@ class Config:
 
     @property
     def plugin_manager(self) -> CanaryPluginManager:
+        """Get the plugin manager instance.
+
+        Lazily initializes the plugin manager if it has not been set previously.
+
+        Returns:
+            An instance of CanaryPluginManager.
+        """
         if self._plugin_manager is None:
             self._plugin_manager = CanaryPluginManager.factory()
         return self._plugin_manager
 
     @plugin_manager.setter
     def plugin_manager(self, arg: CanaryPluginManager) -> None:
+        """Set the plugin manager instance.
+
+        Args:
+            arg: An instance of CanaryPluginManager to set.
+        """
         self._plugin_manager = arg
 
     def restore_from_snapshot(self, fh: TextIO) -> None:
+        """Restore configuration values from a snapshot.
+
+        Reads a JSON snapshot from the provided file handle and updates the configuration
+        attributes accordingly.
+
+        Args:
+            fh: A file handle to read the JSON snapshot from.
+        """
         snapshot = json.load(fh)
         self.system = System(snapshot["system"])
         self.environment = EnvironmentModifications(snapshot["environment"])
@@ -350,11 +405,29 @@ class Config:
         return
 
     def snapshot(self, fh: TextIO, pretty_print: bool = True) -> None:
+        """Save the current configuration state to a file.
+
+        Serializes the current configuration state to JSON and writes it to the provided file
+        handle.
+
+        Args:
+            fh: A file handle to write the JSON snapshot to.
+            pretty_print: If True, the JSON output will be pretty-printed.
+        """
         snapshot = self.getstate()
         json.dump(snapshot, fh, indent=2 if pretty_print else None)
 
     @classmethod
     def load_config(cls, scope: str, config: dict[str, Any]) -> None:
+        """Load configuration settings from a specified scope.
+
+        Reads configuration data from files or environment variables based on the provided scope
+        and updates the given configuration dictionary.
+
+        Args:
+            scope: The scope from which to load configuration (e.g., "global", "local", "environ").
+            config: A dictionary to update with the loaded configuration values.
+        """
         data: dict
         if scope == "environ":
             data = cls.read_config_from_env()
@@ -378,15 +451,23 @@ class Config:
                 if user_defined_timeouts := items.get("timeout"):
                     for type, value in user_defined_timeouts.items():
                         config.setdefault("test", {})[f"timeout_{type}"] = value
-            elif key == "batch":
-                if "duration" in items:
-                    config["batch_duration"] = items["duration"]
-                elif "length" in items:
-                    config["batch_duration"] = items["length"]
+            elif key == "plugins":
+                config.setdefault("plugin_manager", {}).setdefault("plugins", []).extend(items)
             elif key in section_schemas:
                 config[key] = items
 
     def update(self, *args: Any, **kwargs: Any) -> None:
+        """Update configuration attributes with provided values.
+
+        Updates the configuration attributes based on the provided arguments and keyword arguments.
+
+        Args:
+            *args: Positional arguments to update configuration.
+            **kwargs: Keyword arguments to update configuration.
+
+        Raises:
+            TypeError: If more than one positional argument is provided.
+        """
         if len(args) > 1:
             raise TypeError(f"Config.update() expected at most 1 argument, got {len(args)}")
         data = dict(*args) | kwargs
@@ -405,6 +486,14 @@ class Config:
             setattr(self, key, val)
 
     def set_main_options(self, args: argparse.Namespace) -> None:
+        """Set main configuration options based on command-line arguments.
+
+        Updates the configuration attributes based on the provided argparse Namespace containing
+        command-line arguments.
+
+        Args:
+            args: An argparse.Namespace object containing command-line arguments.
+        """
         logging.set_level(logging.INFO)
         if args.color is not None:
             color.set_color_when(args.color)
@@ -479,7 +568,13 @@ class Config:
         ...
 
     def setup_hpc_connect(self, name: str | None) -> None:
-        """Set the hpc_connect library"""
+        """Set up the hpc_connect library.
+
+        Initializes the HPC backend based on the provided name.
+
+        Args:
+            name: The name of the HPC backend to set up
+        """
         if name in ("null", "local", None):
             self.backend = None
             return
@@ -499,6 +594,20 @@ class Config:
 
     @classmethod
     def read_config(cls, file: str) -> dict:
+        """Read configuration data from a YAML file.
+
+        Loads configuration data from the specified YAML file and validates it against predefined
+        schemas.
+
+        Args:
+            file: The path to the YAML configuration file.
+
+        Returns:
+            A dictionary containing the validated configuration data.
+
+        Raises:
+            ValueError: If there are schema validation errors.
+        """
         with open(file) as fh:
             data = yaml.safe_load(fh)
 
@@ -519,6 +628,13 @@ class Config:
 
     @classmethod
     def read_config_from_env(cls) -> dict:
+        """Read configuration data from environment variables.
+
+        Loads configuration values from environment variables and returns them as a dictionary.
+
+        Returns:
+            A dictionary containing configuration values from environment variables.
+        """
         config: dict[str, Any] = {}
         for key, value in os.environ.items():
             if key == "CANARY_DEBUG":
@@ -537,6 +653,16 @@ class Config:
 
     @staticmethod
     def config_file(scope: str) -> str | None:
+        """Get the configuration file path for a specified scope.
+
+        Returns the path to the configuration file based on the provided scope (global or local).
+
+        Args:
+            scope: The scope for which to get the configuration file path.
+
+        Returns:
+            The path to the configuration file or None if not found.
+        """
         if scope == "global":
             config_dir = get_config_dir()
             if config_dir is not None:
@@ -546,6 +672,14 @@ class Config:
         return None
 
     def save(self, path: str, scope: str | None = None):
+        """Save a configuration value to a configuration file.
+
+        Updates the specified section and key in the configuration file with the provided value.
+
+        Args:
+            path: The path in the format 'section:key' to update.
+            scope: The scope of the configuration file (optional).
+        """
         file = self.config_file(scope or "local")
         assert file is not None
         section, key, value = path.split(":")
@@ -556,11 +690,36 @@ class Config:
             yaml.dump(config, fh, default_flow_style=False)
 
     def getoption(self, key: str, default: Any = None) -> Any:
-        """Compatibility with external tools"""
-        option = getattr(self.options, key, None) or default
+        """Get a command line option
+
+        Retrieves the value of the specified configuration option, returning a default value if the
+        option is not set.
+
+        Args:
+            key: The key of the configuration option to retrieve.
+            default: The default value to return if the option is not set.
+
+        Returns:
+            The value of the configuration option or the default value.
+        """
+        sentinel = object()
+        option = getattr(self.options, key, sentinel)
+        if option is sentinel:
+            return default
         return option
 
     def getstate(self, pretty: bool = False) -> dict[str, Any]:
+        """Get the current state of the configuration.
+
+        Returns the current configuration state as a dictionary, which can be useful for
+        serialization or debugging.
+
+        Args:
+            pretty: If True, the output will be formatted for readability.
+
+        Returns:
+            A dictionary representing the current state of the configuration.
+        """
         d: dict[str, Any] = {}
         for key, value in vars(self).items():
             if key == "_plugin_manager":
@@ -585,6 +744,17 @@ class Config:
         return d
 
     def describe(self, section: str | None = None) -> str:
+        """Describe the current configuration state.
+
+        Returns a human-readable description of the configuration state, optionally filtered by a
+        specific section.
+
+        Args:
+            section: The section to describe, or None for the entire configuration.
+
+        Returns:
+            A string representation of the configuration state.
+        """
         state = self.getstate(pretty=True)
         if section is not None:
             state = {section: state[section]}

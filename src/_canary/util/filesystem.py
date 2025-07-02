@@ -16,7 +16,6 @@ import tempfile
 import time
 from contextlib import contextmanager
 from typing import Any
-from typing import Callable
 from typing import Generator
 
 from . import logging
@@ -51,6 +50,7 @@ __all__ = [
     "accessible",
     "samepath",
     "find_work_tree",
+    "clean_out_folder",
 ]
 
 
@@ -167,9 +167,8 @@ def force_remove(file_or_dir: str) -> None:
         pass
 
 
-def force_copy(src: str, dst: str, echo: Callable = lambda x: None) -> None:
+def force_copy(src: str, dst: str) -> None:
     """Forcefully copy ``src`` to ``dst``"""
-    echo(f"copy {src} -> {dst}\n")
     if os.path.isfile(src):
         remove(dst)
         copyfile(src, dst)
@@ -378,9 +377,8 @@ def is_exe(path: str) -> bool:
     return os.path.isfile(path) and os.access(path, os.X_OK)
 
 
-def force_symlink(src: str, dest: str, echo: Callable = lambda x: None) -> None:
+def force_symlink(src: str, dest: str) -> None:
     """Forcefully create a symbolic link from ``src`` to ``dest``"""
-    echo(f"link {src} -> {dest}\n")
     try:
         os.symlink(src, dest)
     except (OSError, FileExistsError):
@@ -461,3 +459,10 @@ def find_work_tree(start: str | None = None) -> str | None:
         if path == os.path.sep:
             break
     return None
+
+
+def clean_out_folder(folder: str) -> None:
+    if os.path.isdir(folder):
+        with working_dir(folder):
+            for f in os.listdir("."):
+                force_remove(f)

@@ -26,6 +26,7 @@ from ...third_party.color import colorize
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
 from ...util import logging
+from ...util.string import stringify
 from ...util.time import time_in_seconds
 from ..hookspec import hookimpl
 
@@ -111,6 +112,20 @@ class PYTTestGenerator(AbstractTestGenerator):
         graph.print(cases, file=file)
         return file.getvalue()
 
+    def info(self) -> dict[str, Any]:
+        info: dict[str, Any] = super().info()
+        info["keywords"] = self.keywords(raw=True)
+        info["options"] = []
+        for name, attr in vars(self).items():
+            if isinstance(attr, FilterNamespace):
+                if attr.when.option_expr:
+                    info.setdefault("options", []).append(attr.when.option_expr)
+            elif isinstance(attr, list) and len(attr) and isinstance(attr[0], FilterNamespace):
+                for a in attr:
+                    if a.when.option_expr:
+                        info.setdefault("options", []).append(a.when.option_expr)
+        return info
+
     def lock(self, on_options: list[str] | None = None) -> list[TestCase]:
         try:
             cases = self._lock(on_options=on_options)
@@ -186,6 +201,10 @@ class PYTTestGenerator(AbstractTestGenerator):
 
             if ns := self.generate_composite_base_case(testname=name, on_options=on_options):
                 # add previous cases as dependencies
+                if not any(paramsets):
+                    raise ValueError(
+                        "Generation of composite base case requires at least one parameter"
+                    )
                 modules = self.modules(testname=name, on_options=on_options)
                 parent = TestMultiCase(
                     self.root,
@@ -262,13 +281,13 @@ class PYTTestGenerator(AbstractTestGenerator):
         self,
         testname: str | None = None,
         parameters: dict[str, Any] | None = None,
+        raw: bool = False,
     ) -> list[str]:
         keywords: set[str] = set()
         for ns in self._keywords:
             result = ns.when.evaluate(testname=testname, parameters=parameters)
-            if not result.value:
-                continue
-            keywords.update(ns.value)
+            if raw or result.value:
+                keywords.update(ns.value)
         return sorted(keywords)
 
     def xstatus(
@@ -511,7 +530,9 @@ class PYTTestGenerator(AbstractTestGenerator):
         on_options: list[str] | None = None,
         parameters: dict[str, Any] | None = None,
     ) -> list[DependencyPatterns]:
-        kwds = dict(parameters) if parameters else {}
+        kwds: dict[str, Any] = {}
+        if parameters:
+            kwds.update({k: stringify(v) for k, v in parameters.items()})
         if testname:
             kwds["name"] = testname
         for key in list(kwds.keys()):

@@ -9,6 +9,7 @@ import signal
 import sys
 import traceback
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import Sequence
 
 from . import config
@@ -128,6 +129,7 @@ class CanaryCommand:
                 config.plugin_manager.hook.canary_addoption(parser=parser)
             args = parser.parse_args(argv)
             config.set_main_options(args)
+            config.plugin_manager.hook.canary_configure(config=config)
             rc = self.command.execute(args)
             self.returncode = rc
         except Exception:
@@ -191,6 +193,16 @@ def invoke_profiled_command(command, args):
     return rc
 
 
+def determine_plugin_from_tb(tb: traceback.StackSummary) -> None | Any:
+    """Determine if the exception was raised inside a plugin"""
+    for frame in tb[::-1]:
+        # Check if the frame corresponds to a registered plugin
+        for plugin in config.plugin_manager.get_plugins():
+            if plugin and frame.filename == plugin.__file__:
+                return plugin
+    return None
+
+
 def console_main() -> int:
     """The CLI entry point of canary.
 
@@ -234,5 +246,9 @@ def console_main() -> int:
     except Exception as e:
         if reraise:
             raise
-        logging.error(str(e))
+        tb = traceback.extract_tb(e.__traceback__)
+        err = str(e)
+        if plugin := determine_plugin_from_tb(tb):
+            err += f" (from plugin: {plugin.__name__})"
+        logging.error(err)
         return 3

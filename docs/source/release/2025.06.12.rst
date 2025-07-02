@@ -1,0 +1,31 @@
+canary 2025.06.12 release notes
+===============================
+
+.. contents::
+
+SYNOPSIS
+
+Authors
+-------
+
+* Tim Fuller (66)
+* Ben Wibking (1)
+
+A total of 2 authors contributed 67 commits to this release.
+
+Issues closed for 2025.06.12
+----------------------------
+
+* `#68 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/68>`__: bug when submitting to another cluster using Slurm
+* `#83 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/83>`__: Composite Base Case Batch Re-Runs Dependencies
+* `#84 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/84>`__: Allow other keywords to define test timeout
+* `#85 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/85>`__: Bad error message for lack of parameters
+* `#87 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/issues/87>`__: batch config not update properly
+
+Merge requests for 2025.06.12
+-----------------------------
+
+* `!56 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/56>`__: Resolve "Allow other keywords to define test timeout"
+* `!57 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/57>`__: Stdout is a stream
+* `!59 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/59>`__: Resolve "batch config not update properly"
+* `!60 <https://cee-gitlab.sandia.gov/ascic-test-infra/canary/-/merge_requests/60>`__: Refactor portions of the code to use plugin hooks

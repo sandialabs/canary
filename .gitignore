@@ -1,4 +1,5 @@
 my-env.sh
+bin/my-deploy.sh
 junit.xml
 .coverage
 coverage.xml
@@ -40,3 +41,11 @@ Testing
 # spack develop build artifacts
 build/
 build-linux*
+
+venv
+dist
+
+canary.yaml
+
+testcase.lock
+testcases.lock

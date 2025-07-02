@@ -26,9 +26,7 @@ def canary_addoption(parser: "Parser") -> None:
 
 @hookimpl(trylast=True)
 def canary_session_finish(session: "Session", exitstatus: int) -> None:
-    if not config.getoption("teardown"):
-        return
-    cases = session.active_cases()
-    for case in cases:
-        if case.status == "success":
-            case.teardown()
+    if config.getoption("teardown"):
+        for case in session.active_cases():
+            if case.status == "success":
+                case.teardown()

@@ -3,15 +3,15 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import io
 from typing import TYPE_CHECKING
-from typing import Any
 
-import yaml
-
-from ...test.case import TestCase
+from ...third_party.colify import colified
+from ...third_party.color import colorize
+from ...util import logging
+from ...util.term import terminal_size
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -24,53 +24,43 @@ def canary_subcommand() -> CanarySubcommand:
 
 class Info(CanarySubcommand):
     name = "info"
-    description = "Print information about a test case"
+    description = "Print information about tests in a folder"
 
     def setup_parser(self, parser: "Parser"):
-        parser.add_argument("testspec", help="Test file or test case spec")
+        parser.add_argument("paths", nargs="*")
 
     def execute(self, args: argparse.Namespace) -> int:
-        session = load_session()
-        if args.testspec.startswith("^"):
-            batch_id = args.testspec[1:]
-            session.bfilter(batch_id=batch_id)
-            cases = session.get_ready()
-            describe_batch(batch_id, cases)
-            return 0
-        for case in session.cases:
-            if case.matches(args.testspec):
-                describe_testcase(case)
-                return 0
-        print(f"{args.testspec}: could not find matching generator or test case")
-        return 1
+        import _canary.finder as finder
 
+        f = finder.Finder()
+        paths = args.paths or ["."]
+        for path in paths:
+            f.add(path)
+        f.prepare()
+        files = f.discover()
 
-def dump(data: dict[str, Any]) -> str:
-    return yaml.dump(data, default_flow_style=False)
-
-
-def describe_testcase(case: TestCase, indent: str = "") -> int:
-    from pygments import highlight
-    from pygments.formatters import TerminalTrueColorFormatter as Formatter
-    from pygments.lexers import get_lexer_by_name
-
-    if case.work_tree is None:
-        case.work_tree = "."
-    state = case.getstate()
-    text = dump({"name": case.display_name, **state})
-    lexer = get_lexer_by_name("yaml")
-    formatter = Formatter(bg="dark", style="monokai")
-    formatted_text = highlight(text.strip(), lexer, formatter)
-    print(formatted_text)
-    return 0
-
-
-def describe_batch(batch_id: str, cases: list[TestCase]) -> int:
-    from ... import config
-
-    print(f"Batch {batch_id}")
-    for case in cases:
-        if case.work_tree is None:
-            case.work_tree = config.session.work_tree
-        print(f"{case.display_name}\n  {case.working_directory}")
-    return 0
+        info: dict[str, dict[str, set[str]]] = {}
+        for file in files:
+            myinfo = info.setdefault(file.root, {})
+            finfo = file.info()
+            myinfo.setdefault("keywords", set()).update(finfo.get("keywords", []))
+            myinfo.setdefault("options", set()).update(finfo.get("options", []))
+            type = finfo.get("type", "AbstractTestGenerator").replace("TestGenerator", "")
+            myinfo.setdefault("types", set()).add(type)
+        _, max_width = terminal_size()
+        for root, myinfo in info.items():
+            fp = io.StringIO()
+            label = colorize("@m{%s}" % root)
+            logging.hline(label, max_width=max_width, file=fp)
+            fp.write(f"Test generators: {len(files)}\n")
+            fp.write(f"Test types: {'  '.join(myinfo['types'])}\n")
+            if keywords := myinfo.get("keywords"):
+                fp.write("Keywords:\n")
+                cols = colified(sorted(keywords), indent=2, width=max_width, padding=5)
+                fp.write(cols.rstrip() + "\n")
+            if options := myinfo.get("options"):
+                fp.write("Option expressions:\n")
+                cols = colified(sorted(options), indent=2, width=max_width, padding=5)
+                fp.write(cols.rstrip() + "\n")
+            print(fp.getvalue())
+        return 0
