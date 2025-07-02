@@ -12,7 +12,6 @@ import pluggy
 
 from . import builtin
 from . import hookspec
-from . import reporters
 from . import subcommands
 from .types import CanarySubcommand
 
@@ -35,8 +34,6 @@ class CanaryPluginManager(pluggy.PluginManager):
         for p in builtin.plugins:
             name = p.__name__.split(".")[-1].lower()
             self.register(p, name=name)
-        for p in reporters.plugins:
-            self.register(p)
         self.load_setuptools_entrypoints(hookspec.project_name)
         self.load_from_env()
         return self

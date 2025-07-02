@@ -6,6 +6,7 @@ import argparse
 import importlib.resources as ir
 import json
 import os
+import sys
 import time
 import xml.dom.minidom as xdom
 from graphlib import TopologicalSorter
@@ -23,7 +24,6 @@ from ....util.filesystem import working_dir
 from ....util.time import strftimestamp
 from ....util.time import timestamp
 from ....version import version as canary_version
-from ..common import TestData
 
 if TYPE_CHECKING:
     from ....session import Session
@@ -352,7 +352,7 @@ class CDashXMLReporter:
             import xmlschema  # type: ignore
         except ImportError:
             return
-        dir = str(ir.files("_canary").joinpath("plugins/reporters/cdash/validators"))
+        dir = str(ir.files("_canary").joinpath("plugins/builtin/cdash/validators"))
         with working_dir(dir):
             xml_schema = xmlschema.XMLSchema(schema)
             xml_schema.validate(file)
@@ -421,3 +421,40 @@ def unique_file(dirname: str, filename: str, ext: str) -> str:
 
 def chunked(seq, size):
     return (seq[pos : pos + size] for pos in range(0, len(seq), size))
+
+
+class TestData:
+    def __init__(self) -> None:
+        self.start: float = sys.maxsize
+        self.stop: float = -1
+        self.status: int = 0
+        self.cases: list["TestCase"] = []
+
+    def __len__(self):
+        return len(self.cases)
+
+    def __iter__(self):
+        for case in self.cases:
+            yield case
+
+    def update_status(self, case: "TestCase") -> None:
+        if case.status == "diffed":
+            self.status |= 2**1
+        elif case.status == "failed":
+            self.status |= 2**2
+        elif case.status == "timeout":
+            self.status |= 2**3
+        elif case.status == "skipped":  # notdone
+            self.status |= 2**4
+        elif case.status == "ready":
+            self.status |= 2**5
+        elif case.status == "not_run":
+            self.status |= 2**6
+
+    def add_test(self, case: "TestCase") -> None:
+        if case.start > 0 and case.start < self.start:
+            self.start = case.start
+        if case.stop > 0 and case.stop > self.stop:
+            self.stop = case.stop
+        self.update_status(case)
+        self.cases.append(case)
