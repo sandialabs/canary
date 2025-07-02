@@ -30,6 +30,7 @@ from _canary.testinstance import TestMultiInstance
 from _canary.testinstance import load as load_instance
 from _canary.util import _difflib as difflib
 from _canary.util import filesystem
+from _canary.util import graph
 from _canary.util import logging
 from _canary.util import module
 from _canary.util import shell
