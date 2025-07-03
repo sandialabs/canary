@@ -1,5 +1,5 @@
 # Start up flux with 3 virtual nodes
-flux start --test-size 3
+env flux start --test-size 3
 
 # Install necessary dependencies
 sudo apt-get update
