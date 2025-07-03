@@ -474,7 +474,7 @@ class TestCase(AbstractTestCase):
                 self._path = os.path.join(dirname, self.name)
             else:
                 # exceeds maximum name length for this filesystem
-                self._path = os.path.join(dirname, self.format("%y.%id"))
+                self._path = os.path.join(dirname, self.format("%b.%id"))
         assert isinstance(self._path, str)
         return self._path
 
@@ -1270,7 +1270,7 @@ class TestCase(AbstractTestCase):
             "%x": self.cmd_line,
             "%w": self.path,
             "%W": os.path.join(os.path.dirname(self.path), self.display_name),
-            "%y": self.family,
+            "%b": self.family,
         }
         if config.getoption("format", "short") == "long":
             replacements["%X"] = self.pretty_path()
