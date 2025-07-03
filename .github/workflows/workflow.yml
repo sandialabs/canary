@@ -8,17 +8,17 @@ on:
 
 jobs:
   slurm:
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - name: Build the Slurm Docker image
-      run: |
-        BRANCH_NAME=${GITHUB_REF#refs/heads/}
-        echo "Building for branch: $BRANCH_NAME"
-        docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file docker/slurm/Dockerfile --tag slurm-test ./docker/slurm
-    - name: Run Slurm tests
-      run: |
-        docker run --rm slurm-test /bin/bash -c "./test.sh"
+   runs-on: ubuntu-latest
+   steps:
+     - uses: actions/checkout@v4
+     - name: Build the Slurm Docker image
+       run: |
+         BRANCH_NAME=${GITHUB_REF#refs/heads/}
+         echo "Building for branch: $BRANCH_NAME"
+         docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file docker/slurm/Dockerfile --tag slurm-test ./docker/slurm
+     - name: Run Slurm tests
+       run: |
+         docker run --rm slurm-test /bin/bash -c "./test.sh"
 
   flux:
     runs-on: ubuntu-latest
