@@ -1,3 +1,7 @@
+BRANCH_NAME=$1
+
+flux resource list
+
 # Install necessary dependencies
 sudo apt-get update
 sudo apt-get upgrade
