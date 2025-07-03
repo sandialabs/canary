@@ -37,11 +37,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build the Flux Docker image
+      - name: Pull the Flux Docker image
         run: |
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
-          echo "Building for branch: $BRANCH_NAME"
           docker pull fluxrm/flux-sched:latest
       - name: Run Flux tests
         run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          echo "Building for branch: $BRANCH_NAME"
           docker run --rm -v /home/runner/work/canary/canary/docker/flux/test.sh:/test.sh fluxrm/flux-sched:latest /test.sh $BRANCH_NAME
