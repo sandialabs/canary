@@ -52,8 +52,9 @@ class Run(CanarySubcommand):
             "--format",
             default="short",
             action="store",
-            choices=["short", "long"],
-            help="Change the format of the test case's name as printed to the screen. Options are 'short' and 'long' [default: %(default)s]",
+            choices=["short", "long", "progress-bar"],
+            help="Change the format of the test case's name as printed to the screen. "
+            "Options are 'short' and 'long' [default: %(default)s]",
         )
         group.add_argument(
             "--durations",

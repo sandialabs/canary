@@ -107,7 +107,7 @@ def canary_runtests(cases: list[TestCase], fail_fast: bool = False) -> int:
                 returncode = compute_returncode(queue.cases())
                 raise
             else:
-                if logging.get_level() > logging.INFO:
+                if config.getoption("format") == "progress-bar":
                     queue.update_progress_bar(start, last=True)
                 returncode = compute_returncode(queue.cases())
                 queue.close(cleanup=cleanup_queue)
@@ -161,6 +161,7 @@ def process_queue(*, queue: ResourceQueue) -> None:
     qsize = queue.qsize
     qrank = 0
     ppe = None
+    progress_bar = config.getoption("format") == "progress-bar"
     try:
         with io.StringIO() as fh:
             config.snapshot(fh, pretty_print=False)
@@ -169,10 +170,14 @@ def process_queue(*, queue: ResourceQueue) -> None:
         with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
             while True:
-                key = keyboard.get_key()
-                if isinstance(key, str) and key in "sS":
-                    logging.emit(queue.status(start=start))
-                if logging.get_level() > logging.INFO:
+                if key := keyboard.get_key():
+                    if key in "sS":
+                        logging.emit(queue.status(start=start))
+                    elif key in "qQ":
+                        ppe.shutdown(cancel_futures=True)
+                        cleanup_children()
+                        raise KeyboardInterrupt
+                if progress_bar:
                     queue.update_progress_bar(start)
                 if timeout >= 0.0 and duration() > timeout:
                     raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
@@ -290,4 +295,8 @@ def rc_environ(**variables) -> Generator[None, None, None]:
 
 
 class ProcessPoolExecutorFailedToStart(Exception):
+    pass
+
+
+class KeyboardQuit(Exception):
     pass

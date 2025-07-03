@@ -237,6 +237,7 @@ class Config:
     options: argparse.Namespace = dataclasses.field(default_factory=argparse.Namespace)
     resource_pool: ResourcePool = dataclasses.field(default_factory=ResourcePool)
     _plugin_manager: CanaryPluginManager | None = dataclasses.field(default=None)
+    option_cache: dict = dataclasses.field(default_factory=dict)
 
     @classmethod
     def factory(cls) -> "Config":
@@ -702,10 +703,13 @@ class Config:
         Returns:
             The value of the configuration option or the default value.
         """
+        if key in self.option_cache:
+            return self.option_cache[key]
         sentinel = object()
         option = getattr(self.options, key, sentinel)
         if option is sentinel:
             return default
+        self.option_cache[key] = option
         return option
 
     def getstate(self, pretty: bool = False) -> dict[str, Any]:
@@ -722,6 +726,8 @@ class Config:
         """
         d: dict[str, Any] = {}
         for key, value in vars(self).items():
+            if key in ("option_cache",):
+                continue
             if key == "_plugin_manager":
                 d["plugin_manager"] = {"plugins": list(value.considered)}
             elif dataclasses.is_dataclass(value):
