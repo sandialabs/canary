@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM rockylinux:9.3
+FROM rockylinux:9.3
 
 ARG SLURM_VERSION=23.02.7
 ARG SLURM_ROOT=/opt/slurm-${SLURM_VERSION}
@@ -10,8 +10,9 @@ ENV SLURM_ROOT      ${SLURM_ROOT}
 ENV SLURM_CONFDIR   ${SLURM_CONFDIR}
 
 # Dependency install
-RUN dnf install -y dnf-plugins-core && dnf config-manager --set-enabled crb && \
-    dnf update -y && dnf install -y \
+RUN dnf clean all && \
+    dnf install -y dnf-plugins-core && dnf config-manager --set-enabled crb && \
+    dnf update -y && dnf install -y --best \
     munge \
     munge-devel \
     numactl \
@@ -49,6 +50,7 @@ RUN dnf install -y dnf-plugins-core && dnf config-manager --set-enabled crb && \
     libmount-devel \
     mpich \
     mpich-devel \
+    git \
     # Database stuff
     mariadb \
     mariadb-server \
@@ -57,12 +59,6 @@ RUN dnf install -y dnf-plugins-core && dnf config-manager --set-enabled crb && \
     && dnf clean all && rm -rf /var/cache/dnf
 
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
-
-# Canary install
-RUN python3 -m venv canary && \
-    . canary/bin/activate && \
-    python -m pip install --upgrade pip==25.1.1 && \
-    python3 -m pip install -e .[dev] "canary-wm@git+https://git@github.com/sandialabs/canary@$BRANCH_NAME"
 
 # Slurm install
 RUN useradd -M slurm
@@ -93,9 +89,15 @@ RUN chmod g-w /etc && \
     chown slurm:slurm /opt/slurm-23.02.7/etc/cgroup.conf && \
     chown -R mysql:mysql /var/lib/mysql
 
+# Canary install
+RUN python3 -m venv canary && \
+    . canary/bin/activate && \
+    python -m pip install --upgrade pip==25.1.1 && \
+    python3 -m pip install "canary-wm@git+https://git@github.com/sandialabs/canary@$BRANCH_NAME"
+
 WORKDIR /root
 
 # Run entrypoint script for initial container setup
-COPY entrypoint.sh example.job .
+COPY entrypoint.sh example.job test.sh .
 ENTRYPOINT ["./entrypoint.sh"]
 CMD ["bash"]
