@@ -1677,7 +1677,8 @@ class TestCase(AbstractTestCase):
             elif sig == signal.SIGTERM:
                 os._exit(1)
 
-        if config.getoption("format") != "progress-bar":
+        bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
+        if not bar:
             logging.emit(self.job_submission_summary(qrank, qsize) + "\n")
 
         tee_output = config.getoption("capture") == "tee"
@@ -1745,7 +1746,8 @@ class TestCase(AbstractTestCase):
             else:
                 self.status.set_from_code(self.returncode)
         finally:
-            if config.getoption("format") != "progress-bar":
+            bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
+            if not bar:
                 logging.emit(self.job_completion_summary(qrank, qsize) + "\n")
             signal.signal(signal.SIGINT, default_int_handler)
             signal.signal(signal.SIGTERM, default_term_handler)

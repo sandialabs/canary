@@ -379,7 +379,8 @@ class TestBatch(AbstractTestCase):
             assert proc is not None
             if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
                 self.jobid = proc.jobid
-            if config.getoption("format") != "progress-bar":
+            bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
+            if not bar:
                 logging.emit(self.job_submission_summary(qrank, qsize) + "\n")
             while True:
                 if proc.poll() is not None:
@@ -413,7 +414,8 @@ class TestBatch(AbstractTestCase):
                 logging.debug(
                     self.format(f"Batch @*b{{%id}}: batch processing exited with code {rc}")
                 )
-            if config.getoption("format") != "progress-bar":
+            bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
+            if not bar:
                 logging.emit(self.job_completion_summary(qrank, qsize) + "\n")
 
         return

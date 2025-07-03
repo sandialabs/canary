@@ -107,7 +107,7 @@ def canary_runtests(cases: list[TestCase], fail_fast: bool = False) -> int:
                 returncode = compute_returncode(queue.cases())
                 raise
             else:
-                if config.getoption("format") == "progress-bar":
+                if config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO:
                     queue.update_progress_bar(start, last=True)
                 returncode = compute_returncode(queue.cases())
                 queue.close(cleanup=cleanup_queue)
@@ -161,7 +161,7 @@ def process_queue(*, queue: ResourceQueue) -> None:
     qsize = queue.qsize
     qrank = 0
     ppe = None
-    progress_bar = config.getoption("format") == "progress-bar"
+    progress_bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
     try:
         with io.StringIO() as fh:
             config.snapshot(fh, pretty_print=False)
