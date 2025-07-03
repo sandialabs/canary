@@ -62,6 +62,13 @@ class Run(CanarySubcommand):
             metavar="N",
             help="Show N slowest test durations (N=0 for all)",
         )
+        group.add_argument(
+            "-e",
+            choices=("separate", "merge"),
+            default="separate",
+            dest="testcase_output_strategy",
+            help="Merge a testcase's stdout and stderr or log separately [default: %(default)s]",
+        )
         group.add_argument("-r", help=argparse.SUPPRESS)
         parser.add_argument("-u", "--until", choices=("discover", "lock"), help=argparse.SUPPRESS)
         parser.add_argument(

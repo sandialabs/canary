@@ -388,7 +388,8 @@ class TestCase(AbstractTestCase):
             self.artifacts = artifacts
 
         self.ofile = "canary-out.txt"
-        self.efile: str | None = "canary-err.txt"
+        output_strategy = config.getoption("testcase_output_strategy")
+        self.efile: str | None = None if output_strategy == "merge" else "canary-err.txt"
         self._stdout: IO[Any] | None = None
         self._stderr: IO[Any] | None = None
 
@@ -406,12 +407,15 @@ class TestCase(AbstractTestCase):
     def __repr__(self) -> str:
         return self.display_name
 
+    def stage(self) -> str:
+        dir = config.session.work_tree
+        assert dir is not None
+        return os.path.join(dir, ".canary/objects/cases", self.id[:2], self.id[2:])
+
     @property
     def lockfile(self) -> str:
         """Path to lock file containing information needed to generate this case at runtime"""
-        dir = config.session.work_tree
-        assert dir is not None
-        return os.path.join(dir, ".canary/objects/cases", self.id[:2], self.id[2:], self._lockfile)
+        return os.path.join(self.stage(), self._lockfile)
 
     @property
     def file_root(self) -> str:
@@ -464,7 +468,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def path(self) -> str:
-        """The relative path from ``self.work_tree`` to ``self.working_directory``"""
+        """The relative path from ``config.session.work_tree`` to ``self.working_directory``"""
         if self._path is None:
             work_tree = config.session.work_tree or config.invocation_dir
             dirname, basename = os.path.split(self.file_path)
@@ -484,13 +488,6 @@ class TestCase(AbstractTestCase):
 
     # backward compatibility
     exec_path = path
-
-    @property
-    def execfile(self) -> str | None:
-        if self.work_tree is None:
-            return None
-        else:
-            return os.path.join(self.work_tree, self.path, os.path.basename(self.file))
 
     @property
     def stdout_file(self) -> str:
@@ -529,11 +526,9 @@ class TestCase(AbstractTestCase):
     def working_directory(self) -> str:
         """Directory where the test is executed."""
         if self._working_directory is None:
-            work_tree = self.work_tree
+            work_tree = config.session.work_tree
             if not work_tree:
-                work_tree = config.session.work_tree
-            if not work_tree:
-                raise ValueError("work_tree must be set during set up") from None
+                raise ValueError("session work_tree not set") from None
             self._working_directory = os.path.normpath(os.path.join(work_tree, self.path))
         assert self._working_directory is not None
         return self._working_directory
@@ -1307,8 +1302,6 @@ class TestCase(AbstractTestCase):
             return True
         elif self.file_path.endswith(pattern):
             return True
-        elif self.execfile == pattern:
-            return True
         return False
 
     def has_keyword(self, /, keyword: str, case_insensitive: bool = True) -> bool:
@@ -1507,7 +1500,7 @@ class TestCase(AbstractTestCase):
         elif self.unresolved_dependencies:
             raise RuntimeError("All dependencies must be resolved before running")
         logging.trace(f"Setting up {self}")
-        self.work_tree = config.session.work_tree
+        assert config.session.work_tree is not None
         fs.mkdirp(self.working_directory)
         self.close_files()
         fs.clean_out_folder(self.working_directory)
