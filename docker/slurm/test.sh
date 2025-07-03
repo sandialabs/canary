@@ -1,6 +1,16 @@
 source /canary/bin/activate
 canary fetch examples
 
+echo
+echo
+echo
+echo
+echo "----------------------------------------------------"
+echo "Starting slurm tests..."
+echo
+echo
+echo
+
 # Test 1
 exit_code=0
 canary run -w -b scheduler=slurm ./examples || exit_code=$?

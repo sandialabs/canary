@@ -16,6 +16,16 @@ canary fetch examples
 # Install flux-python plugin
 python3 -m pip install flux-python
 
+echo
+echo
+echo
+echo
+echo "----------------------------------------------------"
+echo "Starting flux tests..."
+echo
+echo
+echo
+
 # Test 1
 exit_code=0
 canary run -w -b scheduler=flux ./examples || exit_code=$?
