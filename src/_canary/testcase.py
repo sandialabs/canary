@@ -470,11 +470,11 @@ class TestCase(AbstractTestCase):
             dirname, basename = os.path.split(self.file_path)
             path = os.path.join(work_tree, dirname, self.name)
             n = max_name_length()
-            if len(os.path.join(path, self.name)) < n:
+            if len(os.path.join(path, basename)) < n:
                 self._path = os.path.join(dirname, self.name)
             else:
                 # exceeds maximum name length for this filesystem
-                self._path = os.path.join(dirname, self.format("%b.%id"))
+                self._path = os.path.join(dirname, f"{self.family}.{self.id[:7]}")
         assert isinstance(self._path, str)
         return self._path
 
