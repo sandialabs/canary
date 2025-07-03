@@ -13,6 +13,7 @@ from ....testcase import TestCase
 from ....third_party.color import colorize
 from ....util.filesystem import find_work_tree
 from ....util.filesystem import working_dir
+from ....util.string import strip_quotes
 
 
 def setdefault(obj, attr, default):
@@ -47,23 +48,25 @@ class PathSpec(argparse.Action):
             setdefault(args, "paths", {}).update(paths)
             return
 
-        on_options, off_options, pathspec, script_args = self.parse(values)
-        if not pathspec and getattr(args, "f_pathspec", None):
+        ns = self.parse(values)
+        if not ns.pathspec and getattr(args, "f_pathspec", None):
             # use values from file only
             return
-        if on_options:
-            setdefault(args, "on_options", []).extend(on_options)
-        if off_options:
-            setdefault(args, "off_options", []).extend(off_options)
-        if script_args:
-            setdefault(args, "script_args", []).extend(script_args)
-        args.pathspec = pathspec
+        if ns.on_options:
+            setdefault(args, "on_options", []).extend(ns.on_options)
+        if ns.off_options:
+            setdefault(args, "off_options", []).extend(ns.off_options)
+        if ns.script_args:
+            setdefault(args, "script_args", []).extend(ns.script_args)
+        if ns.keyword_exprs:
+            setdefault(args, "keyword_exprs", []).extend(ns.keyword_exprs)
+        args.pathspec = ns.pathspec
 
         work_tree = find_work_tree(os.getcwd())
         if work_tree is None:
             args.mode = "w"
             args.start = None
-            paths = self.parse_new_session(pathspec)
+            paths = self.parse_new_session(ns.pathspec)
             setdefault(args, "paths", {}).update(paths)
             return
 
@@ -76,7 +79,7 @@ class PathSpec(argparse.Action):
             raise ValueError(f"-d {args.work_tree} option is illegal in re-use mode")
 
         args.work_tree = work_tree
-        case_specs, batch_id, path = self.parse_in_session(pathspec)
+        case_specs, batch_id, path = self.parse_in_session(ns.pathspec)
         args.start = None
         args.mode = "b" if batch_id else "a"
         args.case_specs = case_specs or None
@@ -120,28 +123,34 @@ class PathSpec(argparse.Action):
         )
 
     @staticmethod
-    def parse(values: list[str]) -> tuple[list[str], list[str], list[str], list[str]]:
+    def parse(values: list[str]) -> argparse.Namespace:
         """Split ``values`` into:
         - on_options: anything prefixed with +
         - off_options: anything prefixed with ~
+        - keyword expressions: anything prefixed with %
+        - pathspec: everything else, up to ``--``
         - script_args: anything following ``--``
-        - pathspec: everything else
         """
-        on_options: list[str] = []
-        off_options: list[str] = []
-        script_args: list[str] = []
-        pathspec: list[str] = []
+        namespace = argparse.Namespace(
+            on_options=[],
+            off_options=[],
+            script_args=[],
+            keyword_exprs=[],
+            pathspec=[],
+        )
         for i, item in enumerate(values):
             if item == "--":
-                script_args = values[i + 1 :]
+                namespace.script_args = values[i + 1 :]
                 break
             if item.startswith("+"):
-                on_options.append(item[1:])
+                namespace.on_options.append(item[1:])
             elif item.startswith("~"):
-                off_options.append(item[1:])
+                namespace.off_options.append(item[1:])
+            elif item.startswith("%"):
+                namespace.keyword_exprs.append(strip_quotes(item[1:]))
             else:
-                pathspec.append(item)
-        return on_options, off_options, pathspec, script_args
+                namespace.pathspec.append(item)
+        return namespace
 
     @staticmethod
     def parse_new_session(pathspec: list[str]) -> dict[str, list[str]]:

@@ -235,15 +235,14 @@ class TestBatch(AbstractTestCase):
         return ", ".join(colorize("@%s{%d %s}" % (colors[v], n, v)) for (v, n) in stat.items())
 
     def format(self, format_spec: str) -> str:
-        state = self.status
         times = self.times()
         replacements: dict[str, str] = {
-            "%id": "@*b{%s}" % self.id[:7],
+            "%id": self.id[:7],
             "%p": self.path,
             "%n": repr(self),
             "%sN": self.status.cname,
-            "%sn": state.value,
-            "%sd": state.details or "unknown",
+            "%sn": self.status.value,
+            "%sd": self.status.details or "unknown",
             "%l": str(len(self)),
             "%bs": self._combined_status(),
             "%d": hhmmss(times[0], threshold=0),  # duration
@@ -381,16 +380,7 @@ class TestBatch(AbstractTestCase):
             if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
                 self.jobid = proc.jobid
             if logging.get_level() <= logging.INFO:
-                fmt = io.StringIO()
-                fmt.write("@*b{==>} ")
-                if config.debug or os.getenv("GITLAB_CI"):
-                    fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-                    if qrank is not None and qsize is not None:
-                        fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-                fmt.write(f"Submitted batch %id: %l {pluralize('test', len(self))}")
-                if self.jobid:
-                    fmt.write(" (jobid: %j)")
-                logging.emit(self.format(fmt.getvalue()).strip() + "\n")
+                logging.emit(self.job_submission_summary(qrank, qsize) + "\n")
             while True:
                 if proc.poll() is not None:
                     break
@@ -402,7 +392,7 @@ class TestBatch(AbstractTestCase):
             self.total_duration = time.monotonic() - start
             self.refresh()
             if all([_.status.satisfies(("ready", "pending")) for _ in self.cases]):
-                f = "Batch %id: no test cases have started; check %p for any emitted scheduler log files."
+                f = "Batch @*b{%id}: no test cases have started; check %p for any emitted scheduler log files."
                 logging.warning(self.format(f))
             for case in self.cases:
                 if case.status == "skipped":
@@ -420,27 +410,44 @@ class TestBatch(AbstractTestCase):
                     case.status.set("not_run", f"case failed to start (batch: {self.id})")
                     case.save()
             if rc := getattr(proc, "returncode", None):
-                logging.debug(self.format(f"Batch %id: batch processing exited with code {rc}"))
+                logging.debug(
+                    self.format(f"Batch @*b{{%id}}: batch processing exited with code {rc}")
+                )
             if logging.get_level() <= logging.INFO:
-                fmt = io.StringIO()
-                fmt.write("@*b{==>} ")
-                if config.debug or os.getenv("GITLAB_CI"):
-                    fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-                    if qrank is not None and qsize is not None:
-                        fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-                times = self.times()
-                fmt.write(f"Finished batch %id: %bs (time: {hhmmss(times[0], threshold=0)}")
-                if times[1]:
-                    fmt.write(f", running: {hhmmss(times[1], threshold=0)}")
-                if times[2]:
-                    fmt.write(f", queued: {hhmmss(times[2], threshold=0)}")
-                fmt.write(")")
-                logging.emit(self.format(fmt.getvalue()).strip() + "\n")
+                logging.emit(self.job_completion_summary(qrank, qsize) + "\n")
 
         return
 
     def finish(self) -> None:
         pass
+
+    def job_submission_summary(self, qrank: int | None, qsize: int | None) -> str:
+        fmt = io.StringIO()
+        fmt.write("@*b{==>} ")
+        if config.debug or os.getenv("GITLAB_CI"):
+            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            if qrank is not None and qsize is not None:
+                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        fmt.write(f"Submitted batch @*b{{%id}}: %l {pluralize('test', len(self))}")
+        if self.jobid:
+            fmt.write(" (jobid: %j)")
+        return self.format(fmt.getvalue().strip())
+
+    def job_completion_summary(self, qrank: int | None, qsize: int | None) -> str:
+        fmt = io.StringIO()
+        fmt.write("@*b{==>} ")
+        if config.debug or os.getenv("GITLAB_CI"):
+            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+            if qrank is not None and qsize is not None:
+                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        times = self.times()
+        fmt.write(f"Finished batch @*b{{%id}}: %bs (time: {hhmmss(times[0], threshold=0)}")
+        if times[1]:
+            fmt.write(f", running: {hhmmss(times[1], threshold=0)}")
+        if times[2]:
+            fmt.write(f", queued: {hhmmss(times[2], threshold=0)}")
+        fmt.write(")")
+        return self.format(fmt.getvalue().strip())
 
 
 def canary_invocation(arg: "TestBatch | TestCase") -> str:

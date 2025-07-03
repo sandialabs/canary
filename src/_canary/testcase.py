@@ -470,11 +470,11 @@ class TestCase(AbstractTestCase):
             dirname, basename = os.path.split(self.file_path)
             path = os.path.join(work_tree, dirname, self.name)
             n = max_name_length()
-            if len(os.path.join(path, basename)) < n:
+            if len(os.path.join(path, self.name)) < n:
                 self._path = os.path.join(dirname, self.name)
             else:
                 # exceeds maximum name length for this filesystem
-                self._path = os.path.join(dirname, f"{self.family}.{self.id[:7]}")
+                self._path = os.path.join(dirname, self.format("%y.%id"))
         assert isinstance(self._path, str)
         return self._path
 
@@ -892,9 +892,6 @@ class TestCase(AbstractTestCase):
         cmd.extend(getattr(self, "postflags", None) or [])
         return cmd
 
-    def raw_command_line(self) -> str:
-        return shlex.join(self.command())
-
     @property
     def variables(self) -> dict[str, str]:
         return self._variables
@@ -1253,7 +1250,7 @@ class TestCase(AbstractTestCase):
 
     def describe(self) -> str:
         """Write a string describing the test case"""
-        format_spec: str = "%sN %id %X"
+        format_spec: str = "%sN @*b{%id} %X"
         if self.duration >= 0:
             format_spec += " (%d)"
         if self.status.details:
@@ -1261,20 +1258,24 @@ class TestCase(AbstractTestCase):
         return self.format(format_spec)
 
     def format(self, format_spec: str) -> str:
-        state = self.status
         replacements = {
-            "%id": "@*b{%s}" % self.id[:7],
-            "%p": self.pretty_path(),
-            "%n": self.pretty_name(),
+            "%id": self.id[:7],
             "%sN": self.status.cname,
-            "%sn": state.value,
-            "%sd": state.details or "unknown",
+            "%sn": self.status.value,
+            "%sd": self.status.details or "unknown",
             "%d": hhmmss(None if self.duration < 0 else self.duration),
+            "%n": self.name,
+            "%N": self.display_name,
+            "%F": self.fullname,
+            "%x": self.cmd_line,
+            "%w": self.path,
+            "%W": os.path.join(os.path.dirname(self.path), self.display_name),
+            "%y": self.family,
         }
         if config.getoption("format", "short") == "long":
-            replacements["%X"] = replacements["%p"]
+            replacements["%X"] = self.pretty_path()
         else:
-            replacements["%X"] = replacements["%n"]
+            replacements["%X"] = self.pretty_name()
         formatted_text = format_spec
         for placeholder, value in replacements.items():
             formatted_text = formatted_text.replace(placeholder, value)
@@ -1677,14 +1678,7 @@ class TestCase(AbstractTestCase):
                 os._exit(1)
 
         if logging.get_level() <= logging.INFO:
-            fmt = io.StringIO()
-            fmt.write("@*b{==>} ")
-            if config.debug or os.getenv("GITLAB_CI"):
-                fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-                if qrank is not None and qsize is not None:
-                    fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-            fmt.write("Starting %id: %X")
-            logging.emit(self.format(fmt.getvalue()).strip() + "\n")
+            logging.emit(self.job_submission_summary(qrank, qsize) + "\n")
 
         tee_output = config.getoption("capture") == "tee"
         try:
@@ -1752,14 +1746,7 @@ class TestCase(AbstractTestCase):
                 self.status.set_from_code(self.returncode)
         finally:
             if logging.get_level() <= logging.INFO:
-                fmt = io.StringIO()
-                fmt.write("@*b{==>} ")
-                if config.debug or os.getenv("GITLAB_CI"):
-                    fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-                    if qrank is not None and qsize is not None:
-                        fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
-                fmt.write("Finished %id: %X %sN")
-                logging.emit(self.format(fmt.getvalue()).strip() + "\n")
+                logging.emit(self.job_completion_summary(qrank, qsize) + "\n")
             signal.signal(signal.SIGINT, default_int_handler)
             signal.signal(signal.SIGTERM, default_term_handler)
             if self.status != "skipped":
@@ -1779,6 +1766,24 @@ class TestCase(AbstractTestCase):
         else:
             self.stdout.write(text)
         sys.stderr.write(text)
+
+    def job_submission_summary(self, qrank: int | None, qsize: int | None) -> str:
+        fmt = io.StringIO()
+        if config.debug or os.getenv("GITLAB_CI"):
+            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+        if qrank is not None and qsize is not None:
+            fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
+        fmt.write("Starting @*b{%id}: %X")
+        return self.format(fmt.getvalue()).strip()
+
+    def job_completion_summary(self, qrank: int | None, qsize: int | None) -> str:
+        fmt = io.StringIO()
+        if config.debug or os.getenv("GITLAB_CI"):
+            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+        if qrank is not None and qsize is not None:
+            fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
+        fmt.write("Finished @*b{%id}: %X %sN")
+        return self.format(fmt.getvalue()).strip()
 
 
 class TestMultiCase(TestCase):

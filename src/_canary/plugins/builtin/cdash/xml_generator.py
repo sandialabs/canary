@@ -204,7 +204,7 @@ class CDashXMLReporter:
         add_text_node(l1, "StartTestTime", int(starttime))
         testlist = doc.createElement("TestList")
         for case in cases:
-            add_text_node(testlist, "Test", f"./{case.fullname}")
+            add_text_node(testlist, "Test", case.format("./%W"))
         l1.appendChild(testlist)
         success = ("success", "xfail", "xdiff")
 
@@ -266,10 +266,12 @@ class CDashXMLReporter:
                 completion_status = "Completed"
             test_node = doc.createElement("Test")
             test_node.setAttribute("Status", status)
-            add_text_node(test_node, "Name", case.display_name)
-            add_text_node(test_node, "Path", f"./{case.file_path}")
-            add_text_node(test_node, "FullName", case.fullname)
-            add_text_node(test_node, "FullCommandLine", case.raw_command_line())
+            fullname = case.format("./%W")
+            path, name = os.path.split(fullname)
+            add_text_node(test_node, "Name", name)
+            add_text_node(test_node, "Path", path)
+            add_text_node(test_node, "FullName", fullname)
+            add_text_node(test_node, "FullCommandLine", case.format("%x"))
             results = doc.createElement("Results")
 
             add_named_measurement(results, "Exit Code", exit_code)
@@ -279,7 +281,7 @@ class CDashXMLReporter:
             if fail_reason is not None:
                 add_named_measurement(results, "Fail Reason", fail_reason)
             add_named_measurement(results, "Completion Status", completion_status)
-            add_named_measurement(results, "Command Line", case.raw_command_line(), type="cdata")
+            add_named_measurement(results, "Command Line", case.format("%x"), type="cdata")
             add_named_measurement(results, "Processors", int(case.cpus or 1))
             if case.gpus:
                 add_named_measurement(results, "GPUs", case.gpus)
