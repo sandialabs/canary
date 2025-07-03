@@ -44,4 +44,4 @@ jobs:
         run: |
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "Building for branch: $BRANCH_NAME"
-          docker run --rm -v /home/runner/work/canary/canary/docker/flux/test.sh:/test.sh fluxrm/flux-sched:latest /test.sh $BRANCH_NAME
+          docker run --rm -v /home/runner/work/canary/canary/docker/flux/test.sh:/test.sh fluxrm/flux-sched:latest flux start --test-size=3 ./test.sh $BRANCH_NAME
