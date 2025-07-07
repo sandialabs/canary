@@ -242,6 +242,33 @@ class Session:
         logging.info(f"Selected {ready} {pluralize('test', expected)} from batch {batch_id}")
         return self
 
+    def load_from_lockfile(self, file) -> None:
+        with open(file) as fh:
+            data = json.load(fh)
+        fgen = lambda p: AbstractTestGenerator.factory(p["file_root"], p["file_path"])
+        self.generators.clear()
+        self.generators.extend([fgen(_["properties"]) for _ in data["testcases"]])
+        self.dump_testcase_generators()
+        ts: TopologicalSorter = TopologicalSorter()
+        map: dict[str, int] = {}
+        for i, state in enumerate(data["testcases"]):
+            deps = [_["properties"]["id"] for _ in state["properties"]["dependencies"]]
+            ts.add(state["properties"]["id"], *deps)
+            map[state["properties"]["id"]] = i
+        cases: dict[str, TestCase | TestMultiCase] = {}
+        for id in ts.static_order():
+            i = map[id]
+            state = data["testcases"][i]
+            state["properties"]["work_tree"] = self.work_tree
+            for j, dep_state in enumerate(state["properties"]["dependencies"]):
+                state["properties"]["dependencies"][j] = cases[dep_state["properties"]["id"]]
+            cases[id] = testcase_from_state(state)
+            cases[id].mark_as_ready()
+            assert id == cases[id].id
+        self.cases.clear()
+        self.cases.extend(cases.values())
+        self.dump_testcases()
+
     def get_ready(self) -> list[TestCase]:
         return [case for case in self.cases if case.ready() or case.pending()]
 

@@ -31,15 +31,14 @@ def canary_subcommand() -> CanarySubcommand:
 class Find(CanarySubcommand):
     name = "find"
     description = "Search paths for test files"
+    epilog = "See canary help --pathspec for help on the path specification"
 
     def setup_parser(self, parser: "Parser") -> None:
         group = parser.add_mutually_exclusive_group()
         add_group_argument(group, "paths", "Print file paths, grouped by root", False)
         add_group_argument(group, "files", "Print file paths", False)
         add_group_argument(group, "graph", "Print DAG of test cases")
-        parser.add_argument(
-            "--dump", action="store_true", help="Dump test cases to lock lock file [default: False]"
-        )
+        add_group_argument(group, "lock", "Dump test cases to lock file")
         parser.add_argument(
             "--owner", dest="owners", action="append", help="Show tests owned by 'owner'"
         )
@@ -95,13 +94,14 @@ class Find(CanarySubcommand):
             finder.pprint_files(cases_to_run)
         elif args.print_graph:
             finder.pprint_graph(cases_to_run)
-        else:
-            finder.pprint(cases_to_run)
-        if args.dump:
+        elif args.print_lock:
             file = os.path.join(config.invocation_dir, "testcases.lock")
             states = [case.getstate() for case in cases_to_run]
             with open(file, "w") as fh:
                 json.dump({"testcases": states}, fh, indent=2)
+            logging.info("test cases written to testcase.lock")
+        else:
+            finder.pprint(cases_to_run)
         return 0
 
 

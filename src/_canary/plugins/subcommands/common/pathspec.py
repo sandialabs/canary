@@ -66,8 +66,7 @@ class PathSpec(argparse.Action):
         if work_tree is None:
             args.mode = "w"
             args.start = None
-            paths = self.parse_new_session(ns.pathspec)
-            setdefault(args, "paths", {}).update(paths)
+            self.parse_new_session(args)
             return
 
         assert work_tree is not None
@@ -153,12 +152,20 @@ class PathSpec(argparse.Action):
         return namespace
 
     @staticmethod
-    def parse_new_session(pathspec: list[str]) -> dict[str, list[str]]:
+    def parse_new_session(args: argparse.Namespace) -> None:
         paths: dict[str, list[str]] = {}
+        pathspec: list[str] = args.pathspec
         if not pathspec:
             paths.setdefault(os.getcwd(), [])
-            return paths
+            setdefault(args, "paths", {}).update(paths)
+            return
         for path in pathspec:
+            if os.path.isfile(path) and path.endswith("testcases.lock"):
+                if len(pathspec) > 1:
+                    raise ValueError("lock file consumption incompatible with other path args")
+                setdefault(args, "paths", {}).update(paths)
+                args.testcases_lock = path
+                return
             if os.path.isfile(path) and is_test_file(path):
                 root, name = os.path.split(os.path.abspath(path))
                 paths.setdefault(root, []).append(name)
@@ -175,7 +182,8 @@ class PathSpec(argparse.Action):
                 paths.setdefault(root, []).append(name.replace(os.pathsep, os.path.sep))
             else:
                 raise ValueError(f"{path}: no such file or directory")
-        return paths
+        setdefault(args, "paths", {}).update(paths)
+        return
 
     @staticmethod
     def parse_in_session(values: list[str]) -> tuple[list[str], str | None, str | None]:
@@ -236,6 +244,8 @@ pathspec syntax:
   new test sessions:
     %(path)s                                   scan path recursively for test generators
     %(file)s                                   use this test generator
+    %(lock)s                         run tests in this lock file
+                                           (produced by %(find)s)
     %(git)s@path                               find tests under git version control at path
     %(repo)s@path                              find tests under repo version control at path
 
@@ -258,6 +268,8 @@ pathspec syntax:
             "path": bold("path"),
             "git": bold("git"),
             "repo": bold("repo"),
+            "lock": bold("testcases.lock"),
+            "find": bold("canary find --lock ..."),
             "relpath": bold("path"),
             "relfile": bold("file"),
             "hash": bold("/hash"),

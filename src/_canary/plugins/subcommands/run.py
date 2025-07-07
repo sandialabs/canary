@@ -118,38 +118,41 @@ class Run(CanarySubcommand):
             path = args.work_tree or Session.default_worktree
             force = config.getoption("wipe") or False
             session = Session(path, mode=args.mode, force=force)
-            session.add_search_paths(args.paths)
-            parsing_policy = config.getoption("parsing_policy") or "pedantic"
-            session.discover(pedantic=parsing_policy == "pedantic")
-            if until := config.getoption("until"):
-                generators = session.generators
-                roots = set()
-                for generator in generators:
-                    roots.add(generator.root)
-                n, N = len(generators), len(roots)
-                s, S = "" if n == 1 else "s", "" if N == 1 else "s"
-                logging.info(colorize("@*{Collected} %d file%s from %d root%s" % (n, s, N, S)))
-                if until == "discover":
-                    logging.info("Done with test discovery")
-                    return 0
-            env_mods = config.getoption("env_mods") or {}
-            session.lock(
-                keyword_exprs=config.getoption("keyword_exprs"),
-                parameter_expr=config.getoption("parameter_expr"),
-                on_options=config.getoption("on_options"),
-                env_mods=env_mods.get("test") or {},
-                regex=config.getoption("regex_filter"),
-            )
+            if lockfile := getattr(args, "testcases_lock", None):
+                session.load_from_lockfile(lockfile)
+            else:
+                session.add_search_paths(args.paths)
+                parsing_policy = config.getoption("parsing_policy") or "pedantic"
+                session.discover(pedantic=parsing_policy == "pedantic")
+                if until := config.getoption("until"):
+                    generators = session.generators
+                    roots = set()
+                    for generator in generators:
+                        roots.add(generator.root)
+                    n, N = len(generators), len(roots)
+                    s, S = "" if n == 1 else "s", "" if N == 1 else "s"
+                    logging.info(colorize("@*{Collected} %d file%s from %d root%s" % (n, s, N, S)))
+                    if until == "discover":
+                        logging.info("Done with test discovery")
+                        return 0
+                env_mods = config.getoption("env_mods") or {}
+                session.lock(
+                    keyword_exprs=config.getoption("keyword_exprs"),
+                    parameter_expr=config.getoption("parameter_expr"),
+                    on_options=config.getoption("on_options"),
+                    env_mods=env_mods.get("test") or {},
+                    regex=config.getoption("regex_filter"),
+                )
 
-            if until := config.getoption("until"):
-                active_cases = session.get_ready()
-                n, N = len(active_cases), len({case.file for case in active_cases})
-                s, S = "" if n == 1 else "s", "" if N == 1 else "s"
-                logging.info(colorize("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S)))
-                graph.print(active_cases, file=sys.stdout)
-                if until == "lock":
-                    logging.info("Done freezing test cases")
-                    return 0
+                if until := config.getoption("until"):
+                    active_cases = session.get_ready()
+                    n, N = len(active_cases), len({case.file for case in active_cases})
+                    s, S = "" if n == 1 else "s", "" if N == 1 else "s"
+                    logging.info(colorize("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S)))
+                    graph.print(active_cases, file=sys.stdout)
+                    if until == "lock":
+                        logging.info("Done freezing test cases")
+                        return 0
         elif args.mode == "a":
             case_specs = getattr(args, "case_specs", None)
             if case_specs and all([_.startswith("/") for _ in case_specs]):
