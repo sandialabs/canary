@@ -443,10 +443,6 @@ class PYTTestGenerator(AbstractTestGenerator):
             result = ns.when.evaluate(
                 testname=testname, on_options=on_options, parameters=parameters
             )
-            print(f"{testname=}")
-            print(f"{on_options=}")
-            print(f"{ns=}")
-            print(f"{result.value=}")
             if not result.value:
                 continue
             return float(ns.value)
