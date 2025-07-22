@@ -582,8 +582,6 @@ class Config:
         assert name is not None
         logging.debug(f"Setting up HPC Connect for {name}")
         self.backend = hpc_connect.get_backend(name)
-        if self.debug:
-            hpc_connect.set_debug(True)
         logging.debug(f"  HPC connect: node count: {self.backend.config.node_count}")
         logging.debug(f"  HPC connect: CPUs per node: {self.backend.config.cpus_per_node}")
         logging.debug(f"  HPC connect: GPUs per node: {self.backend.config.gpus_per_node}")

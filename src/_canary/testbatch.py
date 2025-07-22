@@ -332,7 +332,6 @@ class TestBatch(AbstractTestCase):
         variables["CANARY_HPCC_BACKEND"] = "null"  # guard against infinite batch recursion
         if config.debug:
             variables["CANARY_DEBUG"] = "on"
-            hpc_connect.set_debug(True)
 
         batchopts = config.getoption("batch", {})
         flat = batchopts["spec"]["layout"] == "flat"

@@ -8,8 +8,10 @@ import pytest
 
 import _canary.config
 
+
 def pytest_addoption(parser):
     parser.addoption("--cpus-per-node", action="store", default="8", help="Number of CPUs per node")
+
 
 @pytest.fixture(scope="function", autouse=True)
 def config(request):

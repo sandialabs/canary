@@ -52,6 +52,10 @@ class FilterNamespace:
         for key, val in kwargs.items():
             setattr(self, key, val)
 
+    def __repr__(self) -> str:
+        attrs = ", ".join([f"{key}={value}" for key, value in vars(self).items()])
+        return f"FilterNamespace({attrs})"
+
     def enabled(
         self,
         testname: str | None = None,
@@ -163,9 +167,17 @@ class PYTTestGenerator(AbstractTestGenerator):
                     family=name,
                     keywords=keywords,
                     parameters=parameters,
-                    timeout=self.timeout(testname=name, parameters=parameters),
-                    baseline=self.baseline(testname=name, parameters=parameters),
-                    sources=self.sources(testname=name, parameters=parameters),
+                    modules=[_[0] for _ in modules],
+                    owners=self.owners,
+                    timeout=self.timeout(
+                        testname=name, on_options=on_options, parameters=parameters
+                    ),
+                    baseline=self.baseline(
+                        testname=name, on_options=on_options, parameters=parameters
+                    ),
+                    sources=self.sources(
+                        testname=name, on_options=on_options, parameters=parameters
+                    ),
                     xstatus=self.xstatus(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
@@ -175,8 +187,6 @@ class PYTTestGenerator(AbstractTestGenerator):
                     rcfiles=self.rcfiles(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
-                    modules=[_[0] for _ in modules],
-                    owners=self.owners,
                     artifacts=self.artifacts(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
@@ -220,20 +230,16 @@ class PYTTestGenerator(AbstractTestGenerator):
                     flag=ns.value,
                     family=name,
                     keywords=self.keywords(testname=name),
-                    timeout=self.timeout(testname=name),
-                    baseline=self.baseline(testname=name),
-                    sources=self.sources(testname=name),
+                    timeout=self.timeout(testname=name, on_options=on_options),
+                    baseline=self.baseline(testname=name, on_options=on_options),
+                    sources=self.sources(testname=name, on_options=on_options),
                     xstatus=self.xstatus(testname=name, on_options=on_options),
                     preload=self.preload(testname=name, on_options=on_options),
                     modules=[_[0] for _ in modules],
                     rcfiles=self.rcfiles(testname=name, on_options=on_options),
                     owners=self.owners,
-                    artifacts=self.artifacts(
-                        testname=name, on_options=on_options, parameters=parameters
-                    ),
-                    exclusive=self.exclusive(
-                        testname=name, on_options=on_options, parameters=parameters
-                    ),
+                    artifacts=self.artifacts(testname=name, on_options=on_options),
+                    exclusive=self.exclusive(testname=name, on_options=on_options),
                 )
                 if test_mask is not None:
                     case.mask = test_mask
@@ -437,6 +443,10 @@ class PYTTestGenerator(AbstractTestGenerator):
             result = ns.when.evaluate(
                 testname=testname, on_options=on_options, parameters=parameters
             )
+            print(f"{testname=}")
+            print(f"{on_options=}")
+            print(f"{ns=}")
+            print(f"{result.value=}")
             if not result.value:
                 continue
             return float(ns.value)
