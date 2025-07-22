@@ -20,6 +20,7 @@ import warnings
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
+from datetime import timedelta
 from types import SimpleNamespace
 from typing import IO
 from typing import Any
@@ -50,6 +51,7 @@ from .util.module import load as load_module
 from .util.procutils import get_process_metrics
 from .util.shell import source_rcfile
 from .util.string import stringify
+from .util.time import Duration
 from .util.time import hhmmss
 from .util.time import timestamp
 from .when import match_any
@@ -1127,9 +1129,12 @@ class TestCase(AbstractTestCase):
         self.name = self.family
         self.display_name = self.family
         if self.parameters:
-            s_params = [f"{k}={v}" for k, v in self.parameters.sorted_items(predicate=stringify)]
+            s_params = self.s_params()
             self.name = f"{self._name}.{'.'.join(s_params)}"
             self.display_name = f"{self._display_name}[{','.join(s_params)}]"
+
+    def s_params(self) -> list:
+        return [f"{k}={v}" for k, v in self.parameters.sorted_items(predicate=stringify)]
 
     @property
     def cache(self) -> TestCaseCache:
@@ -1266,6 +1271,10 @@ class TestCase(AbstractTestCase):
             "%w": self.path,
             "%W": os.path.join(os.path.dirname(self.path), self.display_name),
             "%b": self.family,
+            "%P": self.pretty_repr(",".join(self.s_params())),
+            "%pn": self.pretty_name(),
+            "%pp": self.pretty_path(),
+            "%t": Duration.to_str(timedelta(seconds=self.timeout)),
         }
         if config.getoption("format", "short") == "long":
             replacements["%X"] = self.pretty_path()

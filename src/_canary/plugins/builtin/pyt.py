@@ -26,6 +26,7 @@ from ...third_party.color import colorize
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
 from ...util import logging
+from ...util.string import pluralize
 from ...util.string import stringify
 from ...util.time import time_in_seconds
 from ..hookspec import hookimpl
@@ -112,9 +113,9 @@ class PYTTestGenerator(AbstractTestGenerator):
                         file.write(f" -> {dst}")
                     file.write("\n")
         cases: list[TestCase] = self.lock(on_options=on_options)
-        file.write(
-            f"{len(cases)} test case{'' if len(cases) <= 1 else 's'} using default options:\n"
-        )
+        n = len(cases)
+        opts = ", ".join(on_options or [])
+        file.write(f"{n} test {pluralize('case', n)} using on_options={opts}:\n")
         graph.print(cases, file=file)
         return file.getvalue()
 
