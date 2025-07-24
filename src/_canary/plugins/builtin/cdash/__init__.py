@@ -34,6 +34,12 @@ class CDashReporter(CanaryReporter):
         sp = parser.add_subparsers(dest="action", metavar="subcommands")
         p = sp.add_parser("create", help="Create CDash XML files")
         p.add_argument(
+            "--name-format",
+            choices=("short", "long"),
+            default="short",
+            help="Name as shown on the CDash landing page  [default: %(default)s]",
+        )
+        p.add_argument(
             "--build",
             dest="buildname",
             metavar="name",
