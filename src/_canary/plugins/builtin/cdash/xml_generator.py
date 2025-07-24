@@ -268,7 +268,7 @@ class CDashXMLReporter:
             test_node.setAttribute("Status", status)
             fullname = case.format("./%W")
             path, basename = os.path.split(fullname)
-            name = fullname if config.getoption("name_format") == "long" else basename
+            name = fullname[1:] if config.getoption("name_format") == "long" else basename
             add_text_node(test_node, "Name", name)
             add_text_node(test_node, "Path", path)
             add_text_node(test_node, "FullName", fullname)
