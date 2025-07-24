@@ -1250,38 +1250,39 @@ class TestCase(AbstractTestCase):
 
     def describe(self) -> str:
         """Write a string describing the test case"""
-        format_spec: str = "%sN @*b{%id} %X"
+        format_spec: str = "%s.n @*b{%id} %X"
         if self.duration >= 0:
             format_spec += " (%d)"
         if self.status.details:
-            format_spec += ": %sd"
+            format_spec += ": %s.d"
         return self.format(format_spec)
 
     def format(self, format_spec: str) -> str:
         replacements = {
             "%id": self.id[:7],
-            "%sN": self.status.cname,
-            "%sn": self.status.value,
-            "%sd": self.status.details or "unknown",
             "%d": hhmmss(None if self.duration < 0 else self.duration),
             "%n": self.name,
-            "%N": self.display_name,
+            "%D": self.display_name,
             "%F": self.fullname,
             "%x": self.cmd_line,
-            "%w": self.path,
-            "%W": os.path.join(os.path.dirname(self.path), self.display_name),
-            "%b": self.family,
-            "%P": self.pretty_repr(",".join(self.s_params())),
-            "%pn": self.pretty_name(),
-            "%pp": self.pretty_path(),
+            "%p": self.path,
+            "%P": os.path.dirname(self.path),
+            "%f": self.family,
+            "%a": self.pretty_repr(",".join(self.s_params())),
+            "%N": self.pretty_name(),
+            "%r": self.pretty_path(),
             "%t": Duration.to_str(timedelta(seconds=self.timeout)),
+            "%s.n": self.status.cname,
+            "%s.v": self.status.value,
+            "%s.d": self.status.details or "unknown",
         }
         if config.getoption("format", "short") == "long":
-            replacements["%X"] = self.pretty_path()
+            replacements["%X"] = replacements["%r"]
         else:
-            replacements["%X"] = self.pretty_name()
+            replacements["%X"] = replacements["%N"]
         formatted_text = format_spec
-        for placeholder, value in replacements.items():
+        for placeholder in reversed(sorted(replacements, key=lambda x: (len(x[1:]), x[1:]))):
+            value = replacements[placeholder]
             formatted_text = formatted_text.replace(placeholder, value)
         return colorize(formatted_text.strip())
 
@@ -1786,7 +1787,7 @@ class TestCase(AbstractTestCase):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
         if qrank is not None and qsize is not None:
             fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-        fmt.write("Finished @*b{%id}: %X %sN")
+        fmt.write("Finished @*b{%id}: %X %s.n")
         return self.format(fmt.getvalue()).strip()
 
 

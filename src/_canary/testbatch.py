@@ -235,20 +235,17 @@ class TestBatch(AbstractTestCase):
         return ", ".join(colorize("@%s{%d %s}" % (colors[v], n, v)) for (v, n) in stat.items())
 
     def format(self, format_spec: str) -> str:
-        times = self.times()
         replacements: dict[str, str] = {
             "%id": self.id[:7],
             "%p": self.path,
+            "%P": os.path.dirname(self.path),
             "%n": repr(self),
-            "%sN": self.status.cname,
-            "%sn": self.status.value,
-            "%sd": self.status.details or "unknown",
-            "%l": str(len(self)),
-            "%bs": self._combined_status(),
-            "%d": hhmmss(times[0], threshold=0),  # duration
-            "%tr": hhmmss(times[1], threshold=0),  # running time
-            "%tq": hhmmss(times[2], threshold=0),  # time in queue
             "%j": self.jobid or "none",
+            "%l": str(len(self)),
+            "%S": self._combined_status(),
+            "%s.n": self.status.cname,
+            "%s.v": self.status.value,
+            "%s.d": self.status.details or "unknown",
         }
         if config.getoption("format", "short") == "long":
             replacements["%X"] = replacements["%p"]
@@ -442,7 +439,7 @@ class TestBatch(AbstractTestCase):
             if qrank is not None and qsize is not None:
                 fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
         times = self.times()
-        fmt.write(f"Finished batch @*b{{%id}}: %bs (time: {hhmmss(times[0], threshold=0)}")
+        fmt.write(f"Finished batch @*b{{%id}}: %S (time: {hhmmss(times[0], threshold=0)}")
         if times[1]:
             fmt.write(f", running: {hhmmss(times[1], threshold=0)}")
         if times[2]:

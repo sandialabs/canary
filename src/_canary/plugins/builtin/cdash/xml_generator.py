@@ -19,6 +19,7 @@ from ....testcase import TestCase
 from ....testcase import factory as testcase_factory
 from ....util import cdash
 from ....util import logging
+from ....util.compression import compress_str
 from ....util.filesystem import mkdirp
 from ....util.filesystem import working_dir
 from ....util.time import strftimestamp
@@ -204,7 +205,7 @@ class CDashXMLReporter:
         add_text_node(l1, "StartTestTime", int(starttime))
         testlist = doc.createElement("TestList")
         for case in cases:
-            add_text_node(testlist, "Test", case.format("./%W"))
+            add_text_node(testlist, "Test", case.format("./%P/%D"))
         l1.appendChild(testlist)
         success = ("success", "xfail", "xdiff")
 
@@ -266,15 +267,12 @@ class CDashXMLReporter:
                 completion_status = "Completed"
             test_node = doc.createElement("Test")
             test_node.setAttribute("Status", status)
-            fullname = case.format("./%W")
-            path, basename = os.path.split(fullname)
-            name = fullname[1:] if config.getoption("name_format") == "long" else basename
-            add_text_node(test_node, "Name", name)
-            add_text_node(test_node, "Path", path)
-            add_text_node(test_node, "FullName", fullname)
+            name_fmt = "%P/%D" if config.getoption("name_format") == "long" else "%D"
+            add_text_node(test_node, "Name", case.format(name_fmt))
+            add_text_node(test_node, "Path", case.format("./%P"))
+            add_text_node(test_node, "FullName", case.format("./%P/%D"))
             add_text_node(test_node, "FullCommandLine", case.format("%x"))
             results = doc.createElement("Results")
-
             add_named_measurement(results, "Exit Code", exit_code)
             add_named_measurement(results, "Exit Value", str(exit_value))
             duration = case.stop - case.start
@@ -303,6 +301,17 @@ class CDashXMLReporter:
                 compression="gzip",
             )
             test_node.appendChild(results)
+
+            if case.status.satisfies(("failed", "diffed")) and os.path.exists(case.file):
+                add_named_measurement(
+                    test_node,
+                    "Attached File",
+                    compress_str(open(case.file).read()),
+                    type="file",
+                    encoding="base64",
+                    compression="gzip",
+                    filename=os.path.basename(case.file),
+                )
 
             if case.keywords:
                 labels = doc.createElement("Labels")
@@ -397,6 +406,7 @@ def add_named_measurement(
     name: str,
     arg: str | float | int | None,
     type: str | None = None,
+    **attrs: str,
 ) -> None:
     measurement = xdom.Element("NamedMeasurement")
     measurement.ownerDocument = parent.ownerDocument
@@ -409,6 +419,8 @@ def add_named_measurement(
         add_text_node(measurement, "Value", arg)
     measurement.setAttribute("name", name)
     measurement.setAttribute("type", type)
+    for key, val in attrs.items():
+        measurement.setAttribute(key, str(val))
     parent.appendChild(measurement)
 
 
