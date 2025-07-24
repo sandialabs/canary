@@ -4,9 +4,9 @@
 
 import os
 import sys
+import warnings
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Type
 
 import pluggy
 
@@ -17,6 +17,9 @@ from .types import CanarySubcommand
 
 if TYPE_CHECKING:
     from ..generator import AbstractTestGenerator
+
+
+warnings.simplefilter("once", DeprecationWarning)
 
 
 class CanaryPluginManager(pluggy.PluginManager):
@@ -47,9 +50,19 @@ class CanaryPluginManager(pluggy.PluginManager):
         hook = self.hook.canary_subcommand
         return hook()
 
-    def get_generators(self) -> list[Type["AbstractTestGenerator"]]:
-        hook = self.hook.canary_testcase_generator
-        return hook()
+    def testcase_generator(
+        self, root: str, path: str | None = None
+    ) -> "AbstractTestGenerator | None":
+        if generator := self.hook.canary_generator(root=root, path=path):
+            return generator
+        for gen_type in self.hook.canary_testcase_generator():
+            if gen_type.matches(root if path is None else os.path.join(root, path)):
+                warnings.warn(
+                    "canary_testcase_generator has been deprecated, use canary_generator instead",
+                    category=DeprecationWarning,
+                )
+                return gen_type(root, path=path)
+        return None
 
     def load_from_env(self) -> None:
         if plugins := os.getenv("CANARY_PLUGINS"):

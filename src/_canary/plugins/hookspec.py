@@ -25,6 +25,12 @@ hookimpl = pluggy.HookimplMarker(project_name)
 
 @hookspec
 def canary_testcase_generator() -> Type["AbstractTestGenerator"]:
+    """Deprecated: Use canary_generator"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_generator(root: str, path: str | None) -> "AbstractTestGenerator":
     """Returns an implementation of AbstractTestGenerator"""
     raise NotImplementedError
 

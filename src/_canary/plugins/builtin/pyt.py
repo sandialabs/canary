@@ -11,7 +11,6 @@ from string import Template
 from types import ModuleType
 from typing import Any
 from typing import Sequence
-from typing import Type
 
 from ... import config
 from ... import enums
@@ -954,5 +953,7 @@ class PYTTestGenerator(AbstractTestGenerator):
 
 
 @hookimpl
-def canary_testcase_generator() -> Type[PYTTestGenerator]:
-    return PYTTestGenerator
+def canary_generator(root: str, path: str | None) -> AbstractTestGenerator | None:
+    if PYTTestGenerator.matches(root if path is None else os.path.join(root, path)):
+        return PYTTestGenerator(root, path=path)
+    return None

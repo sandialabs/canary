@@ -20,11 +20,11 @@ from types import SimpleNamespace
 from typing import Any
 from typing import ClassVar
 from typing import Generator
-from typing import Type
 
 from ... import config
 from ...config.argparsing import Parser
 from ...enums import list_parameter_space
+from ...generator import AbstractTestGenerator
 from ...testcase import TestCase
 from ...testcase import TestMultiCase
 from ...third_party.color import colorize
@@ -776,8 +776,10 @@ class InvalidTimeFormat(Exception):
 
 
 @hookimpl
-def canary_testcase_generator() -> Type[VVTTestGenerator]:
-    return VVTTestGenerator
+def canary_generator(root: str, path: str | None) -> AbstractTestGenerator | None:
+    if VVTTestGenerator.matches(root if path is None else os.path.join(root, path)):
+        return VVTTestGenerator(root, path=path)
+    return None
 
 
 @hookimpl

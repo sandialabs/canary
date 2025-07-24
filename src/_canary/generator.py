@@ -114,8 +114,7 @@ class AbstractTestGenerator(ABC):
     def factory(root: str, path: str | None = None) -> "AbstractTestGenerator":
         from . import config
 
-        for gen_type in config.plugin_manager.get_generators():
-            if gen_type.always_matches(root if path is None else path):
-                return gen_type(root, path=path)
+        if generator := config.plugin_manager.testcase_generator(root=root, path=path):
+            return generator
         f = root if path is None else os.path.join(root, path)
         raise TypeError(f"No test generator for {f}")

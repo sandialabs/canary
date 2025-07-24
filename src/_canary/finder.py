@@ -202,10 +202,7 @@ def pprint(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
 
 
 def is_test_file(file: str) -> bool:
-    for generator in config.plugin_manager.get_generators():
-        if generator.always_matches(file):
-            return True
-    return False
+    return config.plugin_manager.testcase_generator(root=file, path=None) is not None
 
 
 def find(path: str) -> AbstractTestGenerator:

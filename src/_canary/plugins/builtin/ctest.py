@@ -14,7 +14,6 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
-from typing import Type
 
 from ... import config
 from ...generator import AbstractTestGenerator
@@ -658,8 +657,10 @@ def parse_environment_modification(environment_modification: list[str]) -> list[
 
 
 @hookimpl
-def canary_testcase_generator() -> Type[CTestTestGenerator]:
-    return CTestTestGenerator
+def canary_generator(root: str, path: str | None) -> AbstractTestGenerator | None:
+    if CTestTestGenerator.matches(root if path is None else os.path.join(root, path)):
+        return CTestTestGenerator(root, path=path)
+    return None
 
 
 @hookimpl
