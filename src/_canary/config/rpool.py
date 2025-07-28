@@ -5,10 +5,11 @@ import copy
 import math
 import pickle
 from typing import Any
-from typing import Iterable
 
 from ..util import logging
+from ..util.collections import contains_any
 from ..util.rprobe import cpu_count
+from .schemas import resource_schema as schema
 
 
 class ResourcePool:
@@ -121,11 +122,49 @@ class ResourcePool:
         self.slots_per: dict[str, int] = {}
         if pool:
             self.fill(pool)
-        else:
-            self.fill_uniform(node_count=1, cpus_per_node=cpu_count(), gpus_per_node=0)
+
+    def __repr__(self) -> str:
+        import io
+
+        import yaml
+
+        fh = io.StringIO()
+        yaml.dump(self.pool, fh)
+        return fh.getvalue()
+
+    def empty(self) -> bool:
+        return len(self.pool) == 0
 
     def update(self, *args: Any, **kwargs: Any) -> None:
         self.fill(args[0])
+
+    def add(self, mods: dict[str, Any]) -> None:
+        print(mods)
+        if contains_any(mods, "local", "nodes", "node_count"):
+            # Modifications are requesting a new node layout
+            pool = schema.validate({"resource_pool": mods})["resource_pool"]
+            self.clear()
+            self.fill(pool)
+        else:
+            if self.empty():
+                cpus_per_node = mods.pop("cpus", cpu_count())
+                gpus_per_node = mods.pop("gpus", 0)
+                self.fill_uniform(
+                    node_count=1, cpus_per_node=cpus_per_node, gpus_per_node=gpus_per_node
+                )
+            for type, count in mods.items():
+                if self.slots_per.get(type, 0) > 0:
+                    raise ValueError(
+                        "Can only add new resource types to resource pool, not modify existing"
+                    )
+                if not isinstance(count, int):
+                    raise ValueError(f"expected {type} count to be an integeger")
+                if count < 0:
+                    raise ValueError(f"expected {type} count > 0, got {count=}")
+                self.types.add(type)
+                for local in self.pool:
+                    local[type] = [{"id": str(i), "slots": 1} for i in range(count)]
+                    self.slots_per[type] = self.slots_per.get(type, 0) + count
 
     def fill(self, pool: list[dict[str, Any]]) -> None:
         self.clear()
@@ -156,14 +195,14 @@ class ResourcePool:
         if item.endswith("_per_node"):
             arg = item[:-9]
             for local in self.pool:
-                if key := contains(local, (arg, f"{arg}s")):
+                if key := contains_any(local, arg, f"{arg}s"):
                     return len(local[key])
             return 0
         if item.endswith("_count"):
             count = 0
             arg = item[:-6]
             for local in self.pool:
-                if key := contains(local, (arg, f"{arg}s")):
+                if key := contains_any(local, arg, f"{arg}s"):
                     count += len(local[key])
             return count
         raise KeyError(item)
@@ -307,13 +346,6 @@ class ResourcePool:
                 if n == 1 and type.endswith("s"):
                     type = type[:-1]
                 logging.debug(f"Reclaimed {n} {type}")
-
-
-def contains(sequence: Iterable[Any], args: tuple[Any, ...]) -> Any:
-    for arg in args:
-        if arg in sequence:
-            return arg
-    return None
 
 
 class ResourceUnsatisfiable(Exception):

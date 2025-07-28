@@ -143,7 +143,6 @@ positive_int = And(int, lambda x: x > 0)
 nonnegative_int = And(int, lambda x: x >= 0)
 id_list = Schema([{"id": Use(str), Optional("slots", default=1): Or(int, float)}])
 
-
 ctest_resource_pool_schema = Schema(
     {
         "local": {
@@ -211,25 +210,26 @@ class ResourceSchema(Schema):
         if "resource_pool" not in data:
             raise SchemaMissingKeyError("Missing key: 'resource_pool'", self._error)
         resource_pool = data["resource_pool"]
-        if isinstance(resource_pool, dict) and "nodes" in resource_pool:
-            # uniform resource pool
-            validated = self.schemas["uniform"].validate(data)
-            rp = []
-            for i in range(validated["resource_pool"].pop("nodes")):
-                x = {"id": str(i)}
-                for name, count in validated["resource_pool"].items():
-                    x[name[:-9]] = self.uniform_pool_object(count)
-                rp.append(x)
-            return {"resource_pool": rp}
         if isinstance(resource_pool, dict):
-            # uniform resource pool, single node
-            validated = self.schemas["local"].validate(data)
-            if "cpus" not in validated["resource_pool"]:
-                validated["resource_pool"]["cpus"] = cpu_count()
-            rp = {"id": "0"}
-            for name, count in validated["resource_pool"].items():
-                rp[name] = self.uniform_pool_object(count)
-            return {"resource_pool": [rp]}
+            if "nodes" not in resource_pool:
+                # uniform resource pool, single node
+                validated = self.schemas["local"].validate(data)
+                if "cpus" not in validated["resource_pool"]:
+                    validated["resource_pool"]["cpus"] = cpu_count()
+                rp = {"id": "0"}
+                for name, count in validated["resource_pool"].items():
+                    rp[name] = self.uniform_pool_object(count)
+                return {"resource_pool": [rp]}
+            else:
+                # uniform resource pool
+                validated = self.schemas["uniform"].validate(data)
+                rp = []
+                for i in range(validated["resource_pool"].pop("nodes")):
+                    x = {"id": str(i)}
+                    for name, count in validated["resource_pool"].items():
+                        x[name[:-9]] = self.uniform_pool_object(count)
+                    rp.append(x)
+                return {"resource_pool": rp}
         if isinstance(resource_pool, list):
             validated = self.schemas["heterogeneous"].validate(data)
             return validated

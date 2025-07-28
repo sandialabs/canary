@@ -270,14 +270,17 @@ class EnvironmentModification(argparse.Action):
 
 class ConfigMods(argparse.Action):
     def __call__(self, parser, namespace, option, option_str=None):
-        *parts, value = option.split(":")
         data = {}
-        current = data
-        while len(parts) > 1:
-            key = parts.pop(0)
-            current[key] = {}
-            current = current[key]
-        current[parts[0]] = safe_loads(value)
+        if os.path.exists(option):
+            data.update(json.load(open(option)))
+        else:
+            *parts, value = option.split(":")
+            current = data
+            while len(parts) > 1:
+                key = parts.pop(0)
+                current[key] = {}
+                current = current[key]
+            current[parts[0]] = safe_loads(value)
         config = getattr(namespace, self.dest, None) or {}
         config = merge(config, data)
         setattr(namespace, self.dest, config)
@@ -389,9 +392,10 @@ def make_argument_parser(**kwargs):
     group = parser.add_argument_group("runtime configuration")
     group.add_argument(
         "-f",
-        dest="config_file",
+        action=ConfigMods,
+        dest="config_mods",
         metavar="file",
-        help="Read local configuration settings from this file",
+        help="Read configuration settings from this file",
     )
     group.add_argument(
         "-c",

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import copy
 import dataclasses
 import io
 import json
@@ -235,7 +236,7 @@ class Config:
     batch: Batch = dataclasses.field(default_factory=Batch)
     build: Build = dataclasses.field(default_factory=Build)
     options: argparse.Namespace = dataclasses.field(default_factory=argparse.Namespace)
-    resource_pool: ResourcePool = dataclasses.field(default_factory=ResourcePool)
+    _resource_pool: ResourcePool | None = dataclasses.field(default=None)
     _plugin_manager: CanaryPluginManager | None = dataclasses.field(default=None)
     option_cache: dict = dataclasses.field(default_factory=dict)
 
@@ -354,6 +355,32 @@ class Config:
         """
         self._plugin_manager = arg
 
+    @property
+    def resource_pool(self) -> ResourcePool:
+        """Get the resource pool instance.
+
+        Lazily initializes the resource pool if it has not been set previously.
+
+        Returns:
+            An instance of ResourcePool.
+        """
+        if self._resource_pool is None:
+            self._resource_pool = ResourcePool()
+        if self._resource_pool.empty():
+            self._resource_pool.fill_uniform(
+                node_count=1, cpus_per_node=cpu_count(), gpus_per_node=0
+            )
+        return self._resource_pool
+
+    @resource_pool.setter
+    def resource_pool(self, arg: ResourcePool) -> None:
+        """Set the plugin manager instance.
+
+        Args:
+            arg: An instance of ResourcePool to set.
+        """
+        self._resource_pool = arg
+
     def restore_from_snapshot(self, fh: TextIO) -> None:
         """Restore configuration values from a snapshot.
 
@@ -370,8 +397,7 @@ class Config:
         self.test = Test(**snapshot["test"])
         compiler = Compiler(**snapshot["build"].pop("compiler"))
         self.build = Build(compiler=compiler, **snapshot["build"])
-        self.resource_pool = ResourcePool()
-        self.resource_pool.update(snapshot["resource_pool"])
+        self.resource_pool = ResourcePool(pool=snapshot["resource_pool"])
         self.update(snapshot["config"])
         self.batch = Batch(**snapshot["batch"])
 
@@ -527,7 +553,15 @@ class Config:
         args.batch = batchopts
 
         errors: int = 0
-        config_mods = args.config_mods or {}
+        config_mods: dict[str, Any] = {}
+        if args.config_mods:
+            config_mods.update(copy.deepcopy(args.config_mods))
+
+        # handle resource pool separately
+        resource_pool_mods: dict[str, Any] = {}
+        if "resource_pool" in config_mods:
+            resource_pool_mods.update(config_mods.pop("resource_pool"))
+
         for section, section_data in config_mods.items():
             if section not in section_schemas:
                 errors += 1
@@ -536,10 +570,21 @@ class Config:
             schema = section_schemas[section]
             config_mods[section] = schema.validate({section: section_data})[section]
 
-        if args.config_file:
-            file_data = self.read_config(args.config_file)
-            for section, section_data in file_data.items():
-                config_mods[section] = merge(config_mods.get(section, {}), section_data)
+        if resource_pool_mods:
+            if self._resource_pool is None or self._resource_pool.empty():
+                schema = section_schemas["resource_pool"]
+                pool = schema.validate({"resource_pool": resource_pool_mods})["resource_pool"]
+                if self._resource_pool is None:
+                    self._resource_pool = ResourcePool(pool)
+                else:
+                    self._resource_pool.fill(pool)
+            else:
+                self.resource_pool.add(resource_pool_mods)
+        elif self._resource_pool is None:
+            self._resource_pool = ResourcePool()
+            self._resource_pool.fill_uniform(
+                node_count=1, cpus_per_node=cpu_count(), gpus_per_node=0
+            )
 
         if errors:
             raise ValueError("Stopping due to previous errors")
@@ -571,7 +616,7 @@ class Config:
     def setup_hpc_connect(self, name: str | None) -> None:
         """Set up the hpc_connect library.
 
-        Initializes the HPC backend based on the provided name.
+        Initializes the resource pool based on the HPC backend.
 
         Args:
             name: The name of the HPC backend to set up
@@ -579,17 +624,21 @@ class Config:
         if name in ("null", "local", None):
             self.backend = None
             return
+
         assert name is not None
         logging.debug(f"Setting up HPC Connect for {name}")
         self.backend = hpc_connect.get_backend(name)
-        logging.debug(f"  HPC connect: node count: {self.backend.config.node_count}")
-        logging.debug(f"  HPC connect: CPUs per node: {self.backend.config.cpus_per_node}")
-        logging.debug(f"  HPC connect: GPUs per node: {self.backend.config.gpus_per_node}")
-        self.resource_pool.fill_uniform(
-            node_count=self.backend.config.node_count,
-            cpus_per_node=self.backend.config.cpus_per_node,
-            gpus_per_node=self.backend.config.gpus_per_node,
-        )
+        if self._resource_pool is None:
+            logging.debug(f"  HPC connect: node count: {self.backend.config.node_count}")
+            logging.debug(f"  HPC connect: CPUs per node: {self.backend.config.cpus_per_node}")
+            logging.debug(f"  HPC connect: GPUs per node: {self.backend.config.gpus_per_node}")
+            rp = ResourcePool()
+            rp.fill_uniform(
+                node_count=self.backend.config.node_count,
+                cpus_per_node=self.backend.config.cpus_per_node,
+                gpus_per_node=self.backend.config.gpus_per_node,
+            )
+            self.resource_pool = rp
 
     @classmethod
     def read_config(cls, file: str) -> dict:
@@ -728,6 +777,8 @@ class Config:
                 continue
             if key == "_plugin_manager":
                 d["plugin_manager"] = {"plugins": list(value.considered)}
+            elif key == "_resource_pool":
+                d["resource_pool"] = None if value is None else value.getstate()
             elif dataclasses.is_dataclass(value):
                 d[key] = dataclasses.asdict(value)  # type: ignore
                 if key == "system":
