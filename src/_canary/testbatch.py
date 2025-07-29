@@ -454,16 +454,19 @@ def canary_invocation(arg: "TestBatch | TestCase") -> str:
     fp = io.StringIO()
     fp.write("canary ")
 
-    # The batch will be run in a compute node, so hpc_connect won't set the machine limits
-    nodes = nodes_required(arg)
-    cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
-    gpus_per_node = config.resource_pool.pinfo("gpus_per_node")
     if isinstance(arg, TestBatch):
+        # The batch will be run in a compute node, so hpc_connect won't set the machine limits
+        resource_types: set[str] = set()
+        for case in arg:
+            reqd_resources = case.required_resources()
+            for group in reqd_resources[0]:
+                resource_types.add(group["type"])
         cfg: dict[str, Any] = {}
         pool = cfg.setdefault("resource_pool", {})
-        pool["nodes"] = nodes
-        pool["cpus_per_node"] = cpus_per_node
-        pool["gpus_per_node"] = gpus_per_node
+        pool["nodes"] = nodes_required(arg)
+        for type in resource_types:
+            key = f"{type}_per_node"
+            pool[key] = config.resource_pool.pinfo(key)
         batch_stage = arg.stage(arg.id)
         config_file = os.path.join(batch_stage, "config")
         with open(config_file, "w") as fh:

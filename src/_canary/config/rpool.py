@@ -139,7 +139,6 @@ class ResourcePool:
         self.fill(args[0])
 
     def add(self, mods: dict[str, Any]) -> None:
-        print(mods)
         if contains_any(mods, "local", "nodes", "node_count"):
             # Modifications are requesting a new node layout
             pool = schema.validate({"resource_pool": mods})["resource_pool"]
