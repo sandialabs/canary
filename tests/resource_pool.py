@@ -9,6 +9,7 @@ import pytest
 import _canary.config.schemas as schemas
 import canary
 from _canary.atc import AbstractTestCase
+from _canary.config.rpool import ResourcePool
 from _canary.status import Status
 from _canary.third_party.schema import SchemaError
 
@@ -163,3 +164,71 @@ def test_resource_pool_acquire():
                 ],
             }
         ]
+
+
+def test_resource_pool_fill_uniform():
+    rp = ResourcePool()
+    rp.fill_uniform(node_count=1, cpus_per_node=1, gpus_per_node=1)
+    assert rp.pool == [
+        {
+            "id": "0",
+            "cpus": [{"id": "0", "slots": 1}],
+            "gpus": [{"id": "0", "slots": 1}],
+        }
+    ]
+    assert rp.slots_per["cpus"] == 1
+    assert rp.maps["cpus"] == {("0", "0"): 0}
+    assert rp.slots_per["gpus"] == 1
+    assert rp.maps["gpus"] == {("0", "0"): 0}
+    with pytest.raises(TypeError):
+        rp.fill_uniform(node_count=1, cpus_per_node=1, gpus=1)
+
+
+def test_resource_pool_add():
+    rp = ResourcePool()
+    rp.fill_uniform(node_count=1, cpus_per_node=1)
+    assert rp.slots_per["cpus"] == 1
+    assert rp.maps["cpus"] == {("0", "0"): 0}
+    rp.add(gpus_per_node=1)
+    assert rp.pool == [
+        {
+            "id": "0",
+            "cpus": [{"id": "0", "slots": 1}],
+            "gpus": [{"id": "0", "slots": 1}],
+        }
+    ]
+    assert rp.slots_per["gpus"] == 1
+    assert rp.maps["gpus"] == {("0", "0"): 0}
+
+
+def test_resource_pool_fill():
+    rp = ResourcePool()
+    pool = [
+        {
+            "id": "01",
+            "cpus": [{"id": "01", "slots": 2}, {"id": "ab", "slots": 3}],
+            "gpus": [{"id": "02", "slots": 4}, {"id": "cd", "slots": 3}],
+        }
+    ]
+    rp.fill(pool)
+    assert rp.slots_per["cpus"] == 5
+    assert rp.maps["cpus"] == {("01", "01"): 0, ("01", "ab"): 1}
+    assert rp.slots_per["gpus"] == 7
+    assert rp.maps["gpus"] == {("01", "02"): 0, ("01", "cd"): 1}
+
+
+def test_resource_acquire():
+    rp = ResourcePool()
+    pool = [
+        {
+            "id": "01",
+            "cpus": [{"id": "01", "slots": 2}, {"id": "ab", "slots": 3}],
+            "gpus": [{"id": "02", "slots": 3}, {"id": "cd", "slots": 5}],
+        }
+    ]
+    rp.fill(pool)
+    x = rp.acquire([[{"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 1}]])
+    assert x == [{"cpus": [{"gid": 0, "slots": 1}], "gpus": [{"gid": 0, "slots": 1}]}]
+    rp.reclaim(x)
+    x = rp.acquire([[{"type": "cpus", "slots": 3}, {"type": "gpus", "slots": 3}]])
+    assert x == [{"cpus": [{"gid": 1, "slots": 3}], "gpus": [{"gid": 0, "slots": 3}]}]

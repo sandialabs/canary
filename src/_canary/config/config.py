@@ -579,7 +579,7 @@ class Config:
                 else:
                     self._resource_pool.fill(pool)
             else:
-                self.resource_pool.add(resource_pool_mods)
+                self.resource_pool.add(**resource_pool_mods)
         elif self._resource_pool is None:
             self._resource_pool = ResourcePool()
             self._resource_pool.fill_uniform(

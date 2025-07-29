@@ -112,10 +112,10 @@ class ResourcePool:
 
     """
 
-    __slots__ = ("map", "pool", "types", "_stash", "slots_per")
+    __slots__ = ("maps", "pool", "types", "_stash", "slots_per")
 
     def __init__(self, pool: list[dict[str, Any]] | None = None) -> None:
-        self.map: dict[str, dict[tuple[str, str], int]] = {}
+        self.maps: dict[str, dict[tuple[str, str], int]] = {}
         self.pool: list[dict[str, Any]] = []
         self.types: set[str] = {"cpus", "gpus"}
         self._stash: bytes | None = None
@@ -138,32 +138,52 @@ class ResourcePool:
     def update(self, *args: Any, **kwargs: Any) -> None:
         self.fill(args[0])
 
-    def add(self, mods: dict[str, Any]) -> None:
+    def add(self, **mods: Any) -> None:
+        """Add a resource to the pool"""
         if contains_any(mods, "local", "nodes", "node_count"):
             # Modifications are requesting a new node layout
             pool = schema.validate({"resource_pool": mods})["resource_pool"]
             self.clear()
             self.fill(pool)
-        else:
-            if self.empty():
-                cpus_per_node = mods.pop("cpus", cpu_count())
-                gpus_per_node = mods.pop("gpus", 0)
-                self.fill_uniform(
-                    node_count=1, cpus_per_node=cpus_per_node, gpus_per_node=gpus_per_node
-                )
-            for type, count in mods.items():
-                if self.slots_per.get(type, 0) > 0:
-                    raise ValueError(
-                        "Can only add new resource types to resource pool, not modify existing"
-                    )
-                if not isinstance(count, int):
-                    raise ValueError(f"expected {type} count to be an integeger")
-                if count < 0:
-                    raise ValueError(f"expected {type} count > 0, got {count=}")
-                self.types.add(type)
-                for local in self.pool:
-                    local[type] = [{"id": str(i), "slots": 1} for i in range(count)]
-                    self.slots_per[type] = self.slots_per.get(type, 0) + count
+            return
+        for kwd in mods:
+            if not kwd.endswith("s") and not kwd.endswith("_per_node"):
+                raise TypeError(f"ResourcePool.add() got an unexpected keyword argument {kwd!r}")
+        if self.empty():
+
+            def f(d: dict[str, Any], key: str, default: int) -> int:
+                if key in d:
+                    return d.pop(key)
+                if f"{key}_per_node" in d:
+                    return d.pop(f"{key}_per_node")
+                return default
+
+            cpus_per_node = f(mods, "cpus", cpu_count())
+            gpus_per_node = f(mods, "gpus", 0)
+            self.fill_uniform(
+                node_count=1, cpus_per_node=cpus_per_node, gpus_per_node=gpus_per_node, **mods
+            )
+        for kwd, count in mods.items():
+            type = kwd[:-9] if kwd.endswith("_per_node") else kwd
+            if self.slots_per.get(type, 0) > 0:
+                raise ValueError(f"resource {type} already exists in pool")
+            if not isinstance(count, int):
+                raise ValueError(f"expected {kwd} count to be an integeger")
+            if count < 0:
+                raise ValueError(f"expected {type} count >= 0, got {count=}")
+            self.types.add(type)
+            map = self.maps.setdefault(type, {})
+            gid = 0 if not map else (max(map.values()) + 1)
+            slots = self.slots_per.get(type, 0)
+            for local in self.pool:
+                pid = local["id"]
+                for i in range(count):
+                    lid = str(i)
+                    local.setdefault(type, []).append({"id": lid, "slots": 1})
+                    map[(pid, lid)] = gid
+                    gid += 1
+                slots += count
+            self.slots_per[type] = slots
 
     def fill(self, pool: list[dict[str, Any]]) -> None:
         self.clear()
@@ -178,11 +198,12 @@ class ResourcePool:
             for type, instances in local.items():
                 self.types.add(type)
                 slots = self.slots_per.get(type, 0)
+                map = self.maps.setdefault(type, {})
                 for instance in instances:
                     lid = instance["id"]
                     slots += instance["slots"]
                     gid = gids.setdefault(type, 0)
-                    self.map.setdefault(type, {})[(pid, lid)] = gid
+                    map[(pid, lid)] = gid
                     gids[type] += 1
                 self.slots_per[type] = slots
             local["id"] = pid
@@ -210,10 +231,10 @@ class ResourcePool:
         return copy.deepcopy(self.pool)
 
     def gid(self, type: str, pid: str, lid: str) -> int:
-        return self.map[type][(pid, lid)]
+        return self.maps[type][(pid, lid)]
 
     def local_ids(self, type: str, arg_gid: int) -> tuple[str, str]:
-        for key, gid in self.map[type].items():
+        for key, gid in self.maps[type].items():
             if arg_gid == gid:
                 return key[0], key[1]
         raise KeyError((type, arg_gid))
@@ -233,7 +254,7 @@ class ResourcePool:
         return node_count
 
     def clear(self) -> None:
-        self.map.clear()
+        self.maps.clear()
         self.pool.clear()
         self.types.clear()
         self.slots_per.clear()
@@ -242,12 +263,14 @@ class ResourcePool:
         pool: list[dict[str, Any]] = []
         for i in range(node_count):
             local: dict[str, Any] = {}
-            for j in range(cpus_per_node):
-                local.setdefault("cpus", []).append({"id": str(j), "slots": 1})
-            for name, count in kwds.items():
-                if name.endswith("_per_node"):
-                    for j in range(count):
-                        local.setdefault(name[:-9], []).append({"id": str(j), "slots": 1})
+            local["cpus"] = [{"id": str(j), "slots": 1} for j in range(cpus_per_node)]
+            for kwd, count in kwds.items():
+                if not kwd.endswith("_per_node"):
+                    raise TypeError(
+                        f"ResourcePool.fill_uniform() got an unexpected keyword argument {kwd!r} "
+                        "(all keyword arguments are expected to end in '_per_node')"
+                    )
+                local[kwd[:-9]] = [{"id": str(j), "slots": 1} for j in range(count)]
             local["id"] = str(i)
             pool.append(local)
         self.fill(pool)
