@@ -24,6 +24,16 @@ jobs:
         run: |
           pip install .[dev]
           pytest tests
+      - name: Coverage
+          coverage run
+          coverage report
+          coverage xml
+      - name: Upload coverage report
+        uses: actions/uplaod-artifact@v3
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention_days: 30
 
   slurm:
    runs-on: ubuntu-latest
@@ -50,3 +60,4 @@ jobs:
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "Building for branch: $BRANCH_NAME"
           docker run --rm --user root -v /home/runner/work/canary/canary/docker/flux/test.sh:/home/fluxuser/test.sh -e BRANCH_NAME=$BRANCH_NAME fluxrm/flux-sched:latest env flux start --test-size=3 "./test.sh $BRANCH_NAME"
+
