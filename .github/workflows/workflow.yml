@@ -95,7 +95,7 @@ jobs:
           pip install .[dev]
           mypy ./src --no-error-summary < mypy-out.txt > codequality.json
 
-     - name: Upload Ruff report
+      - name: Upload Ruff report
         uses: actions/upload-artifact@v4
         with:
           name: ruff-report-${{ matrix.python-version }}
