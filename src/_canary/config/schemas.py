@@ -159,6 +159,7 @@ local_resource_pool_schema = Schema(
             Forbidden("nodes"): object,
             Optional("cpus", default=cpu_count()): positive_int,
             # local schema disallows *_per_node
+            Optional(Regex("slots_per_\w+")): positive_int,
             Optional(Regex("^[a-z_][a-z0-9_]*?(?<!_per_node)$")): nonnegative_int,
         }
     }
@@ -170,6 +171,7 @@ uniform_resource_pool_schema = Schema(
         "resource_pool": {
             "nodes": positive_int,
             "cpus_per_node": positive_int,
+            Optional(Regex("slots_per_\w+")): positive_int,
             Optional(Regex("^[a-z_][a-z0-9_]*_per_node")): nonnegative_int,
         }
     }
@@ -199,6 +201,24 @@ class ResourceSchema(Schema):
             "heterogeneous": heterogeneous_resource_pool_schema,
         }
 
+    @staticmethod
+    def _get_slots_per_resource_type(type: str, mapping: dict[str, int]) -> int:
+        if type in mapping:
+            return mapping[type]
+        elif type.endswith("s") and type[:-1] in mapping:
+            return mapping[type[:-1]]
+        return 1
+
+    @staticmethod
+    def _find_slots_per_resource_type(resource_pool: dict[str, int]) -> dict[str, int]:
+        slots_per: dict[str, int] = {}
+        for name, count in resource_pool.items():
+            if name.startswith("slots_per_"):
+                slots_per[name[10:]] = count
+        for type in slots_per:
+            resource_pool.pop(f"slots_per_{type}")
+        return slots_per
+
     def validate(self, data):
         if not isinstance(data, dict):
             raise SchemaError("Expected resource_pool to be a dict")
@@ -214,20 +234,25 @@ class ResourceSchema(Schema):
             if "nodes" not in resource_pool:
                 # uniform resource pool, single node
                 validated = self.schemas["local"].validate(data)
+                slots_per = self._find_slots_per_resource_type(validated["resource_pool"])
                 if "cpus" not in validated["resource_pool"]:
                     validated["resource_pool"]["cpus"] = cpu_count()
                 rp = {"id": "0"}
                 for name, count in validated["resource_pool"].items():
-                    rp[name] = self.uniform_pool_object(count)
+                    slots = self._get_slots_per_resource_type(name, slots_per)
+                    rp[name] = self.uniform_pool_object(count, slots_per=slots)
                 return {"resource_pool": [rp]}
             else:
                 # uniform resource pool
                 validated = self.schemas["uniform"].validate(data)
+                slots_per = self._find_slots_per_resource_type(validated["resource_pool"])
                 rp = []
                 for i in range(validated["resource_pool"].pop("nodes")):
                     x = {"id": str(i)}
                     for name, count in validated["resource_pool"].items():
-                        x[name[:-9]] = self.uniform_pool_object(count)
+                        type = name[:-9]
+                        slots = self._get_slots_per_resource_type(type, slots_per)
+                        x[type] = self.uniform_pool_object(count, slots_per=slots)
                     rp.append(x)
                 return {"resource_pool": rp}
         if isinstance(resource_pool, list):
@@ -236,10 +261,10 @@ class ResourceSchema(Schema):
         raise SchemaError("Unrecognized resource_pool layout")
 
     @staticmethod
-    def uniform_pool_object(n: int) -> list[dict[str, typing.Any]]:
+    def uniform_pool_object(n: int, slots_per: int = 1) -> list[dict[str, typing.Any]]:
         if n < 0:
             raise ValueError(f"expected pool object count > 0, got {n=}")
-        return [{"id": str(i), "slots": 1} for i in range(n)]
+        return [{"id": str(i), "slots": slots_per} for i in range(n)]
 
 
 resource_schema = ResourceSchema()
