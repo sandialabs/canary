@@ -62,3 +62,48 @@ jobs:
           echo "Building for branch: $BRANCH_NAME"
           docker run --rm --user root -v /home/runner/work/canary/canary/docker/flux/test.sh:/home/fluxuser/test.sh -e BRANCH_NAME=$BRANCH_NAME fluxrm/flux-sched:latest env flux start --test-size=3 "./test.sh $BRANCH_NAME"
 
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          pip install ruff
+          pip install mypy mypy-gitlab-code-quality
+
+      - name: Ruff check
+        run: |
+          ruff --version
+          git fetch origin "{GITHUB_BASE_REF:?}"
+          ./bin/ci/ruff-check --ref="origin/${GITHUB_BASE_REF:?}" --output-format=junit --output-file=ruff.xml
+          cat ruff.xml || true
+      - name: Ruff format
+        run: |
+          ruff --version
+          git fetch origin "${GITHUB_BASE_REF:?}"
+          ./bin.ci.ruff-format --ref="origin/${GITHUB_BASE_REF:?}" --check
+
+      - name: MyPy type checking
+        run: |
+          pip install .[dev]
+          mypy ./src --no-error-summary < mypy-out.txt > codequality.json
+
+     - name: Upload Ruff report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruff-report-${{ matrix.python-version }}
+          path: ruff.xml
+          retention-days: 30
+      - name: Upload CodeQuality report
+        uses: actions/upload-artifact@v4
+        with:
+          name: codequality-report-${{ matrix.python-version }}
+          path: codequality.json
+          retention-days: 30
