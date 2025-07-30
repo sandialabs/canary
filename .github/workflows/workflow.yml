@@ -81,14 +81,14 @@ jobs:
       - name: Ruff check
         run: |
           ruff --version
-          git fetch origin "{GITHUB_BASE_REF:?}"
-          ./bin/ci/ruff-check --ref="origin/${GITHUB_BASE_REF:?}" --output-format=junit --output-file=ruff.xml
+          git fetch origin "$GITHUB_REF"
+          ./bin/ci/ruff-check --ref="origin/$GITHUB_REF" --output-format=junit --output-file=ruff.xml
           cat ruff.xml || true
       - name: Ruff format
         run: |
           ruff --version
-          git fetch origin "${GITHUB_BASE_REF:?}"
-          ./bin.ci.ruff-format --ref="origin/${GITHUB_BASE_REF:?}" --check
+          git fetch origin "$GITHUB_REF"
+          ./bin.ci.ruff-format --ref="origin/$GITHUB_REF" --check
 
       - name: MyPy type checking
         run: |
