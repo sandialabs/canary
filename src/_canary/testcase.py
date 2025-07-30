@@ -1504,6 +1504,14 @@ class TestCase(AbstractTestCase):
                 self._stderr.close()
             self._stderr = None
 
+    def reset(self) -> None:
+        logging.trace(f"Resetting {self}")
+        self.close_files()
+        fs.clean_out_folder(self.working_directory)
+        with fs.working_dir(self.working_directory, create=True):
+            self.setup_working_directory()
+        logging.trace(f"Done resetting {self}")
+
     def setup(self) -> None:
         if len(self.dependencies) != len(self.dep_done_criteria):
             raise RuntimeError("Inconsistent dependency/dep_done_criteria lists")
@@ -1661,8 +1669,18 @@ class TestCase(AbstractTestCase):
                 setattr(self, name, value)
         return
 
-    def run(self, qsize: int = 1, qrank: int = 0) -> None:
+    def run(self, qsize: int = 1, qrank: int = 0, repeat: bool = False) -> None:
         """Run the test case"""
+
+        cmd = self.command()
+        cmd_line = shlex.join(cmd)
+        self.stdout.write(f"==> Running {self.display_name}\n")
+        self.stdout.write(f"==> Working directory: {self.working_directory}\n")
+        self.stdout.write(f"==> Execution directory: {self.execution_directory}\n")
+        self.stdout.write(f"==> Command line: {cmd_line}\n")
+        if timeoutx := config.getoption("timeout_multiplier"):
+            self.stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
+        self.stdout.flush()
 
         def cancel(sig, frame):
             nonlocal proc
@@ -1682,7 +1700,7 @@ class TestCase(AbstractTestCase):
 
         bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
         if not bar:
-            logging.emit(self.job_submission_summary(qrank, qsize) + "\n")
+            logging.emit(self.job_submission_summary(qrank, qsize, repeat) + "\n")
 
         tee_output = config.getoption("capture") == "tee"
         try:
@@ -1759,6 +1777,11 @@ class TestCase(AbstractTestCase):
                 if metrics is not None:
                     self.add_measurement(**metrics)
             logging.trace(f"{self}: finished with status {self.status}")
+        self.stdout.write(
+            f"==> Finished running {self.display_name} "
+            f"in {self.duration} s. with exit code {self.returncode}\n"
+        )
+        self.stdout.flush()
         return
 
     def tee_run_output(self, proc: psutil.Popen) -> None:
@@ -1772,13 +1795,14 @@ class TestCase(AbstractTestCase):
             self.stdout.write(text)
         sys.stderr.write(text)
 
-    def job_submission_summary(self, qrank: int | None, qsize: int | None) -> str:
+    def job_submission_summary(self, qrank: int | None, qsize: int | None, repeat: bool) -> str:
         fmt = io.StringIO()
         if config.debug or os.getenv("GITLAB_CI"):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
         if qrank is not None and qsize is not None:
             fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-        fmt.write("Starting @*b{%id}: %X")
+        action = "Starting" if not repeat else "Repeating"
+        fmt.write(f"{action} @*b{{%id}}: %X")
         return self.format(fmt.getvalue()).strip()
 
     def job_completion_summary(self, qrank: int | None, qsize: int | None) -> str:

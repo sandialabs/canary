@@ -105,6 +105,24 @@ class Run(CanarySubcommand):
             action="store_true",
             help="Do not collect a test's process information [default: %(default)s]",
         )
+        parser.add_argument(
+            "--repeat-until-pass",
+            default=None,
+            type=int,
+            help="Allow each test to run up to <n> times in order to pass",
+        )
+        parser.add_argument(
+            "--repeat-after-timeout",
+            default=None,
+            type=int,
+            help="Allow each test to run up to <n> times if it times out",
+        )
+        parser.add_argument(
+            "--repeat-until-fail",
+            default=None,
+            type=int,
+            help="Require each test to run <n> times without failing in order to pass",
+        )
         add_resource_arguments(parser)
         PathSpec.setup_parser(parser)
 
