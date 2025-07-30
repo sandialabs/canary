@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     config_dir = _config.config_dir
     cache_dir = _config.cache_dir
     debug = _config.debug
-    multiprocessing_context = _config.multiprocessing_context
+    multiprocessing = _config.multiprocessing
     getoption = _config.getoption
     environment = _config.environment
     invocation_dir = _config.invocation_dir
@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     config_file = _config.config_file
     save = _config.save
     snapshot = _config.snapshot
+    archive = _config.archive
 else:
     # allow config to be lazily loaded
     _config: Config | None = None

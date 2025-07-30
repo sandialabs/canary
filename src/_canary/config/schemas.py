@@ -64,13 +64,21 @@ def boolean(arg: typing.Any) -> bool:
     return bool(arg)
 
 
+positive_int = And(int, lambda x: x > 0)
+nonnegative_int = And(int, lambda x: x >= 0)
+id_list = Schema([{"id": Use(str), Optional("slots", default=1): Or(int, float)}])
+
+
 config_schema = Schema(
     {
         "config": {
             Optional("debug"): Use(boolean),
             Optional("log_level"): log_levels,
             Optional("cache_dir"): str,
-            Optional("multiprocessing_context"): multiprocessing_contexts,
+            Optional("multiprocessing"): {
+                Optional("context"): multiprocessing_contexts,
+                Optional("max_tasks_per_child"): positive_int,
+            },
         }
     }
 )
@@ -138,10 +146,6 @@ build_schema = Schema(
 
 any_schema = Schema({}, ignore_extra_keys=True)
 
-
-positive_int = And(int, lambda x: x > 0)
-nonnegative_int = And(int, lambda x: x >= 0)
-id_list = Schema([{"id": Use(str), Optional("slots", default=1): Or(int, float)}])
 
 ctest_resource_pool_schema = Schema(
     {

@@ -3,16 +3,16 @@
 # SPDX-License-Identifier: MIT
 
 import atexit
-import io
+import concurrent.futures
 import json
 import multiprocessing
 import os
 import signal
+import sys
 import threading
 import time
 import traceback
 from concurrent.futures import Future
-from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
 from datetime import datetime
@@ -32,7 +32,6 @@ from ...testcase import TestCase
 from ...third_party.color import colorize
 from ...util import keyboard
 from ...util import logging
-from ...util.compression import compress64
 from ...util.filesystem import mkdirp
 from ...util.filesystem import working_dir
 from ...util.procutils import cleanup_children
@@ -43,6 +42,17 @@ from ...util.time import timestamp
 from ..hookspec import hookimpl
 
 global_session_lock = threading.Lock()
+
+
+class ProcessPoolExecutor(concurrent.futures.ProcessPoolExecutor):
+    def __init__(self, *, workers: int) -> None:
+        mp_context = multiprocessing.get_context(config.multiprocessing.context)
+        max_tasks_per_child = config.multiprocessing.max_tasks_per_child
+        if sys.version_info[:2] >= (3, 11):
+            n = max_tasks_per_child if config.multiprocessing.context == "spawn" else None
+            super().__init__(max_workers=workers, mp_context=mp_context, max_tasks_per_child=n)
+        else:
+            super().__init__(max_workers=workers, mp_context=mp_context)
 
 
 @hookimpl(trylast=True)
@@ -163,11 +173,8 @@ def process_queue(*, queue: ResourceQueue) -> None:
     ppe = None
     progress_bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
     try:
-        with io.StringIO() as fh:
-            config.snapshot(fh, pretty_print=False)
-            os.environ["CANARYCFG64"] = compress64(fh.getvalue())
-        context = multiprocessing.get_context(config.multiprocessing_context)
-        with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
+        config.archive(os.environ)
+        with ProcessPoolExecutor(workers=queue.workers) as ppe:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
             while True:
                 if key := keyboard.get_key():

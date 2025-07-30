@@ -11,6 +11,7 @@ import os
 from string import Template
 from types import SimpleNamespace
 from typing import Any
+from typing import MutableMapping
 from typing import TextIO
 
 import hpc_connect
@@ -22,6 +23,7 @@ from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
 from ..util import logging
 from ..util.collections import merge
+from ..util.compression import compress64
 from ..util.compression import expand64
 from ..util.filesystem import find_work_tree
 from ..util.filesystem import mkdirp
@@ -47,6 +49,8 @@ section_schemas: dict[str, Schema] = {
 }
 
 log_levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.TRACE)
+
+env_archive_name = "CANARYCFG64"
 
 
 class EnvironmentModifications:
@@ -215,6 +219,10 @@ class Batch:
             setattr(self, key, value)
 
 
+def default_mp_settings() -> SimpleNamespace:
+    return SimpleNamespace(context="spawn", max_tasks_per_child=1)
+
+
 @dataclasses.dataclass
 class Config:
     """Access to configuration values"""
@@ -222,7 +230,7 @@ class Config:
     invocation_dir: str = os.getcwd()
     working_dir: str = os.getcwd()
     debug: bool = False
-    multiprocessing_context: str = "spawn"
+    multiprocessing: SimpleNamespace = dataclasses.field(default_factory=default_mp_settings)
     log_level: str = "INFO"
     _config_dir: str | None = None
     _cache_dir: str | None = None
@@ -255,7 +263,7 @@ class Config:
             FileNotFoundError: If the configuration file does not exist.
         """
         self = cls.create()
-        if cfg := os.getenv("CANARYCFG64"):
+        if cfg := os.getenv(env_archive_name):
             with io.StringIO() as fh:
                 fh.write(expand64(cfg))
                 fh.seek(0)
@@ -444,6 +452,10 @@ class Config:
         snapshot = self.getstate()
         json.dump(snapshot, fh, indent=2 if pretty_print else None)
 
+    def archive(self, mapping: MutableMapping) -> None:
+        snapshot = self.getstate()
+        mapping[env_archive_name] = compress64(json.dumps(snapshot, indent=None))
+
     @classmethod
     def load_config(cls, scope: str, config: dict[str, Any]) -> None:
         """Load configuration settings from a specified scope.
@@ -470,10 +482,10 @@ class Config:
                     config["debug"] = bool(items["debug"])
                 if "log_level" in items:
                     config["log_level"] = items["log_level"]
-                if "multiprocessing_context" in items:
-                    config["multiprocessing_context"] = items["multiprocessing_context"]
                 if "cache_dir" in items:
                     config["_cache_dir"] = os.path.expanduser(items["cache_dir"])
+                if "multiprocessing" in items:
+                    config["multiprocessing"] = items["multiprocessing"]
             elif key == "test":
                 if user_defined_timeouts := items.get("timeout"):
                     for type, value in user_defined_timeouts.items():
@@ -509,6 +521,9 @@ class Config:
             logging.set_level(level)
         if "warnings" in data:
             logging.set_warning_level(data.pop("warnings"))
+        if "multiprocessing" in data:
+            for key, value in data.pop("multiprocessing").items():
+                setattr(self.multiprocessing, key, value)
         for key, val in data.items():
             setattr(self, key, val)
 
@@ -696,7 +711,8 @@ class Config:
                 section["cache_dir"] = value
             elif key == "CANARY_MULTIPROCESSING_CONTEXT":
                 section = config.setdefault("config", {})
-                section["multiprocessing_context"] = value
+                subsection = section.setdefault("mulitprocessing", {})
+                subsection["context"] = value
         return config
 
     @staticmethod
@@ -783,6 +799,8 @@ class Config:
                 d[key] = dataclasses.asdict(value)  # type: ignore
                 if key == "system":
                     d[key]["os"] = vars(d[key]["os"])
+            elif key == "multiprocessing":
+                d.setdefault("config", {})[key] = vars(value)
             elif hasattr(value, "getstate"):
                 d[key] = value.getstate()
             elif isinstance(value, (argparse.Namespace, SimpleNamespace)):
