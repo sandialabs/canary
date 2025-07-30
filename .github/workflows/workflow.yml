@@ -25,6 +25,7 @@ jobs:
           pip install .[dev]
           pytest tests
       - name: Coverage
+        run: |
           coverage run
           coverage report
           coverage xml
