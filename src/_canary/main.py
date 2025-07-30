@@ -18,6 +18,7 @@ from .error import StopExecution
 from .third_party import color
 from .third_party.monkeypatch import monkeypatch
 from .util import logging
+from .util.collections import contains_any
 
 if TYPE_CHECKING:
     from .plugins.types import CanarySubcommand
@@ -77,7 +78,7 @@ class CanaryMain:
         """Preparsing is necessary to parse out options that need to take effect before the main
         program starts up"""
         global reraise
-        if "GITLAB_CI" in os.environ:
+        if contains_any(os.environ.keys(), "CANARY_RERAISE_ERRORS", "GITLAB_CI"):
             reraise = True
         parser = make_argument_parser()
         args = parser.preparse(self.argv)

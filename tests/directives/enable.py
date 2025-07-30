@@ -30,6 +30,6 @@ if __name__ == '__main__':
             # Error raised due to empty test session
             rc = run("-w", ".")
         rc = run("-w", "-o", "baz", ".")
-        assert os.listdir("TestResults") == [".canary", "f1"]
+        assert set(os.listdir("TestResults")) == {".canary", "f1"}
         assert len(os.listdir("TestResults")) == 2
         assert rc == 0
