@@ -93,7 +93,8 @@ jobs:
       - name: MyPy type checking
         run: |
           pip install .[dev]
-          mypy ./src --no-error-summary < mypy-out.txt > codequality.json
+          mypy ./src --no-error-summary > mypy-out.txt || true
+          mypy-gitlab-code-quality < mypy-out.txt > codequality.json
 
       - name: Upload Ruff report
         uses: actions/upload-artifact@v4
