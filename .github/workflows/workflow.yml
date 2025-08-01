@@ -5,7 +5,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-
+env:
+  ACTIONS_RUNNER_DEBUG: "true"
 jobs:
   unit-tests:
 
@@ -81,6 +82,8 @@ jobs:
       - name: Ruff check
         run: |
           ruff --version
+          echo "$GITHUB_HEAD_REF"
+          echo "$ACTIONS_RUNNER_DEBUG"
           git fetch origin "$GITHUB_HEAD_REF"
           ./bin/ci/ruff-check --ref="origin/$GITHUB_HEAD_REF" --output-format=junit --output-file=ruff.xml
           cat ruff.xml || true
