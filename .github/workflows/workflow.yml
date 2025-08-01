@@ -83,7 +83,7 @@ jobs:
           
       - name: Ruff
         run: |
-          ruff check --fix
+          ruff check
           ruff format
 
       - name: MyPy type checking
