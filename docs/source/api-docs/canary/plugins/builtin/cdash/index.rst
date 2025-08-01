@@ -2,15 +2,12 @@
 
    SPDX-License-Identifier: MIT
 
-util
-====
+plugins.builtin.cdash
+=====================
 
 .. toctree::
    :maxdepth: 1
 
-   collections
-   dynamic_version
-   proc
-   string
-   tengine
-   time
+   cdash_html_summary
+   gitlab_issue_generator
+   xml_generator

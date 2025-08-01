@@ -12,7 +12,7 @@ from .types import CanarySubcommand
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
-    from ..config.config import Config
+    from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
     from ..session import Session
     from ..testbatch import TestBatch
@@ -41,7 +41,7 @@ def canary_addoption(parser: "Parser") -> None:
 
 
 @hookspec
-def canary_configure(config: "Config") -> None:
+def canary_configure(config: "CanaryConfig") -> None:
     """Perform custom configuration of the test environment"""
 
 

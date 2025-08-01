@@ -18,7 +18,7 @@ from ...util.time import time_in_seconds
 from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
-    from ...config import Config
+    from ...config import Config as CanaryConfig
     from ...config.argparsing import Parser
     from ...testbatch import TestBatch
     from ...testcase import TestCase
@@ -46,7 +46,7 @@ def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
 
 
 @hookimpl
-def canary_configure(config: "Config") -> None:
+def canary_configure(config: "CanaryConfig") -> None:
     """Do some post configuration checks"""
     batchopts = config.getoption("batch")
     if batchopts:

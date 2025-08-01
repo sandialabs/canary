@@ -53,6 +53,7 @@ Rerun all failed tests
 
 .. command-output:: canary -C TestResults.Rerun run -k 'not success'
     :cwd: /examples
+    :setup: canary run -w -d TestResults.Rerun ./status
     :returncode: 30
 
 Rerun only the diffed tests

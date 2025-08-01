@@ -2,15 +2,14 @@
 
    SPDX-License-Identifier: MIT
 
-util
-====
+submit
+======
 
 .. toctree::
    :maxdepth: 1
 
-   collections
-   dynamic_version
-   proc
-   string
-   tengine
-   time
+   base
+   flux_hl
+   pbs
+   shell
+   slurm

@@ -29,7 +29,7 @@ from ...util.time import time_in_seconds
 from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
-    from ...config.config import Config
+    from ...config.config import Config as CanaryConfig
 
 warning_cache = set()
 
@@ -664,7 +664,7 @@ def canary_generator(root: str, path: str | None) -> AbstractTestGenerator | Non
 
 
 @hookimpl
-def canary_configure(config: "Config"):
+def canary_configure(config: "CanaryConfig"):
     setattr(config.test, "timeout_ctest", 1500.0)
 
 

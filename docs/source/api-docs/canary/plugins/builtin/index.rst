@@ -9,11 +9,20 @@ plugins.builtin
    :maxdepth: 1
 
    batch_protocol
+   cdash/index
+   ctest
    discover
    email
+   gitlab
+   html
+   json
+   junit
+   markdown
    mask
    partitioning
    post_clean
+   pyt
    reporting
    runtest_protocol
    runtests
+   vvtest
