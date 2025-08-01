@@ -70,6 +70,8 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+      
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -78,20 +80,11 @@ jobs:
         run: |
           pip install ruff
           pip install mypy mypy-gitlab-code-quality
-
-      - name: Ruff check
+          
+      - name: Ruff
         run: |
-          ruff --version
-          echo "$GITHUB_HEAD_REF"
-          echo "$ACTIONS_RUNNER_DEBUG"
-          git fetch origin "$GITHUB_HEAD_REF"
-          ./bin/ci/ruff-check --ref="origin/$GITHUB_HEAD_REF" --output-format=junit --output-file=ruff.xml
-          cat ruff.xml || true
-      - name: Ruff format
-        run: |
-          ruff --version
-          git fetch origin "$GITHUB_REF"
-          ./bin/ci/ruff-format --ref="origin/$GITHUB_REF" --check
+          ruff check --fix
+          ruff format
 
       - name: MyPy type checking
         run: |
