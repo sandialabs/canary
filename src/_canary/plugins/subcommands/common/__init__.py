@@ -128,7 +128,7 @@ class TimeoutResource(argparse.Action):
         if option_string == "--session-timeout":
             args.session_timeout = time_in_seconds(values)
         elif option_string == "--timeout-multiplier":
-            args.session_timeout = time_in_seconds(values)
+            args.timeout_multiplier = time_in_seconds(values)
         else:
             if match := re.search(r"^(\w*)[:=](.*)$", values):
                 type = match.group(1)
