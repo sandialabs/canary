@@ -106,46 +106,43 @@ def add_resource_arguments(parser: "Parser") -> None:
     )
     group.add_argument(
         "--timeout",
-        "--session-timeout",
-        dest="session_timeout",
-        metavar="T",
-        type=time_in_seconds,
-        help="Set a timeout on test session execution in seconds "
-        "(accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: None]",
-    )
-    group.add_argument(
-        "--test-timeout",
-        metavar="type:T",
         action=TimeoutResource,
-        help=f"Set the timeout for tests of {bold('type')}.  "
-        "Type is one of 'fast', 'long', 'default', or 'ctest' "
-        "(T accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s) [default: 5m]",
+        metavar="type:T",
+        help=f"Set the timeout for {bold('type')} "
+        "(accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s). "
+        "If type is 'session', the timeout is applied to the entire test session.  If type is "
+        "'multiplier', the multiplier T is applied to each test's timeout.  Otherwise, "
+        f"a timeout of T is applied to tests having keyword {bold('type')}.  For example, "
+        "--timeout baz:2 would apply a timeout of 2 seconds to all tests having the keyword 'baz'; "
+        "common types are fast, long, default, and ctest.",
     )
-    group.add_argument(
-        "--timeout-multiplier",
-        metavar="X",
-        type=time_in_seconds,
-        help="Set a timeout multiplier for all tests [default: 1.0]",
-    )
+    group.add_argument("--session-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
+    group.add_argument("--test-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
+    group.add_argument("--timeout-multiplier", action=TimeoutResource, help=argparse.SUPPRESS)
 
 
 class TimeoutResource(argparse.Action):
-    _types = ("fast", "long", "default", "session")
+    _types = ("fast", "long", "default", "session", "ctest", "multiplier")
 
     def __call__(self, parser, args, values, option_string=None):
-        if match := re.search(r"^(\w*)[:=](.*)$", values):
-            type = match.group(1)
-            value = time_in_seconds(match.group(2))
+        if option_string == "--session-timeout":
+            args.session_timeout = time_in_seconds(values)
+        elif option_string == "--timeout-multiplier":
+            args.session_timeout = time_in_seconds(values)
         else:
-            raise ValueError(f"Incorrect test timeout spec: {values}, expected 'type:value'")
-        if type.lower() not in self._types:
-            logging.debug(f"{option_string}: unknown test timeout type {type!r}")
-        if type.lower() == "session":
-            args.session_timeout = value
-        else:
-            timeout_resources = getattr(args, self.dest, None) or {}
-            timeout_resources[type.lower()] = value
-            setattr(args, self.dest, timeout_resources)
+            if match := re.search(r"^(\w*)[:=](.*)$", values):
+                type = match.group(1)
+                value = time_in_seconds(match.group(2))
+            else:
+                raise ValueError(f"Incorrect test timeout spec: {values}, expected 'type:value'")
+            if type.lower() == "session":
+                args.session_timeout = value
+            elif type.lower() == "multiplier":
+                args.timeout_multiplier = value
+            else:
+                timeout_resources = getattr(args, self.dest, None) or {}
+                timeout_resources[type.lower()] = value
+                setattr(args, "test_timeout", timeout_resources)
 
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:
@@ -161,7 +158,6 @@ def filter_cases_by_status(cases: list["TestCase"], status: tuple | str) -> list
 
 def load_session(root: str | None = None, mode: str = "r"):
     from ....session import Session
-    from ....util import logging
 
     with logging.level(logging.WARNING):
         return Session(root or os.getcwd(), mode=mode)

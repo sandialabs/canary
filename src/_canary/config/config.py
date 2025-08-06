@@ -28,6 +28,7 @@ from ..util.compression import expand64
 from ..util.filesystem import find_work_tree
 from ..util.filesystem import mkdirp
 from ..util.rprobe import cpu_count
+from ..util.time import time_in_seconds
 from . import _machine
 from .rpool import ResourcePool
 from .schemas import batch_schema
@@ -133,20 +134,22 @@ class SessionConfig:
 
 @dataclasses.dataclass
 class Test:
-    timeout_fast: float = 120.0
-    timeout_default: float = 5 * 60.0
-    timeout_long: float = 15 * 60.0
+    timeout: dict[str, float] = dataclasses.field(
+        default_factory=lambda: {"fast": 120.0, "default": 5 * 60.0, "long": 15 * 60.0}
+    )
 
     def update(self, *args: Any, **kwargs: Any) -> None:
         if len(args) > 1:
             raise TypeError(f"Test.update() expected at most 1 argument, got {len(args)}")
         data = dict(*args) | kwargs
-        for key, value in data.items():
-            if key == "timeout":
-                for k, v in value.items():
-                    setattr(self, f"{key}_{k}", v)
+        for field, values in data.items():
+            if field == "timeout":
+                for type, value in values.items():
+                    seconds = time_in_seconds(value)
+                    assert seconds > 0
+                    self.timeout[type] = seconds
             else:
-                setattr(self, key, value)
+                setattr(self, field, values)
 
 
 @dataclasses.dataclass(init=False, slots=True)
@@ -489,7 +492,7 @@ class Config:
             elif key == "test":
                 if user_defined_timeouts := items.get("timeout"):
                     for type, value in user_defined_timeouts.items():
-                        config.setdefault("test", {})[f"timeout_{type}"] = value
+                        config.setdefault("test", {}).setdefault("timeout", {})[type] = value
             elif key == "plugins":
                 config.setdefault("plugin_manager", {}).setdefault("plugins", []).extend(items)
             elif key in section_schemas:
@@ -619,8 +622,7 @@ class Config:
                     raise ValueError(f"batch:workers={n} > cpu_count={cpu_count()}")
 
         if t := getattr(args, "test_timeout", None):
-            for type, value in t.items():
-                setattr(self.test, f"timeout_{type}", value)
+            self.test.update(t)
 
         self.options = merge_namespaces(self.options, args)
 

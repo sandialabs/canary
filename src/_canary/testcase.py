@@ -1161,12 +1161,13 @@ class TestCase(AbstractTestCase):
             else:
                 timeout = 2.0 * max_runtime
         else:
+            defined_timeout = config.test.timeout
             for keyword in self.keywords:
-                if t := getattr(config.test, f"timeout_{keyword}", None):
+                if t := config.test.timeout.get(keyword):
                     timeout = float(t)
                     break
             else:
-                timeout = config.test.timeout_default
+                timeout = config.test.timeout["default"]
         self._timeout = float(timeout)
 
     def cache_last_run(self) -> None:
