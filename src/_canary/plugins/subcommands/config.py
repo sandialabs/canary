@@ -34,6 +34,12 @@ class ConfigCmd(CanarySubcommand):
         sp = parser.add_subparsers(dest="subcommand")
         p = sp.add_parser("show", help="Show the current configuration")
         p.add_argument(
+            "-r",
+            action="store_true",
+            default=False,
+            help="Include resource pool in configuration that is shown",
+        )
+        p.add_argument(
             "-p",
             "--paths",
             action="store_true",
@@ -107,6 +113,8 @@ def show_config(args: "argparse.Namespace"):
         state = config.getstate(pretty=True)
         if args.section is not None:
             state = {args.section: state[args.section]}
+        elif not args.r:
+            state["resource_pool"] = "... (-r to include resource pool)"
         if args.format == "json":
             text = json.dumps(state, indent=2)
         else:

@@ -107,14 +107,14 @@ def add_resource_arguments(parser: "Parser") -> None:
     group.add_argument(
         "--timeout",
         action=TimeoutResource,
-        metavar="type:T",
+        metavar="type=T",
         help=f"Set the timeout for {bold('type')} "
         "(accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s). "
-        "If type is 'session', the timeout is applied to the entire test session.  If type is "
-        "'multiplier', the multiplier T is applied to each test's timeout.  Otherwise, "
-        f"a timeout of T is applied to tests having keyword {bold('type')}.  For example, "
-        "--timeout baz:2 would apply a timeout of 2 seconds to all tests having the keyword 'baz'; "
-        "common types are fast, long, default, and ctest.",
+        f"If type={bold('session')}, the timeout is applied to the entire test session.  "
+        f"If type={bold('multiplier')}, the multiplier T is applied to each test's timeout.  "
+        f"Otherwise, a timeout of T is applied to tests having keyword {bold('type')}.  "
+        "For example, --timeout fast=2 would apply a timeout of 2 seconds to all tests having "
+        "the 'fast' keyword; common types are fast, long, default, and ctest.",
     )
     group.add_argument("--session-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
     group.add_argument("--test-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
@@ -126,23 +126,32 @@ class TimeoutResource(argparse.Action):
 
     def __call__(self, parser, args, values, option_string=None):
         if option_string == "--session-timeout":
-            args.session_timeout = time_in_seconds(values)
+            logging.warning(
+                f"option --session-timeout is deprecated, use --timeout session={values}"
+            )
+            type = "session"
+            value = time_in_seconds(values)
         elif option_string == "--timeout-multiplier":
-            args.timeout_multiplier = time_in_seconds(values)
+            logging.warning(
+                f"option --timeout-multiplier is deprecated, use --timeout multiplier={values}"
+            )
+            type = "multiplier"
+            value = time_in_seconds(values)
         else:
             if match := re.search(r"^(\w*)[:=](.*)$", values):
-                type = match.group(1)
+                type = match.group(1).lower()
                 value = time_in_seconds(match.group(2))
             else:
-                raise ValueError(f"Incorrect test timeout spec: {values}, expected 'type:value'")
-            if type.lower() == "session":
-                args.session_timeout = value
-            elif type.lower() == "multiplier":
-                args.timeout_multiplier = value
-            else:
-                timeout_resources = getattr(args, self.dest, None) or {}
-                timeout_resources[type.lower()] = value
-                setattr(args, "test_timeout", timeout_resources)
+                raise ValueError(f"Incorrect test timeout spec: {values}, expected 'type=value'")
+
+        if type == "session":
+            args.session_timeout = value
+        elif type == "multiplier":
+            args.timeout_multiplier = value
+
+        timeouts = getattr(args, "timeouts", None) or {}
+        timeouts[type] = value
+        setattr(args, "timeouts", timeouts)
 
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:

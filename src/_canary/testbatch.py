@@ -343,7 +343,7 @@ class TestBatch(AbstractTestCase):
             logging.debug(f"Submitting batch {self.id}")
             if backend.supports_subscheduling and flat:
                 scriptdir = os.path.dirname(self.submission_script_filename())
-                timeoutx = config.getoption("timeout_multiplier", 1.0)
+                timeoutx = config.timeout.get("multiplier", 1.0)
                 variables.pop("CANARY_BATCH_ID", None)
                 proc = backend.submitn(
                     [case.id for case in self],
@@ -358,9 +358,8 @@ class TestBatch(AbstractTestCase):
                     qtime=[case.runtime * timeoutx for case in self],
                 )
             else:
-                qtime = self.qtime()
-                if timeoutx := config.getoption("timeout_multiplier"):
-                    qtime *= timeoutx
+                timeoutx = config.timeout.get("multiplier", 1.0)
+                qtime = self.qtime() * timeoutx
                 proc = backend.submit(
                     f"canary.{self.id[:7]}",
                     [canary_invocation(self)],

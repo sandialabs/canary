@@ -1161,13 +1161,12 @@ class TestCase(AbstractTestCase):
             else:
                 timeout = 2.0 * max_runtime
         else:
-            defined_timeout = config.test.timeout
             for keyword in self.keywords:
-                if t := config.test.timeout.get(keyword):
+                if t := config.timeout.get(keyword):
                     timeout = float(t)
                     break
             else:
-                timeout = config.test.timeout["default"]
+                timeout = config.timeout["default"]
         self._timeout = float(timeout)
 
     def cache_last_run(self) -> None:
@@ -1679,7 +1678,7 @@ class TestCase(AbstractTestCase):
         self.stdout.write(f"==> Working directory: {self.working_directory}\n")
         self.stdout.write(f"==> Execution directory: {self.execution_directory}\n")
         self.stdout.write(f"==> Command line: {cmd_line}\n")
-        if timeoutx := config.getoption("timeout_multiplier"):
+        if (timeoutx := config.timeout.get("multiplier")) and (timeoutx != 1.0):
             self.stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
         self.stdout.flush()
 
@@ -1711,7 +1710,7 @@ class TestCase(AbstractTestCase):
             proc: psutil.Popen | None = None
             metrics: dict[str, Any] | None = None
             timeout = self.timeout
-            if timeoutx := config.getoption("timeout_multiplier"):
+            if timeoutx := config.timeout.get("multiplier"):
                 timeout *= timeoutx
             cmd = self.command()
             cmd_line = shlex.join(cmd)

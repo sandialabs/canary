@@ -250,10 +250,6 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
 """
             )
         with config.override():
-            config.test.cpu_count = (1, 10)
-            config.test.gpu_count = (0, 0)
-            config.test.node_count = (1, 1)
-
             f = finder.Finder()
             f.add(".")
             f.prepare()
@@ -301,10 +297,6 @@ def test_vvt_generator(tmpdir):
 """
             )
         with config.override():
-            config.test.cpu_count = (1, 10)
-            config.test.gpu_count = (0, 0)
-            config.test.node_count = (1, 1)
-
             f = finder.Finder()
             f.add(".")
             f.prepare()

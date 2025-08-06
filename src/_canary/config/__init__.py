@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     system = _config.system
     session = _config.session
     backend = _config.backend
-    test = _config.test
+    timeout = _config.timeout
     build = _config.build
     null = _config.null
     options = _config.options

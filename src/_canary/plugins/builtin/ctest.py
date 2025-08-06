@@ -292,7 +292,7 @@ class CTestTestCase(TestCase):
         elif self.timeout_property is not None:
             timeout = self.timeout_property
         else:
-            timeout = config.test.timeout.get("ctest", 1500.0)
+            timeout = config.timeout.get("ctest", 1500.0)
         self._timeout = float(timeout)
 
     @property
@@ -665,7 +665,7 @@ def canary_generator(root: str, path: str | None) -> AbstractTestGenerator | Non
 
 @hookimpl
 def canary_configure(config: "CanaryConfig"):
-    config.test.timeout["ctest"] = 1500.0
+    config.timeout["ctest"] = 1500.0
 
 
 @hookimpl

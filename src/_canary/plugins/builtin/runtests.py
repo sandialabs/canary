@@ -166,7 +166,7 @@ def process_queue(*, queue: ResourceQueue) -> None:
     futures: dict = {}
     start = timestamp()
     duration = lambda: timestamp() - start
-    timeout = float(config.getoption("session_timeout", -1))
+    timeout = float(config.timeout.get("session", -1))
     runner = r_factory()
     qsize = queue.qsize
     qrank = 0

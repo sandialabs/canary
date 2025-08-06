@@ -28,7 +28,6 @@ from ..util.compression import expand64
 from ..util.filesystem import find_work_tree
 from ..util.filesystem import mkdirp
 from ..util.rprobe import cpu_count
-from ..util.time import time_in_seconds
 from . import _machine
 from .rpool import ResourcePool
 from .schemas import batch_schema
@@ -38,6 +37,7 @@ from .schemas import environment_schema
 from .schemas import plugin_schema
 from .schemas import resource_schema
 from .schemas import test_schema
+from .schemas import timeout_schema
 
 section_schemas: dict[str, Schema] = {
     "build": build_schema,
@@ -46,6 +46,7 @@ section_schemas: dict[str, Schema] = {
     "environment": environment_schema,
     "plugins": plugin_schema,
     "resource_pool": resource_schema,
+    "timeout": timeout_schema,
     "test": test_schema,
 }
 
@@ -132,26 +133,6 @@ class SessionConfig:
         return d
 
 
-@dataclasses.dataclass
-class Test:
-    timeout: dict[str, float] = dataclasses.field(
-        default_factory=lambda: {"fast": 120.0, "default": 5 * 60.0, "long": 15 * 60.0}
-    )
-
-    def update(self, *args: Any, **kwargs: Any) -> None:
-        if len(args) > 1:
-            raise TypeError(f"Test.update() expected at most 1 argument, got {len(args)}")
-        data = dict(*args) | kwargs
-        for field, values in data.items():
-            if field == "timeout":
-                for type, value in values.items():
-                    seconds = time_in_seconds(value)
-                    assert seconds > 0
-                    self.timeout[type] = seconds
-            else:
-                setattr(self, field, values)
-
-
 @dataclasses.dataclass(init=False, slots=True)
 class System:
     node: str
@@ -226,6 +207,10 @@ def default_mp_settings() -> SimpleNamespace:
     return SimpleNamespace(context="spawn", max_tasks_per_child=1)
 
 
+def default_timeouts() -> dict[str, float]:
+    return {"session": -1.0, "multiplier": 1.0, "fast": 120.0, "default": 300.0, "long": 900.0}
+
+
 @dataclasses.dataclass
 class Config:
     """Access to configuration values"""
@@ -240,7 +225,7 @@ class Config:
     backend: hpc_connect.HPCBackend | None = None
     system: System = dataclasses.field(default_factory=System)
     session: SessionConfig = dataclasses.field(default_factory=SessionConfig)
-    test: Test = dataclasses.field(default_factory=Test)
+    timeout: dict[str, float] = dataclasses.field(default_factory=default_timeouts)
     environment: EnvironmentModifications = dataclasses.field(
         default_factory=EnvironmentModifications
     )
@@ -405,12 +390,15 @@ class Config:
         self.system = System(snapshot["system"])
         self.environment = EnvironmentModifications(snapshot["environment"])
         self.session = SessionConfig(**snapshot["session"])
-        self.test = Test(**snapshot["test"])
         compiler = Compiler(**snapshot["build"].pop("compiler"))
         self.build = Build(compiler=compiler, **snapshot["build"])
         self.resource_pool = ResourcePool(pool=snapshot["resource_pool"])
         self.update(snapshot["config"])
         self.batch = Batch(**snapshot["batch"])
+
+        if "test" in snapshot:
+            for key, value in snapshot["test"]["timeout"].items():
+                self.timeout[key] = value
 
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The
@@ -489,10 +477,8 @@ class Config:
                     config["_cache_dir"] = os.path.expanduser(items["cache_dir"])
                 if "multiprocessing" in items:
                     config["multiprocessing"] = items["multiprocessing"]
-            elif key == "test":
-                if user_defined_timeouts := items.get("timeout"):
-                    for type, value in user_defined_timeouts.items():
-                        config.setdefault("test", {}).setdefault("timeout", {})[type] = value
+            elif key == "timeout":
+                config.setdefault("timeout", {}).update(items)
             elif key == "plugins":
                 config.setdefault("plugin_manager", {}).setdefault("plugins", []).extend(items)
             elif key in section_schemas:
@@ -621,8 +607,8 @@ class Config:
                 if n > cpu_count():
                     raise ValueError(f"batch:workers={n} > cpu_count={cpu_count()}")
 
-        if t := getattr(args, "test_timeout", None):
-            self.test.update(t)
+        if t := getattr(args, "timeouts", None):
+            self.timeout.update(t)
 
         self.options = merge_namespaces(self.options, args)
 
@@ -688,7 +674,11 @@ class Config:
             except SchemaError as e:
                 msg = f"Schema error encountered in {file}: {e.args[0]}"
                 raise ValueError(msg) from None
-            config[section] = validated[section]
+            if section == "test":
+                logging.warning("Deprecated configuration section 'test:timeout'.  Use 'timeout'")
+                config.setdefault("timeout", {}).update(validated["test"]["timeout"])
+            else:
+                config[section] = validated[section]
         return config
 
     @classmethod

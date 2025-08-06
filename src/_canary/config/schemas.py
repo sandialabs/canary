@@ -97,6 +97,7 @@ batch_schema = Schema(
 plugin_schema = Schema({"plugins": list_of_str})
 
 test_schema = Schema({"test": {"timeout": {Optional(str): Use(time_in_seconds)}}})
+timeout_schema = Schema({"timeout": {Optional(str): Use(time_in_seconds)}})
 
 machine_schema = Schema({"machine": {Optional("cpu_count"): Use(int)}})
 python_schema = Schema({"python": {"executable": str, "version": str, "version_info": list}})
