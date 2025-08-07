@@ -6,6 +6,13 @@ import os
 import subprocess
 from typing import TextIO
 
+def get_version(full: bool = False) -> tuple[int, int, int, str]:
+    if os.environ.get('GITHUB_REF') and os.environ.get('GITHUB_SHA'):
+        ref = os.environ.get('GITHUB_REF')
+        sha = os.environ.get('GITHUB_SHA')
+        return 0, 0, 0, f"{ref}-{sha[:7]}"
+    else:
+        return version_components_from_git(full)
 
 def version_components_from_git(full: bool = False) -> tuple[int, int, int, str]:
     try:
@@ -65,7 +72,7 @@ def __getattr__(name):
 #     raise AttributeError(name)
 
 def __generate_dynamic_version__():
-    major, minor, micro, local = version_components_from_git()
+    major, minor, micro, local = get_version()
     with open(os.path.join(os.path.dirname(__file__), "../version.py"), "w") as fh:
         write_version_file(fh, major, minor, micro, local)
     return f"{major}.{minor}.{micro}"
