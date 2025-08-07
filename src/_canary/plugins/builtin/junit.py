@@ -28,6 +28,7 @@ def canary_session_reporter() -> CanaryReporter:
 class JunitReporter(CanaryReporter):
     type = "junit"
     description = "JUnit reporter"
+    default_output = "junit.xml"
 
     def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
         if session is None:
@@ -37,7 +38,7 @@ class JunitReporter(CanaryReporter):
         root = doc.create_testsuite_element(
             session.active_cases(), name=get_root_name(), tagname="testsuites"
         )
-        output = kwargs["output"] or "junit.xml"
+        output = kwargs["output"] or self.default_output
         groups = groupby_classname(session.active_cases())
         for classname, cases in groups.items():
             suite = doc.create_testsuite_element(cases, name=classname)

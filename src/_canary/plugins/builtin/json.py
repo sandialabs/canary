@@ -22,12 +22,13 @@ def canary_session_reporter() -> CanaryReporter:
 class JsonReporter(CanaryReporter):
     type = "json"
     description = "JSON reporter"
+    default_output = "canary.json"
 
     def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
         if session is None:
             raise ValueError("canary report json: session required")
 
-        file = os.path.abspath(kwargs["output"] or "canary-report.json")
+        file = os.path.abspath(kwargs["output"] or self.default_output)
         data: dict = {}
         for case in session.cases:
             data[case.id] = case.getstate()

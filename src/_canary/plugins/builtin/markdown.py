@@ -29,13 +29,14 @@ class MarkdownReporter(CanaryReporter):
     type = "markdown"
     description = "Markdown reporter"
     multipage = True
+    default_output = "MARKDOWN"
 
     def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
         if session is None:
             raise ValueError("canary report markdown: session required")
 
         dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=session.work_tree)
-        self.md_dir = os.path.join(dest, "MARKDOWN")
+        self.md_dir = os.path.join(dest, self.default_output)
         self.index = os.path.join(dest, "canary-report.md")
         self.root = dest
         force_remove(self.md_dir)
