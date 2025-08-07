@@ -6,6 +6,7 @@ import os
 import subprocess
 from typing import TextIO
 
+
 def get_version(full: bool = False) -> tuple[int, int, int, str]:
     if os.environ.get('GITHUB_REF') and os.environ.get('GITHUB_SHA'):
         ref = os.environ.get('GITHUB_REF')
