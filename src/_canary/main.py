@@ -8,6 +8,7 @@ import shlex
 import signal
 import sys
 import traceback
+import urllib.parse
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
@@ -71,7 +72,10 @@ class CanaryMain:
     """Set up and teardown this canary session"""
 
     def __init__(self, argv: Sequence[str] | None = None) -> None:
-        self.argv: Sequence[str] = argv or sys.argv[1:]
+        # Some CI/CD agents use yaml to describe jobs.  Quoting can get wonky between parsing the
+        # yaml and passing it to the shell.  So, we allow url encoded strings and unquote them
+        # here.
+        self.argv: Sequence[str] = [urllib.parse.unquote(_) for _ in (argv or sys.argv[1:])]
         config.invocation_dir = config.working_dir = os.getcwd()
 
     def __enter__(self) -> "CanaryMain":
