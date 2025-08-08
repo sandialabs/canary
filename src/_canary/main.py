@@ -41,6 +41,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.environ["CANARY_LEVEL"] = "0"
 
     with CanaryMain(argv) as m:
+
+        if "--echo" in m.argv:
+            a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
+            logging.emit(shlex.join(a) + "\n")
+
         parser = make_argument_parser()
         parser.add_main_epilog(parser)
         for command in config.plugin_manager.get_subcommands():
@@ -53,9 +58,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.color:
             color.set_color_when(args.color)
 
-        if args.echo:
-            a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
-            logging.emit(shlex.join(a) + "\n")
         config.set_main_options(args)
         config.plugin_manager.hook.canary_configure(config=config)
         command = parser.get_command(args.command)
@@ -75,7 +77,8 @@ class CanaryMain:
         # Some CI/CD agents use yaml to describe jobs.  Quoting can get wonky between parsing the
         # yaml and passing it to the shell.  So, we allow url encoded strings and unquote them
         # here.
-        self.argv: Sequence[str] = [urllib.parse.unquote(_) for _ in (argv or sys.argv[1:])]
+        argv = argv or sys.argv[1:]
+        self.argv: Sequence[str] = [urllib.parse.unquote(arg) for arg in argv]
         config.invocation_dir = config.working_dir = os.getcwd()
 
     def __enter__(self) -> "CanaryMain":
