@@ -74,11 +74,7 @@ class CanaryMain:
     """Set up and teardown this canary session"""
 
     def __init__(self, argv: Sequence[str] | None = None) -> None:
-        # Some CI/CD agents use yaml to describe jobs.  Quoting can get wonky between parsing the
-        # yaml and passing it to the shell.  So, we allow url encoded strings and unquote them
-        # here.
-        argv = argv or sys.argv[1:]
-        self.argv: Sequence[str] = [urllib.parse.unquote(arg) for arg in argv]
+        self.argv: Sequence[str] = list(argv or sys.argv[1:])
         config.invocation_dir = config.working_dir = os.getcwd()
 
     def __enter__(self) -> "CanaryMain":
@@ -216,6 +212,12 @@ def console_main() -> int:
 
     This function is not meant for programmable use; use `main()` instead.
     """
+
+    # Some CI/CD agents use yaml to describe jobs.  Quoting can get wonky between parsing the
+    # yaml and passing it to the shell.  So, we allow url encoded strings and unquote them
+    # here.
+    for i, arg in enumerate(sys.argv):
+        sys.argv[i] = urllib.parse.unquote(arg)
     try:
         returncode = main()
         sys.stdout.flush()
