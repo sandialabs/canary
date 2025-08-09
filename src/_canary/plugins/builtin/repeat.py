@@ -43,7 +43,7 @@ def repeat_until_pass(case: TestCase, qsize: int, qrank: int) -> None:
         while i < count:
             i += 1
             case.reset()
-            case.run(qsize=qsize, qrank=qrank, repeat=True)
+            case.run(qsize=qsize, qrank=qrank, attempt=i)
             if not case.status.satisfies("failed"):
                 return
         n: int = i - 1

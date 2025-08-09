@@ -9,7 +9,6 @@ import io
 import itertools
 import json
 import math
-from .util.string import pluralize
 import os
 import re
 import shlex
@@ -51,6 +50,7 @@ from .util.misc import digits
 from .util.module import load as load_module
 from .util.procutils import get_process_metrics
 from .util.shell import source_rcfile
+from .util.string import pluralize
 from .util.string import stringify
 from .util.time import Duration
 from .util.time import hhmmss
