@@ -145,7 +145,7 @@ class Session:
                 self.cases.extend(cases)
         else:
             self.initialize()
-            config.plugin_manager.hook.canary_session_start(session=self)
+            config.plugin_manager.hook.canary_session_startup(session=self)
 
         if self.mode == "w":
             self.save(ini=True)

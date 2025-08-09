@@ -10,7 +10,6 @@ from ... import config
 from ...third_party.color import colorize
 from ...util import graph
 from ...util import logging
-from ...util.banner import banner
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import PathSpec
@@ -35,41 +34,6 @@ class Run(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         add_work_tree_arguments(parser)
         add_filter_arguments(parser)
-        group = parser.add_argument_group("console reporting")
-        group.add_argument(
-            "--no-header",
-            default=None,
-            action="store_true",
-            help="Disable printing header [default: %(default)s]",
-        )
-        group.add_argument(
-            "--no-summary",
-            default=None,
-            action="store_true",
-            help="Disable summary [default: %(default)s]",
-        )
-        group.add_argument(
-            "--format",
-            default="short",
-            action="store",
-            choices=["short", "long", "progress-bar"],
-            help="Change the format of the test case's name as printed to the screen. "
-            "Options are 'short' and 'long' [default: %(default)s]",
-        )
-        group.add_argument(
-            "--durations",
-            type=int,
-            metavar="N",
-            help="Show N slowest test durations (N=0 for all)",
-        )
-        group.add_argument(
-            "-e",
-            choices=("separate", "merge"),
-            default="separate",
-            dest="testcase_output_strategy",
-            help="Merge a testcase's stdout and stderr or log separately [default: %(default)s]",
-        )
-        group.add_argument("-r", help=argparse.SUPPRESS)
         parser.add_argument("-u", "--until", choices=("discover", "lock"), help=argparse.SUPPRESS)
         parser.add_argument(
             "--fail-fast",
@@ -105,32 +69,41 @@ class Run(CanarySubcommand):
             action="store_true",
             help="Do not collect a test's process information [default: %(default)s]",
         )
-        parser.add_argument(
-            "--repeat-until-pass",
-            default=None,
-            type=int,
-            help="Allow each test to run up to <n> times in order to pass",
+
+        group = parser.add_argument_group("console reporting")
+        group.add_argument(
+            "--format",
+            default="short",
+            action="store",
+            choices=["short", "long", "progress-bar"],
+            help="Change the format of the test case's name as printed to the screen. "
+            "Options are 'short' and 'long' [default: %(default)s]",
         )
-        parser.add_argument(
-            "--repeat-after-timeout",
-            default=None,
-            type=int,
-            help="Allow each test to run up to <n> times if it times out",
+        group.add_argument(
+            "-e",
+            choices=("separate", "merge"),
+            default="separate",
+            dest="testcase_output_strategy",
+            help="Merge a testcase's stdout and stderr or log separately [default: %(default)s]",
         )
-        parser.add_argument(
-            "--repeat-until-fail",
-            default=None,
-            type=int,
-            help="Require each test to run <n> times without failing in order to pass",
+        group.add_argument(
+            "--capture",
+            choices=("log", "tee"),
+            default="log",
+            help="Log test output to a file only (log) or log and print output "
+            "to the screen (tee).  Warning: this could result in a large amount of text printed "
+            "to the screen [default: log]",
         )
+
+        parser.add_argument("-r", help=argparse.SUPPRESS)
         add_resource_arguments(parser)
         PathSpec.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
         from ...session import Session
 
-        if not config.getoption("no_header"):
-            logging.emit(banner() + "\n")
+        config.plugin_manager.hook.canary_runtests_startup()
+
         session: Session
         if args.mode == "w":
             path = args.work_tree or Session.default_worktree

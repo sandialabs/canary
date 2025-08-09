@@ -76,7 +76,7 @@ def canary_subcommand() -> CanarySubcommand:
 
 
 @hookspec
-def canary_session_start(session: "Session") -> None:
+def canary_session_startup(session: "Session") -> None:
     """Called after the session object has been created and before performing collection and
     entering the run test loop."""
 
@@ -85,6 +85,11 @@ def canary_session_start(session: "Session") -> None:
 def canary_session_finish(session: "Session", exitstatus: int) -> None:
     """Called after the test session has finished allowing plugins to perform custom actions after
     all tests have been run."""
+
+
+@hookspec
+def canary_runtests_startup() -> None:
+    """Called at the beginning of `canary run`"""
 
 
 @hookspec(firstresult=True)

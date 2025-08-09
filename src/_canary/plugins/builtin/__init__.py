@@ -16,6 +16,7 @@ from . import mask
 from . import partitioning
 from . import post_clean
 from . import pyt
+from . import repeat
 from . import reporting
 from . import runtest_protocol
 from . import runtests
@@ -36,6 +37,7 @@ plugins = [
     partitioning,
     post_clean,
     pyt,
+    repeat,
     reporting,
     runtest_protocol,
     runtests,

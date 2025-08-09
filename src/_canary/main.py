@@ -41,7 +41,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.environ["CANARY_LEVEL"] = "0"
 
     with CanaryMain(argv) as m:
-
         if "--echo" in m.argv:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
             logging.emit(shlex.join(a) + "\n")
