@@ -41,10 +41,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.environ["CANARY_LEVEL"] = "0"
 
     with CanaryMain(argv) as m:
-        if "--echo" in m.argv:
-            a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
-            logging.emit(shlex.join(a) + "\n")
-
         parser = make_argument_parser()
         parser.add_main_epilog(parser)
         for command in config.plugin_manager.get_subcommands():
@@ -54,6 +50,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
             config.plugin_manager.hook.canary_addoption(parser=parser)
         args = parser.parse_args(m.argv)
+        if args.echo:
+            a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
+            logging.emit(shlex.join(a) + "\n")
         if args.color:
             color.set_color_when(args.color)
 
@@ -83,7 +82,7 @@ class CanaryMain:
         if contains_any(os.environ.keys(), "CANARY_RERAISE_ERRORS", "GITLAB_CI"):
             reraise = True
         parser = make_argument_parser()
-        args = parser.preparse(self.argv)
+        args = parser.preparse(self.argv, addopts=True)
         if args.debug:
             reraise = True
         if args.C:
