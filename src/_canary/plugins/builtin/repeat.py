@@ -42,11 +42,9 @@ def repeat_until_pass(case: TestCase, qsize: int, qrank: int) -> None:
         i: int = 0
         while i < count:
             i += 1
-            case.reset()
-            case.run(qsize=qsize, qrank=qrank, attempt=i)
+            rerun_case(case, qsize, qrank, i)
             if not case.status.satisfies("failed"):
                 return
-        n: int = i - 1
         logging.error(
             f"{case}: failed to finish successfully after {i} additional {pluralize('attempt', i)}"
         )
@@ -58,8 +56,7 @@ def repeat_after_timeout(case: TestCase, qsize: int, qrank: int) -> None:
         i: int = 0
         while i < count:
             i += 1
-            case.reset()
-            case.run(qsize=qsize, qrank=qrank, attempt=i)
+            rerun_case(case, qsize, qrank, i)
             if not case.status.satisfies("timeout"):
                 return
         logging.error(
@@ -73,8 +70,7 @@ def repeat_until_fail(case: TestCase, qsize: int, qrank: int) -> None:
         i: int = 1
         while i < count:
             i += 1
-            case.reset()
-            case.run(qsize=qsize, qrank=qrank, attempt=i)
+            rerun_case(case, qsize, qrank, i)
             if not case.status.satisfies("success"):
                 break
         else:
@@ -83,3 +79,14 @@ def repeat_until_fail(case: TestCase, qsize: int, qrank: int) -> None:
         logging.error(
             f"{case}: failed to finish successfully {n} {pluralize('time', n)} without failing"
         )
+
+
+def rerun_case(case: TestCase, qsize: int, qrank: int, attempt: int) -> None:
+    dont_restage = config.getoption("dont_restage")
+    try:
+        case.reset()
+        config.plugin_manager.hook.canary_testcase_setup(case=case)
+        case.run(qsize=qsize, qrank=qrank, attempt=attempt)
+    finally:
+        if dont_restage:
+            config.options.dont_restage = dont_restage

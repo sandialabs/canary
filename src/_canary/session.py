@@ -565,9 +565,7 @@ class Session:
         if not cases:
             raise StopExecution("No tests to run", notests_exit_status)
         self.start = timestamp()
-        rc = config.plugin_manager.hook.canary_runtests(
-            session=self, cases=cases, fail_fast=fail_fast
-        )
+        rc = config.plugin_manager.hook.canary_runtests(cases=cases, fail_fast=fail_fast)
         self.stop = timestamp()
         self.returncode = rc
         self.exitstatus = rc
