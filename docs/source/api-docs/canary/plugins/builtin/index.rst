@@ -22,6 +22,7 @@ plugins.builtin
    partitioning
    post_clean
    pyt
+   repeat
    reporting
    runtest_protocol
    runtests

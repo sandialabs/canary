@@ -9,6 +9,7 @@ plugins.subcommands
    :maxdepth: 1
 
    autodoc
+   check
    common/index
    config
    describe
