@@ -1,7 +1,3 @@
-# Copyright NTESS. See COPYRIGHT file for details.
-#
-# SPDX-License-Identifier: MIT
-
 import io
 import os
 import re
@@ -12,9 +8,6 @@ from typing import Any
 import yaml
 
 import canary
-from _canary.util import graph
-from _canary.util.filesystem import set_executable
-from _canary.util.filesystem import working_dir
 
 
 class YAMLTestGenerator(canary.AbstractTestGenerator):
@@ -73,7 +66,7 @@ class YAMLTestGenerator(canary.AbstractTestGenerator):
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")
         file.write(f"{len(cases)} test cases:\n")
-        graph.print(cases, file=file)
+        canary.graph.print(cases, file=file)
         return file.getvalue()
 
 
@@ -100,8 +93,7 @@ class YAMLTestCase(canary.TestCase):
         if keywords is not None:
             self.keywords = keywords
 
-        self.launcher = "bash"
-        self.exe = "test_script.sh"
+        self.scriptname = "test_script.sh"
         self.description = description
 
         # Expand variables in the script using my parameters
@@ -110,15 +102,20 @@ class YAMLTestCase(canary.TestCase):
             t = Template(line)
             self.script.append(t.safe_substitute(**parameters))
 
-    def setup(self, stage: str = "run") -> None:
-        super().setup(stage=stage)
-        with working_dir(self.working_directory):
-            with open(self.exe, "w") as fh:
+    def setup(self) -> None:
+        super().setup()
+        with canary.filesystem.working_dir(self.working_directory):
+            with open(self.scriptname, "w") as fh:
                 fh.write("#!/usr/bin/env bash\n")
                 fh.write("\n".join(self.script))
-            set_executable(self.exe)
+            canary.filesystem.set_executable(self.scriptname)
+
+    def command(self) -> list[str]:
+        return ["bash", self.scriptname]
 
 
 @canary.hookimpl
-def canary_testcase_generator():
-    return YAMLTestGenerator
+def canary_generator(root: str, path: str | None) -> canary.AbstractTestGenerator:
+    if YAMLTestGenerator.matches(root if path is None else os.path.join(root, path)):
+        return YAMLTestGenerator(root=root, path=path)
+    return None

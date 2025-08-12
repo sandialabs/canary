@@ -12,11 +12,11 @@ from .types import CanarySubcommand
 
 if TYPE_CHECKING:
     from ..config.argparsing import Parser
-    from ..config.config import Config
+    from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
     from ..session import Session
-    from ..test.batch import TestBatch
-    from ..test.case import TestCase
+    from ..testbatch import TestBatch
+    from ..testcase import TestCase
 
 project_name = "canary"
 hookspec = pluggy.HookspecMarker(project_name)
@@ -25,6 +25,12 @@ hookimpl = pluggy.HookimplMarker(project_name)
 
 @hookspec
 def canary_testcase_generator() -> Type["AbstractTestGenerator"]:
+    """Deprecated: Use canary_generator"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_generator(root: str, path: str | None) -> "AbstractTestGenerator":
     """Returns an implementation of AbstractTestGenerator"""
     raise NotImplementedError
 
@@ -35,7 +41,7 @@ def canary_addoption(parser: "Parser") -> None:
 
 
 @hookspec
-def canary_configure(config: "Config") -> None:
+def canary_configure(config: "CanaryConfig") -> None:
     """Perform custom configuration of the test environment"""
 
 
@@ -70,15 +76,28 @@ def canary_subcommand() -> CanarySubcommand:
 
 
 @hookspec
-def canary_session_start(session: "Session") -> None:
+def canary_session_startup(session: "Session") -> None:
     """Called after the session object has been created and before performing collection and
     entering the run test loop."""
+
+
+_impl_warning = "canary_session_start is deprecated and will be removed, use canary_session_startup"
+
+
+@hookspec(warn_on_impl=DeprecationWarning(_impl_warning))
+def canary_session_start(session: "Session") -> None:
+    pass
 
 
 @hookspec
 def canary_session_finish(session: "Session", exitstatus: int) -> None:
     """Called after the test session has finished allowing plugins to perform custom actions after
     all tests have been run."""
+
+
+@hookspec
+def canary_runtests_startup() -> None:
+    """Called at the beginning of `canary run`"""
 
 
 @hookspec(firstresult=True)
@@ -141,6 +160,7 @@ def canary_testsuite_mask(
     regex: str | None,
     case_specs: list[str] | None,
     start: str | None,
+    ignore_dependencies: bool,
 ) -> None:
     """Filter test cases (mask test cases that don't meet a specific criteria)
 

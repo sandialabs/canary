@@ -8,6 +8,7 @@ _canary
 .. toctree::
    :maxdepth: 1
 
+   atc
    config/index
    enums
    error
@@ -21,7 +22,9 @@ _canary
    runners
    session
    status
-   test/index
+   testbatch
+   testcase
+   testinstance
    util/index
    version
    when

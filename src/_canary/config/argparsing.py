@@ -10,6 +10,7 @@ import re
 import shlex
 import sys
 import textwrap as textwrap
+import urllib
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
@@ -84,32 +85,19 @@ class Parser(argparse.ArgumentParser):
     def convert_arg_line_to_args(self, arg_line: str) -> list[str]:
         return shlex.split(arg_line.split("#", 1)[0].strip())
 
-    def preparse(self, args: list[str], addopts: bool = True):
-        known_commands = [
-            "run",
-            "report",
-            "log",
-            "location",
-            "info",
-            "help",
-            "find",
-            "fetch",
-            "describe",
-            "config",
-        ]
+    def preparse(self, args: list[str], addopts: bool = False):
         ns = argparse.Namespace(plugins=[], debug=False, C=None)
         if addopts:
-            if env_opts := os.getenv("CANARY_ADDOPTS"):
-                args[0:0] = shlex.split(env_opts)
+            self.add_opts_from_environment(args)
+        for i, arg in enumerate(args):
+            args[i] = urllib.parse.unquote(arg)
         i = 0
         n = len(args)
+        commands = known_commands()
         while i < n:
             opt = args[i]
             i += 1
-            if opt in known_commands:
-                if addopts:
-                    if env_opts := os.getenv(f"CANARY_{opt.upper()}_ADDOPTS"):
-                        args[i:i] = shlex.split(env_opts)
+            if opt in commands:
                 return ns
             if isinstance(opt, str):
                 if opt == "-p":
@@ -133,6 +121,18 @@ class Parser(argparse.ArgumentParser):
                 else:
                     continue
         return ns
+
+    def add_opts_from_environment(self, argv: list[str]) -> None:
+        if env_opts := os.getenv("CANARY_ADDOPTS"):
+            argv[0:0] = shlex.split(env_opts)
+        i: int = 0
+        n: int = len(argv)
+        commands = known_commands()
+        while i < n:
+            arg = argv[i]
+            i += 1
+            if arg in commands and (env_opts := os.getenv(f"CANARY_{arg.upper()}_ADDOPTS")):
+                argv[i:i] = shlex.split(env_opts)
 
     def parse_known_args(self, args=None, namespace=None):
         if args is not None:
@@ -241,6 +241,12 @@ def identity(arg):
     return arg
 
 
+def known_commands() -> list[str]:
+    from ..plugins.subcommands import plugins
+
+    return [p.__name__.split(".")[-1] for p in plugins]
+
+
 class EnvironmentModification(argparse.Action):
     def __init__(self, option_strings, dest, default_scope="session", **kwargs):
         self.default_scope = default_scope
@@ -270,14 +276,17 @@ class EnvironmentModification(argparse.Action):
 
 class ConfigMods(argparse.Action):
     def __call__(self, parser, namespace, option, option_str=None):
-        *parts, value = option.split(":")
         data = {}
-        current = data
-        while len(parts) > 1:
-            key = parts.pop(0)
-            current[key] = {}
-            current = current[key]
-        current[parts[0]] = safe_loads(value)
+        if os.path.exists(option):
+            data.update(json.load(open(option)))
+        else:
+            *parts, value = option.split(":")
+            current = data
+            while len(parts) > 1:
+                key = parts.pop(0)
+                current[key] = {}
+                current = current[key]
+            current[parts[0]] = safe_loads(value)
         config = getattr(namespace, self.dest, None) or {}
         config = merge(config, data)
         setattr(namespace, self.dest, config)
@@ -389,9 +398,10 @@ def make_argument_parser(**kwargs):
     group = parser.add_argument_group("runtime configuration")
     group.add_argument(
         "-f",
-        dest="config_file",
+        action=ConfigMods,
+        dest="config_mods",
         metavar="file",
-        help="Read local configuration settings from this file",
+        help="Read configuration settings from this file",
     )
     group.add_argument(
         "-c",

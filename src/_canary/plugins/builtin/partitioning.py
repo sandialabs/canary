@@ -18,10 +18,10 @@ from ...util.time import time_in_seconds
 from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
-    from ...config import Config
+    from ...config import Config as CanaryConfig
     from ...config.argparsing import Parser
-    from ...test.batch import TestBatch
-    from ...test.case import TestCase
+    from ...testbatch import TestBatch
+    from ...testcase import TestCase
 
 
 @hookimpl(trylast=True)
@@ -46,7 +46,7 @@ def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
 
 
 @hookimpl
-def canary_configure(config: "Config") -> None:
+def canary_configure(config: "CanaryConfig") -> None:
     """Do some post configuration checks"""
     batchopts = config.getoption("batch")
     if batchopts:
@@ -129,7 +129,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 • spec=%(spec)s: Batch spec with possible option:value pairs:\n\n
 [pad]%(count)s: Batch count.  max: one test per batch.  N>=1: split into at most N batches.\n\n
 [pad]%(duration)s: Group tests into batches with total runtime approximate T seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s).\n\n
-[pad]%(layout)s: flat: batches may bepend on other batches. atomic: each batch includes all dependencies and is self-contained.\n\n
+[pad]%(layout)s: flat: batches may depend on other batches. atomic: each batch includes all dependencies and is self-contained.\n\n
 [pad]%(nodes)s: any: ignore node counts when batching.  same: all tests in batch require same node count.
 """ % {
             "r_form": bold("type=value"),

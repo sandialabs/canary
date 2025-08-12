@@ -27,13 +27,15 @@ class Info(CanarySubcommand):
     description = "Print information about tests in a folder"
 
     def setup_parser(self, parser: "Parser"):
+        parser.add_argument("-f", action="store_true", default=False, help="Show generator paths")
         parser.add_argument("paths", nargs="*")
 
     def execute(self, args: argparse.Namespace) -> int:
         import _canary.finder as finder
 
         f = finder.Finder()
-        for path in args.paths:
+        paths = args.paths or ["."]
+        for path in paths:
             f.add(path)
         f.prepare()
         files = f.discover()
@@ -46,6 +48,7 @@ class Info(CanarySubcommand):
             myinfo.setdefault("options", set()).update(finfo.get("options", []))
             type = finfo.get("type", "AbstractTestGenerator").replace("TestGenerator", "")
             myinfo.setdefault("types", set()).add(type)
+            myinfo.setdefault("files", set()).add(file.path)
         _, max_width = terminal_size()
         for root, myinfo in info.items():
             fp = io.StringIO()
@@ -61,5 +64,10 @@ class Info(CanarySubcommand):
                 fp.write("Option expressions:\n")
                 cols = colified(sorted(options), indent=2, width=max_width, padding=5)
                 fp.write(cols.rstrip() + "\n")
+            if args.f:
+                if paths := myinfo.get("files"):
+                    fp.write("Generators:\n")
+                    cols = colified(sorted(paths), indent=2, width=max_width, padding=5)
+                    fp.write(cols.rstrip() + "\n")
             print(fp.getvalue())
         return 0

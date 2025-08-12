@@ -14,7 +14,7 @@ from ...util import logging
 from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
-    from ...test.case import TestCase
+    from ...testcase import TestCase
 
 
 @hookimpl(tryfirst=True)
@@ -26,6 +26,7 @@ def canary_testsuite_mask(
     regex: str | None,
     case_specs: list[str] | None,
     start: str | None,
+    ignore_dependencies: bool,
 ) -> None:
     """Filter test cases (mask test cases that don't meet a specific criteria)
 
@@ -60,7 +61,7 @@ def canary_testsuite_mask(
         if case.masked():
             continue
 
-        if start is not None and no_filter_criteria and isrel(case.execfile, start):
+        if start is not None and no_filter_criteria and isrel(case.working_directory, start):
             # won't mask
             continue
 
@@ -109,7 +110,7 @@ def canary_testsuite_mask(
                 case.mask = colorize("parameter expression @*{%s} did not match" % parameter_expr)
                 continue
 
-        if case.dependencies:
+        if case.dependencies and not ignore_dependencies:
             flags = case.dep_condition_flags()
             if any([flag == "wont_run" for flag in flags]):
                 case.mask = "one or more dependencies not satisfied"

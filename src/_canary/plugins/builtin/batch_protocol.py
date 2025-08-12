@@ -6,7 +6,7 @@ from typing import Any
 from typing import Generator
 
 from ... import config
-from ...test.batch import TestBatch
+from ...testbatch import TestBatch
 from ..hookspec import hookimpl
 
 

@@ -6,7 +6,6 @@
 import io
 import os
 
-
 copyright = """\
 .. Copyright NTESS. See COPYRIGHT file for details.
 

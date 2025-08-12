@@ -267,6 +267,14 @@ class Result:
     out: str | None = None
     err: str | None = None
 
+    @property
+    def stdout(self) -> str | None:
+        return self.out
+
+    @property
+    def stderr(self) -> str | None:
+        return self.err
+
     def get_output(self) -> str:
         if self.out is None:
             raise ValueError("No output string")

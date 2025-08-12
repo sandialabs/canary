@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import copy
 import dataclasses
 import io
 import json
@@ -10,6 +11,7 @@ import os
 from string import Template
 from types import SimpleNamespace
 from typing import Any
+from typing import MutableMapping
 from typing import TextIO
 
 import hpc_connect
@@ -21,6 +23,7 @@ from ..third_party.schema import Schema
 from ..third_party.schema import SchemaError
 from ..util import logging
 from ..util.collections import merge
+from ..util.compression import compress64
 from ..util.compression import expand64
 from ..util.filesystem import find_work_tree
 from ..util.filesystem import mkdirp
@@ -34,6 +37,7 @@ from .schemas import environment_schema
 from .schemas import plugin_schema
 from .schemas import resource_schema
 from .schemas import test_schema
+from .schemas import timeout_schema
 
 section_schemas: dict[str, Schema] = {
     "build": build_schema,
@@ -42,10 +46,13 @@ section_schemas: dict[str, Schema] = {
     "environment": environment_schema,
     "plugins": plugin_schema,
     "resource_pool": resource_schema,
+    "timeout": timeout_schema,
     "test": test_schema,
 }
 
 log_levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.TRACE)
+
+env_archive_name = "CANARYCFG64"
 
 
 class EnvironmentModifications:
@@ -126,24 +133,6 @@ class SessionConfig:
         return d
 
 
-@dataclasses.dataclass
-class Test:
-    timeout_fast: float = 120.0
-    timeout_default: float = 5 * 60.0
-    timeout_long: float = 15 * 60.0
-
-    def update(self, *args: Any, **kwargs: Any) -> None:
-        if len(args) > 1:
-            raise TypeError(f"Test.update() expected at most 1 argument, got {len(args)}")
-        data = dict(*args) | kwargs
-        for key, value in data.items():
-            if key == "timeout":
-                for k, v in value.items():
-                    setattr(self, f"{key}_{k}", v)
-            else:
-                setattr(self, key, value)
-
-
 @dataclasses.dataclass(init=False, slots=True)
 class System:
     node: str
@@ -214,6 +203,14 @@ class Batch:
             setattr(self, key, value)
 
 
+def default_mp_settings() -> SimpleNamespace:
+    return SimpleNamespace(context="spawn", max_tasks_per_child=1)
+
+
+def default_timeouts() -> dict[str, float]:
+    return {"session": -1.0, "multiplier": 1.0, "fast": 120.0, "default": 300.0, "long": 900.0}
+
+
 @dataclasses.dataclass
 class Config:
     """Access to configuration values"""
@@ -221,22 +218,23 @@ class Config:
     invocation_dir: str = os.getcwd()
     working_dir: str = os.getcwd()
     debug: bool = False
-    multiprocessing_context: str = "spawn"
+    multiprocessing: SimpleNamespace = dataclasses.field(default_factory=default_mp_settings)
     log_level: str = "INFO"
     _config_dir: str | None = None
     _cache_dir: str | None = None
     backend: hpc_connect.HPCBackend | None = None
     system: System = dataclasses.field(default_factory=System)
     session: SessionConfig = dataclasses.field(default_factory=SessionConfig)
-    test: Test = dataclasses.field(default_factory=Test)
+    timeout: dict[str, float] = dataclasses.field(default_factory=default_timeouts)
     environment: EnvironmentModifications = dataclasses.field(
         default_factory=EnvironmentModifications
     )
     batch: Batch = dataclasses.field(default_factory=Batch)
     build: Build = dataclasses.field(default_factory=Build)
     options: argparse.Namespace = dataclasses.field(default_factory=argparse.Namespace)
-    resource_pool: ResourcePool = dataclasses.field(default_factory=ResourcePool)
+    _resource_pool: ResourcePool | None = dataclasses.field(default=None)
     _plugin_manager: CanaryPluginManager | None = dataclasses.field(default=None)
+    option_cache: dict = dataclasses.field(default_factory=dict)
 
     @classmethod
     def factory(cls) -> "Config":
@@ -253,7 +251,7 @@ class Config:
             FileNotFoundError: If the configuration file does not exist.
         """
         self = cls.create()
-        if cfg := os.getenv("CANARYCFG64"):
+        if cfg := os.getenv(env_archive_name):
             with io.StringIO() as fh:
                 fh.write(expand64(cfg))
                 fh.seek(0)
@@ -353,6 +351,32 @@ class Config:
         """
         self._plugin_manager = arg
 
+    @property
+    def resource_pool(self) -> ResourcePool:
+        """Get the resource pool instance.
+
+        Lazily initializes the resource pool if it has not been set previously.
+
+        Returns:
+            An instance of ResourcePool.
+        """
+        if self._resource_pool is None:
+            self._resource_pool = ResourcePool()
+        if self._resource_pool.empty():
+            self._resource_pool.fill_uniform(
+                node_count=1, cpus_per_node=cpu_count(), gpus_per_node=0
+            )
+        return self._resource_pool
+
+    @resource_pool.setter
+    def resource_pool(self, arg: ResourcePool) -> None:
+        """Set the plugin manager instance.
+
+        Args:
+            arg: An instance of ResourcePool to set.
+        """
+        self._resource_pool = arg
+
     def restore_from_snapshot(self, fh: TextIO) -> None:
         """Restore configuration values from a snapshot.
 
@@ -366,13 +390,15 @@ class Config:
         self.system = System(snapshot["system"])
         self.environment = EnvironmentModifications(snapshot["environment"])
         self.session = SessionConfig(**snapshot["session"])
-        self.test = Test(**snapshot["test"])
         compiler = Compiler(**snapshot["build"].pop("compiler"))
         self.build = Build(compiler=compiler, **snapshot["build"])
-        self.resource_pool = ResourcePool()
-        self.resource_pool.update(snapshot["resource_pool"])
+        self.resource_pool = ResourcePool(pool=snapshot["resource_pool"])
         self.update(snapshot["config"])
         self.batch = Batch(**snapshot["batch"])
+
+        if "test" in snapshot:
+            for key, value in snapshot["test"]["timeout"].items():
+                self.timeout[key] = value
 
         # We need to be careful when restoring the batch configuration.  If this session is being
         # restored while running a batch, restoring the batch can lead to infinite recursion.  The
@@ -417,6 +443,10 @@ class Config:
         snapshot = self.getstate()
         json.dump(snapshot, fh, indent=2 if pretty_print else None)
 
+    def archive(self, mapping: MutableMapping) -> None:
+        snapshot = self.getstate()
+        mapping[env_archive_name] = compress64(json.dumps(snapshot, indent=None))
+
     @classmethod
     def load_config(cls, scope: str, config: dict[str, Any]) -> None:
         """Load configuration settings from a specified scope.
@@ -443,14 +473,12 @@ class Config:
                     config["debug"] = bool(items["debug"])
                 if "log_level" in items:
                     config["log_level"] = items["log_level"]
-                if "multiprocessing_context" in items:
-                    config["multiprocessing_context"] = items["multiprocessing_context"]
                 if "cache_dir" in items:
                     config["_cache_dir"] = os.path.expanduser(items["cache_dir"])
-            elif key == "test":
-                if user_defined_timeouts := items.get("timeout"):
-                    for type, value in user_defined_timeouts.items():
-                        config.setdefault("test", {})[f"timeout_{type}"] = value
+                if "multiprocessing" in items:
+                    config["multiprocessing"] = items["multiprocessing"]
+            elif key == "timeout":
+                config.setdefault("timeout", {}).update(items)
             elif key == "plugins":
                 config.setdefault("plugin_manager", {}).setdefault("plugins", []).extend(items)
             elif key in section_schemas:
@@ -482,6 +510,9 @@ class Config:
             logging.set_level(level)
         if "warnings" in data:
             logging.set_warning_level(data.pop("warnings"))
+        if "multiprocessing" in data:
+            for key, value in data.pop("multiprocessing").items():
+                setattr(self.multiprocessing, key, value)
         for key, val in data.items():
             setattr(self, key, val)
 
@@ -526,7 +557,15 @@ class Config:
         args.batch = batchopts
 
         errors: int = 0
-        config_mods = args.config_mods or {}
+        config_mods: dict[str, Any] = {}
+        if args.config_mods:
+            config_mods.update(copy.deepcopy(args.config_mods))
+
+        # handle resource pool separately
+        resource_pool_mods: dict[str, Any] = {}
+        if "resource_pool" in config_mods:
+            resource_pool_mods.update(config_mods.pop("resource_pool"))
+
         for section, section_data in config_mods.items():
             if section not in section_schemas:
                 errors += 1
@@ -535,10 +574,21 @@ class Config:
             schema = section_schemas[section]
             config_mods[section] = schema.validate({section: section_data})[section]
 
-        if args.config_file:
-            file_data = self.read_config(args.config_file)
-            for section, section_data in file_data.items():
-                config_mods[section] = merge(config_mods.get(section, {}), section_data)
+        if resource_pool_mods:
+            if self._resource_pool is None or self._resource_pool.empty():
+                schema = section_schemas["resource_pool"]
+                pool = schema.validate({"resource_pool": resource_pool_mods})["resource_pool"]
+                if self._resource_pool is None:
+                    self._resource_pool = ResourcePool(pool)
+                else:
+                    self._resource_pool.fill(pool)
+            else:
+                self.resource_pool.add(**resource_pool_mods)
+        elif self._resource_pool is None:
+            self._resource_pool = ResourcePool()
+            self._resource_pool.fill_uniform(
+                node_count=1, cpus_per_node=cpu_count(), gpus_per_node=0
+            )
 
         if errors:
             raise ValueError("Stopping due to previous errors")
@@ -557,9 +607,8 @@ class Config:
                 if n > cpu_count():
                     raise ValueError(f"batch:workers={n} > cpu_count={cpu_count()}")
 
-        if t := getattr(args, "test_timeout", None):
-            for type, value in t.items():
-                setattr(self.test, f"timeout_{type}", value)
+        if t := getattr(args, "timeouts", None):
+            self.timeout.update(t)
 
         self.options = merge_namespaces(self.options, args)
 
@@ -570,7 +619,7 @@ class Config:
     def setup_hpc_connect(self, name: str | None) -> None:
         """Set up the hpc_connect library.
 
-        Initializes the HPC backend based on the provided name.
+        Initializes the resource pool based on the HPC backend.
 
         Args:
             name: The name of the HPC backend to set up
@@ -578,19 +627,21 @@ class Config:
         if name in ("null", "local", None):
             self.backend = None
             return
+
         assert name is not None
         logging.debug(f"Setting up HPC Connect for {name}")
         self.backend = hpc_connect.get_backend(name)
-        if self.debug:
-            hpc_connect.set_debug(True)
-        logging.debug(f"  HPC connect: node count: {self.backend.config.node_count}")
-        logging.debug(f"  HPC connect: CPUs per node: {self.backend.config.cpus_per_node}")
-        logging.debug(f"  HPC connect: GPUs per node: {self.backend.config.gpus_per_node}")
-        self.resource_pool.fill_uniform(
-            node_count=self.backend.config.node_count,
-            cpus_per_node=self.backend.config.cpus_per_node,
-            gpus_per_node=self.backend.config.gpus_per_node,
-        )
+        if self._resource_pool is None:
+            logging.debug(f"  HPC connect: node count: {self.backend.config.node_count}")
+            logging.debug(f"  HPC connect: CPUs per node: {self.backend.config.cpus_per_node}")
+            logging.debug(f"  HPC connect: GPUs per node: {self.backend.config.gpus_per_node}")
+            rp = ResourcePool()
+            rp.fill_uniform(
+                node_count=self.backend.config.node_count,
+                cpus_per_node=self.backend.config.cpus_per_node,
+                gpus_per_node=self.backend.config.gpus_per_node,
+            )
+            self.resource_pool = rp
 
     @classmethod
     def read_config(cls, file: str) -> dict:
@@ -623,7 +674,11 @@ class Config:
             except SchemaError as e:
                 msg = f"Schema error encountered in {file}: {e.args[0]}"
                 raise ValueError(msg) from None
-            config[section] = validated[section]
+            if section == "test":
+                logging.warning("Deprecated configuration section 'test:timeout'.  Use 'timeout'")
+                config.setdefault("timeout", {}).update(validated["test"]["timeout"])
+            else:
+                config[section] = validated[section]
         return config
 
     @classmethod
@@ -648,7 +703,8 @@ class Config:
                 section["cache_dir"] = value
             elif key == "CANARY_MULTIPROCESSING_CONTEXT":
                 section = config.setdefault("config", {})
-                section["multiprocessing_context"] = value
+                subsection = section.setdefault("mulitprocessing", {})
+                subsection["context"] = value
         return config
 
     @staticmethod
@@ -702,10 +758,13 @@ class Config:
         Returns:
             The value of the configuration option or the default value.
         """
+        if key in self.option_cache:
+            return self.option_cache[key]
         sentinel = object()
         option = getattr(self.options, key, sentinel)
         if option is sentinel:
             return default
+        self.option_cache[key] = option
         return option
 
     def getstate(self, pretty: bool = False) -> dict[str, Any]:
@@ -722,12 +781,18 @@ class Config:
         """
         d: dict[str, Any] = {}
         for key, value in vars(self).items():
+            if key in ("option_cache",):
+                continue
             if key == "_plugin_manager":
                 d["plugin_manager"] = {"plugins": list(value.considered)}
+            elif key == "_resource_pool":
+                d["resource_pool"] = None if value is None else value.getstate()
             elif dataclasses.is_dataclass(value):
                 d[key] = dataclasses.asdict(value)  # type: ignore
                 if key == "system":
                     d[key]["os"] = vars(d[key]["os"])
+            elif key == "multiprocessing":
+                d.setdefault("config", {})[key] = vars(value)
             elif hasattr(value, "getstate"):
                 d[key] = value.getstate()
             elif isinstance(value, (argparse.Namespace, SimpleNamespace)):

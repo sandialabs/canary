@@ -6,7 +6,7 @@ import argparse
 import os
 from typing import TYPE_CHECKING
 
-from _canary.test.case import TestCase
+from _canary.testcase import TestCase
 
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
@@ -42,8 +42,8 @@ class Log(CanarySubcommand):
             return case.stdout_file
 
     def execute(self, args: argparse.Namespace) -> int:
-        from ...test.batch import TestBatch
-        from ...test.case import from_id as testcase_from_id
+        from ...testbatch import TestBatch
+        from ...testcase import from_id as testcase_from_id
 
         file: str
         if args.testspec.startswith("/"):

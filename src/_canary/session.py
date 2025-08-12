@@ -18,11 +18,12 @@ from typing import Generator
 from . import config
 from . import finder
 from .error import StopExecution
+from .error import notests_exit_status
 from .generator import AbstractTestGenerator
-from .test.batch import TestBatch
-from .test.case import TestCase
-from .test.case import TestMultiCase
-from .test.case import from_state as testcase_from_state
+from .testbatch import TestBatch
+from .testcase import TestCase
+from .testcase import TestMultiCase
+from .testcase import from_state as testcase_from_state
 from .third_party.color import colorize
 from .third_party.lock import Lock
 from .third_party.lock import LockError
@@ -31,6 +32,7 @@ from .util.filesystem import find_work_tree
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.graph import TopologicalSorter
+from .util.graph import find_reachable_nodes
 from .util.graph import static_order
 from .util.procutils import cleanup_children
 from .util.rprobe import cpu_count
@@ -143,10 +145,52 @@ class Session:
                 self.cases.extend(cases)
         else:
             self.initialize()
-            config.plugin_manager.hook.canary_session_start(session=self)
+            config.plugin_manager.hook.canary_session_startup(session=self)
 
         if self.mode == "w":
             self.save(ini=True)
+
+    @classmethod
+    def filter_view(
+        cls,
+        path: str,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: set[str] | None = None,
+        regex: str | None = None,
+        start: str | None = None,
+        case_specs: list[str] | None = None,
+    ) -> "Session":
+        """Create a view of this session that only includes cases resulting from filtering
+        operations"""
+        self = cls(path, mode="a+")
+        cases = self.load_testcases()
+        config.plugin_manager.hook.canary_testsuite_mask(
+            cases=cases,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+            case_specs=case_specs,
+            start=start,
+            ignore_dependencies=True,
+        )
+        for case in static_order(cases):
+            config.plugin_manager.hook.canary_testcase_modify(case=case)
+        self.cases.clear()
+        for case in static_order(cases):
+            if case.wont_run():
+                continue
+            if case.dependencies:
+                flags = case.dep_condition_flags()
+                if any([flag == "wont_run" for flag in flags]):
+                    case.mask = "one or more dependencies not satisfied"
+            if not case.masked():
+                case.mark_as_ready()
+            if not case.status.satisfies(("pending", "ready")):
+                logging.error(f"{case}: will not run: {case.status.details}")
+            self.cases.append(case)
+        return self
 
     @classmethod
     def casespecs_view(cls, path: str, case_specs: list[str]) -> "Session":
@@ -197,6 +241,33 @@ class Session:
         ready = len(self.get_ready())
         logging.info(f"Selected {ready} {pluralize('test', expected)} from batch {batch_id}")
         return self
+
+    def load_from_lockfile(self, file) -> None:
+        with open(file) as fh:
+            data = json.load(fh)
+        fgen = lambda p: AbstractTestGenerator.factory(p["file_root"], p["file_path"])
+        self.generators.clear()
+        self.generators.extend([fgen(_["properties"]) for _ in data["testcases"]])
+        self.dump_testcase_generators()
+        ts: TopologicalSorter = TopologicalSorter()
+        map: dict[str, int] = {}
+        for i, state in enumerate(data["testcases"]):
+            deps = [_["properties"]["id"] for _ in state["properties"]["dependencies"]]
+            ts.add(state["properties"]["id"], *deps)
+            map[state["properties"]["id"]] = i
+        cases: dict[str, TestCase | TestMultiCase] = {}
+        for id in ts.static_order():
+            i = map[id]
+            state = data["testcases"][i]
+            state["properties"]["work_tree"] = self.work_tree
+            for j, dep_state in enumerate(state["properties"]["dependencies"]):
+                state["properties"]["dependencies"][j] = cases[dep_state["properties"]["id"]]
+            cases[id] = testcase_from_state(state)
+            cases[id].mark_as_ready()
+            assert id == cases[id].id
+        self.cases.clear()
+        self.cases.extend(cases.values())
+        self.dump_testcases()
 
     def get_ready(self) -> list[TestCase]:
         return [case for case in self.cases if case.ready() or case.pending()]
@@ -251,8 +322,7 @@ class Session:
         if ids:
             # we must not only load the requested IDs, but also their dependencies
             for id in ids:
-                ids_to_load.add(id)
-                ids_to_load.update(index[id])
+                ids_to_load.update(find_reachable_nodes(index, id))
         ts: TopologicalSorter = TopologicalSorter()
         cases: dict[str, TestCase | TestMultiCase] = {}
         for id, deps in index.items():
@@ -422,6 +492,7 @@ class Session:
             regex=regex,
             case_specs=None,
             start=None,
+            ignore_dependencies=False,
         )
         for case in static_order(cases):
             config.plugin_manager.hook.canary_testcase_modify(case=case)
@@ -435,7 +506,7 @@ class Session:
                 self.cases.append(case)
         config.plugin_manager.hook.canary_collectreport(cases=cases)
         if not self.get_ready():
-            raise StopExecution("No tests to run", 7)
+            raise StopExecution("No tests to run", notests_exit_status)
 
         self.dump_testcases()
 
@@ -469,8 +540,9 @@ class Session:
             regex=regex,
             case_specs=case_specs,
             start=start,
+            ignore_dependencies=False,
         )
-        for case in static_order(self.cases):
+        for case in static_order(cases):
             config.plugin_manager.hook.canary_testcase_modify(case=case)
         for case in cases:
             if not case.wont_run():
@@ -491,11 +563,9 @@ class Session:
         """
         cases = self.get_ready()
         if not cases:
-            raise StopExecution("No tests to run", 7)
+            raise StopExecution("No tests to run", notests_exit_status)
         self.start = timestamp()
-        rc = config.plugin_manager.hook.canary_runtests(
-            session=self, cases=cases, fail_fast=fail_fast
-        )
+        rc = config.plugin_manager.hook.canary_runtests(cases=cases, fail_fast=fail_fast)
         self.stop = timestamp()
         self.returncode = rc
         self.exitstatus = rc

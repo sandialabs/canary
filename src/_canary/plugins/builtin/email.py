@@ -14,7 +14,7 @@ from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...session import Session
-    from ...test.case import TestCase
+    from ...testcase import TestCase
 
 
 @hookimpl

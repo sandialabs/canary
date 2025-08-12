@@ -60,7 +60,6 @@ To format code and run `canary`'s internal tests, execute
 
 ## License
 
-https://github.com/matmodlab/matmodlab2/blob/master/LICENSE
 Canary is distributed under the terms of the MIT license, see [LICENSE](https://github.com/sandialabs/canary/blob/main/LICENSE) and [COPYRIGHT](https://github.com/sandialabs/canary/blob/main/COPYRIGHT).
 
 SPDX-License-Identifier: MIT

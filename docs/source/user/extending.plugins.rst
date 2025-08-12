@@ -49,7 +49,7 @@ Recognized plugin hooks are:
 +------------------------------------------------------+-------------------------------------------------------------------------------------+
 |``canary_session_finish(session: canary.Session)``    | Called after the session finished                                                   |
 +------------------------------------------------------+-------------------------------------------------------------------------------------+
-|``canary_testcase_generator()``                       | Returns an implementation of :class:`~_canary.generator.AbstractTestGenerator`      |
+|``canary_generator()``                                | Returns an instance of :class:`~_canary.generator.AbstractTestGenerator`            |
 +------------------------------------------------------+-------------------------------------------------------------------------------------+
 |``canary_testcase_modify(case: canary.TestCase)``     | Called after test cases have been masked by filtering criteria                      |
 +------------------------------------------------------+-------------------------------------------------------------------------------------+

@@ -9,6 +9,7 @@ import json
 import os
 from typing import TYPE_CHECKING
 
+import pluggy
 import yaml
 
 from ...util.filesystem import find_work_tree
@@ -32,6 +33,12 @@ class ConfigCmd(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         sp = parser.add_subparsers(dest="subcommand")
         p = sp.add_parser("show", help="Show the current configuration")
+        p.add_argument(
+            "-r",
+            action="store_true",
+            default=False,
+            help="Include resource pool in configuration that is shown",
+        )
         p.add_argument(
             "-p",
             "--paths",
@@ -106,6 +113,8 @@ def show_config(args: "argparse.Namespace"):
         state = config.getstate(pretty=True)
         if args.section is not None:
             state = {args.section: state[args.section]}
+        elif not args.r:
+            state["resource_pool"] = "... (-r to include resource pool)"
         if args.format == "json":
             text = json.dumps(state, indent=2)
         else:
@@ -131,6 +140,19 @@ def pretty_print(text: str, fmt: str):
     print(formatted_text)
 
 
+def list_name_plugin(pluginmanager: pluggy.PluginManager) -> list[tuple[str, str, str]]:
+    plugins: list[tuple[str, str, str]] = []
+
+    for name, plugin in pluginmanager.list_name_plugin():
+        file = inspect.getfile(plugin)  # type: ignore
+        namespace = plugin.__package__.split(".")[0]  # type: ignore
+        if namespace == "_canary":
+            namespace = "builtin"
+        row = (namespace, name, file)
+        plugins.append(row)
+    return plugins
+
+
 def print_active_plugin_descriptions() -> None:
     import hpc_connect
 
@@ -138,20 +160,14 @@ def print_active_plugin_descriptions() -> None:
 
     table: list[tuple[str, str, str]] = []
     widths = [len("Namespace"), len("Name"), 0]
-    for name, plugin in config.plugin_manager.list_name_plugin():
-        file = inspect.getfile(plugin)  # type: ignore
-        namespace = plugin.__package__.split(".")[0]  # type: ignore
-        if namespace == "_canary":
-            namespace = "builtin"
+    for namespace, name, file in list_name_plugin(config.plugin_manager):
         row = (namespace, name, file)
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))
         table.append(row)
-    for backend in hpc_connect.backends().values():  # type: ignore
-        try:
-            row = ("hpc_connect", backend.name, inspect.getfile(backend))
-        except Exception:
-            continue
+    cfg = hpc_connect.config.Config()
+    for namespace, name, file in list_name_plugin(cfg.pluginmanager):
+        row = (namespace, name, file)
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))
         table.append(row)

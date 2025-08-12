@@ -1,20 +1,21 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import io
 import os
 import random
 from textwrap import indent
 from typing import TYPE_CHECKING
+from typing import Any
 
 from ... import config
 from ...status import Status
-from ...test.case import TestCase
+from ...testcase import TestCase
 from ...third_party.color import ccenter
 from ...third_party.color import colorize
 from ...util import glyphs
 from ...util import logging
+from ...util.banner import banner
 from ...util.string import pluralize
 from ...util.term import terminal_size
 from ...util.time import hhmmss
@@ -23,7 +24,49 @@ from ..hookspec import hookimpl
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
     from ...session import Session
-    from ...test.case import TestCase
+    from ...testcase import TestCase
+
+
+@hookimpl
+def canary_addoption(parser: "Parser") -> None:
+    def add_group_argument(p: "Parser", *args: Any, **kwargs: Any):
+        p.add_argument(*args, group="console reporting", command="run", **kwargs)
+
+    add_group_argument(
+        parser,
+        "--no-header",
+        action="store_true",
+        help="Disable printing header [default: %(default)s]",
+    )
+    add_group_argument(
+        parser,
+        "--no-summary",
+        action="store_true",
+        help="Disable summary [default: %(default)s]",
+    )
+    add_group_argument(
+        parser,
+        "--durations",
+        type=int,
+        metavar="N",
+        help="Show N slowest test durations (N<0 for all)",
+    )
+    add_group_argument(
+        parser,
+        "--show-capture",
+        nargs="?",
+        choices=("o", "e", "oe", "no"),
+        default="no",
+        const="oe",
+        help="Show captured stdout (o), stderr (e), or both (oe) "
+        "for failed tests [default: %(default)s]",
+    )
+
+
+@hookimpl(specname="canary_runtests_startup", tryfirst=True)
+def print_banner():
+    if not config.getoption("no_header"):
+        logging.emit(banner() + "\n")
 
 
 @hookimpl(specname="canary_runtests_summary", tryfirst=True)
@@ -127,7 +170,9 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
         logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
         reasons: dict[str | None, int] = {}
         for case in excluded:
-            if case.status.satisfies(("masked", "invalid")):
+            if case.mask:
+                reasons[case.mask] = reasons.get(case.mask, 0) + 1
+            elif case.status == "invalid":
                 reasons[case.status.details] = reasons.get(case.status.details, 0) + 1
         keys = sorted(reasons, key=lambda x: reasons[x])
         for key in reversed(keys):
@@ -206,31 +251,6 @@ def determine_cases_to_show(
             ):
                 cases_to_show.append(case)
     return cases_to_show
-
-
-@hookimpl
-def canary_addoption(parser: "Parser") -> None:
-    parser.add_argument(
-        "--show-capture",
-        command="run",
-        group="console reporting",
-        nargs="?",
-        choices=("o", "e", "oe", "no"),
-        default="no",
-        const="oe",
-        help="Show captured stdout (o), stderr (e), or both (oe) "
-        "for failed tests [default: %(default)s]",
-    )
-    parser.add_argument(
-        "--capture",
-        command="run",
-        choices=("log", "tee"),
-        default="log",
-        group="console reporting",
-        help="Log test output to a file only (log) or log and print output "
-        "to the screen (tee).  Warning: this could result in a large amount of text printed "
-        "to the screen [default: log]",
-    )
 
 
 @hookimpl(specname="canary_session_finish", trylast=True)

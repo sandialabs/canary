@@ -9,7 +9,7 @@ import pytest
 
 import canary
 from _canary.config.schemas import resource_schema
-from _canary.plugins.generators.ctest import CTestTestGenerator
+from _canary.plugins.builtin.ctest import CTestTestGenerator
 from _canary.queues import DirectResourceQueue
 from _canary.runners import TestCaseRunner as xTestCaseRunner
 from _canary.util.executable import Executable

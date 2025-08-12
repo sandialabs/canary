@@ -8,6 +8,7 @@ import shlex
 import signal
 import sys
 import traceback
+import urllib.parse
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
@@ -18,6 +19,7 @@ from .error import StopExecution
 from .third_party import color
 from .third_party.monkeypatch import monkeypatch
 from .util import logging
+from .util.collections import contains_any
 
 if TYPE_CHECKING:
     from .plugins.types import CanarySubcommand
@@ -48,12 +50,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
             config.plugin_manager.hook.canary_addoption(parser=parser)
         args = parser.parse_args(m.argv)
-        if args.color:
-            color.set_color_when(args.color)
-
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
             logging.emit(shlex.join(a) + "\n")
+        if args.color:
+            color.set_color_when(args.color)
+
         config.set_main_options(args)
         config.plugin_manager.hook.canary_configure(config=config)
         command = parser.get_command(args.command)
@@ -70,17 +72,17 @@ class CanaryMain:
     """Set up and teardown this canary session"""
 
     def __init__(self, argv: Sequence[str] | None = None) -> None:
-        self.argv: Sequence[str] = argv or sys.argv[1:]
+        self.argv: Sequence[str] = list(argv or sys.argv[1:])
         config.invocation_dir = config.working_dir = os.getcwd()
 
     def __enter__(self) -> "CanaryMain":
         """Preparsing is necessary to parse out options that need to take effect before the main
         program starts up"""
         global reraise
-        if "GITLAB_CI" in os.environ:
+        if contains_any(os.environ.keys(), "CANARY_RERAISE_ERRORS", "GITLAB_CI"):
             reraise = True
         parser = make_argument_parser()
-        args = parser.preparse(self.argv)
+        args = parser.preparse(self.argv, addopts=True)
         if args.debug:
             reraise = True
         if args.C:
@@ -208,6 +210,12 @@ def console_main() -> int:
 
     This function is not meant for programmable use; use `main()` instead.
     """
+
+    # Some CI/CD agents use yaml to describe jobs.  Quoting can get wonky between parsing the
+    # yaml and passing it to the shell.  So, we allow url encoded strings and unquote them
+    # here.
+    for i, arg in enumerate(sys.argv):
+        sys.argv[i] = urllib.parse.unquote(arg)
     try:
         returncode = main()
         sys.stdout.flush()

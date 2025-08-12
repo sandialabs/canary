@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 import copy
+from typing import Any
+from typing import Iterable
 
 
 class defaultlist(list):
@@ -74,3 +76,10 @@ def merge(dest, source):
     # If we reach here source and dest are either different types or are
     # not both lists or dicts: replace with source.
     return copy.copy(source)
+
+
+def contains_any(sequence: Iterable[Any], *args: Any) -> Any:
+    for arg in args:
+        if arg in sequence:
+            return arg
+    return None

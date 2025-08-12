@@ -26,6 +26,13 @@ before_script:
     exit_codes: 1
 
 
+echo:
+  tags:
+  - cee.build
+  script:
+  - echo $CI_PIPELINE_SOURCE
+
+
 test::unit:
   stage: test
   tags:
@@ -42,7 +49,7 @@ test::unit:
   - python3 -m pip install $STD_PIP_ARGS -e .[dev]
   - pytest tests
   rules:
-  - if: $RUN_UNIT_TESTS
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     when: always
 
 
@@ -62,7 +69,7 @@ test::coverage:
   - coverage report
   - coverage xml
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     when: always
   coverage: '/TOTAL.*? (100(?:\.0+)?\%\|[1-9]?\d(?:\.\d+)?\%)$/'
   artifacts:
@@ -95,7 +102,7 @@ test::integration::flux:
   - $FLUX_START canary run -w -b scheduler=flux -b spec=count:auto,layout:atomic ./examples || exit_code=$?
   - if [ "${exit_code}" -ne 30 ]; then exit 1; fi
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     when: always
 
 
@@ -130,7 +137,7 @@ test::integration::slurm:
   - canary -C TestResults report junit create -o $CI_PROJECT_DIR/junit.xml || true
   - canary -C TestResults report cdash create -d $CI_PROJECT_DIR/xml || true
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     when: always
   artifacts:
     when: on_failure
@@ -162,7 +169,7 @@ test::integration::shell:
   - canary -C TestResults report junit create -o $CI_PROJECT_DIR/junit.xml || true
   - canary -C TestResults report cdash create -d $CI_PROJECT_DIR/xml || true
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     when: always
   artifacts:
     when: on_failure
@@ -194,7 +201,7 @@ test::integration::local:
   - canary -C TestResults report junit create -o $CI_PROJECT_DIR/junit.xml || true
   - canary -C TestResults report cdash create -d $CI_PROJECT_DIR/xml || true
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     when: always
   artifacts:
     when: on_failure
@@ -225,7 +232,7 @@ test::plugin::yaml:
   - cd $CI_PROJECT_DIR
   - canary run -w ./canary-yaml/tests
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     when: always
 
 
@@ -251,7 +258,7 @@ test::plugin::sierra:
   - cd $CI_PROJECT_DIR
   - PYTHONPATH=$CI_PROJECT_DIR/canary-sierra/mock canary run -w ./canary-sierra/tests
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     when: always
 
 
@@ -266,7 +273,7 @@ lint::check:
   - ./bin/ci/ruff-check --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" --output-format=junit --output-file=ruff.xml
   - cat ruff.xml || true
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     when: always
   artifacts:
     when: on_failure
@@ -284,7 +291,7 @@ lint::format:
   - git fetch origin "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}"
   - ./bin/ci/ruff-format --ref="origin/${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:?}" --check
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     when: always
 
 
@@ -298,7 +305,7 @@ lint::type_checking:
   - mypy ./src --no-error-summary > mypy-out.txt || true
   - mypy-gitlab-code-quality < mypy-out.txt > codequality.json
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     when: always
   artifacts:
     when: always
@@ -358,7 +365,7 @@ pages:
 mr-pages:
   extends: .pages
   rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: ($CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main")
     changes:
     - src/nvtest/directives.py
     - src/_nvtest/plugins/commands/*.py

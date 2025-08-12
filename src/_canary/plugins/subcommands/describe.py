@@ -9,7 +9,7 @@ from typing import Any
 import yaml
 
 from ...generator import AbstractTestGenerator
-from ...test.case import TestCase
+from ...testcase import TestCase
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import load_session

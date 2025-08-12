@@ -10,7 +10,7 @@ from typing import TextIO
 
 from . import config
 from .generator import AbstractTestGenerator
-from .test.case import TestCase
+from .testcase import TestCase
 from .third_party.colify import colified
 from .third_party.color import colorize
 from .util import graph
@@ -134,10 +134,12 @@ def generate_test_cases(
                 logging.emit(f"  - {case.display_name}: {case.file_path}\n")
         raise ValueError("Duplicate test IDs in test suite")
 
-    if config.debug and any(
-        not case.status.satisfies(("masked", "invalid", "created")) for case in cases
-    ):
-        raise ValueError("One or more test cases is not in created state")
+    if config.debug:
+        for case in cases:
+            if case.wont_run():
+                continue
+            if not case.status == "created":
+                raise ValueError("One or more test cases is not in created state")
 
     resolve_dependencies(cases)
 
@@ -200,10 +202,7 @@ def pprint(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
 
 
 def is_test_file(file: str) -> bool:
-    for generator in config.plugin_manager.get_generators():
-        if generator.always_matches(file):
-            return True
-    return False
+    return config.plugin_manager.testcase_generator(root=file, path=None) is not None
 
 
 def find(path: str) -> AbstractTestGenerator:

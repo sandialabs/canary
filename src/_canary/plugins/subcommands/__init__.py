@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 from . import autodoc
+from . import check
 from . import config
 from . import describe
 from . import docs
@@ -21,6 +22,7 @@ from . import tree
 
 plugins = [
     autodoc,
+    check,
     config,
     describe,
     docs,

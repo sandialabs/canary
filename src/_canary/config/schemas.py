@@ -64,13 +64,21 @@ def boolean(arg: typing.Any) -> bool:
     return bool(arg)
 
 
+positive_int = And(int, lambda x: x > 0)
+nonnegative_int = And(int, lambda x: x >= 0)
+id_list = Schema([{"id": Use(str), Optional("slots", default=1): Or(int, float)}])
+
+
 config_schema = Schema(
     {
         "config": {
             Optional("debug"): Use(boolean),
             Optional("log_level"): log_levels,
             Optional("cache_dir"): str,
-            Optional("multiprocessing_context"): multiprocessing_contexts,
+            Optional("multiprocessing"): {
+                Optional("context"): multiprocessing_contexts,
+                Optional("max_tasks_per_child"): positive_int,
+            },
         }
     }
 )
@@ -89,6 +97,7 @@ batch_schema = Schema(
 plugin_schema = Schema({"plugins": list_of_str})
 
 test_schema = Schema({"test": {"timeout": {Optional(str): Use(time_in_seconds)}}})
+timeout_schema = Schema({"timeout": {Optional(str): Use(time_in_seconds)}})
 
 machine_schema = Schema({"machine": {Optional("cpu_count"): Use(int)}})
 python_schema = Schema({"python": {"executable": str, "version": str, "version_info": list}})
@@ -139,11 +148,6 @@ build_schema = Schema(
 any_schema = Schema({}, ignore_extra_keys=True)
 
 
-positive_int = And(int, lambda x: x > 0)
-nonnegative_int = And(int, lambda x: x >= 0)
-id_list = Schema([{"id": Use(str), Optional("slots", default=1): Or(int, float)}])
-
-
 ctest_resource_pool_schema = Schema(
     {
         "local": {
@@ -160,6 +164,7 @@ local_resource_pool_schema = Schema(
             Forbidden("nodes"): object,
             Optional("cpus", default=cpu_count()): positive_int,
             # local schema disallows *_per_node
+            Optional(Regex("slots_per_\w+")): positive_int,
             Optional(Regex("^[a-z_][a-z0-9_]*?(?<!_per_node)$")): nonnegative_int,
         }
     }
@@ -171,6 +176,7 @@ uniform_resource_pool_schema = Schema(
         "resource_pool": {
             "nodes": positive_int,
             "cpus_per_node": positive_int,
+            Optional(Regex("slots_per_\w+")): positive_int,
             Optional(Regex("^[a-z_][a-z0-9_]*_per_node")): nonnegative_int,
         }
     }
@@ -200,6 +206,24 @@ class ResourceSchema(Schema):
             "heterogeneous": heterogeneous_resource_pool_schema,
         }
 
+    @staticmethod
+    def _get_slots_per_resource_type(type: str, mapping: dict[str, int]) -> int:
+        if type in mapping:
+            return mapping[type]
+        elif type.endswith("s") and type[:-1] in mapping:
+            return mapping[type[:-1]]
+        return 1
+
+    @staticmethod
+    def _find_slots_per_resource_type(resource_pool: dict[str, int]) -> dict[str, int]:
+        slots_per: dict[str, int] = {}
+        for name, count in resource_pool.items():
+            if name.startswith("slots_per_"):
+                slots_per[name[10:]] = count
+        for type in slots_per:
+            resource_pool.pop(f"slots_per_{type}")
+        return slots_per
+
     def validate(self, data):
         if not isinstance(data, dict):
             raise SchemaError("Expected resource_pool to be a dict")
@@ -211,35 +235,41 @@ class ResourceSchema(Schema):
         if "resource_pool" not in data:
             raise SchemaMissingKeyError("Missing key: 'resource_pool'", self._error)
         resource_pool = data["resource_pool"]
-        if isinstance(resource_pool, dict) and "nodes" in resource_pool:
-            # uniform resource pool
-            validated = self.schemas["uniform"].validate(data)
-            rp = []
-            for i in range(validated["resource_pool"].pop("nodes")):
-                x = {"id": str(i)}
-                for name, count in validated["resource_pool"].items():
-                    x[name[:-9]] = self.uniform_pool_object(count)
-                rp.append(x)
-            return {"resource_pool": rp}
         if isinstance(resource_pool, dict):
-            # uniform resource pool, single node
-            validated = self.schemas["local"].validate(data)
-            if "cpus" not in validated["resource_pool"]:
-                validated["resource_pool"]["cpus"] = cpu_count()
-            rp = {"id": "0"}
-            for name, count in validated["resource_pool"].items():
-                rp[name] = self.uniform_pool_object(count)
-            return {"resource_pool": [rp]}
+            if "nodes" not in resource_pool:
+                # uniform resource pool, single node
+                validated = self.schemas["local"].validate(data)
+                slots_per = self._find_slots_per_resource_type(validated["resource_pool"])
+                if "cpus" not in validated["resource_pool"]:
+                    validated["resource_pool"]["cpus"] = cpu_count()
+                rp = {"id": "0"}
+                for name, count in validated["resource_pool"].items():
+                    slots = self._get_slots_per_resource_type(name, slots_per)
+                    rp[name] = self.uniform_pool_object(count, slots_per=slots)
+                return {"resource_pool": [rp]}
+            else:
+                # uniform resource pool
+                validated = self.schemas["uniform"].validate(data)
+                slots_per = self._find_slots_per_resource_type(validated["resource_pool"])
+                rp = []
+                for i in range(validated["resource_pool"].pop("nodes")):
+                    x = {"id": str(i)}
+                    for name, count in validated["resource_pool"].items():
+                        type = name[:-9]
+                        slots = self._get_slots_per_resource_type(type, slots_per)
+                        x[type] = self.uniform_pool_object(count, slots_per=slots)
+                    rp.append(x)
+                return {"resource_pool": rp}
         if isinstance(resource_pool, list):
             validated = self.schemas["heterogeneous"].validate(data)
             return validated
         raise SchemaError("Unrecognized resource_pool layout")
 
     @staticmethod
-    def uniform_pool_object(n: int) -> list[dict[str, typing.Any]]:
+    def uniform_pool_object(n: int, slots_per: int = 1) -> list[dict[str, typing.Any]]:
         if n < 0:
             raise ValueError(f"expected pool object count > 0, got {n=}")
-        return [{"id": str(i), "slots": 1} for i in range(n)]
+        return [{"id": str(i), "slots": slots_per} for i in range(n)]
 
 
 resource_schema = ResourceSchema()

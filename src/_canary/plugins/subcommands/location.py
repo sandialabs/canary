@@ -60,9 +60,9 @@ Note: this command must be run from inside of a test session directory.
         parser.add_argument("testspec", help="Test name or test id")
 
     def execute(self, args: argparse.Namespace) -> int:
-        from ...test.case import TestCase
-        from ...test.case import TestMultiCase
-        from ...test.case import from_id as testcase_from_id
+        from ...testcase import TestCase
+        from ...testcase import TestMultiCase
+        from ...testcase import from_id as testcase_from_id
 
         case: TestCase | TestMultiCase
         if args.testspec.startswith("/"):

@@ -3,16 +3,16 @@
 # SPDX-License-Identifier: MIT
 
 import atexit
-import io
+import concurrent.futures
 import json
 import multiprocessing
 import os
 import signal
+import sys
 import threading
 import time
 import traceback
 from concurrent.futures import Future
-from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
 from datetime import datetime
@@ -27,12 +27,11 @@ from ...queues import BatchResourceQueue
 from ...queues import Busy as BusyQueue
 from ...queues import Empty as EmptyQueue
 from ...queues import ResourceQueue
-from ...test.batch import TestBatch
-from ...test.case import TestCase
+from ...testbatch import TestBatch
+from ...testcase import TestCase
 from ...third_party.color import colorize
 from ...util import keyboard
 from ...util import logging
-from ...util.compression import compress64
 from ...util.filesystem import mkdirp
 from ...util.filesystem import working_dir
 from ...util.procutils import cleanup_children
@@ -43,6 +42,17 @@ from ...util.time import timestamp
 from ..hookspec import hookimpl
 
 global_session_lock = threading.Lock()
+
+
+class ProcessPoolExecutor(concurrent.futures.ProcessPoolExecutor):
+    def __init__(self, *, workers: int) -> None:
+        mp_context = multiprocessing.get_context(config.multiprocessing.context)
+        max_tasks_per_child = config.multiprocessing.max_tasks_per_child
+        if sys.version_info[:2] >= (3, 11):
+            n = max_tasks_per_child if config.multiprocessing.context == "spawn" else None
+            super().__init__(max_workers=workers, mp_context=mp_context, max_tasks_per_child=n)
+        else:
+            super().__init__(max_workers=workers, mp_context=mp_context)
 
 
 @hookimpl(trylast=True)
@@ -107,7 +117,7 @@ def canary_runtests(cases: list[TestCase], fail_fast: bool = False) -> int:
                 returncode = compute_returncode(queue.cases())
                 raise
             else:
-                if logging.get_level() > logging.INFO:
+                if config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO:
                     queue.update_progress_bar(start, last=True)
                 returncode = compute_returncode(queue.cases())
                 queue.close(cleanup=cleanup_queue)
@@ -156,23 +166,25 @@ def process_queue(*, queue: ResourceQueue) -> None:
     futures: dict = {}
     start = timestamp()
     duration = lambda: timestamp() - start
-    timeout = float(config.getoption("session_timeout", -1))
+    timeout = float(config.timeout.get("session", -1))
     runner = r_factory()
     qsize = queue.qsize
     qrank = 0
     ppe = None
+    progress_bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
     try:
-        with io.StringIO() as fh:
-            config.snapshot(fh, pretty_print=False)
-            os.environ["CANARYCFG64"] = compress64(fh.getvalue())
-        context = multiprocessing.get_context(config.multiprocessing_context)
-        with ProcessPoolExecutor(mp_context=context, max_workers=queue.workers) as ppe:
+        config.archive(os.environ)
+        with ProcessPoolExecutor(workers=queue.workers) as ppe:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
             while True:
-                key = keyboard.get_key()
-                if isinstance(key, str) and key in "sS":
-                    logging.emit(queue.status(start=start))
-                if logging.get_level() > logging.INFO:
+                if key := keyboard.get_key():
+                    if key in "sS":
+                        logging.emit(queue.status(start=start))
+                    elif key in "qQ":
+                        ppe.shutdown(cancel_futures=True)
+                        cleanup_children()
+                        raise KeyboardInterrupt
+                if progress_bar:
                     queue.update_progress_bar(start)
                 if timeout >= 0.0 and duration() > timeout:
                     raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
@@ -290,4 +302,8 @@ def rc_environ(**variables) -> Generator[None, None, None]:
 
 
 class ProcessPoolExecutorFailedToStart(Exception):
+    pass
+
+
+class KeyboardQuit(Exception):
     pass

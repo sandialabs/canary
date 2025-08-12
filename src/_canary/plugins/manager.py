@@ -4,21 +4,22 @@
 
 import os
 import sys
+import warnings
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Type
 
 import pluggy
 
 from . import builtin
-from . import generators
 from . import hookspec
-from . import reporters
 from . import subcommands
 from .types import CanarySubcommand
 
 if TYPE_CHECKING:
     from ..generator import AbstractTestGenerator
+
+
+warnings.simplefilter("once", DeprecationWarning)
 
 
 class CanaryPluginManager(pluggy.PluginManager):
@@ -31,14 +32,11 @@ class CanaryPluginManager(pluggy.PluginManager):
         self = cls(hookspec.project_name)
         self.add_hookspecs(hookspec)
         for subcommand in subcommands.plugins:
-            self.register(subcommand)
-        for generator in generators.plugins:
-            name = generator.__name__.split(".")[-1]
-            self.register(generator, name=name)
+            name = subcommand.__name__.split(".")[-1].lower()
+            self.register(subcommand, name=name)
         for p in builtin.plugins:
-            self.register(p)
-        for p in reporters.plugins:
-            self.register(p)
+            name = p.__name__.split(".")[-1].lower()
+            self.register(p, name=name)
         self.load_setuptools_entrypoints(hookspec.project_name)
         self.load_from_env()
         return self
@@ -52,9 +50,19 @@ class CanaryPluginManager(pluggy.PluginManager):
         hook = self.hook.canary_subcommand
         return hook()
 
-    def get_generators(self) -> list[Type["AbstractTestGenerator"]]:
-        hook = self.hook.canary_testcase_generator
-        return hook()
+    def testcase_generator(
+        self, root: str, path: str | None = None
+    ) -> "AbstractTestGenerator | None":
+        if generator := self.hook.canary_generator(root=root, path=path):
+            return generator
+        for gen_type in self.hook.canary_testcase_generator():
+            if gen_type.matches(root if path is None else os.path.join(root, path)):
+                warnings.warn(
+                    "canary_testcase_generator has been deprecated, use canary_generator instead",
+                    category=DeprecationWarning,
+                )
+                return gen_type(root, path=path)
+        return None
 
     def load_from_env(self) -> None:
         if plugins := os.getenv("CANARY_PLUGINS"):

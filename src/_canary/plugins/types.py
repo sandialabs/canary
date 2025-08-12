@@ -58,6 +58,7 @@ class CanaryReporter:
     type: str
     description: str
     multipage: bool = False
+    default_output: str = "report.ext"
 
     def setup_parser(self, parser: "Parser") -> None:
         subparsers = parser.add_subparsers(dest="action", metavar="subcommands")
@@ -67,7 +68,9 @@ class CanaryReporter:
                 "--dest", default="$canary_work_tree", help="Write reports to this directory"
             )
         else:
-            p.add_argument("-o", dest="output", help=f"Output file name [default: {self.type}.ext]")
+            p.add_argument(
+                "-o", dest="output", help=f"Output file name [default: {self.default_output}]"
+            )
 
     def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
         raise NotImplementedError

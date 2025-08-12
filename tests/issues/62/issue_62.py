@@ -5,7 +5,7 @@
 import os
 
 import canary
-from _canary.plugins.generators.pyt import PYTTestGenerator
+from _canary.plugins.builtin.pyt import PYTTestGenerator
 
 
 def test_issue_62(tmpdir):

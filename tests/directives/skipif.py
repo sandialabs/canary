@@ -28,7 +28,7 @@ if __name__ == '__main__':
             )
         run = CanaryCommand("run")
         rc = run("-w", ".")
-        assert os.listdir("TestResults") == [".canary", "f1"]
+        assert set(os.listdir("TestResults")) == {".canary", "f1"}
         assert len(os.listdir("TestResults")) == 2
         assert rc == 0
         with pytest.raises(StopExecution):

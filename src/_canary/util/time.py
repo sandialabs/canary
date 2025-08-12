@@ -30,7 +30,6 @@ def time_in_seconds(arg: int | float | str) -> float:
 def hhmmss(seconds: float | None, threshold: float = 2.0) -> str:
     if seconds is None:
         return "--:--:--"
-    t = datetime.fromtimestamp(seconds)
     utc = datetime.fromtimestamp(seconds, timezone.utc)
     if seconds < threshold:
         return datetime.strftime(utc, "%H:%M:%S.%f")[:-4]

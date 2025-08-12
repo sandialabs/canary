@@ -74,16 +74,13 @@ def vcfind(root: str) -> tuple[list[AbstractTestGenerator], int]:
     errors: int = 0
     generators: list[AbstractTestGenerator] = []
     with working_dir(root):
-        gen_types = config.plugin_manager.get_generators()
         for file in files:
-            for gen_type in gen_types:
-                if gen_type.matches(file):
-                    try:
-                        generators.append(gen_type(root, file))
-                    except Exception as e:
-                        errors += 1
-                        logging.exception(f"Failed to parse {root}/{file}", e)
-                    break
+            try:
+                if generator := config.plugin_manager.testcase_generator(root=root, path=file):
+                    generators.append(generator)
+            except Exception as e:
+                errors += 1
+                logging.exception(f"Failed to parse {root}/{file}", e)
     return generators, errors
 
 
@@ -99,7 +96,6 @@ def rfind(root: str, subdir: str | None = None) -> tuple[list[AbstractTestGenera
 
     start = root if subdir is None else os.path.join(root, subdir)
     errors: int = 0
-    gen_types = config.plugin_manager.get_generators()
     generators: list[AbstractTestGenerator] = []
     for dirname, dirs, files in os.walk(start):
         if skip(dirname):
@@ -108,18 +104,18 @@ def rfind(root: str, subdir: str | None = None) -> tuple[list[AbstractTestGenera
         try:
             for f in files:
                 file = os.path.join(dirname, f)
-                for gen_type in gen_types:
-                    if gen_type.matches(file):
-                        try:
-                            generator = gen_type(root, os.path.relpath(file, root))
-                        except Exception as e:
-                            errors += 1
-                            logging.exception(f"Failed to parse {file}", e)
-                        else:
-                            generators.append(generator)
-                            if generator.stop_recursion():
-                                raise StopRecursion
-                        break
+                generator: AbstractTestGenerator | None
+                try:
+                    if generator := config.plugin_manager.testcase_generator(
+                        root=root, path=os.path.relpath(file, root)
+                    ):
+                        generators.append(generator)
+                except Exception as e:
+                    errors += 1
+                    logging.exception(f"Failed to parse {file}", e)
+                else:
+                    if generator and generator.stop_recursion():
+                        raise StopRecursion
         except StopRecursion:
             del dirs[:]
             continue
