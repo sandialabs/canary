@@ -81,6 +81,14 @@ def canary_session_startup(session: "Session") -> None:
     entering the run test loop."""
 
 
+_impl_warning = "canary_session_start is deprecated and will be removed, use canary_session_startup"
+
+
+@hookspec(warn_on_impl=DeprecationWarning(_impl_warning))
+def canary_session_start(session: "Session") -> None:
+    pass
+
+
 @hookspec
 def canary_session_finish(session: "Session", exitstatus: int) -> None:
     """Called after the test session has finished allowing plugins to perform custom actions after
