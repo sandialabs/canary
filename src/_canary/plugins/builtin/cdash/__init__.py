@@ -107,6 +107,9 @@ class CDashReporter(CanaryReporter):
             required=True,
             help="The base CDash url (do not include project)",
         )
+        p.add_argument(
+            "--done", action="store_true", default=False, help="Post Done.xml to the build."
+        )
         p.add_argument("files", nargs="*", help="XML files to post")
 
         p = sp.add_parser("summary", help="Generate an html summary of the CDash dashboard")
@@ -181,9 +184,10 @@ class CDashReporter(CanaryReporter):
     def post(self, session: "Session | None" = None, **kwargs: Any) -> None:
         cdash_url = kwargs["cdash_url"]
         cdash_project = kwargs["cdash_project"]
+        done = kwargs["done"] or False
         files = kwargs["files"] or []
         if files:
-            url = CDashXMLReporter.post(cdash_url, cdash_project, *files)
+            url = CDashXMLReporter.post(cdash_url, cdash_project, *files, done=done)
             # write url to stdout so that tools can do cdash_url=$(canary report cdash post ...)
             sys.stdout.write("%s\n" % url)
         else:
@@ -193,7 +197,7 @@ class CDashReporter(CanaryReporter):
             files.extend(glob.glob(os.path.join(reporter.xml_dir, "*.xml")))
             if not files:
                 raise ValueError("canary report cdash post: no xml files to post")
-            url = reporter.post(cdash_url, cdash_project, *files)
+            url = reporter.post(cdash_url, cdash_project, *files, done=done)
             # write url to stdout so that tools can do cdash_url=$(canary report cdash post ...)
             sys.stdout.write("%s\n" % url)
         return

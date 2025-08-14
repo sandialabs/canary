@@ -135,7 +135,7 @@ class CDashXMLReporter:
         return buildstamp
 
     @staticmethod
-    def post(url: str, project: str, *files: str) -> str | None:
+    def post(url: str, project: str, *files: str, done: bool = False) -> str | None:
         if not files:
             raise ValueError("No files to post")
         server = cdash.server(url, project)
@@ -156,6 +156,20 @@ class CDashXMLReporter:
             logging.warning(f"{upload_errors} files failed to upload to CDash")
         if buildid is None:
             return None
+        if done:
+            try:
+                with open(os.path.abspath("./Done.xml"), mode="w") as fh:
+                    doc = CDashXMLReporter.create_done_document(buildid, time.time())
+                    CDashXMLReporter.dump_xml(doc, fh)
+                CDashXMLReporter.validate_xml(fh.name, schema="Done.xsd")
+                payload = server.upload(
+                    filename=fh.name,
+                    sitename=ns.site,
+                    buildname=ns.buildname,
+                    buildstamp=ns.buildstamp,
+                )
+            finally:
+                os.remove(fh.name)
         return f"{url}/buildSummary.php?buildid={buildid}"
 
     def create_document(self) -> xdom.Document:
@@ -201,14 +215,15 @@ class CDashXMLReporter:
         doc = self.create_document()
         root = doc.firstChild
         l1 = doc.createElement("Testing")
+
         add_text_node(l1, "StartDateTime", strftimestamp(starttime))
         add_text_node(l1, "StartTestTime", int(starttime))
         testlist = doc.createElement("TestList")
         for case in cases:
             add_text_node(testlist, "Test", case.format("./%P/%D"))
         l1.appendChild(testlist)
-        success = ("success", "xfail", "xdiff")
 
+        success = ("success", "xfail", "xdiff")
         status: str
         for case in cases:
             exit_value = case.returncode
@@ -356,10 +371,12 @@ class CDashXMLReporter:
         self.validate_xml(filename, schema="Notes.xsd")
         return filename
 
-    def dump_xml(self, document: xdom.Document, stream: IO[Any]):
+    @staticmethod
+    def dump_xml(document: xdom.Document, stream: IO[Any]):
         stream.write(document.toprettyxml(indent="", newl=""))
 
-    def validate_xml(self, file: str, *, schema: str) -> None:
+    @staticmethod
+    def validate_xml(file: str, *, schema: str) -> None:
         try:
             import xmlschema  # type: ignore
         except ImportError:
@@ -368,6 +385,16 @@ class CDashXMLReporter:
         with working_dir(dir):
             xml_schema = xmlschema.XMLSchema(schema)
             xml_schema.validate(file)
+
+    @staticmethod
+    def create_done_document(buildid: str, time: float) -> xdom.Document:
+        doc = xdom.Document()
+        done = doc.createElement("Done")
+        done.setAttribute("retries", "1")
+        add_text_node(done, "buildId", buildid)
+        add_text_node(done, "time", str(time))
+        doc.appendChild(done)
+        return doc
 
 
 def add_text_node(parent: xdom.Element, name: str, value: Any, **attrs: Any) -> None:
