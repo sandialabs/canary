@@ -14,6 +14,8 @@ from .status import Status
 from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_lockfile as testcase_from_lockfile
+from .util._json import safeload
+from .util._json import safesave
 
 key_type = tuple[str, ...] | str
 index_type = tuple[int, ...] | int
@@ -189,6 +191,8 @@ class TestInstance:
     dependencies: list["TestInstance"]
     ofile: str
     efile: str | None
+    lockfile: str
+    attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     @property
     def analyze(self) -> bool:
@@ -250,6 +254,7 @@ class TestInstance:
             dependencies=dependencies,
             ofile=case.ofile,
             efile=case.efile,
+            lockfile=case.lockfile,
         )
         return self
 
@@ -264,6 +269,12 @@ class TestInstance:
     @property
     def gpus(self) -> int:
         return len(self.gpu_ids)
+
+    def set_attribute(self, **kwargs: Any) -> None:
+        state = safeload(self.lockfile)
+        self.attributes.update(kwargs)
+        state["properties"].setdefault("instance_attributes").update(self.attributes)
+        safesave(self.lockfile, state)
 
     def get_dependency(self, **params: Any) -> "TestInstance | None":
         for dep in self.dependencies:
@@ -313,6 +324,7 @@ class TestMultiInstance(TestInstance):
             dependencies=dependencies,
             ofile=case.ofile,
             efile=case.efile,
+            lockfile=case.lockfile,
         )
         return self
 

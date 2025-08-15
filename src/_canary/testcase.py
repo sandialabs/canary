@@ -40,6 +40,8 @@ from .status import Status
 from .third_party.color import colorize
 from .util import filesystem as fs
 from .util import logging
+from .util._json import safeload
+from .util._json import safesave
 from .util.compression import compress_str
 from .util.executable import Executable
 from .util.filesystem import copyfile
@@ -50,7 +52,6 @@ from .util.misc import digits
 from .util.module import load as load_module
 from .util.procutils import get_process_metrics
 from .util.shell import source_rcfile
-from .util.string import pluralize
 from .util.string import stringify
 from .util.time import Duration
 from .util.time import hhmmss
@@ -360,6 +361,7 @@ class TestCase(AbstractTestCase):
         self._environment_modifications: list[dict[str, str]] = []
 
         self._measurements: dict[str, Any] = {}
+        self._instance_attributes: dict[str, Any] = {}
 
         if file_root is not None:
             self.file_root = file_root
@@ -915,6 +917,14 @@ class TestCase(AbstractTestCase):
         self._measurements = dict(arg)
 
     @property
+    def instance_attributes(self) -> dict[str, Any]:
+        return self._instance_attributes
+
+    @instance_attributes.setter
+    def instance_attributes(self, arg: dict[str, Any]) -> None:
+        self._instance_attributes = dict(arg)
+
+    @property
     def name(self) -> str:
         if self._name is None:
             self.set_default_names()
@@ -1386,34 +1396,13 @@ class TestCase(AbstractTestCase):
 
     def save(self):
         lockfile = self.lockfile
-        dirname, basename = os.path.split(lockfile)
-        tmp = os.path.join(dirname, f".{basename}.tmp")
-        mkdirp(dirname)
-        try:
-            with open(tmp, "w") as fh:
-                self.dump(fh)
-            os.replace(tmp, lockfile)
-        finally:
-            if os.path.exists(tmp):
-                os.remove(tmp)
+        safesave(lockfile, self.getstate())
         file = os.path.join(self.working_directory, self._lockfile)
         mkdirp(os.path.dirname(file))
         fs.force_symlink(lockfile, file)
 
-    def _load_lockfile(self, tries: int = 8) -> dict[str, Any]:
-        delay = 0.5
-        file = self.lockfile
-        for _ in range(tries):
-            # Guard against race condition when multiple batches are running at once
-            try:
-                with open(file, "r") as fh:
-                    return json.load(fh)
-            except Exception:
-                time.sleep(delay)
-                delay *= 2
-        raise FailedToLoadLockfileError(
-            f"Failed to load {file} after {tries} {pluralize('attempt', tries)}"
-        )
+    def _load_lockfile(self) -> dict[str, Any]:
+        return safeload(self.lockfile)
 
     def refresh(self, propagate: bool = True) -> None:
         try:
@@ -1429,6 +1418,7 @@ class TestCase(AbstractTestCase):
             "work_tree",
             "status",
             "measurements",
+            "instance_attributes",
             "dep_done_criteria",
         )
         for name, value in state["properties"].items():
