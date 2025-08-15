@@ -665,7 +665,7 @@ def canary_generator(root: str, path: str | None) -> AbstractTestGenerator | Non
 
 @hookimpl
 def canary_configure(config: "CanaryConfig"):
-    config.timeout["ctest"] = 1500.0
+    config.timeout.setdefault("ctest", 1500.0)
 
 
 @hookimpl
