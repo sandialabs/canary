@@ -61,6 +61,13 @@ def canary_addoption(parser: "Parser") -> None:
         help="Show captured stdout (o), stderr (e), or both (oe) "
         "for failed tests [default: %(default)s]",
     )
+    add_group_argument(
+        parser,
+        "--show-excluded-tests",
+        action="store_true",
+        default=False,
+        help="Show names of tests that are excluded from the test session %(default)s",
+    )
 
 
 @hookimpl(specname="canary_runtests_startup", tryfirst=True)
@@ -168,16 +175,20 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
     if excluded:
         n = len(excluded)
         logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
-        reasons: dict[str | None, int] = {}
+        reasons: dict[str | None, list[TestCase]] = {}
         for case in excluded:
             if case.mask:
-                reasons[case.mask] = reasons.get(case.mask, 0) + 1
+                reasons.setdefault(case.mask, []).append(case)
             elif case.status == "invalid":
-                reasons[case.status.details] = reasons.get(case.status.details, 0) + 1
-        keys = sorted(reasons, key=lambda x: reasons[x])
+                reasons.setdefault(case.status.details, []).append(case)
+        keys = sorted(reasons, key=lambda x: len(reasons[x]))
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
-            logging.emit(f"{3 * glyphs.bullet} {reasons[key]}: {reason}\n")
+            n = len(reasons[key])
+            logging.emit(f"{colorize('@M{==>}')} {n}: {reason}\n")
+            if config.getoption("show_excluded_tests"):
+                for case in reasons[key]:
+                    logging.emit(f"... {case.format('%N')}\n")
 
 
 def print_durations(cases: list[TestCase], N: int) -> None:
