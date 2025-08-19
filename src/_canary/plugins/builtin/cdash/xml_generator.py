@@ -81,6 +81,7 @@ class CDashXMLReporter:
         buildstamp: str | None = None,
         generator: str | None = None,
         chunk_size: int | None = None,
+        subproject_labels: list[str] | None = None,
     ) -> None:
         """Collect information and create reports"""
         self.meta: dict[str, Any] | None = None
@@ -97,9 +98,9 @@ class CDashXMLReporter:
         try:
             if chunk_size > 0:  # type: ignore
                 for cases in chunked(self.data.cases, chunk_size):
-                    self.write_test_xml(cases)
+                    self.write_test_xml(cases, subproject_labels=subproject_labels)
             elif chunk_size < 0:  # type: ignore
-                self.write_test_xml(self.data.cases)
+                self.write_test_xml(self.data.cases, subproject_labels=subproject_labels)
             else:
                 raise ValueError("chunk_size must be a positive integer or -1")
         except ValueError as e:
@@ -201,7 +202,9 @@ class CDashXMLReporter:
         doc.appendChild(el)
         return doc
 
-    def write_test_xml(self, cases: list[TestCase]) -> str:
+    def write_test_xml(
+        self, cases: list[TestCase], subproject_labels: list[str] | None = None
+    ) -> str:
         i = 0
         while True:
             filename = os.path.join(self.xml_dir, f"Test-{i}.xml")
@@ -214,6 +217,14 @@ class CDashXMLReporter:
 
         doc = self.create_document()
         root = doc.firstChild
+
+        if subproject_labels is not None:
+            for label in subproject_labels:
+                subproject = doc.createElement("Subproject")
+                subproject.setAttribute("name", label)
+                add_text_node(subproject, "Label", label)
+                root.appendChild(subproject)  # type: ignore
+
         l1 = doc.createElement("Testing")
 
         add_text_node(l1, "StartDateTime", strftimestamp(starttime))
