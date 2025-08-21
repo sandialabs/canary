@@ -378,8 +378,11 @@ class TestBatch(AbstractTestCase):
             if not bar:
                 logging.emit(self.job_submission_summary(qrank, qsize) + "\n")
             while True:
-                if proc.poll() is not None:
-                    break
+                try:
+                    if proc.poll() is not None:
+                        break
+                except Exception:
+                    logging.error(self.format("Batch @*b{%id}: polling job failed!"))
                 time.sleep(backend.polling_frequency)
         finally:
             force_remove(breadcrumb)
