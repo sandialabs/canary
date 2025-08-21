@@ -95,16 +95,15 @@ class CDashXMLReporter:
         else:
             self.buildstamp = self.validate_buildstamp(buildstamp)
         mkdirp(self.xml_dir)
-        try:
-            if chunk_size > 0:  # type: ignore
-                for cases in chunked(self.data.cases, chunk_size):
-                    self.write_test_xml(cases, subproject_labels=subproject_labels)
-            elif chunk_size < 0:  # type: ignore
-                self.write_test_xml(self.data.cases, subproject_labels=subproject_labels)
-            else:
-                raise ValueError("chunk_size must be a positive integer or -1")
-        except ValueError as e:
-            raise ValueError(f"invalid chunk_size {chunk_size} \n{e}")
+        if chunk_size is None:
+            chunk_size = 500
+        if chunk_size > 0:  # type: ignore
+            for cases in chunked(self.data.cases, chunk_size):
+                self.write_test_xml(cases, subproject_labels=subproject_labels)
+        elif chunk_size < 0:  # type: ignore
+            self.write_test_xml(self.data.cases, subproject_labels=subproject_labels)
+        else:
+            raise ValueError("chunk_size must be a positive integer or -1")
         self.write_notes_xml()
 
     @staticmethod
@@ -144,6 +143,7 @@ class CDashXMLReporter:
         upload_errors = 0
         buildid = None
         for file in files:
+            logging.info(f"Posting {file} to {url}", file=sys.stderr)
             payload = server.upload(
                 filename=file,
                 sitename=ns.site,
@@ -212,8 +212,7 @@ class CDashXMLReporter:
                 break
             i += 1
         f = os.path.relpath(filename, config.invocation_dir)
-        logging.log(logging.INFO, f"WRITING: {len(cases)} test cases to {f}", prefix=None)
-        starttime = self.data.start
+        logging.info(f"Writing {f} ({len(cases)} test cases)")
 
         doc = self.create_document()
         root = doc.firstChild
@@ -227,8 +226,10 @@ class CDashXMLReporter:
 
         l1 = doc.createElement("Testing")
 
+        starttime = self.data.start
         add_text_node(l1, "StartDateTime", strftimestamp(starttime))
         add_text_node(l1, "StartTestTime", int(starttime))
+
         testlist = doc.createElement("TestList")
         for case in cases:
             add_text_node(testlist, "Test", case.format("./%P/%D"))
@@ -347,6 +348,11 @@ class CDashXMLReporter:
 
             l1.appendChild(test_node)
 
+        stop = self.data.stop
+        add_text_node(l1, "EndDateTime", strftimestamp(stop))
+        add_text_node(l1, "EndTestTime", int(stop))
+        add_text_node(l1, "ElapsedMinutes", int((stop - starttime) / 60.0))
+
         root.appendChild(l1)  # type: ignore
         doc.appendChild(root)  # type: ignore
 
@@ -362,7 +368,7 @@ class CDashXMLReporter:
             return None
         filename = unique_file(self.xml_dir, "Notes", ".xml")
         f = os.path.relpath(filename, config.invocation_dir)
-        logging.log(logging.INFO, f"WRITING: Notes.xml to {f}", prefix=None)
+        logging.info(f"Writing Notes.xml to {f}")
         doc = self.create_document()
         root = doc.firstChild
         notes_el = doc.createElement("Notes")

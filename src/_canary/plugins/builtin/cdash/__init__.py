@@ -260,6 +260,7 @@ class CDashReporter(CanaryReporter):
                 raise ValueError(f"-f {kwargs['f']!r} incompatible with {s}")
             ns = reporter.read_site_info(kwargs["f"])
             kwargs.update(vars(ns))
+        kwargs.setdefault("chunk_size", 500)
         reporter.create(
             kwargs["buildname"],
             site=kwargs["site"],
