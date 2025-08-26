@@ -23,7 +23,7 @@ hookspec = pluggy.HookspecMarker(project_name)
 hookimpl = pluggy.HookimplMarker(project_name)
 
 
-@hookspec(warn_on_impl=DeprecationWarning("Use canary_generator"))
+@hookspec
 def canary_testcase_generator() -> Type["AbstractTestGenerator"]:
     """Deprecated: Use canary_generator"""
     raise NotImplementedError
