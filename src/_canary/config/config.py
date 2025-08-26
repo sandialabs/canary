@@ -404,6 +404,7 @@ class Config:
             snapshot = convert_legacy_snapshot(snapshot)
         properties: dict[str, Any] = snapshot["properties"]
         self.working_dir = properties["working_dir"]
+        self.invocation_dir = properties["invocation_dir"]
         if pool := properties.pop("resource_pool", None):
             self._resource_pool.clear()
             self._resource_pool.update(pool)
@@ -619,6 +620,9 @@ def default_config_values() -> dict[str, Any]:
                 "default": 300.0,
                 "long": 900.0,
             },
+            "polling_frequency": {
+                "testcase": .05,
+            }
         },
         "plugins": [],
         "environment": {

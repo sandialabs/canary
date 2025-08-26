@@ -80,6 +80,10 @@ config_schema = Schema(
                 Optional("max_tasks_per_child"): positive_int,
             },
             Optional("timeout"): {Optional(str): Use(time_in_seconds)},
+            Optional("polling_frequency"): {
+                Optional("testcase"): Use(time_in_seconds),
+                Optional("batch"): Use(time_in_seconds),
+            },
         }
     }
 )

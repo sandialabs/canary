@@ -1695,6 +1695,7 @@ class TestCase(AbstractTestCase):
             logging.emit(summary + "\n")
 
         tee_output = config.getoption("capture") == "tee"
+        sleep_interval = config.get("config:polling_frequency:testcase") or 0.05
         try:
             default_int_handler = signal.signal(signal.SIGINT, cancel)
             default_term_handler = signal.signal(signal.SIGTERM, cancel)
@@ -1729,7 +1730,7 @@ class TestCase(AbstractTestCase):
                         if timeout > 0 and time.monotonic() - start_marker > timeout:
                             os.kill(proc.pid, signal.SIGINT)
                             raise TimeoutError
-                        time.sleep(0.05)
+                        time.sleep(sleep_interval)
         except MissingSourceError as e:
             self.returncode = skip_exit_status
             self.status.set("skipped", f"{self}: resource file {e.args[0]} not found")
