@@ -413,7 +413,7 @@ class TestCase(AbstractTestCase):
         return self.display_name
 
     def stage(self) -> str:
-        dir = config.session.work_tree
+        dir = config.get("session:work_tree")
         assert dir is not None
         return os.path.join(dir, ".canary/objects/cases", self.id[:2], self.id[2:])
 
@@ -459,7 +459,7 @@ class TestCase(AbstractTestCase):
     def work_tree(self) -> str | None:
         """The session work tree.  Can be lazily evaluated so we don't set it here if missing"""
         if self._work_tree is None:
-            self._work_tree = config.session.work_tree
+            self._work_tree = config.get("session:work_tree")
         return self._work_tree
 
     @work_tree.setter
@@ -475,7 +475,7 @@ class TestCase(AbstractTestCase):
     def path(self) -> str:
         """The relative path from ``config.session.work_tree`` to ``self.working_directory``"""
         if self._path is None:
-            work_tree = config.session.work_tree or config.invocation_dir
+            work_tree = config.get("session:work_tree") or config.invocation_dir
             dirname, basename = os.path.split(self.file_path)
             path = os.path.join(work_tree, dirname, self.name)
             n = max_name_length()
@@ -531,7 +531,7 @@ class TestCase(AbstractTestCase):
     def working_directory(self) -> str:
         """Directory where the test is executed."""
         if self._working_directory is None:
-            work_tree = config.session.work_tree
+            work_tree = config.get("session:work_tree")
             if not work_tree:
                 raise ValueError("session work_tree not set") from None
             self._working_directory = os.path.normpath(os.path.join(work_tree, self.path))
@@ -1173,11 +1173,11 @@ class TestCase(AbstractTestCase):
                 timeout = 2.0 * max_runtime
         else:
             for keyword in self.keywords:
-                if t := config.timeout.get(keyword):
+                if t := config.get(f"config:timeout:{keyword}"):
                     timeout = float(t)
                     break
             else:
-                timeout = config.timeout["default"]
+                timeout = config.get("config:timeout:default")
         self._timeout = float(timeout)
 
     def cache_last_run(self) -> None:
@@ -1511,7 +1511,7 @@ class TestCase(AbstractTestCase):
         elif self.unresolved_dependencies:
             raise RuntimeError("All dependencies must be resolved before running")
         logging.trace(f"Setting up {self}")
-        assert config.session.work_tree is not None
+        assert config.get("session:work_tree") is not None
         fs.mkdirp(self.working_directory)
         self.close_files()
         fs.clean_out_folder(self.working_directory)
@@ -1671,7 +1671,7 @@ class TestCase(AbstractTestCase):
         self.stdout.write(f"==> Working directory: {self.working_directory}\n")
         self.stdout.write(f"==> Execution directory: {self.execution_directory}\n")
         self.stdout.write(f"==> Command line: {cmd_line}\n")
-        if (timeoutx := config.timeout.get("multiplier")) and (timeoutx != 1.0):
+        if (timeoutx := config.get("config:timeout.multiplier")) and (timeoutx != 1.0):
             self.stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
         self.stdout.flush()
 
@@ -1691,9 +1691,8 @@ class TestCase(AbstractTestCase):
             elif sig == signal.SIGTERM:
                 os._exit(1)
 
-        bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
-        if not bar:
-            logging.emit(self.job_submission_summary(qrank, qsize, attempt) + "\n")
+        if summary := self.job_submission_summary(qrank, qsize, attempt=attempt):
+            logging.emit(summary + "\n")
 
         tee_output = config.getoption("capture") == "tee"
         try:
@@ -1703,7 +1702,7 @@ class TestCase(AbstractTestCase):
             proc: psutil.Popen | None = None
             metrics: dict[str, Any] | None = None
             timeout = self.timeout
-            if timeoutx := config.timeout.get("multiplier"):
+            if timeoutx := config.get("config:timeout:multiplier"):
                 timeout *= timeoutx
             cmd = self.command()
             cmd_line = shlex.join(cmd)
@@ -1760,9 +1759,9 @@ class TestCase(AbstractTestCase):
             else:
                 self.status.set_from_code(self.returncode)
         finally:
-            bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
-            if not bar:
-                logging.emit(self.job_completion_summary(qrank, qsize, attempt=attempt) + "\n")
+            if summary := self.job_completion_summary(qrank, qsize, attempt=attempt):
+                logging.emit(summary + "\n")
+
             signal.signal(signal.SIGINT, default_int_handler)
             signal.signal(signal.SIGTERM, default_term_handler)
             if self.status != "skipped":
@@ -1789,8 +1788,10 @@ class TestCase(AbstractTestCase):
         sys.stderr.write(text)
 
     def job_submission_summary(self, qrank: int | None, qsize: int | None, attempt: int) -> str:
+        if config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO:
+            return ""
         fmt = io.StringIO()
-        if config.debug or os.getenv("GITLAB_CI"):
+        if config.get("config:debug") or os.getenv("GITLAB_CI"):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
         if qrank is not None and qsize is not None:
             fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
@@ -1799,8 +1800,10 @@ class TestCase(AbstractTestCase):
         return self.format(fmt.getvalue()).strip()
 
     def job_completion_summary(self, qrank: int | None, qsize: int | None, attempt: int = 0) -> str:
+        if config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO:
+            return ""
         fmt = io.StringIO()
-        if config.debug or os.getenv("GITLAB_CI"):
+        if config.get("config:debug") or os.getenv("GITLAB_CI"):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
         if qrank is not None and qsize is not None:
             fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
@@ -1929,14 +1932,15 @@ def from_lockfile(lockfile: str) -> TestCase | TestMultiCase:
 def from_id(id: str) -> TestCase | TestMultiCase:
     import glob
 
-    if config.session.work_tree is None:
+    work_tree = config.get("session:work_tree")
+    if work_tree is None:
         raise ValueError(f"cannot find test case {id} outside a test session")
-    config_dir = os.path.join(config.session.work_tree, ".canary")
+    config_dir = os.path.join(work_tree, ".canary")
     pat = os.path.join(config_dir, "objects/cases", id[:2], f"{id[2:]}*", TestCase._lockfile)
     lockfiles = glob.glob(pat)
     if lockfiles:
         return from_lockfile(lockfiles[0])
-    raise ValueError(f"no test case associated with {id} found in {config.session.work_tree}")
+    raise ValueError(f"no test case associated with {id} found in {work_tree}")
 
 
 class MissingSourceError(Exception):

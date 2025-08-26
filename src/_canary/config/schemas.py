@@ -79,6 +79,7 @@ config_schema = Schema(
                 Optional("context"): multiprocessing_contexts,
                 Optional("max_tasks_per_child"): positive_int,
             },
+            Optional("timeout"): {Optional(str): Use(time_in_seconds)},
         }
     }
 )
@@ -100,7 +101,6 @@ test_schema = Schema({"test": {"timeout": {Optional(str): Use(time_in_seconds)}}
 timeout_schema = Schema({"timeout": {Optional(str): Use(time_in_seconds)}})
 
 machine_schema = Schema({"machine": {Optional("cpu_count"): Use(int)}})
-python_schema = Schema({"python": {"executable": str, "version": str, "version_info": list}})
 testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
 environment_schema = Schema(
     {

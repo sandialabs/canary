@@ -50,7 +50,7 @@ def canary_testsuite_mask(
 
     if start is not None:
         if not os.path.isabs(start):
-            start = os.path.join(config.session.work_tree, start)  # type: ignore
+            start = os.path.join(config.get("session:work_tree"), start)  # type: ignore
         start = os.path.normpath(start)
 
     owners = set(owners or [])

@@ -85,7 +85,7 @@ class ConfigCmd(CanarySubcommand):
             show_config(args)
             return 0
         elif args.subcommand == "add":
-            config.save(args.path, scope=args.scope)
+            config.add(args.path, scope=args.scope)
             return 0
         elif args.subcommand is None:
             raise ValueError("canary config: missing required subcommand (choose from show, add)")
@@ -98,8 +98,8 @@ def show_config(args: "argparse.Namespace"):
 
     text: str
     if args.paths:
-        global_f = config.config_file("global")
-        local_f = os.path.realpath(config.config_file("local") or "canary.yaml")
+        global_f = config.get_scope_filename("global")
+        local_f = os.path.realpath(config.get_scope_filename("local") or "canary.yaml")
         with io.StringIO() as fp:
             fp.write("configuration paths:\n")
             fp.write(f"  global: {global_f}\n")

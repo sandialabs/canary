@@ -284,7 +284,7 @@ class TestBatch(AbstractTestCase):
 
     @staticmethod
     def stage(batch_id: str) -> str:
-        work_tree = config.session.work_tree
+        work_tree = config.get("session:work_tree")
         assert work_tree is not None
         root = os.path.join(work_tree, ".canary/batches", batch_id[:2])
         if os.path.exists(root) and os.path.exists(os.path.join(root, batch_id[2:])):
@@ -298,7 +298,7 @@ class TestBatch(AbstractTestCase):
     @staticmethod
     def find(batch_id: str) -> str:
         """Find the full batch ID from batch_id"""
-        work_tree = config.session.work_tree
+        work_tree = config.get("session:work_tree")
         assert work_tree is not None
         pattern = os.path.join(work_tree, ".canary/batches", batch_id[:2], f"{batch_id[2:]}*")
         candidates = glob.glob(pattern)
@@ -327,7 +327,7 @@ class TestBatch(AbstractTestCase):
         variables["CANARY_LEVEL"] = "1"
         variables["CANARY_DISABLE_KB"] = "1"
         variables["CANARY_HPCC_BACKEND"] = "null"  # guard against infinite batch recursion
-        if config.debug:
+        if config.get("config:debug"):
             variables["CANARY_DEBUG"] = "on"
 
         batchopts = config.getoption("batch", {})
@@ -337,13 +337,13 @@ class TestBatch(AbstractTestCase):
             touchp(breadcrumb)
             default_int_signal = signal.signal(signal.SIGINT, cancel)
             default_term_signal = signal.signal(signal.SIGTERM, cancel)
-            backend = config.backend
+            backend = config.hpcc_backend
             assert backend is not None
             proc: hpc_connect.HPCProcess | None = None
             logging.debug(f"Submitting batch {self.id}")
             if backend.supports_subscheduling and flat:
                 scriptdir = os.path.dirname(self.submission_script_filename())
-                timeoutx = config.timeout.get("multiplier", 1.0)
+                timeoutx = config.get("config:timeout.multiplier", 1.0)
                 variables.pop("CANARY_BATCH_ID", None)
                 proc = backend.submitn(
                     [case.id for case in self],
@@ -358,7 +358,7 @@ class TestBatch(AbstractTestCase):
                     qtime=[case.runtime * timeoutx for case in self],
                 )
             else:
-                timeoutx = config.timeout.get("multiplier", 1.0)
+                timeoutx = config.get("config:timeout.multiplier", 1.0)
                 qtime = self.qtime() * timeoutx
                 proc = backend.submit(
                     f"canary.{self.id[:7]}",
@@ -424,7 +424,7 @@ class TestBatch(AbstractTestCase):
     def job_submission_summary(self, qrank: int | None, qsize: int | None) -> str:
         fmt = io.StringIO()
         fmt.write("@*b{==>} ")
-        if config.debug or os.getenv("GITLAB_CI"):
+        if config.get("config:debug") or os.getenv("GITLAB_CI"):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
                 fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
@@ -436,7 +436,7 @@ class TestBatch(AbstractTestCase):
     def job_completion_summary(self, qrank: int | None, qsize: int | None) -> str:
         fmt = io.StringIO()
         fmt.write("@*b{==>} ")
-        if config.debug or os.getenv("GITLAB_CI"):
+        if config.get("config:debug") or os.getenv("GITLAB_CI"):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
             if qrank is not None and qsize is not None:
                 fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
@@ -474,9 +474,9 @@ def canary_invocation(arg: "TestBatch | TestCase") -> str:
         with open(config_file, "w") as fh:
             json.dump(cfg, fh, indent=2)
         fp.write(f"-f {config_file} ")
-    if config.debug:
+    if config.get("config:debug"):
         fp.write("-d ")
-    fp.write(f"-C {config.session.work_tree} run ")
+    fp.write(f"-C {config.get('session:work_tree')} run ")
     if isinstance(arg, TestBatch):
         batchopts = config.getoption("batch", {})
         if workers := batchopts.get("workers"):
@@ -500,7 +500,7 @@ def nodes_required(arg: TestCase | TestBatch) -> int:
 
 
 def batch_options() -> list[str]:
-    options: list[str] = list(config.batch.default_options)
+    options: list[str] = list(config.get("batch:default_options") or [])
     if varargs := os.getenv("CANARY_BATCH_ARGS"):
         warnings.warn(
             "Use CANARY_RUN_ADDOPTS instead of CANARY_BATCH_ARGS",

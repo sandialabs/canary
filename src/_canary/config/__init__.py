@@ -8,37 +8,35 @@ from typing import Any
 from typing import Generator
 
 from .config import Config
+from .config import get_scope_filename
 from .rpool import ResourcePool  # noqa: F401
 from .rpool import ResourceUnavailable  # noqa: F401
 from .rpool import ResourceUnsatisfiable  # noqa: F401
 
 if TYPE_CHECKING:
-    _config = Config.factory()
-    batch = _config.batch
-    system = _config.system
-    session = _config.session
-    backend = _config.backend
-    timeout = _config.timeout
-    build = _config.build
-    null = _config.null
-    options = _config.options
-    resource_pool = _config.resource_pool
+    _config = Config()
+
+    add = _config.add
+    get = _config.get
+    set = _config.set
+    getstate = _config.getstate
+
     plugin_manager = _config.plugin_manager
-    config_dir = _config.config_dir
-    cache_dir = _config.cache_dir
-    debug = _config.debug
-    multiprocessing = _config.multiprocessing
-    getoption = _config.getoption
-    environment = _config.environment
     invocation_dir = _config.invocation_dir
     working_dir = _config.working_dir
+    resource_pool = _config.resource_pool
+    getoption = _config.getoption
+    hpcc_backend = _config.hpcc_backend
     set_main_options = _config.set_main_options
-    describe = _config.describe
-    getstate = _config.getstate
-    config_file = _config.config_file
-    save = _config.save
-    snapshot = _config.snapshot
+    cache_dir = _config.cache_dir
+    options = _config.options
+    dump_snapshot = _config.dump_snapshot
+    load_snapshot = _config.load_snapshot
+    null = _config.null
     archive = _config.archive
+
+    temporary_scope = _config.temporary_scope
+
 else:
     # allow config to be lazily loaded
     _config: Config | None = None
@@ -46,7 +44,9 @@ else:
     def __getattr__(name: str) -> Any:
         global _config
         if _config is None:
-            _config = Config.factory()
+            _config = Config()
+        if name == "backend":
+            name = "hpcc_backend"
         return getattr(_config, name)
 
 
@@ -55,7 +55,7 @@ def override() -> Generator[None, None, None]:
     global _config
     save_config = _config
     try:
-        _config = Config.factory()
+        _config = Config()
         yield
     finally:
         _config = save_config

@@ -57,7 +57,7 @@ class BatchRunner(AbstractTestRunner):
         super().__init__()
 
         # by this point, hpc_connect should have already be set up
-        assert config.backend is not None
+        assert config.hpcc_backend is not None
 
     def run(self, obj: AbstractTestCase, **kwargs: Any) -> None:
         assert isinstance(obj, TestBatch)
@@ -72,7 +72,7 @@ class BatchRunner(AbstractTestRunner):
 
 def factory() -> "AbstractTestRunner":
     runner: "AbstractTestRunner"
-    if config.backend is None:
+    if config.hpcc_backend is None:
         runner = TestCaseRunner()
     else:
         runner = BatchRunner()

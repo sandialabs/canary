@@ -111,36 +111,33 @@ class CanaryCommand:
     def __call__(self, *args_in: str, fail_on_error: bool = True) -> int:
         try:
             global reraise
-            save_debug: bool | None = None
-            save_reraise: bool | None = None
-            if self.debug:
-                save_debug = config.debug
-                config.debug = True
-                save_reraise = reraise
-                reraise = True
-            argv = [self.command.name] + list(args_in)
-            parser = make_argument_parser()
-            args = parser.preparse(argv, addopts=False)
-            for p in args.plugins:
-                config.plugin_manager.consider_plugin(p)
-            for command in config.plugin_manager.get_subcommands():
-                parser.add_command(command)
-            with monkeypatch.context() as mp:
-                mp.setattr(parser, "add_argument", parser.add_plugin_argument)
-                mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
-                config.plugin_manager.hook.canary_addoption(parser=parser)
-            args = parser.parse_args(argv)
-            config.set_main_options(args)
-            config.plugin_manager.hook.canary_configure(config=config)
-            rc = self.command.execute(args)
-            self.returncode = rc
+            with config.temporary_scope() as scope:
+                save_reraise: bool | None = None
+                if self.debug:
+                    scope["debug"] = True
+                    save_reraise = reraise
+                    reraise = True
+                argv = [self.command.name] + list(args_in)
+                parser = make_argument_parser()
+                args = parser.preparse(argv, addopts=False)
+                for p in args.plugins:
+                    config.plugin_manager.consider_plugin(p)
+                for command in config.plugin_manager.get_subcommands():
+                    parser.add_command(command)
+                with monkeypatch.context() as mp:
+                    mp.setattr(parser, "add_argument", parser.add_plugin_argument)
+                    mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
+                    config.plugin_manager.hook.canary_addoption(parser=parser)
+                args = parser.parse_args(argv)
+                config.set_main_options(args)
+                config.plugin_manager.hook.canary_configure(config=config)
+                rc = self.command.execute(args)
+                self.returncode = rc
         except Exception:
             if fail_on_error:
                 raise
             self.returncode = 1
         finally:
-            if save_debug is not None:
-                config.debug = save_debug
             if save_reraise is not None:
                 reraise = save_reraise
         return self.returncode
