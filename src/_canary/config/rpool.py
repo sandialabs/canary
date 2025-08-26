@@ -303,6 +303,8 @@ class ResourcePool:
 
     def satisfiable(self, required: list[list[dict[str, Any]]]) -> None:
         """determine if the resources for this test are satisfiable"""
+        if self.empty():
+            raise EmptyResourcePoolError
         slots_reqd: dict[str, int] = {}
         for group in required:
             for item in group:
@@ -322,6 +324,8 @@ class ResourcePool:
         local[i] = {<type>: [{'gid': <gid>, 'slots': <slots>}, ...], ... }
 
         """
+        if self.empty():
+            raise EmptyResourcePoolError
         totals: dict[str, int] = {}
         acquired: list[dict[str, list[dict]]] = []
         try:
@@ -381,4 +385,8 @@ class ResourceUnsatisfiable(Exception):
 
 
 class ResourceUnavailable(Exception):
+    pass
+
+
+class EmptyResourcePoolError(Exception):
     pass

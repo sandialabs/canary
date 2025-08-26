@@ -8,7 +8,7 @@ from typing import Any
 from typing import Generator
 
 from .config import Config
-from .config import get_scope_filename
+from .config import get_scope_filename  # noqa: F401
 from .rpool import ResourcePool  # noqa: F401
 from .rpool import ResourceUnavailable  # noqa: F401
 from .rpool import ResourceUnsatisfiable  # noqa: F401
@@ -45,7 +45,9 @@ else:
         global _config
         if _config is None:
             _config = Config()
-        if name == "backend":
+        if name == "debug":
+            return _config.get("config:debug")
+        elif name == "backend":
             name = "hpcc_backend"
         return getattr(_config, name)
 

@@ -19,7 +19,7 @@ def config(request):
         env_copy = os.environ.copy()
         os.environ.pop("CANARYCFG64", None)
         os.environ["CANARY_DISABLE_KB"] = "1"
-        _canary.config._config = _canary.config.config.Config.factory()
+        _canary.config._config = _canary.config.config.Config()
         cpus_per_node = int(request.config.getoption("--cpus-per-node"))
         _canary.config._config.resource_pool.fill_uniform(
             node_count=1,
