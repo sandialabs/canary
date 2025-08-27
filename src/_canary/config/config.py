@@ -83,8 +83,22 @@ class ConfigScope:
     def __iter__(self):
         return iter(self.data)
 
-    def __setitem__(self, key: str, value: Any) -> None:
-        self.data[key] = value
+    def __setitem__(self, path: str, value: Any) -> None:
+        parts = process_config_path(path)
+        section = parts.pop(0)
+        section_data = self.data.get(section, {})
+        data = section_data
+        while len(parts) > 1:
+            key = parts.pop(0)
+            new = data.get(key, {})
+            if isinstance(new, dict):
+                new = dict(new)
+                # reattach to parent object
+                data[key] = new
+            data = new
+        # update new value
+        data[parts[0]] = value
+        self.data[section] = section_data
 
     def get_section(self, section: str) -> Any:
         return self.data.get(section)
@@ -621,8 +635,8 @@ def default_config_values() -> dict[str, Any]:
                 "long": 900.0,
             },
             "polling_frequency": {
-                "testcase": .05,
-            }
+                "testcase": 0.05,
+            },
         },
         "plugins": [],
         "environment": {

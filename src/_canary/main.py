@@ -114,7 +114,7 @@ class CanaryCommand:
             with config.temporary_scope() as scope:
                 save_reraise: bool | None = None
                 if self.debug:
-                    scope["debug"] = True
+                    scope["config:debug"] = True
                     save_reraise = reraise
                     reraise = True
                 argv = [self.command.name] + list(args_in)
