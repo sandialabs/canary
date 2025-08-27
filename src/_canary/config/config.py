@@ -36,8 +36,6 @@ from .schemas import config_schema
 from .schemas import environment_schema
 from .schemas import plugin_schema
 from .schemas import resource_schema
-from .schemas import test_schema
-from .schemas import timeout_schema
 
 section_schemas: dict[str, Schema] = {
     "build": build_schema,
@@ -48,8 +46,6 @@ section_schemas: dict[str, Schema] = {
     "resource_pool": resource_schema,
     "session": any_schema,
     "system": any_schema,
-    "timeout": timeout_schema,
-    "test": test_schema,
 }
 
 
@@ -678,10 +674,7 @@ def default_config_values() -> dict[str, Any]:
                 "mpif77": None,
             },
         },
-        "batch": {
-            "duration": 30 * 60,
-            "default_options": [],
-        },
+        "batch": {"default_options": []},
     }
     return defaults
 
