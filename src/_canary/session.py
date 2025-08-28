@@ -374,11 +374,11 @@ class Session:
 
         """
         logging.debug(f"Loading test session in {self.work_tree}")
-        if config.session.work_tree is None:
-            config.session.work_tree = self.work_tree
-        elif not os.path.samefile(config.session.work_tree, self.work_tree):
+        if config.get("session:work_tree") is None:
+            config.set("session:work_tree", self.work_tree, scope="defaults")
+        elif not os.path.samefile(config.get("session:work_tree"), self.work_tree):
             msg = "Expected config.session.work_tree=%r but got %s"
-            raise RuntimeError(msg % (self.work_tree, config.session.work_tree))
+            raise RuntimeError(msg % (self.work_tree, config.get("session:work_tree")))
         self.load_attrs()
         self.set_config_values()
 
@@ -399,9 +399,9 @@ class Session:
 
     def set_config_values(self):
         """Set ``section`` configuration values"""
-        config.session.work_tree = self.work_tree
-        config.session.level = self.level
-        config.session.mode = self.mode
+        config.set("session:work_tree", self.work_tree, scope="defaults")
+        config.set("session:level", self.level, scope="defaults")
+        config.set("session:mode", self.mode, scope="defaults")
 
     def save(self, ini: bool = False) -> None:
         """Save session data, excluding data that is stored separately in the database"""
@@ -409,7 +409,7 @@ class Session:
         if ini:
             file = os.path.join(self.config_dir, "config")
             with open(file, "w") as fh:
-                config.snapshot(fh, pretty_print=True)
+                config.dump_snapshot(fh, indent=2)
 
     def add_search_paths(self, search_paths: dict[str, list[str]] | list[str] | str) -> None:
         """Add paths to this session's search paths

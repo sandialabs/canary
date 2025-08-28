@@ -2,13 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
+import argparse
 import glob
 import os
 import sys
 from typing import TYPE_CHECKING
 from typing import Any
 
-from ....util import logging
+from ....util.string import csvsplit
 from ...hookspec import hookimpl
 from ...types import CanaryReporter
 from .cdash_html_summary import cdash_summary
@@ -92,6 +93,19 @@ class CDashReporter(CanaryReporter):
             help="The results will be split into chunks of N entries per XML file. "
             "If N is -1 the XML will be not be split and will be stored as a single file.",
         )
+        p.add_argument(
+            "-L",
+            metavar="LABEL",
+            action="append",
+            dest="subproject_labels",
+            help="Label that will be treated as a subproject",
+        )
+        p.add_argument(
+            "--subproject-labels",
+            metavar="LABELS",
+            action=SubprojectLabels,
+            help="Comma-separated list of labels that will be treated as subprojects",
+        )
         p = sp.add_parser("post", help="Post CDash XML files")
         p.add_argument(
             "--project",
@@ -106,6 +120,9 @@ class CDashReporter(CanaryReporter):
             dest="cdash_url",
             required=True,
             help="The base CDash url (do not include project)",
+        )
+        p.add_argument(
+            "--done", action="store_true", default=False, help="Post Done.xml to the build."
         )
         p.add_argument("files", nargs="*", help="XML files to post")
 
@@ -181,9 +198,10 @@ class CDashReporter(CanaryReporter):
     def post(self, session: "Session | None" = None, **kwargs: Any) -> None:
         cdash_url = kwargs["cdash_url"]
         cdash_project = kwargs["cdash_project"]
+        done = kwargs["done"] or False
         files = kwargs["files"] or []
         if files:
-            url = CDashXMLReporter.post(cdash_url, cdash_project, *files)
+            url = CDashXMLReporter.post(cdash_url, cdash_project, *files, done=done)
             # write url to stdout so that tools can do cdash_url=$(canary report cdash post ...)
             sys.stdout.write("%s\n" % url)
         else:
@@ -193,7 +211,7 @@ class CDashReporter(CanaryReporter):
             files.extend(glob.glob(os.path.join(reporter.xml_dir, "*.xml")))
             if not files:
                 raise ValueError("canary report cdash post: no xml files to post")
-            url = reporter.post(cdash_url, cdash_project, *files)
+            url = reporter.post(cdash_url, cdash_project, *files, done=done)
             # write url to stdout so that tools can do cdash_url=$(canary report cdash post ...)
             sys.stdout.write("%s\n" % url)
         return
@@ -242,6 +260,7 @@ class CDashReporter(CanaryReporter):
                 raise ValueError(f"-f {kwargs['f']!r} incompatible with {s}")
             ns = reporter.read_site_info(kwargs["f"])
             kwargs.update(vars(ns))
+        kwargs.setdefault("chunk_size", 500)
         reporter.create(
             kwargs["buildname"],
             site=kwargs["site"],
@@ -249,5 +268,13 @@ class CDashReporter(CanaryReporter):
             buildstamp=kwargs["buildstamp"],
             generator=kwargs.get("generator"),
             chunk_size=kwargs.get("chunk_size"),
+            subproject_labels=kwargs.get("subproject_labels"),
         )
         return
+
+
+class SubprojectLabels(argparse.Action):
+    def __call__(self, parser, namespace, value, option_string=None):
+        values = getattr(namespace, self.dest, None) or []
+        values.extend(csvsplit(value))
+        setattr(namespace, self.dest, values)

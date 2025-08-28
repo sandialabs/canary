@@ -149,6 +149,7 @@ class ResourcePool:
         for kwd in mods:
             if not kwd.endswith("s") and not kwd.endswith("_per_node"):
                 raise TypeError(f"ResourcePool.add() got an unexpected keyword argument {kwd!r}")
+
         if self.empty():
 
             def f(d: dict[str, Any], key: str, default: int) -> int:
@@ -163,6 +164,7 @@ class ResourcePool:
             self.fill_uniform(
                 node_count=1, cpus_per_node=cpus_per_node, gpus_per_node=gpus_per_node, **mods
             )
+
         for kwd, count in mods.items():
             type = kwd[:-9] if kwd.endswith("_per_node") else kwd
             if self.slots_per.get(type, 0) > 0:
@@ -259,6 +261,10 @@ class ResourcePool:
         self.types.clear()
         self.slots_per.clear()
 
+    def fill_default(self) -> None:
+        self.clear()
+        self.fill_uniform(node_count=1, cpus_per_node=cpu_count(), gpus_per_node=0)
+
     def fill_uniform(self, *, node_count: int, cpus_per_node: int, **kwds: int) -> None:
         pool: list[dict[str, Any]] = []
         for i in range(node_count):
@@ -297,6 +303,8 @@ class ResourcePool:
 
     def satisfiable(self, required: list[list[dict[str, Any]]]) -> None:
         """determine if the resources for this test are satisfiable"""
+        if self.empty():
+            raise EmptyResourcePoolError
         slots_reqd: dict[str, int] = {}
         for group in required:
             for item in group:
@@ -316,6 +324,8 @@ class ResourcePool:
         local[i] = {<type>: [{'gid': <gid>, 'slots': <slots>}, ...], ... }
 
         """
+        if self.empty():
+            raise EmptyResourcePoolError
         totals: dict[str, int] = {}
         acquired: list[dict[str, list[dict]]] = []
         try:
@@ -375,4 +385,8 @@ class ResourceUnsatisfiable(Exception):
 
 
 class ResourceUnavailable(Exception):
+    pass
+
+
+class EmptyResourcePoolError(Exception):
     pass

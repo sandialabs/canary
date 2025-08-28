@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import os
 
 
@@ -42,22 +43,21 @@ def add_rst_license(file):
 
 
 def main():
-    root = os.path.dirname(os.path.dirname(__file__))
-    top_level_dirs = ("docs", "src", "bin", "tests")
-    for dir in top_level_dirs:
-        for dirname, dirs, files in os.walk(os.path.join(root, dir)):
+    p = argparse.ArgumentParser()
+    p.add_argument("paths", nargs="+")
+    args = p.parse_args()
+
+    for path in args.paths:
+        for dirname, dirs, files in os.walk(path):
             if dirname.endswith(("third_party", "TestResults")):
                 del dirs[:]
                 continue
             for file in files:
-                if file.endswith(
-                    (".html", ".pyc", ".rst.txt", ".doctree", ".jpg", ".lock", ".log", ".txt")
-                ):
-                    continue
-                elif file.endswith((".py", ".pyt", ".vvt", ".cmake", ".sh")):
+                if file.endswith((".py", ".pyt", ".vvt", ".cmake", ".sh")):
                     add_python_license(os.path.join(dirname, file))
                 elif file.endswith(".rst"):
                     add_rst_license(os.path.join(dirname, file))
+                    continue
 
 
 if __name__ == "__main__":

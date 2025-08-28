@@ -81,6 +81,7 @@ class CDashXMLReporter:
         buildstamp: str | None = None,
         generator: str | None = None,
         chunk_size: int | None = None,
+        subproject_labels: list[str] | None = None,
     ) -> None:
         """Collect information and create reports"""
         self.meta: dict[str, Any] | None = None
@@ -94,16 +95,15 @@ class CDashXMLReporter:
         else:
             self.buildstamp = self.validate_buildstamp(buildstamp)
         mkdirp(self.xml_dir)
-        try:
-            if chunk_size > 0:  # type: ignore
-                for cases in chunked(self.data.cases, chunk_size):
-                    self.write_test_xml(cases)
-            elif chunk_size < 0:  # type: ignore
-                self.write_test_xml(self.data.cases)
-            else:
-                raise ValueError("chunk_size must be a positive integer or -1")
-        except ValueError as e:
-            raise ValueError(f"invalid chunk_size {chunk_size} \n{e}")
+        if chunk_size is None:
+            chunk_size = 500
+        if chunk_size > 0:  # type: ignore
+            for cases in chunked(self.data.cases, chunk_size):
+                self.write_test_xml(cases, subproject_labels=subproject_labels)
+        elif chunk_size < 0:  # type: ignore
+            self.write_test_xml(self.data.cases, subproject_labels=subproject_labels)
+        else:
+            raise ValueError("chunk_size must be a positive integer or -1")
         self.write_notes_xml()
 
     @staticmethod
@@ -135,7 +135,7 @@ class CDashXMLReporter:
         return buildstamp
 
     @staticmethod
-    def post(url: str, project: str, *files: str) -> str | None:
+    def post(url: str, project: str, *files: str, done: bool = False) -> str | None:
         if not files:
             raise ValueError("No files to post")
         server = cdash.server(url, project)
@@ -143,6 +143,7 @@ class CDashXMLReporter:
         upload_errors = 0
         buildid = None
         for file in files:
+            logging.info(f"Posting {file} to {url}", file=sys.stderr)
             payload = server.upload(
                 filename=file,
                 sitename=ns.site,
@@ -156,6 +157,20 @@ class CDashXMLReporter:
             logging.warning(f"{upload_errors} files failed to upload to CDash")
         if buildid is None:
             return None
+        if done:
+            try:
+                with open(os.path.abspath("./Done.xml"), mode="w") as fh:
+                    doc = CDashXMLReporter.create_done_document(buildid, time.time())
+                    CDashXMLReporter.dump_xml(doc, fh)
+                CDashXMLReporter.validate_xml(fh.name, schema="Done.xsd")
+                payload = server.upload(
+                    filename=fh.name,
+                    sitename=ns.site,
+                    buildname=ns.buildname,
+                    buildstamp=ns.buildstamp,
+                )
+            finally:
+                os.remove(fh.name)
         return f"{url}/buildSummary.php?buildid={buildid}"
 
     def create_document(self) -> xdom.Document:
@@ -163,17 +178,16 @@ class CDashXMLReporter:
         if self.meta is None:
             self.meta = {}
             host = os.uname().nodename
-            os_release = config.system.os.release
-            os_name = config.system.platform
-            os_version = config.system.os.fullversion
-            os_platform = config.system.arch
+            os_release = config.get("system:os:release")
+            os_name = config.get("system:platform")
+            os_version = config.get("system:os:fullversion")
+            os_platform = config.get("system:arch")
             self.meta["BuildName"] = self.buildname
             self.meta["BuildStamp"] = self.buildstamp
             self.meta["Name"] = self.site
             self.meta["Generator"] = self.generator
-            if config.build.compiler.vendor is not None:
-                vendor = config.build.compiler.vendor
-                version = config.build.compiler.version
+            if vendor := config.get("build:compiler:vendor"):
+                version = config.get("build:compiler:version")
                 self.meta["CompilerName"] = vendor
                 self.meta["CompilerVersion"] = version
             self.meta["Hostname"] = host
@@ -187,7 +201,9 @@ class CDashXMLReporter:
         doc.appendChild(el)
         return doc
 
-    def write_test_xml(self, cases: list[TestCase]) -> str:
+    def write_test_xml(
+        self, cases: list[TestCase], subproject_labels: list[str] | None = None
+    ) -> str:
         i = 0
         while True:
             filename = os.path.join(self.xml_dir, f"Test-{i}.xml")
@@ -195,20 +211,30 @@ class CDashXMLReporter:
                 break
             i += 1
         f = os.path.relpath(filename, config.invocation_dir)
-        logging.log(logging.INFO, f"WRITING: {len(cases)} test cases to {f}", prefix=None)
-        starttime = self.data.start
+        logging.info(f"Writing {f} ({len(cases)} test cases)")
 
         doc = self.create_document()
         root = doc.firstChild
+
+        if subproject_labels is not None:
+            for label in subproject_labels:
+                subproject = doc.createElement("Subproject")
+                subproject.setAttribute("name", label)
+                add_text_node(subproject, "Label", label)
+                root.appendChild(subproject)  # type: ignore
+
         l1 = doc.createElement("Testing")
+
+        starttime = self.data.start
         add_text_node(l1, "StartDateTime", strftimestamp(starttime))
         add_text_node(l1, "StartTestTime", int(starttime))
+
         testlist = doc.createElement("TestList")
         for case in cases:
             add_text_node(testlist, "Test", case.format("./%P/%D"))
         l1.appendChild(testlist)
-        success = ("success", "xfail", "xdiff")
 
+        success = ("success", "xfail", "xdiff")
         status: str
         for case in cases:
             exit_value = case.returncode
@@ -321,6 +347,11 @@ class CDashXMLReporter:
 
             l1.appendChild(test_node)
 
+        stop = self.data.stop
+        add_text_node(l1, "EndDateTime", strftimestamp(stop))
+        add_text_node(l1, "EndTestTime", int(stop))
+        add_text_node(l1, "ElapsedMinutes", int((stop - starttime) / 60.0))
+
         root.appendChild(l1)  # type: ignore
         doc.appendChild(root)  # type: ignore
 
@@ -336,7 +367,7 @@ class CDashXMLReporter:
             return None
         filename = unique_file(self.xml_dir, "Notes", ".xml")
         f = os.path.relpath(filename, config.invocation_dir)
-        logging.log(logging.INFO, f"WRITING: Notes.xml to {f}", prefix=None)
+        logging.info(f"Writing Notes.xml to {f}")
         doc = self.create_document()
         root = doc.firstChild
         notes_el = doc.createElement("Notes")
@@ -356,10 +387,12 @@ class CDashXMLReporter:
         self.validate_xml(filename, schema="Notes.xsd")
         return filename
 
-    def dump_xml(self, document: xdom.Document, stream: IO[Any]):
+    @staticmethod
+    def dump_xml(document: xdom.Document, stream: IO[Any]):
         stream.write(document.toprettyxml(indent="", newl=""))
 
-    def validate_xml(self, file: str, *, schema: str) -> None:
+    @staticmethod
+    def validate_xml(file: str, *, schema: str) -> None:
         try:
             import xmlschema  # type: ignore
         except ImportError:
@@ -368,6 +401,16 @@ class CDashXMLReporter:
         with working_dir(dir):
             xml_schema = xmlschema.XMLSchema(schema)
             xml_schema.validate(file)
+
+    @staticmethod
+    def create_done_document(buildid: str, time: float) -> xdom.Document:
+        doc = xdom.Document()
+        done = doc.createElement("Done")
+        done.setAttribute("retries", "1")
+        add_text_node(done, "buildId", buildid)
+        add_text_node(done, "time", str(time))
+        doc.appendChild(done)
+        return doc
 
 
 def add_text_node(parent: xdom.Element, name: str, value: Any, **attrs: Any) -> None:

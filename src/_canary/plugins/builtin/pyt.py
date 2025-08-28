@@ -142,7 +142,7 @@ class PYTTestGenerator(AbstractTestGenerator):
             cases = self._lock(on_options=on_options)
             return cases
         except Exception as e:
-            if config.debug:
+            if config.get("config:debug"):
                 raise
             raise ValueError(f"Failed to lock {self.file}: {e}") from None
 

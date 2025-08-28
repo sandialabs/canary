@@ -87,8 +87,8 @@ class MarkdownReporter(CanaryReporter):
         for case in session.active_cases():
             group = case.status.name.title()
             totals.setdefault(group, []).append(case)
-        fh.write(f"| {config.system.host} ")
-        fh.write(f"| {config.build.project} ")
+        fh.write(f"| {config.get('system:host')} ")
+        fh.write(f"| {config.get('build:project')} ")
         for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Invalid", "Cancelled"):
             if group not in totals:
                 fh.write("| 0 ")

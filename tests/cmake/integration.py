@@ -88,8 +88,9 @@ def test_cmake_integration_parallel(tmpdir):
             run = CanaryCommand("run", debug=True)
             run("-w", ".", fail_on_error=False)
             if run.returncode != 0:
-                files = glob.glob("TestResults/**/canary-out.txt", recursive=True)
+                files = glob.glob("TestResults/**/canary-*.txt", recursive=True)
                 for file in files:
+                    print(f"{file}:")
                     print(open(file).read())
                 assert 0, "test failed"
             assert len(os.listdir("TestResults")) == 2

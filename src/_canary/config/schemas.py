@@ -68,51 +68,8 @@ positive_int = And(int, lambda x: x > 0)
 nonnegative_int = And(int, lambda x: x >= 0)
 id_list = Schema([{"id": Use(str), Optional("slots", default=1): Or(int, float)}])
 
-
-config_schema = Schema(
-    {
-        "config": {
-            Optional("debug"): Use(boolean),
-            Optional("log_level"): log_levels,
-            Optional("cache_dir"): str,
-            Optional("multiprocessing"): {
-                Optional("context"): multiprocessing_contexts,
-                Optional("max_tasks_per_child"): positive_int,
-            },
-        }
-    }
-)
-
-
-batch_schema = Schema(
-    {
-        "batch": {
-            Optional("duration"): Use(time_in_seconds),
-            Optional("default_options"): list_of_str,
-        }
-    }
-)
-
-
-plugin_schema = Schema({"plugins": list_of_str})
-
-test_schema = Schema({"test": {"timeout": {Optional(str): Use(time_in_seconds)}}})
-timeout_schema = Schema({"timeout": {Optional(str): Use(time_in_seconds)}})
-
-machine_schema = Schema({"machine": {Optional("cpu_count"): Use(int)}})
-python_schema = Schema({"python": {"executable": str, "version": str, "version_info": list}})
-testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
-environment_schema = Schema(
-    {
-        "environment": {
-            Optional("set"): vardict,
-            Optional("unset"): list_of_str,
-            Optional("prepend-path"): vardict,
-            Optional("append-path"): vardict,
-        }
-    }
-)
-
+any_schema = Schema({}, ignore_extra_keys=True)
+batch_schema = Schema({"batch": {Optional("default_options"): list_of_str}})
 build_schema = Schema(
     {
         "build": {
@@ -144,10 +101,39 @@ build_schema = Schema(
     },
     ignore_extra_keys=True,
 )
+config_schema = Schema(
+    {
+        "config": {
+            Optional("debug"): Use(boolean),
+            Optional("log_level"): log_levels,
+            Optional("cache_dir"): str,
+            Optional("multiprocessing"): {
+                Optional("context"): multiprocessing_contexts,
+                Optional("max_tasks_per_child"): positive_int,
+            },
+            Optional("timeout"): {Optional(str): Use(time_in_seconds)},
+            Optional("polling_frequency"): {
+                Optional("testcase"): Use(time_in_seconds),
+                Optional("batch"): Use(time_in_seconds),
+            },
+        }
+    }
+)
+environment_schema = Schema(
+    {
+        "environment": {
+            Optional("set"): vardict,
+            Optional("unset"): list_of_str,
+            Optional("prepend-path"): vardict,
+            Optional("append-path"): vardict,
+        }
+    }
+)
+plugin_schema = Schema({"plugins": list_of_str})
 
-any_schema = Schema({}, ignore_extra_keys=True)
+testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
 
-
+# --- Resource pool schemas
 ctest_resource_pool_schema = Schema(
     {
         "local": {
@@ -155,8 +141,6 @@ ctest_resource_pool_schema = Schema(
         }
     }
 )
-
-
 local_resource_pool_schema = Schema(
     {
         "resource_pool": {
