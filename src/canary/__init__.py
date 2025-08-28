@@ -12,6 +12,7 @@ import _canary.config as config
 import _canary.enums as enums
 from _canary.config.argparsing import Parser
 from _canary.config.config import Config
+from _canary.config.config import ConfigScope
 from _canary.enums import centered_parameter_space
 from _canary.enums import list_parameter_space
 from _canary.enums import random_parameter_space
@@ -28,6 +29,8 @@ from _canary.testcase import TestCase
 from _canary.testinstance import TestInstance
 from _canary.testinstance import TestMultiInstance
 from _canary.testinstance import load as load_instance
+from _canary.third_party import color
+from _canary.third_party import schema
 from _canary.util import _difflib as difflib
 from _canary.util import filesystem
 from _canary.util import graph

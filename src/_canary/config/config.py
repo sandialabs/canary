@@ -57,15 +57,7 @@ class ConfigScope:
     def __init__(self, name: str, file: str | None, data: dict[str, Any]) -> None:
         self.name = name
         self.file = file
-        self.data: dict[str, Any] = {}
-        for section, section_data in data.items():
-            if schema := section_schemas.get(section):
-                if schema == any_schema:
-                    self.data[section] = section_data
-                else:
-                    self.data[section] = schema.validate({section: section_data})[section]
-            else:
-                logging.warning(f"ignoring unrecognized config section: {section}")
+        self.data = data
 
     def __repr__(self):
         file = self.file or "<none>"
@@ -106,11 +98,12 @@ class ConfigScope:
         data = {"name": self.name, "file": self.file, "data": self.data.copy()}
         return data
 
-    def dump(self) -> None:
+    def dump(self, root: str | None = None) -> None:
         if self.file is None:
             return
+        root = root or "canary"
         with open(self.file, "w") as fh:
-            yaml.dump({"canary": self.data}, fh, default_flow_style=False)
+            yaml.dump({root or "canary": self.data}, fh, default_flow_style=False)
 
 
 class Config:
@@ -155,7 +148,8 @@ class Config:
 
     def getstate(self, pretty: bool = True) -> dict[str, Any]:
         data: dict[str, Any] = {}
-        for section in self.scopes["defaults"]:
+        sections = set([sec for scope in self.scopes.values() for sec in scope.data])
+        for section in sections:
             section_data = self.get_config(section)
             data[section] = section_data
         data["resource_pool"] = self._resource_pool.getstate()
@@ -312,7 +306,7 @@ class Config:
             config_scope = self.scopes[scope]
         # read only the requested section's data.
         config_scope.data[section] = dict(update_data)
-        config_scope.dump()
+        config_scope.dump(root="canary")
 
     def set_main_options(self, args: argparse.Namespace) -> None:
         """Set main configuration options based on command-line arguments.
@@ -534,6 +528,14 @@ def read_config_scope(scope: str) -> ConfigScope:
                 data.update(fd["canary"])
             else:
                 data.update(fd)
+        for section, section_data in data.items():
+            if schema := section_schemas.get(section):
+                if schema == any_schema:
+                    data[section] = section_data
+                else:
+                    data[section] = schema.validate({section: section_data})[section]
+            else:
+                logging.warning(f"ignoring unrecognized config section: {section}")
     return ConfigScope(scope, file, data)
 
 
