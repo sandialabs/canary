@@ -146,7 +146,7 @@ class server:
                     m = payload["message"] = get_text(doc, "message")
                     lines = "\n    ".join([_.rstrip() for _ in open(efile).readlines()])
                     logging.error(f"Failed to upload {os.path.basename(file)}: {m}\n    {lines}")
-                if not config.debug:
+                if not config.get("config:debug"):
                     force_remove(efile)
             return payload
 

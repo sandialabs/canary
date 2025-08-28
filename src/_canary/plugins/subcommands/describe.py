@@ -98,5 +98,5 @@ def describe_batch(batch_id: str, cases: list[TestCase]) -> None:
     print(f"Batch {batch_id}")
     for case in cases:
         if case.work_tree is None:
-            case.work_tree = config.session.work_tree
+            case.work_tree = config.get("session:work_tree")
         print(f"{case.display_name}\n  {case.working_directory}")

@@ -46,10 +46,11 @@ global_session_lock = threading.Lock()
 
 class ProcessPoolExecutor(concurrent.futures.ProcessPoolExecutor):
     def __init__(self, *, workers: int) -> None:
-        mp_context = multiprocessing.get_context(config.multiprocessing.context)
-        max_tasks_per_child = config.multiprocessing.max_tasks_per_child
+        context = config.get("config:multiprocessing:context") or "spawn"
+        mp_context = multiprocessing.get_context(context)
+        max_tasks_per_child = config.get("config:multiprocessing:max_tasks_per_child") or 1
         if sys.version_info[:2] >= (3, 11):
-            n = max_tasks_per_child if config.multiprocessing.context == "spawn" else None
+            n = max_tasks_per_child if context == "spawn" else None
             super().__init__(max_workers=workers, mp_context=mp_context, max_tasks_per_child=n)
         else:
             super().__init__(max_workers=workers, mp_context=mp_context)
@@ -72,8 +73,8 @@ def canary_runtests(cases: list[TestCase], fail_fast: bool = False) -> int:
     atexit.register(cleanup_children)
     queue = setup_queue(cases, fail_fast=fail_fast)
     with rc_environ():
-        assert config.session.work_tree is not None
-        with working_dir(config.session.work_tree):
+        assert config.get("session:work_tree") is not None
+        with working_dir(config.get("session:work_tree")):
             cleanup_queue = True
             try:
                 queue_size = len(queue)
@@ -87,7 +88,7 @@ def canary_runtests(cases: list[TestCase], fail_fast: bool = False) -> int:
                 logging.debug("Start: processing queue")
                 process_queue(queue=queue)
             except ProcessPoolExecutorFailedToStart:
-                if config.session.level:
+                if config.get("session:level"):
                     # This can happen when the ProcessPoolExecutor fails to obtain a lock.
                     returncode = -3
                     for case in queue.cases():
@@ -166,7 +167,7 @@ def process_queue(*, queue: ResourceQueue) -> None:
     futures: dict = {}
     start = timestamp()
     duration = lambda: timestamp() - start
-    timeout = float(config.timeout.get("session", -1))
+    timeout = float(config.get("config:timeout:session", -1))
     runner = r_factory()
     qsize = queue.qsize
     qrank = 0
@@ -266,12 +267,12 @@ def heartbeat(queue: ResourceQueue) -> None:
     currently busy
 
     """
-    if not config.debug:
+    if not config.get("config:debug"):
         return None
     if isinstance(queue, BatchResourceQueue):
         return None
-    assert config.session.work_tree is not None
-    log_dir = os.path.join(config.session.work_tree, ".canary/logs")
+    assert config.get("session:work_tree") is not None
+    log_dir = os.path.join(config.get("session:work_tree"), ".canary/logs")
     hb: dict[str, Any] = {"date": datetime.now().strftime("%c")}
     busy = queue.busy()
     hb["busy"] = [case.id for case in busy]

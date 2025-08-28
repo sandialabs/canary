@@ -673,9 +673,8 @@ def to_seconds(arg: str | int | float, round: bool = False, negatives: bool = Fa
 def get_vvtest_attrs(case: "TestCase") -> dict:
     attrs = {}
     compiler_spec = None
-    if config.build.compiler.vendor is not None:
-        vendor = config.build.compiler.vendor
-        version = config.build.compiler.version
+    if vendor := config.get("build:compiler:vendor"):
+        version = config.get("build:compiler:version")
         compiler_spec = f"{vendor}@{version}"
     attrs["CASEID"] = case.id
     attrs["NAME"] = case.family

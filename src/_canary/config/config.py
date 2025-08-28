@@ -1,18 +1,17 @@
-# Copyright NTESS. See COPYRIGHT file for details.
-#
-# SPDX-License-Identifier: MIT
-
 import argparse
-import copy
-import dataclasses
 import io
 import json
 import os
+import sys
+from collections.abc import ValuesView
+from contextlib import contextmanager
+from copy import deepcopy
+from functools import cached_property
 from string import Template
-from types import SimpleNamespace
+from typing import IO
 from typing import Any
+from typing import Generator
 from typing import MutableMapping
-from typing import TextIO
 
 import hpc_connect
 import yaml
@@ -20,7 +19,6 @@ import yaml
 from ..plugins.manager import CanaryPluginManager
 from ..third_party import color
 from ..third_party.schema import Schema
-from ..third_party.schema import SchemaError
 from ..util import logging
 from ..util.collections import merge
 from ..util.compression import compress64
@@ -28,16 +26,16 @@ from ..util.compression import expand64
 from ..util.filesystem import find_work_tree
 from ..util.filesystem import mkdirp
 from ..util.rprobe import cpu_count
+from ..util.string import strip_quotes
 from . import _machine
 from .rpool import ResourcePool
+from .schemas import any_schema
 from .schemas import batch_schema
 from .schemas import build_schema
 from .schemas import config_schema
 from .schemas import environment_schema
 from .schemas import plugin_schema
 from .schemas import resource_schema
-from .schemas import test_schema
-from .schemas import timeout_schema
 
 section_schemas: dict[str, Schema] = {
     "build": build_schema,
@@ -46,269 +44,122 @@ section_schemas: dict[str, Schema] = {
     "environment": environment_schema,
     "plugins": plugin_schema,
     "resource_pool": resource_schema,
-    "timeout": timeout_schema,
-    "test": test_schema,
+    "session": any_schema,
+    "system": any_schema,
 }
 
-log_levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.TRACE)
 
+log_levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.TRACE)
 env_archive_name = "CANARYCFG64"
 
 
-class EnvironmentModifications:
-    def __init__(self, arg: dict[str, dict[str, str] | list[str]] | None = None) -> None:
-        self.mods: dict[str, Any] = {}
-        self.update(arg or {})
+class ConfigScope:
+    def __init__(self, name: str, file: str | None, data: dict[str, Any]) -> None:
+        self.name = name
+        self.file = file
+        self.data = data
 
-    def update(self, arg: dict[str, Any]) -> None:
-        for action, items in arg.items():
-            if action == "set":
-                self.set(**items)
-            elif action == "unset":
-                self.unset(*items)
-            elif action in ("prepend-path", "prepend_path"):
-                for pathname, path in items.items():
-                    self.prepend_path(pathname, path)
-            elif action in ("append-path", "append_path"):
-                for pathname, path in items.items():
-                    self.append_path(pathname, path)
-            else:
-                raise KeyError(action)
+    def __repr__(self):
+        file = self.file or "<none>"
+        return f"ConfigScope({self.name}: {file})"
 
-    def getstate(self) -> dict[str, Any]:
-        return dict(self.mods)
+    def __eq__(self, other):
+        if not isinstance(other, ConfigScope):
+            return False
+        return self.name == other.name and self.file == other.file and other.data == self.data
 
-    def set(self, **vars: str) -> None:
-        self.mods.setdefault("set", {}).update(vars)
-        for name, value in vars.items():
-            os.environ[name] = value
+    def __iter__(self):
+        return iter(self.data)
 
-    def unset(self, *vars: str) -> None:
-        self.mods.setdefault("unset", []).extend(vars)
-        for name in vars:
-            os.environ.pop(name, None)
+    def __setitem__(self, path: str, value: Any) -> None:
+        parts = process_config_path(path)
+        section = parts.pop(0)
+        section_data = self.data.get(section, {})
+        data = section_data
+        while len(parts) > 1:
+            key = parts.pop(0)
+            new = data.get(key, {})
+            if isinstance(new, dict):
+                new = dict(new)
+                # reattach to parent object
+                data[key] = new
+            data = new
+        # update new value
+        data[parts[0]] = value
+        self.data[section] = section_data
 
-    def prepend_path(self, pathname: str, path: str) -> None:
-        self.mods.setdefault("prepend-path", {}).update({pathname: path})
-        if existing := os.getenv(pathname):
-            os.environ[pathname] = f"{path}:{existing}"
-        else:
-            os.environ[pathname] = path
+    def get_section(self, section: str) -> Any:
+        return self.data.get(section)
 
-    def append_path(self, pathname: str, path: str, sep: str = ":") -> None:
-        self.mods.setdefault("append-path", {}).update({pathname: path})
-        if existing := os.getenv(pathname):
-            os.environ[pathname] = f"{existing}{sep}{path}"
-        else:
-            os.environ[pathname] = path
+    def pop_section(self, section: str) -> Any:
+        return self.data.pop(section, None)
 
+    def asdict(self) -> dict[str, Any]:
+        data = {"name": self.name, "file": self.file, "data": self.data.copy()}
+        return data
 
-class SessionConfig:
-    __slots__ = ("work_tree", "stage", "level", "mode")
-
-    def __init__(
-        self,
-        *,
-        work_tree: str | None = None,
-        level: int | None = None,
-        stage: str | None = None,
-        mode: str | None = None,
-    ):
-        self.work_tree = work_tree
-        self.stage = stage
-        self.level = level
-        self.mode = mode
-
-    def __repr__(self) -> str:
-        kwds = [f"{key.lstrip('_')}={value!r}" for key, value in vars(self).items()]
-        return "{}({})".format(type(self).__name__, ", ".join(kwds))
-
-    def getstate(self) -> dict[str, Any]:
-        d: dict[str, str | int | None] = {}
-        d["work_tree"] = self.work_tree
-        # these are set during the process
-        d["stage"] = None
-        d["level"] = None
-        d["mode"] = None
-        return d
+    def dump(self, root: str | None = None) -> None:
+        if self.file is None:
+            return
+        root = root or "canary"
+        with open(self.file, "w") as fh:
+            yaml.dump({root or "canary": self.data}, fh, default_flow_style=False)
 
 
-@dataclasses.dataclass(init=False, slots=True)
-class System:
-    node: str
-    arch: str
-    site: str
-    host: str
-    name: str
-    platform: str
-    os: SimpleNamespace
-
-    def __init__(self, syscfg: dict | None = None) -> None:
-        syscfg = syscfg or _machine.system_config()
-        self.node = syscfg["node"]
-        self.arch = syscfg["arch"]
-        self.site = syscfg["site"]
-        self.host = syscfg["host"]
-        self.name = syscfg["name"]
-        self.platform = syscfg["platform"]
-        self.os = SimpleNamespace(**syscfg["os"])
-
-
-@dataclasses.dataclass
-class Compiler:
-    vendor: str | None = None
-    version: str | None = None
-    cc: str | None = None
-    cxx: str | None = None
-    fc: str | None = None
-    f77: str | None = None
-    mpicc: str | None = None
-    mpicxx: str | None = None
-    mpifc: str | None = None
-    mpif77: str | None = None
-
-
-@dataclasses.dataclass
-class Build:
-    project: str | None = None
-    type: str | None = None
-    date: str | None = None
-    build_directory: str | None = None
-    source_directory: str | None = None
-    compiler: Compiler = dataclasses.field(default_factory=Compiler)
-
-    def update(self, *args: Any, **kwargs: Any) -> None:
-        if len(args) > 1:
-            raise TypeError(f"Build.update() expected at most 1 argument, got {len(args)}")
-        data = dict(*args) | kwargs
-        if compiler := data.pop("compiler", None):
-            if "paths" in compiler:
-                compiler.update(compiler.pop("paths"))
-            for key, value in compiler.items():
-                setattr(self.compiler, key, value)
-        for key, value in data.items():
-            setattr(self, key, value)
-
-
-@dataclasses.dataclass
-class Batch:
-    duration: float = 30 * 60  # 30 minutes
-    default_options: list[str] = dataclasses.field(default_factory=list)
-
-    def update(self, *args: Any, **kwargs: Any) -> None:
-        if len(args) > 1:
-            raise TypeError(f"Batch.update() expected at most 1 argument, got {len(args)}")
-        data = dict(*args) | kwargs
-        for key, value in data.items():
-            setattr(self, key, value)
-
-
-def default_mp_settings() -> SimpleNamespace:
-    return SimpleNamespace(context="spawn", max_tasks_per_child=1)
-
-
-def default_timeouts() -> dict[str, float]:
-    return {"session": -1.0, "multiplier": 1.0, "fast": 120.0, "default": 300.0, "long": 900.0}
-
-
-@dataclasses.dataclass
 class Config:
-    """Access to configuration values"""
-
-    invocation_dir: str = os.getcwd()
-    working_dir: str = os.getcwd()
-    debug: bool = False
-    multiprocessing: SimpleNamespace = dataclasses.field(default_factory=default_mp_settings)
-    log_level: str = "INFO"
-    _config_dir: str | None = None
-    _cache_dir: str | None = None
-    backend: hpc_connect.HPCBackend | None = None
-    system: System = dataclasses.field(default_factory=System)
-    session: SessionConfig = dataclasses.field(default_factory=SessionConfig)
-    timeout: dict[str, float] = dataclasses.field(default_factory=default_timeouts)
-    environment: EnvironmentModifications = dataclasses.field(
-        default_factory=EnvironmentModifications
-    )
-    batch: Batch = dataclasses.field(default_factory=Batch)
-    build: Build = dataclasses.field(default_factory=Build)
-    options: argparse.Namespace = dataclasses.field(default_factory=argparse.Namespace)
-    _resource_pool: ResourcePool | None = dataclasses.field(default=None)
-    _plugin_manager: CanaryPluginManager | None = dataclasses.field(default=None)
-    option_cache: dict = dataclasses.field(default_factory=dict)
-
-    @classmethod
-    def factory(cls) -> "Config":
-        """Create the configuration object.
-
-        Initializes a new Config instance, restoring its state from environment variables or a
-        configuration file if available.
-
-        Returns:
-            A new instance of Config with restored values.
-
-        Raises:
-            RuntimeError: If an inconsistent configuration state is detected.
-            FileNotFoundError: If the configuration file does not exist.
-        """
-        self = cls.create()
-        if cfg := os.getenv(env_archive_name):
+    def __init__(self) -> None:
+        self.invocation_dir = os.getcwd()
+        self.working_dir = os.getcwd()
+        self._resource_pool: ResourcePool = ResourcePool()
+        self.plugin_manager: CanaryPluginManager = CanaryPluginManager.factory()
+        self.hpcc_backend: hpc_connect.HPCBackend | None = None
+        self.options: argparse.Namespace = argparse.Namespace()
+        self.scopes: dict[str, ConfigScope] = {}
+        if envcfg := os.getenv(env_archive_name):
             with io.StringIO() as fh:
-                fh.write(expand64(cfg))
+                fh.write(expand64(envcfg))
                 fh.seek(0)
-                self.restore_from_snapshot(fh)
-            wt = find_work_tree()
-            if not os.path.samefile(wt, self.session.work_tree):  # type: ignore
-                raise RuntimeError("Inconsistent configuration state detected")
+                self.load_snapshot(fh)
         elif root := find_work_tree():
-            # If we are inside a session directory, then we want to restore its configuration
-            # any changes create happens before setting command line options, so changes can still
-            # be made to the restored configuration
+            # If we are inside a session directory, then we want to restore its configuration.
             file = os.path.join(root, ".canary/config")
             if os.path.exists(file):
                 with open(file) as fh:
-                    self.restore_from_snapshot(fh)
+                    self.load_snapshot(fh)
             else:
                 raise FileNotFoundError(file)
-        return self
+        else:
+            self.scopes["defaults"] = ConfigScope("defaults", None, default_config_values())
+            for scope in ("global", "local"):
+                config_scope = read_config_scope(scope)
+                self.push_scope(config_scope)
+            if cscope := read_env_config():
+                self.push_scope(cscope)
+            if backend := self.get("hpc_connect:backend"):
+                self.setup_hpc_connect(backend)
+        if self.get("config:debug"):
+            logging.set_level(logging.DEBUG)
 
-    @classmethod
-    def create(cls) -> "Config":
-        """Create a new Config instance with user-defined settings.
+    def getoption(self, name: str, default: Any = None) -> Any:
+        value = getattr(self.options, name, None)
+        if value is None:
+            return default
+        return value
 
-        Loads configuration settings from global, local, and environment sources, populating the
-        Config instance with these values.
+    def getstate(self, pretty: bool = True) -> dict[str, Any]:
+        data: dict[str, Any] = {}
+        sections = set([sec for scope in self.scopes.values() for sec in scope.data])
+        for section in sections:
+            section_data = self.get_config(section)
+            data[section] = section_data
+        data["resource_pool"] = self._resource_pool.getstate()
+        data["hpcc_backend"] = None if self.hpcc_backend is None else self.hpcc_backend.name
+        data["options"] = vars(self.options)
+        data["invocation_dir"] = self.invocation_dir
+        data["working_dir"] = self.working_dir
+        return data
 
-        Returns:
-            A new instance of Config populated with user-defined settings.
-        """
-        user_defined_config: dict[str, Any] = {}
-        cls.load_config("global", user_defined_config)
-        cls.load_config("local", user_defined_config)
-        cls.load_config("environ", user_defined_config)
-        kwds: dict[str, Any] = user_defined_config.pop("config", {})
-        self = cls(**kwds)
-        for section, items in user_defined_config.items():
-            if not hasattr(self, section):
-                continue
-            obj = getattr(self, section)
-            if hasattr(obj, "update"):
-                obj.update(items)
-        return self
-
-    @property
-    def config_dir(self) -> str | None:
-        """Get the directory for configuration files.
-
-        Lazily initializes the configuration directory path if it has not been set previously.
-
-        Returns:
-            The path to the configuration directory or None if not set.
-        """
-        if self._config_dir is None:
-            self._config_dir = get_config_dir()
-        return self._config_dir
-
-    @property
+    @cached_property
     def cache_dir(self) -> str | None:
         """Get the directory for cache files.
 
@@ -317,204 +168,145 @@ class Config:
         Returns:
             The path to the cache directory or None if not set.
         """
-        if self._cache_dir is None:
-            if d := self.getoption("cache_dir"):
-                self._cache_dir = os.path.expanduser(d)
-            elif d := os.getenv("CANARY_CACHE_DIR"):
-                self._cache_dir = os.path.expanduser(d)
-            else:
-                self._cache_dir = os.path.join(self.invocation_dir, ".canary_cache")
-        if isnullpath(self._cache_dir):
+        cache_dir: str
+        if dir := self.get("config:cache_dir"):
+            cache_dir = os.path.expanduser(dir)
+        else:
+            cache_dir = os.path.join(self.invocation_dir, ".canary_cache")
+        if isnullpath(cache_dir):
             return None
-        create_cache_dir(self._cache_dir)
-        return self._cache_dir
-
-    @property
-    def plugin_manager(self) -> CanaryPluginManager:
-        """Get the plugin manager instance.
-
-        Lazily initializes the plugin manager if it has not been set previously.
-
-        Returns:
-            An instance of CanaryPluginManager.
-        """
-        if self._plugin_manager is None:
-            self._plugin_manager = CanaryPluginManager.factory()
-        return self._plugin_manager
-
-    @plugin_manager.setter
-    def plugin_manager(self, arg: CanaryPluginManager) -> None:
-        """Set the plugin manager instance.
-
-        Args:
-            arg: An instance of CanaryPluginManager to set.
-        """
-        self._plugin_manager = arg
+        create_cache_dir(cache_dir)
+        return cache_dir
 
     @property
     def resource_pool(self) -> ResourcePool:
-        """Get the resource pool instance.
-
-        Lazily initializes the resource pool if it has not been set previously.
-
-        Returns:
-            An instance of ResourcePool.
-        """
-        if self._resource_pool is None:
-            self._resource_pool = ResourcePool()
         if self._resource_pool.empty():
-            self._resource_pool.fill_uniform(
-                node_count=1, cpus_per_node=cpu_count(), gpus_per_node=0
-            )
+            self._resource_pool.fill_default()
         return self._resource_pool
 
-    @resource_pool.setter
-    def resource_pool(self, arg: ResourcePool) -> None:
-        """Set the plugin manager instance.
+    def read_only_scope(self, scope: str) -> bool:
+        return scope in ("defaults", "environment", "command_line")
 
-        Args:
-            arg: An instance of ResourcePool to set.
-        """
-        self._resource_pool = arg
+    def push_scope(self, scope: ConfigScope) -> None:
+        if pool := scope.pop_section("resource_pool"):
+            self._resource_pool.clear()
+            self._resource_pool.update(pool)
+        if envmods := scope.get_section("environment"):
+            self.apply_environment_mods(envmods)
+        self.scopes[scope.name] = scope
 
-    def restore_from_snapshot(self, fh: TextIO) -> None:
-        """Restore configuration values from a snapshot.
+    def pop_scope(self, scope: ConfigScope) -> ConfigScope | None:
+        return self.scopes.pop(scope.name, None)
 
-        Reads a JSON snapshot from the provided file handle and updates the configuration
-        attributes accordingly.
-
-        Args:
-            fh: A file handle to read the JSON snapshot from.
-        """
-        snapshot = json.load(fh)
-        self.system = System(snapshot["system"])
-        self.environment = EnvironmentModifications(snapshot["environment"])
-        self.session = SessionConfig(**snapshot["session"])
-        compiler = Compiler(**snapshot["build"].pop("compiler"))
-        self.build = Build(compiler=compiler, **snapshot["build"])
-        self.resource_pool = ResourcePool(pool=snapshot["resource_pool"])
-        self.update(snapshot["config"])
-        self.batch = Batch(**snapshot["batch"])
-
-        if "test" in snapshot:
-            for key, value in snapshot["test"]["timeout"].items():
-                self.timeout[key] = value
-
-        # We need to be careful when restoring the batch configuration.  If this session is being
-        # restored while running a batch, restoring the batch can lead to infinite recursion.  The
-        # batch runner sets the variable CANARY_LEVEL=1 to guard against this case.
-        backend: str | None = None
-        if os.getenv("CANARY_LEVEL") == "1":
-            backend = "null"
-        elif "CANARY_HPCC_BACKEND" in os.environ:
-            backend = os.environ["CANARY_HPCC_BACKEND"]
-        elif snapshot.get("scheduler") or snapshot.get("backend"):
-            backend = snapshot.get("scheduler") or snapshot.get("backend")
-        try:
-            self.setup_hpc_connect(backend)
-        except Exception as e:
-            # Since we are restoring from a snapshot, our backend was properly set up on creation
-            # but is now erroring on restoration.  This can happen, for example, if using the Flux
-            # backend to run tests (Flux requires being run in a Flux session) and now the user is
-            # running `canary status` outside of a Flux session.  We ignore the error.  If the
-            # backend is really needed (it will only be needed by `canary run`), an error will
-            # be thrown later if/when it is used.
-            logging.warning(f"Failed to setup hpc_connect for {backend=}", ex=e)
-        if self.backend is None:
-            snapshot["options"].pop("batch", None)
-        self.options = argparse.Namespace(**snapshot["options"])
-
-        if plugins := getattr(self.options, "plugins", None):
-            for f in plugins:
-                self.plugin_manager.consider_plugin(f)
-
-        return
-
-    def snapshot(self, fh: TextIO, pretty_print: bool = True) -> None:
-        """Save the current configuration state to a file.
-
-        Serializes the current configuration state to JSON and writes it to the provided file
-        handle.
-
-        Args:
-            fh: A file handle to write the JSON snapshot to.
-            pretty_print: If True, the JSON output will be pretty-printed.
-        """
-        snapshot = self.getstate()
-        json.dump(snapshot, fh, indent=2 if pretty_print else None)
-
-    def archive(self, mapping: MutableMapping) -> None:
-        snapshot = self.getstate()
-        mapping[env_archive_name] = compress64(json.dumps(snapshot, indent=None))
-
-    @classmethod
-    def load_config(cls, scope: str, config: dict[str, Any]) -> None:
-        """Load configuration settings from a specified scope.
-
-        Reads configuration data from files or environment variables based on the provided scope
-        and updates the given configuration dictionary.
-
-        Args:
-            scope: The scope from which to load configuration (e.g., "global", "local", "environ").
-            config: A dictionary to update with the loaded configuration values.
-        """
-        data: dict
-        if scope == "environ":
-            data = cls.read_config_from_env()
+    def get_config(self, section: str, scope: str | None = None) -> Any:
+        scopes: ValuesView[ConfigScope] | list[ConfigScope]
+        if scope is None:
+            scopes = self.scopes.values()
         else:
-            file = cls.config_file(scope)
-            if file is None or not os.path.exists(file):
-                return
-            logging.debug(f"Reading configuration from {file}")
-            data = cls.read_config(file)
-        for key, items in data.items():
-            if key == "config":
-                if "debug" in items:
-                    config["debug"] = bool(items["debug"])
-                if "log_level" in items:
-                    config["log_level"] = items["log_level"]
-                if "cache_dir" in items:
-                    config["_cache_dir"] = os.path.expanduser(items["cache_dir"])
-                if "multiprocessing" in items:
-                    config["multiprocessing"] = items["multiprocessing"]
-            elif key == "timeout":
-                config.setdefault("timeout", {}).update(items)
-            elif key == "plugins":
-                config.setdefault("plugin_manager", {}).setdefault("plugins", []).extend(items)
-            elif key in section_schemas:
-                config[key] = items
+            scopes = [self.validate_scope(scope)]
+        merged_section: dict[str, Any] = {}
+        for config_scope in scopes:
+            assert isinstance(config_scope, ConfigScope), str(config_scope)
+            data = config_scope.get_section(section)
+            if not data or not isinstance(data, dict):
+                continue
+            merged_section = merge(merged_section, {section: data})
+        if section not in merged_section:
+            return {}
+        return merged_section[section]
 
-    def update(self, *args: Any, **kwargs: Any) -> None:
-        """Update configuration attributes with provided values.
+    def get(self, path: str, default: Any = None, scope: str | None = None) -> Any:
+        parts = process_config_path(path)
+        section = parts.pop(0)
+        value = self.get_config(section, scope=scope)
+        while parts:
+            key = parts.pop(0)
+            # cannot use value.get(key, default) in case there is another part
+            # and default is not a dict
+            if key not in value:
+                return default
+            value = value[key]
+        return value
 
-        Updates the configuration attributes based on the provided arguments and keyword arguments.
+    def set(self, path: str, value: Any, scope: str | None = None) -> None:
+        parts = process_config_path(path)
+        section = parts.pop(0)
+        section_data = self.get_config(section, scope=scope)
+        data = section_data
+        while len(parts) > 1:
+            key = parts.pop(0)
+            new = data.get(key, {})
+            if isinstance(new, dict):
+                new = dict(new)
+                # reattach to parent object
+                data[key] = new
+            data = new
+        # update new value
+        data[parts[0]] = value
+        self.update_config(section, section_data, scope=scope)
+        if section == "environment":
+            self.apply_environment_mods(section_data)
+
+    def add(self, fullpath: str, scope: str | None = None) -> None:
+        path: str = ""
+        existing: Any = None
+        components = process_config_path(fullpath)
+        has_existing_value = True
+        for idx, name in enumerate(components[:-1]):
+            path = name if not path else f"{path}:{name}"
+            existing = self.get(path, scope=scope)
+            if existing is None:
+                has_existing_value = False
+                # construct value from this point down
+                value = safe_loads(components[-1])
+                for component in reversed(components[idx + 1 : -1]):
+                    value = {component: value}
+                break
+
+        if has_existing_value:
+            path = ":".join(components[:-1])
+            value = safe_loads(strip_quotes(components[-1]))
+            existing = self.get(path, scope=scope)
+
+        if isinstance(existing, list) and not isinstance(value, list):
+            # append values to lists
+            value = [value]
+
+        new = merge(existing, value)
+        self.set(path, new, scope=scope)
+
+    def highest_precedence_scope(self) -> ConfigScope:
+        """Non-internal scope with highest precedence."""
+        file_scopes = [scope for scope in self.scopes.values() if scope.file is not None]
+        return next(reversed(file_scopes))
+
+    def validate_scope(self, scope: str | None) -> ConfigScope:
+        if scope is None:
+            return self.highest_precedence_scope()
+        elif scope in self.scopes:
+            return self.scopes[scope]
+        elif scope == "internal":
+            cfgscope = ConfigScope("internal", None, {})
+            self.push_scope(cfgscope)
+            return cfgscope
+        else:
+            raise ValueError(f"Invalid scope {scope!r}")
+
+    def update_config(self, section: str, update_data: dict[str, Any], scope: str | None = None):
+        """Update the configuration file for a particular scope.
 
         Args:
-            *args: Positional arguments to update configuration.
-            **kwargs: Keyword arguments to update configuration.
-
-        Raises:
-            TypeError: If more than one positional argument is provided.
+            section (str): section of the configuration to be updated
+            update_data (dict): data to be used for the update
+            scope (str): scope to be updated
         """
-        if len(args) > 1:
-            raise TypeError(f"Config.update() expected at most 1 argument, got {len(args)}")
-        data = dict(*args) | kwargs
-        if "debug" in data:
-            self.debug = boolean(data.pop("debug"))
-            if self.debug:
-                self.log_level = logging.get_level_name(log_levels[3])
-                logging.set_level(logging.DEBUG)
-        if "log_level" in data:
-            self.log_level = data.pop("log_level").upper()
-            level = logging.get_level(self.log_level)
-            logging.set_level(level)
-        if "warnings" in data:
-            logging.set_warning_level(data.pop("warnings"))
-        if "multiprocessing" in data:
-            for key, value in data.pop("multiprocessing").items():
-                setattr(self.multiprocessing, key, value)
-        for key, val in data.items():
-            setattr(self, key, val)
+        if scope is None:
+            config_scope = self.highest_precedence_scope()
+        else:
+            config_scope = self.scopes[scope]
+        # read only the requested section's data.
+        config_scope.data[section] = dict(update_data)
+        config_scope.dump(root="canary")
 
     def set_main_options(self, args: argparse.Namespace) -> None:
         """Set main configuration options based on command-line arguments.
@@ -525,18 +317,23 @@ class Config:
         Args:
             args: An argparse.Namespace object containing command-line arguments.
         """
+        data: dict[str, Any] = {}
+
+        if cache_dir := getattr(args, "cache_dir", None):
+            data.setdefault("config", {})["cache_dir"] = cache_dir
+
         logging.set_level(logging.INFO)
         if args.color is not None:
             color.set_color_when(args.color)
 
         if args.q or args.v:
             i = min(max(2 - args.q + args.v, 0), 4)
-            self.log_level = logging.get_level_name(log_levels[i])
+            data.setdefault("config", {})["log_level"] = logging.get_level_name(log_levels[i])
             logging.set_level(log_levels[i])
 
         if args.debug:
-            self.debug = True
-            self.log_level = logging.get_level_name(log_levels[3])
+            data.setdefault("config", {})["debug"] = True
+            data.setdefault("config", {})["log_level"] = logging.get_level_name(log_levels[3])
             logging.set_level(logging.DEBUG)
 
         if args.warnings:
@@ -544,12 +341,12 @@ class Config:
 
         env_mods = getattr(args, "env_mods") or {}
         if "session" in env_mods:
-            self.environment.update({"set": env_mods["session"]})
+            data["environment"] = {"set": env_mods["session"]}
 
         batchopts: dict = getattr(args, "batch", None) or {}
         if backend := batchopts.get("scheduler"):
             self.setup_hpc_connect(backend)
-        if self.backend is None:
+        if self.hpcc_backend is None:
             self.options.batch = {}
             batchopts.clear()
         elif cached_batchopts := getattr(self.options, "batch", None):
@@ -557,46 +354,32 @@ class Config:
         args.batch = batchopts
 
         errors: int = 0
-        config_mods: dict[str, Any] = {}
         if args.config_mods:
-            config_mods.update(copy.deepcopy(args.config_mods))
+            data.update(deepcopy(args.config_mods))
 
         # handle resource pool separately
         resource_pool_mods: dict[str, Any] = {}
-        if "resource_pool" in config_mods:
-            resource_pool_mods.update(config_mods.pop("resource_pool"))
+        if "resource_pool" in data:
+            resource_pool_mods.update(data.pop("resource_pool"))
 
-        for section, section_data in config_mods.items():
+        for section, section_data in data.items():
             if section not in section_schemas:
                 errors += 1
                 logging.error(f"Illegal config section: {section!r}")
                 continue
             schema = section_schemas[section]
-            config_mods[section] = schema.validate({section: section_data})[section]
+            data[section] = schema.validate({section: section_data})[section]
 
         if resource_pool_mods:
-            if self._resource_pool is None or self._resource_pool.empty():
+            if self._resource_pool.empty():
                 schema = section_schemas["resource_pool"]
                 pool = schema.validate({"resource_pool": resource_pool_mods})["resource_pool"]
-                if self._resource_pool is None:
-                    self._resource_pool = ResourcePool(pool)
-                else:
-                    self._resource_pool.fill(pool)
+                self._resource_pool.update(pool)
             else:
-                self.resource_pool.add(**resource_pool_mods)
-        elif self._resource_pool is None:
-            self._resource_pool = ResourcePool()
-            self._resource_pool.fill_uniform(
-                node_count=1, cpus_per_node=cpu_count(), gpus_per_node=0
-            )
+                self._resource_pool.add(**resource_pool_mods)
 
         if errors:
             raise ValueError("Stopping due to previous errors")
-
-        for section, section_data in config_mods.items():
-            obj = self if section == "config" else getattr(self, section)
-            if hasattr(obj, "update"):
-                obj.update(section_data)
 
         if n := getattr(args, "workers", None):
             if n > cpu_count():
@@ -608,13 +391,74 @@ class Config:
                     raise ValueError(f"batch:workers={n} > cpu_count={cpu_count()}")
 
         if t := getattr(args, "timeouts", None):
-            self.timeout.update(t)
+            c = data.setdefault("config", {})
+            c.setdefault("timeout", {}).update(t)
 
         self.options = merge_namespaces(self.options, args)
 
-    def null(self) -> None:
-        """Null opt to generate lazy config"""
-        ...
+        scope = ConfigScope("command_line", None, data)
+        self.push_scope(scope)
+
+        if self.get("config:debug", scope="command_line"):
+            logging.set_level(logging.DEBUG)
+
+    def load_snapshot(self, file: IO[Any]) -> None:
+        snapshot = json.load(file)
+        if "config" in snapshot:
+            snapshot = convert_legacy_snapshot(snapshot)
+        properties: dict[str, Any] = snapshot["properties"]
+        self.working_dir = properties["working_dir"]
+        self.invocation_dir = properties["invocation_dir"]
+        if pool := properties.pop("resource_pool", None):
+            self._resource_pool.clear()
+            self._resource_pool.update(pool)
+        if plugins := properties.pop("plugins", None):
+            for f in plugins:
+                self.plugin_manager.consider_plugin(f)
+        if options := properties.pop("options", None):
+            self.options = argparse.Namespace(**options)
+        backend: str | None = properties.pop("hpcc_backend", None)
+        if os.getenv("CANARY_LEVEL") == "1":
+            backend = "null"
+        elif "CANARY_HPCC_BACKEND" in os.environ:
+            backend = os.environ["CANARY_HPCC_BACKEND"]
+        try:
+            self.setup_hpc_connect(backend)
+        except Exception as e:
+            # Since we are restoring from a snapshot, our backend was properly set up on creation
+            # but is now erroring on restoration.  This can happen, for example, if using the Flux
+            # backend to run tests (Flux requires being run in a Flux session) and now the user is
+            # running `canary status` outside of a Flux session.  We ignore the error.  If the
+            # backend is really needed (it will only be needed by `canary run`), an error will
+            # be thrown later if/when it is used.
+            logging.warning(f"Failed to setup hpc_connect for {backend=}", ex=e)
+        if self.hpcc_backend is None:
+            self.options.batch = None
+        self.scopes.clear()
+        for value in snapshot["scopes"]:
+            scope = ConfigScope(value["name"], value["file"], value["data"])
+            self.push_scope(scope)
+        log_level = self.get("config:log_level")
+        logging.set_level(logging.get_level(log_level))
+
+    def dump_snapshot(self, file: IO[Any], indent: int | None = None) -> None:
+        snapshot: dict[str, Any] = {}
+        properties = snapshot.setdefault("properties", {})
+        properties["resource_pool"] = self._resource_pool.getstate()
+        properties["plugins"] = list(self.plugin_manager.considered)
+        properties["hpcc_backend"] = None if self.hpcc_backend is None else self.hpcc_backend.name
+        properties["options"] = vars(self.options)
+        properties["invocation_dir"] = self.invocation_dir
+        properties["working_dir"] = self.working_dir
+        scopes = snapshot.setdefault("scopes", [])
+        for scope in self.scopes.values():
+            scopes.append(scope.asdict())
+        file.write(json.dumps(snapshot, indent=indent))
+
+    def archive(self, mapping: MutableMapping) -> None:
+        file = io.StringIO()
+        self.dump_snapshot(file)
+        mapping[env_archive_name] = compress64(file.getvalue())
 
     def setup_hpc_connect(self, name: str | None) -> None:
         """Set up the hpc_connect library.
@@ -625,205 +469,220 @@ class Config:
             name: The name of the HPC backend to set up
         """
         if name in ("null", "local", None):
-            self.backend = None
+            self.hpcc_backend = None
             return
 
         assert name is not None
         logging.debug(f"Setting up HPC Connect for {name}")
-        self.backend = hpc_connect.get_backend(name)
-        if self._resource_pool is None:
-            logging.debug(f"  HPC connect: node count: {self.backend.config.node_count}")
-            logging.debug(f"  HPC connect: CPUs per node: {self.backend.config.cpus_per_node}")
-            logging.debug(f"  HPC connect: GPUs per node: {self.backend.config.gpus_per_node}")
-            rp = ResourcePool()
-            rp.fill_uniform(
-                node_count=self.backend.config.node_count,
-                cpus_per_node=self.backend.config.cpus_per_node,
-                gpus_per_node=self.backend.config.gpus_per_node,
+        self.hpcc_backend = hpc_connect.get_backend(name)
+        if self._resource_pool.empty():
+            logging.debug(f"  HPC connect: node count: {self.hpcc_backend.config.node_count}")
+            logging.debug(f"  HPC connect: CPUs per node: {self.hpcc_backend.config.cpus_per_node}")
+            logging.debug(f"  HPC connect: GPUs per node: {self.hpcc_backend.config.gpus_per_node}")
+            self._resource_pool.fill_uniform(
+                node_count=self.hpcc_backend.config.node_count,
+                cpus_per_node=self.hpcc_backend.config.cpus_per_node,
+                gpus_per_node=self.hpcc_backend.config.gpus_per_node,
             )
-            self.resource_pool = rp
 
-    @classmethod
-    def read_config(cls, file: str) -> dict:
-        """Read configuration data from a YAML file.
+    def apply_environment_mods(self, envmods: dict[str, Any]) -> None:
+        for action, values in envmods.items():
+            if action == "set":
+                for name, value in values.items():
+                    os.environ[name] = value
+            elif action == "unset":
+                for value in values:
+                    os.environ.pop(value, None)
+            elif action == "prepend-path":
+                for pathname, path in values.items():
+                    if existing := os.getenv(pathname):
+                        os.environ[pathname] = f"{path}:{existing}"
+                    else:
+                        os.environ[pathname] = path
+            elif action == "append-path":
+                for pathname, path in values.items():
+                    if existing := os.getenv(pathname):
+                        os.environ[pathname] = f"{existing}:{path}"
+                    else:
+                        os.environ[pathname] = path
 
-        Loads configuration data from the specified YAML file and validates it against predefined
-        schemas.
+    @contextmanager
+    def temporary_scope(self) -> Generator[ConfigScope, None, None]:
+        scope = ConfigScope("tmp", None, {})
+        self.push_scope(scope)
+        try:
+            yield scope
+        finally:
+            self.pop_scope(scope)
 
-        Args:
-            file: The path to the YAML configuration file.
+    def null(self) -> None:
+        """Null opt to generate lazy config"""
+        ...
 
-        Returns:
-            A dictionary containing the validated configuration data.
 
-        Raises:
-            ValueError: If there are schema validation errors.
-        """
-        with open(file) as fh:
-            data = yaml.safe_load(fh)
-
-        config: dict[str, Any] = {}
-        # expand any keys given as a:b:c
+def read_config_scope(scope: str) -> ConfigScope:
+    data: dict[str, Any] = {}
+    if file := get_scope_filename(scope):
+        if fd := read_config_file(file):
+            if "canary" in fd:
+                data.update(fd["canary"])
+            else:
+                data.update(fd)
         for section, section_data in data.items():
-            if section not in section_schemas:
+            if schema := section_schemas.get(section):
+                if schema == any_schema:
+                    data[section] = section_data
+                else:
+                    data[section] = schema.validate({section: section_data})[section]
+            else:
                 logging.warning(f"ignoring unrecognized config section: {section}")
-                continue
-            schema = section_schemas[section]
-            try:
-                validated = schema.validate({section: section_data})
-            except SchemaError as e:
-                msg = f"Schema error encountered in {file}: {e.args[0]}"
-                raise ValueError(msg) from None
-            if section == "test":
-                logging.warning("Deprecated configuration section 'test:timeout'.  Use 'timeout'")
-                config.setdefault("timeout", {}).update(validated["test"]["timeout"])
-            else:
-                config[section] = validated[section]
-        return config
+    return ConfigScope(scope, file, data)
 
-    @classmethod
-    def read_config_from_env(cls) -> dict:
-        """Read configuration data from environment variables.
 
-        Loads configuration values from environment variables and returns them as a dictionary.
-
-        Returns:
-            A dictionary containing configuration values from environment variables.
-        """
-        config: dict[str, Any] = {}
-        for key, value in os.environ.items():
-            if key == "CANARY_DEBUG":
-                section = config.setdefault("config", {})
-                section["debug"] = boolean(value)
-            elif key == "CANARY_LOG_LEVEL":
-                section = config.setdefault("config", {})
-                section["log_level"] = value
-            elif key == "CANARY_CACHE_DIR":
-                section = config.setdefault("config", {})
-                section["cache_dir"] = value
-            elif key == "CANARY_MULTIPROCESSING_CONTEXT":
-                section = config.setdefault("config", {})
-                subsection = section.setdefault("mulitprocessing", {})
-                subsection["context"] = value
-        return config
-
-    @staticmethod
-    def config_file(scope: str) -> str | None:
-        """Get the configuration file path for a specified scope.
-
-        Returns the path to the configuration file based on the provided scope (global or local).
-
-        Args:
-            scope: The scope for which to get the configuration file path.
-
-        Returns:
-            The path to the configuration file or None if not found.
-        """
-        if scope == "global":
-            config_dir = get_config_dir()
-            if config_dir is not None:
-                return os.path.join(config_dir, "config.yaml")
-        elif scope == "local":
-            return os.path.abspath("./canary.yaml")
+def read_config_file(file: str) -> dict[str, Any] | None:
+    """Load configuration settings from ``file``"""
+    if not os.path.exists(file):
         return None
+    with open(file) as fh:
+        return yaml.safe_load(fh)
 
-    def save(self, path: str, scope: str | None = None):
-        """Save a configuration value to a configuration file.
 
-        Updates the specified section and key in the configuration file with the provided value.
+def get_scope_filename(scope: str) -> str | None:
+    if scope == "site":
+        if var := os.getenv("CANARY_SITE_CONFIG"):
+            return var
+        return os.path.join(sys.prefix, "etc/canary/config.yaml")
+    elif scope == "global":
+        if var := os.getenv("CANARY_GLOBAL_CONFIG"):
+            return var
+        elif var := os.getenv("XDG_CONFIG_HOME"):
+            file = os.path.join(var, "canary/config.yaml")
+            if os.path.exists(file):
+                return file
+        return os.path.expanduser("~/.config/canary.yaml")
+    elif scope == "local":
+        return os.path.abspath("./canary.yaml")
+    raise ValueError(f"Could not determine filename for scope {scope!r}")
 
-        Args:
-            path: The path in the format 'section:key' to update.
-            scope: The scope of the configuration file (optional).
-        """
-        file = self.config_file(scope or "local")
-        assert file is not None
-        section, key, value = path.split(":")
-        with open(file, "r") as fh:
-            config = yaml.safe_load(fh)
-        config.setdefault(section, {})[key] = safe_loads(value)
-        with open(file, "w") as fh:
-            yaml.dump(config, fh, default_flow_style=False)
 
-    def getoption(self, key: str, default: Any = None) -> Any:
-        """Get a command line option
+def read_env_config() -> ConfigScope | None:
+    # FIXME
+    data: dict[str, Any] = {}
+    config_defaults = default_config_values()
+    for config_var in config_defaults["config"]:
+        var = f"CANARY_{config_var.upper()}"
+        if var in os.environ:
+            data.setdefault("config", {})[config_var] = safe_loads(os.environ[var])
+    if not data:
+        return None
+    return ConfigScope("environment", None, data)
 
-        Retrieves the value of the specified configuration option, returning a default value if the
-        option is not set.
 
-        Args:
-            key: The key of the configuration option to retrieve.
-            default: The default value to return if the option is not set.
+def process_config_path(path: str) -> list[str]:
+    result: list[str] = []
+    if path.startswith(":"):
+        raise ValueError(f"Illegal leading ':' in path {path}")
+    while path:
+        front, _, path = path.partition(":")
+        result.append(front)
+        if path.startswith(("{", "[")):
+            result.append(path)
+            return result
+    return result
 
-        Returns:
-            The value of the configuration option or the default value.
-        """
-        if key in self.option_cache:
-            return self.option_cache[key]
-        sentinel = object()
-        option = getattr(self.options, key, sentinel)
-        if option is sentinel:
-            return default
-        self.option_cache[key] = option
-        return option
 
-    def getstate(self, pretty: bool = False) -> dict[str, Any]:
-        """Get the current state of the configuration.
+def safe_loads(arg):
+    import json
 
-        Returns the current configuration state as a dictionary, which can be useful for
-        serialization or debugging.
+    try:
+        return json.loads(arg)
+    except json.decoder.JSONDecodeError:
+        return arg
 
-        Args:
-            pretty: If True, the output will be formatted for readability.
 
-        Returns:
-            A dictionary representing the current state of the configuration.
-        """
-        d: dict[str, Any] = {}
-        for key, value in vars(self).items():
-            if key in ("option_cache",):
-                continue
-            if key == "_plugin_manager":
-                d["plugin_manager"] = {"plugins": list(value.considered)}
-            elif key == "_resource_pool":
-                d["resource_pool"] = None if value is None else value.getstate()
-            elif dataclasses.is_dataclass(value):
-                d[key] = dataclasses.asdict(value)  # type: ignore
-                if key == "system":
-                    d[key]["os"] = vars(d[key]["os"])
-            elif key == "multiprocessing":
-                d.setdefault("config", {})[key] = vars(value)
-            elif hasattr(value, "getstate"):
-                d[key] = value.getstate()
-            elif isinstance(value, (argparse.Namespace, SimpleNamespace)):
-                d[key] = vars(value)
-            elif key == "backend":
-                d[key] = getattr(value, "name", None)
-            else:
-                if pretty and key.startswith("_"):
-                    # print value given by getter
-                    key = key[1:]
-                    if hasattr(self, key):
-                        value = getattr(self, key)
-                d.setdefault("config", {})[key] = value
-        return d
+def merge_namespaces(dest: argparse.Namespace, source: argparse.Namespace) -> argparse.Namespace:
+    for attr, value in vars(source).items():
+        if value is None:
+            continue
+        elif not hasattr(dest, attr):
+            setattr(dest, attr, value)
+        else:
+            my_value = getattr(dest, attr)
+            if hasattr(my_value, "copy"):
+                my_value = my_value.copy()
+            setattr(dest, attr, merge(my_value, value))
+    return dest
 
-    def describe(self, section: str | None = None) -> str:
-        """Describe the current configuration state.
 
-        Returns a human-readable description of the configuration state, optionally filtered by a
-        specific section.
+def default_config_values() -> dict[str, Any]:
+    syscfg = _machine.system_config()
+    defaults = {
+        "config": {
+            "debug": False,
+            "log_level": "INFO",
+            "cache_dir": os.path.join(os.getcwd(), ".canary_cache"),
+            "multiprocessing": {
+                "context": "spawn",
+                "max_tasks_per_child": 1,
+            },
+            "timeout": {
+                "session": -1.0,
+                "multiplier": 1.0,
+                "fast": 120.0,
+                "default": 300.0,
+                "long": 900.0,
+            },
+            "polling_frequency": {
+                "testcase": 0.05,
+            },
+        },
+        "plugins": [],
+        "environment": {
+            "prepend-path": {},
+            "append-path": {},
+            "set": {},
+            "unset": [],
+        },
+        "session": {
+            "work_tree": None,
+            "level": None,
+            "mode": None,
+        },
+        "system": {
+            "node": syscfg["node"],
+            "arch": syscfg["arch"],
+            "site": syscfg["site"],
+            "host": syscfg["host"],
+            "name": syscfg["name"],
+            "platform": syscfg["platform"],
+            "os": syscfg["os"],
+        },
+        "build": {
+            "project": None,
+            "type": None,
+            "date": None,
+            "build_directory": None,
+            "source_directory": None,
+            "compiler": {
+                "vendor": None,
+                "version": None,
+                "cc": None,
+                "cxx": None,
+                "fc": None,
+                "f77": None,
+                "mpicc": None,
+                "mpicxx": None,
+                "mpifc": None,
+                "mpif77": None,
+            },
+        },
+        "batch": {"default_options": []},
+    }
+    return defaults
 
-        Args:
-            section: The section to describe, or None for the entire configuration.
 
-        Returns:
-            A string representation of the configuration state.
-        """
-        state = self.getstate(pretty=True)
-        if section is not None:
-            state = {section: state[section]}
-        return yaml.dump(state, default_flow_style=False)
+def isnullpath(path: str) -> bool:
+    return path in ("null", os.devnull)
 
 
 def boolean(arg: Any) -> bool:
@@ -847,19 +706,6 @@ def expandvars(arg: Any, mapping: dict) -> Any:
     return arg
 
 
-def get_config_dir() -> str | None:
-    config_dir: str
-    if "CANARY_CONFIG_DIR" in os.environ:
-        config_dir = os.environ["CANARY_CONFIG_DIR"]
-    elif "XDG_CONFIG_HOME" in os.environ:
-        config_dir = os.path.join(os.environ["XDG_CONFIG_HOME"], "canary")
-    else:
-        config_dir = os.path.expanduser("~/.config/canary")
-    if isnullpath(config_dir):
-        return None
-    return config_dir
-
-
 def create_cache_dir(path: str) -> None:
     if isnullpath(path):
         return
@@ -874,26 +720,29 @@ def create_cache_dir(path: str) -> None:
             fh.write("see https://bford.info/cachedir/\n")
 
 
-def safe_loads(arg):
-    try:
-        return json.loads(arg)
-    except json.decoder.JSONDecodeError:
-        return arg
+def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
+    snapshot: dict[str, Any] = {}
+    properties = snapshot.setdefault("properties", {})
+    properties["resource_pool"] = legacy["resource_pool"]
+    properties["plugins"] = legacy["plugin_manager"]["plugins"]
+    properties["hpcc_backend"] = legacy["backend"]
+    properties["options"] = legacy["options"]
+    properties["invocation_dir"] = legacy["config"].pop("invocation_dir")
+    properties["working_dir"] = legacy["config"].pop("working_dir")
 
-
-def merge_namespaces(dest: argparse.Namespace, source: argparse.Namespace) -> argparse.Namespace:
-    for attr, value in vars(source).items():
-        if value is None:
-            continue
-        elif not hasattr(dest, attr):
-            setattr(dest, attr, value)
-        else:
-            my_value = getattr(dest, attr)
-            if hasattr(my_value, "copy"):
-                my_value = my_value.copy()
-            setattr(dest, attr, merge(my_value, value))
-    return dest
-
-
-def isnullpath(path: str) -> bool:
-    return path in ("null", os.devnull)
+    scope: dict[str, Any] = {"name": "defaults", "file": None}
+    data = scope.setdefault("data", {})
+    data["build"] = legacy["build"]
+    data["environment"] = legacy["environment"]
+    data["session"] = legacy["session"]
+    data["system"] = legacy["system"]
+    data["config"] = legacy["config"]
+    data["config"]["cache_dir"] = os.path.join(properties["invocation_dir"], ".canary_cache")
+    data["config"]["multiprocessing"] = {
+        "context": data["config"].pop("multiprocessing_context"),
+        "max_tasks_per_child": 1,
+    }
+    data["config"]["timeout"] = legacy["test"]["timeout"]
+    data["config"].pop("_config_dir", None)
+    snapshot.setdefault("scopes", []).append(scope)
+    return snapshot

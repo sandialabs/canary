@@ -103,8 +103,8 @@ class HTMLReporter(CanaryReporter):
             group = case.status.name.title()
             totals.setdefault(group, []).append(case)
         fh.write("<tr>")
-        fh.write(f"<td>{config.system.host}</td>")
-        fh.write(f"<td>{config.build.project}</td>")
+        fh.write(f"<td>{config.get('system:host')}</td>")
+        fh.write(f"<td>{config.get('build:project')}</td>")
         for group in ("Not Run", "Timeout", "Fail", "Diff", "Pass", "Invalid", "Cancelled"):
             if group not in totals:
                 fh.write("<td>0</td>")

@@ -194,7 +194,7 @@ class DirectResourceQueue(ResourceQueue):
 
     def put(self, *cases: Any) -> None:
         for case in cases:
-            if config.debug:
+            if config.get("config:debug"):
                 # The case should have already been validated
                 config.resource_pool.satisfiable(case.required_resources())
             super().put(case)
@@ -244,7 +244,7 @@ class BatchResourceQueue(ResourceQueue):
     def __init__(self, lock: threading.Lock) -> None:
         workers = int(config.getoption("workers", -1))
         super().__init__(lock=lock, workers=5 if workers < 0 else workers)
-        if config.backend is None:
+        if config.hpcc_backend is None:
             raise ValueError("BatchResourceQueue requires a batch:scheduler")
         self.tmp_buffer: list[TestCase] = []
 
@@ -267,7 +267,7 @@ class BatchResourceQueue(ResourceQueue):
 
     def put(self, *cases: Any) -> None:
         for case in cases:
-            if config.debug:
+            if config.get("config:debug"):
                 # The case should have already been validated
                 config.resource_pool.satisfiable(case.required_resources())
             self.tmp_buffer.append(case)
@@ -348,7 +348,7 @@ def factory(lock: threading.Lock, fail_fast: bool = False) -> ResourceQueue:
 
     """
     queue: ResourceQueue
-    if config.backend is None:
+    if config.hpcc_backend is None:
         queue = DirectResourceQueue(lock)
     else:
         queue = BatchResourceQueue(lock)

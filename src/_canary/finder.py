@@ -117,7 +117,7 @@ def generate_test_cases(
 
     with logging.context(colorize("@*{Generating} test cases")):
         locked: list[list[TestCase]]
-        if config.debug:
+        if config.get("config:debug"):
             locked = [f.lock(on_options) for f in generators]
         else:
             locked = starmap(lock_file, [(f, on_options) for f in generators])
@@ -134,7 +134,7 @@ def generate_test_cases(
                 logging.emit(f"  - {case.display_name}: {case.file_path}\n")
         raise ValueError("Duplicate test IDs in test suite")
 
-    if config.debug:
+    if config.get("config:debug"):
         for case in cases:
             if case.wont_run():
                 continue

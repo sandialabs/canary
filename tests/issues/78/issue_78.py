@@ -10,7 +10,7 @@ from _canary.config import Config
 def test_issue_78():
     with open(os.path.join(os.path.dirname(__file__), "config.json"), "r") as fh:
         conf = Config()
-        conf.restore_from_snapshot(fh)
+        conf.load_snapshot(fh)
 
     rp = conf.resource_pool
 

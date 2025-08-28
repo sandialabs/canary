@@ -108,7 +108,7 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
         runner = xTestCaseRunner()
         mkdirp("./foo")
         with canary.config.override():
-            canary.config.session.work_tree = f"{os.getcwd()}/foo"
+            canary.config.set("session:work_tree", f"{os.getcwd()}/foo", scope="defaults")
             runner.run(case)
             assert case.returncode == 0
             assert case.status == "failed"
@@ -132,7 +132,7 @@ set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test shoul
         runner = xTestCaseRunner()
         mkdirp("./foo")
         with canary.config.override():
-            canary.config.session.work_tree = f"{os.getcwd()}/foo"
+            canary.config.set("session:work_tree", f"{os.getcwd()}/foo", scope="defaults")
             runner.run(case)
 
 
@@ -154,7 +154,7 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
         runner = xTestCaseRunner()
         mkdirp("./foo")
         with canary.config.override():
-            canary.config.session.work_tree = f"{os.getcwd()}/foo"
+            canary.config.set("session:work_tree", f"{os.getcwd()}/foo", scope="defaults")
             runner.run(case)
         assert case.status == "success"
         assert case.returncode == 1
@@ -265,7 +265,7 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
         }
         with canary.config.override():
             validated = resource_schema.validate(pool)
-            canary.config.session.work_tree = f"{os.getcwd()}/foo"
+            canary.config.set("session:work_tree", f"{os.getcwd()}/foo", scope="defaults")
             canary.config.resource_pool.fill(validated["resource_pool"])
             file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
             [case] = file.lock()

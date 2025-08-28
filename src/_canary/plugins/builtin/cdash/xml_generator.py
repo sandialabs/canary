@@ -178,17 +178,16 @@ class CDashXMLReporter:
         if self.meta is None:
             self.meta = {}
             host = os.uname().nodename
-            os_release = config.system.os.release
-            os_name = config.system.platform
-            os_version = config.system.os.fullversion
-            os_platform = config.system.arch
+            os_release = config.get("system:os:release")
+            os_name = config.get("system:platform")
+            os_version = config.get("system:os:fullversion")
+            os_platform = config.get("system:arch")
             self.meta["BuildName"] = self.buildname
             self.meta["BuildStamp"] = self.buildstamp
             self.meta["Name"] = self.site
             self.meta["Generator"] = self.generator
-            if config.build.compiler.vendor is not None:
-                vendor = config.build.compiler.vendor
-                version = config.build.compiler.version
+            if vendor := config.get("build:compiler:vendor"):
+                version = config.get("build:compiler:version")
                 self.meta["CompilerName"] = vendor
                 self.meta["CompilerVersion"] = version
             self.meta["Hostname"] = host

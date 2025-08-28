@@ -87,11 +87,11 @@ def test_config_args():
             "SPAM=EGGS",
         ]
     )
-    config = Config.factory()
+    config = Config()
     config.set_main_options(args)
-    assert config.debug is True
+    assert config.get("config:debug") is True
     assert config.resource_pool.pinfo("cpus_per_node") == 8
     assert config.resource_pool.pinfo("gpus_per_node") == 4
-    assert config.environment.mods["set"]["SPAM"] == "EGGS"
+    assert config.get("environment")["set"]["SPAM"] == "EGGS"
     assert os.environ["SPAM"] == "EGGS"
     os.environ.pop("SPAM")
