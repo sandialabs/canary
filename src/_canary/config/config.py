@@ -229,6 +229,10 @@ class Config:
         return value
 
     def set(self, path: str, value: Any, scope: str | None = None) -> None:
+        if ":" not in path:
+            # handle bare section name as path
+            self.update_config(path, value, scope=scope)
+            return
         parts = process_config_path(path)
         section = parts.pop(0)
         section_data = self.get_config(section, scope=scope)
@@ -274,6 +278,19 @@ class Config:
 
         new = merge(existing, value)
         self.set(path, new, scope=scope)
+
+    def create_scope(self, name: str, file: str | None, data: dict[str, Any]) -> ConfigScope:
+        for value in self.scopes.values():
+            if value.name == name:
+                if value.file != file:
+                    raise ValueError(
+                        f"The config scope {name!r} already exists at file={value.file}"
+                    )
+                value.data = merge(value.data, data)
+                return value
+        scope = ConfigScope(name, file, data)
+        self.push_scope(scope)
+        return scope
 
     def highest_precedence_scope(self) -> ConfigScope:
         """Non-internal scope with highest precedence."""
