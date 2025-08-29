@@ -118,7 +118,6 @@ class Duration:
             hours, minutes, seconds = [float(_) for _ in duration.split(":")]
             units = Duration.units
             microseconds = hours * units["h"] + minutes * units["m"] + seconds * units["s"]
-            print(microseconds / Duration._microsecond_size)
             return timedelta(microseconds=sign * microseconds / Duration._microsecond_size)
         elif re.search(r"^\d{1,2}:\d{1,2}(\.\d+)?$", duration):
             minutes, seconds = [float(_) for _ in duration.split(":")]

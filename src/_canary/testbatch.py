@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import argparse
 import glob
 import io
 import json
@@ -31,6 +32,7 @@ from .util.hash import hashit
 from .util.misc import digits
 from .util.string import pluralize
 from .util.time import hhmmss
+from .util.time import time_in_seconds
 
 
 class TestBatch(AbstractTestCase):
@@ -98,6 +100,12 @@ class TestBatch(AbstractTestCase):
         return self._runtime
 
     def qtime(self) -> float:
+        batch_opts = batch_options()
+        p = argparse.ArgumentParser()
+        p.add_argument("--time", dest="qtime")
+        a, _ = p.parse_known_args(batch_opts)
+        if a.qtime:
+            return time_in_seconds(a.qtime)
         if len(self.cases) == 1:
             return self.cases[0].runtime
         total_runtime = self.runtime

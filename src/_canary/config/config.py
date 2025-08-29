@@ -755,11 +755,13 @@ def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
     data["system"] = legacy["system"]
     data["config"] = legacy["config"]
     data["config"]["cache_dir"] = os.path.join(properties["invocation_dir"], ".canary_cache")
-    data["config"]["multiprocessing"] = {
-        "context": data["config"].pop("multiprocessing_context"),
-        "max_tasks_per_child": 1,
-    }
-    data["config"]["timeout"] = legacy["test"]["timeout"]
+    if "mulitprocessing_context" in data["config"]:
+        data["config"]["multiprocessing"] = {
+            "context": data["config"].pop("multiprocessing_context", "spawn"),
+            "max_tasks_per_child": 1,
+        }
+    if "test" in legacy:
+        data["config"]["timeout"] = legacy["test"]["timeout"]
     data["config"].pop("_config_dir", None)
     snapshot.setdefault("scopes", []).append(scope)
     return snapshot
