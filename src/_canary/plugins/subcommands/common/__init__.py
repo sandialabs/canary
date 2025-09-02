@@ -64,8 +64,6 @@ def add_filter_arguments(parser: "Parser") -> None:
     group.add_argument(
         "--rerun-failed",
         nargs=0,
-        const=True,
-        default=False,
         action=RerunFailed,
         help="Rerun failed tests [default: False]",
     )
