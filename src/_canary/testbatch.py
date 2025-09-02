@@ -389,8 +389,8 @@ class TestBatch(AbstractTestCase):
                 try:
                     if proc.poll() is not None:
                         break
-                except Exception:
-                    logging.error(self.format("Batch @*b{%id}: polling job failed!"))
+                except Exception as e:
+                    logging.exception(self.format("Batch @*b{%id}: polling job failed!"), e)
                 time.sleep(backend.polling_frequency)
         finally:
             force_remove(breadcrumb)
