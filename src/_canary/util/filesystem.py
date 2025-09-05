@@ -18,8 +18,6 @@ from contextlib import contextmanager
 from typing import Any
 from typing import Generator
 
-from . import logging
-
 __all__ = [
     "ancestor",
     "grep",
@@ -193,6 +191,9 @@ def remove(file_or_dir: pathlib.Path | str) -> None:
 def rmtree2(path: pathlib.Path | str, n: int = 5) -> None:
     """Wrapper around shutil.rmtree to make it more robust when used on NFS
     mounted file systems."""
+    from . import logging
+
+    logger = logging.get_logger(__name__)
     ok = False
     attempts = 1
     while not ok:
@@ -202,7 +203,7 @@ def rmtree2(path: pathlib.Path | str, n: int = 5) -> None:
         except OSError as e:
             if attempts >= n:
                 raise
-            logging.debug(f"Failed to remove {path} with shutil.rmtree at attempt {n}: {e}")
+            logger.debug(f"Failed to remove {path} with shutil.rmtree at attempt {n}: {e}")
             time.sleep(0.2 * n)
         attempts += 1
 

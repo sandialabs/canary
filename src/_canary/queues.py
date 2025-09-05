@@ -21,6 +21,8 @@ from .util.rprobe import cpu_count
 from .util.time import hhmmss
 from .util.time import timestamp
 
+logger = logging.get_logger(__name__)
+
 
 class ResourceQueue(abc.ABC):
     def __init__(self, *, lock: threading.Lock, workers: int) -> None:
@@ -176,7 +178,7 @@ class ResourceQueue(abc.ABC):
         with self.lock:
             progress(self.cases(), timestamp() - start)
             if last:
-                logging.emit("\n")
+                logger.info(logging.EMIT, "\n", extra={"prefix": ""})
 
 
 class DirectResourceQueue(ResourceQueue):
@@ -261,7 +263,7 @@ class BatchResourceQueue(ResourceQueue):
                 "the default batching scheme should have been used)"
             )
         fmt = "@*{Generated} %d batches from %d test cases"
-        logging.info(color.colorize(fmt % (len(batches), len(self.tmp_buffer))))
+        logger.info(fmt % (len(batches), len(self.tmp_buffer)))
         for batch in batches:
             super().put(batch)
 

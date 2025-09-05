@@ -19,6 +19,8 @@ from .util.parallel import starmap
 from .util.term import terminal_size
 from .util.time import hhmmss
 
+logger = logging.get_logger(__name__)
+
 
 class Finder:
     version_info = (1, 0, 3)
@@ -54,7 +56,7 @@ class Finder:
                 file = os.path.join(root, path)
                 if not os.path.exists(file):
                     if tolerant:
-                        logging.warning(f"{path} not found in {root}")
+                        logger.warning(f"{path} not found in {root}")
                         continue
                     else:
                         raise ValueError(f"{path} not found in {root}")
@@ -69,13 +71,13 @@ class Finder:
             found, e = config.plugin_manager.hook.canary_discover_generators(root=root, paths=paths)
             generators.update(found)
             errors += e
-            logging.debug(f"Found {len(found)} test files in {root}")
+            logger.debug(f"Found {len(found)} test files in {root}")
         files: list[AbstractTestGenerator] = list(generators)
         n = len(files)
         nr = len(set(f.root for f in files))
         if pedantic and errors:
             raise ValueError("Stopping due to previous parsing errors")
-        logging.debug(f"Found {n} test files in {nr} search roots")
+        logger.debug(f"Found {n} test files in {nr} search roots")
         return files
 
     @property
@@ -84,7 +86,7 @@ class Finder:
 
 
 def resolve_dependencies(cases: list[TestCase]) -> None:
-    ctx = logging.context(colorize("@*{Resolving} test case dependencies"))
+    ctx = logging.context("@*{Resolving} test case dependencies")
     ctx.start()
     for case in cases:
         while True:
@@ -115,7 +117,7 @@ def generate_test_cases(
 ) -> list[TestCase]:
     """Generate test cases and filter based on criteria"""
 
-    with logging.context(colorize("@*{Generating} test cases")):
+    with logging.context("@*{Generating} test cases"):
         locked: list[list[TestCase]]
         if config.get("config:debug"):
             locked = [f.lock(on_options) for f in generators]
@@ -123,15 +125,17 @@ def generate_test_cases(
             locked = starmap(lock_file, [(f, on_options) for f in generators])
         cases: list[TestCase] = [case for group in locked for case in group if case]
         nc, ng = len(cases), len(generators)
-    logging.info(colorize("@*{Generated} %d test cases from %d generators" % (nc, ng)))
+    logger.info("@*{Generated} %d test cases from %d generators" % (nc, ng))
 
     duplicates = find_duplicates(cases)
     if duplicates:
-        logging.error("Duplicate test IDs generated for the following test cases")
+        logger.error("Duplicate test IDs generated for the following test cases")
         for id, dcases in duplicates.items():
-            logging.error(f"{id}:")
+            logger.error(f"{id}:")
             for case in dcases:
-                logging.emit(f"  - {case.display_name}: {case.file_path}\n")
+                logger.log(
+                    logging.EMIT, f"  - {case.display_name}: {case.file_path}", extra={"prefix": ""}
+                )
         raise ValueError("Duplicate test IDs in test suite")
 
     if config.get("config:debug"):

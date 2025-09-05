@@ -19,6 +19,8 @@ from ..types import CanaryReporter
 if TYPE_CHECKING:
     from ...session import Session
 
+logger = logging.get_logger(__name__)
+
 
 @hookimpl
 def canary_session_reporter() -> CanaryReporter:
@@ -48,7 +50,7 @@ class HTMLReporter(CanaryReporter):
         with open(self.index, "w") as fh:
             self.generate_index(session, fh)
         f = os.path.relpath(self.index, config.invocation_dir)
-        logging.info(f"HTML report written to {f}")
+        logger.info(f"HTML report written to {f}")
 
     @property
     def style(self) -> str:

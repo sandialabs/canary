@@ -52,7 +52,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args = parser.parse_args(m.argv)
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
-            logging.emit(shlex.join(a) + "\n")
+            sys.stderr.write(shlex.join(a) + "\n")
         if args.color:
             color.set_color_when(args.color)
 
@@ -211,6 +211,7 @@ def console_main() -> int:
     # Some CI/CD agents use yaml to describe jobs.  Quoting can get wonky between parsing the
     # yaml and passing it to the shell.  So, we allow url encoded strings and unquote them
     # here.
+    logger = logging.get_logger(__name__)
     for i, arg in enumerate(sys.argv):
         sys.argv[i] = urllib.parse.unquote(arg)
     try:
@@ -225,20 +226,20 @@ def console_main() -> int:
         return 1  # Python exits with error code 1 on EPIPE
     except StopExecution as e:
         if e.exit_code == 0:
-            logging.info(e.message)
+            logger.info(e.message)
         else:
-            logging.error(e.message)
+            logger.error(e.message)
         return e.exit_code
     except TimeoutError as e:
         if reraise:
             raise
-        logging.error(e.args[0])
+        logger.error(e.args[0])
         return 4
     except KeyboardInterrupt:
         if reraise:
             raise
         sys.stderr.write("\n")
-        logging.error("Keyboard interrupt.")
+        logger.error("Keyboard interrupt.")
         return signal.SIGINT.value
     except SystemExit as e:
         if e.code == 0:
@@ -255,5 +256,5 @@ def console_main() -> int:
         err = str(e)
         if plugin := determine_plugin_from_tb(tb):
             err += f" (from plugin: {plugin.__name__})"
-        logging.error(err)
+        logger.error(err)
         return 3

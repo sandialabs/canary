@@ -34,7 +34,7 @@ from _canary.third_party import schema
 from _canary.util import _difflib as difflib
 from _canary.util import filesystem
 from _canary.util import graph
-from _canary.util import logging
+from _canary.util import logging as _logging
 from _canary.util import module
 from _canary.util import shell
 from _canary.util.executable import Executable
@@ -43,6 +43,8 @@ from _canary.version import version_info
 
 from . import directives
 from . import patterns
+
+logging = _logging.get_logger("_canary")
 
 
 class TestParser(argparse.ArgumentParser):

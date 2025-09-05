@@ -19,6 +19,8 @@ from ..types import CanaryReporter
 if TYPE_CHECKING:
     from ...session import Session
 
+logger = logging.get_logger(__name__)
+
 
 @hookimpl
 def canary_session_reporter() -> CanaryReporter:
@@ -47,12 +49,11 @@ class MarkdownReporter(CanaryReporter):
                 try:
                     self.generate_case_file(case, fh)
                 except Exception as e:
-                    ex = e if logging.DEBUG >= logging.get_level() else None
-                    logging.warning(f"Issue writing report for test case ID:{case.id}", ex=ex)
+                    logger.exception(f"Issue writing report for test case ID:{case.id}")
         with open(self.index, "w") as fh:
             self.generate_index(session, fh)
         f = os.path.relpath(self.index, config.invocation_dir)
-        logging.info(f"Markdown report written to {f}")
+        logger.info(f"Markdown report written to {f}")
 
     def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
         if case.masked():

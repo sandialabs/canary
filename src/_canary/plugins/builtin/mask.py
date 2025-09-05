@@ -17,6 +17,9 @@ if TYPE_CHECKING:
     from ...testcase import TestCase
 
 
+logger = logging.get_logger(__name__)
+
+
 @hookimpl(tryfirst=True)
 def canary_testsuite_mask(
     cases: list["TestCase"],
@@ -39,11 +42,11 @@ def canary_testsuite_mask(
     """
     from ... import config
 
-    ctx = logging.context(colorize("@*{Masking} test cases based on filtering criteria"))
+    ctx = logging.context("@*{Masking} test cases based on filtering criteria")
     ctx.start()
     rx: re.Pattern | None = None
     if regex is not None:
-        logging.warning("Regular expression search can be slow for large test suites")
+        logger.warning("Regular expression search can be slow for large test suites")
         rx = re.compile(regex)
 
     no_filter_criteria = all(_ is None for _ in (keyword_exprs, parameter_expr, owners, regex))
@@ -66,7 +69,7 @@ def canary_testsuite_mask(
             continue
 
         if start is not None and not isrel(case.working_directory, start):
-            logging.debug(f"{case}: {case.working_directory=} but {start=}")
+            logger.debug(f"{case}: {case.working_directory=} but {start=}")
             case.mask = "Unreachable from start directory"
             continue
 

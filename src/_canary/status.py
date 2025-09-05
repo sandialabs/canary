@@ -149,7 +149,7 @@ class Status:
 
     @property
     def cname(self) -> str:
-        return colorize("@*%s{%s}" % (self.color, self.name))
+        return "@*%s{%s}" % (self.color, self.name)
 
     @property
     def color(self) -> str:

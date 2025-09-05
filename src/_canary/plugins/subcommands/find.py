@@ -8,7 +8,6 @@ import os
 from typing import TYPE_CHECKING
 
 from ...error import StopExecution
-from ...third_party.color import colorize
 from ...util import logging
 from ...util.banner import banner
 from ...util.filesystem import find_work_tree
@@ -21,6 +20,8 @@ from .common import add_resource_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
+
+logger = logging.get_logger(__name__)
 
 
 @hookimpl
@@ -57,15 +58,15 @@ class Find(CanarySubcommand):
         if quiet:
             logging.set_level(logging.ERROR)
         else:
-            logging.emit(banner() + "\n")
+            logger.log(logging.EMIT, banner(), extra={"prefix": ""})
         f = finder.Finder()
         for root, paths in args.paths.items():
             f.add(root, *paths, tolerant=True)
         f.prepare()
         s = ", ".join(os.path.relpath(p, os.getcwd()) for p in f.roots)
-        logging.info(colorize("@*{Searching} for tests in %s" % s))
+        logger.info("@*{Searching} for tests in %s" % s)
         generators = f.discover()
-        logging.debug(f"Discovered {len(generators)} test files")
+        logger.debug(f"Discovered {len(generators)} test files")
 
         cases = finder.generate_test_cases(generators, on_options=args.on_options)
 
@@ -99,7 +100,7 @@ class Find(CanarySubcommand):
             states = [case.getstate() for case in cases_to_run]
             with open(file, "w") as fh:
                 json.dump({"testcases": states}, fh, indent=2)
-            logging.info("test cases written to testcase.lock")
+            logger.info("test cases written to testcase.lock")
         else:
             finder.pprint(cases_to_run)
         return 0

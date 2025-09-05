@@ -15,6 +15,8 @@ from . import logging
 
 IOType = type[str] | TextIO | Path | str
 
+logger = logging.get_logger(__name__)
+
 
 class Executable:
     """Create a callable object for the executable ``name``
@@ -151,7 +153,7 @@ class Executable:
         result = Result(shlex.join(args))
 
         if verbose:
-            logging.info(f"Command line: {result.cmd}")
+            logger.info(f"Command line: {result.cmd}")
 
         try:
             f1: _StreamHandler
@@ -182,21 +184,21 @@ class Executable:
             msg = f"{self.file}: {e.strerror}"
             if fail_on_error:
                 raise ProcessError(msg)
-            logging.error(msg)
+            logger.error(msg)
 
         except CommandTimedOutError as e:
             result.returncode = self.returncode = 101
             msg = f"{e}\nExecution timed out when invoking command: {result.cmd}"
             if fail_on_error:
                 raise TimeoutError(msg) from None
-            logging.error(msg)
+            logger.error(msg)
 
         except Exception as e:
             result.returncode = self.returncode = 1
             msg = f"{e}\nUnknown failure occurred when invoking command: {result.cmd}"
             if fail_on_error:
                 raise ProcessError(msg)
-            logging.error(msg)
+            logger.error(msg)
 
         return result
 

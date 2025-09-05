@@ -15,6 +15,8 @@ from .common import add_filter_arguments
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
 
+logger = logging.get_logger(__name__)
+
 
 @hookimpl
 def canary_subcommand() -> CanarySubcommand:
@@ -41,7 +43,7 @@ class Rebaseline(CanarySubcommand):
             # Rebaseline diffed tests by default
             args.keyword_exprs = "diff"
 
-        logging.emit(banner() + "\n")
+        logger.log(logging.EMIT, banner(), extra={"prefix": ""})
         session = Session(args.work_tree, mode="r")
         session.filter(
             start=args.start,
