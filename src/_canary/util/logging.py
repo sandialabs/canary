@@ -149,7 +149,7 @@ def level_color(levelno: int) -> str:
 def get_level() -> int:
     logger = builtin_logging.getLogger("_canary")
     for handler in logger.handlers:
-        if isinstance(handler, builtin_logging.StreamHandler):
+        if isinstance(handler, StreamHandler):
             return handler.level
     return logger.getEffectiveLevel()
 
@@ -312,16 +312,15 @@ class context:
 
     def start(self) -> "context":
         self._start = time.monotonic()
-        # builtin_logging.log(self.levelno, self.message, extra={"end": "..."})
-        builtin_logging.getLogger("_canary").log(self.levelno, self.message, extra={"end": "..."})
+        extra = {"end": "..."}
+        builtin_logging.getLogger("_canary").log(self.levelno, self.message, extra=extra)
         return self
 
     def stop(self, failed: bool = False):
         state = "failed" if failed else "done"
         end = "... %s (%.2fs.)\n" % (state, time.monotonic() - self._start)
-        builtin_logging.getLogger("_canary").log(
-            self.levelno, self.message, extra={"end": end, "rewind": True}
-        )
+        extra = {"end": end, "rewind": True}
+        builtin_logging.getLogger("_canary").log(self.levelno, self.message, extra=extra)
 
     def __enter__(self) -> "context":
         return self.start()

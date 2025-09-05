@@ -6,7 +6,6 @@ import random
 from itertools import cycle
 
 from .. import version
-from ..third_party.color import colorize
 from . import logging
 
 bird = """\
@@ -48,7 +47,7 @@ def banner(color: bool = True) -> str:
         if not line.split() and not lines:
             continue
         elif line.split():
-            line = colorize("@*%s{%s}" % (next(colors), line))
+            line = "@*%s{%s}" % (next(colors), line)
         lines.append(line)
     banner = "\n".join(lines).rstrip()
     return banner + f"\nversion: {version.version}"

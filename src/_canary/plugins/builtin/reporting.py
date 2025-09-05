@@ -116,7 +116,7 @@ def print_short_test_status_summary(
                         break
     string = file.getvalue()
     if string.strip():
-        string = "@*{Short test summary info}" + string
+        string = "@*{Short test summary info}\n" + string
     logger.log(logging.EMIT, string, extra={"prefix": ""})
 
 
@@ -163,7 +163,6 @@ def runtest_report_status(session: "Session") -> None:
                     glyph = Status.glyph(case.status.value)
                     description = case.describe()
                     file.write("%s %s\n" % (glyph, description))
-        file.write("\n")
         logger.log(logging.EMIT, file.getvalue(), extra={"prefix": ""})
 
 
@@ -188,7 +187,7 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
             n = len(reasons[key])
-            logger.log(logging.EMIT, f"{'@M{==>}'} {n}: {reason}\n", extra={"prefix": ""})
+            logger.log(logging.EMIT, f"{'@M{==>}'} {n}: {reason}", extra={"prefix": ""})
             if config.getoption("show_excluded_tests"):
                 for case in reasons[key]:
                     logger.log(logging.EMIT, f"... {case.format('%N')}", extra={"prefix": ""})

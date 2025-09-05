@@ -7,7 +7,6 @@ import re
 from typing import TYPE_CHECKING
 
 from ... import when
-from ...third_party.color import colorize
 from ...util import filesystem
 from ...util import graph
 from ...util import logging
@@ -76,17 +75,17 @@ def canary_testsuite_mask(
         if case_specs is not None:
             if not any(case.matches(case_spec) for case_spec in case_specs):
                 expr = ",".join(case_specs)
-                case.mask = colorize("testspec expression @*{%s} did not match" % expr)
+                case.mask = "testspec expression @*{%s} did not match" % expr
             continue
 
         try:
             config.resource_pool.satisfiable(case.required_resources())
         except config.ResourceUnsatisfiable as e:
-            case.mask = colorize("@*{ResourceUnsatisfiable}(%r)" % e.args[0])
+            case.mask = "@*{ResourceUnsatisfiable}(%r)" % e.args[0]
             continue
 
         if owners and not owners.intersection(case.owners):
-            case.mask = colorize("not owned by @*{%r}" % case.owners)
+            case.mask = "not owned by @*{%r}" % case.owners
             continue
 
         if keyword_exprs is not None:
@@ -97,9 +96,7 @@ def canary_testsuite_mask(
                 for keyword_expr in keyword_exprs:
                     match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
                     if not match:
-                        case.mask = colorize(
-                            "keyword expression @*{%r} did not match" % keyword_expr
-                        )
+                        case.mask = "keyword expression @*{%r} did not match" % keyword_expr
                         break
                 if case.masked():
                     continue
@@ -110,7 +107,7 @@ def canary_testsuite_mask(
                 parameters=case.parameters | case.implicit_parameters,
             )
             if not match:
-                case.mask = colorize("parameter expression @*{%s} did not match" % parameter_expr)
+                case.mask = "parameter expression @*{%s} did not match" % parameter_expr
                 continue
 
         if case.dependencies and not ignore_dependencies:
@@ -125,7 +122,7 @@ def canary_testsuite_mask(
                     if os.path.isfile(asset.src) and filesystem.grep(rx, asset.src):
                         break
                 else:
-                    case.mask = colorize("@*{re.search(%r) is None} evaluated to @*g{True}" % regex)
+                    case.mask = "@*{re.search(%r) is None} evaluated to @*g{True}" % regex
                     continue
 
         # If we got this far and the case is not masked, only mask it if no filtering criteria were

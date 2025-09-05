@@ -37,7 +37,6 @@ from .error import skip_exit_status
 from .error import timeout_exit_status
 from .paramset import ParameterSet
 from .status import Status
-from .third_party.color import colorize
 from .util import filesystem as fs
 from .util import logging
 from .util._json import safeload
@@ -1363,7 +1362,7 @@ class TestCase(AbstractTestCase):
         colors = itertools.cycle("bmgycr")
         for key, value in self.parameters.sorted_items(predicate=stringify):
             old = f"{key}={value}"
-            new = colorize("@%s{%s}" % (next(colors), old))
+            new = "@%s{%s}" % (next(colors), old)
             what = re.sub("\\b%s\\b" % re.escape(old), new, what)
         return what
 

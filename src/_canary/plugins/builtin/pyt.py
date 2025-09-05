@@ -21,7 +21,6 @@ from ...paramset import ParameterSet
 from ...testcase import DependencyPatterns
 from ...testcase import TestCase
 from ...testcase import TestMultiCase
-from ...third_party.color import colorize
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
 from ...util import logging
@@ -464,7 +463,7 @@ class PYTTestGenerator(AbstractTestGenerator):
             if ns.value is True and not result.value:
                 return False, result.reason
             elif ns.value is False and result.value:
-                reason = result.reason or colorize("@*{enable=False}")
+                reason = result.reason or "@*{enable=False}"
                 return False, reason
         return True, None
 
