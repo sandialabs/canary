@@ -6,6 +6,7 @@ import argparse
 import importlib.resources as ir
 import json
 import os
+import re
 import sys
 import time
 import xml.dom.minidom as xdom
@@ -82,6 +83,7 @@ class CDashXMLReporter:
         generator: str | None = None,
         chunk_size: int | None = None,
         subproject_labels: list[str] | None = None,
+        use_testcase_labels: bool | None = False
     ) -> None:
         """Collect information and create reports"""
         self.meta: dict[str, Any] | None = None
@@ -99,9 +101,9 @@ class CDashXMLReporter:
             chunk_size = 500
         if chunk_size > 0:  # type: ignore
             for cases in chunked(self.data.cases, chunk_size):
-                self.write_test_xml(cases, subproject_labels=subproject_labels)
+                self.write_test_xml(cases, subproject_labels=subproject_labels, use_labels=use_testcase_labels)
         elif chunk_size < 0:  # type: ignore
-            self.write_test_xml(self.data.cases, subproject_labels=subproject_labels)
+            self.write_test_xml(self.data.cases, subproject_labels=subproject_labels, use_labels=use_testcase_labels)
         else:
             raise ValueError("chunk_size must be a positive integer or -1")
         self.write_notes_xml()
@@ -117,6 +119,7 @@ class CDashXMLReporter:
         namespace.buildname = fs.getAttribute("BuildName")
         namespace.buildstamp = fs.getAttribute("BuildStamp")
         namespace.generator = fs.getAttribute("Generator")
+        namespace.subproject_labels = [elem.getAttribute("name") for elem in fs.getElementsByTagName("Subproject")]
         return namespace
 
     def generate_buildstamp(self, track):
@@ -125,14 +128,17 @@ class CDashXMLReporter:
         return time.strftime(fmt, t)
 
     def validate_buildstamp(self, buildstamp):
-        fmt = "%Y%m%d-%H%M"
-        time_part = "-".join(buildstamp.split("-")[:-1])
-        try:
-            time.strptime(time_part, fmt)
-        except ValueError:
-            fmt += "-<track>"
-            raise ValueError(f"expected build stamp should formatted as {fmt!r}, got {buildstamp}")
-        return buildstamp
+        match = re.match(r"(\d{8}-\d{4})-[^ ]*", buildstamp)
+        if match:
+            time_part = match.group(1)
+            fmt = "%Y%m%d-%H%M"
+            try:
+                time.strptime(time_part, fmt)
+            except ValueError:
+                raise ValueError(f"expected build stamp time part should be formatted as {fmt!r}, got {time_part}")
+            return buildstamp
+        else:
+            raise ValueError(f"expected build stamp should match the format 'YYYYMMDD-HHMM-Track [optional description]', got {buildstamp}")
 
     @staticmethod
     def post(url: str, project: str, *files: str, done: bool = False) -> str | None:
@@ -202,8 +208,10 @@ class CDashXMLReporter:
         return doc
 
     def write_test_xml(
-        self, cases: list[TestCase], subproject_labels: list[str] | None = None
-    ) -> str:
+            self,
+            cases: list[TestCase],
+            subproject_labels: list[str] | None = None,
+            use_labels: bool | None = False) -> str:
         i = 0
         while True:
             filename = os.path.join(self.xml_dir, f"Test-{i}.xml")
@@ -216,6 +224,15 @@ class CDashXMLReporter:
         doc = self.create_document()
         root = doc.firstChild
 
+        #ToDo: add an argument for the subproject labels being found from tests
+        if use_labels:
+            project_labesls = set()
+            for case in cases:
+                if case.subproject_labels is not None:
+                    for sub_proj_labels in case.subproject_labels:
+                        project_labesls.add(sub_proj_labels)
+            subproject_labels = list(project_labesls)
+                
         if subproject_labels is not None:
             for label in subproject_labels:
                 subproject = doc.createElement("Subproject")

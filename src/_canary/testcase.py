@@ -324,6 +324,7 @@ class TestCase(AbstractTestCase):
         self._family: str = ""
         self._classname: str | None = None
         self._keywords: list[str] = []
+        self._subproject_labels: list[str] | None = None
         self._parameters: Parameters = Parameters()
         self._timeout: float | None = None
         self._baseline: list[str | tuple[str, str]] = []
@@ -570,6 +571,15 @@ class TestCase(AbstractTestCase):
     @keywords.setter
     def keywords(self, arg: list[str]) -> None:
         self._keywords = list(arg)
+
+    @property
+    def subproject_labels(self) -> list[str] | None:
+        """Test keywords (labels)"""
+        return self._subproject_labels
+
+    @subproject_labels.setter
+    def subproject_labels(self, arg: list[str]) -> None:
+        self._subproject_labels = list(arg)
 
     @property
     def implicit_keywords(self) -> list[str]:
