@@ -106,6 +106,13 @@ class CDashReporter(CanaryReporter):
             action=SubprojectLabels,
             help="Comma-separated list of labels that will be treated as subprojects",
         )
+        p.add_argument(
+            "--use-testcase-labels",
+            action="store_true",
+            default=False,
+            help="Use the test labels as the site configured Subproject labels. " 
+            "By default this will use all keywords found in tests as Subproject names.",
+        )
         p = sp.add_parser("post", help="Post CDash XML files")
         p.add_argument(
             "--project",
@@ -269,6 +276,7 @@ class CDashReporter(CanaryReporter):
             generator=kwargs.get("generator"),
             chunk_size=kwargs.get("chunk_size"),
             subproject_labels=kwargs.get("subproject_labels"),
+            use_testcase_labels=kwargs.get("use_testcase_labels"),
         )
         return
 
