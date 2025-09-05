@@ -128,17 +128,17 @@ class CDashXMLReporter:
         return time.strftime(fmt, t)
 
     def validate_buildstamp(self, buildstamp):
-        match = re.match(r"(\d{8}-\d{4})-[^ ]*", buildstamp)
+        match = re.match(r"(\d{8}-\d{4})-[^ ].*", buildstamp)
         if match:
             time_part = match.group(1)
             fmt = "%Y%m%d-%H%M"
             try:
                 time.strptime(time_part, fmt)
             except ValueError:
-                raise ValueError(f"expected build stamp time part should be formatted as {fmt!r}, got {time_part}")
+                raise ValueError(f"expected build stamp time formatting: {fmt!r}, got {time_part}")
             return buildstamp
         else:
-            raise ValueError(f"expected build stamp should match the format 'YYYYMMDD-HHMM-Track [optional description]', got {buildstamp}")
+            raise ValueError(f"expected build stamp should match the format 'YYYYMMDD-HHMM-Track', got {buildstamp}")
 
     @staticmethod
     def post(url: str, project: str, *files: str, done: bool = False) -> str | None:
@@ -224,7 +224,6 @@ class CDashXMLReporter:
         doc = self.create_document()
         root = doc.firstChild
 
-        #ToDo: add an argument for the subproject labels being found from tests
         if use_labels:
             project_labesls = set()
             for case in cases:

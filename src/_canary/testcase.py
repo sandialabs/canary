@@ -574,7 +574,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def subproject_labels(self) -> list[str] | None:
-        """Test keywords (labels)"""
+        """Test subproject labels"""
         return self._subproject_labels
 
     @subproject_labels.setter
