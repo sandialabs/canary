@@ -98,9 +98,9 @@ def set_level(level: int | str) -> None:
         levelno = get_levelno(level)
     else:
         levelno = level
-    builtin_logging.getLogger("_canary").setLevel(levelno)
     for handler in builtin_logging.getLogger("_canary").handlers:
-        handler.setLevel(levelno)
+        if levelno < handler.level:
+            handler.setLevel(levelno)
 
 
 def setup_logging() -> None:
@@ -119,7 +119,7 @@ def add_file_handler(file: str, levelno: int) -> None:
     os.makedirs(os.path.dirname(file), exist_ok=True)
     fh = FileHandler(file)
     fmt = Formatter(
-        fmt="[%(asctime)s] %(levelname)s [%(name)s::%(funcName)s:%(lineno)d] %(message)s",
+        fmt="[%(asctime)s] %(levelname)s: %(name)s::%(funcName)s:%(lineno)d: %(message)s",
         datefmt="%Y-%m-%d-%H:%M:%S",
         color=False,
     )
