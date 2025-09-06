@@ -729,8 +729,25 @@ def get_job_artifacts(api_v4_url, project_id, jobid, access_token=None, dest=Non
         request = Request(url=url, headers=headers)
         response = urlopen(request)
         f = zipfile.ZipFile(io.BytesIO(response.read()))
-        f.extractall(".")
-        files = os.listdir(".")
+        # Safe extraction: block traversal and absolute paths
+        def is_within_directory(directory, target):
+            abs_directory = os.path.abspath(directory)
+            abs_target = os.path.abspath(target)
+            return abs_target.startswith(abs_directory + os.sep)
+
+        safe_files = []
+        for member in f.namelist():
+            # Block absolute paths and traversal
+            if os.path.isabs(member) or ".." in member.split(os.sep):
+                logging.warning(f"Blocked unsafe zip member: {member}")
+                continue
+            target_path = os.path.join(".", member)
+            if not is_within_directory(".", target_path):
+                logging.warning(f"Blocked zip member outside target dir: {member}")
+                continue
+            f.extract(member, ".")
+            safe_files.append(member)
+        files = [f for f in safe_files if os.path.exists(f)]
         for file in files:
             if os.path.isdir(file):
                 shutil.copytree(file, f"{dest}/{file}")
