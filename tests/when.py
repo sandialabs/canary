@@ -45,6 +45,7 @@ def test_when_options():
     assert expr.evaluate(on_options=["baz"]).value is True
 
 
+        
 def test_when_parameters():
     expr = When.from_string("parameters='cpus<4'")
     assert expr.evaluate().value is False
@@ -79,6 +80,26 @@ def test_when_parameters():
     assert expr.evaluate(parameters={"cpus": 3, "baz": "wubble"}).value is True
     assert expr.evaluate(parameters={"cpus": 3, "baz": "spam"}).value is True
 
+
+
+# Security test: ParameterExpression should block code execution via builtins
+def test_parameterexpression_blocks_builtins():
+    from _canary.expression import ParameterExpression
+    # Try to access a builtin (should be blocked)
+    expr = ParameterExpression("__import__('os').system('echo hacked')")
+    # Should not execute, should raise SyntaxError or NameError or return False
+    try:
+        result = expr.evaluate({})
+    except (SyntaxError, NameError):
+        result = False
+    assert result is False, "ParameterExpression should block access to builtins and code execution"
+    # Try to access another builtin
+    expr2 = ParameterExpression("open('somefile.txt', 'w')")
+    try:
+        result2 = expr2.evaluate({})
+    except (SyntaxError, NameError):
+        result2 = False
+    assert result2 is False, "ParameterExpression should block open() and other builtins"
 
 def test_when_composite():
     params = {"cpus": 4}
