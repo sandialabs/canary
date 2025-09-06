@@ -7,7 +7,6 @@ import sys
 from typing import TYPE_CHECKING
 
 from ... import config
-from ...third_party.color import colorize
 from ...util import graph
 from ...util import logging
 from ..hookspec import hookimpl
@@ -124,7 +123,7 @@ class Run(CanarySubcommand):
                         roots.add(generator.root)
                     n, N = len(generators), len(roots)
                     s, S = "" if n == 1 else "s", "" if N == 1 else "s"
-                    logger.info(colorize("@*{Collected} %d file%s from %d root%s" % (n, s, N, S)))
+                    logger.info("@*{Collected} %d file%s from %d root%s" % (n, s, N, S))
                     if until == "discover":
                         logger.info("Done with test discovery")
                         return 0
@@ -141,7 +140,7 @@ class Run(CanarySubcommand):
                     active_cases = session.get_ready()
                     n, N = len(active_cases), len({case.file for case in active_cases})
                     s, S = "" if n == 1 else "s", "" if N == 1 else "s"
-                    logger.info(colorize("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S)))
+                    logger.info("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S))
                     graph.print(active_cases, file=sys.stdout)
                     if until == "lock":
                         logger.info("Done freezing test cases")

@@ -9,6 +9,7 @@ import json
 import multiprocessing
 import os
 import sys
+import time
 from contextlib import contextmanager
 from datetime import datetime
 from typing import IO
@@ -300,7 +301,10 @@ class Session:
 
     def dump_testcases(self) -> None:
         """Dump each case's state in this session to ``file`` in json format"""
-        with logging.context("@*{Generating} test case lockfiles"):
+        msg = "@*{Generating} test case lockfiles"
+        created = time.monotonic()
+        logger.log(logging.INFO, msg, extra={"end": "..."})
+        try:
             if len(self.cases) < 100:
                 [case.save() for case in self.cases]
             else:
@@ -313,43 +317,62 @@ class Session:
             index = {case.id: [dep.id for dep in case.dependencies] for case in self.cases}
             with self.db.open("cases/index", "w") as fh:
                 json.dump({"index": index}, fh, indent=2)
+        except Exception:
+            state = "failed"
+            raise
+        else:
+            state = "done"
+        finally:
+            end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+            extra = {"end": end, "rewind": True}
+            logger.log(logging.INFO, msg, extra=extra)
 
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
         """Load test cases previously dumped by ``dump_testcases``.  Dependency resolution is also
         performed
         """
-        ctx = logging.context("@*{Loading} test cases", levelno=logging.DEBUG)
-        ctx.start()
-        with self.db.open("cases/index", "r") as fh:
-            # index format: {ID: [DEPS_IDS]}
-            index = json.load(fh)["index"]
-        ids_to_load: set[str] = set()
-        if ids:
-            # we must not only load the requested IDs, but also their dependencies
-            for id in ids:
-                ids_to_load.update(find_reachable_nodes(index, id))
-        ts: TopologicalSorter = TopologicalSorter()
-        cases: dict[str, TestCase | TestMultiCase] = {}
-        for id, deps in index.items():
-            ts.add(id, *deps)
-        for id in ts.static_order():
-            if ids_to_load and id not in ids_to_load:
-                continue
-            # see TestCase.lockfile for file pattern
-            file = self.db.join_path("cases", id[:2], id[2:], TestCase._lockfile)
-            with self.db.open(file) as fh:
-                try:
-                    state = json.load(fh)
-                except json.JSONDecodeError:
-                    logger.warning(f"Unable to load {file}!")
+        msg = "@*{Loading} test cases"
+        created = time.monotonic()
+        logger.log(logging.DEBUG, msg, extra={"end": "..."})
+        try:
+            with self.db.open("cases/index", "r") as fh:
+                # index format: {ID: [DEPS_IDS]}
+                index = json.load(fh)["index"]
+            ids_to_load: set[str] = set()
+            if ids:
+                # we must not only load the requested IDs, but also their dependencies
+                for id in ids:
+                    ids_to_load.update(find_reachable_nodes(index, id))
+            ts: TopologicalSorter = TopologicalSorter()
+            cases: dict[str, TestCase | TestMultiCase] = {}
+            for id, deps in index.items():
+                ts.add(id, *deps)
+            for id in ts.static_order():
+                if ids_to_load and id not in ids_to_load:
                     continue
-            state["properties"]["work_tree"] = self.work_tree
-            for i, dep_state in enumerate(state["properties"]["dependencies"]):
-                # assign dependencies from existing dependencies
-                state["properties"]["dependencies"][i] = cases[dep_state["properties"]["id"]]
-            cases[id] = testcase_from_state(state)
-            assert id == cases[id].id
-        ctx.stop()
+                # see TestCase.lockfile for file pattern
+                file = self.db.join_path("cases", id[:2], id[2:], TestCase._lockfile)
+                with self.db.open(file) as fh:
+                    try:
+                        state = json.load(fh)
+                    except json.JSONDecodeError:
+                        logger.warning(f"Unable to load {file}!")
+                        continue
+                state["properties"]["work_tree"] = self.work_tree
+                for i, dep_state in enumerate(state["properties"]["dependencies"]):
+                    # assign dependencies from existing dependencies
+                    state["properties"]["dependencies"][i] = cases[dep_state["properties"]["id"]]
+                cases[id] = testcase_from_state(state)
+                assert id == cases[id].id
+        except Exception:
+            state = "failed"
+            raise
+        else:
+            state = "done"
+        finally:
+            end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+            extra = {"end": end, "rewind": True}
+            logger.log(logging.DEBUG, msg, extra=extra)
         return list(cases.values())
 
     def dump_testcase_generators(self) -> None:
@@ -362,12 +385,22 @@ class Session:
     def load_testcase_generators(self) -> None:
         """Load test files (test generators) previously dumped by ``dump_testcase_generators``"""
         self.generators.clear()
-        ctx = logging.context("@*{Loading} test case generators", levelno=logging.DEBUG)
-        ctx.start()
-        with self.db.open("files", "r") as file:
-            states = json.load(file)
-            self.generators.extend(map(AbstractTestGenerator.from_state, states))
-        ctx.stop()
+        msg = "@*{Loading} test case generators"
+        logger.log(logging.DEBUG, msg, extra={"end": "..."})
+        created = time.monotonic()
+        try:
+            with self.db.open("files", "r") as file:
+                states = json.load(file)
+                self.generators.extend(map(AbstractTestGenerator.from_state, states))
+        except Exception:
+            state = "failed"
+            raise
+        else:
+            state = "done"
+        finally:
+            end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+            extra = {"end": end, "rewind": True}
+            logger.log(logging.DEBUG, msg, extra=extra)
         return
 
     def restore_settings(self) -> None:

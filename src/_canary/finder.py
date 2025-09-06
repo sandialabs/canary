@@ -5,6 +5,7 @@
 import os
 import re
 import sys
+import time
 from typing import Any
 from typing import TextIO
 
@@ -86,29 +87,39 @@ class Finder:
 
 
 def resolve_dependencies(cases: list[TestCase]) -> None:
-    ctx = logging.context("@*{Resolving} test case dependencies")
-    ctx.start()
-    for case in cases:
-        while True:
-            if not case.unresolved_dependencies:
-                break
-            dep = case.unresolved_dependencies.pop(0)
-            matches = dep.evaluate([c for c in cases if c != case], extra_fields=True)
-            n = len(matches)
-            if dep.expect == "+" and n < 1:
-                raise ValueError(f"{case}: expected at least one dependency, got {n}")
-            elif dep.expect == "?" and n not in (0, 1):
-                raise ValueError(f"{case}: expected 0 or 1 dependency, got {n}")
-            elif isinstance(dep.expect, int) and n != dep.expect:
-                raise ValueError(f"{case}: expected {dep.expect} dependencies, got {n}")
-            elif dep.expect != "*" and n == 0:
-                raise ValueError(
-                    f"Dependency pattern {dep.value} of test case {case.name} not found"
-                )
-            for match in matches:
-                assert isinstance(match, TestCase)
-                case.add_dependency(match, dep.result)
-    ctx.stop()
+    created = time.monotonic()
+    msg = "@*{Resolving} test case dependencies"
+    logger.info(msg, extra={"end": "..."})
+    try:
+        for case in cases:
+            while True:
+                if not case.unresolved_dependencies:
+                    break
+                dep = case.unresolved_dependencies.pop(0)
+                matches = dep.evaluate([c for c in cases if c != case], extra_fields=True)
+                n = len(matches)
+                if dep.expect == "+" and n < 1:
+                    raise ValueError(f"{case}: expected at least one dependency, got {n}")
+                elif dep.expect == "?" and n not in (0, 1):
+                    raise ValueError(f"{case}: expected 0 or 1 dependency, got {n}")
+                elif isinstance(dep.expect, int) and n != dep.expect:
+                    raise ValueError(f"{case}: expected {dep.expect} dependencies, got {n}")
+                elif dep.expect != "*" and n == 0:
+                    raise ValueError(
+                        f"Dependency pattern {dep.value} of test case {case.name} not found"
+                    )
+                for match in matches:
+                    assert isinstance(match, TestCase)
+                    case.add_dependency(match, dep.result)
+    except Exception:
+        state = "failed"
+        raise
+    else:
+        state = "done"
+    finally:
+        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+        extra = {"end": end, "rewind": True}
+        logger.log(logging.INFO, msg, extra=extra)
 
 
 def generate_test_cases(
@@ -117,7 +128,10 @@ def generate_test_cases(
 ) -> list[TestCase]:
     """Generate test cases and filter based on criteria"""
 
-    with logging.context("@*{Generating} test cases"):
+    msg = "@*{Generating} test cases"
+    logger.log(logging.INFO, msg, extra={"end": "..."})
+    created = time.monotonic()
+    try:
         locked: list[list[TestCase]]
         if config.get("config:debug"):
             locked = [f.lock(on_options) for f in generators]
@@ -125,6 +139,15 @@ def generate_test_cases(
             locked = starmap(lock_file, [(f, on_options) for f in generators])
         cases: list[TestCase] = [case for group in locked for case in group if case]
         nc, ng = len(cases), len(generators)
+    except Exception:
+        state = "failed"
+        raise
+    else:
+        state = "done"
+    finally:
+        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+        extra = {"end": end, "rewind": True}
+        logger.log(logging.INFO, msg, extra=extra)
     logger.info("@*{Generated} %d test cases from %d generators" % (nc, ng))
 
     duplicates = find_duplicates(cases)

@@ -3,13 +3,11 @@
 # SPDX-License-Identifier: MIT
 
 import datetime
-import inspect
 import logging as builtin_logging
 import math
 import os
 import sys
 import termios
-import time
 from contextlib import contextmanager
 from typing import IO
 from typing import Any
@@ -68,7 +66,6 @@ class Formatter(builtin_logging.Formatter):
     def format(self, record):
         extra = {
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
-            "plugin": get_plugin(),
         }
         if not hasattr(record, "prefix"):
             if record.levelno in (INFO, DEBUG):
@@ -101,7 +98,7 @@ def set_level(level: int | str) -> None:
         levelno = get_levelno(level)
     else:
         levelno = level
-    builtin_logging.getLogger().setLevel(levelno)
+    builtin_logging.getLogger("_canary").setLevel(levelno)
     for handler in builtin_logging.getLogger("_canary").handlers:
         handler.setLevel(levelno)
 
@@ -115,13 +112,17 @@ def setup_logging() -> None:
     sh.setLevel(INFO)
     logger = builtin_logging.getLogger("_canary")
     logger.addHandler(sh)
-    logger.setLevel(INFO)
+    logger.setLevel(TRACE)
 
 
 def add_file_handler(file: str, levelno: int) -> None:
     os.makedirs(os.path.dirname(file), exist_ok=True)
     fh = FileHandler(file)
-    fmt = Formatter(fmt="[%(timestamp)s] %(message)s%(plugin)s", color=False)
+    fmt = Formatter(
+        fmt="[%(asctime)s] %(levelname)s [%(name)s::%(funcName)s:%(lineno)d] %(message)s",
+        datefmt="%Y-%m-%d-%H:%M:%S",
+        color=False,
+    )
     fh.setFormatter(fmt)
     fh.setLevel(levelno)
     logger = builtin_logging.getLogger("_canary")
@@ -278,52 +279,8 @@ def capture(file_like: str | IO[Any], mode: str = "w") -> Generator[None, None, 
             file.close()
 
 
-def get_plugin() -> str:
-    if plugin := determine_plugin():
-        return " (from plugin: @*{%s::%s})" % (plugin.__name__, plugin.f_name)
-    return ""
-
-
-def determine_plugin() -> Any | None:
-    from .. import config
-
-    stack = inspect.stack()
-    for frame_info in stack:
-        filename = frame_info.frame.f_code.co_filename
-        for plugin in config.plugin_manager.get_plugins():
-            if plugin and plugin.__file__ == filename:
-                plugin.f_name = frame_info.frame.f_code.co_name
-                return plugin
-    return None
-
-
 def reset():
     if sys.stdin.isatty():
         fd = sys.stdin.fileno()
         save_tty_attr = termios.tcgetattr(fd)
         termios.tcsetattr(fd, termios.TCSAFLUSH, save_tty_attr)
-
-
-class context:
-    def __init__(self, message: str, *, levelno=builtin_logging.INFO) -> None:
-        self._start = -1.0
-        self.message = message
-        self.levelno = levelno
-
-    def start(self) -> "context":
-        self._start = time.monotonic()
-        extra = {"end": "..."}
-        builtin_logging.getLogger("_canary").log(self.levelno, self.message, extra=extra)
-        return self
-
-    def stop(self, failed: bool = False):
-        state = "failed" if failed else "done"
-        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - self._start)
-        extra = {"end": end, "rewind": True}
-        builtin_logging.getLogger("_canary").log(self.levelno, self.message, extra=extra)
-
-    def __enter__(self) -> "context":
-        return self.start()
-
-    def __exit__(self, *args) -> None:
-        self.stop(failed=args[0] is not None)

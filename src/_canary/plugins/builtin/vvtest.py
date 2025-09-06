@@ -27,7 +27,6 @@ from ...enums import list_parameter_space
 from ...generator import AbstractTestGenerator
 from ...testcase import TestCase
 from ...testcase import TestMultiCase
-from ...third_party.color import colorize
 from ...util import logging
 from ...util import scalar
 from ...util import string
@@ -598,7 +597,7 @@ def p_SKIPIF(arg: SimpleNamespace) -> tuple[bool, str]:
     if not skip:
         return False, ""
     if not reason:
-        reason = colorize("skipif expression @*b{%s} evaluating to @*g{True}" % expression)
+        reason = "skipif expression @*b{%s} evaluating to @*g{True}" % expression
     return True, reason
 
 
