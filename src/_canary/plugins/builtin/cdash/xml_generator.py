@@ -227,8 +227,8 @@ class CDashXMLReporter:
         if use_labels:
             project_labesls = set()
             for case in cases:
-                if case.subproject_labels is not None:
-                    for sub_proj_labels in case.subproject_labels:
+                if case.keywords is not None:
+                    for sub_proj_labels in case.keywords:
                         project_labesls.add(sub_proj_labels)
             subproject_labels = list(project_labesls)
                 
