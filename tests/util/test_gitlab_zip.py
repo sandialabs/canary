@@ -4,11 +4,9 @@
 
 import os
 import zipfile
-import tempfile
-import shutil
-import pytest
 
 from _canary.util import gitlab
+
 
 def make_zip_with_traversal(zip_path):
     with zipfile.ZipFile(zip_path, "w") as z:
