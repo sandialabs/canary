@@ -81,16 +81,35 @@ class Formatter(builtin_logging.Formatter):
         return colorize(result, color=self.color)
 
 
+def level_name_mapping() -> dict[int, str]:
+    mapping = {
+        NOTSET: "NOTSET",
+        TRACE: "TRACE",
+        DEBUG: "DEBUG",
+        INFO: "INFO",
+        WARNING: "WARNING",
+        ERROR: "ERROR",
+        CRITICAL: "CRITICAL",
+        EMIT: "EMIT",
+    }
+    return mapping
+
+
 def get_logger(name: str) -> builtin_logging.Logger:
     return builtin_logging.getLogger(name)
 
 
 def get_level_name(levelno: int | None = None) -> str:
-    return builtin_logging.getLevelName(levelno or get_level())
+    mapping = level_name_mapping()
+    return mapping[levelno or get_level()]
 
 
 def get_levelno(levelname: str) -> int:
-    return builtin_logging.getLevelNamesMapping()[levelname]
+    mapping = level_name_mapping()
+    for level, name in mapping.items():
+        if name == levelname:
+            return level
+    raise ValueError(f"Invalid logging level name {levelname!r}")
 
 
 def set_level(level: int | str) -> None:
