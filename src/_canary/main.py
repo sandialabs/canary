@@ -88,6 +88,10 @@ class CanaryMain:
         if args.C:
             config.working_dir = args.C
         os.chdir(config.working_dir)
+
+        # Consider plugins passed in the environment and the command line early, before parsing the
+        # main command line. This allows plugins to define a subcommand (which must be registered
+        # before it can be run)
         for p in args.plugins:
             config.plugin_manager.consider_plugin(p)
         return self
@@ -119,9 +123,6 @@ class CanaryCommand:
                     reraise = True
                 argv = [self.command.name] + list(args_in)
                 parser = make_argument_parser()
-                args = parser.preparse(argv, addopts=False)
-                for p in args.plugins:
-                    config.plugin_manager.consider_plugin(p)
                 for command in config.plugin_manager.get_subcommands():
                     parser.add_command(command)
                 with monkeypatch.context() as mp:
