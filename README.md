@@ -24,17 +24,20 @@ Python 3.10+
 
 `canary` is distributed as a python library and is most easily installed via `pip` (or other compatible tool):
 
+To install the latest production version, execute:
+
+```console
+python3 -m pip install canary-wm
+```
+
 To install the latest development version, execute:
 
 ```console
 python3 -m pip install "canary-wm@git+ssh://git@github.com/sandialabs/canary"
 ```
 
-To install the latest production version, execute:
+> **NOTE:** Installing from the main development branch depends on floating git refs to one or more dependencies.  For stable installs, install a published release.
 
-```console
-python3 -m pip install canary-wm
-```
 
 ## Developers
 
@@ -55,7 +58,7 @@ python3 -m pip install --editable .[dev]
 To format code and run `canary`'s internal tests, execute
 
 ```console
-./bin/pre-commit
+canary check
 ```
 
 ## License
