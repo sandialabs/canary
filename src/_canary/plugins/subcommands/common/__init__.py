@@ -110,8 +110,9 @@ def add_resource_arguments(parser: "Parser") -> None:
         metavar="type=T",
         help=f"Set the timeout for {bold('type')} "
         "(accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s). "
-        f"If type={bold('session')}, the timeout is applied to the entire test session.  "
+        f"If type={bold('session')}, the timeout T is applied to the entire test session.  "
         f"If type={bold('multiplier')}, the multiplier T is applied to each test's timeout.  "
+        f"If type={bold('all')}, the timeout T is applied to each individual test.  "
         f"Otherwise, a timeout of T is applied to tests having keyword {bold('type')}.  "
         "For example, --timeout fast=2 would apply a timeout of 2 seconds to all tests having "
         "the 'fast' keyword; common types are fast, long, default, and ctest.",

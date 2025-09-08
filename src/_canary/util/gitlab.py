@@ -729,6 +729,7 @@ def get_job_artifacts(api_v4_url, project_id, jobid, access_token=None, dest=Non
         request = Request(url=url, headers=headers)
         response = urlopen(request)
         f = zipfile.ZipFile(io.BytesIO(response.read()))
+
         # Safe extraction: block traversal and absolute paths
         def is_within_directory(directory, target):
             abs_directory = os.path.abspath(directory)

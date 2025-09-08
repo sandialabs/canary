@@ -329,7 +329,7 @@ class ParameterExpression:
     def evaluate(self, parameters: dict[str, Any]) -> bool:
         # SECURITY: Only allow whitelisted names/functions in eval, and remove builtins.
         # This prevents arbitrary code execution via builtins or unexpected globals.
-        safe_globals = {"__builtins__": {}}
+        safe_globals: dict[str, Any] = {"__builtins__": {}}
         # Only expose parameter keys, plus defined/not_defined helpers
         safe_globals.update({k: v for k, v in parameters.items()})
         safe_globals["not_defined"] = NotDefined(list(parameters.keys()))
