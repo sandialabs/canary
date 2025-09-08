@@ -416,6 +416,7 @@ def setup(app):
 
 
 def hashit(arg, length=15):
+    """Create a non-cryptographic hash solely for the purpose of creating a reproducible ID"""
     if isinstance(arg, (list, tuple)):
         arg = " ".join(arg)
     obj = hashlib.md5(arg.encode("utf-8"))
