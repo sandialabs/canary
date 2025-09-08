@@ -24,6 +24,9 @@ def canary_session_reporter() -> CanaryReporter:
     return GitLabMRReporter()
 
 
+logger = logging.get_logger(__name__)
+
+
 class GitLabMRReporter(CanaryReporter):
     type = "gitlab-mr"
     description = "GitLab reporter"
@@ -115,7 +118,7 @@ class MergeRequest:
         if cdash_build_url is not None:
             fp.write(f"See the [CDash entry]({cdash_build_url}) for details.\n\n")
         note = fp.getvalue()
-        logging.info(note)
+        logger.info(note)
         self.add_note(note)
 
 

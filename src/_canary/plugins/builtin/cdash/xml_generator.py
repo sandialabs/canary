@@ -30,6 +30,9 @@ if TYPE_CHECKING:
     from ....session import Session
 
 
+logger = logging.get_logger(__name__)
+
+
 class CDashXMLReporter:
     def __init__(self, session: "Session | None" = None, dest: str | None = None) -> None:
         self.data = TestData()
@@ -143,7 +146,7 @@ class CDashXMLReporter:
         upload_errors = 0
         buildid = None
         for file in files:
-            logging.info(f"Posting {file} to {url}", file=sys.stderr)
+            logger.info(f"Posting {file} to {url}")
             payload = server.upload(
                 filename=file,
                 sitename=ns.site,
@@ -154,7 +157,7 @@ class CDashXMLReporter:
             upload_error = 0 if payload["status"] == "OK" else 1
             upload_errors += upload_error
         if upload_errors:
-            logging.warning(f"{upload_errors} files failed to upload to CDash")
+            logger.warning(f"{upload_errors} files failed to upload to CDash")
         if buildid is None:
             return None
         if done:
@@ -211,7 +214,7 @@ class CDashXMLReporter:
                 break
             i += 1
         f = os.path.relpath(filename, config.invocation_dir)
-        logging.info(f"Writing {f} ({len(cases)} test cases)")
+        logger.info(f"Writing {f} ({len(cases)} test cases)")
 
         doc = self.create_document()
         root = doc.firstChild
@@ -367,7 +370,7 @@ class CDashXMLReporter:
             return None
         filename = unique_file(self.xml_dir, "Notes", ".xml")
         f = os.path.relpath(filename, config.invocation_dir)
-        logging.info(f"Writing Notes.xml to {f}")
+        logger.info(f"Writing Notes.xml to {f}")
         doc = self.create_document()
         root = doc.firstChild
         notes_el = doc.createElement("Notes")

@@ -17,7 +17,6 @@ from typing import Type
 
 from .expression import Expression
 from .expression import ParameterExpression
-from .third_party.color import colorize
 
 
 class WhenResult:
@@ -172,7 +171,7 @@ class When:
         if not expr.evaluate(PlatformMatcher()):
             fmt = "@*{{platforms={0}}} evaluated to @*r{{False}} for platforms={1}"
             input = ",".join(PlatformMatcher().own_platform_names)
-            reason = colorize(fmt.format(expr.string, input))
+            reason = fmt.format(expr.string, input)
             return reason
         return None
 
@@ -180,14 +179,14 @@ class When:
         assert self.testname_expr is not None
         if testname_arg is None:
             fmt = "@*{{testname={0}}} evaluated to @*r{{False}} for testname=None"
-            reason = colorize(fmt.format(self.testname_expr))
+            reason = fmt.format(self.testname_expr)
             return reason
         string = safe_substitute(self.testname_expr, **kwds)
         string = remove_surrounding_quotes(string)
         expr = Expression.compile(string, allow_wildcards=True)
         if not expr.evaluate(NameMatcher({testname_arg})):
             fmt = "@*{{testname={0}}} evaluated to @*r{{False}} for testname={1}"
-            reason = colorize(fmt.format(expr.string, testname_arg))
+            reason = fmt.format(expr.string, testname_arg)
             return reason
         return None
 
@@ -199,7 +198,7 @@ class When:
         expr = Expression.compile(string, allow_wildcards=True)
         if not expr.evaluate(OptionMatcher(set(options_arg))):
             fmt = "@*{{options={0}}} evaluated to @*r{{False}} for options={1}"
-            reason = colorize(fmt.format(expr.string, json.dumps(options_arg)))
+            reason = fmt.format(expr.string, json.dumps(options_arg))
             return reason
         return None
 
@@ -213,7 +212,7 @@ class When:
         expr = Expression.compile(string, allow_wildcards=True)
         if not expr.evaluate(AnyMatcher(set(keywords_arg), False)):
             fmt = "@*{{keywords={0}}} evaluated to @*r{{False}} for keywords={1}"
-            reason = colorize(fmt.format(expr.string, json.dumps(keywords_arg)))
+            reason = fmt.format(expr.string, json.dumps(keywords_arg))
             return reason
         return None
 
@@ -227,7 +226,7 @@ class When:
         expr = ParameterExpression(string)
         if not expr.evaluate(parameters_arg):
             fmt = "@*{{parameters={0}}} evaluated to @*r{{False}} for parameters={1}"
-            reason = colorize(fmt.format(expr.string, json.dumps(parameters_arg)))
+            reason = fmt.format(expr.string, json.dumps(parameters_arg))
             return reason
         return None
 

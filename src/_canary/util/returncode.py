@@ -7,6 +7,8 @@ from typing import Sequence
 from ..testcase import TestCase
 from . import logging
 
+logger = logging.get_logger(__name__)
+
 
 def compute_returncode(cases: Sequence[TestCase], permissive: bool = False) -> int:
     returncode: int = 0
@@ -33,6 +35,6 @@ def compute_returncode(cases: Sequence[TestCase], permissive: bool = False) -> i
                 # any other code is a failure
                 returncode |= 2**6
                 if case.status.value not in warned:
-                    logging.warning(f"{case}: unhandled status: {case.status}")
+                    logger.warning(f"{case}: unhandled status: {case.status}")
                     warned.add(case.status.value)
     return returncode

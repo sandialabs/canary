@@ -11,7 +11,6 @@ import signal
 import sys
 import threading
 import time
-import traceback
 from concurrent.futures import Future
 from concurrent.futures.process import BrokenProcessPool
 from contextlib import contextmanager
@@ -29,7 +28,6 @@ from ...queues import Empty as EmptyQueue
 from ...queues import ResourceQueue
 from ...testbatch import TestBatch
 from ...testcase import TestCase
-from ...third_party.color import colorize
 from ...util import keyboard
 from ...util import logging
 from ...util.filesystem import mkdirp
@@ -42,6 +40,7 @@ from ...util.time import timestamp
 from ..hookspec import hookimpl
 
 global_session_lock = threading.Lock()
+logger = logging.get_logger(__name__)
 
 
 class ProcessPoolExecutor(concurrent.futures.ProcessPoolExecutor):
@@ -82,10 +81,10 @@ def canary_runtests(cases: list[TestCase], fail_fast: bool = False) -> int:
                     "batch" if isinstance(queue, BatchResourceQueue) else "test case",
                     queue_size,
                 )
-                logging.info(colorize("@*{Running} %d %s" % (queue_size, what)))
+                logger.info("@*{Running} %d %s" % (queue_size, what))
                 start = timestamp()
                 stop = -1.0
-                logging.debug("Start: processing queue")
+                logger.debug("Start: processing queue")
                 process_queue(queue=queue)
             except ProcessPoolExecutorFailedToStart:
                 if config.get("session:level"):
@@ -98,34 +97,35 @@ def canary_runtests(cases: list[TestCase], fail_fast: bool = False) -> int:
                     returncode = compute_returncode(queue.cases())
                 raise
             except KeyboardInterrupt:
-                logging.debug("keyboard interrupt: killing child processes and exiting")
+                logger.debug("keyboard interrupt: killing child processes and exiting")
                 returncode = signal.SIGINT.value
                 cleanup_queue = False
                 raise
             except StopExecution as e:
-                logging.debug("stop execution: killing child processes and exiting")
+                logger.debug("stop execution: killing child processes and exiting")
                 returncode = e.exit_code
             except FailFast as e:
-                logging.debug("fail fast: killing child processes and exiting")
+                logger.debug("fail fast: killing child processes and exiting")
                 code = compute_returncode(e.failed)
                 returncode = code
                 cleanup_queue = False
                 names = ",".join(_.name for _ in e.failed)
                 raise StopExecution(f"fail_fast: {names}", code)
             except Exception:
-                logging.debug("unknown failure: killing child processes and exiting")
-                logging.error(traceback.format_exc())
+                logger.exception("unknown failure: killing child processes and exiting")
                 returncode = compute_returncode(queue.cases())
                 raise
             else:
-                if config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO:
+                if (
+                    config.getoption("format") == "progress-bar"
+                    or logging.get_level() > logging.INFO
+                ):
                     queue.update_progress_bar(start, last=True)
                 returncode = compute_returncode(queue.cases())
                 queue.close(cleanup=cleanup_queue)
                 stop = timestamp()
                 dt = stop - start
-                msg = colorize("@*{Finished} %d %s (%s)\n" % (queue_size, what, hhmmss(dt)))
-                logging.info(msg)
+                logger.info("@*{Finished} %d %s (%s)" % (queue_size, what, hhmmss(dt)))
                 atexit.unregister(cleanup_children)
     return returncode
 
@@ -172,7 +172,9 @@ def process_queue(*, queue: ResourceQueue) -> None:
     qsize = queue.qsize
     qrank = 0
     ppe = None
-    progress_bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
+    progress_bar = (
+        config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
+    )
     try:
         config.archive(os.environ)
         with ProcessPoolExecutor(workers=queue.workers) as ppe:
@@ -180,7 +182,7 @@ def process_queue(*, queue: ResourceQueue) -> None:
             while True:
                 if key := keyboard.get_key():
                     if key in "sS":
-                        logging.emit(queue.status(start=start))
+                        logger.log(logging.EMIT, queue.status(start=start), extra={"prefix": ""})
                     elif key in "qQ":
                         ppe.shutdown(cancel_futures=True)
                         cleanup_children()
@@ -197,12 +199,12 @@ def process_queue(*, queue: ResourceQueue) -> None:
                     continue
                 except EmptyQueue:
                     break
-                logging.debug(f"Submitting {obj} to process pool for execution", end="... ")
+                logger.debug(f"Submitting {obj} to process pool for execution")
                 future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank)
                 qrank += 1
                 callback = partial(done_callback, iid, queue)
                 future.add_done_callback(callback)
-                logging.log(logging.DEBUG, "done")
+                logger.debug(f"Process pool execution for {obj} finished")
                 futures[iid] = (obj, future)
     except BaseException:
         if ppe is None:
@@ -241,10 +243,10 @@ def done_callback(iid: int, queue: ResourceQueue, future: Future) -> None:
 
     obj: TestCase | TestBatch = queue.done(iid)
     if not isinstance(obj, (TestBatch, TestCase)):
-        logging.error(f"Expected AbstractTestCase, got {obj.__class__.__name__}")
+        logger.error(f"Expected AbstractTestCase, got {obj.__class__.__name__}")
         return
     obj.refresh()
-    logging.debug(f"Finished {obj} ({obj.duration} s.)")
+    logger.debug(f"Finished {obj} ({obj.duration} s.)")
     if not isinstance(obj, TestCase):
         assert isinstance(obj, TestBatch)
         if all(case.status == "retry" for case in obj):
@@ -295,8 +297,7 @@ def rc_environ(**variables) -> Generator[None, None, None]:
     """Set the runtime environment"""
     save_env = os.environ.copy()
     os.environ.update(variables)
-    level = logging.get_level()
-    os.environ["CANARY_LOG_LEVEL"] = logging.get_level_name(level)
+    os.environ["CANARY_LOG_LEVEL"] = logging.get_level_name()
     yield
     os.environ.clear()
     os.environ.update(save_env)

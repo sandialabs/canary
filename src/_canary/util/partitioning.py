@@ -18,6 +18,7 @@ size_t = tuple[int, int]
 
 AUTO = 1027  # automically choose batch size
 ONE_PER_BATCH = 1028  # One test per batch
+logger = logging.get_logger(__name__)
 
 
 def partition_n_atomic(cases: Sequence[TestCase], n: int = 8) -> list[TestBatch]:
@@ -119,7 +120,7 @@ def partition_t(
     cases: Sequence[TestCase], t: float = 60 * 30, nodes: str = "any"
 ) -> list[TestBatch]:
     """Partition test cases by tiling them in the 2D space defined by num_cpus x run_time"""
-    logging.debug(f"Partitioning {len(cases)} test cases")
+    logger.debug(f"Partitioning {len(cases)} test cases")
 
     def _pack_ready_nodes(packer: "Packer", batches: list[TestBatch], ready: list[TestCase]):
         blocks = [Block(case.id, case.cpus, math.ceil(runtime(case))) for case in ready]
@@ -169,7 +170,7 @@ def partition_t(
         ts.done(*ready)
     if len(cases) != sum([len(b) for b in batches]):
         raise ValueError("Incorrect partition lengths!")
-    logging.debug(f"Partitioned {len(cases)} test cases in to {len(batches)} batches")
+    logger.debug(f"Partitioned {len(cases)} test cases in to {len(batches)} batches")
     return [b for b in batches if len(b)]
 
 

@@ -27,13 +27,14 @@ class Log(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         parser.epilog = self.in_session_note()
-        parser.add_argument("testspec", help="Test name, /TEST_ID, or ^BATCH_ID")
         parser.add_argument(
+            "-e",
             "--error",
             default=False,
             action="store_true",
             help="Display test stderr if it exists",
         )
+        parser.add_argument("testspec", nargs="?", help="Test name, /TEST_ID, or ^BATCH_ID")
 
     def get_logfile(self, case: TestCase, args: argparse.Namespace) -> str:
         if args.error:
@@ -46,6 +47,14 @@ class Log(CanarySubcommand):
         from ...testcase import from_id as testcase_from_id
 
         file: str
+        if not args.testspec:
+            session = load_session()
+            file = os.path.join(session.config_dir, "log.txt")
+            if os.path.exists(file):
+                display_file(file)
+                return 0
+            raise ValueError(f"no log file found in {session.config_dir}")
+
         if args.testspec.startswith("/"):
             case = testcase_from_id(args.testspec[1:])
             file = self.get_logfile(case, args)

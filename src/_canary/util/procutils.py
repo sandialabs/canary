@@ -10,12 +10,14 @@ import psutil
 
 from . import logging
 
+logger = logging.get_logger(__name__)
+
 
 def cleanup_children(pid: int | None = None, include_parent: bool = False) -> None:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
         pid = pid or os.getpid()
-        logging.debug("killing child processes")
+        logger.debug("killing child processes")
         try:
             fd = os.open(os.devnull, os.O_WRONLY)
             stdout = os.dup(1)
@@ -77,11 +79,11 @@ def get_process_metrics(
         names = valid_names - skip_names
         new_metrics = proc.as_dict(names)
     except psutil.NoSuchProcess:
-        logging.debug(f"Process with PID {proc.pid} does not exist.")
+        logger.debug(f"Process with PID {proc.pid} does not exist.")
     except psutil.AccessDenied:
-        logging.debug(f"Access denied to process with PID {proc.pid}.")
+        logger.debug(f"Access denied to process with PID {proc.pid}.")
     except psutil.ZombieProcess:
-        logging.debug(f"Process with PID {proc.pid} is a Zombie process.")
+        logger.debug(f"Process with PID {proc.pid} is a Zombie process.")
     else:
         for name, metric in new_metrics.items():
             if name == "open_files":

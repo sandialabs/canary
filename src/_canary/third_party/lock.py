@@ -38,6 +38,9 @@ __all__ = [
 true_fn = lambda: True
 
 
+logger = logging.get_logger(__name__)
+
+
 class OpenFile(object):
     """Record for keeping track of open lockfiles (with reference counting).
 
@@ -637,7 +640,7 @@ class Lock(object):
             raise LockError("Attempting to cleanup active lock.")
 
     def _get_counts_desc(self):
-        verbose = logging.get_level() < logging.TRACE
+        verbose = logger.level < logging.DEBUG
         return "(reads {0}, writes {1})".format(self._reads, self._writes) if verbose else ""
 
     def _log_acquired(self, locktype, wait_time, nattempts):
@@ -651,7 +654,7 @@ class Lock(object):
 
     def _log_debug(self, *args, **kwargs):
         """Output lock debug messages."""
-        logging.trace(" ".join(args))
+        logger.log(5, " ".join(args))
 
     def _log_downgraded(self, wait_time, nattempts):
         attempts_part = _attempts_str(wait_time, nattempts)

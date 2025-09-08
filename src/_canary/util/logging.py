@@ -3,234 +3,175 @@
 # SPDX-License-Identifier: MIT
 
 import datetime
-import inspect
+import logging as builtin_logging
 import math
 import os
 import sys
 import termios
-import time
-import traceback
 from contextlib import contextmanager
-from io import StringIO
 from typing import IO
 from typing import Any
 from typing import Generator
 
-from ..third_party.color import cescape
 from ..third_party.color import clen
-from ..third_party.color import cprint
+from ..third_party.color import colorize
 from .term import terminal_size
 from .time import hhmmss
 
-SUPPRESS = -10
-TRACE = 0
-DEBUG = 10
-INFO = 20
-WARNING = 30
-ERROR = 40
-FATAL = 50
-ALWAYS = 100
-
-
-LEVEL = WARNING
-TIMESTAMP = False
-PLUGIN = False
-FORMAT = "%(prefix)s%(timestamp)s%(message)s%(plugin)s"
-WARNINGS = WARNING
+NOTSET = builtin_logging.NOTSET
+TRACE = builtin_logging.DEBUG - 5
+DEBUG = builtin_logging.DEBUG
+INFO = builtin_logging.INFO
+WARNING = builtin_logging.WARNING
+ERROR = builtin_logging.ERROR
+CRITICAL = builtin_logging.CRITICAL
+EMIT = builtin_logging.CRITICAL + 5
 
 
 builtin_print = print
-log_levels = (TRACE, DEBUG, INFO, WARNING, ERROR, FATAL)
-level_color_map: dict[int, str] = {
-    TRACE: "c",
-    DEBUG: "g",
-    INFO: "b",
-    WARNING: "Y",
-    ERROR: "r",
-    FATAL: "r",
-}
-level_name_map: dict[int, str] = {
-    TRACE: "TRACE",
-    DEBUG: "DEBUG",
-    INFO: "INFO",
-    WARNING: "WARNING",
-    ERROR: "ERROR",
-    FATAL: "FATAL",
-}
 
 
-def get_timestamp() -> str:
-    """Get a string timestamp"""
-    if TIMESTAMP:
-        return datetime.datetime.now().strftime("[%Y-%m-%d-%H:%M:%S.%f] ")
-    else:
-        return ""
+class FileHandler(builtin_logging.FileHandler): ...
 
 
-@contextmanager
-def timestamps() -> Generator[None, None, None]:
-    global TIMESTAMP
-    save = TIMESTAMP
-    TIMESTAMP = True
-    yield
-    TIMESTAMP = save
+class StreamHandler(builtin_logging.StreamHandler):
+    def emit(self, record):
+        """Emit a record.
+
+        If a formatter is specified, it is used to format the record.  The record is then written
+        to the stream with a trailing newline. If exception information is present, it is formatted
+        using `traceback.print_exception` and appended to the stream.  If the stream has an
+        'encoding' attribute, it is used to determine how to do the output to the stream.
+        """
+        try:
+            formatted_record = self.format(record)
+            starter = "\r" if hasattr(record, "rewind") else ""
+            terminator = getattr(record, "end", self.terminator)
+            self.stream.write(starter + formatted_record + terminator)
+            self.flush()
+        except RecursionError:
+            raise
+        except Exception:
+            self.handleError(record)
 
 
-@contextmanager
-def level(level: int) -> Generator[None, None, None]:
-    global LEVEL
-    save_level = LEVEL
-    set_level(level)
-    yield
-    set_level(save_level)
+class Formatter(builtin_logging.Formatter):
+    def __init__(self, **kwargs):
+        fmt = kwargs.pop("fmt", "%(prefix)s%(message)s")
+        color = kwargs.pop("color", None)
+        assert color in (None, True, False)
+        super().__init__(fmt, **kwargs)
+        self.color = color
+
+    def format(self, record):
+        extra = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
+        }
+        if not hasattr(record, "prefix"):
+            if record.levelno in (INFO, DEBUG):
+                prefix = "@*%s{==>} " % level_color(record.levelno)
+            elif record.levelno in (ERROR, WARNING):
+                prefix = "@*%s{==>} %s: " % (level_color(record.levelno), record.levelname.title())
+            else:
+                prefix = "@*{==>} "
+            extra["prefix"] = prefix
+
+        record.__dict__.update(extra)
+        result = super().format(record)
+        return colorize(result, color=self.color)
 
 
-def set_level(level: int) -> None:
-    global LEVEL
-    assert level in log_levels
-    LEVEL = level
-
-
-def set_warning_level(level: str) -> None:
-    global WARNINGS
-    assert level in ("all", "ignore", "error")
-    if level == "all":
-        WARNINGS = WARNING
-    elif level == "ignore":
-        WARNINGS = SUPPRESS
-    elif level == "error":
-        WARNINGS = ERROR
-
-
-def set_format(format: str) -> None:
-    global FORMAT
-    FORMAT = format
-
-
-def get_level(name: str | None = None) -> int:
-    if name is None:
-        return LEVEL
-    for level_num, level_name in level_name_map.items():
-        if name == level_name:
-            return level_num
-    raise ValueError(name)
-
-
-def get_level_name(level: int) -> str:
-    for level_num, level_name in level_name_map.items():
-        if level == level_num:
-            return level_name
-    raise ValueError(level)
-
-
-def level_color(level: int) -> str:
-    for level_num, level_color in level_color_map.items():
-        if level == level_num:
-            return level_color
-    raise ValueError(level)
-
-
-def format_message(
-    message: str,
-    *,
-    end: str = "\n",
-    prefix: str | None = None,
-    format: str | None = None,
-    rewind: bool = False,
-    color: bool | None = None,
-) -> str:
-    if format == "center":
-        _, width = terminal_size()
-        dots = "." * clen(message)
-        tmp = f" {dots} ".center(width, "-")
-        message = tmp.replace(dots, message)
-        format = "%(message)s"
-    kwds = {
-        "prefix": prefix or "",
-        "timestamp": get_timestamp(),
-        "message": cescape(str(message)),
-        "plugin": get_plugin(),
+def level_name_mapping() -> dict[int, str]:
+    mapping = {
+        NOTSET: "NOTSET",
+        TRACE: "TRACE",
+        DEBUG: "DEBUG",
+        INFO: "INFO",
+        WARNING: "WARNING",
+        ERROR: "ERROR",
+        CRITICAL: "CRITICAL",
+        EMIT: "EMIT",
     }
-    text = (format or FORMAT) % kwds
-    file = StringIO()
-    if rewind:
-        file.write("\r")
-    cprint(text, stream=file, end=end, color=color)
-    file.flush()
-    return file.getvalue()
+    return mapping
 
 
-def log(
-    level: int,
-    message: str,
-    *,
-    file: IO[Any] = sys.stdout,
-    prefix: str | None = None,
-    end: str = "\n",
-    format: str | None = None,
-    ex: Exception | None = None,
-    rewind: bool = False,
-    color: bool | None = None,
-) -> None:
-    if level == SUPPRESS:
-        return
-    if level >= LEVEL:
-        if not file.isatty():
-            color = False
-        text = format_message(
-            message, end=end, prefix=prefix, format=format, rewind=rewind, color=color
-        )
-        emit(text, file=file)
-    if ex is not None:
-        exc, tb = ex.__class__, ex.__traceback__
-        lines = [_.rstrip("\n") for _ in traceback.format_exception(exc, ex, tb)]
-        emit("\n".join(lines) + "\n", file=sys.stderr)
+def get_logger(name: str) -> builtin_logging.Logger:
+    return builtin_logging.getLogger(name)
 
 
-def emit(message: str, *, file: IO[Any] = sys.stdout) -> None:
-    file.write(message)
-    file.flush()
+def get_level_name(levelno: int | None = None) -> str:
+    mapping = level_name_mapping()
+    return mapping[levelno or get_level()]
 
 
-def trace(message: str, *, file: IO[Any] = sys.stdout, end: str = "\n") -> None:
-    c = level_color(TRACE)
-    log(TRACE, message, file=file, prefix="@*%s{==>} " % c, end=end)
+def get_levelno(levelname: str) -> int:
+    mapping = level_name_mapping()
+    for level, name in mapping.items():
+        if name == levelname:
+            return level
+    raise ValueError(f"Invalid logging level name {levelname!r}")
 
 
-def debug(message: str, *, file: IO[Any] = sys.stdout, end: str = "\n") -> None:
-    c = level_color(DEBUG)
-    log(DEBUG, message, file=file, prefix="@*%s{==>} " % c, end=end)
+def set_level(level: int | str) -> None:
+    if isinstance(level, str):
+        levelno = get_levelno(level)
+    else:
+        levelno = level
+    for handler in builtin_logging.getLogger("_canary").handlers:
+        if levelno < handler.level:
+            handler.setLevel(levelno)
 
 
-def info(message: str, *, file: IO[Any] = sys.stdout, end: str = "\n") -> None:
-    c = level_color(INFO)
-    log(INFO, message, file=file, prefix="@*%s{==>} " % c, end=end)
+def setup_logging() -> None:
+    builtin_logging.addLevelName(TRACE, "TRACE")
+    builtin_logging.addLevelName(EMIT, "EMIT")
+    sh = StreamHandler(sys.stderr)
+    fmt = Formatter(color=sys.stderr.isatty())
+    sh.setFormatter(fmt)
+    sh.setLevel(INFO)
+    logger = builtin_logging.getLogger("_canary")
+    logger.addHandler(sh)
+    logger.setLevel(TRACE)
 
 
-def warning(
-    message: str, *, file: IO[Any] = sys.stderr, end: str = "\n", ex: Exception | None = None
-) -> None:
-    c = level_color(WARNING)
-    log(WARNINGS, message, file=file, prefix="@*%s{==>} Warning: " % c, end=end, ex=ex)
+def add_file_handler(file: str, levelno: int) -> None:
+    os.makedirs(os.path.dirname(file), exist_ok=True)
+    fh = FileHandler(file)
+    fmt = Formatter(
+        fmt="[%(asctime)s] %(levelname)s: %(name)s::%(funcName)s:%(lineno)d: %(message)s",
+        datefmt="%Y-%m-%d-%H:%M:%S",
+        color=False,
+    )
+    fh.setFormatter(fmt)
+    fh.setLevel(levelno)
+    logger = builtin_logging.getLogger("_canary")
+    logger.addHandler(fh)
 
 
-def error(
-    message: str, *, file: IO[Any] = sys.stderr, end: str = "\n", ex: Exception | None = None
-) -> None:
-    c = level_color(ERROR)
-    log(ERROR, message, file=file, prefix="@*%s{==>} Error: " % c, end=end, ex=ex)
+def level_color(levelno: int) -> str:
+    if levelno == NOTSET:
+        return "c"
+    elif levelno == DEBUG:
+        return "g"
+    elif levelno == INFO:
+        return "b"
+    elif levelno == WARNING:
+        return "Y"
+    elif levelno == ERROR:
+        return "r"
+    elif levelno == CRITICAL:
+        return "r"
+    elif levelno == EMIT:
+        return ""
+    raise ValueError(levelno)
 
 
-def exception(message: str, ex: Exception, *, file: IO[Any] = sys.stderr, end: str = "\n") -> None:
-    c = level_color(ERROR)
-    log(ERROR, message, file=file, prefix="@*%s{==>} Error: " % c, end=end, ex=ex)
-
-
-def fatal(
-    message: str, *, file: IO[Any] = sys.stderr, end: str = "\n", ex: Exception | None = None
-) -> None:
-    c = level_color(FATAL)
-    log(FATAL, message, file=file, prefix="@*%s{==>} Fatal: " % c, end=end, ex=ex)
+def get_level() -> int:
+    logger = builtin_logging.getLogger("_canary")
+    for handler in logger.handlers:
+        if isinstance(handler, StreamHandler):
+            return handler.level
+    return logger.getEffectiveLevel()
 
 
 def progress_bar(
@@ -239,7 +180,8 @@ def progress_bar(
     elapsed: float,
     average: float | None = None,
     width: int | None = None,
-    level: int = ALWAYS,
+    level: int = 0,
+    file: IO[Any] = sys.stderr,
 ) -> None:
     """Display test session progress
 
@@ -273,7 +215,7 @@ def progress_bar(
     bar = "█" * x + blocks[i]
     n = bar_width - len(bar)
     pad = " " * n
-    return log(level, f"\r{lsep}{bar}{pad}{rsep}{info}", prefix=None, end="")
+    file.write(f"\r{lsep}{bar}{pad}{rsep}{info}")
 
 
 def hline(
@@ -356,53 +298,8 @@ def capture(file_like: str | IO[Any], mode: str = "w") -> Generator[None, None, 
             file.close()
 
 
-def get_plugin() -> str:
-    if LEVEL <= DEBUG:
-        if plugin := determine_plugin():
-            return " (from plugin: @*{%s::%s})" % (plugin.__name__, plugin.f_name)
-    return ""
-
-
-def determine_plugin() -> Any | None:
-    from .. import config
-
-    stack = inspect.stack()
-    for frame_info in stack:
-        filename = frame_info.frame.f_code.co_filename
-        for plugin in config.plugin_manager.get_plugins():
-            if plugin and plugin.__file__ == filename:
-                plugin.f_name = frame_info.frame.f_code.co_name
-                return plugin
-    return None
-
-
 def reset():
     if sys.stdin.isatty():
         fd = sys.stdin.fileno()
         save_tty_attr = termios.tcgetattr(fd)
         termios.tcsetattr(fd, termios.TCSAFLUSH, save_tty_attr)
-
-
-class context:
-    def __init__(self, message: str, *, file: IO[Any] = sys.stdout, level=INFO) -> None:
-        self._start = -1.0
-        self.message = message
-        self.file = file
-        self.level = level
-        self.prefix = "@*%s{==>} " % level_color(level)
-
-    def start(self) -> "context":
-        self._start = time.monotonic()
-        log(self.level, self.message, file=self.file, prefix=self.prefix, end="...")
-        return self
-
-    def stop(self, failed: bool = False):
-        state = "failed" if failed else "done"
-        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - self._start)
-        log(self.level, self.message, file=self.file, prefix=self.prefix, end=end, rewind=True)
-
-    def __enter__(self) -> "context":
-        return self.start()
-
-    def __exit__(self, *args) -> None:
-        self.stop(failed=args[0] is not None)

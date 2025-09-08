@@ -28,6 +28,8 @@ def canary_subcommand() -> CanarySubcommand:
 stdout: Any = subprocess.PIPE
 stderr: Any = subprocess.PIPE
 
+logger = logging.get_logger(__name__)
+
 
 class Action(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -92,7 +94,7 @@ class Check(CanarySubcommand):
         if "d" in args.action:
             self.make_docs(args)
 
-        logging.info("All checks complete!")
+        logger.info("All checks complete!")
 
         return 0
 
@@ -105,39 +107,39 @@ class Check(CanarySubcommand):
 
     def format_code(self, args: argparse.Namespace):
         with working_dir(self.root):
-            logging.info(f"Formatting examples in {self.root}/src/canary/examples")
+            logger.info(f"Formatting examples in {self.root}/src/canary/examples")
             paths = Check.find_pyt_files("./src/canary/examples")
             ruff("format", *paths)
             ruff("format", "./src/canary/examples")
 
-            logging.info(f"Formatting examples in {self.root}/docs/source/static")
+            logger.info(f"Formatting examples in {self.root}/docs/source/static")
             ruff("format", "./docs/source/static")
 
-            logging.info(f"Formatting tests in {self.root}/tests")
+            logger.info(f"Formatting tests in {self.root}/tests")
             ruff("format", "./tests")
 
-            logging.info(f"Formatting source in {self.root}/src")
+            logger.info(f"Formatting source in {self.root}/src")
             ruff("format", "./src")
 
     def lint_check_code(self, args: argparse.Namespace):
         with working_dir(self.root):
-            logging.info(f"Lint checking examples in {self.root}/src/canary/examples")
+            logger.info(f"Lint checking examples in {self.root}/src/canary/examples")
             paths = Check.find_pyt_files("./src/canary/examples")
             ruff("check", "--fix", *paths)
             ruff("check", "--fix", "./src/canary/examples")
 
-            logging.info(f"Lint checking examples in {self.root}/docs/source/static")
+            logger.info(f"Lint checking examples in {self.root}/docs/source/static")
             ruff("check", "--fix", "./docs/source/static")
 
-            logging.info(f"Lint checking tests in {self.root}/tests")
+            logger.info(f"Lint checking tests in {self.root}/tests")
             ruff("check", "--fix", "./tests")
 
-            logging.info(f"Lint checking source in {self.root}/src")
+            logger.info(f"Lint checking source in {self.root}/src")
             ruff("check", "--fix", "./src")
 
     def type_check_code(self, args: argparse.Namespace):
         with working_dir(self.root):
-            logging.info(f"Type checking source in {self.root}/src")
+            logger.info(f"Type checking source in {self.root}/src")
             mypy("./src")
 
     def run_tests(self, args: argparse.Namespace):
@@ -145,18 +147,18 @@ class Check(CanarySubcommand):
             os.environ["CANARY_RUN_EXAMPLES_TEST"] = "1"
         with working_dir(self.root):
             if "C" not in args.action:
-                logging.info(f"Running tests in {self.root}/tests")
+                logger.info(f"Running tests in {self.root}/tests")
                 pytest("./tests")
             else:
-                logging.info(f"Running coverage in {self.root}/tests")
+                logger.info(f"Running coverage in {self.root}/tests")
                 coverage("run")
-                logging.info("Creating coverage report")
+                logger.info("Creating coverage report")
                 coverage("report")
                 coverage("html")
 
     def make_docs(self, args: argparse.Namespace):
         with working_dir(f"{self.root}/docs"):
-            logging.info(f"Making documentation in {self.root}/docs")
+            logger.info(f"Making documentation in {self.root}/docs")
             make("api-docs")
             make("clean")
             make("html")

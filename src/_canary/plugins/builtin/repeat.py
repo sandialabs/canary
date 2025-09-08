@@ -9,6 +9,8 @@ from ..hookspec import hookimpl
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
 
+logger = logging.get_logger(__name__)
+
 
 @hookimpl
 def canary_addoption(parser: "Parser") -> None:
@@ -45,7 +47,7 @@ def repeat_until_pass(case: TestCase, qsize: int, qrank: int) -> None:
             rerun_case(case, qsize, qrank, i)
             if not case.status.satisfies("failed"):
                 return
-        logging.error(
+        logger.error(
             f"{case}: failed to finish successfully after {i} additional {pluralize('attempt', i)}"
         )
 
@@ -59,7 +61,7 @@ def repeat_after_timeout(case: TestCase, qsize: int, qrank: int) -> None:
             rerun_case(case, qsize, qrank, i)
             if not case.status.satisfies("timeout"):
                 return
-        logging.error(
+        logger.error(
             f"{case}: failed to finish without timing out after {i} additional {pluralize('attempt', i)}"
         )
 
@@ -76,7 +78,7 @@ def repeat_until_fail(case: TestCase, qsize: int, qrank: int) -> None:
         else:
             return
         n: int = count
-        logging.error(
+        logger.error(
             f"{case}: failed to finish successfully {n} {pluralize('time', n)} without failing"
         )
 

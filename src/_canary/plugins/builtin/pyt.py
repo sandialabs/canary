@@ -21,7 +21,6 @@ from ...paramset import ParameterSet
 from ...testcase import DependencyPatterns
 from ...testcase import TestCase
 from ...testcase import TestMultiCase
-from ...third_party.color import colorize
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
 from ...util import logging
@@ -31,6 +30,9 @@ from ...util.time import time_in_seconds
 from ..hookspec import hookimpl
 
 WhenType = str | dict[str, str]
+
+
+logger = logging.get_logger(__name__)
 
 
 class FilterNamespace:
@@ -150,7 +152,7 @@ class PYTTestGenerator(AbstractTestGenerator):
         testcases: list[TestCase] = []
 
         names = ", ".join(self.names())
-        logging.trace(f"Generating test cases for {self} using the following test names: {names}")
+        logger.debug(f"Generating test cases for {self} using the following test names: {names}")
         dependencies: dict[str, list[DependencyPatterns]] = {}
         for name in self.names():
             skip_reason = self.skipif_reason
@@ -199,7 +201,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                 )
                 if test_mask is None and not enabled:
                     test_mask = reason
-                    logging.debug(f"{case}: disabled because {reason!r}")
+                    logger.debug(f"{case}: disabled because {reason!r}")
                 if test_mask is not None:
                     case.mask = test_mask
                 if any([_[1] is not None for _ in modules]):
@@ -260,7 +262,7 @@ class PYTTestGenerator(AbstractTestGenerator):
     def resolve_inter_dependencies(
         self, cases: list[TestCase], dependencies: dict[str, list[DependencyPatterns]]
     ) -> None:
-        logging.trace(f"Resolving dependencies in test {self}")
+        logger.debug(f"Resolving dependencies in test {self}")
         for case in cases:
             if case.id not in dependencies:
                 continue
@@ -461,7 +463,7 @@ class PYTTestGenerator(AbstractTestGenerator):
             if ns.value is True and not result.value:
                 return False, result.reason
             elif ns.value is False and result.value:
-                reason = result.reason or colorize("@*{enable=False}")
+                reason = result.reason or "@*{enable=False}"
                 return False, reason
         return True, None
 

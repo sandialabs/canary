@@ -8,7 +8,6 @@ from .error import diff_exit_status
 from .error import fail_exit_status
 from .error import skip_exit_status
 from .error import timeout_exit_status
-from .third_party.color import colorize
 from .util import glyphs
 
 
@@ -113,7 +112,7 @@ class Status:
         }
         glyph = map[status]
         color = Status.colors[status]
-        return colorize("@*%s{%s}" % (color, glyph))
+        return "@*%s{%s}" % (color, glyph)
 
     def set_from_code(self, arg: int) -> None:
         assert isinstance(arg, int)
@@ -149,7 +148,7 @@ class Status:
 
     @property
     def cname(self) -> str:
-        return colorize("@*%s{%s}" % (self.color, self.name))
+        return "@*%s{%s}" % (self.color, self.name)
 
     @property
     def color(self) -> str:

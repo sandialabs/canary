@@ -33,6 +33,8 @@ if TYPE_CHECKING:
 
 warning_cache = set()
 
+logger = logging.get_logger(__name__)
+
 
 def warn_unsupported_ctest_option(option: str) -> None:
     if option in warning_cache:
@@ -40,7 +42,7 @@ def warn_unsupported_ctest_option(option: str) -> None:
     file = io.StringIO()
     file.write(f"The ctest test property {option.upper()!r} is currently not supported, ")
     file.write("contact the canary developers to implement this property")
-    logging.warning(file.getvalue())
+    logger.warning(file.getvalue())
     warning_cache.add(option)
 
 
@@ -69,7 +71,7 @@ class CTestTestGenerator(AbstractTestGenerator):
     def lock(self, on_options: list[str] | None = None) -> list[TestCase]:
         cmake = find_cmake()
         if cmake is None:
-            logging.warning("cmake not found, test cases cannot be generated")
+            logger.warning("cmake not found, test cases cannot be generated")
             return []
         tests = self.load()
         if not tests:
@@ -150,7 +152,7 @@ class CTestTestGenerator(AbstractTestGenerator):
                         fixture.add_dependency(case)
 
     def resolve_inter_dependencies(self, cases: list["CTestTestCase"]) -> None:
-        logging.debug(f"Resolving dependencies in {self}")
+        logger.debug(f"Resolving dependencies in {self}")
         for case in cases:
             while True:
                 if not case.unresolved_dependencies:
@@ -473,7 +475,7 @@ class CTestTestCase(TestCase):
         self._required_files = list(arg)
         for file in arg:
             if not os.path.exists(file):
-                logging.debug(f"{self}: missing required file: {file}")
+                logger.debug(f"{self}: missing required file: {file}")
 
     @property
     def will_fail(self) -> bool:
@@ -516,7 +518,7 @@ def parse_np(args: list[str]) -> int | None:
 def load(file: str) -> dict[str, Any]:
     """Use ctest --show-only"""
     tests: dict[str, Any] = {}
-    logging.debug(f"Loading ctest tests from {file}")
+    logger.debug(f"Loading ctest tests from {file}")
 
     ctest = which("ctest")
     assert ctest is not None
@@ -614,7 +616,7 @@ def find_cmake():
     if parts and parts[0:2] == ["cmake", "version"]:
         version_parts = tuple([int(_) for _ in parts[2].split(".")])
         if version_parts[:2] <= (3, 20):
-            logging.warning("canary ctest integration requires cmake > 3.20")
+            logger.warning("canary ctest integration requires cmake > 3.20")
             return None
         return cmake
     return None

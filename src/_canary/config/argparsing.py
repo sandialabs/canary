@@ -310,13 +310,6 @@ def make_argument_parser(**kwargs):
         help="show version and exit",
     )
     parser.add_argument(
-        "-W",
-        choices=("all", "ignore", "error"),
-        default="all",
-        dest="warnings",
-        help="Issue all warnings (default), ignore warnings, or treat warnings as errors",
-    )
-    parser.add_argument(
         "-C",
         default=None,
         metavar="path",

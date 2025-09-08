@@ -27,6 +27,8 @@ if TYPE_CHECKING:
     from ....config.argparsing import Parser
     from ....testcase import TestCase
 
+logger = logging.get_logger(__name__)
+
 
 def add_filter_arguments(parser: "Parser") -> None:
     group = parser.add_argument_group("filtering")
@@ -124,13 +126,13 @@ class TimeoutResource(argparse.Action):
 
     def __call__(self, parser, args, values, option_string=None):
         if option_string == "--session-timeout":
-            logging.warning(
+            logger.warning(
                 f"option --session-timeout is deprecated, use --timeout session={values}"
             )
             type = "session"
             value = time_in_seconds(values)
         elif option_string == "--timeout-multiplier":
-            logging.warning(
+            logger.warning(
                 f"option --timeout-multiplier is deprecated, use --timeout multiplier={values}"
             )
             type = "multiplier"
@@ -166,8 +168,7 @@ def filter_cases_by_status(cases: list["TestCase"], status: tuple | str) -> list
 def load_session(root: str | None = None, mode: str = "r"):
     from ....session import Session
 
-    with logging.level(logging.WARNING):
-        return Session(root or os.getcwd(), mode=mode)
+    return Session(root or os.getcwd(), mode=mode)
 
 
 def bold(arg: str) -> str:

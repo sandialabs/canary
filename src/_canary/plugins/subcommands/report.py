@@ -6,7 +6,6 @@ import os
 from argparse import Namespace
 from typing import TYPE_CHECKING
 
-from ...util import logging
 from ..hookspec import hookimpl
 from ..types import CanaryReporter
 from ..types import CanarySubcommand
@@ -47,8 +46,7 @@ class Report(CanarySubcommand):
 
         session: Session | None
         try:
-            with logging.level(logging.WARNING):
-                session = Session(os.getcwd(), mode="r")
+            session = Session(os.getcwd(), mode="r")
         except NotASession:
             session = None
         kwargs = vars(args)

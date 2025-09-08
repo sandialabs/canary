@@ -27,7 +27,6 @@ from ...enums import list_parameter_space
 from ...generator import AbstractTestGenerator
 from ...testcase import TestCase
 from ...testcase import TestMultiCase
-from ...third_party.color import colorize
 from ...util import logging
 from ...util import scalar
 from ...util import string
@@ -35,6 +34,8 @@ from ...util.executable import Executable
 from ...util.filesystem import working_dir
 from ..hookspec import hookimpl
 from .pyt import PYTTestGenerator
+
+logger = logging.get_logger(__name__)
 
 
 class VVTTestGenerator(PYTTestGenerator):
@@ -324,7 +325,7 @@ def p_GEN_PARAMETERIZE(arg: SimpleNamespace) -> tuple[list, list, dict, list | N
     kwds["type"] = list_parameter_space
     for opt, value in arg.options:
         if opt in ("autotype", "int", "float", "str"):
-            logging.warning(f"skipping parameter type {opt!r} -- type deduced by json generation")
+            logger.warning(f"skipping parameter type {opt!r} -- type deduced by json generation")
         else:
             kwds[opt] = value
     assert kwds.pop("generator", None) is not None
@@ -596,7 +597,7 @@ def p_SKIPIF(arg: SimpleNamespace) -> tuple[bool, str]:
     if not skip:
         return False, ""
     if not reason:
-        reason = colorize("skipif expression @*b{%s} evaluating to @*g{True}" % expression)
+        reason = "skipif expression @*b{%s} evaluating to @*g{True}" % expression
     return True, reason
 
 

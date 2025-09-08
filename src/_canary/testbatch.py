@@ -23,7 +23,6 @@ from . import config
 from .atc import AbstractTestCase
 from .status import Status
 from .testcase import TestCase
-from .third_party.color import colorize
 from .util import logging
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
@@ -33,6 +32,8 @@ from .util.misc import digits
 from .util.string import pluralize
 from .util.time import hhmmss
 from .util.time import time_in_seconds
+
+logger = logging.get_logger(__name__)
 
 
 class TestBatch(AbstractTestCase):
@@ -144,12 +145,12 @@ class TestBatch(AbstractTestCase):
         errors = 0
         for case in cases:
             if case.masked():
-                logging.fatal(f"{case}: case is masked")
+                logger.critical(f"{case}: case is masked")
                 errors += 1
             for dep in case.dependencies:
                 if dep.masked():
                     errors += 1
-                    logging.fatal(f"{dep}: dependent of {case} is masked")
+                    logger.critical(f"{dep}: dependent of {case} is masked")
         if errors:
             raise ValueError("Stopping due to previous errors")
 
@@ -240,7 +241,7 @@ class TestBatch(AbstractTestCase):
         for case in self.cases:
             stat[case.status.value] = stat.get(case.status.value, 0) + 1
         colors = Status.colors
-        return ", ".join(colorize("@%s{%d %s}" % (colors[v], n, v)) for (v, n) in stat.items())
+        return ", ".join("@%s{%d %s}" % (colors[v], n, v) for (v, n) in stat.items())
 
     def format(self, format_spec: str) -> str:
         replacements: dict[str, str] = {
@@ -262,7 +263,7 @@ class TestBatch(AbstractTestCase):
         formatted_text = format_spec
         for placeholder, value in replacements.items():
             formatted_text = formatted_text.replace(placeholder, value)
-        return colorize(formatted_text.strip())
+        return formatted_text.strip()
 
     def times(self) -> tuple[float | None, float | None, float | None]:
         """Return total, running, and time in queue"""
@@ -320,16 +321,16 @@ class TestBatch(AbstractTestCase):
     def run(self, qsize: int = 1, qrank: int = 1) -> None:
         def cancel(sig, frame):
             nonlocal proc
-            logging.info(f"Cancelling run due to captured signal {sig!r}")
+            logger.info(f"Cancelling run due to captured signal {sig!r}")
             if proc is not None:
-                logging.info("Cancelling hpc-connect process")
+                logger.info("Cancelling hpc-connect process")
                 proc.cancel()
             if sig == signal.SIGINT:
                 raise KeyboardInterrupt
             elif sig == signal.SIGTERM:
                 os._exit(1)
 
-        logging.trace(f"Running batch {self.id[:7]}")
+        logger.debug(f"Running batch {self.id[:7]}")
         start = time.monotonic()
         variables = dict(self.variables)
         variables["CANARY_LEVEL"] = "1"
@@ -348,7 +349,7 @@ class TestBatch(AbstractTestCase):
             backend = config.hpcc_backend
             assert backend is not None
             proc: hpc_connect.HPCProcess | None = None
-            logging.debug(f"Submitting batch {self.id}")
+            logger.debug(f"Submitting batch {self.id}")
             if backend.supports_subscheduling and flat:
                 scriptdir = os.path.dirname(self.submission_script_filename())
                 timeoutx = config.get("config:timeout.multiplier", 1.0)
@@ -382,15 +383,17 @@ class TestBatch(AbstractTestCase):
             assert proc is not None
             if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
                 self.jobid = proc.jobid
-            bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
+            bar = config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
             if not bar:
-                logging.emit(self.job_submission_summary(qrank, qsize) + "\n")
+                logger.log(
+                    logging.EMIT, self.job_submission_summary(qrank, qsize), extra={"prefix": ""}
+                )
             while True:
                 try:
                     if proc.poll() is not None:
                         break
                 except Exception as e:
-                    logging.exception(self.format("Batch @*b{%id}: polling job failed!"), e)
+                    logger.exception(self.format("Batch @*b{%id}: polling job failed!"))
                 time.sleep(backend.polling_frequency)
         finally:
             force_remove(breadcrumb)
@@ -400,29 +403,31 @@ class TestBatch(AbstractTestCase):
             self.refresh()
             if all([_.status.satisfies(("ready", "pending")) for _ in self.cases]):
                 f = "Batch @*b{%id}: no test cases have started; check %p for any emitted scheduler log files."
-                logging.warning(self.format(f))
+                logger.warning(self.format(f))
             for case in self.cases:
                 if case.status == "skipped":
                     pass
                 elif case.status == "running":
-                    logging.debug(f"{case}: cancelling (status: running)")
+                    logger.debug(f"{case}: cancelling (status: running)")
                     case.status.set("cancelled", "case failed to stop")
                     case.save()
                 elif case.start > 0 and case.stop < 0:
-                    logging.debug(f"{case}: cancelling (status: {case.status})")
+                    logger.debug(f"{case}: cancelling (status: {case.status})")
                     case.status.set("cancelled", "case failed to stop")
                     case.save()
                 elif case.status == "ready":
-                    logging.debug(f"{case}: case failed to start")
+                    logger.debug(f"{case}: case failed to start")
                     case.status.set("not_run", f"case failed to start (batch: {self.id})")
                     case.save()
             if rc := getattr(proc, "returncode", None):
-                logging.debug(
+                logger.debug(
                     self.format(f"Batch @*b{{%id}}: batch processing exited with code {rc}")
                 )
-            bar = config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO
+            bar = config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
             if not bar:
-                logging.emit(self.job_completion_summary(qrank, qsize) + "\n")
+                logger.log(
+                    logging.EMIT, self.job_completion_summary(qrank, qsize), extra={"prefix": ""}
+                )
 
         return
 
@@ -431,11 +436,10 @@ class TestBatch(AbstractTestCase):
 
     def job_submission_summary(self, qrank: int | None, qsize: int | None) -> str:
         fmt = io.StringIO()
-        fmt.write("@*b{==>} ")
-        if config.get("config:debug") or os.getenv("GITLAB_CI"):
+        if os.getenv("GITLAB_CI"):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-            if qrank is not None and qsize is not None:
-                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        if qrank is not None and qsize is not None:
+            fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
         fmt.write(f"Submitted batch @*b{{%id}}: %l {pluralize('test', len(self))}")
         if self.jobid:
             fmt.write(" (jobid: %j)")
@@ -443,11 +447,10 @@ class TestBatch(AbstractTestCase):
 
     def job_completion_summary(self, qrank: int | None, qsize: int | None) -> str:
         fmt = io.StringIO()
-        fmt.write("@*b{==>} ")
-        if config.get("config:debug") or os.getenv("GITLAB_CI"):
+        if os.getenv("GITLAB_CI"):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-            if qrank is not None and qsize is not None:
-                fmt.write(f"{qrank + 1:0{digits(qsize)}}/{qsize} ")
+        if qrank is not None and qsize is not None:
+            fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
         times = self.times()
         fmt.write(f"Finished batch @*b{{%id}}: %S (time: {hhmmss(times[0], threshold=0)}")
         if times[1]:

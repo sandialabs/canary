@@ -27,6 +27,9 @@ if TYPE_CHECKING:
     from ...testcase import TestCase
 
 
+logger = logging.get_logger(__name__)
+
+
 @hookimpl
 def canary_addoption(parser: "Parser") -> None:
     def add_group_argument(p: "Parser", *args: Any, **kwargs: Any):
@@ -73,7 +76,7 @@ def canary_addoption(parser: "Parser") -> None:
 @hookimpl(specname="canary_runtests_startup", tryfirst=True)
 def print_banner():
     if not config.getoption("no_header"):
-        logging.emit(banner() + "\n")
+        logger.log(logging.EMIT, banner(), extra={"prefix": ""})
 
 
 @hookimpl(specname="canary_runtests_summary", tryfirst=True)
@@ -104,17 +107,17 @@ def print_short_test_status_summary(
                     n += 1
                     if truncate > 0 and truncate == n:
                         cname = case.status.cname
-                        bullets = colorize("@*{%s}" % (3 * "."))
+                        bullets = "@*{%s}" % (3 * ".")
                         fmt = "%s %s %s truncating summary to the first %d entries. "
                         alert = io.StringIO()
                         alert.write(fmt % (glyph, cname, bullets, truncate))
-                        alert.write(colorize("See @*{canary status} for the full summary\n"))
+                        alert.write("See @*{canary status} for the full summary\n")
                         file.write(alert.getvalue())
                         break
     string = file.getvalue()
     if string.strip():
-        string = colorize("@*{Short test summary info}\n") + string + "\n"
-    logging.emit(string)
+        string = "@*{Short test summary info}\n" + string
+    logger.log(logging.EMIT, string, extra={"prefix": ""})
 
 
 @hookimpl(specname="canary_runtests_summary")
@@ -160,8 +163,7 @@ def runtest_report_status(session: "Session") -> None:
                     glyph = Status.glyph(case.status.value)
                     description = case.describe()
                     file.write("%s %s\n" % (glyph, description))
-        file.write("\n")
-        logging.emit(file.getvalue())
+        logger.log(logging.EMIT, file.getvalue(), extra={"prefix": ""})
 
 
 @hookimpl
@@ -171,10 +173,10 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
         if case.wont_run():
             excluded.append(case)
     n = len(cases) - len(excluded)
-    logging.info(colorize("@*{Selected} %d test %s" % (n, pluralize("case", n))))
+    logger.info("@*{Selected} %d test %s" % (n, pluralize("case", n)))
     if excluded:
         n = len(excluded)
-        logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
+        logger.info("@*{Excluding} %d test cases for the following reasons:" % n)
         reasons: dict[str | None, list[TestCase]] = {}
         for case in excluded:
             if case.mask:
@@ -185,10 +187,10 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
             n = len(reasons[key])
-            logging.emit(f"{colorize('@M{==>}')} {n}: {reason}\n")
+            logger.log(logging.EMIT, f"{'@M{==>}'} {n}: {reason}", extra={"prefix": ""})
             if config.getoption("show_excluded_tests"):
                 for case in reasons[key]:
-                    logging.emit(f"... {case.format('%N')}\n")
+                    logger.log(logging.EMIT, f"... {case.format('%N')}", extra={"prefix": ""})
 
 
 def print_durations(cases: list[TestCase], N: int) -> None:
@@ -202,7 +204,7 @@ def print_durations(cases: list[TestCase], N: int) -> None:
     for case in sorted_cases:
         string.write("  %6.2f   %s\n" % (case.duration, case.format("%id   %X")))
     string.write("\n")
-    logging.emit(string.getvalue())
+    logger.log(logging.EMIT, string.getvalue(), extra={"prefix": ""})
 
 
 def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
@@ -273,7 +275,7 @@ def show_capture(session: "Session", exitstatus: int) -> None:
     failed = [case for case in cases if not case.status.satisfies(("success", "xdiff", "xfail"))]
     if failed:
         _, width = terminal_size()
-        print(ccenter(colorize(" @*R{%d Test failures} " % len(failed)), width, "="), end="\n\n")
+        print(ccenter(" @*R{%d Test failures} " % len(failed), width, "="), end="\n\n")
         for case in failed:
             _show_capture(case, what=what)
 
@@ -282,7 +284,7 @@ def _show_capture(case: "TestCase", what="oe") -> None:
     _, width = terminal_size()
     color = "g" if case.status == "success" else "R" if case.status == "failed" else "y"
     fp = io.StringIO()
-    fp.write(ccenter(colorize(" @*%s{%s} " % (color, case.display_name)), width, "-") + "\n")
+    fp.write(ccenter(" @*%s{%s} " % (color, case.display_name), width, "-") + "\n")
     fp.write(f"{bold('Status')}: {case.status.cname}\n")
     fp.write(f"{bold('Execution directory')}: {case.execution_directory}\n")
     fp.write(f"{bold('Command')}: {' '.join(case.command())}\n")
@@ -327,7 +329,7 @@ def print_footer(cases: list[TestCase], title: str) -> None:
         if n:
             c = Status.colors[member]
             stat = totals[member][0].status.name
-            summary.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
+            summary.append("@%s{%d %s}" % (c, n, stat.lower()))
     emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
     x, y = random.sample(emojis, 2)
     kwds = {
@@ -337,8 +339,8 @@ def print_footer(cases: list[TestCase], title: str) -> None:
         "t": hhmmss(None if duration < 0 else duration),
         "title": title,
     }
-    string.write(colorize("%(x)s%(x)s @*{%(title)s} -- %(s)s in @*{%(t)s}\n" % kwds))
-    logging.emit(string.getvalue())
+    string.write("%(x)s%(x)s @*{%(title)s} -- %(s)s in @*{%(t)s}" % kwds)
+    logger.log(logging.EMIT, string.getvalue(), extra={"prefix": ""})
 
 
 def bold(string: str) -> str:

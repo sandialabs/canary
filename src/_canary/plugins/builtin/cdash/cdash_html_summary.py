@@ -13,6 +13,8 @@ from _canary.util import logging
 from _canary.util.filesystem import mkdirp
 from _canary.util.sendmail import sendmail
 
+logger = logging.get_logger(__name__)
+
 
 def cdash_summary(
     *,
@@ -33,7 +35,7 @@ def cdash_summary(
       skip_sites (list[str]): CDash sites to skip. If None, pull from all sites.
 
     """
-    logging.info("Generating the HTML summary")
+    logger.info("Generating the HTML summary")
     if url is None:
         if "CDASH_URL" not in os.environ:
             raise MissingCIVariable("CDASH_URL")
@@ -53,21 +55,21 @@ def cdash_summary(
     user = getuser()
     today = datetime.date.today()
     if mailto is not None:
-        logging.info(f"Sending HTML summary to {','.join(mailto)}")
+        logger.info(f"Sending HTML summary to {','.join(mailto)}")
         st_time = today.strftime("%m/%d/%Y")
         subject = f"{project} CDash Summary for {st_time}"
         sendmail(f"{user}@sandia.gov", mailto, subject, html_summary, subtype="html")
 
     if file is not None:
         file = os.path.abspath(file)
-        logging.info(f"Writing HTML summary to {file}")
+        logger.info(f"Writing HTML summary to {file}")
         try:
             mkdirp(os.path.dirname(file))
             with open(file, "w") as fh:
                 fh.write(html_summary)
         except OSError as e:
             s = "Unknown" if not e.args else e.args[0]
-            logging.warning(f"Could not write HTML summary due to OSError ({s})")
+            logger.warning(f"Could not write HTML summary due to OSError ({s})")
 
 
 def generate_cdash_html_summary(
@@ -119,9 +121,9 @@ def _get_build_data(
     server = cdash.server(url, project)
     cdash_builds = server.builds(date=date, buildgroups=buildgroups, skip_sites=skip_sites)
     for b in cdash_builds:
-        logging.info(f"Categorizing tests for build {b['buildname']}")
+        logger.info(f"Categorizing tests for build {b['buildname']}")
         if "test" not in b:
-            logging.debug(f"Missing 'test' section from {b['buildname']}")
+            logger.debug(f"Missing 'test' section from {b['buildname']}")
             b["test"] = server.empty_test_data()
             continue
         num_failed = b["test"]["fail"]

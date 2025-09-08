@@ -11,6 +11,8 @@ from ..util.collections import contains_any
 from ..util.rprobe import cpu_count
 from .schemas import resource_schema as schema
 
+logger = logging.get_logger(__name__)
+
 
 class ResourcePool:
     """Class representing resources available on the computer
@@ -347,12 +349,12 @@ class ResourcePool:
             raise
         else:
             self._stash = None
-        if logging.LEVEL <= logging.DEBUG:
+        if logging.get_level() <= logging.DEBUG:
             for type, n in totals.items():
                 N = sum([_["slots"] for local in self.pool for _ in local[type]]) + n
                 if n == 1 and type.endswith("s"):
                     type = type[:-1]
-                logging.debug(f"Acquiring {n} {type} from {N} available")
+                logger.debug(f"Acquiring {n} {type} from {N} available")
         return acquired
 
     def reclaim(self, resources: list[dict[str, list[dict]]]) -> None:
@@ -373,11 +375,11 @@ class ResourcePool:
                 for rspec in rspecs:
                     n = _reclaim(type, rspec)
                     types[type] = types.setdefault(type, 0) + n
-        if logging.LEVEL <= logging.DEBUG:
+        if logging.get_level() <= logging.DEBUG:
             for type, n in types.items():
                 if n == 1 and type.endswith("s"):
                     type = type[:-1]
-                logging.debug(f"Reclaimed {n} {type}")
+                logger.debug(f"Reclaimed {n} {type}")
 
 
 class ResourceUnsatisfiable(Exception):

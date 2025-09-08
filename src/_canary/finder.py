@@ -5,6 +5,7 @@
 import os
 import re
 import sys
+import time
 from typing import Any
 from typing import TextIO
 
@@ -18,6 +19,8 @@ from .util import logging
 from .util.parallel import starmap
 from .util.term import terminal_size
 from .util.time import hhmmss
+
+logger = logging.get_logger(__name__)
 
 
 class Finder:
@@ -54,7 +57,7 @@ class Finder:
                 file = os.path.join(root, path)
                 if not os.path.exists(file):
                     if tolerant:
-                        logging.warning(f"{path} not found in {root}")
+                        logger.warning(f"{path} not found in {root}")
                         continue
                     else:
                         raise ValueError(f"{path} not found in {root}")
@@ -69,13 +72,13 @@ class Finder:
             found, e = config.plugin_manager.hook.canary_discover_generators(root=root, paths=paths)
             generators.update(found)
             errors += e
-            logging.debug(f"Found {len(found)} test files in {root}")
+            logger.debug(f"Found {len(found)} test files in {root}")
         files: list[AbstractTestGenerator] = list(generators)
         n = len(files)
         nr = len(set(f.root for f in files))
         if pedantic and errors:
             raise ValueError("Stopping due to previous parsing errors")
-        logging.debug(f"Found {n} test files in {nr} search roots")
+        logger.debug(f"Found {n} test files in {nr} search roots")
         return files
 
     @property
@@ -84,29 +87,39 @@ class Finder:
 
 
 def resolve_dependencies(cases: list[TestCase]) -> None:
-    ctx = logging.context(colorize("@*{Resolving} test case dependencies"))
-    ctx.start()
-    for case in cases:
-        while True:
-            if not case.unresolved_dependencies:
-                break
-            dep = case.unresolved_dependencies.pop(0)
-            matches = dep.evaluate([c for c in cases if c != case], extra_fields=True)
-            n = len(matches)
-            if dep.expect == "+" and n < 1:
-                raise ValueError(f"{case}: expected at least one dependency, got {n}")
-            elif dep.expect == "?" and n not in (0, 1):
-                raise ValueError(f"{case}: expected 0 or 1 dependency, got {n}")
-            elif isinstance(dep.expect, int) and n != dep.expect:
-                raise ValueError(f"{case}: expected {dep.expect} dependencies, got {n}")
-            elif dep.expect != "*" and n == 0:
-                raise ValueError(
-                    f"Dependency pattern {dep.value} of test case {case.name} not found"
-                )
-            for match in matches:
-                assert isinstance(match, TestCase)
-                case.add_dependency(match, dep.result)
-    ctx.stop()
+    created = time.monotonic()
+    msg = "@*{Resolving} test case dependencies"
+    logger.info(msg, extra={"end": "..."})
+    try:
+        for case in cases:
+            while True:
+                if not case.unresolved_dependencies:
+                    break
+                dep = case.unresolved_dependencies.pop(0)
+                matches = dep.evaluate([c for c in cases if c != case], extra_fields=True)
+                n = len(matches)
+                if dep.expect == "+" and n < 1:
+                    raise ValueError(f"{case}: expected at least one dependency, got {n}")
+                elif dep.expect == "?" and n not in (0, 1):
+                    raise ValueError(f"{case}: expected 0 or 1 dependency, got {n}")
+                elif isinstance(dep.expect, int) and n != dep.expect:
+                    raise ValueError(f"{case}: expected {dep.expect} dependencies, got {n}")
+                elif dep.expect != "*" and n == 0:
+                    raise ValueError(
+                        f"Dependency pattern {dep.value} of test case {case.name} not found"
+                    )
+                for match in matches:
+                    assert isinstance(match, TestCase)
+                    case.add_dependency(match, dep.result)
+    except Exception:
+        state = "failed"
+        raise
+    else:
+        state = "done"
+    finally:
+        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+        extra = {"end": end, "rewind": True}
+        logger.log(logging.INFO, msg, extra=extra)
 
 
 def generate_test_cases(
@@ -115,7 +128,10 @@ def generate_test_cases(
 ) -> list[TestCase]:
     """Generate test cases and filter based on criteria"""
 
-    with logging.context(colorize("@*{Generating} test cases")):
+    msg = "@*{Generating} test cases"
+    logger.log(logging.INFO, msg, extra={"end": "..."})
+    created = time.monotonic()
+    try:
         locked: list[list[TestCase]]
         if config.get("config:debug"):
             locked = [f.lock(on_options) for f in generators]
@@ -123,15 +139,26 @@ def generate_test_cases(
             locked = starmap(lock_file, [(f, on_options) for f in generators])
         cases: list[TestCase] = [case for group in locked for case in group if case]
         nc, ng = len(cases), len(generators)
-    logging.info(colorize("@*{Generated} %d test cases from %d generators" % (nc, ng)))
+    except Exception:
+        state = "failed"
+        raise
+    else:
+        state = "done"
+    finally:
+        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+        extra = {"end": end, "rewind": True}
+        logger.log(logging.INFO, msg, extra=extra)
+    logger.info("@*{Generated} %d test cases from %d generators" % (nc, ng))
 
     duplicates = find_duplicates(cases)
     if duplicates:
-        logging.error("Duplicate test IDs generated for the following test cases")
+        logger.error("Duplicate test IDs generated for the following test cases")
         for id, dcases in duplicates.items():
-            logging.error(f"{id}:")
+            logger.error(f"{id}:")
             for case in dcases:
-                logging.emit(f"  - {case.display_name}: {case.file_path}\n")
+                logger.log(
+                    logging.EMIT, f"  - {case.display_name}: {case.file_path}", extra={"prefix": ""}
+                )
         raise ValueError("Duplicate test IDs in test suite")
 
     if config.get("config:debug"):

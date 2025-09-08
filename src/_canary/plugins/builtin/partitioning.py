@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from ...testbatch import TestBatch
     from ...testcase import TestCase
 
+logger = logging.get_logger(__name__)
+
 
 @hookimpl(trylast=True)
 def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
@@ -34,12 +36,12 @@ def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
     layout = spec["layout"] or "flat"
     if spec["duration"] is not None:
         duration = float(spec["duration"])  # 30 minute default
-        logging.debug(f"Batching test cases using duration={duration}")
+        logger.debug(f"Batching test cases using duration={duration}")
         return partitioning.partition_t(cases, t=duration, nodes=nodes)
     else:
         assert spec["count"] is not None
         count = int(spec["count"])
-        logging.debug(f"Batching test cases using count={count}")
+        logger.debug(f"Batching test cases using count={count}")
         if layout == "atomic":
             return partitioning.partition_n_atomic(cases, n=count)
         return partitioning.partition_n(cases, n=count, nodes=nodes)
@@ -190,7 +192,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         if match := re.search(r"^(duration|length)[:=](.*)$", arg):
             a = match.group(1)
             raw = strip_quotes(match.group(2))
-            logging.warning(f"Deprecated syntax: -b {a}={raw}, use -b spec=duration:{raw}[,...]")
+            logger.warning(f"Deprecated syntax: -b {a}={raw}, use -b spec=duration:{raw}[,...]")
             duration = time_in_seconds(raw)
             if duration <= 0:
                 raise ValueError("batch duration <= 0")
@@ -199,7 +201,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             return ("spec", spec)
         elif match := re.search(r"^count[:=]([-]?\d+)$", arg):
             raw = match.group(1)
-            logging.warning(f"Deprecated syntax: -b count={raw}, use -b spec=count:{raw}[,...]")
+            logger.warning(f"Deprecated syntax: -b count={raw}, use -b spec=count:{raw}[,...]")
             count = int(raw)
             if count < -1:
                 raise ValueError("batch count < -1")
@@ -208,13 +210,13 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             return ("spec", spec)
         elif match := re.search(r"^scheme[:=](isolate.*)$", arg):
             raw = match.group(1)
-            logging.warning(f"Deprecated syntax: -b scheme={raw}, use -b spec=layout:flat[,...]")
+            logger.warning(f"Deprecated syntax: -b scheme={raw}, use -b spec=layout:flat[,...]")
             spec = setdefaultspec(namespace)
             spec["layout"] = "flat"
             return ("spec", spec)
         elif match := re.search(r"^scheme[:=](\w+)$", arg):
             raw = match.group(1)
-            logging.warning(f"Deprecated syntax: -b scheme={raw}, use -b spec={raw}:...")
+            logger.warning(f"Deprecated syntax: -b scheme={raw}, use -b spec={raw}:...")
             return (".ignore", None)
         else:
             raise ValueError(f"invalid resource arg: {arg!r}")

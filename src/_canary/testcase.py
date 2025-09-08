@@ -37,7 +37,6 @@ from .error import skip_exit_status
 from .error import timeout_exit_status
 from .paramset import ParameterSet
 from .status import Status
-from .third_party.color import colorize
 from .util import filesystem as fs
 from .util import logging
 from .util._json import safeload
@@ -59,6 +58,8 @@ from .util.time import timestamp
 from .when import match_any
 
 stats_version_info = (3, 0)
+
+logger = logging.get_logger(__name__)
 
 
 @dataclasses.dataclass
@@ -671,7 +672,7 @@ class TestCase(AbstractTestCase):
         if self._timeout is None:
             self.set_default_timeout()
         if not isinstance(self._timeout, (int, float)):
-            logging.warning(f"{self}: expected timeout to be a number but got {self.timeout=}")
+            logger.warning(f"{self}: expected timeout to be a number but got {self.timeout=}")
             self._timeout = float(self._timeout)  # type: ignore
         return self._timeout
 
@@ -703,7 +704,7 @@ class TestCase(AbstractTestCase):
             for t, dst in arg[action]:
                 src = t if os.path.isabs(t) else os.path.join(self.file_dir, t)
                 if not os.path.exists(src):
-                    logging.debug(f"{self}: {action} resource file {t} not found")
+                    logger.debug(f"{self}: {action} resource file {t} not found")
                 asset = Asset(src=os.path.abspath(src), dst=dst, action=action)
                 self._assets.append(asset)
 
@@ -1295,7 +1296,7 @@ class TestCase(AbstractTestCase):
         for placeholder in reversed(sorted(replacements, key=lambda x: (len(x[1:]), x[1:]))):
             value = replacements[placeholder]
             formatted_text = formatted_text.replace(placeholder, value)
-        return colorize(formatted_text.strip())
+        return formatted_text.strip()
 
     def mark_as_ready(self) -> None:
         if self.wont_run():
@@ -1361,7 +1362,7 @@ class TestCase(AbstractTestCase):
         colors = itertools.cycle("bmgycr")
         for key, value in self.parameters.sorted_items(predicate=stringify):
             old = f"{key}={value}"
-            new = colorize("@%s{%s}" % (next(colors), old))
+            new = "@%s{%s}" % (next(colors), old)
             what = re.sub("\\b%s\\b" % re.escape(old), new, what)
         return what
 
@@ -1388,10 +1389,10 @@ class TestCase(AbstractTestCase):
             else:
                 dst = os.path.join(self.working_directory, asset.dst)
             if asset.action == "copy" or copy_all_resources:
-                logging.info(f"copying {asset.src} to {dst}", file=self.stdout)
+                self.stdout.write(f"==> copying {asset.src} to {dst}\n")
                 fs.force_copy(asset.src, dst)
             else:
-                logging.info(f"linking {asset.src} to {dst}", file=self.stdout)
+                self.stdout.write(f"==> linking {asset.src} to {dst}\n")
                 fs.force_symlink(asset.src, dst)
 
     def save(self):
@@ -1498,26 +1499,26 @@ class TestCase(AbstractTestCase):
             self._stderr = None
 
     def reset(self) -> None:
-        logging.trace(f"Resetting {self}")
+        logger.debug(f"Resetting {self}")
         self.close_files()
         fs.clean_out_folder(self.working_directory)
         with fs.working_dir(self.working_directory, create=True):
             self.setup_working_directory()
-        logging.trace(f"Done resetting {self}")
+        logger.debug(f"Done resetting {self}")
 
     def setup(self) -> None:
         if len(self.dependencies) != len(self.dep_done_criteria):
             raise RuntimeError("Inconsistent dependency/dep_done_criteria lists")
         elif self.unresolved_dependencies:
             raise RuntimeError("All dependencies must be resolved before running")
-        logging.trace(f"Setting up {self}")
+        logger.debug(f"Setting up {self}")
         assert config.get("session:work_tree") is not None
         fs.mkdirp(self.working_directory)
         self.close_files()
         fs.clean_out_folder(self.working_directory)
         with fs.working_dir(self.working_directory, create=True):
             self.setup_working_directory()
-        logging.trace(f"Done setting up {self}")
+        logger.debug(f"Done setting up {self}")
 
     def setup_working_directory(self) -> None:
         cwd = os.getcwd()
@@ -1528,23 +1529,23 @@ class TestCase(AbstractTestCase):
                 f"\t{cwd=}"
             )
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
-        with logging.timestamps():
-            logging.info(f"Preparing test: {self.name}", file=self.stdout)
-            logging.info(f"Directory: {os.getcwd()}", file=self.stdout)
-            logging.info("Cleaning work directory...", file=self.stdout)
-            logging.info("Linking and copying working files...", file=self.stdout)
-            if copy_all_resources:
-                logging.info(f"copying {self.file} to {cwd}", file=self.stdout)
-                fs.force_copy(self.file, os.path.basename(self.file))
-            else:
-                logging.info(f"linking {self.file} to {cwd}", file=self.stdout)
-                fs.force_symlink(self.file, os.path.basename(self.file))
-            self.copy_sources_to_workdir()
+        ts = lambda: datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
+        self.stdout.write(f"[{ts()}] Preparing test: {self.name}\n")
+        self.stdout.write(f"[{ts()}] Directory: {os.getcwd()}\n")
+        self.stdout.write(f"[{ts()}] Cleaning work directory...\n")
+        self.stdout.write(f"[{ts()}] Linking and copying working files...\n")
+        if copy_all_resources:
+            self.stdout.write(f"[{ts()}] Copying {self.file} to {cwd}\n")
+            fs.force_copy(self.file, os.path.basename(self.file))
+        else:
+            self.stdout.write(f"[{ts()}] Linking {self.file} to {cwd}\n")
+            fs.force_symlink(self.file, os.path.basename(self.file))
+        self.copy_sources_to_workdir()
 
     def do_baseline(self) -> None:
         if not self.baseline:
             return
-        logging.info(self.format("Rebaselining %X"))
+        logger.info(self.format("Rebaselining %X"))
         with fs.working_dir(self.working_directory):
             for arg in self.baseline:
                 if isinstance(arg, str):
@@ -1561,7 +1562,7 @@ class TestCase(AbstractTestCase):
                     src = os.path.join(self.working_directory, a)
                     dst = os.path.join(self.file_dir, b)
                     if os.path.exists(src):
-                        logging.emit(f"    Replacing {b} with {a}\n")
+                        logger.debug(f"    Replacing {b} with {a}\n")
                         copyfile(src, dst)
 
     def finish(self, update_stats: bool = True) -> None:
@@ -1677,7 +1678,7 @@ class TestCase(AbstractTestCase):
 
         def cancel(sig, frame):
             nonlocal proc
-            logging.info(f"Cancelling run due to captured signal {sig!r}")
+            logger.info(f"Cancelling run due to captured signal {sig!r}")
             if proc is not None:
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore")
@@ -1692,7 +1693,7 @@ class TestCase(AbstractTestCase):
                 os._exit(1)
 
         if summary := self.job_submission_summary(qrank, qsize, attempt=attempt):
-            logging.emit(summary + "\n")
+            logger.log(logging.EMIT, summary, extra={"prefix": ""})
 
         tee_output = config.getoption("capture") == "tee"
         sleep_interval = config.get("config:polling_frequency:testcase") or 0.05
@@ -1710,7 +1711,7 @@ class TestCase(AbstractTestCase):
             with fs.working_dir(self.working_directory):
                 with self.rc_environ():
                     start_marker: float = time.monotonic()
-                    logging.debug(f"Submitting {self} for execution with command {cmd_line}")
+                    logger.debug(f"Submitting {self} for execution with command {cmd_line}")
                     cwd = self.execution_directory
                     stdout: IO[Any] | int
                     stderr: IO[Any] | int
@@ -1761,7 +1762,7 @@ class TestCase(AbstractTestCase):
                 self.status.set_from_code(self.returncode)
         finally:
             if summary := self.job_completion_summary(qrank, qsize, attempt=attempt):
-                logging.emit(summary + "\n")
+                logger.log(logging.EMIT, summary, extra={"prefix": ""})
 
             signal.signal(signal.SIGINT, default_int_handler)
             signal.signal(signal.SIGTERM, default_term_handler)
@@ -1769,7 +1770,7 @@ class TestCase(AbstractTestCase):
                 self.stop = timestamp()
                 if metrics is not None:
                     self.add_measurement(**metrics)
-            logging.trace(f"{self}: finished with status {self.status}")
+            logger.debug(f"{self}: finished with status {self.status}")
         self.stdout.write(
             f"==> Finished running {self.display_name} "
             f"in {self.duration} s. with exit code {self.returncode}\n"
@@ -1789,10 +1790,10 @@ class TestCase(AbstractTestCase):
         sys.stderr.write(text)
 
     def job_submission_summary(self, qrank: int | None, qsize: int | None, attempt: int) -> str:
-        if config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO:
+        if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
             return ""
         fmt = io.StringIO()
-        if config.get("config:debug") or os.getenv("GITLAB_CI"):
+        if os.getenv("GITLAB_CI"):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
         if qrank is not None and qsize is not None:
             fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
@@ -1801,10 +1802,10 @@ class TestCase(AbstractTestCase):
         return self.format(fmt.getvalue()).strip()
 
     def job_completion_summary(self, qrank: int | None, qsize: int | None, attempt: int = 0) -> str:
-        if config.getoption("format") == "progress-bar" or logging.LEVEL > logging.INFO:
+        if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
             return ""
         fmt = io.StringIO()
-        if config.get("config:debug") or os.getenv("GITLAB_CI"):
+        if os.getenv("GITLAB_CI"):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
         if qrank is not None and qsize is not None:
             fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
@@ -1861,7 +1862,7 @@ class TestMultiCase(TestCase):
         else:
             src = flag if os.path.exists(flag) else os.path.join(self.file_dir, flag)
             if not os.path.exists(src):
-                logging.warning(f"{self}: analyze script {flag} not found")
+                logger.warning(f"{self}: analyze script {flag} not found")
             self.cmd = [os.path.basename(flag)]
             # flag is a script to run during analysis, check if it is going to be copied/linked
             for asset in self.assets:

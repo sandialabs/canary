@@ -49,8 +49,10 @@ section_schemas: dict[str, Schema] = {
 }
 
 
-log_levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG, logging.TRACE)
+log_levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG)
 env_archive_name = "CANARYCFG64"
+
+logger = logging.get_logger("_canary")
 
 
 class ConfigScope:
@@ -353,9 +355,6 @@ class Config:
             data.setdefault("config", {})["log_level"] = logging.get_level_name(log_levels[3])
             logging.set_level(logging.DEBUG)
 
-        if args.warnings:
-            logging.set_warning_level(args.warnings)
-
         env_mods = getattr(args, "env_mods") or {}
         if "session" in env_mods:
             data["environment"] = {"set": env_mods["session"]}
@@ -382,7 +381,7 @@ class Config:
         for section, section_data in data.items():
             if section not in section_schemas:
                 errors += 1
-                logging.error(f"Illegal config section: {section!r}")
+                logger.error(f"Illegal config section: {section!r}")
                 continue
             schema = section_schemas[section]
             data[section] = schema.validate({section: section_data})[section]
@@ -448,15 +447,26 @@ class Config:
             # running `canary status` outside of a Flux session.  We ignore the error.  If the
             # backend is really needed (it will only be needed by `canary run`), an error will
             # be thrown later if/when it is used.
-            logging.warning(f"Failed to setup hpc_connect for {backend=}", ex=e)
+            logger.exception(f"Failed to setup hpc_connect for {backend=}")
         if self.hpcc_backend is None:
             self.options.batch = None
         self.scopes.clear()
         for value in snapshot["scopes"]:
             scope = ConfigScope(value["name"], value["file"], value["data"])
             self.push_scope(scope)
+
+        if not len(logger.handlers):
+            logging.setup_logging()
         log_level = self.get("config:log_level")
-        logging.set_level(logging.get_level(log_level))
+        if logging.get_level_name(logger.level) != log_level:
+            logging.set_level(log_level)
+        if root := find_work_tree():
+            f = os.path.abspath(os.path.join(root, ".canary/log.txt"))
+            for handler in logger.handlers:
+                if isinstance(handler, logging.FileHandler) and handler.baseFilename == f:
+                    break
+            else:
+                logging.add_file_handler(f, logging.DEBUG)
 
     def dump_snapshot(self, file: IO[Any], indent: int | None = None) -> None:
         snapshot: dict[str, Any] = {}
@@ -490,12 +500,12 @@ class Config:
             return
 
         assert name is not None
-        logging.debug(f"Setting up HPC Connect for {name}")
+        logger.debug(f"Setting up HPC Connect for {name}")
         self.hpcc_backend = hpc_connect.get_backend(name)
         if self._resource_pool.empty():
-            logging.debug(f"  HPC connect: node count: {self.hpcc_backend.config.node_count}")
-            logging.debug(f"  HPC connect: CPUs per node: {self.hpcc_backend.config.cpus_per_node}")
-            logging.debug(f"  HPC connect: GPUs per node: {self.hpcc_backend.config.gpus_per_node}")
+            logger.debug(f"  HPC connect: node count: {self.hpcc_backend.config.node_count}")
+            logger.debug(f"  HPC connect: CPUs per node: {self.hpcc_backend.config.cpus_per_node}")
+            logger.debug(f"  HPC connect: GPUs per node: {self.hpcc_backend.config.gpus_per_node}")
             self._resource_pool.fill_uniform(
                 node_count=self.hpcc_backend.config.node_count,
                 cpus_per_node=self.hpcc_backend.config.cpus_per_node,
@@ -552,7 +562,7 @@ def read_config_scope(scope: str) -> ConfigScope:
                 else:
                     data[section] = schema.validate({section: section_data})[section]
             else:
-                logging.warning(f"ignoring unrecognized config section: {section}")
+                logger.warning(f"ignoring unrecognized config section: {section}")
     return ConfigScope(scope, file, data)
 
 
