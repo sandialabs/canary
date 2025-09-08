@@ -116,6 +116,7 @@ config_schema = Schema(
                 Optional("testcase"): Use(time_in_seconds),
                 Optional("batch"): Use(time_in_seconds),
             },
+            Optional("plugins"): list_of_str,
         }
     }
 )
@@ -129,7 +130,8 @@ environment_schema = Schema(
         }
     }
 )
-plugin_schema = Schema({"plugins": list_of_str})
+plugin_schema = Schema({"plugin": {str: dict}}, ignore_extra_keys=True)
+user_schema = Schema({"user": dict}, ignore_extra_keys=True)
 
 testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
 

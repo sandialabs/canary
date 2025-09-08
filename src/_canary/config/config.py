@@ -36,16 +36,18 @@ from .schemas import config_schema
 from .schemas import environment_schema
 from .schemas import plugin_schema
 from .schemas import resource_schema
+from .schemas import user_schema
 
 section_schemas: dict[str, Schema] = {
     "build": build_schema,
     "batch": batch_schema,
     "config": config_schema,
     "environment": environment_schema,
-    "plugins": plugin_schema,
     "resource_pool": resource_schema,
     "session": any_schema,
     "system": any_schema,
+    "plugin": plugin_schema,
+    "user": user_schema,
 }
 
 
@@ -196,6 +198,10 @@ class Config:
         if envmods := scope.get_section("environment"):
             self.apply_environment_mods(envmods)
         self.scopes[scope.name] = scope
+        if cfg := scope.get_section("config"):
+            if plugins := cfg.get("plugins"):
+                for f in plugins:
+                    self.plugin_manager.consider_plugin(f)
 
     def pop_scope(self, scope: ConfigScope) -> ConfigScope | None:
         return self.scopes.pop(scope.name, None)
@@ -355,10 +361,6 @@ class Config:
             data.setdefault("config", {})["log_level"] = logging.get_level_name(log_levels[3])
             logging.set_level(logging.DEBUG)
 
-        env_mods = getattr(args, "env_mods") or {}
-        if "session" in env_mods:
-            data["environment"] = {"set": env_mods["session"]}
-
         batchopts: dict = getattr(args, "batch", None) or {}
         if backend := batchopts.get("scheduler"):
             self.setup_hpc_connect(backend)
@@ -428,9 +430,6 @@ class Config:
         if pool := properties.pop("resource_pool", None):
             self._resource_pool.clear()
             self._resource_pool.update(pool)
-        if plugins := properties.pop("plugins", None):
-            for f in plugins:
-                self.plugin_manager.consider_plugin(f)
         if options := properties.pop("options", None):
             self.options = argparse.Namespace(**options)
         backend: str | None = properties.pop("hpcc_backend", None)
@@ -472,7 +471,6 @@ class Config:
         snapshot: dict[str, Any] = {}
         properties = snapshot.setdefault("properties", {})
         properties["resource_pool"] = self._resource_pool.getstate()
-        properties["plugins"] = list(self.plugin_manager.considered)
         properties["hpcc_backend"] = None if self.hpcc_backend is None else self.hpcc_backend.name
         properties["options"] = vars(self.options)
         properties["invocation_dir"] = self.invocation_dir
@@ -552,9 +550,8 @@ def read_config_scope(scope: str) -> ConfigScope:
     if file := get_scope_filename(scope):
         if fd := read_config_file(file):
             if "canary" in fd:
-                data.update(fd["canary"])
-            else:
-                data.update(fd)
+                data.update(fd.pop("canary"))
+            data.update(fd)
         for section, section_data in data.items():
             if schema := section_schemas.get(section):
                 if schema == any_schema:
@@ -593,13 +590,17 @@ def get_scope_filename(scope: str) -> str | None:
 
 
 def read_env_config() -> ConfigScope | None:
-    # FIXME
     data: dict[str, Any] = {}
     config_defaults = default_config_values()
     for config_var in config_defaults["config"]:
         var = f"CANARY_{config_var.upper()}"
         if var in os.environ:
-            data.setdefault("config", {})[config_var] = safe_loads(os.environ[var])
+            value: Any
+            if var == "CANARY_PLUGINS":
+                value = [_.strip() for _ in os.environ[var].split(",") if _.split()]
+            else:
+                value = safe_loads(os.environ[var])
+            data.setdefault("config", {})[config_var] = value
     if not data:
         return None
     return ConfigScope("environment", None, data)
@@ -659,11 +660,11 @@ def default_config_values() -> dict[str, Any]:
                 "default": 300.0,
                 "long": 900.0,
             },
+            "plugins": [],
             "polling_frequency": {
                 "testcase": 0.05,
             },
         },
-        "plugins": [],
         "environment": {
             "prepend-path": {},
             "append-path": {},
@@ -751,7 +752,6 @@ def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
     snapshot: dict[str, Any] = {}
     properties = snapshot.setdefault("properties", {})
     properties["resource_pool"] = legacy["resource_pool"]
-    properties["plugins"] = legacy["plugin_manager"]["plugins"]
     properties["hpcc_backend"] = legacy["backend"]
     properties["options"] = legacy["options"]
     properties["invocation_dir"] = legacy["config"].pop("invocation_dir")
@@ -770,6 +770,7 @@ def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
             "context": data["config"].pop("multiprocessing_context", "spawn"),
             "max_tasks_per_child": 1,
         }
+    data["config"]["plugins"] = legacy["plugin_manager"]["plugins"]
     if "test" in legacy:
         data["config"]["timeout"] = legacy["test"]["timeout"]
     data["config"].pop("_config_dir", None)

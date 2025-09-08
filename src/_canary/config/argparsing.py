@@ -248,10 +248,6 @@ def known_commands() -> list[str]:
 
 
 class EnvironmentModification(argparse.Action):
-    def __init__(self, option_strings, dest, default_scope="session", **kwargs):
-        self.default_scope = default_scope
-        super().__init__(option_strings, dest, **kwargs)
-
     def __call__(
         self,
         parser: argparse.ArgumentParser,
@@ -263,15 +259,26 @@ class EnvironmentModification(argparse.Action):
         try:
             var, val = [_.strip() for _ in option.split("=", 1)]
         except ValueError:
-            raise argparse.ArgumentTypeError(
-                f"Invalid environment variable {option!r} specification. Expected form NAME=VAL"
-            ) from None
-        scope = self.default_scope
-        if ":" in var:
-            scope, var = var.split(":", 1)
-        env_mods: dict[str, dict[str, str]] = getattr(namespace, self.dest, None) or {}
-        env_mods.setdefault(scope, {})[var] = val
-        setattr(namespace, self.dest, env_mods)
+            msg = f"Invalid environment variable {option!r} specification. Expected form NAME=VAL"
+            raise argparse.ArgumentTypeError(msg) from None
+        config_mods = getattr(namespace, self.dest, None) or {}
+        env_section = config_mods.setdefault("environment", {})
+        env_section.setdefault("set", {}).update({var: val})
+        setattr(namespace, self.dest, config_mods)
+
+
+class RegisterPlugin(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        option: str | Sequence[Any] | None,
+        option_str: str | None = None,
+    ):
+        config_mods = getattr(namespace, self.dest, None) or {}
+        config_section = config_mods.setdefault("config", {})
+        config_section.setdefault("plugins", []).append(option)
+        setattr(namespace, self.dest, config_mods)
 
 
 class ConfigMods(argparse.Action):
@@ -319,9 +326,9 @@ def make_argument_parser(**kwargs):
     )
     parser.add_argument(
         "-p",
+        action=RegisterPlugin,
         default=None,
-        dest="plugins",
-        action="append",
+        dest="config_mods",
         metavar="name",
         help="Load given plugin module name (multi-allowed). "
         "To avoid loading of plugins, use the `no:` prefix.",
@@ -406,11 +413,10 @@ def make_argument_parser(**kwargs):
     )
     group.add_argument(
         "-e",
-        dest="env_mods",
+        dest="config_mods",
         metavar="var=val",
         default=None,
         action=EnvironmentModification,
-        default_scope="session",
         help="Add environment variable %s to the testing environment with value %s.  Accepts "
         "optional scope using the form %s:var=val.  Valid scopes are: "
         "session: set environment variable for whole session; "
