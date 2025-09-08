@@ -327,13 +327,17 @@ class ParameterExpression:
         return " ".join(_.string for _ in parts)
 
     def evaluate(self, parameters: dict[str, Any]) -> bool:
-        global_vars = dict(parameters)
-        global_vars["not_defined"] = NotDefined(list(parameters.keys()))
-        global_vars["defined"] = Defined([key for key, value in parameters.items() if value])
+        # SECURITY: Only allow whitelisted names/functions in eval, and remove builtins.
+        # This prevents arbitrary code execution via builtins or unexpected globals.
+        safe_globals = {"__builtins__": {}}
+        # Only expose parameter keys, plus defined/not_defined helpers
+        safe_globals.update({k: v for k, v in parameters.items()})
+        safe_globals["not_defined"] = NotDefined(list(parameters.keys()))
+        safe_globals["defined"] = Defined([key for key, value in parameters.items() if value])
         local_vars: dict = {}
         assert isinstance(self.expression, str)
         try:
-            return bool(eval(self.expression, global_vars, local_vars))
+            return bool(eval(self.expression, safe_globals, local_vars))
         except NameError:
             return False
 
