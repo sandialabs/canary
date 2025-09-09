@@ -687,25 +687,6 @@ def default_config_values() -> dict[str, Any]:
             "platform": syscfg["platform"],
             "os": syscfg["os"],
         },
-        "build": {
-            "project": None,
-            "type": None,
-            "date": None,
-            "build_directory": None,
-            "source_directory": None,
-            "compiler": {
-                "vendor": None,
-                "version": None,
-                "cc": None,
-                "cxx": None,
-                "fc": None,
-                "f77": None,
-                "mpicc": None,
-                "mpicxx": None,
-                "mpifc": None,
-                "mpif77": None,
-            },
-        },
         "batch": {"default_options": []},
     }
     return defaults
