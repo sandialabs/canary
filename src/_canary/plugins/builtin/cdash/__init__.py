@@ -25,8 +25,15 @@ if TYPE_CHECKING:
 
 
 class CDashHooks:
+    @hookspec
+    def canary_cdash_labels_for_subproject(self) -> list[str] | None:
+        """Return a list of subproject labels to be added to Test.xml reports"""
+        ...
+
     @hookspec(firstresult=True)
-    def canary_cdash_subproject_label(self, case: "TestCase") -> str | None: ...
+    def canary_cdash_subproject_label(self, case: "TestCase") -> str | None:
+        """Return a subproject label for ``case`` that will be added in Test.xml reports"""
+        ...
 
 
 @hookimpl

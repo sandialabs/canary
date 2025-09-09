@@ -98,14 +98,18 @@ class CDashXMLReporter:
         else:
             self.buildstamp = self.validate_buildstamp(buildstamp)
         mkdirp(self.xml_dir)
-        if chunk_size is None:
-            chunk_size = 500
+
         unique_subproject_labels: set[str] = set(subproject_labels or [])
+        if label_sets := config.plugin_manager.hook.canary_cdash_labels_for_subproject():
+            unique_subproject_labels.update([_ for label_set in label_sets for _ in label_set])
         for case in self.data.cases:
             if label := config.plugin_manager.hook.canary_cdash_subproject_label(case=case):
                 unique_subproject_labels.add(label)
         if unique_subproject_labels:
             subproject_labels = list(unique_subproject_labels)
+
+        if chunk_size is None:
+            chunk_size = 500
         if chunk_size > 0:  # type: ignore
             for cases in chunked(self.data.cases, chunk_size):
                 self.write_test_xml(cases, subproject_labels=subproject_labels)
