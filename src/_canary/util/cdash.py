@@ -153,7 +153,7 @@ class server:
     @staticmethod
     def get(url, raw=False):
         """Get the response from the CDash API and parse it using the json library"""
-        response = urlopen(url)
+        response = urlopen(url)  # nosec B310
         return response if raw else json.load(response)
 
     def buildid(self, *, sitename, buildstamp, buildname):

@@ -253,7 +253,7 @@ class TestCaseCache:
                 data = json.load(open(self.file))  # type: ignore
                 if "cache" in data and data["cache"].get(".version") == self.version_info:
                     self._data.update(data["cache"])
-            except Exception:
+            except Exception:  # nosec B110
                 ...
         return
 
@@ -1457,7 +1457,7 @@ class TestCase(AbstractTestCase):
         for key, value in variables.items():
             try:
                 variables[key] = value % vars
-            except Exception:
+            except Exception:  # nosec B110
                 pass
         variables["PYTHONPATH"] = f"{self.pythonpath}:{variables.get('PYTHONPATH', '')}"
         variables["PATH"] = f"{self.working_directory}:{variables['PATH']}"
@@ -1688,7 +1688,7 @@ class TestCase(AbstractTestCase):
                     try:
                         if proc.is_running():
                             proc.send_signal(sig)
-                    except Exception:
+                    except Exception:  # nosec B110
                         pass
             if sig == signal.SIGINT:
                 raise KeyboardInterrupt

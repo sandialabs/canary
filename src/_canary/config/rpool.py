@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 import copy
 import math
-import pickle
+import pickle  # nosec B403
 from typing import Any
 
 from ..util import logging
@@ -285,13 +285,13 @@ class ResourcePool:
 
     def stash(self) -> None:
         # pickling faster than taking a deep copy of the pool
-        self._stash = pickle.dumps(self.pool)
+        self._stash = pickle.dumps(self.pool)  # nosec B301
 
     def unstash(self) -> None:
         # NOTE: pickled data is process-internal and not loaded from untrusted sources
         assert self._stash is not None
         self.pool.clear()
-        self.pool.extend(pickle.loads(self._stash))
+        self.pool.extend(pickle.loads(self._stash))  # nosec B301
         self._stash = None
 
     def _get_from_pool(self, type: str, slots: int) -> dict[str, Any]:

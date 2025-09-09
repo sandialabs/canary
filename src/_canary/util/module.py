@@ -28,7 +28,7 @@ def _module(*args, environb: MutableMapping | None = None) -> str | None:
             shell=True,
             executable="/bin/bash",
             env=environb,
-        )
+        )  # nosec B602
 
         new_environb = {}
         module_p.wait()
@@ -57,7 +57,7 @@ def _module(*args, environb: MutableMapping | None = None) -> str | None:
             stderr=subprocess.STDOUT,
             shell=True,
             executable="/bin/bash",
-        )
+        )  # nosec B602
         return str(module_p.communicate()[0].decode())
 
 

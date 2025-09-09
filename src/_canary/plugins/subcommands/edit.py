@@ -42,7 +42,7 @@ def find_file(testspec: str) -> str | None:
     try:
         generator = finder.find(testspec)
         return generator.file
-    except Exception:
+    except Exception:  # nosec B110
         pass
     try:
         session = load_session()

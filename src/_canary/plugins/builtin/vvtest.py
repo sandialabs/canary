@@ -562,7 +562,7 @@ def importable(module_name: str) -> bool:
 
 def safe_eval(expression: str) -> Any:
     globals = {"os": os, "sys": sys, "importable": importable}
-    return eval(expression, globals, {})
+    return eval(expression, globals, {})  # nosec B307
 
 
 def cached(func):

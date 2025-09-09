@@ -234,7 +234,7 @@ class Expression:
 
         :returns: Whether the expression matches or not.
         """
-        ret: bool = eval(self.code, {"__builtins__": {}}, MatcherAdapter(matcher))
+        ret: bool = eval(self.code, {"__builtins__": {}}, MatcherAdapter(matcher))  # nosec B307
         return ret
 
 
@@ -337,7 +337,7 @@ class ParameterExpression:
         local_vars: dict = {}
         assert isinstance(self.expression, str)
         try:
-            return bool(eval(self.expression, safe_globals, local_vars))
+            return bool(eval(self.expression, safe_globals, local_vars))  # nosec B307
         except NameError:
             return False
 

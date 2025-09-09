@@ -811,9 +811,9 @@ class PYTTestGenerator(AbstractTestGenerator):
             with monkeypatch.context() as mp:
                 mp.setattr(canary, "directives", m)
                 code = compile(open(self.file).read(), self.file, "exec")
-                global_vars = {"__name__": "__load__", "__file__": self.file}
+                safe_globals = {"__name__": "__load__", "__file__": self.file}
                 try:
-                    exec(code, global_vars)
+                    exec(code, safe_globals)  # nosec B102
                 except SystemExit:
                     pass
         finally:

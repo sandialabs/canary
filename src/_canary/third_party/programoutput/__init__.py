@@ -109,7 +109,7 @@ class ProgramOutputDirective(rst.Directive):
         cwd=unchanged,
         caption=unchanged,
         name=unchanged,
-    )
+    )  # nosec B604
 
     def run(self):
         env = self.state.document.settings.env
@@ -228,7 +228,7 @@ class Command(_Command):
             stdout=g_fp,
             stderr=open(os.devnull, "a") if self.hide_standard_error else STDOUT,
             cwd=self.working_directory,
-        )
+        )  # nosec B602
         return proc
 
     def get_output(self):

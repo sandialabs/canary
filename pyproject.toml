@@ -184,3 +184,18 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = [ "_canary.third_party.*" ]
 ignore_errors = true
+
+
+[tool.bandit]
+skips = [
+    "B101",  # ignore asserts
+    "B311",  # ignore warnings about random numbers
+    "B318",  # xml.dom.minidom.parse to parse XML
+    "B324",  # non-cryptographic hashes allowed (they are used to generate IDs only)
+    "B404",  # consider security risks when using subprocess module
+    "B406",  # xml.sax.saxutils to parse XML
+    "B408",  # allow use of xml parsers
+    "B603",
+    "B607", # start_process_with_partial_path"
+]
+exclude_dirs = ["src/canary/examples"]

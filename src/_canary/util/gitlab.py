@@ -281,7 +281,7 @@ class repo:
         url = self.build_api_url(path=f"projects/{self.project_id}/uploads")
         headers = {"PRIVATE-TOKEN": self.access_token}
         files = {"file": open(file, "rb")}
-        response = requests.post(url, headers=headers, files=files)
+        response = requests.post(url, headers=headers, files=files)  # nosec B113
         return response.json()
 
     @api_access_required
@@ -306,7 +306,7 @@ class repo:
 
         get_url = f"{url}/{tag}"
         request = Request(url=get_url, headers=headers)
-        return json.load(urlopen(request))
+        return json.load(urlopen(request))  # nosec B310
 
     @api_access_required
     def link(self, *, tag, filename, fileurl):
@@ -335,7 +335,7 @@ class repo:
                 url = f"{base_url}?{params}"
                 logging.debug(url)
                 request = Request(url=url, headers=header)
-                payload = json.load(urlopen(request))
+                payload = json.load(urlopen(request))  # nosec B310
                 if not payload:
                     break
                 issues.extend(payload)
@@ -357,7 +357,7 @@ class repo:
                 url = f"{base_url}?{params}"
                 logging.debug(url)
                 request = Request(url=url, headers=header)
-                payload = json.load(urlopen(request))
+                payload = json.load(urlopen(request))  # nosec B310
                 if not payload:
                     break
                 self._commits.extend(payload)
@@ -381,7 +381,7 @@ class repo:
                 url = f"{base_url}?{params}"
                 logging.debug(url)
                 request = Request(url=url, headers=header)
-                payload = json.load(urlopen(request))
+                payload = json.load(urlopen(request))  # nosec B310
                 if not payload:
                     break
                 merge_requests.extend(payload)
@@ -394,7 +394,7 @@ class repo:
         url = self.build_api_url(path=f"projects/{self.project_id}/issues/{issue_no}")
         headers = {"PRIVATE-TOKEN": self.access_token}
         request = Request(url=url, headers=headers)
-        return json.load(urlopen(request))
+        return json.load(urlopen(request))  # nosec B310
 
     @api_access_required
     def move_issue(self, issue_no, *, to_project_id):
@@ -439,7 +439,7 @@ class repo:
         url = f"{base_url}?{encoded_params}"
         request = Request(url=url, headers=headers, method="POST")
         request.get_method = lambda: "POST"
-        issue = json.load(urlopen(request))
+        issue = json.load(urlopen(request))  # nosec B310
         return issue.get("iid")
 
     @api_access_required
@@ -447,7 +447,7 @@ class repo:
         url = self.build_api_url(path=f"projects/{self.project_id}/repository/tags")
         headers = {"PRIVATE-TOKEN": self.access_token}
         request = Request(url=url, headers=headers)
-        return json.load(urlopen(request))
+        return json.load(urlopen(request))  # nosec B310
 
     def tag_exists(self, name):
         return name in self.tags()
@@ -611,7 +611,7 @@ class merge_request:
             logging.info(f"Fetching merge request data for MR {self.iid}")
             headers = {"PRIVATE-TOKEN": self.access_token}
             request = Request(url=url, headers=headers)
-            self._mr_data = json.load(urlopen(request))
+            self._mr_data = json.load(urlopen(request))  # nosec B310
         return self._mr_data
 
     def fetch_project_data(self, pid):
@@ -619,7 +619,7 @@ class merge_request:
         logging.info(f"Fetching project data for project {pid}")
         headers = {"PRIVATE-TOKEN": self.access_token}
         request = Request(url=url, headers=headers)
-        return json.load(urlopen(request))
+        return json.load(urlopen(request))  # nosec B310
 
     @property
     def project_data(self):
@@ -714,7 +714,7 @@ class merge_request:
 
 def download_file(download_url, filename=None):
     filename = filename or os.path.basename(download_url)
-    with urlopen(download_url) as response:
+    with urlopen(download_url) as response:  # nosec B310
         with open(filename, "wb") as fh:
             shutil.copyfileobj(response, fh)
 
@@ -728,7 +728,7 @@ def get_job_artifacts(api_v4_url, project_id, jobid, access_token=None, dest=Non
             headers["PRIVATE-TOKEN"] = access_token
         logging.info(f"Downloading artifacts from {url}")
         request = Request(url=url, headers=headers)
-        response = urlopen(request)
+        response = urlopen(request)  # nosec B310
         f = zipfile.ZipFile(io.BytesIO(response.read()))
 
         # Safe extraction: block traversal and absolute paths

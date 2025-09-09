@@ -161,7 +161,7 @@ def force_remove(file_or_dir: str) -> None:
     """Remove ``file_or_dir`` forcefully"""
     try:
         remove(file_or_dir)
-    except Exception:
+    except Exception:  # nosec B110
         pass
 
 
