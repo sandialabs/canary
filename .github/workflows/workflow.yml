@@ -124,6 +124,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          pip install toml
           pip install bandit
 
       - name: Bandit
