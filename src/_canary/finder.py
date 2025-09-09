@@ -38,7 +38,7 @@ class Finder:
         special: str | None = None
         if self._ready:
             raise ValueError("Cannot call add() after calling prepare()")
-        if match := re.search("^(\w+)@(.*)", root):
+        if match := re.search(r"^(\w+)@(.*)", root):
             special, f = match.groups()
             root = os.path.abspath(f)
             if paths:
