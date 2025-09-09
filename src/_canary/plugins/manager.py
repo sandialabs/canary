@@ -36,11 +36,6 @@ class CanaryPluginManager(pluggy.PluginManager):
         self.load_setuptools_entrypoints(hookspec.project_name)
         return self
 
-    def update(self, arg: dict[str, Any]) -> None:
-        if plugins := arg.get("plugins"):
-            for plugin in plugins:
-                self.consider_plugin(plugin)
-
     def get_subcommands(self) -> list[CanarySubcommand]:
         hook = self.hook.canary_subcommand
         return hook()

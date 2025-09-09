@@ -8,6 +8,7 @@ from typing import Any
 from typing import Generator
 
 from .config import Config
+from .config import ConfigScope
 from .config import get_scope_filename  # noqa: F401
 from .rpool import ResourcePool  # noqa: F401
 from .rpool import ResourceUnavailable  # noqa: F401
@@ -53,11 +54,11 @@ else:
 
 
 @contextmanager
-def override() -> Generator[None, None, None]:
+def override() -> Generator[Config, None, None]:
     global _config
     save_config = _config
     try:
         _config = Config()
-        yield
+        yield _config
     finally:
         _config = save_config
