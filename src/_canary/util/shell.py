@@ -4,6 +4,7 @@
 
 import os
 import re
+import shlex
 import subprocess
 from contextlib import contextmanager
 from typing import Generator
@@ -24,7 +25,7 @@ class Bash:
             raise FileNotFoundError(file)
         file = os.path.abspath(file)
         cmd = ["bash", "--noprofile", "-c"]
-        args = ["set -a", f". {file}", "echo 'env<<<'", "export -p", "echo '>>>'"]
+        args = ["set -a", shlex.join([".", file]), "echo 'env<<<'", "export -p", "echo '>>>'"]
         cmd.append(" ; ".join(args))
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         p.wait()
