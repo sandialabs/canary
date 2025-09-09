@@ -101,7 +101,7 @@ class CDashXMLReporter:
 
         unique_subproject_labels: set[str] = set(subproject_labels or [])
         if label_sets := config.plugin_manager.hook.canary_cdash_labels_for_subproject():
-            unique_subproject_labels.update([_ for label_set in label_sets for _ in label_set])
+            unique_subproject_labels.update([_ for ls in label_sets for _ in ls if ls])
         for case in self.data.cases:
             if label := config.plugin_manager.hook.canary_cdash_subproject_label(case=case):
                 unique_subproject_labels.add(label)
