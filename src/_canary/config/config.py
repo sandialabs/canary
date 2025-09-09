@@ -603,6 +603,8 @@ def read_env_config() -> ConfigScope | None:
             data.setdefault("config", {})[config_var] = value
     if not data:
         return None
+    schema = section_schemas["config"]
+    data = schema.validate(data)
     return ConfigScope("environment", None, data)
 
 
