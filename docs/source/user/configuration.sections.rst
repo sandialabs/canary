@@ -20,34 +20,47 @@ Set general configuration settings.
      debug: false  # (bool)
      log_level: "INFO"  # (str)
 
-batch
------
+config:multiprocessing
+......................
 
-Set batch settings.
+Multiprocessing configuration settings
 
 .. code-block:: yaml
 
-   batch:
-     duration: 1800 # (float)
-     default_options: []  # (list of str)
+  config:
+    multiprocessing:
+      context: spawn
+      max_tasks_per_child: 1
 
-plugins
--------
+config:plugins
+..............
 
 Plugins to load
 
 .. code-block:: yaml
 
-   plugins: []  # (list of str)
+   config:
+     plugins: []  # (list of str)
 
-test:timeout
-------------
+config:polling_frequency
+........................
+
+Frequency to poll running tests from completion
+
+.. code-block:: yaml
+
+   config:
+     polling_freqeuncy:
+       testcase: 0.05
+
+config:timeout
+..............
 
 Set test timeouts based on :ref:`keywords<directive-keywords>`.  The ``fast`` and ``long`` timeouts are applied to tests having ``fast`` or ``long`` :ref:`keywords<directive-keywords>`, otherwise the ``default`` timeout is applied.
 
 .. code-block:: yaml
 
-   test:
+   config:
      timeout:
        fast: T  # (number or str) default: 30s
        long: T  # (number or str) default: 10m
@@ -59,11 +72,21 @@ Set test timeouts based on :ref:`keywords<directive-keywords>`.  The ``fast`` an
 
   .. code-block:: yaml
 
-     test:
+     config:
        timeout:
          unit_test: 1s
 
   The same can be accomplished on the command line: ``canary -c test:timeout:unit_test:1s ...``.
+
+batch
+-----
+
+Set batch settings.
+
+.. code-block:: yaml
+
+   batch:
+     default_options: []  # (list of str)
 
 environment
 -----------
