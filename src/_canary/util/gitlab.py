@@ -98,9 +98,7 @@ class repo:
         if quiet:
             cmd.append("--quiet")
         cmd.append(url)
-        rc = git(*cmd)
-        if rc != 0:
-            raise ValueError(f"Failed to clone {url}")
+        git(*cmd)
         path = os.path.join(os.getcwd(), os.path.basename(url))
         if path.endswith(".git"):
             path = path[:-4]
@@ -159,9 +157,9 @@ class repo:
 
     def branches(self):
         with working_dir(self.path):
-            out = git("branch", "-a", stdout=str)
+            cp = git("branch", "-a", stdout=subprocess.PIPE)
             branches = []
-            for line in split(out, sep="\n"):
+            for line in split(cp.stdout, sep="\n"):
                 line = line.split()[0]
                 if line.startswith("remotes/origin/HEAD"):
                     continue
@@ -254,7 +252,8 @@ class repo:
     def tag(self, name):
         logging.info(f"Tagging {self.name} at {self.sha()} with {name}")
         with working_dir(self.path):
-            tags = split(git("tag", stdout=str), sep="\n")
+            cp = git("tag", stdout=subprocess.PIPE)
+            tags = split(cp.stdout, sep="\n")
             if name in tags:
                 git("tag", "-d", name)
             git("tag", name)
@@ -262,19 +261,21 @@ class repo:
 
     def sha(self):
         with working_dir(self.path):
-            return git("rev-parse", "HEAD", stdout=str).strip()
+            cp = git("rev-parse", "HEAD", stdout=subprocess.PIPE)
+            return cp.stdout.strip()
 
     @property
     def _current_branch(self):
         with working_dir(self.path):
-            return git("rev-parse", "--abbrev-ref", "HEAD", stdout=str).strip()
+            cp = git("rev-parse", "--abbrev-ref", "HEAD", stdout=subprocess.PIPE)
+            return cp.stdout.strip()
 
     @api_access_required
     def upload(self, *, file):
         try:
             import requests
         except ImportError:
-            logging.warning("uploading files requires the requests library")
+            logging.exception("uploading files requires the requests library")
             return None
 
         url = self.build_api_url(path=f"projects/{self.project_id}/uploads")
@@ -787,31 +788,11 @@ def force_remove(path):
 
 
 def git(subcommand, *args, **kwargs):
-    cmd = ["git", subcommand] + list(args)
-    if kwargs.get("stdout") is str:
-        kwargs.pop("stdout")
-        return check_output(cmd, **kwargs)
-    return call(cmd, **kwargs)
-
-
-def call(args, **kwargs):
-    p = subprocess.Popen(args, **kwargs)
-    p.wait()
-    return p.returncode
-
-
-def check_output(args, **kwargs):
-    try:
-        output = subprocess.check_output(args, **kwargs)
-        return output.decode("utf-8").strip()
-    except subprocess.CalledProcessError as e:
-        logging.warn(str(e))
-        return None
+    return subprocess.run(["git", subcommand, *args], check=True, text=True, **kwargs)
 
 
 def curl(*args, **kwargs):
-    cmd = ["curl"] + list(args)
-    return call(cmd, **kwargs)
+    return subprocess.run(["curl", *args], check=True, text=True, **kwargs)
 
 
 def split(arg, sep=None):
