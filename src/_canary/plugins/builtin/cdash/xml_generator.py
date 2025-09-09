@@ -351,7 +351,7 @@ class CDashXMLReporter:
             subproject_label = config.plugin_manager.hook.canary_cdash_subproject_label(case=case)
             if subproject_label and subproject_label not in keywords:
                 keywords.append(subproject_label)
-            if case.keywords:
+            if keywords:
                 labels = doc.createElement("Labels")
                 for keyword in case.keywords:
                     add_text_node(labels, "Label", keyword)

@@ -6,7 +6,6 @@ import os
 import sys
 import warnings
 from typing import TYPE_CHECKING
-from typing import Any
 
 import pluggy
 

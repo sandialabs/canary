@@ -8,7 +8,7 @@ from typing import Any
 from typing import Generator
 
 from .config import Config
-from .config import ConfigScope
+from .config import ConfigScope  # noqa: F401
 from .config import get_scope_filename  # noqa: F401
 from .rpool import ResourcePool  # noqa: F401
 from .rpool import ResourceUnavailable  # noqa: F401
