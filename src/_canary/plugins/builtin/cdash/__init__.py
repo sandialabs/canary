@@ -11,6 +11,7 @@ from typing import Any
 
 from ....util.string import csvsplit
 from ...hookspec import hookimpl
+from ...hookspec import hookspec
 from ...types import CanaryReporter
 from .cdash_html_summary import cdash_summary
 from .gitlab_issue_generator import create_issues_from_failed_tests
@@ -19,11 +20,23 @@ from .xml_generator import CDashXMLReporter
 if TYPE_CHECKING:
     from ....config.argparsing import Parser
     from ....session import Session
+    from ....testcase import TestCase
+    from ...manager import CanaryPluginManager
+
+
+class CDashHooks:
+    @hookspec(firstresult=True)
+    def canary_cdash_subproject_label(self, case: "TestCase") -> str | None: ...
 
 
 @hookimpl
 def canary_session_reporter() -> CanaryReporter:
     return CDashReporter()
+
+
+@hookimpl
+def canary_addhooks(pluginmanager: "CanaryPluginManager"):
+    pluginmanager.add_hookspecs(CDashHooks)
 
 
 class CDashReporter(CanaryReporter):

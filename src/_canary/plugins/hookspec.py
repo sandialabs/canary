@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from ..session import Session
     from ..testbatch import TestBatch
     from ..testcase import TestCase
+    from .manager import CanaryPluginManager
 
 project_name = "canary"
 hookspec = pluggy.HookspecMarker(project_name)
@@ -255,6 +256,10 @@ def canary_testbatch_finish(batch: "TestBatch") -> None:
     The default implementation runs ``batch.finish()``
 
     Args:
-        The test case.
+        The test case batch.
 
     """
+
+
+@hookspec
+def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None: ...
