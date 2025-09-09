@@ -6,7 +6,6 @@ import os
 import sys
 import warnings
 from typing import TYPE_CHECKING
-from typing import Any
 
 import pluggy
 
@@ -35,11 +34,6 @@ class CanaryPluginManager(pluggy.PluginManager):
             self.register(p, name=name)
         self.load_setuptools_entrypoints(hookspec.project_name)
         return self
-
-    def update(self, arg: dict[str, Any]) -> None:
-        if plugins := arg.get("plugins"):
-            for plugin in plugins:
-                self.consider_plugin(plugin)
 
     def get_subcommands(self) -> list[CanarySubcommand]:
         hook = self.hook.canary_subcommand

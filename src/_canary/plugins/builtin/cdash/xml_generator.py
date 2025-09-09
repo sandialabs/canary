@@ -98,6 +98,16 @@ class CDashXMLReporter:
         else:
             self.buildstamp = self.validate_buildstamp(buildstamp)
         mkdirp(self.xml_dir)
+
+        unique_subproject_labels: set[str] = set(subproject_labels or [])
+        if label_sets := config.plugin_manager.hook.canary_cdash_labels_for_subproject():
+            unique_subproject_labels.update([_ for label_set in label_sets for _ in label_set])
+        for case in self.data.cases:
+            if label := config.plugin_manager.hook.canary_cdash_subproject_label(case=case):
+                unique_subproject_labels.add(label)
+        if unique_subproject_labels:
+            subproject_labels = list(unique_subproject_labels)
+
         if chunk_size is None:
             chunk_size = 500
         if chunk_size > 0:  # type: ignore
@@ -219,7 +229,7 @@ class CDashXMLReporter:
         doc = self.create_document()
         root = doc.firstChild
 
-        if subproject_labels is not None:
+        if subproject_labels:
             for label in subproject_labels:
                 subproject = doc.createElement("Subproject")
                 subproject.setAttribute("name", label)
@@ -342,9 +352,12 @@ class CDashXMLReporter:
                     filename=os.path.basename(case.file),
                 )
 
-            if case.keywords:
+            keywords: set[str] = set(case.keywords)
+            if label := config.plugin_manager.hook.canary_cdash_subproject_label(case=case):
+                keywords.add(label)
+            if keywords:
                 labels = doc.createElement("Labels")
-                for keyword in case.keywords:
+                for keyword in keywords:
                     add_text_node(labels, "Label", keyword)
                 test_node.appendChild(labels)
 

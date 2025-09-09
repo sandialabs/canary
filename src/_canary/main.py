@@ -57,6 +57,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             color.set_color_when(args.color)
 
         config.set_main_options(args)
+        config.plugin_manager.hook.canary_addhooks(pluginmanager=config.plugin_manager)
         config.plugin_manager.hook.canary_configure(config=config)
         command = parser.get_command(args.command)
         if command is None:
@@ -115,23 +116,25 @@ class CanaryCommand:
     def __call__(self, *args_in: str, fail_on_error: bool = True) -> int:
         try:
             global reraise
-            with config.temporary_scope() as scope:
+            with config.override() as cfg:
                 save_reraise: bool | None = None
                 if self.debug:
-                    scope["config:debug"] = True
+                    scope = config.ConfigScope("tmp", None, {"config": {"debug": True}})
+                    cfg.push_scope(scope)
                     save_reraise = reraise
                     reraise = True
                 argv = [self.command.name] + list(args_in)
                 parser = make_argument_parser()
-                for command in config.plugin_manager.get_subcommands():
+                for command in cfg.plugin_manager.get_subcommands():
                     parser.add_command(command)
                 with monkeypatch.context() as mp:
                     mp.setattr(parser, "add_argument", parser.add_plugin_argument)
                     mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
-                    config.plugin_manager.hook.canary_addoption(parser=parser)
+                    cfg.plugin_manager.hook.canary_addoption(parser=parser)
                 args = parser.parse_args(argv)
-                config.set_main_options(args)
-                config.plugin_manager.hook.canary_configure(config=config)
+                cfg.set_main_options(args)
+                cfg.plugin_manager.hook.canary_addhooks(pluginmanager=cfg.plugin_manager)
+                cfg.plugin_manager.hook.canary_configure(config=cfg)
                 rc = self.command.execute(args)
                 self.returncode = rc
         except Exception:
