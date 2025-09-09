@@ -288,6 +288,7 @@ class ResourcePool:
         self._stash = pickle.dumps(self.pool)
 
     def unstash(self) -> None:
+        # NOTE: pickled data is process-internal and not loaded from untrusted sources
         assert self._stash is not None
         self.pool.clear()
         self.pool.extend(pickle.loads(self._stash))
