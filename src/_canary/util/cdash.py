@@ -22,6 +22,9 @@ from .executable import Executable
 from .filesystem import force_remove
 
 
+logger = logging.get_logger(__name__)
+
+
 class api_filters:
     def __init__(self, combine_mode=None):
         assert combine_mode in ("and", "or", None)
@@ -107,7 +110,7 @@ class server:
             params["MD5"] = md5sum
         encoded_params = urlencode(params)
         url = f"{self.baseurl}/submit.php?{encoded_params}"
-        logging.info(f"Uploading {os.path.basename(filename)} to {url}", file=sys.stderr)
+        logger.info(f"Uploading {os.path.basename(filename)} to {url}", file=sys.stderr)
         return self.put(url, filename)
 
     @staticmethod
@@ -141,11 +144,11 @@ class server:
             finally:
                 if payload["status"] == "NA":
                     m = payload["message"]
-                    logging.error(f"Failed to upload {os.path.basename(file)}: {m}")
+                    logger.error(f"Failed to upload {os.path.basename(file)}: {m}")
                 elif payload["status"] != "OK":
                     m = payload["message"] = get_text(doc, "message")
                     lines = "\n    ".join([_.rstrip() for _ in open(efile).readlines()])
-                    logging.error(f"Failed to upload {os.path.basename(file)}: {m}\n    {lines}")
+                    logger.error(f"Failed to upload {os.path.basename(file)}: {m}\n    {lines}")
                 if not config.get("config:debug"):
                     force_remove(efile)
             return payload
@@ -176,7 +179,7 @@ class server:
         }
         query = urlencode(params)
         url = self.build_api_url(path="getbuildid.php", query=query)
-        logging.debug(f"Getting build ID from CDash using the following query: {url}")
+        logger.debug(f"Getting build ID from CDash using the following query: {url}")
         curl = Executable("curl")
         try:
             result = curl("-k", url, output=str, error=os.devnull)
@@ -184,7 +187,7 @@ class server:
             buildid = doc.getElementsByTagName("buildid")[0].firstChild.data.strip()
         except xml.parsers.expat.ExpatError:
             buildid = "not found"
-        logging.debug(f"build id = {buildid}")
+        logger.debug(f"build id = {buildid}")
         return None if buildid == "not found" else int(buildid)
 
     @staticmethod
@@ -207,14 +210,14 @@ class server:
 
         """
         skip_sites = skip_sites or []
-        logging.info(f"Getting build groups for {self.project}")
+        logger.info(f"Getting build groups for {self.project}")
         buildgroups = self.get_buildgroups(date, buildgroups=buildgroups)
         nbuild = sum([len(bg["builds"]) for bg in buildgroups])
-        logging.info(f"Found {len(buildgroups)} build groups with {nbuild} builds")
+        logger.info(f"Found {len(buildgroups)} build groups with {nbuild} builds")
         builds = []
         for buildgroup in buildgroups:
             n = len(buildgroup["builds"])
-            logging.info(f"Getting build summaries for build group {buildgroup['name']}")
+            logger.info(f"Getting build summaries for build group {buildgroup['name']}")
             for i, build in enumerate(buildgroup["builds"], start=1):
                 cwrite("\r@*b{==>} Getting build summary for build %d of %d" % (i, n))
                 if self.contains(build["site"], skip_sites):
@@ -244,7 +247,7 @@ class server:
             params["date"] = date
         query = urlencode(params)
         url = self.build_api_url(path="index.php", query=query)
-        logging.debug(f"Getting build groups from CDash using the following query: {url}")
+        logger.debug(f"Getting build groups from CDash using the following query: {url}")
         data = self.get(url)
         if buildgroups is not None:
             buildgroups = [_ for _ in data["buildgroups"] if _["name"] in buildgroups]
@@ -278,7 +281,7 @@ class server:
         failed = []
         builds = self.builds(date=date, buildgroups=buildgroups, skip_sites=skip_sites)
         for i, build in enumerate(builds, start=1):
-            logging.info(f"Getting failed tests for build {i} of {len(builds)}")
+            logger.info(f"Getting failed tests for build {i} of {len(builds)}")
             if skip_timeout:
                 for fail_reason in ("Failed", "Diffed"):
                     tests = self.get_failed_tests(
@@ -288,7 +291,7 @@ class server:
             else:
                 tests = self.get_failed_tests(build, skip_missing=skip_missing)
                 failed.extend(tests)
-        logging.info(f"Found {len(failed)} tests across the {len(builds)} builds")
+        logger.info(f"Found {len(failed)} tests across the {len(builds)} builds")
         return failed
 
     def tests(
@@ -316,11 +319,11 @@ class server:
         tests = []
         builds = self.builds(date=date, buildgroups=buildgroups, skip_sites=skip_sites)
         for i, build in enumerate(builds, start=1):
-            logging.info(f"Getting tests for build {i} of {len(builds)}")
+            logger.info(f"Getting tests for build {i} of {len(builds)}")
             build_tests = self.get_tests_from_build(
                 build, skip_missing=skip_missing, include_details=include_details
             )
-            logging.debug(f"Found {len(build_tests)} tests for {build['buildname']}")
+            logger.debug(f"Found {len(build_tests)} tests for {build['buildname']}")
             tests.extend(build_tests)
         return tests
 

@@ -12,6 +12,9 @@ from _canary.util import gitlab
 from _canary.util import logging
 
 
+logger = logging.get_logger(__name__)
+
+
 def create_issues_from_failed_tests(
     *,
     access_token: str | None = None,
@@ -117,7 +120,7 @@ def groupby_status_and_testname(tests):
         "notrun (Not Run)": "Failed",
     }
     grouped = {}
-    logging.info("Grouping failed tests by status and name")
+    logger.info("Grouping failed tests by status and name")
     for test in tests:
         if re.search(r"\[.*\]", test["name"]):
             name = test["name"].split("[")[0]
@@ -127,9 +130,9 @@ def groupby_status_and_testname(tests):
         status = details_map.get(details, "Unknown")
         test["fail_reason"] = status
         grouped.setdefault(status, {}).setdefault(name, []).append(test)
-    logging.info("Done grouping failed tests by status and name")
+    logger.info("Done grouping failed tests by status and name")
     for gn, gt in grouped.items():
-        logging.info(f"{len(gt)} tests {gn}")
+        logger.info(f"{len(gt)} tests {gn}")
     return grouped
 
 
@@ -199,7 +202,7 @@ def close_test_issues_missing_from_cdash(repo, current_issue_data):
         else:
             # Issue is open, but not in the CDash failed tests. Must have been fixed and
             # not closed.
-            logging.info(f"Closing issue {existing_issue['title']}")
+            logger.info(f"Closing issue {existing_issue['title']}")
             params = {"state_event": "close", "add_labels": "test::fixed"}
             repo.edit_issue(existing_issue["iid"], data=params)
 
@@ -242,7 +245,7 @@ def update_existing_issue(repo, existing, updated_issue_data):
     if existing["state"] == "closed":
         params["state_event"] = "reopen"
     s = "Reopening" if params.get("state_event") else "Updating"
-    logging.info(f"{s} issue {title}")
+    logger.info(f"{s} issue {title}")
     iid = existing["iid"]
     repo.edit_issue(iid, data=params)
     repo.edit_issue(iid, notes=updated_issue_data["notes"])
@@ -256,7 +259,7 @@ def create_new_issue(repo, new_issue_data):
     labels.append("Stage::To Do")
     labels.extend([site_label(_) for _ in new_issue_data["sites"]])
     params = {"title": title, "description": description, "labels": ",".join(labels)}
-    logging.info(f"Creating new issue for {title}, with labels {params['labels']}")
+    logger.info(f"Creating new issue for {title}, with labels {params['labels']}")
     iid = repo.new_issue(data=params)
     if iid:
         repo.edit_issue(iid, notes=new_issue_data["notes"])
