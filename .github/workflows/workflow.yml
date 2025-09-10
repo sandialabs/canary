@@ -124,8 +124,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install toml
-          pip install bandit
+          pip install --upgrade pip
+          if [ "$(python -c 'import sys; print(sys.version_info.major * 100 + sys.version_info.minor)')" -lt "311" ]; then
+            pip install bandit[toml]
+          else
+            pip install bandit
+          fi
 
       - name: Bandit
         run: |
