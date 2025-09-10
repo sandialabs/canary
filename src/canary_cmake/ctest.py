@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import argparse
 import copy
 import io
 import json
@@ -11,29 +10,14 @@ import re
 import shlex
 import subprocess
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
 from typing import Any
 from typing import Generator
 
-from ... import config
-from ...generator import AbstractTestGenerator
-from ...testcase import DependencyPatterns
-from ...testcase import TestCase
-from ...util import graph
-from ...util import logging
-from ...util.filesystem import force_remove
-from ...util.filesystem import set_executable
-from ...util.filesystem import which
-from ...util.filesystem import working_dir
-from ...util.time import time_in_seconds
-from ..hookspec import hookimpl
-
-if TYPE_CHECKING:
-    from ...config.config import Config as CanaryConfig
+import canary
 
 warning_cache = set()
 
-logger = logging.get_logger(__name__)
+logger = canary.get_logger(__name__)
 
 
 def warn_unsupported_ctest_option(option: str) -> None:
@@ -46,7 +30,7 @@ def warn_unsupported_ctest_option(option: str) -> None:
     warning_cache.add(option)
 
 
-class CTestTestGenerator(AbstractTestGenerator):
+class CTestTestGenerator(canary.AbstractTestGenerator):
     def __init__(self, root: str, path: str | None = None) -> None:
         # CTest works with resolved paths
         super().__init__(os.path.abspath(root), path=path)
@@ -60,7 +44,7 @@ class CTestTestGenerator(AbstractTestGenerator):
         return False
 
     def stop_recursion(self) -> bool:
-        if config.getoption("recurse_ctest", False):
+        if canary.config.getoption("recurse_ctest", False):
             return False
         return True
 
@@ -68,7 +52,7 @@ class CTestTestGenerator(AbstractTestGenerator):
     def always_matches(cls, path: str) -> bool:
         return os.path.basename(path) == "CTestTestfile.cmake"
 
-    def lock(self, on_options: list[str] | None = None) -> list[TestCase]:
+    def lock(self, on_options: list[str] | None = None) -> list[canary.TestCase]:
         cmake = find_cmake()
         if cmake is None:
             logger.warning("cmake not found, test cases cannot be generated")
@@ -94,7 +78,7 @@ class CTestTestGenerator(AbstractTestGenerator):
         file.write(f"File: {self.file}\n")
         cases = self.lock(on_options=on_options)
         file.write(f"{len(cases)} test cases:\n")
-        graph.print(cases, file=file)
+        canary.graph.print(cases, file=file)
         return file.getvalue()
 
     def info(self) -> dict[str, Any]:
@@ -163,7 +147,7 @@ class CTestTestGenerator(AbstractTestGenerator):
                     case.add_dependency(match)
 
 
-class CTestTestCase(TestCase):
+class CTestTestCase(canary.TestCase):
     def __init__(
         self,
         *,
@@ -225,7 +209,7 @@ class CTestTestCase(TestCase):
 
         if depends:
             self.unresolved_dependencies.extend(
-                [DependencyPatterns(value=d, result="success", expect="+") for d in depends]
+                [canary.DependencyPatterns(value=d, result="success", expect="+") for d in depends]
             )
 
         if environment is not None:
@@ -287,14 +271,14 @@ class CTestTestCase(TestCase):
     def set_default_timeout(self) -> None:
         """Sets the default timeout which is 1500 for CMake generated files."""
         timeout: float
-        if var := config.getoption("ctest_test_timeout"):
+        if var := canary.config.getoption("ctest_test_timeout"):
             timeout = float(var)
         elif var := os.getenv("CTEST_TEST_TIMEOUT"):
-            timeout = time_in_seconds(var)
+            timeout = canary.time.time_in_seconds(var)
         elif self.timeout_property is not None:
             timeout = self.timeout_property
         else:
-            timeout = config.get("config:timeout:ctest", 1500.0)
+            timeout = canary.config.get("config:timeout:ctest", 1500.0)
         self._timeout = float(timeout)
 
     @property
@@ -390,20 +374,20 @@ class CTestTestCase(TestCase):
                 values = []
                 for item in items:
                     # use LID since CTest is not designed for multi-node execution
-                    _, lid = config.resource_pool.local_ids(type, item["gid"])
+                    _, lid = canary.config.resource_pool.local_ids(type, item["gid"])
                     values.append(f"id:{lid},slots:{item['slots']}")
                 os.environ[key] = ";".join(values)
         os.environ["CTEST_RESOURCE_GROUP_COUNT"] = str(resource_group_count)
 
     def setup(self) -> None:
         super().setup()
-        with working_dir(self.working_directory):
-            sh = which("sh")
+        with canary.filesystem.working_dir(self.working_directory):
+            sh = canary.filesystem.which("sh")
             with open("runtest", "w") as fh:
                 fh.write(f"#!{sh}\n")
                 fh.write(f"cd {self.execution_directory}\n")
                 fh.write(shlex.join(self.command()))
-            set_executable("runtest")
+            canary.filesystem.set_executable("runtest")
 
     def finish(self, update_stats: bool = True) -> None:
         if update_stats:
@@ -520,10 +504,10 @@ def load(file: str) -> dict[str, Any]:
     tests: dict[str, Any] = {}
     logger.debug(f"Loading ctest tests from {file}")
 
-    ctest = which("ctest")
+    ctest = canary.filesystem.which("ctest")
     assert ctest is not None
 
-    with working_dir(os.path.dirname(file)):
+    with canary.filesystem.working_dir(os.path.dirname(file)):
         project_binary_dir: str | None = find_project_binary_dir(os.path.dirname(file))
         project_source_dir: str | None = None
         if project_binary_dir is not None:
@@ -532,14 +516,14 @@ def load(file: str) -> dict[str, Any]:
         try:
             with open(".ctest-json-v1.json", "w") as fh:
                 args = [ctest, "--show-only=json-v1"]
-                if ctest_config := config.getoption("ctest_config"):
+                if ctest_config := canary.config.getoption("ctest_config"):
                     args.extend(["-C", ctest_config])
                 p = subprocess.Popen(args, stdout=fh)
                 p.wait()
             with open(".ctest-json-v1.json", "r") as fh:
                 payload = json.load(fh)
         finally:
-            force_remove(".ctest-json-v1.json")
+            canary.filesystem.force_remove(".ctest-json-v1.json")
 
         nodes = payload["backtraceGraph"]["nodes"]
         files = payload["backtraceGraph"]["files"]
@@ -608,7 +592,7 @@ def infer_project_source_dir(project_binary_dir: str) -> str | None:
 
 
 def find_cmake():
-    cmake = which("cmake")
+    cmake = canary.filesystem.which("cmake")
     if cmake is None:
         return None
     out = subprocess.check_output([cmake, "--version"]).decode("utf-8")
@@ -656,59 +640,3 @@ def parse_environment_modification(environment_modification: list[str]) -> list[
             name, op, value = match.group(1), match.group(2), match.group(3)
             envmod.append({"name": name, "op": op, "value": value})
     return envmod
-
-
-@hookimpl
-def canary_generator(root: str, path: str | None) -> AbstractTestGenerator | None:
-    if CTestTestGenerator.matches(root if path is None else os.path.join(root, path)):
-        return CTestTestGenerator(root, path=path)
-    return None
-
-
-@hookimpl
-def canary_configure(config: "CanaryConfig"):
-    config.set("config:timeout:ctest", 1500.0, scope="defaults")
-
-
-@hookimpl
-def canary_addoption(parser) -> None:
-    parser.add_argument(
-        "--ctest-config",
-        metavar="cfg",
-        group="ctest options",
-        command=["run", "find"],
-        help="Choose configuration to test",
-    )
-    parser.add_argument(
-        "--ctest-test-timeout",
-        metavar="T",
-        type=time_in_seconds,
-        group="ctest options",
-        command="run",
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
-        "--recurse-ctest",
-        default=None,
-        action="store_true",
-        group="ctest options",
-        command=["run", "find"],
-        help="Recurse CMake binary directory for test files.  CTest tests can be detected "
-        "from the root CTestTestfile.cmake, so this is option is not necessary unless there "
-        "is a mix of CTests and other test types in the binary directory",
-    )
-    parser.add_argument(
-        "--output-on-failure",
-        nargs=0,
-        default=None,
-        action=MapToShowCapture,
-        group="ctest options",
-        command="run",
-        help="Alias for --show-capture",
-    )
-
-
-class MapToShowCapture(argparse.Action):
-    def __call__(self, parser, args, values, option_string=None):
-        args.show_capture = "oe"
-        setattr(args, self.dest, True)

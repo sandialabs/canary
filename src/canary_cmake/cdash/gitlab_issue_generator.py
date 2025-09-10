@@ -7,10 +7,10 @@ import io
 import os
 import re
 
-from _canary.util import cdash
 from _canary.util import gitlab
 from _canary.util import logging
 
+from . import interface
 
 logger = logging.get_logger(__name__)
 
@@ -69,7 +69,7 @@ def create_issues_from_failed_tests(
         gitlab_api_url = os.environ["CI_API_V4_URL"]
 
     filtergroups = filtergroups or ["Nightly"]
-    server = cdash.server(cdash_url, cdash_project)
+    server = interface.server(cdash_url, cdash_project)
     builds = server.builds(date=date, buildgroups=filtergroups, skip_sites=skip_sites)
     tests: list[dict] = []
     for build in builds:

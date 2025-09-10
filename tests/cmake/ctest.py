@@ -9,7 +9,6 @@ import pytest
 
 import canary
 from _canary.config.schemas import resource_schema
-from _canary.plugins.builtin.ctest import CTestTestGenerator
 from _canary.queues import DirectResourceQueue
 from _canary.runners import TestCaseRunner as xTestCaseRunner
 from _canary.util.executable import Executable
@@ -18,6 +17,7 @@ from _canary.util.filesystem import set_executable
 from _canary.util.filesystem import touchp
 from _canary.util.filesystem import which
 from _canary.util.filesystem import working_dir
+from canary_cmake.ctest import CTestTestGenerator
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")

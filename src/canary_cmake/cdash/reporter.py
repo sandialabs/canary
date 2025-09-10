@@ -6,52 +6,22 @@ import argparse
 import glob
 import os
 import sys
-from typing import TYPE_CHECKING
 from typing import Any
 
-from ....util.string import csvsplit
-from ...hookspec import hookimpl
-from ...hookspec import hookspec
-from ...types import CanaryReporter
+import canary
+from _canary.util.string import csvsplit
+
 from .cdash_html_summary import cdash_summary
 from .gitlab_issue_generator import create_issues_from_failed_tests
 from .xml_generator import CDashXMLReporter
 
-if TYPE_CHECKING:
-    from ....config.argparsing import Parser
-    from ....session import Session
-    from ....testcase import TestCase
-    from ...manager import CanaryPluginManager
 
-
-class CDashHooks:
-    @hookspec
-    def canary_cdash_labels_for_subproject(self) -> list[str] | None:
-        """Return a list of subproject labels to be added to Test.xml reports"""
-        ...
-
-    @hookspec(firstresult=True)
-    def canary_cdash_subproject_label(self, case: "TestCase") -> str | None:
-        """Return a subproject label for ``case`` that will be added in Test.xml reports"""
-        ...
-
-
-@hookimpl
-def canary_session_reporter() -> CanaryReporter:
-    return CDashReporter()
-
-
-@hookimpl
-def canary_addhooks(pluginmanager: "CanaryPluginManager"):
-    pluginmanager.add_hookspecs(CDashHooks)
-
-
-class CDashReporter(CanaryReporter):
+class CDashReporter(canary.CanaryReporter):
     type = "cdash"
     description = "CDash reporter"
     multipage = True
 
-    def setup_parser(self, parser: "Parser"):
+    def setup_parser(self, parser: "canary.Parser"):
         sp = parser.add_subparsers(dest="action", metavar="subcommands")
         p = sp.add_parser("create", help="Create CDash XML files")
         p.add_argument(
@@ -215,7 +185,7 @@ class CDashReporter(CanaryReporter):
             help="Don't close issues belonging to missing tests",
         )
 
-    def post(self, session: "Session | None" = None, **kwargs: Any) -> None:
+    def post(self, session: "canary.Session | None" = None, **kwargs: Any) -> None:
         cdash_url = kwargs["cdash_url"]
         cdash_project = kwargs["cdash_project"]
         done = kwargs["done"] or False
@@ -236,7 +206,7 @@ class CDashReporter(CanaryReporter):
             sys.stdout.write("%s\n" % url)
         return
 
-    def summary(self, session: "Session | None" = None, **kwargs: Any) -> None:
+    def summary(self, session: "canary.Session | None" = None, **kwargs: Any) -> None:
         cdash_summary(
             url=kwargs["cdash_url"],
             project=kwargs["cdash_project"],
@@ -247,7 +217,7 @@ class CDashReporter(CanaryReporter):
         )
         return
 
-    def make_gitlab_issues(self, session: "Session | None" = None, **kwargs: Any) -> None:
+    def make_gitlab_issues(self, session: "canary.Session | None" = None, **kwargs: Any) -> None:
         create_issues_from_failed_tests(
             access_token=kwargs["access_token"],
             cdash_url=kwargs["cdash_url"],
@@ -261,7 +231,7 @@ class CDashReporter(CanaryReporter):
         )
         return
 
-    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
+    def create(self, session: "canary.Session | None" = None, **kwargs: Any) -> None:
         reporter: CDashXMLReporter
         if kwargs.get("json"):
             reporter = CDashXMLReporter.from_json(file=kwargs["json"], dest=kwargs["dest"])

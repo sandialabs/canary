@@ -3,8 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 from . import batch_protocol
-from . import cdash
-from . import ctest
 from . import discover
 from . import email
 from . import gitlab
@@ -24,8 +22,6 @@ from . import vvtest
 
 plugins = [
     batch_protocol,
-    cdash,
-    ctest,
     discover,
     email,
     gitlab,

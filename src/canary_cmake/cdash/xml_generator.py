@@ -11,30 +11,19 @@ import time
 import xml.dom.minidom as xdom
 from graphlib import TopologicalSorter
 from typing import IO
-from typing import TYPE_CHECKING
 from typing import Any
 
-from .... import config
-from ....testcase import TestCase
-from ....testcase import factory as testcase_factory
-from ....util import cdash
-from ....util import logging
-from ....util.compression import compress_str
-from ....util.filesystem import mkdirp
-from ....util.filesystem import working_dir
-from ....util.time import strftimestamp
-from ....util.time import timestamp
-from ....version import version as canary_version
+import canary
+from _canary.testcase import factory as testcase_factory
+from _canary.util.compression import compress_str
 
-if TYPE_CHECKING:
-    from ....session import Session
+from . import interface
 
-
-logger = logging.get_logger(__name__)
+logger = canary.get_logger(__name__)
 
 
 class CDashXMLReporter:
-    def __init__(self, session: "Session | None" = None, dest: str | None = None) -> None:
+    def __init__(self, session: "canary.Session | None" = None, dest: str | None = None) -> None:
         self.data = TestData()
         if session:
             for case in session.active_cases():
@@ -43,7 +32,7 @@ class CDashXMLReporter:
             dest = os.path.join("." if not session else session.work_tree, "CDASH")
         assert dest is not None
         if not os.path.isabs(dest):
-            dest = os.path.join(config.invocation_dir, dest)
+            dest = os.path.join(canary.config.invocation_dir, dest)
         self.xml_dir = os.path.abspath(dest)
         self.xml_files: list[str] = []
         self.notes: dict[str, str] = {}
@@ -62,7 +51,7 @@ class CDashXMLReporter:
                     dep_ids = [d["properties"]["id"] for d in dependencies]
                     ts.add(id, *dep_ids)
                     break
-        cases: dict[str, TestCase] = {}
+        cases: dict[str, canary.TestCase] = {}
         for id in ts.static_order():
             state = data[id]
             case = testcase_factory(state.pop("type"))
@@ -90,20 +79,20 @@ class CDashXMLReporter:
         self.meta: dict[str, Any] | None = None
         self.buildname = buildname
         self.site = site or os.uname().nodename
-        self.generator = generator or f"canary version {canary_version}"
+        self.generator = generator or f"canary version {canary.version}"
         if buildstamp is not None and track is not None:
             raise ValueError("mutually exclusive inputs: track, buildstamp")
         if buildstamp is None:
             self.buildstamp = self.generate_buildstamp(track or "Experimental")
         else:
             self.buildstamp = self.validate_buildstamp(buildstamp)
-        mkdirp(self.xml_dir)
+        canary.filesystem.mkdirp(self.xml_dir)
 
         unique_subproject_labels: set[str] = set(subproject_labels or [])
-        if label_sets := config.plugin_manager.hook.canary_cdash_labels_for_subproject():
+        if label_sets := canary.config.plugin_manager.hook.canary_cdash_labels_for_subproject():
             unique_subproject_labels.update([_ for ls in label_sets for _ in ls if ls])
         for case in self.data.cases:
-            if label := config.plugin_manager.hook.canary_cdash_subproject_label(case=case):
+            if label := canary.config.plugin_manager.hook.canary_cdash_subproject_label(case=case):
                 unique_subproject_labels.add(label)
         if unique_subproject_labels:
             subproject_labels = list(unique_subproject_labels)
@@ -151,7 +140,7 @@ class CDashXMLReporter:
     def post(url: str, project: str, *files: str, done: bool = False) -> str | None:
         if not files:
             raise ValueError("No files to post")
-        server = cdash.server(url, project)
+        server = interface.server(url, project)
         ns = CDashXMLReporter.read_site_info(files[0])
         upload_errors = 0
         buildid = None
@@ -191,16 +180,16 @@ class CDashXMLReporter:
         if self.meta is None:
             self.meta = {}
             host = os.uname().nodename
-            os_release = config.get("system:os:release")
-            os_name = config.get("system:platform")
-            os_version = config.get("system:os:fullversion")
-            os_platform = config.get("system:arch")
+            os_release = canary.config.get("system:os:release")
+            os_name = canary.config.get("system:platform")
+            os_version = canary.config.get("system:os:fullversion")
+            os_platform = canary.config.get("system:arch")
             self.meta["BuildName"] = self.buildname
             self.meta["BuildStamp"] = self.buildstamp
             self.meta["Name"] = self.site
             self.meta["Generator"] = self.generator
-            if vendor := config.get("build:compiler:vendor"):
-                version = config.get("build:compiler:version")
+            if vendor := canary.config.get("build:compiler:vendor"):
+                version = canary.config.get("build:compiler:version")
                 self.meta["CompilerName"] = vendor
                 self.meta["CompilerVersion"] = version
             self.meta["Hostname"] = host
@@ -215,7 +204,7 @@ class CDashXMLReporter:
         return doc
 
     def write_test_xml(
-        self, cases: list[TestCase], subproject_labels: list[str] | None = None
+        self, cases: list[canary.TestCase], subproject_labels: list[str] | None = None
     ) -> str:
         i = 0
         while True:
@@ -223,7 +212,7 @@ class CDashXMLReporter:
             if not os.path.exists(filename):
                 break
             i += 1
-        f = os.path.relpath(filename, config.invocation_dir)
+        f = os.path.relpath(filename, canary.config.invocation_dir)
         logger.info(f"Writing {f} ({len(cases)} test cases)")
 
         doc = self.create_document()
@@ -239,7 +228,7 @@ class CDashXMLReporter:
         l1 = doc.createElement("Testing")
 
         starttime = self.data.start
-        add_text_node(l1, "StartDateTime", strftimestamp(starttime))
+        add_text_node(l1, "StartDateTime", canary.time.strftimestamp(starttime))
         add_text_node(l1, "StartTestTime", int(starttime))
 
         testlist = doc.createElement("TestList")
@@ -306,7 +295,7 @@ class CDashXMLReporter:
                 completion_status = "Completed"
             test_node = doc.createElement("Test")
             test_node.setAttribute("Status", status)
-            name_fmt = "%P/%D" if config.getoption("name_format") == "long" else "%D"
+            name_fmt = "%P/%D" if canary.config.getoption("name_format") == "long" else "%D"
             add_text_node(test_node, "Name", case.format(name_fmt))
             add_text_node(test_node, "Path", case.format("./%P"))
             add_text_node(test_node, "FullName", case.format("./%P/%D"))
@@ -353,7 +342,7 @@ class CDashXMLReporter:
                 )
 
             keywords: set[str] = set(case.keywords)
-            if label := config.plugin_manager.hook.canary_cdash_subproject_label(case=case):
+            if label := canary.config.plugin_manager.hook.canary_cdash_subproject_label(case=case):
                 keywords.add(label)
             if keywords:
                 labels = doc.createElement("Labels")
@@ -364,7 +353,7 @@ class CDashXMLReporter:
             l1.appendChild(test_node)
 
         stop = self.data.stop
-        add_text_node(l1, "EndDateTime", strftimestamp(stop))
+        add_text_node(l1, "EndDateTime", canary.time.strftimestamp(stop))
         add_text_node(l1, "EndTestTime", int(stop))
         add_text_node(l1, "ElapsedMinutes", int((stop - starttime) / 60.0))
 
@@ -382,14 +371,14 @@ class CDashXMLReporter:
         if not self.notes:
             return None
         filename = unique_file(self.xml_dir, "Notes", ".xml")
-        f = os.path.relpath(filename, config.invocation_dir)
+        f = os.path.relpath(filename, canary.config.invocation_dir)
         logger.info(f"Writing Notes.xml to {f}")
         doc = self.create_document()
         root = doc.firstChild
         notes_el = doc.createElement("Notes")
         for name, text in self.notes.items():
-            t = timestamp()
-            s = strftimestamp(t)
+            t = canary.time.timestamp()
+            s = canary.time.strftimestamp(t)
             el = doc.createElement("Note")
             el.setAttribute("Name", str(name))
             add_text_node(el, "Time", t)
@@ -413,8 +402,8 @@ class CDashXMLReporter:
             import xmlschema  # type: ignore
         except ImportError:
             return
-        dir = str(ir.files("_canary").joinpath("plugins/builtin/cdash/validators"))
-        with working_dir(dir):
+        dir = str(ir.files("canary_cmake").joinpath("cdash/validators"))
+        with canary.filesystem.working_dir(dir):
             xml_schema = xmlschema.XMLSchema(schema)
             xml_schema.validate(file)
 
@@ -502,7 +491,7 @@ class TestData:
         self.start: float = sys.maxsize
         self.stop: float = -1
         self.status: int = 0
-        self.cases: list["TestCase"] = []
+        self.cases: list["canary.TestCase"] = []
 
     def __len__(self):
         return len(self.cases)
@@ -511,7 +500,7 @@ class TestData:
         for case in self.cases:
             yield case
 
-    def update_status(self, case: "TestCase") -> None:
+    def update_status(self, case: "canary.TestCase") -> None:
         if case.status == "diffed":
             self.status |= 2**1
         elif case.status == "failed":
@@ -525,7 +514,7 @@ class TestData:
         elif case.status == "not_run":
             self.status |= 2**6
 
-    def add_test(self, case: "TestCase") -> None:
+    def add_test(self, case: "canary.TestCase") -> None:
         if case.start > 0 and case.start < self.start:
             self.start = case.start
         if case.stop > 0 and case.stop > self.stop:
