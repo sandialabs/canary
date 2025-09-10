@@ -74,6 +74,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v3
+        with:
+          args: "--version"
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -81,13 +83,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install ruff
           pip install mypy mypy-gitlab-code-quality
 
       - name: Ruff
         run: |
-          ruff check
-          ruff format
+          ruff format --check --diff
+          ruff check --show-fixes
 
       - name: MyPy type checking
         run: |
