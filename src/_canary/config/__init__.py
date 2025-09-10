@@ -32,8 +32,8 @@ if TYPE_CHECKING:
     cache_dir = _config.cache_dir
     options = _config.options
     dump_snapshot = _config.dump_snapshot
-    load_snapshot = _config.load_snapshot
     ensure_loaded = lambda: None
+    load_snapshot = _config.load_snapshot
     archive = _config.archive
     temporary_scope = _config.temporary_scope
 
@@ -41,14 +41,16 @@ else:
     # allow config to be lazily loaded
     _config: Config | None = None
 
+    def ensure_loaded() -> None:
+        global _config
+        if _config is None:
+            _config = Config()
+
     def __getattr__(name: str) -> Any:
         global _config
         if _config is None:
             _config = Config()
-        if name == "ensure_loaded":
-            # _config was loaded above, so we can return
-            return None
-        elif name == "debug":
+        if name == "debug":
             return _config.get("config:debug")
         elif name == "backend":
             name = "hpcc_backend"
