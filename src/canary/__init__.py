@@ -48,8 +48,8 @@ from _canary.version import version_info
 from . import directives
 from . import patterns
 
-logging = _logging.get_logger("_canary")
 get_logger = _logging.get_logger
+logging = _logging.get_logger("_canary")
 
 
 class TestParser(argparse.ArgumentParser):
