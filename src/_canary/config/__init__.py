@@ -33,9 +33,8 @@ if TYPE_CHECKING:
     options = _config.options
     dump_snapshot = _config.dump_snapshot
     load_snapshot = _config.load_snapshot
-    null = _config.null
+    ensure_loaded = lambda: None
     archive = _config.archive
-
     temporary_scope = _config.temporary_scope
 
 else:
@@ -46,7 +45,10 @@ else:
         global _config
         if _config is None:
             _config = Config()
-        if name == "debug":
+        if name == "ensure_loaded":
+            # _config was loaded above, so we can return
+            return None
+        elif name == "debug":
             return _config.get("config:debug")
         elif name == "backend":
             name = "hpcc_backend"

@@ -23,7 +23,8 @@ class AbstractTestRunner:
     scheduled = False
 
     def __call__(self, case: AbstractTestCase, *args: str, **kwargs: Any) -> None:
-        config.null()  # Make sure config is loaded, since this may be called in a new subprocess
+        # Ensure the config is loaded, since this may be called in a new subprocess
+        config.ensure_loaded()
         self.run(case, **kwargs)
         return None
 

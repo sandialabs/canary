@@ -270,14 +270,14 @@ class Config:
             if existing is None:
                 has_existing_value = False
                 # construct value from this point down
-                value = safe_loads(components[-1])
+                value = try_loads(components[-1])
                 for component in reversed(components[idx + 1 : -1]):
                     value = {component: value}
                 break
 
         if has_existing_value:
             path = ":".join(components[:-1])
-            value = safe_loads(strip_quotes(components[-1]))
+            value = try_loads(strip_quotes(components[-1]))
             existing = self.get(path, scope=scope)
 
         if isinstance(existing, list) and not isinstance(value, list):
@@ -540,10 +540,6 @@ class Config:
         finally:
             self.pop_scope(scope)
 
-    def null(self) -> None:
-        """Null opt to generate lazy config"""
-        ...
-
 
 def read_config_scope(scope: str) -> ConfigScope:
     data: dict[str, Any] = {}
@@ -599,7 +595,7 @@ def read_env_config() -> ConfigScope | None:
             if var == "CANARY_PLUGINS":
                 value = [_.strip() for _ in os.environ[var].split(",") if _.split()]
             else:
-                value = safe_loads(os.environ[var])
+                value = try_loads(os.environ[var])
             data.setdefault("config", {})[config_var] = value
     if not data:
         return None
@@ -621,9 +617,11 @@ def process_config_path(path: str) -> list[str]:
     return result
 
 
-def safe_loads(arg):
-    import json
+def try_loads(arg):
+    """Attempt to deserialize ``arg`` into a python object. If the deserialization fails,
+    return ``arg`` unmodified.
 
+    """
     try:
         return json.loads(arg)
     except json.decoder.JSONDecodeError:
