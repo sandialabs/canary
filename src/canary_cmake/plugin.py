@@ -3,7 +3,7 @@ import os
 
 import canary
 
-from .cdash.reporter import CDashReporter
+from .cdash import CDashReporter
 from .ctest import CTestTestGenerator
 
 
@@ -74,6 +74,11 @@ class CDashHooks:
         """Return a subproject label for ``case`` that will be added in Test.xml reports"""
         ...
 
+    @canary.hookspec(firstresult=True)
+    def canary_cdash_labels(self, case: "canary.TestCase") -> list[str] | None:
+        """Return CDash labels for ``case``"""
+        ...
+
 
 @canary.hookimpl
 def canary_session_reporter() -> canary.CanaryReporter:
@@ -83,3 +88,9 @@ def canary_session_reporter() -> canary.CanaryReporter:
 @canary.hookimpl
 def canary_addhooks(pluginmanager: "canary.CanaryPluginManager"):
     pluginmanager.add_hookspecs(CDashHooks)
+
+
+@canary.hookimpl(trylast=True)
+def canary_cdash_labels(case: canary.TestCase) -> list[str]:
+    """Default implementation: return the test case's keywords"""
+    return list(case.keywords)

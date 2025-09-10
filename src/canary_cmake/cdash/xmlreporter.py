@@ -23,19 +23,22 @@ logger = canary.get_logger(__name__)
 
 
 class CDashXMLReporter:
-    def __init__(self, session: "canary.Session | None" = None, dest: str | None = None) -> None:
+    def __init__(self, dest: str | None = None) -> None:
         self.data = TestData()
-        if session:
-            for case in session.active_cases():
-                self.data.add_test(case)
         if dest is None:
-            dest = os.path.join("." if not session else session.work_tree, "CDASH")
+            dest = os.path.join(".", "CDASH")
         assert dest is not None
         if not os.path.isabs(dest):
             dest = os.path.join(canary.config.invocation_dir, dest)
-        self.xml_dir = os.path.abspath(dest)
-        self.xml_files: list[str] = []
+        self.dest: str = os.path.abspath(dest)
         self.notes: dict[str, str] = {}
+
+    @classmethod
+    def from_session(cls, session: "canary.Session", dest: str | None = None) -> "CDashXMLReporter":
+        self = cls(dest=dest or os.path.join(session.work_tree, "CDASH"))
+        for case in session.active_cases():
+            self.data.add_test(case)
+        return self
 
     @classmethod
     def from_json(cls, file: str, dest: str | None = None) -> "CDashXMLReporter":
@@ -86,7 +89,7 @@ class CDashXMLReporter:
             self.buildstamp = self.generate_buildstamp(track or "Experimental")
         else:
             self.buildstamp = self.validate_buildstamp(buildstamp)
-        canary.filesystem.mkdirp(self.xml_dir)
+        canary.filesystem.mkdirp(self.dest)
 
         unique_subproject_labels: set[str] = set(subproject_labels or [])
         if label_sets := canary.config.plugin_manager.hook.canary_cdash_labels_for_subproject():
@@ -119,6 +122,17 @@ class CDashXMLReporter:
         namespace.buildname = fs.getAttribute("BuildName")
         namespace.buildstamp = fs.getAttribute("BuildStamp")
         namespace.generator = fs.getAttribute("Generator")
+        subproject_labels: set[str] = set()
+        if subprojects := fs.getElementsByTagName("Subproject"):
+            for subproject in subprojects:
+                if name := subproject.getAttribute("name"):
+                    subproject_labels.add(name)
+                for label in subproject.getElementsByTagName("Label"):
+                    if label.childNodes and (name := label.childNodes[0].nodeValue):
+                        subproject_labels.add(name)
+        namespace.subproject_labels = None
+        if subproject_labels:
+            namespace.subproject_labels = list(subproject_labels)
         return namespace
 
     def generate_buildstamp(self, track):
@@ -208,7 +222,7 @@ class CDashXMLReporter:
     ) -> str:
         i = 0
         while True:
-            filename = os.path.join(self.xml_dir, f"Test-{i}.xml")
+            filename = os.path.join(self.dest, f"Test-{i}.xml")
             if not os.path.exists(filename):
                 break
             i += 1
@@ -341,14 +355,16 @@ class CDashXMLReporter:
                     filename=os.path.basename(case.file),
                 )
 
-            keywords: set[str] = set(case.keywords)
+            labels: set[str] = set(
+                canary.config.plugin_manager.hook.canary_cdash_labels(case=case) or []
+            )
             if label := canary.config.plugin_manager.hook.canary_cdash_subproject_label(case=case):
-                keywords.add(label)
-            if keywords:
-                labels = doc.createElement("Labels")
-                for keyword in keywords:
-                    add_text_node(labels, "Label", keyword)
-                test_node.appendChild(labels)
+                labels.add(label)
+            if labels:
+                el = doc.createElement("Labels")
+                for label in labels:
+                    add_text_node(el, "Label", label)
+                test_node.appendChild(el)
 
             l1.appendChild(test_node)
 
@@ -370,7 +386,7 @@ class CDashXMLReporter:
     def write_notes_xml(self) -> str | None:
         if not self.notes:
             return None
-        filename = unique_file(self.xml_dir, "Notes", ".xml")
+        filename = unique_file(self.dest, "Notes", ".xml")
         f = os.path.relpath(filename, canary.config.invocation_dir)
         logger.info(f"Writing Notes.xml to {f}")
         doc = self.create_document()
