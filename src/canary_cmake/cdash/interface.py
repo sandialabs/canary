@@ -108,7 +108,7 @@ class server:
             params["MD5"] = md5sum
         encoded_params = urlencode(params)
         url = f"{self.baseurl}/submit.php?{encoded_params}"
-        logger.info(f"Uploading {os.path.basename(filename)} to {url}", file=sys.stderr)
+        logger.info(f"Uploading {os.path.basename(filename)} to {url}")
         return self.put(url, filename)
 
     @staticmethod
