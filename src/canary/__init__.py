@@ -3,10 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from typing import Sequence
 
 import _canary.config as config
 import _canary.enums as enums
