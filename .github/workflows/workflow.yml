@@ -87,9 +87,8 @@ jobs:
 
       - name: Ruff
         run: |
-          ruff format || true
-          ruff check --fix || true
-          git diff
+          ruff format --check --diff
+          ruff check --show-fixes
 
       - name: MyPy type checking
         run: |
