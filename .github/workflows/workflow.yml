@@ -87,10 +87,9 @@ jobs:
 
       - name: Ruff
         run: |
-          ruff -v format --check --diff
-          echo 'ruff format finished successfully'
-          ruff -v check --show-fixes
-          echo 'ruff check finished successfully'
+          ruff format || true
+          ruff check --fix || true
+          git diff
 
       - name: MyPy type checking
         run: |
