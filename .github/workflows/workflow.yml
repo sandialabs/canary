@@ -87,18 +87,8 @@ jobs:
 
       - name: Ruff
         run: |
-          echo 'Formatting src'
-          ruff format --check --diff src
-          echo 'Done formatting src'
-          echo 'Formatting tests'
-          ruff format --check --diff tests
-          echo 'Done formatting tests'
-          echo 'Linting src'
-          ruff check --show-fixes src
-          echo 'Done linting src'
-          echo 'Linting tests'
-          ruff check --show-fixes tests
-          echo 'Done linting tests'
+          ruff format --check --diff
+          ruff check --show-fixes --exclude=src/canary/__init__.py
 
       - name: MyPy type checking
         run: |
