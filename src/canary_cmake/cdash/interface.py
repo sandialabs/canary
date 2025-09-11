@@ -15,12 +15,10 @@ from types import SimpleNamespace
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from ..third_party.color import cwrite
-from ..third_party.ctest_log_parser import CTestLogParser  # noqa: F401
-from ..util import logging
-from .executable import Executable
-from .filesystem import force_remove
-
+from _canary.third_party.color import cwrite
+from _canary.util import logging
+from _canary.util.executable import Executable
+from _canary.util.filesystem import force_remove
 
 logger = logging.get_logger(__name__)
 

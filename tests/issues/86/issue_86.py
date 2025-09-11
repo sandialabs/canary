@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-import _canary.plugins.builtin.ctest as ctg
+import canary_cmake.ctest as ctg
 from _canary.util.filesystem import force_remove
 from _canary.util.filesystem import which
 

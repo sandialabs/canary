@@ -55,7 +55,7 @@ def build(hpc_connect_version: str | None = None, local: bool = False) -> None:
             subprocess.run(["git", "add", "pyproject.toml"], check=True)
             subprocess.run(
                 ["git", "commit", "-m", f"Update hpc-connect dependency to {hpc_connect_version}"],
-                check=True
+                check=True,
             )
         if not local:
             subprocess.run(["git", "push", "origin", "production"], check=True)
@@ -124,7 +124,9 @@ def virtual_env(preserve: bool = False) -> Generator[Prefix, None, None]:
         os.environ["PATH"] = f"{venv}/bin:{os.environ['PATH']}"
         os.environ["PIP_INDEX"] = "https://nexus.web.sandia.gov/repository/pypi-proxy/pypi"
         os.environ["PIP_INDEX_URL"] = "https://nexus.web.sandia.gov/repository/pypi-proxy/simple"
-        os.environ["PIP_TRUSTED_HOST"] = "nexus.web.sandia.gov,pypi.org,pypi.python.org,file.pythonhosted.org"
+        os.environ["PIP_TRUSTED_HOST"] = (
+            "nexus.web.sandia.gov,pypi.org,pypi.python.org,file.pythonhosted.org"
+        )
         yield Prefix(venv)
     finally:
         os.environ.clear()

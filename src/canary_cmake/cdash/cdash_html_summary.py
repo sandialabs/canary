@@ -8,10 +8,11 @@ import os
 import sys
 from getpass import getuser
 
-from _canary.util import cdash
 from _canary.util import logging
 from _canary.util.filesystem import mkdirp
 from _canary.util.sendmail import sendmail
+
+from . import interface
 
 logger = logging.get_logger(__name__)
 
@@ -118,7 +119,7 @@ def _get_build_data(
     diffed tests
 
     """
-    server = cdash.server(url, project)
+    server = interface.server(url, project)
     cdash_builds = server.builds(date=date, buildgroups=buildgroups, skip_sites=skip_sites)
     for b in cdash_builds:
         logger.info(f"Categorizing tests for build {b['buildname']}")
