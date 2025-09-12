@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import re
-import sys
 import xml.dom.minidom as dom
 import xml.parsers.expat
 import xml.sax.saxutils
@@ -15,12 +14,12 @@ from types import SimpleNamespace
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
+import canary
 from _canary.third_party.color import cwrite
-from _canary.util import logging
 from _canary.util.executable import Executable
 from _canary.util.filesystem import force_remove
 
-logger = logging.get_logger(__name__)
+logger = canary.get_logger(__name__)
 
 
 class api_filters:
@@ -113,7 +112,6 @@ class server:
 
     @staticmethod
     def put(url, file):
-        from .. import config
 
         def get_text(doc, tag):
             try:
@@ -147,7 +145,7 @@ class server:
                     m = payload["message"] = get_text(doc, "message")
                     lines = "\n    ".join([_.rstrip() for _ in open(efile).readlines()])
                     logger.error(f"Failed to upload {os.path.basename(file)}: {m}\n    {lines}")
-                if not config.get("config:debug"):
+                if not canary.config.get("config:debug"):
                     force_remove(efile)
             return payload
 
