@@ -384,11 +384,12 @@ def perimeter(blocks: list[Block]) -> size_t:
 
 def runtime(case: TestCase) -> float:
     t: float
-    tm = case.cache.get("metrics:time")
-    if tm is None:
+    if config.getoption("no_incremental"):
         t = case.timeout
-    else:
+    elif tm := case.cache.get("metrics:time"):
         t = (tm["mean"] + tm["max"]) / 2.0
+    else:
+        t = case.timeout
     if t <= 5.0:
         return 5.0 * t
     elif t <= 10.0:

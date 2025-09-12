@@ -229,7 +229,7 @@ def pprint(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
 
 
 def is_test_file(file: str) -> bool:
-    return config.plugin_manager.testcase_generator(root=file, path=None) is not None
+    return config.plugin_manager.hook.canary_testcase_generator(root=file, path=None) is not None
 
 
 def find(path: str) -> AbstractTestGenerator:

@@ -115,7 +115,15 @@ def add_resource_arguments(parser: "Parser") -> None:
         f"If type={bold('all')}, the timeout T is applied to each individual test.  "
         f"Otherwise, a timeout of T is applied to tests having keyword {bold('type')}.  "
         "For example, --timeout fast=2 would apply a timeout of 2 seconds to all tests having "
-        "the 'fast' keyword; common types are fast, long, default, and ctest.",
+        "the 'fast' keyword; common types are fast, long, default, and ctest. "
+        f"If type={bold('batch')}, choices for T are 'conservative' to use a conservative "
+        "estimate for batch timeouts (queue times) or 'aggressive'.",
+    )
+    group.add_argument(
+        "--no-incremental",
+        action="store_true",
+        default=False,
+        help="Don't use the .canary_cache to infer testcase runtimes",
     )
     group.add_argument("--session-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
     group.add_argument("--test-timeout", action=TimeoutResource, help=argparse.SUPPRESS)
@@ -141,7 +149,13 @@ class TimeoutResource(argparse.Action):
         else:
             if match := re.search(r"^(\w*)[:=](.*)$", values):
                 type = match.group(1).lower()
-                value = time_in_seconds(match.group(2))
+                raw = match.group(2)
+                if type == "batch":
+                    if raw not in ("conservative", "aggressive"):
+                        raise ValueError(f"Incorrect batch timeout choice: {raw}")
+                    value = raw
+                else:
+                    value = time_in_seconds(match.group(2))
             else:
                 raise ValueError(f"Incorrect test timeout spec: {values}, expected 'type=value'")
 

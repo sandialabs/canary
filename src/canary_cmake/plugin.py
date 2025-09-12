@@ -7,7 +7,7 @@ from .cdash import CDashReporter
 from .ctest import CTestTestGenerator
 
 
-@canary.hookimpl(specname="canary_generator")
+@canary.hookimpl(specname="canary_testcase_generator")
 def ctest_test_generator(root: str, path: str | None) -> canary.AbstractTestGenerator | None:
     if CTestTestGenerator.matches(root if path is None else os.path.join(root, path)):
         return CTestTestGenerator(root, path=path)

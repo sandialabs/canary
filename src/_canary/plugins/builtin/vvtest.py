@@ -776,7 +776,7 @@ class InvalidTimeFormat(Exception):
 
 
 @hookimpl
-def canary_generator(root: str, path: str | None) -> AbstractTestGenerator | None:
+def canary_testcase_generator(root: str, path: str | None) -> AbstractTestGenerator | None:
     if VVTTestGenerator.matches(root if path is None else os.path.join(root, path)):
         return VVTTestGenerator(root, path=path)
     return None

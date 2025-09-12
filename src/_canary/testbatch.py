@@ -58,7 +58,13 @@ class TestBatch(AbstractTestCase):
         self._submit_gpus = 0
         self.max_cpus_required = max([case.cpus for case in self.cases])
         self.max_gpus_required = max([case.gpus for case in self.cases])
-        self._runtime: float | None = runtime
+        self._runtime: float
+        if runtime is None:
+            self._runtime = self.find_approximate_runtime()
+        elif config.getoption("timeout:batch") == "conservative":
+            self._runtime = max(runtime, self.find_approximate_runtime())
+        else:
+            self._runtime = runtime
         self._status: Status
         self._jobid: str | None = None
         for case in self.cases:
@@ -88,17 +94,16 @@ class TestBatch(AbstractTestCase):
 
     @property
     def runtime(self) -> float:
+        return self._runtime
+
+    def find_approximate_runtime(self) -> float:
         from .util import partitioning
 
-        if self._runtime is None:
-            if len(self.cases) == 1:
-                self._runtime = self.cases[0].runtime
-            else:
-                _, height = partitioning.packed_perimeter(self.cases)
-                t = sum(c.runtime for c in self)
-                self._runtime = float(min(height, t))
-        assert self._runtime is not None
-        return self._runtime
+        if len(self.cases) == 1:
+            return self.cases[0].runtime
+        _, height = partitioning.packed_perimeter(self.cases)
+        t = sum(c.runtime for c in self)
+        return float(min(height, t))
 
     def qtime(self) -> float:
         batch_opts = batch_options()
@@ -352,7 +357,7 @@ class TestBatch(AbstractTestCase):
             logger.debug(f"Submitting batch {self.id}")
             if backend.supports_subscheduling and flat:
                 scriptdir = os.path.dirname(self.submission_script_filename())
-                timeoutx = config.get("config:timeout.multiplier", 1.0)
+                timeoutx = config.get("config:timeout:multiplier", 1.0)
                 variables.pop("CANARY_BATCH_ID", None)
                 proc = backend.submitn(
                     [case.id for case in self],
@@ -367,7 +372,7 @@ class TestBatch(AbstractTestCase):
                     qtime=[case.runtime * timeoutx for case in self],
                 )
             else:
-                timeoutx = config.get("config:timeout.multiplier", 1.0)
+                timeoutx = config.get("config:timeout:multiplier", 1.0)
                 qtime = self.qtime() * timeoutx
                 proc = backend.submit(
                     f"canary.{self.id[:7]}",

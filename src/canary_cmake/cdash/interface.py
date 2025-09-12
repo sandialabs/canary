@@ -112,7 +112,6 @@ class server:
 
     @staticmethod
     def put(url, file):
-
         def get_text(doc, tag):
             try:
                 return doc.getElementsByTagName(tag)[0].firstChild.data.strip()

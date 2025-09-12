@@ -520,6 +520,8 @@ class PYTTestGenerator(AbstractTestGenerator):
             src, dst = ns.value
             src = self.safe_substitute(src, **kwds)
             src = src if os.path.isabs(src) else os.path.join(dirname, src)
+            if not os.path.exists(src):
+                logger.warning(f"File not found: {src!r}")
             if dst is None:
                 if os.path.exists(src):
                     file = os.path.relpath(src, dirname)
@@ -678,6 +680,12 @@ class PYTTestGenerator(AbstractTestGenerator):
         dst: str | None = None,
         when: WhenType | None = None,
     ) -> None:
+        def check_existence(path):
+            if os.path.isabs(path):
+                return os.path.exists(path)
+            # If not absolute, should be relative to test's directory
+            return os.path.exists(os.path.join(self.root, os.path.dirname(self.path), path))
+
         if src is not None:
             if files:
                 raise ValueError(
@@ -955,7 +963,7 @@ class PYTTestGenerator(AbstractTestGenerator):
 
 
 @hookimpl
-def canary_generator(root: str, path: str | None) -> AbstractTestGenerator | None:
+def canary_testcase_generator(root: str, path: str | None) -> AbstractTestGenerator | None:
     if PYTTestGenerator.matches(root if path is None else os.path.join(root, path)):
         return PYTTestGenerator(root, path=path)
     return None

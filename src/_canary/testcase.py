@@ -208,11 +208,9 @@ class TestCaseCache:
         self.version_info = [3, 0]
         self.case: "TestCase" = case
         self._data: dict | None = None
-        cache_dir = config.cache_dir
         self.file: str | None = None
-        self.w_ok: bool = False
+        cache_dir = config.cache_dir
         if cache_dir and os.path.isdir(cache_dir) and os.access(cache_dir, os.W_OK):
-            self.w_ok = True
             self.file = os.path.join(cache_dir, f"cases/{case.id[:2]}/{case.id[2:]}.json")
 
     def __getitem__(self, arg: str) -> Any:
@@ -248,7 +246,7 @@ class TestCaseCache:
                 "parameters": case.parameters,
             },
         }
-        if self.w_ok:
+        if self.file is not None and os.path.exists(self.file):
             try:
                 data = json.load(open(self.file))  # type: ignore
                 if "cache" in data and data["cache"].get(".version") == self.version_info:
@@ -258,7 +256,7 @@ class TestCaseCache:
         return
 
     def dump(self) -> None:
-        if not self.w_ok:
+        if self.file is None:
             return
         assert self.file is not None
         mkdirp(os.path.dirname(self.file))
@@ -1123,10 +1121,15 @@ class TestCase(AbstractTestCase):
 
     @property
     def runtime(self) -> float | int:
+        runtime: float
+        if config.getoption("no_incremental"):
+            return self.timeout
         t = self.cache.get("metrics:time")
         if t is None:
-            return self.timeout
-        return t["mean"]
+            runtime = self.timeout
+        else:
+            runtime = float(t["mean"])
+        return runtime
 
     @property
     def pythonpath(self):
@@ -1675,7 +1678,7 @@ class TestCase(AbstractTestCase):
         self.stdout.write(f"==> Working directory: {self.working_directory}\n")
         self.stdout.write(f"==> Execution directory: {self.execution_directory}\n")
         self.stdout.write(f"==> Command line: {cmd_line}\n")
-        if (timeoutx := config.get("config:timeout.multiplier")) and (timeoutx != 1.0):
+        if (timeoutx := config.get("config:timeout:multiplier")) and (timeoutx != 1.0):
             self.stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
         self.stdout.flush()
 

@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import os
 import sys
 import warnings
 from typing import TYPE_CHECKING
@@ -15,7 +14,7 @@ from . import subcommands
 from .types import CanarySubcommand
 
 if TYPE_CHECKING:
-    from ..generator import AbstractTestGenerator
+    pass
 
 
 warnings.simplefilter("once", DeprecationWarning)
@@ -38,20 +37,6 @@ class CanaryPluginManager(pluggy.PluginManager):
     def get_subcommands(self) -> list[CanarySubcommand]:
         hook = self.hook.canary_subcommand
         return hook()
-
-    def testcase_generator(
-        self, root: str, path: str | None = None
-    ) -> "AbstractTestGenerator | None":
-        if generator := self.hook.canary_generator(root=root, path=path):
-            return generator
-        for gen_type in self.hook.canary_testcase_generator():
-            if gen_type.matches(root if path is None else os.path.join(root, path)):
-                warnings.warn(
-                    "canary_testcase_generator has been deprecated, use canary_generator instead",
-                    category=DeprecationWarning,
-                )
-                return gen_type(root, path=path)
-        return None
 
     def consider_plugin(self, name: str) -> None:
         assert isinstance(name, str), f"module name as text required, got {name!r}"
