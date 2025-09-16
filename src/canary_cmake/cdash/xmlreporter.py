@@ -92,10 +92,10 @@ class CDashXMLReporter:
         canary.filesystem.mkdirp(self.dest)
 
         unique_subproject_labels: set[str] = set(subproject_labels or [])
-        if label_sets := canary.config.plugin_manager.hook.canary_cdash_labels_for_subproject():
+        if label_sets := canary.config.pluginmanager.hook.canary_cdash_labels_for_subproject():
             unique_subproject_labels.update([_ for ls in label_sets for _ in ls if ls])
         for case in self.data.cases:
-            if label := canary.config.plugin_manager.hook.canary_cdash_subproject_label(case=case):
+            if label := canary.config.pluginmanager.hook.canary_cdash_subproject_label(case=case):
                 unique_subproject_labels.add(label)
         if unique_subproject_labels:
             subproject_labels = list(unique_subproject_labels)
@@ -356,9 +356,9 @@ class CDashXMLReporter:
                 )
 
             labels: set[str] = set(
-                canary.config.plugin_manager.hook.canary_cdash_labels(case=case) or []
+                canary.config.pluginmanager.hook.canary_cdash_labels(case=case) or []
             )
-            if label := canary.config.plugin_manager.hook.canary_cdash_subproject_label(case=case):
+            if label := canary.config.pluginmanager.hook.canary_cdash_subproject_label(case=case):
                 labels.add(label)
             if labels:
                 el = doc.createElement("Labels")

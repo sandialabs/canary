@@ -2,10 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 import copy
+import io
 import math
 import pickle  # nosec B403
 from typing import Any
 
+import yaml
+
+from ..error import ResourceUnsatisfiableError
 from ..util import logging
 from ..util.collections import contains_any
 from ..util.rprobe import cpu_count
@@ -126,10 +130,6 @@ class ResourcePool:
             self.fill(pool)
 
     def __repr__(self) -> str:
-        import io
-
-        import yaml
-
         fh = io.StringIO()
         yaml.dump(self.pool, fh)
         return fh.getvalue()
@@ -304,7 +304,7 @@ class ResourcePool:
                     return {"gid": gid, "slots": slots}
         raise ResourceUnavailable
 
-    def satisfiable(self, required: list[list[dict[str, Any]]]) -> None:
+    def satisfiable(self, required: list[list[dict[str, Any]]]) -> bool:
         """determine if the resources for this test are satisfiable"""
         if self.empty():
             raise EmptyResourcePoolError
@@ -314,12 +314,12 @@ class ResourcePool:
                 if item["type"] not in self.types:
                     t = item["type"]
                     msg = f"required resource type {t!r} is not registered with canary"
-                    raise ResourceUnsatisfiable(msg)
+                    raise ResourceUnsatisfiableError(msg)
                 slots_reqd[item["type"]] = slots_reqd.get(item["type"], 0) + item["slots"]
         for type, slots in slots_reqd.items():
             if self.slots_per[type] < slots:
-                msg = f"insufficient slots of {type!r} available"
-                raise ResourceUnsatisfiable(msg) from None
+                raise ResourceUnsatisfiableError(f"insufficient slots of {type!r} available")
+        return True
 
     def acquire(self, required: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
         """Returns resources available to the test
@@ -381,10 +381,6 @@ class ResourcePool:
                 if n == 1 and type.endswith("s"):
                     type = type[:-1]
                 logger.debug(f"Reclaimed {n} {type}")
-
-
-class ResourceUnsatisfiable(Exception):
-    pass
 
 
 class ResourceUnavailable(Exception):

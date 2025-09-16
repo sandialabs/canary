@@ -78,11 +78,10 @@ class PathSpec(argparse.Action):
             raise ValueError(f"-d {args.work_tree} option is illegal in re-use mode")
 
         args.work_tree = work_tree
-        case_specs, batch_id, path = self.parse_in_session(ns.pathspec)
+        case_specs, path = self.parse_in_session(ns.pathspec)
         args.start = None
-        args.mode = "b" if batch_id else "a"
+        args.mode = "a"
         args.case_specs = case_specs or None
-        args.batch_id = batch_id
         if path is not None:
             if not path.startswith(args.work_tree):  # type: ignore
                 raise ValueError("path arg must be a child of the work tree")
@@ -186,23 +185,16 @@ class PathSpec(argparse.Action):
         return
 
     @staticmethod
-    def parse_in_session(values: list[str]) -> tuple[list[str], str | None, str | None]:
+    def parse_in_session(values: list[str]) -> tuple[list[str], str | None]:
         paths: list[str] = []
         case_specs: list[str] = []
-        batch_id: str | None = None
         path: str | None = None
         for p in values:
             if TestCase.spec_like(p):
                 case_specs.append(p)
-            elif p.startswith("^"):
-                batch_id = p[1:]
-                if "CANARY_BATCH_ID" not in os.environ:
-                    os.environ["CANARY_BATCH_ID"] = str(batch_id)
-                elif not batch_id == os.environ["CANARY_BATCH_ID"]:
-                    raise ValueError("env batch id inconsistent with cli batch id")
             else:
                 paths.append(p)
-        if len([1 for _ in (case_specs, batch_id, paths) if _]) > 1:
+        if len([1 for _ in (case_specs, paths) if _]) > 1:
             raise ValueError("do not mix /hash, ^hash, and other pathspec arguments")
         if len(paths) > 1:
             raise ValueError("incompatible input path arguments")
@@ -210,7 +202,7 @@ class PathSpec(argparse.Action):
             path = os.path.abspath(paths.pop(0))
             if not os.path.exists(path):
                 raise ValueError(f"{path}: no such file or directory")
-        return case_specs, batch_id, path
+        return case_specs, path
 
     @staticmethod
     def read_paths(file: str) -> dict[str, list[str]]:

@@ -2,12 +2,16 @@
 #
 # SPDX-License-Identifier: MIT
 
+import concurrent.futures
+import multiprocessing
 import os
+import sys
 import warnings
 from typing import Any
 
 import psutil
 
+from .. import config
 from . import logging
 
 logger = logging.get_logger(__name__)
@@ -106,3 +110,15 @@ def get_process_metrics(
                 metrics[name] = metric
     finally:
         return metrics
+
+
+class ProcessPoolExecutor(concurrent.futures.ProcessPoolExecutor):
+    def __init__(self, *, workers: int) -> None:
+        context = config.get("config:multiprocessing:context") or "spawn"
+        mp_context = multiprocessing.get_context(context)
+        max_tasks_per_child = config.get("config:multiprocessing:max_tasks_per_child") or 1
+        if sys.version_info[:2] >= (3, 11):
+            n = max_tasks_per_child if context == "spawn" else None
+            super().__init__(max_workers=workers, mp_context=mp_context, max_tasks_per_child=n)
+        else:
+            super().__init__(max_workers=workers, mp_context=mp_context)

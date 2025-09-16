@@ -5,79 +5,114 @@
 import argparse
 import os
 import re
-from typing import TYPE_CHECKING
 from typing import Any
+from typing import Generator
 
-from ... import config
-from ...third_party.color import colorize
-from ...util import logging
-from ...util import partitioning
-from ...util.string import csvsplit
-from ...util.string import strip_quotes
-from ...util.time import time_in_seconds
-from ..hookspec import hookimpl
+import psutil
 
-if TYPE_CHECKING:
-    from ...config import Config as CanaryConfig
-    from ...config.argparsing import Parser
-    from ...testbatch import TestBatch
-    from ...testcase import TestCase
+import canary
+from _canary.third_party.color import colorize
+from _canary.util.string import csvsplit
+from _canary.util.string import strip_quotes
+from _canary.util.time import time_in_seconds
 
-logger = logging.get_logger(__name__)
+from . import partitioning
+from . import subprocess
+from .testbatch import TestBatch
+
+logger = canary.get_logger(__name__)
 
 
-@hookimpl(trylast=True)
-def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
-    batchopts = config.getoption("batch", {})
-    if not batchopts:
-        return None
-    spec = batchopts["spec"]
-    nodes = spec["nodes"] or "any"
-    layout = spec["layout"] or "flat"
-    if spec["duration"] is not None:
-        duration = float(spec["duration"])  # 30 minute default
-        logger.debug(f"Batching test cases using duration={duration}")
-        return partitioning.partition_t(cases, t=duration, nodes=nodes)
-    else:
-        assert spec["count"] is not None
-        count = int(spec["count"])
-        logger.debug(f"Batching test cases using count={count}")
-        if layout == "atomic":
-            return partitioning.partition_n_atomic(cases, n=count)
-        return partitioning.partition_n(cases, n=count, nodes=nodes)
+class BatchHooks:
+    @canary.hookspec
+    def canary_batch_add_scheduler(self) -> dict[str, str | list[str]]:  # type: ignore[empty-body]
+        """Add the name of a recognized scheduler
+
+        Returns
+        -------
+
+           info: dict
+             info['name'] (required) is the name of the scheduler
+             info['aliases'] (optional) is a list of aliases
+
+        """
 
 
-@hookimpl
-def canary_configure(config: "CanaryConfig") -> None:
+@canary.hookimpl
+def canary_addhooks(pluginmanager: "canary.CanaryPluginManager") -> None:
+    pluginmanager.add_hookspecs(BatchHooks)
+    pluginmanager.register(subprocess)
+
+
+@canary.hookimpl(wrapper=True)
+def canary_batch_add_scheduler() -> Generator[None, list[dict[str, str | list[str]]], list[str]]:
+    schedulers: set[str] = set()
+    res = yield
+    for info in res:
+        schedulers.add(info["name"])  # type: ignore
+        if aliases := info.get("aliases"):
+            schedulers.update(aliases)  # type: ignore
+    return list(schedulers)
+
+
+@canary.hookimpl
+def canary_runtests_startup(args: argparse.Namespace) -> None:
+    if batch_id := getattr(args, "batch_id", None):
+        if "CANARY_BATCH_ID" not in os.environ:
+            os.environ["CANARY_BATCH_ID"] = str(batch_id)
+        elif not batch_id == os.environ["CANARY_BATCH_ID"]:
+            raise ValueError("env batch id inconsistent with cli batch id")
+        args.mode = "a"
+        case_ids = TestBatch.loadindex(batch_id)
+        if case_ids is None:
+            raise ValueError(f"could not load case ids for batch {batch_id!r}")
+        n = len(case_ids)
+        logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {batch_id}")
+        setattr(args, "case_specs", [f"/{_}" for _ in case_ids])
+
+
+@canary.hookimpl
+def canary_configure(config: "canary.Config") -> None:
     """Do some post configuration checks"""
-    batchopts = config.getoption("batch")
+    batchopts: dict[str, Any] = config.getoption("batchopts")
     if batchopts:
-        if config.hpcc_backend is None:
-            raise ValueError("Test batching requires a batch:scheduler")
-        validate_and_set_defaults(batchopts)
+        scheduler = batchopts.pop("scheduler", None)
+        if scheduler == "null":
+            batchopts.clear()
+        elif scheduler is None:
+            raise ValueError("Test batching requires a batchopts:scheduler")
+        else:
+            schedulers = canary.config.pluginmanager.hook.canary_batch_add_scheduler()
+            if scheduler not in schedulers:
+                raise ValueError(
+                    f"Unknown scheduler {scheduler!r}, choose from {', '.join(schedulers)}"
+                )
+            batchopts["scheduler"] = scheduler
+        if n := batchopts.get("workers"):
+            if n > psutil.cpu_count():
+                raise ValueError(f"-b workers={n} > cpu_count={psutil.cpu_count(logical=True)}")
+        if batchopts:
+            validate_and_set_defaults(batchopts)
+        setattr(config.options, "batchopts", batchopts)
 
 
-@hookimpl
-def canary_addoption(parser: "Parser") -> None:
+@canary.hookimpl
+def canary_addoption(parser: "canary.Parser") -> None:
     parser.add_argument(
         "-b",
         action=BatchResourceSetter,
         metavar="resource",
         command=("run", "find"),
         group="batch control",
-        dest="batch",
+        dest="batchopts",
         help=BatchResourceSetter.help_page("-b"),
     )
+    parser.add_argument("--batch-id", command="run", group="batch control", help="Run this batch")
 
 
 def validate_and_set_defaults(batchopts: dict) -> None:
-    if "spec" not in batchopts:
-        batchopts["spec"] = {
-            "nodes": "any",
-            "layout": "flat",
-            "count": None,
-            "duration": 30 * 60,
-        }
+    default_spec = {"nodes": "any", "layout": "flat", "count": None, "duration": 30 * 60}
+    batchopts.setdefault("spec", default_spec)
     spec = batchopts["spec"]
     if spec.get("duration") is None and spec.get("count") is None:
         spec["duration"] = 30 * 60  # 30 minutes

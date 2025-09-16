@@ -4,10 +4,8 @@
 
 import atexit
 import concurrent.futures
-import multiprocessing
 import os
 import signal
-import sys
 import threading
 import time
 from concurrent.futures.process import BrokenProcessPool
@@ -16,41 +14,32 @@ from typing import Any
 from typing import Callable
 from typing import Sequence
 
-from ... import config
-from ...error import FailFast
-from ...error import StopExecution
-from ...queue import Busy as BusyQueue
-from ...queue import Empty as EmptyQueue
-from ...queue import ResourceQueue
-from ...testcase import TestCase
-from ...util import keyboard
-from ...util import logging
-from ...util.filesystem import working_dir
-from ...util.procutils import cleanup_children
-from ...util.returncode import compute_returncode
-from ...util.string import pluralize
-from ...util.time import hhmmss
-from ...util.time import timestamp
-from ..hookspec import hookimpl
+import hpc_connect
 
-global_session_lock = threading.Lock()
-logger = logging.get_logger(__name__)
+import canary
+from _canary.error import FailFast
+from _canary.error import StopExecution
+from _canary.queue import Busy as BusyQueue
+from _canary.queue import Empty as EmptyQueue
+from _canary.util import keyboard
+from _canary.util import logging
+from _canary.util.procutils import ProcessPoolExecutor
+from _canary.util.procutils import cleanup_children
+from _canary.util.returncode import compute_returncode
 
+from .queue import ResourceQueue
+from .testbatch import TestBatch
 
-class ProcessPoolExecutor(concurrent.futures.ProcessPoolExecutor):
-    def __init__(self, *, workers: int) -> None:
-        context = config.get("config:multiprocessing:context") or "spawn"
-        mp_context = multiprocessing.get_context(context)
-        max_tasks_per_child = config.get("config:multiprocessing:max_tasks_per_child") or 1
-        if sys.version_info[:2] >= (3, 11):
-            n = max_tasks_per_child if context == "spawn" else None
-            super().__init__(max_workers=workers, mp_context=mp_context, max_tasks_per_child=n)
-        else:
-            super().__init__(max_workers=workers, mp_context=mp_context)
+global_lock = threading.Lock()
+logger = canary.get_logger(__name__)
 
 
-@hookimpl(trylast=True)
-def canary_runtests(cases: Sequence[TestCase], fail_fast: bool = False) -> int:
+def runtests(
+    *,
+    backend: hpc_connect.HPCSubmissionManager,
+    cases: Sequence[canary.TestCase],
+    fail_fast: bool = False,
+) -> int:
     """Run each test case in ``cases``.
 
     Args:
@@ -64,18 +53,19 @@ def canary_runtests(cases: Sequence[TestCase], fail_fast: bool = False) -> int:
     """
     returncode: int = -10
     atexit.register(cleanup_children)
-    queue = ResourceQueue.factory(global_session_lock, cases, fail_fast=fail_fast)
+    queue = ResourceQueue.factory(global_lock, cases, fail_fast=fail_fast)
     runner = Runner()
-    assert config.get("session:work_tree") is not None
-    with working_dir(config.get("session:work_tree")):
+    pbar = canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
+    assert canary.config.get("session:work_tree") is not None
+    with canary.filesystem.working_dir(canary.config.get("session:work_tree")):
         cleanup_queue = True
         try:
-            what = pluralize("test case", len(queue))
+            what = canary.string.pluralize("test case", len(queue))
             logger.info("@*{Running} %d %s" % (len(queue), what))
-            start = timestamp()
+            start = canary.time.timestamp()
             stop = -1.0
             logger.debug("Start: processing queue")
-            process_queue(runner=runner, queue=queue)
+            process_queue(backend=backend, runner=runner, queue=queue)
         except KeyboardInterrupt:
             logger.debug("keyboard interrupt: killing child processes and exiting")
             returncode = signal.SIGINT.value
@@ -96,18 +86,20 @@ def canary_runtests(cases: Sequence[TestCase], fail_fast: bool = False) -> int:
             returncode = compute_returncode(queue.cases())
             raise
         else:
-            if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+            if pbar:
                 queue.update_progress_bar(start, last=True)
             returncode = compute_returncode(queue.cases())
             queue.close(cleanup=cleanup_queue)
-            stop = timestamp()
+            stop = canary.time.timestamp()
             dt = stop - start
-            logger.info("@*{Finished} %d %s (%s)" % (len(queue), what, hhmmss(dt)))
+            logger.info("@*{Finished} %d %s (%s)" % (len(queue), what, canary.time.hhmmss(dt)))
             atexit.unregister(cleanup_children)
     return returncode
 
 
-def process_queue(*, runner: Callable, queue: ResourceQueue) -> None:
+def process_queue(
+    *, backend: hpc_connect.HPCSubmissionManager, runner: Callable, queue: ResourceQueue
+) -> None:
     """Process the test queue, asynchronously
 
     Args:
@@ -115,17 +107,15 @@ def process_queue(*, runner: Callable, queue: ResourceQueue) -> None:
 
     """
     futures: dict = {}
-    start = timestamp()
-    duration = lambda: timestamp() - start
-    timeout = float(config.get("config:timeout:session", -1))
+    start = canary.time.timestamp()
+    duration = lambda: canary.time.timestamp() - start
+    timeout = float(canary.config.get("config:timeout:session", -1))
     qsize = queue.qsize
     qrank = 0
     ppe = None
-    progress_bar = (
-        config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
-    )
+    pbar = canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
     try:
-        config.archive(os.environ)
+        canary.config.archive(os.environ)
         with ProcessPoolExecutor(workers=queue.workers) as ppe:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
             while True:
@@ -136,7 +126,7 @@ def process_queue(*, runner: Callable, queue: ResourceQueue) -> None:
                         ppe.shutdown(cancel_futures=True)
                         cleanup_children()
                         raise KeyboardInterrupt
-                if progress_bar:
+                if pbar:
                     queue.update_progress_bar(start)
                 if timeout >= 0.0 and duration() > timeout:
                     raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
@@ -149,7 +139,7 @@ def process_queue(*, runner: Callable, queue: ResourceQueue) -> None:
                 except EmptyQueue:
                     break
                 logger.debug(f"Submitting {obj} to process pool for execution")
-                future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank)
+                future = ppe.submit(runner, obj, backend.name, qsize=qsize, qrank=qrank)
                 qrank += 1
                 callback = partial(done_callback, queue, iid)
                 future.add_done_callback(callback)
@@ -167,24 +157,25 @@ class KeyboardQuit(Exception):
 class Runner:
     """Class for running ``AbstractTestCase``."""
 
-    def __call__(self, case: TestCase, *args: str, **kwargs: Any) -> None:
+    def __call__(
+        self, batch: TestBatch, backend_name: str, *args: str, **kwargs: Any
+    ) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
-        config.ensure_loaded()
-        try:
-            config.pluginmanager.hook.canary_testcase_setup(case=case)
-            config.pluginmanager.hook.canary_testcase_run(
-                case=case, qsize=kwargs.get("qsize", 1), qrank=kwargs.get("qrank", 0)
-            )
-        finally:
-            config.pluginmanager.hook.canary_testcase_finish(case=case)
+        canary.config.ensure_loaded()
+        backend = hpc_connect.get_backend(backend_name)
+        batch.save()
+        batch.run_with_backend(
+            backend=backend, qsize=kwargs.get("qsize", 1), qrank=kwargs.get("qrank", 0)
+        )
 
 
 def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Future) -> None:
-    """Function registered to the process pool executor to be called when a test completes
+    """Function registered to the process pool executor to be called when a test (or batch of
+    tests) completes
 
     Args:
-        queue: the queue
-        iid: the queue's internal ID of the test
+        iid: the queue's internal ID of the test (or batch)
+        queue: the active test queue
         future: the future return by the process pool executor
 
     """
@@ -201,8 +192,21 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
         # Seems to be a filesystem issue, punt for now
         return
 
-    # The case was run in a subprocess.  The object must be
+    # The case (or batch) was run in a subprocess.  The object must be
     # refreshed so that the state in this main thread is up to date.
-    obj = queue.done(iid)
-    obj.refresh()
-    logger.debug(f"Finished {obj} ({obj.duration} s.)")
+    batch: TestBatch = queue.done(iid)
+    if not isinstance(batch, TestBatch):
+        logger.error(f"Expected AbstractTestCase, got {batch.__class__.__name__}")
+        return
+    batch.refresh()
+    logger.debug(f"Finished {batch} ({batch.duration} s.)")
+    for case in batch:
+        if case.status == "running":
+            # Job was cancelled
+            case.status.set("cancelled", "batch cancelled")
+        elif case.status == "skipped":
+            pass
+        elif case.status == "ready":
+            case.status.set("not_run", "test not run for unknown reasons")
+        elif case.start > 0 and case.stop < 0:
+            case.status.set("cancelled", "test case cancelled")

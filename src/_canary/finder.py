@@ -69,7 +69,7 @@ class Finder:
         errors: int = 0
         generators: set[AbstractTestGenerator] = set()
         for root, paths in self.roots.items():
-            found, e = config.plugin_manager.hook.canary_discover_generators(root=root, paths=paths)
+            found, e = config.pluginmanager.hook.canary_discover_generators(root=root, paths=paths)
             generators.update(found)
             errors += e
             logger.debug(f"Found {len(found)} test files in {root}")
@@ -229,7 +229,7 @@ def pprint(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
 
 
 def is_test_file(file: str) -> bool:
-    return config.plugin_manager.hook.canary_testcase_generator(root=file, path=None) is not None
+    return config.pluginmanager.hook.canary_testcase_generator(root=file, path=None) is not None
 
 
 def find(path: str) -> AbstractTestGenerator:

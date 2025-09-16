@@ -43,7 +43,7 @@ class Log(CanarySubcommand):
             return case.stdout_file
 
     def execute(self, args: argparse.Namespace) -> int:
-        from ...testbatch import TestBatch
+        #        from ...testbatch import TestBatch
         from ...testcase import from_id as testcase_from_id
 
         file: str
@@ -61,10 +61,10 @@ class Log(CanarySubcommand):
             display_file(file)
             return 0
 
-        if args.testspec.startswith("^"):
-            file = TestBatch.logfile(args.testspec[1:])
-            display_file(file)
-            return 0
+        #        if args.testspec.startswith("^"):
+        #            file = TestBatch.logfile(args.testspec[1:])
+        #            display_file(file)
+        #            return 0
 
         session = load_session()
         for case in session.cases:

@@ -21,7 +21,6 @@ from . import finder
 from .error import StopExecution
 from .error import notests_exit_status
 from .generator import AbstractTestGenerator
-from .testbatch import TestBatch
 from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_state as testcase_from_state
@@ -148,7 +147,7 @@ class Session:
                 self.cases.extend(cases)
         else:
             self.initialize()
-            config.plugin_manager.hook.canary_session_startup(session=self)
+            config.pluginmanager.hook.canary_session_startup(session=self)
 
         if self.mode == "w":
             self.save(ini=True)
@@ -171,7 +170,7 @@ class Session:
         operations"""
         self = cls(path, mode="a+")
         cases = self.load_testcases()
-        config.plugin_manager.hook.canary_testsuite_mask(
+        config.pluginmanager.hook.canary_testsuite_mask(
             cases=cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
@@ -182,7 +181,7 @@ class Session:
             ignore_dependencies=True,
         )
         for case in static_order(cases):
-            config.plugin_manager.hook.canary_testcase_modify(case=case)
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
         self.cases.clear()
         for case in static_order(cases):
             if case.wont_run():
@@ -228,7 +227,7 @@ class Session:
     @classmethod
     def batch_view(cls, path: str, batch_id: str) -> "Session":
         """Create a view of this session that only includes cases in ``batch_id``"""
-        ids = TestBatch.loadindex(batch_id)
+        ids = None  # TestBatch.loadindex(batch_id)
         if ids is None:
             raise ValueError(f"could not find index for batch {batch_id}")
         expected = len(ids)
@@ -522,7 +521,7 @@ class Session:
 
         """
         cases = finder.generate_test_cases(self.generators, on_options=on_options)
-        config.plugin_manager.hook.canary_testsuite_mask(
+        config.pluginmanager.hook.canary_testsuite_mask(
             cases=cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
@@ -533,7 +532,7 @@ class Session:
             ignore_dependencies=False,
         )
         for case in static_order(cases):
-            config.plugin_manager.hook.canary_testcase_modify(case=case)
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
 
         self.cases.clear()
         for case in cases:
@@ -542,7 +541,7 @@ class Session:
             if not case.wont_run():
                 case.mark_as_ready()
                 self.cases.append(case)
-        config.plugin_manager.hook.canary_collectreport(cases=cases)
+        config.pluginmanager.hook.canary_collectreport(cases=cases)
         if not self.get_ready():
             raise StopExecution("No tests to run", notests_exit_status)
 
@@ -570,7 +569,7 @@ class Session:
 
         """
         cases = self.active_cases()
-        config.plugin_manager.hook.canary_testsuite_mask(
+        config.pluginmanager.hook.canary_testsuite_mask(
             cases=cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
@@ -581,11 +580,11 @@ class Session:
             ignore_dependencies=False,
         )
         for case in static_order(cases):
-            config.plugin_manager.hook.canary_testcase_modify(case=case)
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
         for case in cases:
             if not case.wont_run():
                 case.mark_as_ready()
-        config.plugin_manager.hook.canary_collectreport(cases=cases)
+        config.pluginmanager.hook.canary_collectreport(cases=cases)
 
     def run(self, *, fail_fast: bool = False) -> list[TestCase]:
         """Run each test case in ``cases``.
@@ -603,11 +602,11 @@ class Session:
         if not cases:
             raise StopExecution("No tests to run", notests_exit_status)
         self.start = timestamp()
-        rc = config.plugin_manager.hook.canary_runtests(cases=cases, fail_fast=fail_fast)
+        rc = config.pluginmanager.hook.canary_runtests(cases=cases, fail_fast=fail_fast)
         self.stop = timestamp()
         self.returncode = rc
         self.exitstatus = rc
-        config.plugin_manager.hook.canary_session_finish(session=self, exitstatus=self.exitstatus)
+        config.pluginmanager.hook.canary_session_finish(session=self, exitstatus=self.exitstatus)
         self.save()
         for case in self.cases:
             # we wont run invalid cases, but we want to include them in reports

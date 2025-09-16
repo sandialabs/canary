@@ -95,8 +95,17 @@ def level_name_mapping() -> dict[int, str]:
     return mapping
 
 
-def get_logger(name: str) -> builtin_logging.Logger:
-    return builtin_logging.getLogger(name)
+def get_logger(name: str | None) -> builtin_logging.Logger:
+    if name is None:
+        name = "canary"
+    root, _, leaf = name.partition(".")
+    if root == "_canary":
+        root = root[1:]
+    name = ".".join([root, *leaf])
+    logger = builtin_logging.getLogger(name)
+    if not root == "canary":
+        logger.parent = builtin_logging.getLogger("canary")
+    return logger
 
 
 def get_level_name(levelno: int | None = None) -> str:
@@ -117,7 +126,7 @@ def set_level(level: int | str) -> None:
         levelno = get_levelno(level)
     else:
         levelno = level
-    for handler in builtin_logging.getLogger("_canary").handlers:
+    for handler in builtin_logging.getLogger("canary").handlers:
         if levelno < handler.level:
             handler.setLevel(levelno)
 
@@ -129,7 +138,7 @@ def setup_logging() -> None:
     fmt = Formatter(color=sys.stderr.isatty())
     sh.setFormatter(fmt)
     sh.setLevel(INFO)
-    logger = builtin_logging.getLogger("_canary")
+    logger = builtin_logging.getLogger("canary")
     logger.addHandler(sh)
     logger.setLevel(TRACE)
 
@@ -144,7 +153,7 @@ def add_file_handler(file: str, levelno: int) -> None:
     )
     fh.setFormatter(fmt)
     fh.setLevel(levelno)
-    logger = builtin_logging.getLogger("_canary")
+    logger = builtin_logging.getLogger("canary")
     logger.addHandler(fh)
 
 
@@ -167,7 +176,7 @@ def level_color(levelno: int) -> str:
 
 
 def get_level() -> int:
-    logger = builtin_logging.getLogger("_canary")
+    logger = builtin_logging.getLogger("canary")
     for handler in logger.handlers:
         if isinstance(handler, StreamHandler):
             return handler.level

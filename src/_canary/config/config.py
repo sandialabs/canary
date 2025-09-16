@@ -13,7 +13,6 @@ from typing import Any
 from typing import Generator
 from typing import MutableMapping
 
-import hpc_connect
 import yaml
 
 from ..plugins.manager import CanaryPluginManager
@@ -37,6 +36,9 @@ from .schemas import environment_schema
 from .schemas import plugin_schema
 from .schemas import resource_schema
 from .schemas import user_schema
+
+invocation_dir = os.getcwd()
+
 
 section_schemas: dict[str, Schema] = {
     "build": build_schema,
@@ -112,11 +114,10 @@ class ConfigScope:
 
 class Config:
     def __init__(self) -> None:
-        self.invocation_dir = os.getcwd()
+        self.invocation_dir = invocation_dir
         self.working_dir = os.getcwd()
         self._resource_pool: ResourcePool = ResourcePool()
-        self.plugin_manager: CanaryPluginManager = CanaryPluginManager.factory()
-        self.hpcc_backend: hpc_connect.HPCBackend | None = None
+        self.pluginmanager: CanaryPluginManager = CanaryPluginManager.factory()
         self.options: argparse.Namespace = argparse.Namespace()
         self.scopes: dict[str, ConfigScope] = {}
         if envcfg := os.getenv(env_archive_name):
@@ -139,8 +140,6 @@ class Config:
                 self.push_scope(config_scope)
             if cscope := read_env_config():
                 self.push_scope(cscope)
-            if backend := self.get("hpc_connect:backend"):
-                self.setup_hpc_connect(backend)
         if self.get("config:debug"):
             logging.set_level(logging.DEBUG)
 
@@ -157,7 +156,6 @@ class Config:
             section_data = self.get_config(section)
             data[section] = section_data
         data["resource_pool"] = self._resource_pool.getstate()
-        data["hpcc_backend"] = None if self.hpcc_backend is None else self.hpcc_backend.name
         data["options"] = vars(self.options)
         data["invocation_dir"] = self.invocation_dir
         data["working_dir"] = self.working_dir
@@ -201,7 +199,7 @@ class Config:
         if cfg := scope.get_section("config"):
             if plugins := cfg.get("plugins"):
                 for f in plugins:
-                    self.plugin_manager.consider_plugin(f)
+                    self.pluginmanager.consider_plugin(f)
 
     def pop_scope(self, scope: ConfigScope) -> ConfigScope | None:
         return self.scopes.pop(scope.name, None)
@@ -361,16 +359,6 @@ class Config:
             data.setdefault("config", {})["log_level"] = logging.get_level_name(log_levels[3])
             logging.set_level(logging.DEBUG)
 
-        batchopts: dict = getattr(args, "batch", None) or {}
-        if backend := batchopts.get("scheduler"):
-            self.setup_hpc_connect(backend)
-        if self.hpcc_backend is None:
-            self.options.batch = {}
-            batchopts.clear()
-        elif cached_batchopts := getattr(self.options, "batch", None):
-            batchopts = merge(batchopts, cached_batchopts)
-        args.batch = batchopts
-
         errors: int = 0
         if args.config_mods:
             data.update(deepcopy(args.config_mods))
@@ -403,11 +391,6 @@ class Config:
             if n > cpu_count():
                 raise ValueError(f"workers={n} > cpu_count={cpu_count()}")
 
-        if b := getattr(args, "batch", None):
-            if n := b.get("workers"):
-                if n > cpu_count():
-                    raise ValueError(f"batch:workers={n} > cpu_count={cpu_count()}")
-
         if t := getattr(args, "timeouts", None):
             c = data.setdefault("config", {})
             c.setdefault("timeout", {}).update(t)
@@ -432,23 +415,6 @@ class Config:
             self._resource_pool.update(pool)
         if options := properties.pop("options", None):
             self.options = argparse.Namespace(**options)
-        backend: str | None = properties.pop("hpcc_backend", None)
-        if os.getenv("CANARY_LEVEL") == "1":
-            backend = "null"
-        elif "CANARY_HPCC_BACKEND" in os.environ:
-            backend = os.environ["CANARY_HPCC_BACKEND"]
-        try:
-            self.setup_hpc_connect(backend)
-        except Exception as e:
-            # Since we are restoring from a snapshot, our backend was properly set up on creation
-            # but is now erroring on restoration.  This can happen, for example, if using the Flux
-            # backend to run tests (Flux requires being run in a Flux session) and now the user is
-            # running `canary status` outside of a Flux session.  We ignore the error.  If the
-            # backend is really needed (it will only be needed by `canary run`), an error will
-            # be thrown later if/when it is used.
-            logger.exception(f"Failed to setup hpc_connect for {backend=}")
-        if self.hpcc_backend is None:
-            self.options.batch = None
         self.scopes.clear()
         for value in snapshot["scopes"]:
             scope = ConfigScope(value["name"], value["file"], value["data"])
@@ -471,7 +437,6 @@ class Config:
         snapshot: dict[str, Any] = {}
         properties = snapshot.setdefault("properties", {})
         properties["resource_pool"] = self._resource_pool.getstate()
-        properties["hpcc_backend"] = None if self.hpcc_backend is None else self.hpcc_backend.name
         properties["options"] = vars(self.options)
         properties["invocation_dir"] = self.invocation_dir
         properties["working_dir"] = self.working_dir
@@ -484,31 +449,6 @@ class Config:
         file = io.StringIO()
         self.dump_snapshot(file)
         mapping[env_archive_name] = compress64(file.getvalue())
-
-    def setup_hpc_connect(self, name: str | None) -> None:
-        """Set up the hpc_connect library.
-
-        Initializes the resource pool based on the HPC backend.
-
-        Args:
-            name: The name of the HPC backend to set up
-        """
-        if name in ("null", "local", None):
-            self.hpcc_backend = None
-            return
-
-        assert name is not None
-        logger.debug(f"Setting up HPC Connect for {name}")
-        self.hpcc_backend = hpc_connect.get_backend(name)
-        if self._resource_pool.empty():
-            logger.debug(f"  HPC connect: node count: {self.hpcc_backend.config.node_count}")
-            logger.debug(f"  HPC connect: CPUs per node: {self.hpcc_backend.config.cpus_per_node}")
-            logger.debug(f"  HPC connect: GPUs per node: {self.hpcc_backend.config.gpus_per_node}")
-            self._resource_pool.fill_uniform(
-                node_count=self.hpcc_backend.config.node_count,
-                cpus_per_node=self.hpcc_backend.config.cpus_per_node,
-                gpus_per_node=self.hpcc_backend.config.gpus_per_node,
-            )
 
     def apply_environment_mods(self, envmods: dict[str, Any]) -> None:
         for action, values in envmods.items():
@@ -733,7 +673,6 @@ def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
     snapshot: dict[str, Any] = {}
     properties = snapshot.setdefault("properties", {})
     properties["resource_pool"] = legacy["resource_pool"]
-    properties["hpcc_backend"] = legacy["backend"]
     properties["options"] = legacy["options"]
     properties["invocation_dir"] = legacy["config"].pop("invocation_dir")
     properties["working_dir"] = legacy["config"].pop("working_dir")
@@ -751,7 +690,7 @@ def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
             "context": data["config"].pop("multiprocessing_context", "spawn"),
             "max_tasks_per_child": 1,
         }
-    data["config"]["plugins"] = legacy["plugin_manager"]["plugins"]
+    data["config"]["plugins"] = legacy["pluginmanager"]["plugins"]
     if "test" in legacy:
         data["config"]["timeout"] = legacy["test"]["timeout"]
     data["config"].pop("_config_dir", None)

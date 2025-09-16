@@ -36,6 +36,7 @@ from _canary.util import graph
 from _canary.util import logging as _logging
 from _canary.util import module
 from _canary.util import shell
+from _canary.util import string
 from _canary.util import time
 from _canary.util.executable import Executable
 from _canary.version import version  # noqa: I001
