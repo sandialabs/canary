@@ -113,7 +113,7 @@ def canary_resource_requirements_satisfiable(case: "TestCase") -> bool:
 
 
 @hookspec(firstresult=True)
-def canary_runtests(cases: list["TestCase"], fail_fast: bool) -> int: ...
+def canary_runtests(cases: list["TestCase"]) -> int: ...
 
 
 @hookspec

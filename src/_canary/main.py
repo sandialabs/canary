@@ -174,7 +174,7 @@ class Profiler:
     def __exit__(self, *args):
         if self.type == 1:
             self.profiler.stop()
-            self.profiler.print()
+            self.profiler.print(show_all=True)
         else:
             import pstats
 

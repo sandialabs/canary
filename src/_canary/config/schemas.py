@@ -69,6 +69,15 @@ nonnegative_int = And(int, lambda x: x >= 0)
 id_list = Schema([{"id": Use(str), Optional("slots", default=1): Or(int, float)}])
 
 any_schema = Schema({}, ignore_extra_keys=True)
+machine_schema = Schema(
+    {
+        "machine": {
+            Optional("node_count"): int,
+            Optional("gpus_per_node"): int,
+            Optional("cpus_per_node"): int,
+        }
+    }
+)
 batch_schema = Schema({"batch": {Optional("default_options"): list_of_str}})
 build_schema = Schema(
     {

@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
 from datetime import timedelta
+from functools import lru_cache
 from types import SimpleNamespace
 from typing import IO
 from typing import Any
@@ -583,9 +584,9 @@ class TestCase(AbstractTestCase):
         parameters["runtime"] = self.runtime
         if "nodes" in self.parameters:
             nodes = self.parameters["nodes"]
-            pinfo = config.resource_pool.pinfo
-            parameters["cpus"] = parameters["np"] = nodes * pinfo("cpus_per_node")
-            parameters["gpus"] = parameters["ndevice"] = nodes * pinfo("gpus_per_node")
+            info = lambda t: config.get(f"machine:{t}")
+            parameters["cpus"] = parameters["np"] = nodes * info("cpus_per_node")
+            parameters["gpus"] = parameters["ndevice"] = nodes * info("gpus_per_node")
         else:
             P, S, default = "cpus", "np", 1
             if P not in self.parameters:
@@ -607,6 +608,7 @@ class TestCase(AbstractTestCase):
                 vec.append(value)
         return math.sqrt(sum(_**2 for _ in vec))
 
+    @lru_cache
     def required_resources(self) -> list[list[dict[str, Any]]]:
         group: list[dict[str, Any]] = []
         parameters = self.parameters | self.implicit_parameters
@@ -1090,7 +1092,7 @@ class TestCase(AbstractTestCase):
             cpus = int(self.parameters["np"])
         elif "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])
-            cpus = nodes * config.resource_pool.pinfo("cpus_per_node")
+            cpus = nodes * config.get("machine:cpus_per_node")
         return cpus
 
     @property
@@ -1099,7 +1101,7 @@ class TestCase(AbstractTestCase):
         if "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])  # type: ignore
         else:
-            cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
+            cpus_per_node = config.get("machine:cpus_per_node")
             nodes = math.ceil(self.cpus / cpus_per_node)
         return nodes
 
@@ -1112,7 +1114,7 @@ class TestCase(AbstractTestCase):
             gpus = int(self.parameters["ndevice"])  # type: ignore
         elif "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])
-            gpus = nodes * config.resource_pool.pinfo("gpus_per_node")
+            gpus = nodes * config.get("machine:gpus_per_node")
         return gpus
 
     @property

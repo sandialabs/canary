@@ -586,23 +586,18 @@ class Session:
                 case.mark_as_ready()
         config.pluginmanager.hook.canary_collectreport(cases=cases)
 
-    def run(self, *, fail_fast: bool = False) -> list[TestCase]:
+    def run(self) -> list[TestCase]:
         """Run each test case in ``cases``.
 
-        Args:
-          cases: test cases to run
-          fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
-            continuing running until all tests have been run.
-
         Returns:
-          The session returncode (0 for success)
+          The cases that were run
 
         """
         cases = self.get_ready()
         if not cases:
             raise StopExecution("No tests to run", notests_exit_status)
         self.start = timestamp()
-        rc = config.pluginmanager.hook.canary_runtests(cases=cases, fail_fast=fail_fast)
+        rc = config.pluginmanager.hook.canary_runtests(cases=cases)
         self.stop = timestamp()
         self.returncode = rc
         self.exitstatus = rc

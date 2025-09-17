@@ -34,18 +34,11 @@ global_lock = threading.Lock()
 logger = canary.get_logger(__name__)
 
 
-def runtests(
-    *,
-    backend: hpc_connect.HPCSubmissionManager,
-    cases: Sequence[canary.TestCase],
-    fail_fast: bool = False,
-) -> int:
+def runtests(*, backend: hpc_connect.HPCSubmissionManager, cases: Sequence[canary.TestCase]) -> int:
     """Run each test case in ``cases``.
 
     Args:
       cases: test cases to run
-      fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
-        continuing running until all tests have been run.
 
     Returns:
       The session returncode (0 for success)
@@ -53,7 +46,7 @@ def runtests(
     """
     returncode: int = -10
     atexit.register(cleanup_children)
-    queue = ResourceQueue.factory(global_lock, cases, fail_fast=fail_fast)
+    queue = ResourceQueue.factory(global_lock, cases)
     runner = Runner()
     pbar = canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
     assert canary.config.get("session:work_tree") is not None
@@ -157,16 +150,12 @@ class KeyboardQuit(Exception):
 class Runner:
     """Class for running ``AbstractTestCase``."""
 
-    def __call__(
-        self, batch: TestBatch, backend_name: str, *args: str, **kwargs: Any
-    ) -> None:
+    def __call__(self, batch: TestBatch, backend_name: str, *args: str, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
         canary.config.ensure_loaded()
         backend = hpc_connect.get_backend(backend_name)
         batch.save()
-        batch.run_with_backend(
-            backend=backend, qsize=kwargs.get("qsize", 1), qrank=kwargs.get("qrank", 0)
-        )
+        batch.run(backend=backend, qsize=kwargs.get("qsize", 1), qrank=kwargs.get("qrank", 0))
 
 
 def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Future) -> None:

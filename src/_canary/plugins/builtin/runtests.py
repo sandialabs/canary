@@ -4,10 +4,8 @@
 
 import atexit
 import concurrent.futures
-import multiprocessing
 import os
 import signal
-import sys
 import threading
 import time
 from concurrent.futures.process import BrokenProcessPool
@@ -26,6 +24,7 @@ from ...testcase import TestCase
 from ...util import keyboard
 from ...util import logging
 from ...util.filesystem import working_dir
+from ...util.procutils import ProcessPoolExecutor
 from ...util.procutils import cleanup_children
 from ...util.returncode import compute_returncode
 from ...util.string import pluralize
@@ -37,26 +36,12 @@ global_session_lock = threading.Lock()
 logger = logging.get_logger(__name__)
 
 
-class ProcessPoolExecutor(concurrent.futures.ProcessPoolExecutor):
-    def __init__(self, *, workers: int) -> None:
-        context = config.get("config:multiprocessing:context") or "spawn"
-        mp_context = multiprocessing.get_context(context)
-        max_tasks_per_child = config.get("config:multiprocessing:max_tasks_per_child") or 1
-        if sys.version_info[:2] >= (3, 11):
-            n = max_tasks_per_child if context == "spawn" else None
-            super().__init__(max_workers=workers, mp_context=mp_context, max_tasks_per_child=n)
-        else:
-            super().__init__(max_workers=workers, mp_context=mp_context)
-
-
 @hookimpl(trylast=True)
-def canary_runtests(cases: Sequence[TestCase], fail_fast: bool = False) -> int:
+def canary_runtests(cases: Sequence[TestCase]) -> int:
     """Run each test case in ``cases``.
 
     Args:
       cases: test cases to run
-      fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
-        continuing running until all tests have been run.
 
     Returns:
       The session returncode (0 for success)
@@ -64,7 +49,7 @@ def canary_runtests(cases: Sequence[TestCase], fail_fast: bool = False) -> int:
     """
     returncode: int = -10
     atexit.register(cleanup_children)
-    queue = ResourceQueue.factory(global_session_lock, cases, fail_fast=fail_fast)
+    queue = ResourceQueue.factory(global_session_lock, cases)
     runner = Runner()
     assert config.get("session:work_tree") is not None
     with working_dir(config.get("session:work_tree")):

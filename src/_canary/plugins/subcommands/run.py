@@ -162,7 +162,7 @@ class Run(CanarySubcommand):
         else:
             assert args.mode == "b"
             session = Session.batch_view(args.work_tree, args.batch_id)
-        session.run(fail_fast=config.getoption("fail_fast") or False)
+        session.run()
         config.pluginmanager.hook.canary_runtests_summary(
             cases=session.active_cases(), include_pass=False, truncate=10
         )

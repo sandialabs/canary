@@ -27,9 +27,9 @@ logger = logging.get_logger(__name__)
 
 
 class AbstractResourceQueue(abc.ABC):
-    def __init__(self, *, lock: threading.Lock, workers: int, fail_fast: bool = False) -> None:
-        self.workers = workers
-        self.fail_fast = fail_fast
+    def __init__(self, *, lock: threading.Lock, workers: int) -> None:
+        self.workers: int = workers
+        self.fail_fast: bool = config.getoption("fail_fast") or False
         self.buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
         self._finished: dict[int, Any] = {}
@@ -44,7 +44,7 @@ class AbstractResourceQueue(abc.ABC):
     @classmethod
     @abc.abstractmethod
     def factory(
-        cls, lock: threading.Lock, cases: Sequence[TestCase], fail_fast: bool = False
+        cls, lock: threading.Lock, cases: Sequence[TestCase], **kwds: Any
     ) -> "AbstractResourceQueue": ...
 
     @abc.abstractmethod
@@ -155,17 +155,15 @@ class AbstractResourceQueue(abc.ABC):
 
 
 class ResourceQueue(AbstractResourceQueue):
-    def __init__(self, lock: threading.Lock, fail_fast: bool = True) -> None:
+    def __init__(self, lock: threading.Lock) -> None:
         workers = int(config.getoption("workers", -1))
-        super().__init__(
-            lock=lock, workers=cpu_count() if workers < 0 else workers, fail_fast=fail_fast
-        )
+        super().__init__(lock=lock, workers=cpu_count() if workers < 0 else workers)
 
     @classmethod
     def factory(
-        cls, lock: threading.Lock, cases: Sequence[TestCase], fail_fast: bool = False
+        cls, lock: threading.Lock, cases: Sequence[TestCase], **kwds: Any
     ) -> "ResourceQueue":
-        self = ResourceQueue(lock=lock, fail_fast=fail_fast)
+        self = ResourceQueue(lock=lock)
         for case in cases:
             if case.status == "skipped":
                 case.save()

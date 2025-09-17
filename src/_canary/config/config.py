@@ -33,6 +33,7 @@ from .schemas import batch_schema
 from .schemas import build_schema
 from .schemas import config_schema
 from .schemas import environment_schema
+from .schemas import machine_schema
 from .schemas import plugin_schema
 from .schemas import resource_schema
 from .schemas import user_schema
@@ -50,6 +51,7 @@ section_schemas: dict[str, Schema] = {
     "system": any_schema,
     "plugin": plugin_schema,
     "user": user_schema,
+    "machine": machine_schema,
 }
 
 
@@ -583,7 +585,6 @@ def merge_namespaces(dest: argparse.Namespace, source: argparse.Namespace) -> ar
 
 
 def default_config_values() -> dict[str, Any]:
-    syscfg = _machine.system_config()
     defaults = {
         "config": {
             "debug": False,
@@ -616,15 +617,8 @@ def default_config_values() -> dict[str, Any]:
             "level": None,
             "mode": None,
         },
-        "system": {
-            "node": syscfg["node"],
-            "arch": syscfg["arch"],
-            "site": syscfg["site"],
-            "host": syscfg["host"],
-            "name": syscfg["name"],
-            "platform": syscfg["platform"],
-            "os": syscfg["os"],
-        },
+        "system": _machine.system_config(),
+        "machine": _machine.machine_config(),
         "batch": {"default_options": []},
     }
     return defaults

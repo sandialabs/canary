@@ -8,6 +8,8 @@ from graphlib import TopologicalSorter
 from typing import Any
 from typing import Sequence
 
+import psutil
+
 import canary
 from _canary.util.collections import defaultlist
 
@@ -22,15 +24,19 @@ logger = canary.get_logger(__name__)
 
 
 def partition_testcases(
-    *, cases: list["canary.TestCase"], batchspec: dict[str, Any] | None = None
+    *,
+    cases: list["canary.TestCase"],
+    batchspec: dict[str, Any] | None = None,
+    cpus_per_node: int | None = None,
 ) -> list["TestBatch"]:
+    cpus_per_node = cpus_per_node or psutil.cpu_count(logical=True)
     batchspec = batchspec or {"nodes": "any", "layout": "flat", "count": None, "duration": 30 * 60}
     nodes = batchspec["nodes"] or "any"
     layout = batchspec["layout"] or "flat"
     if batchspec["duration"] is not None:
         duration = float(batchspec["duration"])  # 30 minute default
         logger.debug(f"Batching test cases using duration={duration}")
-        return partition_t(cases, t=duration, nodes=nodes)
+        return partition_t(cases, t=duration, nodes=nodes, cpus_per_node=cpus_per_node)
     else:
         assert batchspec["count"] is not None
         count = int(batchspec["count"])
@@ -138,12 +144,20 @@ def partition_n(
 
 
 def partition_t(
-    cases: Sequence[canary.TestCase], t: float = 60 * 30, nodes: str = "any"
+    cases: Sequence[canary.TestCase],
+    t: float = 60 * 30,
+    nodes: str = "any",
+    cpus_per_node: int | None = None,
 ) -> list[TestBatch]:
     """Partition test cases by tiling them in the 2D space defined by num_cpus x run_time"""
     logger.debug(f"Partitioning {len(cases)} test cases")
 
-    def _pack_ready_nodes(packer: "Packer", batches: list[TestBatch], ready: list[canary.TestCase]):
+    cpus_per_node = cpus_per_node or psutil.cpu_count(logical=True)
+    assert isinstance(cpus_per_node, int)
+
+    def _pack_ready_nodes(
+        packer: "Packer", batches: list[TestBatch], ready: list[canary.TestCase], cpus_per_node: int
+    ):
         blocks = [Block(case.id, case.cpus, math.ceil(runtime(case))) for case in ready]
         cpus = max(block.size[0] for block in blocks)
         nodes_reqd = math.ceil(cpus / cpus_per_node)
@@ -169,7 +183,6 @@ def partition_t(
                 raise RuntimeError("Unable to partition blocks")
             unfit = tmp
 
-    cpus_per_node: int = int(canary.config.resource_pool.pinfo("cpus_per_node"))
     map: dict[str, canary.TestCase] = {case.id: case for case in cases}
     graph: dict[canary.TestCase, list[canary.TestCase]] = {}
     for case in cases:
@@ -185,9 +198,9 @@ def partition_t(
             for case in ready:
                 node_groups.setdefault(case.nodes, []).append(case)
             for group in node_groups.values():
-                _pack_ready_nodes(packer, batches, group)
+                _pack_ready_nodes(packer, batches, group, cpus_per_node)
         else:
-            _pack_ready_nodes(packer, batches, ready)
+            _pack_ready_nodes(packer, batches, ready, cpus_per_node)
         ts.done(*ready)
     if len(cases) != sum([len(b) for b in batches]):
         raise ValueError("Incorrect partition lengths!")
@@ -418,8 +431,8 @@ def runtime(case: canary.TestCase) -> float:
     return 1.25 * t
 
 
-def packed_perimeter(cases: Sequence[canary.TestCase]) -> size_t:
-    cpus_per_node = canary.config.resource_pool.pinfo("cpus_per_node")
+def packed_perimeter(cases: Sequence[canary.TestCase], cpus_per_node: int | None = None) -> size_t:
+    cpus_per_node = cpus_per_node or psutil.cpu_count(logical=True)
     cases = sorted(cases, key=lambda c: c.size(), reverse=True)
     cpus = max(case.cpus for case in cases)
     nodes = math.ceil(cpus / cpus_per_node)

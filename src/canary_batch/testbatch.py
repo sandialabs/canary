@@ -323,10 +323,7 @@ class TestBatch(AbstractTestCase):
     def setup(self) -> None:
         pass
 
-    def run(self, qsize: int = 1, qrank: int = 1) -> None:
-        pass
-
-    def run_with_backend(
+    def run(  # type: ignore[override]
         self, backend: hpc_connect.HPCSubmissionManager, qsize: int = 1, qrank: int = 1
     ) -> None:
         def cancel(sig, frame):
@@ -340,7 +337,10 @@ class TestBatch(AbstractTestCase):
             elif sig == signal.SIGTERM:
                 os._exit(1)
 
-        pbar = canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
+        pbar = (
+            canary.config.getoption("format") == "progress-bar"
+            or logging.get_level() > logging.INFO
+        )
         logger.debug(f"Running batch {self.id[:7]}")
         start = time.monotonic()
         variables = dict(self.variables)
@@ -364,7 +364,7 @@ class TestBatch(AbstractTestCase):
                 variables.pop("CANARY_BATCH_ID", None)
                 proc = backend.submitn(
                     [case.id for case in self],
-                    [[canary_invocation(case)] for case in self],
+                    [[canary_testcase_invocation(case)] for case in self],
                     cpus=[case.cpus for case in self],
                     gpus=[case.gpus for case in self],
                     scriptname=[os.path.join(scriptdir, f"{case.id}-inp.sh") for case in self],
@@ -377,10 +377,13 @@ class TestBatch(AbstractTestCase):
             else:
                 timeoutx = canary.config.get("config:timeout:multiplier", 1.0)
                 qtime = self.qtime() * timeoutx
+                nodes = backend.config.nodes_required(
+                    max_cpus=self.max_cpus_required, max_gpus=self.max_gpus_required
+                )
                 proc = backend.submit(
                     f"canary.{self.id[:7]}",
-                    [canary_invocation(self)],
-                    nodes=nodes_required(self),
+                    [canary_batch_invocation(self, backend)],
+                    nodes=nodes,
                     scriptname=self.submission_script_filename(),
                     output=self.logfile(self.id),
                     error=self.logfile(self.id),
@@ -467,55 +470,46 @@ def emit(text: str, **kwargs: Any) -> None:
     logger.log(logging.EMIT, text, **kwargs)
 
 
-def canary_invocation(arg: "TestBatch | canary.TestCase") -> str:
+def canary_batch_invocation(batch: TestBatch, backend: hpc_connect.HPCSubmissionManager) -> str:
     """Write the canary invocation used to run this batch."""
-
-    fp = io.StringIO()
-    fp.write("canary ")
-
-    if isinstance(arg, TestBatch):
-        # The batch will be run in a compute node, so hpc_connect won't set the machine limits
-        resource_types: set[str] = set()
-        for case in arg:
-            reqd_resources = case.required_resources()
-            for group in reqd_resources[0]:
-                resource_types.add(group["type"])
-        cfg: dict[str, Any] = {}
-        pool = cfg.setdefault("resource_pool", {})
-        pool["nodes"] = nodes_required(arg)
-        for type in resource_types:
-            key = f"{type}_per_node"
-            pool[key] = canary.config.resource_pool.pinfo(key)
-        batch_stage = arg.stage(arg.id)
-        config_file = os.path.join(batch_stage, "config")
-        with open(config_file, "w") as fh:
-            json.dump(cfg, fh, indent=2)
-        fp.write(f"-f {config_file} ")
+    args: list[str] = ["canary"]
+    # The batch will be run in a compute node, so hpc_connect won't set the machine limits
+    types: set[str] = set()
+    for case in batch:
+        reqd_resources = case.required_resources()
+        for group in reqd_resources:
+            types.update([item["type"] for item in group])
+    cfg: dict[str, Any] = {}
+    pool = cfg.setdefault("resource_pool", {})
+    pool["nodes"] = backend.config.nodes_required(
+        max_cpus=batch.max_cpus_required, max_gpus=batch.max_gpus_required
+    )
+    for type in types:
+        pool[f"{type}_per_node"] = backend.config.count_per_node(type)
+    config_file = os.path.join(batch.stage(batch.id), "config")
+    with open(config_file, "w") as fh:
+        json.dump(cfg, fh, indent=2)
+    args.extend(["-f", config_file])
     if canary.config.get("config:debug"):
-        fp.write("-d ")
-    fp.write(f"-C {canary.config.get('session:work_tree')} run ")
-    if isinstance(arg, TestBatch):
-        batchopts = canary.config.getoption("batchopts", {})
-        if workers := batchopts.get("workers"):
-            fp.write(f"--workers={workers} ")
-    fp.write("-b scheduler=null ")  # guard against infinite batch recursion
-    if isinstance(arg, TestBatch):
-        fp.write(f"--batch-id={arg.id}")
-    else:
-        fp.write(f"/{arg.id}")
-    return fp.getvalue()
+        args.append("-d")
+    args.extend(["-C", canary.config.get("session:work_tree"), "run"])
+    batchopts = canary.config.getoption("batchopts", {})
+    if workers := batchopts.get("workers"):
+        args.append(f"--workers={workers}")
+    args.extend(["-b", "scheduler=null"])  # guard against infinite batch recursion
+    args.append(f"--batch-id={batch.id}")
+    return shlex.join(args)
 
 
-def nodes_required(arg: canary.TestCase | TestBatch) -> int:
-    nodes: int
-    if isinstance(arg, canary.TestCase):
-        nodes = canary.config.resource_pool.nodes_required(arg.required_resources())
-    else:
-        assert isinstance(arg, TestBatch)
-        nodes = max(canary.config.resource_pool.nodes_required(c.required_resources()) for c in arg)
-        if nodes_per_batch := os.getenv("CANARY_NODES_PER_BATCH"):
-            nodes = max(nodes, int(nodes_per_batch))
-    return nodes
+def canary_testcase_invocation(case: canary.TestCase) -> str:
+    """Write the canary invocation used to run this batch."""
+    args: list[str] = ["canary"]
+    if canary.config.get("config:debug"):
+        args.append("-d")
+    args.extend(["-C", canary.config.get("session:work_tree"), "run"])
+    args.extend(["-b", "scheduler=null"])  # guard against infinite batch recursion
+    args.append(f"/{case.id}")
+    return shlex.join(args)
 
 
 def batch_options() -> list[str]:

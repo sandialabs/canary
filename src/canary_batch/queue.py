@@ -20,25 +20,23 @@ logger = canary.get_logger(__name__)
 
 
 class ResourceQueue(queue.AbstractResourceQueue):
-    def __init__(
-        self, *, lock: threading.Lock, workers: int | None = None, fail_fast: bool = False
-    ) -> None:
+    def __init__(self, *, lock: threading.Lock, workers: int | None = None) -> None:
         workers = int(canary.config.getoption("workers", -1))
-        super().__init__(lock=lock, workers=5 if workers < 0 else workers, fail_fast=fail_fast)
+        super().__init__(lock=lock, workers=5 if workers < 0 else workers)
         self.tmp_buffer: list[canary.TestCase] = []
 
     @classmethod
     def factory(
-        cls, lock: threading.Lock, cases: Sequence[canary.TestCase], fail_fast: bool = False
+        cls, lock: threading.Lock, cases: Sequence[canary.TestCase], **kwds: Any
     ) -> "ResourceQueue":
-        self = ResourceQueue(lock=lock, fail_fast=fail_fast)
+        self = ResourceQueue(lock=lock)
         for case in cases:
             if case.status == "skipped":
                 case.save()
             elif not case.status.satisfies(("ready", "pending")):
                 raise ValueError(f"{case}: case is not ready or pending")
         self.put(*[case for case in cases if case.status.satisfies(("ready", "pending"))])
-        self.prepare()
+        self.prepare(**kwds)
         if self.empty():
             raise ValueError("There are no cases to run in this session")
         return self
@@ -51,7 +49,9 @@ class ResourceQueue(queue.AbstractResourceQueue):
         if not batchopts:
             raise ValueError("Cannot partition test cases: missing batching options")
         batches: list[TestBatch] = partition_testcases(
-            cases=self.tmp_buffer, batchspec=batchopts["spec"]
+            cases=self.tmp_buffer,
+            batchspec=batchopts["spec"],
+            cpus_per_node=kwds.get("cpus_per_node"),
         )
         if not batches:
             raise ValueError(
