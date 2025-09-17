@@ -375,9 +375,7 @@ class CTestTestCase(canary.TestCase):
                 key = f"CTEST_RESOURCE_GROUP_{i}_{type.upper()}"
                 values = []
                 for item in items:
-                    # use LID since CTest is not designed for multi-node execution
-                    _, lid = canary.config.resource_pool.local_ids(type, item["gid"])
-                    values.append(f"id:{lid},slots:{item['slots']}")
+                    values.append(f"id:{item['id']},slots:{item['slots']}")
                 os.environ[key] = ";".join(values)
         os.environ["CTEST_RESOURCE_GROUP_COUNT"] = str(resource_group_count)
 

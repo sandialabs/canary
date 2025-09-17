@@ -120,7 +120,7 @@ class AbstractTestCase(abc.ABC):
         for group in self.resources:
             for type, instances in group.items():
                 if type == "cpus":
-                    cpu_ids.extend([str(_["gid"]) for _ in instances])
+                    cpu_ids.extend([str(_["id"]) for _ in instances])
         return cpu_ids
 
     @property
@@ -133,5 +133,5 @@ class AbstractTestCase(abc.ABC):
         for group in self.resources:
             for type, instances in group.items():
                 if type == "gpus":
-                    gpu_ids.extend([str(_["gid"]) for _ in instances])
+                    gpu_ids.extend([str(_["id"]) for _ in instances])
         return gpu_ids

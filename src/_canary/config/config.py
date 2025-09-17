@@ -29,13 +29,12 @@ from ..util.string import strip_quotes
 from . import _machine
 from .rpool import ResourcePool
 from .schemas import any_schema
-from .schemas import batch_schema
 from .schemas import build_schema
 from .schemas import config_schema
 from .schemas import environment_schema
 from .schemas import machine_schema
 from .schemas import plugin_schema
-from .schemas import resource_schema
+from .schemas import resource_pool_schema
 from .schemas import user_schema
 
 invocation_dir = os.getcwd()
@@ -43,10 +42,9 @@ invocation_dir = os.getcwd()
 
 section_schemas: dict[str, Schema] = {
     "build": build_schema,
-    "batch": batch_schema,
     "config": config_schema,
     "environment": environment_schema,
-    "resource_pool": resource_schema,
+    "resource_pool": resource_pool_schema,
     "session": any_schema,
     "system": any_schema,
     "plugin": plugin_schema,
@@ -185,7 +183,7 @@ class Config:
     @property
     def resource_pool(self) -> ResourcePool:
         if self._resource_pool.empty():
-            self._resource_pool.fill_default()
+            self._resource_pool.populate(cpus=cpu_count())
         return self._resource_pool
 
     def read_only_scope(self, scope: str) -> bool:
@@ -193,8 +191,7 @@ class Config:
 
     def push_scope(self, scope: ConfigScope) -> None:
         if pool := scope.pop_section("resource_pool"):
-            self._resource_pool.clear()
-            self._resource_pool.update(pool)
+            self._resource_pool.fill(pool)
         if envmods := scope.get_section("environment"):
             self.apply_environment_mods(envmods)
         self.scopes[scope.name] = scope
@@ -366,7 +363,7 @@ class Config:
             data.update(deepcopy(args.config_mods))
 
         # handle resource pool separately
-        resource_pool_mods: dict[str, Any] = {}
+        resource_pool_mods: dict[str, int] = {}
         if "resource_pool" in data:
             resource_pool_mods.update(data.pop("resource_pool"))
 
@@ -376,15 +373,13 @@ class Config:
                 logger.error(f"Illegal config section: {section!r}")
                 continue
             schema = section_schemas[section]
-            data[section] = schema.validate({section: section_data})[section]
+            data[section] = schema.validate(section_data)
 
         if resource_pool_mods:
             if self._resource_pool.empty():
-                schema = section_schemas["resource_pool"]
-                pool = schema.validate({"resource_pool": resource_pool_mods})["resource_pool"]
-                self._resource_pool.update(pool)
+                self._resource_pool.populate(**resource_pool_mods)
             else:
-                self._resource_pool.add(**resource_pool_mods)
+                self._resource_pool.modify(**resource_pool_mods)
 
         if errors:
             raise ValueError("Stopping due to previous errors")
@@ -398,6 +393,16 @@ class Config:
             c.setdefault("timeout", {}).update(t)
 
         self.options = merge_namespaces(self.options, args)
+
+        if args.config_file:
+            if fd := read_config_file(args.config_file):
+                for sec, sd in fd.items():
+                    if schema := section_schemas.get(sec):
+                        sd = schema.validate(sd)
+                        if sec in data:
+                            data[sec] = merge(data[sec], sd)
+                        else:
+                            data[sec] = sd
 
         scope = ConfigScope("command_line", None, data)
         self.push_scope(scope)
@@ -414,7 +419,7 @@ class Config:
         self.invocation_dir = properties["invocation_dir"]
         if pool := properties.pop("resource_pool", None):
             self._resource_pool.clear()
-            self._resource_pool.update(pool)
+            self._resource_pool.fill(pool)
         if options := properties.pop("options", None):
             self.options = argparse.Namespace(**options)
         self.scopes.clear()
@@ -495,7 +500,7 @@ def read_config_scope(scope: str) -> ConfigScope:
                 if schema == any_schema:
                     data[section] = section_data
                 else:
-                    data[section] = schema.validate({section: section_data})[section]
+                    data[section] = schema.validate(section_data)
             else:
                 logger.warning(f"ignoring unrecognized config section: {section}")
     return ConfigScope(scope, file, data)
@@ -538,12 +543,11 @@ def read_env_config() -> ConfigScope | None:
                 value = [_.strip() for _ in os.environ[var].split(",") if _.split()]
             else:
                 value = try_loads(os.environ[var])
-            data.setdefault("config", {})[config_var] = value
+            data[config_var] = value
     if not data:
         return None
-    schema = section_schemas["config"]
-    data = schema.validate(data)
-    return ConfigScope("environment", None, data)
+    data = section_schemas["config"].validate(data)
+    return ConfigScope("environment", None, {"config": data})
 
 
 def process_config_path(path: str) -> list[str]:
@@ -619,7 +623,6 @@ def default_config_values() -> dict[str, Any]:
         },
         "system": _machine.system_config(),
         "machine": _machine.machine_config(),
-        "batch": {"default_options": []},
     }
     return defaults
 

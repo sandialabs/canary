@@ -1457,7 +1457,7 @@ class TestCase(AbstractTestCase):
         for group in self.resources:
             for type, instances in group.items():
                 varname = type[:-1] if type[-1] == "s" else type
-                ids: list[str] = [str(_["gid"]) for _ in instances]
+                ids: list[str] = [str(_["id"]) for _ in instances]
                 vars[f"{varname}_ids"] = variables[f"CANARY_{varname.upper()}"] = ",".join(ids)
         for key, value in variables.items():
             try:

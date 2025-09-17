@@ -65,7 +65,7 @@ scripts.nvtest = "canary:console_main"
 
 [project.entry-points."canary"]
 canary_cmake = "canary_cmake"
-canary_batch = "canary_batch"
+canary_hpc = "canary_hpc"
 
 [tool.setuptools.dynamic]
 version = { attr = "_canary.util.dynamic_version.__generate_dynamic_version__" }

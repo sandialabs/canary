@@ -40,48 +40,48 @@ class SchedulerHooks:
         return runtests.runtests(backend=self.backend, cases=cases)
 
 
-@canary.hookimpl(specname="canary_batch_add_scheduler")
+@canary.hookimpl(specname="canary_hpc_add_scheduler")
 def add_subprocess_scheduler() -> dict[str, str | list[str]]:
     return {"name": "subprocess", "aliases": ["shell", "none"]}
 
 
-@canary.hookimpl(specname="canary_batch_get_scheduler")
+@canary.hookimpl(specname="canary_hpc_get_scheduler")
 def get_subprocess_scheduler(scheduler: str) -> Any:
     if scheduler in ("shell", "subprocess", "none"):
         return SchedulerHooks("shell")
     return None
 
 
-@canary.hookimpl(specname="canary_batch_add_scheduler")
+@canary.hookimpl(specname="canary_hpc_add_scheduler")
 def add_slurm_scheduler() -> dict[str, str | list[str]]:
     return {"name": "slurm", "aliases": ["sbatch"]}
 
 
-@canary.hookimpl(specname="canary_batch_get_scheduler")
+@canary.hookimpl(specname="canary_hpc_get_scheduler")
 def get_slurm_scheduler(scheduler: str) -> Any:
     if scheduler in ("slurm", "sbatch"):
         return SchedulerHooks("slurm")
     return None
 
 
-@canary.hookimpl(specname="canary_batch_add_scheduler")
+@canary.hookimpl(specname="canary_hpc_add_scheduler")
 def add_pbs_scheduler() -> dict[str, str | list[str]]:
     return {"name": "pbs", "aliases": ["qsub"]}
 
 
-@canary.hookimpl(specname="canary_batch_get_scheduler")
+@canary.hookimpl(specname="canary_hpc_get_scheduler")
 def get_pbs_scheduler(scheduler: str) -> Any:
     if scheduler in ("pbs", "qsub"):
         return SchedulerHooks("pbs")
     return None
 
 
-@canary.hookimpl(specname="canary_batch_add_scheduler")
+@canary.hookimpl(specname="canary_hpc_add_scheduler")
 def add_flux_scheduler() -> dict[str, str | list[str]]:
     return {"name": "flux"}
 
 
-@canary.hookimpl(specname="canary_batch_get_scheduler")
+@canary.hookimpl(specname="canary_hpc_get_scheduler")
 def get_flux_scheduler(scheduler: str) -> Any:
     if scheduler in ("flux",):
         return SchedulerHooks("flux")

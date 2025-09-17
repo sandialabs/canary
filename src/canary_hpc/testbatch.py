@@ -12,6 +12,7 @@ import shlex
 import signal
 import time
 import warnings
+import yaml
 from datetime import datetime
 from itertools import repeat
 from typing import Any
@@ -252,7 +253,7 @@ class TestBatch(AbstractTestCase):
         replacements: dict[str, str] = {
             "%id": self.id[:7],
             "%p": self.path,
-            "%P": os.path.dirname(self.path),
+            "%P": self.stage(self.id),
             "%n": repr(self),
             "%j": self.jobid or "none",
             "%l": str(len(self)),
@@ -382,7 +383,7 @@ class TestBatch(AbstractTestCase):
                 )
                 proc = backend.submit(
                     f"canary.{self.id[:7]}",
-                    [canary_batch_invocation(self, backend)],
+                    [canary_hpc_invocation(self, backend)],
                     nodes=nodes,
                     scriptname=self.submission_script_filename(),
                     output=self.logfile(self.id),
@@ -410,7 +411,7 @@ class TestBatch(AbstractTestCase):
             self.total_duration = time.monotonic() - start
             self.refresh()
             if all([_.status.satisfies(("ready", "pending")) for _ in self.cases]):
-                f = "Batch @*b{%id}: no test cases have started; check %p for any emitted scheduler log files."
+                f = "Batch @*b{%id}: no test cases have started; check %P for any emitted scheduler log files."
                 logger.warning(self.format(f))
             for case in self.cases:
                 if case.status == "skipped":
@@ -470,7 +471,7 @@ def emit(text: str, **kwargs: Any) -> None:
     logger.log(logging.EMIT, text, **kwargs)
 
 
-def canary_batch_invocation(batch: TestBatch, backend: hpc_connect.HPCSubmissionManager) -> str:
+def canary_hpc_invocation(batch: TestBatch, backend: hpc_connect.HPCSubmissionManager) -> str:
     """Write the canary invocation used to run this batch."""
     args: list[str] = ["canary"]
     # The batch will be run in a compute node, so hpc_connect won't set the machine limits
@@ -480,15 +481,16 @@ def canary_batch_invocation(batch: TestBatch, backend: hpc_connect.HPCSubmission
         for group in reqd_resources:
             types.update([item["type"] for item in group])
     cfg: dict[str, Any] = {}
-    pool = cfg.setdefault("resource_pool", {})
-    pool["nodes"] = backend.config.nodes_required(
-        max_cpus=batch.max_cpus_required, max_gpus=batch.max_gpus_required
-    )
+    resources: dict[str, list[Any]] = {}
     for type in types:
-        pool[f"{type}_per_node"] = backend.config.count_per_node(type)
+        count = backend.config.count_per_node(type)
+        resources[type] = [{"id": str(j), "slots": 1} for j in range(count)]
+    cfg["resource_pool"] = {
+        "resources": resources, "additional_properties": {"backend": backend.name}
+    }
     config_file = os.path.join(batch.stage(batch.id), "config")
     with open(config_file, "w") as fh:
-        json.dump(cfg, fh, indent=2)
+        yaml.dump(cfg, fh, indent=2)
     args.extend(["-f", config_file])
     if canary.config.get("config:debug"):
         args.append("-d")
