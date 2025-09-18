@@ -108,6 +108,7 @@ def process_queue(
     qrank = 0
     ppe = None
     pbar = canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
+    mark = time.monotonic()
     try:
         canary.config.archive(os.environ)
         with ProcessPoolExecutor(workers=queue.workers) as ppe:
@@ -117,6 +118,7 @@ def process_queue(
                     if key in "sS":
                         logger.log(logging.EMIT, queue.status(start=start), extra={"prefix": ""})
                     elif key in "qQ":
+                        logger.debug(f"Quiting due to caputuring {key!r} from the keyboard")
                         ppe.shutdown(cancel_futures=True)
                         cleanup_children()
                         raise KeyboardInterrupt
@@ -129,6 +131,9 @@ def process_queue(
                     queue.heartbeat()
                 except BusyQueue:
                     time.sleep(0.005)
+                    if time.monotonic() - mark > 30:
+                        logger.debug("Waiting on busy queue...")
+                        mark = time.monotonic()
                     continue
                 except EmptyQueue:
                     break
@@ -137,7 +142,6 @@ def process_queue(
                 qrank += 1
                 callback = partial(done_callback, queue, iid)
                 future.add_done_callback(callback)
-                logger.debug(f"Process pool execution for {obj} finished")
                 futures[iid] = (obj, future)
     finally:
         if ppe is not None:
@@ -172,14 +176,17 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
     if future.cancelled():
         return
     try:
+        logger.debug(f"Retrieving future for Batch({iid})")
         future.result()
     except BrokenProcessPool:
         # The future was probably killed by fail_fast or a keyboard interrupt
+        logger.debug("BrokenProcessPool occurred while attempting to retrieve future")
         return
     except BrokenPipeError:
         # something bad happened.  On some HPCs we have seen:
         # BrokenPipeError: [Errno 108] Cannot send after transport endpoint shutdown
         # Seems to be a filesystem issue, punt for now
+        logger.debug("BrokenPipeError occurred while attempting to retrieve future")
         return
 
     # The case (or batch) was run in a subprocess.  The object must be
@@ -205,3 +212,4 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
             failed.append(case)
     if canary.config.getoption("fail_fast") and failed:
         raise FailFast(failed=failed)
+    logger.debug(f"Process pool execution for {batch} finished")
