@@ -29,6 +29,7 @@ EMIT = builtin_logging.CRITICAL + 5
 
 
 builtin_print = print
+root_log_name = "canary"
 
 
 class FileHandler(builtin_logging.FileHandler): ...
@@ -97,14 +98,15 @@ def level_name_mapping() -> dict[int, str]:
 
 def get_logger(name: str | None) -> builtin_logging.Logger:
     if name is None:
-        name = "canary"
+        name = root_log_name
     root, _, leaf = name.partition(".")
     if root == "_canary":
-        root = root[1:]
-    name = ".".join([root, leaf])
+        root = root_log_name
+        if leaf:
+            name = ".".join([root, leaf])
     logger = builtin_logging.getLogger(name)
-    if not root == "canary":
-        logger.parent = builtin_logging.getLogger("canary")
+    if root != root_log_name:
+        logger.parent = builtin_logging.getLogger(root_log_name)
     return logger
 
 
@@ -126,7 +128,7 @@ def set_level(level: int | str) -> None:
         levelno = get_levelno(level)
     else:
         levelno = level
-    for handler in builtin_logging.getLogger("canary").handlers:
+    for handler in builtin_logging.getLogger(root_log_name).handlers:
         if levelno < handler.level:
             handler.setLevel(levelno)
 
@@ -138,7 +140,7 @@ def setup_logging() -> None:
     fmt = Formatter(color=sys.stderr.isatty())
     sh.setFormatter(fmt)
     sh.setLevel(INFO)
-    logger = builtin_logging.getLogger("canary")
+    logger = builtin_logging.getLogger(root_log_name)
     logger.addHandler(sh)
     logger.setLevel(TRACE)
 
@@ -153,7 +155,7 @@ def add_file_handler(file: str, levelno: int) -> None:
     )
     fh.setFormatter(fmt)
     fh.setLevel(levelno)
-    logger = builtin_logging.getLogger("canary")
+    logger = builtin_logging.getLogger(root_log_name)
     logger.addHandler(fh)
 
 
@@ -178,7 +180,7 @@ def level_color(levelno: int) -> str:
 
 
 def get_level() -> int:
-    logger = builtin_logging.getLogger("canary")
+    logger = builtin_logging.getLogger(root_log_name)
     for handler in logger.handlers:
         if isinstance(handler, StreamHandler):
             return handler.level

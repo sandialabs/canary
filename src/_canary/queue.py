@@ -124,7 +124,7 @@ class AbstractResourceQueue(abc.ABC):
                     continue
                 elif status == "ready":
                     try:
-                        if obj.exclusive and self.busy():
+                        if self.exclusive_lock:
                             continue
                         required = obj.required_resources()
                         if not required:
@@ -198,10 +198,10 @@ class ResourceQueue(AbstractResourceQueue):
             if obj_no not in self._busy:
                 raise RuntimeError(f"case {obj_no} is not running")
             obj = self._finished[obj_no] = self._busy.pop(obj_no)
-            config.resource_pool.reclaim(obj.resources)
-            obj.free_resources()
             if obj.exclusive:
                 self.exclusive_lock = False
+            config.resource_pool.reclaim(obj.resources)
+            obj.free_resources()
             for case in self.buffer.values():
                 for i, dep in enumerate(case.dependencies):
                     if dep.id == self._finished[obj_no].id:
