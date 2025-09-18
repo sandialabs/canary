@@ -354,6 +354,29 @@ class CDashXMLReporter:
                     compression="gzip",
                     filename=os.path.basename(case.file),
                 )
+            for artifact in case.artifacts:
+                when = artifact["when"]
+                if when == "success" and case.status != "success":
+                    continue
+                elif when == "failure" and case.status == "success":
+                    continue
+                file = artifact["file"]
+                if not os.path.exists(file) and not os.path.isabs(file):
+                    if os.path.exists(os.path.join(case.working_directory, file)):
+                        file = os.path.join(case.working_directory, file)
+                    elif os.path.exists(os.path.join(case.file_dir, file)):
+                        file = os.path.join(case.file_dir, file)
+                if os.path.exists(file):
+                    mode = "r" if file.endswith((".py", ".txt", ".cmake", ".pyt", ".log")) else "rb"
+                    add_named_measurement(
+                        test_node,
+                        "Attached File",
+                        compress_str(open(file, mode=mode).read()),
+                        type="file",
+                        encoding="base64",
+                        compression="gzip",
+                        filename=os.path.basename(file),
+                    )
 
             labels: set[str] = set(
                 canary.config.pluginmanager.hook.canary_cdash_labels(case=case) or []

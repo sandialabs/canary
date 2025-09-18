@@ -99,14 +99,11 @@ def level_name_mapping() -> dict[int, str]:
 def get_logger(name: str | None) -> builtin_logging.Logger:
     if name is None:
         name = root_log_name
-    root, _, leaf = name.partition(".")
-    if root == "_canary":
-        root = root_log_name
-        if leaf:
-            name = ".".join([root, leaf])
+    parts = name.split(".")
+    if parts[0] != root_log_name:
+        parts.insert(0, root_log_name)
+        name = ".".join(parts)
     logger = builtin_logging.getLogger(name)
-    if root != root_log_name:
-        logger.parent = builtin_logging.getLogger(root_log_name)
     return logger
 
 
@@ -134,18 +131,23 @@ def set_level(level: int | str) -> None:
 
 
 def setup_logging() -> None:
+    logger = builtin_logging.getLogger(root_log_name)
     builtin_logging.addLevelName(TRACE, "TRACE")
     builtin_logging.addLevelName(EMIT, "EMIT")
-    sh = StreamHandler(sys.stderr)
-    fmt = Formatter(color=sys.stderr.isatty())
-    sh.setFormatter(fmt)
-    sh.setLevel(INFO)
-    logger = builtin_logging.getLogger(root_log_name)
-    logger.addHandler(sh)
-    logger.setLevel(TRACE)
+    if not logger.handlers:
+        sh = StreamHandler(sys.stderr)
+        fmt = Formatter(color=sys.stderr.isatty())
+        sh.setFormatter(fmt)
+        sh.setLevel(INFO)
+        logger.addHandler(sh)
+        logger.setLevel(TRACE)
 
 
 def add_file_handler(file: str, levelno: int) -> None:
+    logger = builtin_logging.getLogger(root_log_name)
+    for handler in logger.handlers:
+        if isinstance(handler, FileHandler) and handler.baseFilename == file:
+            return
     os.makedirs(os.path.dirname(file), exist_ok=True)
     fh = FileHandler(file)
     fmt = Formatter(
@@ -155,7 +157,6 @@ def add_file_handler(file: str, levelno: int) -> None:
     )
     fh.setFormatter(fmt)
     fh.setLevel(levelno)
-    logger = builtin_logging.getLogger(root_log_name)
     logger.addHandler(fh)
 
 
