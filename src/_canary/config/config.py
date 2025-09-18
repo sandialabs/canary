@@ -32,6 +32,7 @@ from .schemas import any_schema
 from .schemas import build_schema
 from .schemas import config_schema
 from .schemas import environment_schema
+from .schemas import environment_variable_schema
 from .schemas import machine_schema
 from .schemas import plugin_schema
 from .schemas import resource_pool_schema
@@ -537,21 +538,11 @@ def get_scope_filename(scope: str) -> str | None:
 
 
 def read_env_config() -> ConfigScope | None:
-    data: dict[str, Any] = {}
-    config_defaults = default_config_values()
-    for config_var in config_defaults["config"]:
-        var = f"CANARY_{config_var.upper()}"
-        if var in os.environ:
-            value: Any
-            if var == "CANARY_PLUGINS":
-                value = [_.strip() for _ in os.environ[var].split(",") if _.split()]
-            else:
-                value = try_loads(os.environ[var])
-            data[config_var] = value
-    if not data:
+    variables = {key: var for key, var in os.environ.items() if key.startswith("CANARY_")}
+    if not variables:
         return None
-    data = section_schemas["config"].validate(data)
-    return ConfigScope("environment", None, {"config": data})
+    data = environment_variable_schema.validate(variables)
+    return ConfigScope("environment", None, data)
 
 
 def process_config_path(path: str) -> list[str]:

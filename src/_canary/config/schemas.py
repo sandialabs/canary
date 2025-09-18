@@ -7,7 +7,9 @@ import typing
 from schema import And
 from schema import Optional
 from schema import Or
+from schema import Regex
 from schema import Schema
+from schema import SchemaError
 from schema import SchemaMissingKeyError
 from schema import SchemaOnlyOneAllowedError
 from schema import Use
@@ -40,25 +42,30 @@ def vardict(arg: typing.Any) -> bool:
     return True
 
 
-def log_levels(arg: typing.Any) -> bool:
-    if not isinstance(arg, str):
-        return False
-    elif arg.upper() not in ("TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "FATAL"):
-        return False
-    return True
+def log_level_name(arg: typing.Any) -> str:
+    logging_levels = ("TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+    if isinstance(arg, str):
+        level_name = arg.upper()
+        if level_name not in logging_levels:
+            s = ", ".join(logging_levels)
+            raise SchemaError(
+                f"Wrong log level {level_name!r}, choose from {', '.join(logging_levels)}"
+            )
+        return level_name
+    raise SchemaError(f"Wrong log level {arg!r}, choose from {', '.join(logging_levels)}")
 
 
 def multiprocessing_contexts(arg: typing.Any) -> bool:
     if not isinstance(arg, str):
         return False
-    elif arg.upper() not in ("FORK", "SPAWN"):
+    elif arg not in ("fork", "spawn"):
         return False
     return True
 
 
 def boolean(arg: typing.Any) -> bool:
     if isinstance(arg, str):
-        return arg.lower() in ("0", "off", "false", "no")
+        return arg.lower() not in ("0", "off", "false", "no")
     return bool(arg)
 
 
@@ -70,8 +77,7 @@ any_schema = Schema({}, ignore_extra_keys=True)
 machine_schema = Schema(
     {
         Optional("node_count"): int,
-        Optional("gpus_per_node"): int,
-        Optional("cpus_per_node"): int,
+        Optional(Regex("^[a-z_][a-z0-9_]*_per_node")): nonnegative_int,
     }
 )
 build_schema = Schema(
@@ -106,7 +112,7 @@ build_schema = Schema(
 config_schema = Schema(
     {
         Optional("debug"): Use(boolean),
-        Optional("log_level"): log_levels,
+        Optional("log_level"): Use(log_level_name),
         Optional("cache_dir"): str,
         Optional("multiprocessing"): {
             Optional("context"): multiprocessing_contexts,
@@ -172,4 +178,39 @@ resource_pool_schema = RPSchema(
         Optional("local"): resource_spec_schema,
         Optional(str): int,
     }
+)
+
+
+class EnvarSchema(Schema):
+    def validate(self, data, is_root_eval=True):
+        data = super().validate(data, is_root_eval=False)
+        if is_root_eval:
+            validated = {}
+            config: dict[str, typing.Any] = validated.setdefault("config", {})
+            for key, val in data.items():
+                name = key[7:].lower()
+                if name.startswith(("timeout_", "multiprocessing_")):
+                    root, _, leaf = name.partition("_")
+                    config.setdefault(root, {})[leaf] = val
+                elif name.endswith("_polling_frequency"):
+                    leaf, _, root = name.partition("_")
+                    config.setdefault(root, {})[leaf] = val
+                else:
+                    config[name] = val
+            return validated
+        return data
+
+
+environment_variable_schema = EnvarSchema(
+    {
+        Optional("CANARY_DEBUG"): Use(boolean),
+        Optional("CANARY_LOG_LEVEL"): Use(log_level_name),
+        Optional("CANARY_CACHE_DIR"): Use(str),
+        Optional("CANARY_PLUGINS"): Use(lambda x: [_.strip() for _ in x.split(",") if _.split()]),
+        Optional("CANARY_MULTIPROCESSING_CONTEXT"): multiprocessing_contexts,
+        Optional("CANARY_MULTIPROCESSING_MAX_TASKS_PER_CHILD"): positive_int,
+        Optional(Regex("CANARY_TIMEOUT_w+")): Use(time_in_seconds),
+        Optional("CANARY_TESTCASE_POLLING_FREQUENCY"): Use(time_in_seconds),
+    },
+    ignore_extra_keys=True,
 )

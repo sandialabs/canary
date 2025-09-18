@@ -14,7 +14,6 @@ from typing import Sequence
 
 from . import config
 from .atc import AbstractTestCase
-from .error import FailFast
 from .testcase import TestCase
 from .third_party import color
 from .util import logging
@@ -29,7 +28,6 @@ logger = logging.get_logger(__name__)
 class AbstractResourceQueue(abc.ABC):
     def __init__(self, *, lock: threading.Lock, workers: int) -> None:
         self.workers: int = workers
-        self.fail_fast: bool = config.getoption("fail_fast") or False
         self.buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
         self._finished: dict[int, Any] = {}
@@ -112,8 +110,6 @@ class AbstractResourceQueue(abc.ABC):
 
     def get(self) -> tuple[int, AbstractTestCase]:
         """return (total number in queue, this number, iid, obj)"""
-        if self.fail_fast and (failed := self.failed()):
-            raise FailFast(failed=failed)
         with self.lock:
             if self.available_workers() <= 0:
                 raise Busy

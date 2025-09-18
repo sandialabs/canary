@@ -189,6 +189,8 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
         return
     batch.refresh()
     logger.debug(f"Finished {batch} ({batch.duration} s.)")
+    fail_fast: bool = canary.config.getoption("fail_fast") or False
+    failed: list[canary.TestCase] = []
     for case in batch:
         if case.status == "running":
             # Job was cancelled
@@ -199,3 +201,7 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
             case.status.set("not_run", "test not run for unknown reasons")
         elif case.start > 0 and case.stop < 0:
             case.status.set("cancelled", "test case cancelled")
+        if not case.satisfies(("skipped", "success")):
+            failed.append(case)
+    if failed:
+        raise FailFast(failed=failed)

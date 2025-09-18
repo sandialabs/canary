@@ -188,6 +188,8 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
 
     # The case was run in a subprocess.  The object must be
     # refreshed so that the state in this main thread is up to date.
-    obj = queue.done(iid)
-    obj.refresh()
-    logger.debug(f"Finished {obj} ({obj.duration} s.)")
+    case = queue.done(iid)
+    case.refresh()
+    if config.getoption("fail_fast") and not case.status.satisfies(("success", "skipped")):
+        raise FailFast(failed=[case])
+    logger.debug(f"Finished {case} ({case.duration} s.)")
