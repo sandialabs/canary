@@ -210,7 +210,6 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
             case.status.set("cancelled", "test case cancelled")
         if not case.status.satisfies(("skipped", "success")):
             failed.append(case)
-    if failed:
-        logger.debug("The follwing test cases failed: ','.join([str(_) for _ in failed])")
-        if canary.config.getoption("fail_fast"):
-            raise FailFast(failed=failed)
+            logger.debug(f"Batch {batch}: test case failed: {case}")
+    if failed and canary.config.getoption("fail_fast"):
+        raise FailFast(failed=failed)
