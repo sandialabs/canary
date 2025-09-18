@@ -221,7 +221,6 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
 
 
 class Checkpoint:
-
     def __init__(self):
         self.t: float = time.monotonic()
         self.n: int = 0
@@ -229,4 +228,3 @@ class Checkpoint:
     def reset(self):
         self.n = 0
         self.t = time.monotonic()
-
