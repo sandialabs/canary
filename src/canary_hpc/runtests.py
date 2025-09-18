@@ -196,7 +196,7 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
         logger.error(f"Expected AbstractTestCase, got {batch.__class__.__name__}")
         return
     batch.refresh()
-    logger.debug(f"Finished {batch} ({batch.duration} s.)")
+    logger.debug(f"Batch {batch} finished in {batch.duration} s.")
     failed: list[canary.TestCase] = []
     for case in batch:
         if case.status == "running":
@@ -210,6 +210,7 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
             case.status.set("cancelled", "test case cancelled")
         if not case.status.satisfies(("skipped", "success")):
             failed.append(case)
-    if canary.config.getoption("fail_fast") and failed:
-        raise FailFast(failed=failed)
-    logger.debug(f"Process pool execution for {batch} finished")
+    if failed:
+        logger.debug("The follwing test cases failed: ','.join([str(_) for _ in failed])")
+        if canary.config.getoption("fail_fast"):
+            raise FailFast(failed=failed)
