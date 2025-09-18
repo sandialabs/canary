@@ -47,14 +47,15 @@ def runtests(*, backend: hpc_connect.HPCSubmissionManager, cases: Sequence[canar
     returncode: int = -10
     atexit.register(cleanup_children)
     queue = ResourceQueue.factory(global_lock, cases)
+    nbatches = len(queue)
     runner = Runner()
     pbar = canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
     assert canary.config.get("session:work_tree") is not None
     with canary.filesystem.working_dir(canary.config.get("session:work_tree")):
         cleanup_queue = True
         try:
-            what = canary.string.pluralize("batch", len(queue))
-            logger.info("@*{Running} %d %s" % (len(queue), what))
+            what = canary.string.pluralize("batch", nbatches)
+            logger.info("@*{Running} %d %s" % (nbatches, what))
             start = canary.time.timestamp()
             stop = -1.0
             logger.debug("Start: processing queue")
@@ -85,7 +86,7 @@ def runtests(*, backend: hpc_connect.HPCSubmissionManager, cases: Sequence[canar
             queue.close(cleanup=cleanup_queue)
             stop = canary.time.timestamp()
             dt = stop - start
-            logger.info("@*{Finished} %d %s (%s)" % (len(queue), what, canary.time.hhmmss(dt)))
+            logger.info("@*{Finished} %d %s (%s)" % (nbatches, what, canary.time.hhmmss(dt)))
             atexit.unregister(cleanup_children)
     return returncode
 
