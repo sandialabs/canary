@@ -174,10 +174,10 @@ class ResourcePool:
                 type = f"{key[10:]}s"
                 for instance in self.resources[type]:
                     instance["slots"] = count
-        for type, count in kwds.items():
+        for type in kwds:
             if type.startswith("slots_per_"):
                 continue
-            self.slots_per_resource_type[type] = len(self.resources[type]) * count
+            self.slots_per_resource_type[type] = sum([_["slots"] for _ in self.resources[type]])
 
     def satisfiable(self, required: list[list[dict[str, Any]]]) -> bool:
         """determine if the resources for this test are satisfiable"""
