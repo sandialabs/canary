@@ -12,13 +12,14 @@ from datetime import datetime
 from typing import Any
 from typing import Sequence
 
+import psutil
+
 from . import config
 from .atc import AbstractTestCase
 from .testcase import TestCase
 from .third_party import color
 from .util import logging
 from .util.progress import progress
-from .util.rprobe import cpu_count
 from .util.time import hhmmss
 from .util.time import timestamp
 
@@ -153,7 +154,7 @@ class AbstractResourceQueue(abc.ABC):
 class ResourceQueue(AbstractResourceQueue):
     def __init__(self, lock: threading.Lock) -> None:
         workers = int(config.getoption("workers", -1))
-        super().__init__(lock=lock, workers=cpu_count() if workers < 0 else workers)
+        super().__init__(lock=lock, workers=psutil.cpu_count() if workers < 0 else workers)
 
     @classmethod
     def factory(

@@ -13,6 +13,7 @@ from typing import Any
 from typing import Generator
 from typing import MutableMapping
 
+import psutil
 import yaml
 from schema import Schema
 
@@ -24,7 +25,6 @@ from ..util.compression import compress64
 from ..util.compression import expand64
 from ..util.filesystem import find_work_tree
 from ..util.filesystem import mkdirp
-from ..util.rprobe import cpu_count
 from ..util.string import strip_quotes
 from . import _machine
 from .rpool import ResourcePool
@@ -184,7 +184,7 @@ class Config:
     @property
     def resource_pool(self) -> ResourcePool:
         if self._resource_pool.empty():
-            self._resource_pool.populate(cpus=cpu_count())
+            self._resource_pool.populate(cpus=psutil.cpu_count())
         return self._resource_pool
 
     def read_only_scope(self, scope: str) -> bool:
@@ -386,8 +386,8 @@ class Config:
             raise ValueError("Stopping due to previous errors")
 
         if n := getattr(args, "workers", None):
-            if n > cpu_count():
-                raise ValueError(f"workers={n} > cpu_count={cpu_count()}")
+            if n > psutil.cpu_count():
+                raise ValueError(f"workers={n} > cpu_count={psutil.cpu_count()}")
 
         if t := getattr(args, "timeouts", None):
             c = data.setdefault("config", {})

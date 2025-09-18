@@ -8,7 +8,8 @@ import re
 import sys
 from typing import Any
 
-from ..util.rprobe import cpu_count
+import psutil
+
 from . import linux
 from . import macos
 
@@ -54,4 +55,4 @@ def system_config() -> dict:
 
 
 def machine_config() -> dict[str, Any]:
-    return dict(node_count=1, gpus_per_node=0, cpus_per_node=cpu_count())
+    return dict(node_count=1, gpus_per_node=0, cpus_per_node=psutil.cpu_count())

@@ -6,11 +6,11 @@ import io
 import pickle  # nosec B403
 from typing import Any
 
+import psutil
 import yaml
 
 from ..error import ResourceUnsatisfiableError
 from ..util import logging
-from ..util.rprobe import cpu_count
 from .schemas import resource_pool_schema
 
 logger = logging.get_logger(__name__)
@@ -146,7 +146,7 @@ class ResourcePool:
     def populate(self, **kwds: int) -> None:
         slots_per_instance: dict[str, int] = {}
         if "cpus" not in kwds:
-            kwds["cpus"] = cpu_count()
+            kwds["cpus"] = psutil.cpu_count()
         for type, count in kwds.items():
             if type.startswith("slots_per_"):
                 slots_per_instance[f"{type[10:]}s"] = count

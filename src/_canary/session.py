@@ -16,6 +16,8 @@ from typing import IO
 from typing import Any
 from typing import Generator
 
+import psutil
+
 from . import config
 from . import finder
 from .error import StopExecution
@@ -34,7 +36,6 @@ from .util.graph import TopologicalSorter
 from .util.graph import find_reachable_nodes
 from .util.graph import static_order
 from .util.procutils import cleanup_children
-from .util.rprobe import cpu_count
 from .util.time import timestamp
 
 # Session modes are analogous to file modes
@@ -283,7 +284,7 @@ class Session:
             if len(self.cases) < 100:
                 [case.save() for case in self.cases]
             else:
-                cpus = cpu_count()
+                cpus = psutil.cpu_count()
                 args = ((case.getstate(), case.lockfile) for case in self.cases)
                 pool = multiprocessing.Pool(cpus)
                 pool.imap_unordered(json_dump, args, chunksize=len(self.cases) // cpus or 1)
