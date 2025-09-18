@@ -21,7 +21,6 @@ def cleanup_children(pid: int | None = None, include_parent: bool = False) -> No
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
         pid = pid or os.getpid()
-        logger.debug("killing child processes")
         try:
             fd = os.open(os.devnull, os.O_WRONLY)
             stdout = os.dup(1)
