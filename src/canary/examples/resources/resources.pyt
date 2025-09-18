@@ -5,9 +5,7 @@
 import sys
 
 import canary
-from _canary.util.rprobe import cpu_count
-
-canary.directives.parameterize("cpus,gpus", [(1, 1), (4, 4), (2 * cpu_count(), 2 * cpu_count())])
+canary.directives.parameterize("cpus,gpus", [(1, 1), (4, 4), (1000, 1000)])
 
 
 def test():
