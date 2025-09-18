@@ -53,7 +53,7 @@ def runtests(*, backend: hpc_connect.HPCSubmissionManager, cases: Sequence[canar
     with canary.filesystem.working_dir(canary.config.get("session:work_tree")):
         cleanup_queue = True
         try:
-            what = canary.string.pluralize("test case", len(queue))
+            what = canary.string.pluralize("batch", len(queue))
             logger.info("@*{Running} %d %s" % (len(queue), what))
             start = canary.time.timestamp()
             stop = -1.0
