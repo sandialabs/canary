@@ -99,11 +99,12 @@ class ResourcePool:
 
     """
 
-    __slots__ = ("additional_properties", "resources")
+    __slots__ = ("additional_properties", "resources", "slots_per_resource_type")
 
     def __init__(self, pool: dict[str, Any] | None = None) -> None:
         self.additional_properties: dict[str, Any] = {}
         self.resources: dict[str, resource_spec] = {}
+        self.slots_per_resource_type: dict[str, int] = {}
         if pool:
             self.fill(pool)
 
@@ -125,12 +126,17 @@ class ResourcePool:
     def count(self, type: str) -> int:
         return len(self.resources[type])
 
+    def slots(self, type: str) -> int:
+        return self.slots_per_resource_type.get(type, 0)
+
     def fill(self, pool: dict[str, Any]) -> None:
         pool = resource_pool_schema.validate(pool)
         self.clear()
         if "additional_properties" in pool:
             self.additional_properties.update(pool["additional_properties"])
         self.resources.update(pool["resources"])
+        for type, instances in pool["resources"].items():
+            self.slots_per_resource_type[type] = sum([_["slots"] for _ in instances])
 
     def getstate(self) -> dict[str, Any]:
         state = {
@@ -168,6 +174,10 @@ class ResourcePool:
                 type = f"{key[10:]}s"
                 for instance in self.resources[type]:
                     instance["slots"] = count
+        for type, count in kwds.items():
+            if type.startswith("slots_per_"):
+                continue
+            self.slots_per_resource_type[type] = len(self.resources[type]) * count
 
     def satisfiable(self, required: list[list[dict[str, Any]]]) -> bool:
         """determine if the resources for this test are satisfiable"""
@@ -182,8 +192,7 @@ class ResourcePool:
                     raise ResourceUnsatisfiableError(msg)
                 slots_reqd[type] = slots_reqd.get(type, 0) + item["slots"]
         for type, slots in slots_reqd.items():
-            spec = self.resources[type]
-            slots_avail = sum([_["slots"] for _ in spec])
+            slots_avail = self.slots(type)
             if slots_avail < slots:
                 raise ResourceUnsatisfiableError(f"insufficient slots of {type!r} available")
         return True

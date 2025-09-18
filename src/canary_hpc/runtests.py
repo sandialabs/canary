@@ -110,7 +110,6 @@ def process_queue(
     ppe = None
     pbar = canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
     try:
-        checkpoint = Checkpoint()
         canary.config.archive(os.environ)
         with ProcessPoolExecutor(workers=queue.workers) as ppe:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
@@ -131,13 +130,6 @@ def process_queue(
                     iid, obj = queue.get()
                     queue.heartbeat()
                 except BusyQueue:
-                    if time.monotonic() - checkpoint.t > 1:
-                        if checkpoint.n > 4:
-                            sys.stderr.write("\r.     ")
-                            checkpoint.reset()
-                        else:
-                            sys.stderr.write(".")
-                            checkpoint.n += 1
                     time.sleep(0.005)
                     continue
                 except EmptyQueue:
@@ -218,13 +210,3 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
             logger.debug(f"Batch {batch}: test case failed: {case}")
     if failed and canary.config.getoption("fail_fast"):
         raise FailFast(failed=failed)
-
-
-class Checkpoint:
-    def __init__(self):
-        self.t: float = time.monotonic()
-        self.n: int = 0
-
-    def reset(self):
-        self.n = 0
-        self.t = time.monotonic()
