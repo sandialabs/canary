@@ -68,9 +68,9 @@ class Formatter(builtin_logging.Formatter):
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
         }
         if not hasattr(record, "prefix"):
-            if record.levelno in (INFO, DEBUG):
+            if record.levelno in (TRACE, DEBUG, INFO):
                 prefix = "@*%s{==>} " % level_color(record.levelno)
-            elif record.levelno in (ERROR, WARNING):
+            elif record.levelno in (WARNING, ERROR, CRITICAL):
                 prefix = "@*%s{==>} %s: " % (level_color(record.levelno), record.levelname.title())
             else:
                 prefix = "@*{==>} "
@@ -101,7 +101,7 @@ def get_logger(name: str | None) -> builtin_logging.Logger:
     root, _, leaf = name.partition(".")
     if root == "_canary":
         root = root[1:]
-    name = ".".join([root, *leaf])
+    name = ".".join([root, leaf])
     logger = builtin_logging.getLogger(name)
     if not root == "canary":
         logger.parent = builtin_logging.getLogger("canary")
@@ -160,6 +160,8 @@ def add_file_handler(file: str, levelno: int) -> None:
 def level_color(levelno: int) -> str:
     if levelno == NOTSET:
         return "c"
+    elif levelno == TRACE:
+        return "m"
     elif levelno == DEBUG:
         return "g"
     elif levelno == INFO:

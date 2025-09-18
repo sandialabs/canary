@@ -12,13 +12,13 @@ import shlex
 import signal
 import time
 import warnings
-import yaml
 from datetime import datetime
 from itertools import repeat
 from typing import Any
 from typing import Sequence
 
 import hpc_connect
+import yaml
 
 import canary
 from _canary.atc import AbstractTestCase
@@ -486,7 +486,8 @@ def canary_hpc_invocation(batch: TestBatch, backend: hpc_connect.HPCSubmissionMa
         count = backend.config.count_per_node(type)
         resources[type] = [{"id": str(j), "slots": 1} for j in range(count)]
     cfg["resource_pool"] = {
-        "resources": resources, "additional_properties": {"backend": backend.name}
+        "resources": resources,
+        "additional_properties": {"backend": backend.name},
     }
     config_file = os.path.join(batch.stage(batch.id), "config")
     with open(config_file, "w") as fh:

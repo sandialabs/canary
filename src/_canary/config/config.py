@@ -14,10 +14,10 @@ from typing import Generator
 from typing import MutableMapping
 
 import yaml
+from schema import Schema
 
 from ..plugins.manager import CanaryPluginManager
 from ..third_party import color
-from ..third_party.schema import Schema
 from ..util import logging
 from ..util.collections import merge
 from ..util.compression import compress64
@@ -155,7 +155,7 @@ class Config:
         for section in sections:
             section_data = self.get_config(section)
             data[section] = section_data
-        data["resource_pool"] = self._resource_pool.getstate()
+        data["resource_pool"] = self.resource_pool.getstate()
         data["options"] = vars(self.options)
         data["invocation_dir"] = self.invocation_dir
         data["working_dir"] = self.working_dir
@@ -397,12 +397,16 @@ class Config:
         if args.config_file:
             if fd := read_config_file(args.config_file):
                 for sec, sd in fd.items():
-                    if schema := section_schemas.get(sec):
-                        sd = schema.validate(sd)
+                    if sec in section_schemas:
+                        sd = section_schemas[sec].validate(sd)
                         if sec in data:
                             data[sec] = merge(data[sec], sd)
                         else:
                             data[sec] = sd
+                    else:
+                        logger.warning(
+                            f"{args.config_file}: ignoring unrecognized config section: {sec}"
+                        )
 
         scope = ConfigScope("command_line", None, data)
         self.push_scope(scope)
@@ -443,7 +447,7 @@ class Config:
     def dump_snapshot(self, file: IO[Any], indent: int | None = None) -> None:
         snapshot: dict[str, Any] = {}
         properties = snapshot.setdefault("properties", {})
-        properties["resource_pool"] = self._resource_pool.getstate()
+        properties["resource_pool"] = self.resource_pool.getstate()
         properties["options"] = vars(self.options)
         properties["invocation_dir"] = self.invocation_dir
         properties["working_dir"] = self.working_dir
@@ -669,7 +673,10 @@ def create_cache_dir(path: str) -> None:
 def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
     snapshot: dict[str, Any] = {}
     properties = snapshot.setdefault("properties", {})
-    properties["resource_pool"] = legacy["resource_pool"]
+    legacy_pool = legacy["resource_pool"]
+    pool = legacy_pool[0]
+    pool.pop("id")
+    properties["resource_pool"] = {"additional_properties": {}, "resources": pool}
     properties["options"] = legacy["options"]
     properties["invocation_dir"] = legacy["config"].pop("invocation_dir")
     properties["working_dir"] = legacy["config"].pop("working_dir")
@@ -687,7 +694,7 @@ def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
             "context": data["config"].pop("multiprocessing_context", "spawn"),
             "max_tasks_per_child": 1,
         }
-    data["config"]["plugins"] = legacy["pluginmanager"]["plugins"]
+    data["config"]["plugins"] = legacy["plugin_manager"]["plugins"]
     if "test" in legacy:
         data["config"]["timeout"] = legacy["test"]["timeout"]
     data["config"].pop("_config_dir", None)

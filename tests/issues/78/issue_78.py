@@ -14,10 +14,5 @@ def test_issue_78():
 
     rp = conf.resource_pool
 
-    # these asserts pass
-    assert rp.pinfo("cpus_per_node") != 0
-    assert rp.pinfo("gpus_per_node") != 0
-
-    # these asserts fail
-    assert rp.pinfo("gpu_count") != 0
-    assert rp.pinfo("cpu_count") != 0
+    assert rp.count("cpus") != 0
+    assert rp.count("gpus") != 0

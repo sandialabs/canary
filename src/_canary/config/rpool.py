@@ -110,7 +110,7 @@ class ResourcePool:
     def __repr__(self) -> str:
         pool = {"additional_properties": self.additional_properties, "resources": self.resources}
         fh = io.StringIO()
-        yaml.dump(pool, fh)
+        yaml.dump({"resource_pool": pool}, fh, default_flow_style=False)
         return fh.getvalue()
 
     @property
@@ -120,6 +120,9 @@ class ResourcePool:
     def empty(self) -> bool:
         return len(self.resources) == 0
 
+    def count(self, type: str) -> int:
+        return len(self.resources[type])
+
     def fill(self, pool: dict[str, Any]) -> None:
         pool = resource_pool_schema.validate(pool)
         self.clear()
@@ -127,7 +130,7 @@ class ResourcePool:
             self.additional_properties.update(pool["additional_properties"])
         self.resources.update(pool["resources"])
 
-    def getstate(self) -> list[dict[str, Any]]:
+    def getstate(self) -> dict[str, Any]:
         state = {
             "additional_properties": copy.deepcopy(self.additional_properties),
             "resources": copy.deepcopy(self.resources),
@@ -144,10 +147,12 @@ class ResourcePool:
             kwds["cpus"] = cpu_count()
         for type, count in kwds.items():
             if type.startswith("slots_per_"):
-                slots_per_instance[type] = count
+                slots_per_instance[f"{type[10:]}s"] = count
         resources: dict[str, resource_spec] = {}
         for type, count in kwds.items():
-            slots = slots_per_instance.get(f"slots_per_{type[:-1]}", 1)
+            if type.startswith("slots_per_"):
+                continue
+            slots = slots_per_instance.get(type, 1)
             resources[type] = [{"id": str(j), "slots": slots} for j in range(count)]
         self.fill({"resources": resources, "additional_properties": {}})
 
@@ -155,8 +160,7 @@ class ResourcePool:
         for type, count in kwds.items():
             if type.startswith("slots_per_"):
                 continue
-            self.resources[type].clear()
-            self.resources[type].extend([{"id": str(j), "slots": 1} for j in range(count)])
+            self.resources[type] = [{"id": str(j), "slots": 1} for j in range(count)]
         for key, count in kwds.items():
             if key.startswith("slots_per_"):
                 type = f"{key[10:]}s"
@@ -211,7 +215,7 @@ class ResourcePool:
             raise
         if logging.get_level() <= logging.DEBUG:
             for type, n in totals.items():
-                N = sum([instance["slots"] for instance in self.resources[type]]) + n
+                N = sum([instance["slots"] for instance in self.resources[type]]) + n  # type: ignore[misc]
                 if n == 1 and type.endswith("s"):
                     type = type[:-1]
                 logger.debug(f"Acquiring {n} {type} from {N} available")
@@ -233,8 +237,8 @@ class ResourcePool:
     def _get_from_pool(self, type: str, slots: int) -> dict[str, Any]:
         instances = sorted(self.resources[type], key=lambda x: x["slots"])
         for instance in instances:
-            if slots <= instance["slots"]:
-                instance["slots"] -= slots
+            if slots <= instance["slots"]:  # type: ignore[operator]
+                instance["slots"] -= slots  # type: ignore[operator]
                 rspec: dict[str, Any] = {"id": instance["id"], "slots": slots}
                 return rspec
         raise ResourceUnavailable

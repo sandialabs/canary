@@ -39,6 +39,7 @@ dependencies = [
     "pluggy>=1.5",
     "psutil",
     "pyyaml",
+    "schema",
 ]
 
 optional-dependencies.dev = [
@@ -130,6 +131,10 @@ exclude = [
 
 [[tool.mypy.overrides]]
 module = "requests.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "schema.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

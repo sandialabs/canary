@@ -4,11 +4,14 @@
 
 import typing
 
-from ..third_party.schema import And
-from ..third_party.schema import Optional
-from ..third_party.schema import Or
-from ..third_party.schema import Schema
-from ..third_party.schema import Use
+from schema import And
+from schema import Optional
+from schema import Or
+from schema import Schema
+from schema import SchemaMissingKeyError
+from schema import SchemaOnlyOneAllowedError
+from schema import Use
+
 from ..util.time import time_in_seconds
 
 
@@ -67,8 +70,8 @@ any_schema = Schema({}, ignore_extra_keys=True)
 machine_schema = Schema(
     {
         Optional("node_count"): int,
-        Optional("cpus_per_node"): int,
         Optional("gpus_per_node"): int,
+        Optional("cpus_per_node"): int,
     }
 )
 build_schema = Schema(
@@ -133,9 +136,40 @@ testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
 resource_spec_schema = Schema(
     {str: [{"id": Use(str), Optional("slots", default=1): Or(int, float)}]}
 )
-resource_pool_schema = Schema(
+
+
+class RPSchema(Schema):
+    def rspec(self, count):
+        return [{"id": str(j), "slots": 1} for j in range(count)]
+
+    def validate(self, data, is_root_eval=True):
+        data = super().validate(data, is_root_eval=False)
+        if is_root_eval:
+            if "local" in data and "resources" in data:
+                cond = Or("resources", "local")
+                raise SchemaOnlyOneAllowedError(
+                    ["There are multiple keys present from the %r condition" % cond]
+                )
+            elif "local" in data:
+                data["resources"] = data.pop("local")
+            data.setdefault("additional_properties", {})
+            for key in list(data.keys()):
+                if key in ("additional_properties", "resources"):
+                    continue
+                count = data.pop(key)
+                data.setdefault("resources", {})[key] = self.rspec(count)
+            if "resources" not in data:
+                message = "Missing key: resources"
+                message = self._prepend_schema_name(message)
+                raise SchemaMissingKeyError(message, None)
+        return data
+
+
+resource_pool_schema = RPSchema(
     {
         Optional("additional_properties"): dict,
-        "resources": resource_spec_schema,
+        Optional("resources"): resource_spec_schema,
+        Optional("local"): resource_spec_schema,
+        Optional(str): int,
     }
 )

@@ -4,18 +4,16 @@
 
 .. _tutorial-resource-spec:
 
-Resource pool spec
-==================
+Resource Pool Specification
+===========================
 
-Each entry in the ``resource_pool`` array is a JSON object describing that node's resources.  Each object's members are:
+The ``resource_pool`` is a JSON object describing resources available to ``caanary``. There are two fields in the ``resource_pool`` object: ``additional_properties`` and ``resources``.
 
-* ``id``: a string uniquely identifying the node; and
-* arrays describing each named resource type.
+Fields:
+-------
 
-On each node, each resource type is defined by an array of JSON objects whose entries describe a single instance of the specified resource.  Each instance's members are:
-
-* ``id``: a string uniquely identifying this instance of the resource; and
-* ``slots``: the number of ``slots`` of the resource available.  If not defined, the number of ``slots`` is 1.
+- **additional_properties**: A JSON object for any extra properties that may be needed.
+- **resources**: A collection of available resources, which can include CPUs, GPUs, and other resource types.
 
 Example
 -------
@@ -25,14 +23,30 @@ A machine having 4 CPUs with one slot each and 2 GPUs with 2 slots each would be
 .. code-block:: yaml
 
    resource_pool:
-   - id: 1
-     cpus:
-     - id: "0"
-       slots: 1
-     - id: "1"
-       slots: 1
-     gpus:
-     - id: "0"
-       slots: 2
-     - id: "1"
-       slots: 2
+     additional_properties: {}
+     resources:
+       cpus:
+       - id: "0"
+         slots: 1
+       - id: "1"
+         slots: 1
+       - id: "2"
+         slots: 1
+       - id: "3"
+         slots: 1
+       gpus:
+       - id: "0"
+         slots: 2
+       - id: "1"
+         slots: 2
+
+Field Descriptions:
+--------------------
+
+- **id**:
+  - A unique identifier for each resource.
+  - Used to reference specific resources in configurations.
+
+- **slots**:
+  - The number of concurrent tasks or processes that can be handled by the resource.
+  - For CPUs, typically set to 1; for GPUs, can be greater depending on the resource's capabilities.

@@ -4,6 +4,8 @@
 
 import argparse
 
+import schema
+
 import _canary.config as config
 import _canary.enums as enums
 from _canary.config.argparsing import Parser
@@ -29,7 +31,6 @@ from _canary.testinstance import TestInstance
 from _canary.testinstance import TestMultiInstance
 from _canary.testinstance import load as load_instance
 from _canary.third_party import color
-from _canary.third_party import schema
 from _canary.util import _difflib as difflib
 from _canary.util import filesystem
 from _canary.util import graph

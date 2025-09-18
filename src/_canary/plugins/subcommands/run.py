@@ -160,8 +160,7 @@ class Run(CanarySubcommand):
                     case_specs=case_specs,
                 )
         else:
-            assert args.mode == "b"
-            session = Session.batch_view(args.work_tree, args.batch_id)
+            raise ValueError(f"Unknown session mode {args.mode!r}")
         session.run()
         config.pluginmanager.hook.canary_runtests_summary(
             cases=session.active_cases(), include_pass=False, truncate=10

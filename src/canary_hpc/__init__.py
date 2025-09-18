@@ -64,7 +64,7 @@ def canary_configure(config: "canary.Config") -> None:
         elif scheduler is None:
             raise ValueError("Test batching requires a batchopts:scheduler")
         else:
-            schedulers = canary.config.pluginmanager.hook.canary_hpc_add_scheduler()
+            schedulers = config.pluginmanager.hook.canary_hpc_add_scheduler()
             if scheduler not in schedulers:
                 raise ValueError(
                     f"Unknown scheduler {scheduler!r}, choose from {', '.join(schedulers)}"
@@ -79,9 +79,9 @@ def canary_configure(config: "canary.Config") -> None:
             sched = canary.config.pluginmanager.hook.canary_hpc_get_scheduler(scheduler=scheduler)
             canary.config.pluginmanager.register(sched, f"canary_hpc{sched.backend.name}")
             cfgset = lambda t, v: canary.config.set(f"machine:{t}", v, scope="defaults")
-            cfgset("machine:node_count", sched.backend.config.node_count)
-            cfgset("machine:gpus_per_node", sched.backend.config.gpus_per_node)
-            cfgset("machine:cpus_per_node", sched.backend.config.cpus_per_node)
+            cfgset("node_count", sched.backend.config.node_count)
+            cfgset("gpus_per_node", sched.backend.config.gpus_per_node)
+            cfgset("cpus_per_node", sched.backend.config.cpus_per_node)
 
 
 @canary.hookimpl

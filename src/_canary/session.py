@@ -35,7 +35,6 @@ from .util.graph import find_reachable_nodes
 from .util.graph import static_order
 from .util.procutils import cleanup_children
 from .util.rprobe import cpu_count
-from .util.string import pluralize
 from .util.time import timestamp
 
 # Session modes are analogous to file modes
@@ -222,29 +221,6 @@ class Session:
             elif case.pending() and not all(dep.id in ids for dep in case.dependencies):
                 case.mask = "one or more missing dependencies"
             self.cases.append(case)
-        return self
-
-    @classmethod
-    def batch_view(cls, path: str, batch_id: str) -> "Session":
-        """Create a view of this session that only includes cases in ``batch_id``"""
-        ids = None  # TestBatch.loadindex(batch_id)
-        if ids is None:
-            raise ValueError(f"could not find index for batch {batch_id}")
-        expected = len(ids)
-        logger.info(f"Selecting {expected} {pluralize('test', expected)} from batch {batch_id}")
-        self = cls(path, mode="a+")
-        self.cases.clear()
-        for case in self.load_testcases(ids=ids):
-            if case.id not in ids:
-                continue
-            case.mark_as_ready()
-            if not case.status.satisfies(("pending", "ready")):
-                logger.error(f"{case}: will not run: {case.status.details}")
-            elif case.pending() and not all(_.id in ids for _ in case.dependencies):
-                case.mask = "one or more missing dependencies"
-            self.cases.append(case)
-        ready = len(self.get_ready())
-        logger.info(f"Selected {ready} {pluralize('test', expected)} from batch {batch_id}")
         return self
 
     def load_from_lockfile(self, file) -> None:

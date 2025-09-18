@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import glob
 import os
 import types
 
@@ -52,30 +53,31 @@ def test_session_bfilter(tmpdir):
     p = paths()
     with working_dir(tmpdir.strpath, create=True):
         with config.override():
-            config.options.batch = {
-                "scheduler": "none",
+            config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
+            config.options.batchopts = {
+                "scheduler": "shell",
                 "spec": {"count": 2, "duration": None, "layout": "flat", "nodes": "any"},
             }
-            config.setup_hpc_connect("none")
+            config.pluginmanager.hook.canary_configure(config=config)
             s = session.Session("tests", mode="w", force=True)
             s.add_search_paths([os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")])
             s.discover()
             s.lock()
             s.run()
             # test batchfile
-            d1 = os.listdir("tests/.canary/batches")[0]
-            d2 = os.listdir(os.path.join("tests/.canary/batches", d1))[0]
-            id = d1 + d2
-            with working_dir("tests"):
-                s = session.Session.batch_view(".", id)
+
+            files = glob.glob("tests/.canary/batches/**/config", recursive=True)
+            assert len(files) == 2
 
 
 def test_session_fail_fast(tmpdir):
     p = paths()
     with working_dir(tmpdir.strpath, create=True):
-        s = session.Session("tests", mode="w", force=True)
-        s.add_search_paths(os.path.join(p.examples, "status"))
-        s.discover()
-        s.lock()
-        rc = s.run(fail_fast=True)
-        assert rc != 0
+        with config.override():
+            config.options.fail_fast = True
+            s = session.Session("tests", mode="w", force=True)
+            s.add_search_paths(os.path.join(p.examples, "status"))
+            s.discover()
+            s.lock()
+            rc = s.run()
+            assert rc != 0
