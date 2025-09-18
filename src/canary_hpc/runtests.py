@@ -6,7 +6,6 @@ import atexit
 import concurrent.futures
 import os
 import signal
-import sys
 import threading
 import time
 from concurrent.futures.process import BrokenProcessPool
