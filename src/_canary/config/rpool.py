@@ -115,7 +115,9 @@ class ResourcePool:
 
     @property
     def types(self) -> set[str]:
-        return set(self.resources.keys())
+        types: set[str] = {"cpus", "gpus"}
+        types.update(self.resources.keys())
+        return types
 
     def empty(self) -> bool:
         return len(self.resources) == 0
