@@ -32,6 +32,8 @@ echo " "
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=flux ./examples || exit_code=$?
 if [ "${exit_code}" -ne 30 ]; then
+  cat TestResults/.canary/config || true
+  cat TestResults/.canary/batches/*/*/config || true
   cat TestResults/.canary/batches/*/*/canary-out.txt || true
   exit 1
 fi
@@ -43,6 +45,8 @@ echo " "
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=flux -b spec=count:3 ./examples || exit_code=$?
 if [ "${exit_code}" -ne 30 ]; then
+  cat TestResults/.canary/config || true
+  cat TestResults/.canary/batches/*/*/config || true
   cat TestResults/.canary/batches/*/*/canary-out.txt || true
   exit 1
 fi
@@ -54,6 +58,8 @@ echo " "
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=flux -b spec=count:3,layout:atomic ./examples || exit_code=$?
 if [ "${exit_code}" -ne 30 ]; then
+  cat TestResults/.canary/config || true
+  cat TestResults/.canary/batches/*/*/config || true
   cat TestResults/.canary/batches/*/*/canary-out.txt || true
   exit 1
 fi
@@ -65,6 +71,8 @@ echo " "
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=flux -b spec=count:auto,layout:flat ./examples || exit_code=$?
 if [ "${exit_code}" -ne 30 ]; then
+  cat TestResults/.canary/config || true
+  cat TestResults/.canary/batches/*/*/config || true
   cat TestResults/.canary/batches/*/*/canary-out.txt || true
   exit 1
 fi
