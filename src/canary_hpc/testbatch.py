@@ -378,12 +378,10 @@ class TestBatch(AbstractTestCase):
             else:
                 timeoutx = canary.config.get("config:timeout:multiplier", 1.0)
                 qtime = self.qtime() * timeoutx
-                nodes = backend.config.nodes_required(
-                    max_cpus=self.max_cpus_required, max_gpus=self.max_gpus_required
-                )
+                nodes = nodes_required(batch, backend)
                 proc = backend.submit(
                     f"canary.{self.id[:7]}",
-                    [canary_hpc_invocation(self, backend)],
+                    [canary_batch_invocation(self, backend)],
                     nodes=nodes,
                     scriptname=self.submission_script_filename(),
                     output=self.logfile(self.id),
@@ -471,31 +469,41 @@ def emit(text: str, **kwargs: Any) -> None:
     logger.log(logging.EMIT, text, **kwargs)
 
 
-def canary_hpc_invocation(batch: TestBatch, backend: hpc_connect.HPCSubmissionManager) -> str:
-    """Write the canary invocation used to run this batch."""
-    args: list[str] = ["canary"]
+def default_canary_invocation_args(
+    batch: TestBatch, backend: hpc_connect.HPCSubmissionManager
+) -> list[str]:
+    """Write the default canary invocation used to run this batch."""
     # The batch will be run in a compute node, so hpc_connect won't set the machine limits
     types: set[str] = set()
     for case in batch:
         reqd_resources = case.required_resources()
         for group in reqd_resources:
-            types.update([item["type"] for item in group])
-    cfg: dict[str, Any] = {}
+            types.update([member["type"] for member in group])
     resources: dict[str, list[Any]] = {}
+    node_count = nodes_required(batch, backend)
     for type in types:
-        count = backend.config.count_per_node(type)
-        resources[type] = [{"id": str(j), "slots": 1} for j in range(count)]
-    cfg["resource_pool"] = {
-        "resources": resources,
-        "additional_properties": {"backend": backend.name},
+        count_per_node = backend.config.count_per_node(type)
+        resources[type] = [{"id": str(j), "slots": 1} for j in range(count_per_node * node_count)]
+    cfg: dict[str, Any] = {
+        "resource_pool": {
+            "resources": resources,
+            "additional_properties": {"backend": backend.name, "allocated nodes": node_count},
+         }
     }
     config_file = os.path.join(batch.stage(batch.id), "config")
     with open(config_file, "w") as fh:
         yaml.dump(cfg, fh, indent=2)
-    args.extend(["-f", config_file])
+    args: list[str] = ["canary", "-f", config_file]
     if canary.config.get("config:debug"):
         args.append("-d")
-    args.extend(["-C", canary.config.get("session:work_tree"), "run"])
+    args.extend(["-C", canary.config.get("session:work_tree")])
+    return args
+
+
+def canary_batch_invocation(batch: TestBatch, backend: hpc_connect.HPCSubmissionManager) -> str:
+    """Write the canary invocation used to run this batch."""
+    args: list[str] = default_canary_invocation_args(batch, backend)
+    args.append("run")
     batchopts = canary.config.getoption("batchopts", {})
     if workers := batchopts.get("workers"):
         args.append(f"--workers={workers}")
@@ -506,24 +514,32 @@ def canary_hpc_invocation(batch: TestBatch, backend: hpc_connect.HPCSubmissionMa
 
 def canary_testcase_invocation(case: canary.TestCase) -> str:
     """Write the canary invocation used to run this batch."""
-    args: list[str] = ["canary"]
-    if canary.config.get("config:debug"):
-        args.append("-d")
-    args.extend(["-C", canary.config.get("session:work_tree"), "run"])
-    args.extend(["-b", "scheduler=null"])  # guard against infinite batch recursion
-    args.append(f"/{case.id}")
+    args: list[str] = default_canary_invocation_args(batch, backend)
+    args.extend(["run", "-b", "scheduler=null", f"/{case.id}"])
     return shlex.join(args)
 
 
+def nodes_required(batch: TestBatch, backend: hpc_connect.HPCSubmissionManager) -> int:
+    """Nodes required to run cases in ``batch``"""
+    max_count_per_type: dict[str, int] = {}
+    for case in batch:
+        reqd_resources = case.required_resources()
+        slots: dict[str, int] = {}
+        for group in reqd_resources:
+            for member in group:
+                type = member["type"]
+                types[type] = types.get(type, 0) + member["slots"]
+        for type, count in slots.items():
+            max_count_per_type[type] = max(max_count_per_type.get(type, 0), count)
+    nodes: int = 1
+    for type, count in max_count_per_type.items():
+        count_per_node = backend.config.count_per_node(type)
+        nodes = max(nodes, int(math.ceil(count / count_per_node)))
+    return nodes
+
+
 def batch_options() -> list[str]:
-    options: list[str] = list(canary.config.get("batch:default_options") or [])
-    if varargs := os.getenv("CANARY_BATCH_ARGS"):
-        warnings.warn(
-            "Use CANARY_RUN_ADDOPTS instead of CANARY_BATCH_ARGS",
-            category=DeprecationWarning,
-            stacklevel=0,
-        )
-        options.extend(shlex.split(varargs))
+    options: list[str] = []
     batchopts = canary.config.getoption("batchopts", {})
     if args := batchopts.get("options"):
         options.extend(args)
