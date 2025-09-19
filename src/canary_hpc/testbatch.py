@@ -378,7 +378,7 @@ class TestBatch(AbstractTestCase):
             else:
                 timeoutx = canary.config.get("config:timeout:multiplier", 1.0)
                 qtime = self.qtime() * timeoutx
-                nodes = nodes_required(batch, backend)
+                nodes = nodes_required(self, backend)
                 proc = backend.submit(
                     f"canary.{self.id[:7]}",
                     [canary_batch_invocation(self, backend)],
