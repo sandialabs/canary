@@ -194,7 +194,10 @@ class ResourcePool:
         for type, slots in slots_reqd.items():
             slots_avail = self.slots(type)
             if slots_avail < slots:
-                raise ResourceUnsatisfiableError(f"insufficient slots of {type!r} available")
+                raise ResourceUnsatisfiableError(
+                    f"insufficient slots of {type!r} available, "
+                    f"requested: {slots}, available: {slots_avail}"
+                )
         return True
 
     def acquire(self, required: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
