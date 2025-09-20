@@ -352,7 +352,6 @@ class TestBatch(AbstractTestCase):
 
         batchopts = canary.config.getoption("batchopts", {})
         flat = batchopts["spec"]["layout"] == "flat"
-        print("A.3", batch_options())
         try:
             breadcrumb = os.path.join(self.stage(self.id), ".running")
             canary.filesystem.touchp(breadcrumb)
