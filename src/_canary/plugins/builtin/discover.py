@@ -93,7 +93,7 @@ def vcfind(root: str) -> tuple[list[AbstractTestGenerator], int]:
     with working_dir(root):
         for file in files:
             try:
-                if generator := config.plugin_manager.hook.canary_testcase_generator(
+                if generator := config.pluginmanager.hook.canary_testcase_generator(
                     root=root, path=file
                 ):
                     generators.append(generator)
@@ -125,7 +125,7 @@ def rfind(root: str, subdir: str | None = None) -> tuple[list[AbstractTestGenera
                 file = os.path.join(dirname, f)
                 generator: AbstractTestGenerator | None
                 try:
-                    if generator := config.plugin_manager.hook.canary_testcase_generator(
+                    if generator := config.pluginmanager.hook.canary_testcase_generator(
                         root=root, path=os.path.relpath(file, root)
                     ):
                         generators.append(generator)

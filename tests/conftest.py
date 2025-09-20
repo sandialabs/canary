@@ -21,11 +21,7 @@ def config(request):
         os.environ["CANARY_DISABLE_KB"] = "1"
         _canary.config._config = _canary.config.config.Config()
         cpus_per_node = int(request.config.getoption("--cpus-per-node"))
-        _canary.config._config.resource_pool.fill_uniform(
-            node_count=1,
-            cpus_per_node=cpus_per_node,
-            gpus_per_node=0,
-        )
+        _canary.config.resource_pool.populate(cpus=cpus_per_node, gpus=0)
         yield
     except:
         os.environ.clear()

@@ -154,19 +154,11 @@ def list_name_plugin(pluginmanager: pluggy.PluginManager) -> list[tuple[str, str
 
 
 def print_active_plugin_descriptions() -> None:
-    import hpc_connect
-
     from ... import config
 
     table: list[tuple[str, str, str]] = []
     widths = [len("Namespace"), len("Name"), 0]
-    for namespace, name, file in list_name_plugin(config.plugin_manager):
-        row = (namespace, name, file)
-        for i, ri in enumerate(row):
-            widths[i] = max(widths[i], len(ri))
-        table.append(row)
-    cfg = hpc_connect.config.Config()
-    for namespace, name, file in list_name_plugin(cfg.pluginmanager):
+    for namespace, name, file in list_name_plugin(config.pluginmanager):
         row = (namespace, name, file)
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))

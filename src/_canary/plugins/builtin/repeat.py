@@ -87,7 +87,7 @@ def rerun_case(case: TestCase, qsize: int, qrank: int, attempt: int) -> None:
     dont_restage = config.getoption("dont_restage")
     try:
         case.reset()
-        config.plugin_manager.hook.canary_testcase_setup(case=case)
+        config.pluginmanager.hook.canary_testcase_setup(case=case)
         case.run(qsize=qsize, qrank=qrank, attempt=attempt)
     finally:
         if dont_restage:

@@ -73,7 +73,7 @@ class Status(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         session = load_session()
-        config.plugin_manager.hook.canary_statusreport(session=session)
+        config.pluginmanager.hook.canary_statusreport(session=session)
         if args.dump:
             report_chars = args.report_chars or "dftns"
             cases_to_show = determine_cases_to_show(session, report_chars)

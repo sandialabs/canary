@@ -3,13 +3,14 @@
 # SPDX-License-Identifier: MIT
 
 import statistics
+from typing import Sequence
 
 from ..status import Status
 from ..testcase import TestCase
 from . import logging
 
 
-def progress(cases: list[TestCase], elapsed_time: float) -> None:
+def progress(cases: Sequence[TestCase], elapsed_time: float) -> None:
     """Display test session progress
 
     Args:

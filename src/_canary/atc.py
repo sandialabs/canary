@@ -4,7 +4,6 @@
 
 import abc
 from typing import Any
-from typing import Generator
 
 from .status import Status
 
@@ -15,15 +14,24 @@ class AbstractTestCase(abc.ABC):
     def __init__(self) -> None:
         self._resources: list[dict[str, list[dict]]] = []
 
-    def __iter__(self) -> Generator["AbstractTestCase", None, None]:
-        yield self
-
     def __len__(self) -> int:
         return 1
 
     @abc.abstractmethod
     def size(self) -> float:
         pass
+
+    @abc.abstractmethod
+    def save(self) -> None:
+        pass
+
+    @abc.abstractmethod
+    def finish(self) -> None:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def duration(self) -> float: ...
 
     @abc.abstractmethod
     def required_resources(self) -> list[list[dict[str, Any]]]:
@@ -85,9 +93,19 @@ class AbstractTestCase(abc.ABC):
     @abc.abstractmethod
     def runtime(self) -> float: ...
 
+    @abc.abstractmethod
+    def run(self, qsize: int = 1, qrank: int = 1) -> None: ...
+
+    def setup(self) -> None:
+        pass
+
     @property
     @abc.abstractmethod
     def path(self) -> str: ...
+
+    @property
+    @abc.abstractmethod
+    def working_directory(self) -> str: ...
 
     @abc.abstractmethod
     def refresh(self) -> None: ...
@@ -102,7 +120,7 @@ class AbstractTestCase(abc.ABC):
         for group in self.resources:
             for type, instances in group.items():
                 if type == "cpus":
-                    cpu_ids.extend([str(_["gid"]) for _ in instances])
+                    cpu_ids.extend([str(_["id"]) for _ in instances])
         return cpu_ids
 
     @property
@@ -115,5 +133,5 @@ class AbstractTestCase(abc.ABC):
         for group in self.resources:
             for type, instances in group.items():
                 if type == "gpus":
-                    gpu_ids.extend([str(_["gid"]) for _ in instances])
+                    gpu_ids.extend([str(_["id"]) for _ in instances])
         return gpu_ids

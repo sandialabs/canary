@@ -10,6 +10,7 @@ import re
 import shlex
 import subprocess
 from contextlib import contextmanager
+from functools import lru_cache
 from typing import Any
 from typing import Generator
 
@@ -307,6 +308,7 @@ class CTestTestCase(canary.TestCase):
     def binary_dir(self) -> str:
         return os.path.dirname(self.ctestfile)
 
+    @lru_cache
     def required_resources(self) -> list[list[dict[str, Any]]]:
         # The CTest resource group is already configured but CTest does not include CPUs in the
         # resource groups, so we add it on here as a separate resource group.
@@ -373,9 +375,7 @@ class CTestTestCase(canary.TestCase):
                 key = f"CTEST_RESOURCE_GROUP_{i}_{type.upper()}"
                 values = []
                 for item in items:
-                    # use LID since CTest is not designed for multi-node execution
-                    _, lid = canary.config.resource_pool.local_ids(type, item["gid"])
-                    values.append(f"id:{lid},slots:{item['slots']}")
+                    values.append(f"id:{item['id']},slots:{item['slots']}")
                 os.environ[key] = ";".join(values)
         os.environ["CTEST_RESOURCE_GROUP_COUNT"] = str(resource_group_count)
 

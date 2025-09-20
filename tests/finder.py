@@ -143,7 +143,7 @@ def test_cpu_count(tmpdir):
             fh.write("import canary\n")
             fh.write("canary.directives.parameterize('cpus', [1, 4, 8, 32])\n")
     with canary.config.override():
-        canary.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=42)
+        canary.config.resource_pool.populate(cpus=42)
         f = finder.Finder()
         f.add(workdir)
         f.prepare()
@@ -151,7 +151,7 @@ def test_cpu_count(tmpdir):
         cases = finder.generate_test_cases(files)
         assert len([c for c in cases if not c.masked()]) == 4
     with canary.config.override():
-        canary.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=2)
+        canary.config.resource_pool.populate(cpus=2)
         cases = finder.generate_test_cases(files)
         mask(cases)
         assert len([c for c in cases if not c.masked()]) == 1

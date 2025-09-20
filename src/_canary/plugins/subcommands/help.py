@@ -39,7 +39,7 @@ class Help(CanarySubcommand):
 
         parser = make_argument_parser(all=args.all)
         parser.add_main_epilog(parser)
-        for command in config.plugin_manager.hook.canary_subcommand():
+        for command in config.pluginmanager.hook.canary_subcommand():
             parser.add_command(command, add_help_override=args.all)
         parser.print_help()
 

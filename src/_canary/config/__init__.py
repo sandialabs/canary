@@ -12,7 +12,6 @@ from .config import ConfigScope  # noqa: F401
 from .config import get_scope_filename  # noqa: F401
 from .rpool import ResourcePool  # noqa: F401
 from .rpool import ResourceUnavailable  # noqa: F401
-from .rpool import ResourceUnsatisfiable  # noqa: F401
 
 if TYPE_CHECKING:
     _config = Config()
@@ -22,12 +21,11 @@ if TYPE_CHECKING:
     set = _config.set
     getstate = _config.getstate
 
-    plugin_manager = _config.plugin_manager
+    pluginmanager = _config.pluginmanager
     invocation_dir = _config.invocation_dir
     working_dir = _config.working_dir
     resource_pool = _config.resource_pool
     getoption = _config.getoption
-    hpcc_backend = _config.hpcc_backend
     set_main_options = _config.set_main_options
     cache_dir = _config.cache_dir
     options = _config.options
@@ -52,8 +50,6 @@ else:
             _config = Config()
         if name == "debug":
             return _config.get("config:debug")
-        elif name == "backend":
-            name = "hpcc_backend"
         return getattr(_config, name)
 
 

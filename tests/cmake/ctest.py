@@ -8,9 +8,7 @@ import threading
 import pytest
 
 import canary
-from _canary.config.schemas import resource_schema
-from _canary.queues import DirectResourceQueue
-from _canary.runners import TestCaseRunner as xTestCaseRunner
+from _canary.queue import ResourceQueue
 from _canary.util.executable import Executable
 from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import set_executable
@@ -18,6 +16,17 @@ from _canary.util.filesystem import touchp
 from _canary.util.filesystem import which
 from _canary.util.filesystem import working_dir
 from canary_cmake.ctest import CTestTestGenerator
+
+
+class Runner:
+    """Class for running ``AbstractTestCase``."""
+
+    def __call__(self, case):
+        try:
+            case.setup()
+            case.run(qsize=1, qrank=0)
+        finally:
+            case.finish()
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -105,11 +114,11 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
             )
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
         [case] = file.lock()
-        runner = xTestCaseRunner()
         mkdirp("./foo")
+        runner = Runner()
         with canary.config.override():
             canary.config.set("session:work_tree", f"{os.getcwd()}/foo", scope="defaults")
-            runner.run(case)
+            runner(case)
             assert case.returncode == 0
             assert case.status == "failed"
 
@@ -129,11 +138,11 @@ set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test shoul
             )
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
         [case] = file.lock()
-        runner = xTestCaseRunner()
         mkdirp("./foo")
+        runner = Runner()
         with canary.config.override():
             canary.config.set("session:work_tree", f"{os.getcwd()}/foo", scope="defaults")
-            runner.run(case)
+            runner(case)
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -151,11 +160,11 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
             )
         file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
         [case] = file.lock()
-        runner = xTestCaseRunner()
         mkdirp("./foo")
+        runner = Runner()
         with canary.config.override():
             canary.config.set("session:work_tree", f"{os.getcwd()}/foo", scope="defaults")
-            runner.run(case)
+            runner(case)
         assert case.status == "success"
         assert case.returncode == 1
 
@@ -246,32 +255,29 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
             fh.write(f"PROJECT_SOURCE_DIR:INTERNAL={os.getcwd()}")
 
         pool = {
-            "local": {
-                "cpus": [
-                    {"id": "0", "slots": 1},
-                    {"id": "1", "slots": 1},
-                    {"id": "2", "slots": 1},
-                    {"id": "3", "slots": 1},
-                    {"id": "4", "slots": 1},
-                ],
-                "gpus": [
-                    {"id": "0", "slots": 2},
-                    {"id": "1", "slots": 4},
-                    {"id": "2", "slots": 2},
-                    {"id": "3", "slots": 1},
-                ],
-                "crypto_chips": [{"id": "card0", "slots": 4}],
-            }
+            "cpus": [
+                {"id": "0", "slots": 1},
+                {"id": "1", "slots": 1},
+                {"id": "2", "slots": 1},
+                {"id": "3", "slots": 1},
+                {"id": "4", "slots": 1},
+            ],
+            "gpus": [
+                {"id": "0", "slots": 2},
+                {"id": "1", "slots": 4},
+                {"id": "2", "slots": 2},
+                {"id": "3", "slots": 1},
+            ],
+            "crypto_chips": [{"id": "card0", "slots": 4}],
         }
         with canary.config.override():
-            validated = resource_schema.validate(pool)
             canary.config.set("session:work_tree", f"{os.getcwd()}/foo", scope="defaults")
-            canary.config.resource_pool.fill(validated["resource_pool"])
+            canary.config.resource_pool.fill({"additional_properties": {}, "resources": pool})
             file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
             [case] = file.lock()
             canary.config.resource_pool.satisfiable(case.required_resources())
             case.status.set("ready")
-            queue = DirectResourceQueue(threading.Lock())
+            queue = ResourceQueue(threading.Lock())
             queue.put(case)
             queue.prepare()
             _, c = queue.get()

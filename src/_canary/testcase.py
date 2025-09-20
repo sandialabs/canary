@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
 from datetime import timedelta
+from functools import lru_cache
 from types import SimpleNamespace
 from typing import IO
 from typing import Any
@@ -583,9 +584,10 @@ class TestCase(AbstractTestCase):
         parameters["runtime"] = self.runtime
         if "nodes" in self.parameters:
             nodes = self.parameters["nodes"]
-            pinfo = config.resource_pool.pinfo
-            parameters["cpus"] = parameters["np"] = nodes * pinfo("cpus_per_node")
-            parameters["gpus"] = parameters["ndevice"] = nodes * pinfo("gpus_per_node")
+            n = nodes * config.pluginmanager.hook.canary_resource_count_per_node(resource="cpus")
+            parameters["cpus"] = parameters["np"] = n
+            n = nodes * config.pluginmanager.hook.canary_resource_count_per_node(resource="gpus")
+            parameters["gpus"] = parameters["ndevice"] = n
         else:
             P, S, default = "cpus", "np", 1
             if P not in self.parameters:
@@ -607,6 +609,7 @@ class TestCase(AbstractTestCase):
                 vec.append(value)
         return math.sqrt(sum(_**2 for _ in vec))
 
+    @lru_cache
     def required_resources(self) -> list[list[dict[str, Any]]]:
         group: list[dict[str, Any]] = []
         parameters = self.parameters | self.implicit_parameters
@@ -1090,7 +1093,7 @@ class TestCase(AbstractTestCase):
             cpus = int(self.parameters["np"])
         elif "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])
-            cpus = nodes * config.resource_pool.pinfo("cpus_per_node")
+            cpus = nodes * config.pluginmanager.hook.canary_resource_count_per_node(resource="cpus")
         return cpus
 
     @property
@@ -1099,7 +1102,9 @@ class TestCase(AbstractTestCase):
         if "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])  # type: ignore
         else:
-            cpus_per_node = config.resource_pool.pinfo("cpus_per_node")
+            cpus_per_node = config.pluginmanager.hook.canary_resource_count_per_node(
+                resource="cpus"
+            )
             nodes = math.ceil(self.cpus / cpus_per_node)
         return nodes
 
@@ -1112,7 +1117,10 @@ class TestCase(AbstractTestCase):
             gpus = int(self.parameters["ndevice"])  # type: ignore
         elif "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])
-            gpus = nodes * config.resource_pool.pinfo("gpus_per_node")
+            gpus_per_node = config.pluginmanager.hook.canary_resource_count_per_node(
+                resource="gpus"
+            )
+            gpus = nodes * gpus_per_node
         return gpus
 
     @property
@@ -1455,7 +1463,7 @@ class TestCase(AbstractTestCase):
         for group in self.resources:
             for type, instances in group.items():
                 varname = type[:-1] if type[-1] == "s" else type
-                ids: list[str] = [str(_["gid"]) for _ in instances]
+                ids: list[str] = [str(_["id"]) for _ in instances]
                 vars[f"{varname}_ids"] = variables[f"CANARY_{varname.upper()}"] = ",".join(ids)
         for key, value in variables.items():
             try:

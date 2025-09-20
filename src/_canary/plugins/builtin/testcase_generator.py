@@ -21,6 +21,6 @@ def canary_testcase_generator(
             return res(root, path=path)
     elif isinstance(res, AbstractTestGenerator):
         return res
-    if generator := config.plugin_manager.hook.canary_generator(root=root, path=path):
+    if generator := config.pluginmanager.hook.canary_generator(root=root, path=path):
         return generator
     return None

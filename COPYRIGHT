@@ -61,7 +61,3 @@ PackageLicenseDeclared: MIT
 PackageName: programoutput
 PackageHomePage: https://pypi.org/project/sphinxcontrib-programoutput/
 PackageLicenseDeclared: BSD
-
-PackageName: schema
-PackageHomePage: https://pypi.org/project/schema/
-PackageLicenseDeclared: MIT
