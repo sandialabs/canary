@@ -32,7 +32,6 @@ class PathSpec(argparse.Action):
     - a directory to search for test files when creating a new session
     - a filter when re-using a previous session
     - a test ID to run
-    - a batch number to run
 
     """
 
@@ -195,7 +194,7 @@ class PathSpec(argparse.Action):
             else:
                 paths.append(p)
         if len([1 for _ in (case_specs, paths) if _]) > 1:
-            raise ValueError("do not mix /hash, ^hash, and other pathspec arguments")
+            raise ValueError("do not mix /hash and other pathspec arguments")
         if len(paths) > 1:
             raise ValueError("incompatible input path arguments")
         if paths:
@@ -245,13 +244,11 @@ pathspec syntax:
     %(relpath)s                                   rerun test cases in this directory and its children
     %(relfile)s                                   rerun the test case defined in this file
     %(hash)s                                  rerun this test case
-    %(batch)s                                  run this batch of tests
 
   examples:
     canary run path                        scan path for tests to run
     canary -C TestResults run .            rerun tests in . (and its children)
     canary -C TestResults run /7yral9i     rerun test case with hash 7yral9i
-    canary -C TestResults run ^h6tvbax     run tests in batch h6tvbax
 
   script arguments:
     Any argument following the %(sep)s separator is passed directly to each test script's command line.
@@ -265,7 +262,6 @@ pathspec syntax:
             "relpath": bold("path"),
             "relfile": bold("file"),
             "hash": bold("/hash"),
-            "batch": bold("^hash"),
             "sep": bold("--"),
         }
         return pathspec_help

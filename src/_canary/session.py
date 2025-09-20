@@ -152,7 +152,7 @@ class Session:
         if self.mode == "w":
             self.save(ini=True)
 
-        f = os.path.join(self.config_dir, "log.txt")
+        f = os.path.join(self.config_dir, "canary-out.txt")
         logging.add_file_handler(f, levelno=logging.DEBUG)
 
     @classmethod

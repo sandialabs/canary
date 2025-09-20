@@ -186,7 +186,7 @@ class EnvarSchema(Schema):
         data = super().validate(data, is_root_eval=False)
         if is_root_eval:
             validated = {}
-            config: dict[str, typing.Any] = validated.setdefault("config", {})
+            config = validated.setdefault("config", {})
             for key, val in data.items():
                 name = key[7:].lower()
                 if name.startswith(("timeout_", "multiprocessing_")):

@@ -237,3 +237,9 @@ def canary_testcase_finish(case: "AbstractTestCase") -> bool:
 
 @hookspec
 def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None: ...
+
+
+@hookspec(firstresult=True)
+def canary_resource_count_per_node(resource: str) -> int:
+    """Return the number of resource type ``type`` per node"""
+    ...

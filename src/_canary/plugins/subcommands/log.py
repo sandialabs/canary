@@ -34,7 +34,7 @@ class Log(CanarySubcommand):
             action="store_true",
             help="Display test stderr if it exists",
         )
-        parser.add_argument("testspec", nargs="?", help="Test name, /TEST_ID, or ^BATCH_ID")
+        parser.add_argument("testspec", nargs="?", help="Test name or /TEST_ID")
 
     def get_logfile(self, case: TestCase, args: argparse.Namespace) -> str:
         if args.error:
@@ -43,13 +43,12 @@ class Log(CanarySubcommand):
             return case.stdout_file
 
     def execute(self, args: argparse.Namespace) -> int:
-        #        from ...testbatch import TestBatch
         from ...testcase import from_id as testcase_from_id
 
         file: str
         if not args.testspec:
             session = load_session()
-            file = os.path.join(session.config_dir, "log.txt")
+            file = os.path.join(session.config_dir, "canary-log.txt")
             if os.path.exists(file):
                 display_file(file)
                 return 0
@@ -60,11 +59,6 @@ class Log(CanarySubcommand):
             file = self.get_logfile(case, args)
             display_file(file)
             return 0
-
-        #        if args.testspec.startswith("^"):
-        #            file = TestBatch.logfile(args.testspec[1:])
-        #            display_file(file)
-        #            return 0
 
         session = load_session()
         for case in session.cases:

@@ -104,10 +104,9 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             raw = match.group(2)
             return ("scheduler", raw)
         elif match := re.search(r"^(option|args|scheduler_args|with)[:=](.*)$", arg):
-            options = setdefaultopts(namespace)
+            setdefaultopts(namespace)
             raw = strip_quotes(match.group(2))
-            options.extend(csvsplit(raw))
-            return ("options", options)
+            return ("options", csvsplit(raw))
         # Deprecated options, use spec
         if match := re.search(r"^(duration|length)[:=](.*)$", arg):
             a = match.group(1)
@@ -176,14 +175,14 @@ def bold(arg: str) -> str:
 
 def setdefaultspec(namespace: argparse.Namespace) -> dict[str, Any]:
     default = {"nodes": None, "layout": None, "count": None, "duration": None}
-    if not hasattr(namespace, "batchopts"):
+    if not getattr(namespace, "batchopts", None):
         namespace.batchopts = {}
     namespace.batchopts.setdefault("spec", default)
     return namespace.batchopts["spec"]
 
 
 def setdefaultopts(namespace: argparse.Namespace) -> list[str]:
-    if not hasattr(namespace, "batchopts"):
+    if not getattr(namespace, "batchopts", None):
         namespace.batchopts = {}
     if "options" not in namespace.batchopts:
         options = namespace.batchopts.setdefault("options", [])

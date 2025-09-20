@@ -584,9 +584,10 @@ class TestCase(AbstractTestCase):
         parameters["runtime"] = self.runtime
         if "nodes" in self.parameters:
             nodes = self.parameters["nodes"]
-            info = lambda t: config.get(f"machine:{t}")
-            parameters["cpus"] = parameters["np"] = nodes * info("cpus_per_node")
-            parameters["gpus"] = parameters["ndevice"] = nodes * info("gpus_per_node")
+            n = nodes * config.pluginmanager.hook.canary_resource_count_per_node(resource="cpus")
+            parameters["cpus"] = parameters["np"] = n
+            n = nodes * config.pluginmanager.hook.canary_resource_count_per_node(resource="gpus")
+            parameters["gpus"] = parameters["ndevice"] = n
         else:
             P, S, default = "cpus", "np", 1
             if P not in self.parameters:
@@ -1092,7 +1093,7 @@ class TestCase(AbstractTestCase):
             cpus = int(self.parameters["np"])
         elif "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])
-            cpus = nodes * config.get("machine:cpus_per_node")
+            cpus = nodes * config.pluginmanager.hook.canary_resource_count_per_node(resource="cpus")
         return cpus
 
     @property
@@ -1101,7 +1102,7 @@ class TestCase(AbstractTestCase):
         if "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])  # type: ignore
         else:
-            cpus_per_node = config.get("machine:cpus_per_node")
+            cpus_per_node = config.pluginmanager.hook.canary_resource_count_per_node(resource="cpus")
             nodes = math.ceil(self.cpus / cpus_per_node)
         return nodes
 
@@ -1114,7 +1115,8 @@ class TestCase(AbstractTestCase):
             gpus = int(self.parameters["ndevice"])  # type: ignore
         elif "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])
-            gpus = nodes * config.get("machine:gpus_per_node")
+            gpus_per_node = config.pluginmanager.hook.canary_resource_count_per_node(resource="gpus")
+            gpus = nodes * gpus_per_node
         return gpus
 
     @property
