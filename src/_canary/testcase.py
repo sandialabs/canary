@@ -1102,7 +1102,9 @@ class TestCase(AbstractTestCase):
         if "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])  # type: ignore
         else:
-            cpus_per_node = config.pluginmanager.hook.canary_resource_count_per_node(resource="cpus")
+            cpus_per_node = config.pluginmanager.hook.canary_resource_count_per_node(
+                resource="cpus"
+            )
             nodes = math.ceil(self.cpus / cpus_per_node)
         return nodes
 
@@ -1115,7 +1117,9 @@ class TestCase(AbstractTestCase):
             gpus = int(self.parameters["ndevice"])  # type: ignore
         elif "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])
-            gpus_per_node = config.pluginmanager.hook.canary_resource_count_per_node(resource="gpus")
+            gpus_per_node = config.pluginmanager.hook.canary_resource_count_per_node(
+                resource="gpus"
+            )
             gpus = nodes * gpus_per_node
         return gpus
 
