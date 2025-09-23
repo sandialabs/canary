@@ -36,9 +36,20 @@ class SchedulerHooks:
         return True
 
     @canary.hookimpl(tryfirst=True)
-    def canary_resource_count_per_node(self, resource: str) -> int:
+    def canary_resource_count_per_node(self, type: str) -> int:
         """determine if the resources for this test are satisfiable"""
-        return self.backend.config.count_per_node(resource) or 0
+        try:
+            return self.backend.config.count_per_node(type)
+        except ValueError:
+            return 0
+
+    @canary.hookimpl(tryfirst=True)
+    def canary_resource_types(self) -> list[str]:
+        types = self.backend.config.resource_types()
+        for i, type in enumerate(types):
+            if not type.endswith("s"):
+                types[i] = f"{type}s"
+        return types
 
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, cases: Sequence[canary.TestCase]) -> int:

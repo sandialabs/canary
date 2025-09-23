@@ -132,11 +132,7 @@ class Session:
         self.returncode = -1
         self.start = -1.0
         self.stop = -1.0
-
-        os.environ.setdefault("CANARY_LEVEL", "0")
         os.environ["CANARY_WORK_TREE"] = self.work_tree
-        self.level = int(os.environ["CANARY_LEVEL"])
-
         self.db = Database(self.config_dir, mode=mode)
         if mode in ("r", "r+", "a", "a+"):
             self.restore_settings()
@@ -414,7 +410,6 @@ class Session:
     def set_config_values(self):
         """Set ``section`` configuration values"""
         config.set("session:work_tree", self.work_tree, scope="defaults")
-        config.set("session:level", self.level, scope="defaults")
         config.set("session:mode", self.mode, scope="defaults")
 
     def save(self, ini: bool = False) -> None:

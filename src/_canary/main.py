@@ -37,9 +37,6 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     :returns: An exit code.
     """
-    if "CANARY_LEVEL" not in os.environ:
-        os.environ["CANARY_LEVEL"] = "0"
-
     with CanaryMain(argv) as m:
         parser = make_argument_parser()
         parser.add_main_epilog(parser)
@@ -267,6 +264,6 @@ def console_main() -> int:
         tb = traceback.extract_tb(e.__traceback__)
         err = str(e)
         if plugin := determine_plugin_from_tb(tb):
-            err += f" (from plugin: {plugin.__name__})"
+            err += f" (from plugin: {plugin})"
         logger.error(err)
         return 3

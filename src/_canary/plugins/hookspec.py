@@ -240,6 +240,12 @@ def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None: ...
 
 
 @hookspec(firstresult=True)
-def canary_resource_count_per_node(resource: str) -> int:
+def canary_resource_count_per_node(type: str) -> int:
     """Return the number of resource type ``type`` per node"""
+    ...
+
+
+@hookspec
+def canary_resource_types() -> list[str]:
+    """Return the resource types avaiable"""
     ...

@@ -114,17 +114,22 @@ class ResourcePool:
         yaml.dump({"resource_pool": pool}, fh, default_flow_style=False)
         return fh.getvalue()
 
+    def __contains__(self, type: str) -> bool:
+        return type in self.resources
+
     @property
-    def types(self) -> set[str]:
+    def types(self) -> list[str]:
         types: set[str] = {"cpus", "gpus"}
         types.update(self.resources.keys())
-        return types
+        return sorted(types)
 
     def empty(self) -> bool:
         return len(self.resources) == 0
 
     def count(self, type: str) -> int:
-        return len(self.resources[type])
+        if type in self.resources:
+            return len(self.resources[type])
+        raise ResourceUnavailable(type)
 
     def slots(self, type: str) -> int:
         return self.slots_per_resource_type.get(type, 0)
