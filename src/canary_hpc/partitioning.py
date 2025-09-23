@@ -106,7 +106,7 @@ def partition_n(
         return [TestBatch(cases)]
     graph = {}
     for case in cases:
-        graph[case] = case.dependencies
+        graph[case] = [dep for dep in case.dependencies if dep in cases]
     ts = TopologicalSorter(graph)
     ts.prepare()
     sizes: list[float] = []
@@ -186,7 +186,7 @@ def partition_t(
     map: dict[str, canary.TestCase] = {case.id: case for case in cases}
     graph: dict[canary.TestCase, list[canary.TestCase]] = {}
     for case in cases:
-        graph[case] = case.dependencies
+        graph[case] = [dep for dep in case.dependencies if dep in cases]
     ts = TopologicalSorter(graph)
     ts.prepare()
     packer = Packer()

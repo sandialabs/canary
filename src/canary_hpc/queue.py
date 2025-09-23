@@ -30,12 +30,7 @@ class ResourceQueue(queue.AbstractResourceQueue):
         cls, lock: threading.Lock, cases: Sequence[canary.TestCase], **kwds: Any
     ) -> "ResourceQueue":
         self = ResourceQueue(lock=lock)
-        for case in cases:
-            if case.status == "skipped":
-                case.save()
-            elif not case.status.satisfies(("ready", "pending")):
-                raise ValueError(f"{case}: case is not ready or pending")
-        self.put(*[case for case in cases if case.status.satisfies(("ready", "pending"))])
+        self.put(*cases)
         self.prepare(**kwds)
         if self.empty():
             raise ValueError("There are no cases to run in this session")
@@ -49,6 +44,23 @@ class ResourceQueue(queue.AbstractResourceQueue):
         batchopts = canary.config.getoption("batchopts", {})
         if not batchopts:
             raise ValueError("Cannot partition test cases: missing batching options")
+        for case in self.tmp_buffer:
+            if case.status == "pending":
+                # at this point, every test case has status ready or pending.  if the status is
+                # pending, the case will only be able to run if its dependencies are also in this
+                # queue.
+                flags = case.dep_condition_flags()
+                for i, dep in enumerate(case.dependencies):
+                    if flags[i] == "pending" and dep not in self.tmp_buffer:
+                        raise ValueError(f"{case}: can't run due to missing dependency: {dep}")
+                    elif flags[i] != "can_run":
+                        raise ValueError(
+                            f"{case}: can't run due to dependency status: "
+                            f"{dep}, status={dep.status.value}. "
+                            "This should only happen when attempting to rerun a subset of cases "
+                            "that have dependencies that have not finished in a previous canary run "
+                            "invocation."
+                        )
         batches: list[TestBatch] = partition_testcases(
             cases=self.tmp_buffer,
             batchspec=batchopts["spec"],
@@ -107,7 +119,13 @@ class ResourceQueue(queue.AbstractResourceQueue):
                     case=case
                 ):
                     raise ValueError(f"Resources for {case} not satisfiable")
-            self.tmp_buffer.append(case)
+            status = case.status
+            if status == "skipped":
+                case.save()
+            elif not case.status.satisfies(("ready", "pending")):
+                raise ValueError(f"{case}: case is not ready or pending")
+            else:
+                self.tmp_buffer.append(case)
 
     def cases(self) -> list[canary.TestCase]:
         cases: list[canary.TestCase] = []
