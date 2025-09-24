@@ -508,7 +508,14 @@ class TestBatch(AbstractTestCase):
         cfg: dict[str, Any] = {
             "resource_pool": {
                 "resources": resources,
-                "additional_properties": {"case": case.id, "nodes": node_count, **counts_per_node},
+                "additional_properties": {
+                    "hpc_connect": {
+                        "backend": backend.name,
+                        "nodes": node_count,
+                        "case": case.id,
+                        **counts_per_node,
+                    }
+                },
             }
         }
         config_file = os.path.join(self.stage(self.id), f"config.{case.id}")
@@ -541,9 +548,11 @@ class TestBatch(AbstractTestCase):
             "resource_pool": {
                 "resources": resources,
                 "additional_properties": {
-                    "backend": backend.name,
-                    "nodes": node_count,
-                    **counts_per_node,
+                    "hpc_connect": {
+                        "backend": backend.name,
+                        "nodes": node_count,
+                        **counts_per_node,
+                    }
                 },
             }
         }

@@ -58,8 +58,9 @@ def canary_hpc_add_scheduler() -> Generator[None, list[dict[str, str | list[str]
 @canary.hookimpl
 def canary_resource_count_per_node(type: str) -> int | None:
     """determine if the resources for this test are satisfiable"""
-    if f"{type}_per_node" in canary.config.resource_pool.additional_properties:
-        return canary.config.resource_pool.additional_properties[f"{type}_per_node"]
+    if props := canary.config.resource_pool.additional_properties.get("hpc_connect"):
+        if count_per_node := props.get(f"{type}_per_node"):
+            return count_per_node
     return None
 
 
