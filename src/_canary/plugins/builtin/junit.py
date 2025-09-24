@@ -11,13 +11,13 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from typing import Any
 
-from ...testcase import TestCase
 from ...util.filesystem import mkdirp
 from ..hookspec import hookimpl
 from ..types import CanaryReporter
 
 if TYPE_CHECKING:
     from ...session import Session
+    from ...testcase import TestCase
 
 
 @hookimpl
@@ -62,9 +62,9 @@ def get_root_name() -> str:
     return name
 
 
-def groupby_classname(cases: list[TestCase]) -> dict[str, list[TestCase]]:
+def groupby_classname(cases: list["TestCase"]) -> dict[str, list["TestCase"]]:
     """Group tests by status"""
-    grouped: dict[str, list[TestCase]] = {}
+    grouped: dict[str, list["TestCase"]] = {}
     for case in cases:
         grouped.setdefault(case.classname, []).append(case)
     return grouped
@@ -83,7 +83,7 @@ class JunitDocument(xdom.Document):
         return node
 
     def create_testsuite_element(
-        self, cases: list[TestCase], tagname: str = "testsuite", **attrs: str
+        self, cases: list["TestCase"], tagname: str = "testsuite", **attrs: str
     ) -> xdom.Element:
         """Create a testcase element with the following structure
 
@@ -105,7 +105,7 @@ class JunitDocument(xdom.Document):
         element.setAttribute("timestamp", stats.timestamp)
         return element
 
-    def create_testcase_element(self, case: TestCase) -> xdom.Element:
+    def create_testcase_element(self, case: "TestCase") -> xdom.Element:
         """Create a testcase element with the following structure:
 
         .. code-block: xml
@@ -153,7 +153,7 @@ class JunitDocument(xdom.Document):
         return testcase
 
 
-def gather_statistics(cases: list[TestCase]) -> SimpleNamespace:
+def gather_statistics(cases: list["TestCase"]) -> SimpleNamespace:
     stats = SimpleNamespace(
         num_skipped=0,
         num_failed=0,

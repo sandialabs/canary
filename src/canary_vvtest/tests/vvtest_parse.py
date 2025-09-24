@@ -5,8 +5,8 @@
 import os
 import sys
 
-import _canary.plugins.builtin.vvtest as vvtest
 import _canary.util.filesystem as fs
+import canary_vvtest.generator as generator
 from _canary import finder
 from _canary.enums import list_parameter_space
 
@@ -17,10 +17,10 @@ def test_parse_parameterize():
 # VVT: parameterize (autotype) : np,n = 1,2 3,4 5,6
 # VVT: : 7,8
 """
-    commands = list(vvtest.p_VVT(s))
+    commands = list(generator.p_VVT(s))
     assert commands[0].command == "parameterize"
     assert "%".join(commands[0].argument.split()) == "np,n%=%1,2%3,4%5,6%7,8"
-    names, values, kwds, _ = vvtest.p_PARAMETERIZE(commands[0])
+    names, values, kwds, _ = generator.p_PARAMETERIZE(commands[0])
     assert names == ["np", "n"]
     assert values == [[1, 2], [3, 4], [5, 6], [7, 8]]
     assert kwds == {"type": list_parameter_space}
@@ -31,7 +31,7 @@ def test_parse_autotype():
 #!/usr/bin/env python3
 # VVT: parameterize (autotype) : np,n = 1,2 3,4 5,6
 """
-    commands = list(vvtest.p_VVT(s))
+    commands = list(generator.p_VVT(s))
     assert commands[0].command == "parameterize"
     assert "%".join(commands[0].argument.split()) == "np,n%=%1,2%3,4%5,6"
     assert commands[0].options == [("autotype", True)]
@@ -42,9 +42,9 @@ def test_parse_parameterize_1():
 #!/usr/bin/env python3
 # VVT: parameterize (int, float) : np, mesh_factor = 1 , 1.0    1 , 0.5    1 , 0.25
 """
-    args = list(vvtest.p_VVT(s))
+    args = list(generator.p_VVT(s))
     assert args[0].command == "parameterize"
-    names, values, _, _ = vvtest.p_PARAMETERIZE(args[0])
+    names, values, _, _ = generator.p_PARAMETERIZE(args[0])
     assert names == ["np", "mesh_factor"]
     assert values == [[1, 1.0], [1, 0.5], [1, 0.25]]
 
@@ -56,33 +56,33 @@ def test_parse_parameterize_types():
 # VVT: parameterize (int, float) : a, b = 1 , 1.0    1 , 0.5    1 , 0.25
 # VVT: parameterize (autotype) : a, b = 1 , 1.0    1 , 0.5    1 , 0.25
 """
-    args = list(vvtest.p_VVT(s))
+    args = list(generator.p_VVT(s))
     assert args[0].command == "parameterize"
-    names, values, _, _ = vvtest.p_PARAMETERIZE(args[0])
+    names, values, _, _ = generator.p_PARAMETERIZE(args[0])
     assert names == ["a", "b"]
     assert values == [["1", "1.0"], ["1", "0.5"], ["1", "0.25"]]
     assert args[1].command == "parameterize"
-    names, values, _, _ = vvtest.p_PARAMETERIZE(args[1])
+    names, values, _, _ = generator.p_PARAMETERIZE(args[1])
     assert names == ["a", "b"]
     assert values == [[1, 1.0], [1, 0.5], [1, 0.25]]
     assert args[2].command == "parameterize"
-    names, values, _, _ = vvtest.p_PARAMETERIZE(args[2])
+    names, values, _, _ = generator.p_PARAMETERIZE(args[2])
     assert names == ["a", "b"]
     assert values == [[1, 1.0], [1, 0.5], [1, 0.25]]
 
 
 def test_csplit():
-    assert vvtest.csplit("1 , 1.0    1 , 0.5    1 , 0.25") == [
+    assert generator.csplit("1 , 1.0    1 , 0.5    1 , 0.25") == [
         ["1", "1.0"],
         ["1", "0.5"],
         ["1", "0.25"],
     ]
-    assert vvtest.csplit("1 , baz    1 , 'foo'    5.0 , 0.25") == [
+    assert generator.csplit("1 , baz    1 , 'foo'    5.0 , 0.25") == [
         ["1", "baz"],
         ["1", "foo"],
         ["5.0", "0.25"],
     ]
-    assert vvtest.csplit("spam , baz    \"eggs\" , 'foo'    wubble , 0.25") == [
+    assert generator.csplit("spam , baz    \"eggs\" , 'foo'    wubble , 0.25") == [
         ["spam", "baz"],
         ["eggs", "foo"],
         ["wubble", "0.25"],
@@ -94,10 +94,10 @@ def test_parse_copy_rename():
 #!/usr/bin/env python3
 # VVT: copy (rename) : foo, baz  spam   ,ham
 """
-    commands = list(vvtest.p_VVT(s))
+    commands = list(generator.p_VVT(s))
     assert commands[0].command == "copy"
     assert commands[0].options == [("rename", True)]
-    file_pairs = vvtest.csplit(commands[0].argument)
+    file_pairs = generator.csplit(commands[0].argument)
     assert file_pairs == [["foo", "baz"], ["spam", "ham"]]
 
 
@@ -106,9 +106,9 @@ def test_parse_baseline():
 #!/usr/bin/env python3
 # VVT: baseline : foo, baz  spam   ,ham
 """
-    commands = list(vvtest.p_VVT(s))
+    commands = list(generator.p_VVT(s))
     assert commands[0].command == "baseline"
-    file_pairs = vvtest.csplit(commands[0].argument)
+    file_pairs = generator.csplit(commands[0].argument)
     assert file_pairs == [["foo", "baz"], ["spam", "ham"]]
 
 
@@ -117,10 +117,10 @@ def test_parse_link_rename():
 #!/usr/bin/env python3
 # VVT : link (rename) : 3DTmWave.g,3DTmWave.pregen.g
 """
-    commands = list(vvtest.p_VVT(s))
+    commands = list(generator.p_VVT(s))
     assert commands[0].command == "link"
     assert commands[0].options == [("rename", True)]
-    file_pairs = vvtest.csplit(commands[0].argument)
+    file_pairs = generator.csplit(commands[0].argument)
     assert file_pairs == [["3DTmWave.g", "3DTmWave.pregen.g"]]
 
 
@@ -129,10 +129,10 @@ def test_parse_link_rename_1():
 #!/usr/bin/env python3
 # VVT : link (rename) : multiblock_rectangle_pml.exo, multiblock_rectangle_pml.prebuilt.exo
 """
-    commands = list(vvtest.p_VVT(s))
+    commands = list(generator.p_VVT(s))
     assert commands[0].command == "link"
     assert commands[0].options == [("rename", True)]
-    file_pairs = vvtest.csplit(commands[0].argument)
+    file_pairs = generator.csplit(commands[0].argument)
     assert file_pairs == [["multiblock_rectangle_pml.exo", "multiblock_rectangle_pml.prebuilt.exo"]]
 
 
@@ -152,8 +152,8 @@ a = [{'A': 1.0, 'B': 2.0}, {'B': 4.0, 'A': 3.0}]
 print(json.dumps(a))
 """
             )
-        command = next(vvtest.p_VVT(s))
-        names, values, _, _ = vvtest.p_PARAMETERIZE(command)
+        command = next(generator.p_VVT(s))
+        names, values, _, _ = generator.p_PARAMETERIZE(command)
     assert names == ["A", "B"]
     assert values == [[1.0, 2.0], [3.0, 4.0]]
 
@@ -176,8 +176,8 @@ deps = [None, 'a.*']
 print(json.dumps(deps))
 """
             )
-        command = next(vvtest.p_VVT(s))
-        names, values, _, deps = vvtest.p_PARAMETERIZE(command)
+        command = next(generator.p_VVT(s))
+        names, values, _, deps = generator.p_PARAMETERIZE(command)
     assert names == ["A", "B"]
     assert values == [[1.0, 2.0], [3.0, 4.0]]
     assert deps == [None, "a.*"]
@@ -307,7 +307,7 @@ if __name__ == "__main__":
 
 
 def test_make_table():
-    table = vvtest.make_table("a.0,'b,0',c, 1-0   e ,2.0  ,    6.5,       a.b-foo-baz")
+    table = generator.make_table("a.0,'b,0',c, 1-0   e ,2.0  ,    6.5,       a.b-foo-baz")
     assert table == [["a.0", "'b,0'", "c", "1-0"], ["e", "2.0", "6.5", "a.b-foo-baz"]], table
-    table = vvtest.make_table("1,2 3,4 5,6 7,8")
+    table = generator.make_table("1,2 3,4 5,6 7,8")
     assert table == [["1", "2"], ["3", "4"], ["5", "6"], ["7", "8"]]

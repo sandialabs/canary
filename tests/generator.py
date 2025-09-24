@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import _canary.plugins.builtin.pyt as pyt
-import _canary.plugins.builtin.vvtest as vvt
 import _canary.testcase as tc
 from _canary.util.filesystem import working_dir
 
@@ -23,24 +22,6 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
 """
             )
         file = pyt.PYTTestGenerator(".", "test.pyt")
-        cases = file.lock(on_options=["baz"])
-        assert len(cases) == 10
-        assert isinstance(cases[-1], tc.TestMultiCase)
-
-
-def test_vvt_generator(tmpdir):
-    with working_dir(tmpdir.strpath, create=True):
-        with open("test.vvt", "w") as fh:
-            fh.write(
-                """
-# VVT: name: baz
-# VVT: analyze : --analyze
-# VVT: keywords: test unit
-# VVT: parameterize (options=baz) : np=1 2 3
-# VVT: parameterize : a,b,c=1,11,111 2,22,222 3,33,333
-"""
-            )
-        file = vvt.VVTTestGenerator(".", "test.vvt")
         cases = file.lock(on_options=["baz"])
         assert len(cases) == 10
         assert isinstance(cases[-1], tc.TestMultiCase)

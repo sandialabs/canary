@@ -2,15 +2,18 @@
 #
 # SPDX-License-Identifier: MIT
 
+from typing import TYPE_CHECKING
 from typing import Sequence
 
-from ..testcase import TestCase
 from . import logging
+
+if TYPE_CHECKING:
+    from ..testcase import TestCase
 
 logger = logging.get_logger(__name__)
 
 
-def compute_returncode(cases: Sequence[TestCase], permissive: bool = False) -> int:
+def compute_returncode(cases: Sequence["TestCase"], permissive: bool = False) -> int:
     returncode: int = 0
 
     results: dict[str, int] = {}

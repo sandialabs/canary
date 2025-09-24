@@ -27,6 +27,7 @@ from _canary.plugins.types import CanarySubcommand
 from _canary.session import Session
 from _canary.testcase import DependencyPatterns
 from _canary.testcase import TestCase
+from _canary.testcase import TestMultiCase
 from _canary.testinstance import TestInstance
 from _canary.testinstance import TestMultiInstance
 from _canary.testinstance import load as load_instance

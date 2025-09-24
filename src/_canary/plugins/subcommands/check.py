@@ -34,6 +34,7 @@ logger = logging.get_logger(__name__)
 class Action(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         action = getattr(namespace, "action", set())
+        assert option_string is not None
         value = option_string[1:]
         action.add(value)
         namespace.action = action
@@ -71,8 +72,9 @@ class Check(CanarySubcommand):
             raise ValueError("ruff must be on PATH to format and check code")
         if shutil.which("ruff") is None and "c" in args.action:
             raise ValueError("ruff must be on PATH to lint check code")
-        if shutil.which("mypy") is None and "m" in args.action:
-            raise ValueError("mypy must be on PATH to type check code")
+        if "m" in args.action:
+            if shutil.which("ty") is None and shutil.which("mypy") is None:
+                raise ValueError("type checking requires ty or mypy be on PATH")
         if "t" in args.action or "C" in args.action:
             if shutil.which("pytest") is None:
                 raise ValueError("pytest must be on PATH to test code")
@@ -140,7 +142,7 @@ class Check(CanarySubcommand):
     def type_check_code(self, args: argparse.Namespace):
         with working_dir(self.root):
             logger.info(f"Type checking source in {self.root}/src")
-            mypy("./src")
+            typecheck("./src")
 
     def run_tests(self, args: argparse.Namespace):
         if "e" in args.action:
@@ -149,6 +151,10 @@ class Check(CanarySubcommand):
             if "C" not in args.action:
                 logger.info(f"Running tests in {self.root}/tests")
                 pytest("./tests")
+                logger.info(f"Running tests in {self.root}/canary_cmake/tests")
+                pytest("./src/canary_cmake/tests")
+                logger.info(f"Running tests in {self.root}/canary_vvtest/tests")
+                pytest("./src/canary_vvtest/tests")
             else:
                 logger.info(f"Running coverage in {self.root}/tests")
                 coverage("run")
@@ -172,9 +178,9 @@ def make(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
     cp = subprocess.run(command, **kwargs)
     if cp.returncode != 0:
         if cp.stdout:
-            sys.stdout.write(cp.stdout)
+            sys.stdout.write(cp.stdout)  # ty: ignore[no-matching-overload]
         if cp.stderr:
-            sys.stderr.write(cp.stderr)
+            sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
         raise ValueError(f"{' '.join(command)} failed!")
     return cp
 
@@ -187,24 +193,28 @@ def ruff(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
     cp = subprocess.run(command, **kwargs)
     if cp.returncode != 0:
         if cp.stdout:
-            sys.stdout.write(cp.stdout)
+            sys.stdout.write(cp.stdout)  # ty: ignore[no-matching-overload]
         if cp.stderr:
-            sys.stderr.write(cp.stderr)
+            sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
         raise ValueError(f"{' '.join(command)} failed!")
     return cp
 
 
-def mypy(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
+def typecheck(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
     kwargs["stdout"] = stdout
     kwargs["stderr"] = stderr
     kwargs["encoding"] = "utf-8"
-    command = ["mypy", *args]
+    command: list[str]
+    if x := shutil.which("ty"):
+        command = [x, "check", *args]
+    else:
+        command = ["mypy", *args]
     cp = subprocess.run(command, **kwargs)
     if cp.returncode != 0:
         if cp.stdout:
-            sys.stdout.write(cp.stdout)
+            sys.stdout.write(cp.stdout)  # ty: ignore[no-matching-overload]
         if cp.stderr:
-            sys.stderr.write(cp.stderr)
+            sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
         raise ValueError(f"{' '.join(command)} failed!")
     return cp
 
@@ -217,9 +227,9 @@ def pytest(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
     cp = subprocess.run(command, **kwargs)
     if cp.returncode != 0:
         if cp.stdout:
-            sys.stdout.write(cp.stdout)
+            sys.stdout.write(cp.stdout)  # ty: ignore[no-matching-overload]
         if cp.stderr:
-            sys.stderr.write(cp.stderr)
+            sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
         raise ValueError(f"{' '.join(command)} failed!")
     return cp
 
@@ -232,8 +242,8 @@ def coverage(*args: str, **kwargs: Any) -> subprocess.CompletedProcess:
     cp = subprocess.run(command, **kwargs)
     if cp.returncode != 0:
         if cp.stdout:
-            sys.stdout.write(cp.stdout)
+            sys.stdout.write(cp.stdout)  # ty: ignore[no-matching-overload]
         if cp.stderr:
-            sys.stderr.write(cp.stderr)
+            sys.stderr.write(cp.stderr)  # ty: ignore[no-matching-overload]
         raise ValueError(f"{' '.join(command)} failed!")
     return cp

@@ -9,6 +9,7 @@ import math
 import threading
 import time
 from datetime import datetime
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
 
@@ -16,12 +17,14 @@ import psutil
 
 from . import config
 from .atc import AbstractTestCase
-from .testcase import TestCase
 from .third_party import color
 from .util import logging
 from .util.progress import progress
 from .util.time import hhmmss
 from .util.time import timestamp
+
+if TYPE_CHECKING:
+    from .testcase import TestCase
 
 logger = logging.get_logger(__name__)
 
@@ -43,7 +46,7 @@ class AbstractResourceQueue(abc.ABC):
     @classmethod
     @abc.abstractmethod
     def factory(
-        cls, lock: threading.Lock, cases: Sequence[TestCase], **kwds: Any
+        cls, lock: threading.Lock, cases: Sequence["TestCase"], **kwds: Any
     ) -> "AbstractResourceQueue": ...
 
     @abc.abstractmethod
@@ -56,7 +59,7 @@ class AbstractResourceQueue(abc.ABC):
     def retry(self, obj_id: int) -> Any: ...
 
     @abc.abstractmethod
-    def cases(self) -> list[TestCase]: ...
+    def cases(self) -> list["TestCase"]: ...
 
     @abc.abstractmethod
     def queued(self) -> list[Any]: ...
@@ -71,7 +74,7 @@ class AbstractResourceQueue(abc.ABC):
     def notrun(self) -> list[Any]: ...
 
     @abc.abstractmethod
-    def failed(self) -> list[TestCase]: ...
+    def failed(self) -> list["TestCase"]: ...
 
     def empty(self) -> bool:
         return len(self.buffer) == 0
@@ -158,7 +161,7 @@ class ResourceQueue(AbstractResourceQueue):
 
     @classmethod
     def factory(
-        cls, lock: threading.Lock, cases: Sequence[TestCase], **kwds: Any
+        cls, lock: threading.Lock, cases: Sequence["TestCase"], **kwds: Any
     ) -> "ResourceQueue":
         self = ResourceQueue(lock=lock)
         for case in cases:
@@ -209,22 +212,22 @@ class ResourceQueue(AbstractResourceQueue):
                         case.dependencies[i] = self._finished[obj_no]
             return self._finished[obj_no]
 
-    def cases(self) -> list[TestCase]:
+    def cases(self) -> list["TestCase"]:
         return self.queued() + self.busy() + self.finished() + self.notrun()
 
-    def queued(self) -> list[TestCase]:
+    def queued(self) -> list["TestCase"]:
         return list(self.buffer.values())
 
-    def busy(self) -> list[TestCase]:
+    def busy(self) -> list["TestCase"]:
         return list(self._busy.values())
 
-    def finished(self) -> list[TestCase]:
+    def finished(self) -> list["TestCase"]:
         return list(self._finished.values())
 
-    def notrun(self) -> list[TestCase]:
+    def notrun(self) -> list["TestCase"]:
         return list(self._notrun.values())
 
-    def failed(self) -> list[TestCase]:
+    def failed(self) -> list["TestCase"]:
         return [_ for _ in self._finished.values() if _.status != "success"]
 
     def _counts(self) -> tuple[int, int, int]:

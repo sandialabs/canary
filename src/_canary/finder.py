@@ -6,12 +6,12 @@ import os
 import re
 import sys
 import time
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import TextIO
 
 from . import config
 from .generator import AbstractTestGenerator
-from .testcase import TestCase
 from .third_party.colify import colified
 from .third_party.color import colorize
 from .util import graph
@@ -20,6 +20,8 @@ from .util.parallel import starmap
 from .util.term import terminal_size
 from .util.time import hhmmss
 
+if TYPE_CHECKING:
+    from .testcase import TestCase
 logger = logging.get_logger(__name__)
 
 
@@ -86,7 +88,9 @@ class Finder:
         return [root for root in self.roots]
 
 
-def resolve_dependencies(cases: list[TestCase]) -> None:
+def resolve_dependencies(cases: list["TestCase"]) -> None:
+    from _canary.testcase import TestCase
+
     created = time.monotonic()
     msg = "@*{Resolving} test case dependencies"
     logger.info(msg, extra={"end": "..."})
@@ -125,19 +129,19 @@ def resolve_dependencies(cases: list[TestCase]) -> None:
 def generate_test_cases(
     generators: list[AbstractTestGenerator],
     on_options: list[str] | None = None,
-) -> list[TestCase]:
+) -> list["TestCase"]:
     """Generate test cases and filter based on criteria"""
 
     msg = "@*{Generating} test cases"
     logger.log(logging.INFO, msg, extra={"end": "..."})
     created = time.monotonic()
     try:
-        locked: list[list[TestCase]]
+        locked: list[list["TestCase"]]
         if config.get("config:debug"):
             locked = [f.lock(on_options) for f in generators]
         else:
             locked = starmap(lock_file, [(f, on_options) for f in generators])
-        cases: list[TestCase] = [case for group in locked for case in group if case]
+        cases: list["TestCase"] = [case for group in locked for case in group if case]
         nc, ng = len(cases), len(generators)
     except Exception:
         state = "failed"
@@ -173,16 +177,16 @@ def generate_test_cases(
     return cases
 
 
-def find_duplicates(cases: list[TestCase]) -> dict[str, list[TestCase]]:
+def find_duplicates(cases: list["TestCase"]) -> dict[str, list["TestCase"]]:
     ids = [case.id for case in cases]
     duplicate_ids = {id for id in ids if ids.count(id) > 1}
-    duplicates: dict[str, list[TestCase]] = {}
+    duplicates: dict[str, list["TestCase"]] = {}
     for id in duplicate_ids:
         duplicates.setdefault(id, []).extend([_ for _ in cases if _.id == id])
     return duplicates
 
 
-def pprint_paths(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+def pprint_paths(cases: list["TestCase"], file: TextIO = sys.stdout) -> None:
     unique_generators: dict[str, set[str]] = dict()
     for case in cases:
         unique_generators.setdefault(case.file_root, set()).add(case.file_path)
@@ -194,12 +198,12 @@ def pprint_paths(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
         file.write(cols + "\n")
 
 
-def pprint_files(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+def pprint_files(cases: list["TestCase"], file: TextIO = sys.stdout) -> None:
     for f in sorted(set([case.file for case in cases])):
-        file.write(os.path.relpath(f, os.getcwd()) + "\n")
+        file.write("%s\n" % os.path.relpath(f, os.getcwd()))
 
 
-def pprint_keywords(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+def pprint_keywords(cases: list["TestCase"], file: TextIO = sys.stdout) -> None:
     unique_kwds: dict[str, set[str]] = dict()
     for case in cases:
         unique_kwds.setdefault(case.file_root, set()).update(case.keywords)
@@ -211,11 +215,11 @@ def pprint_keywords(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
         file.write(cols + "\n")
 
 
-def pprint_graph(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+def pprint_graph(cases: list["TestCase"], file: TextIO = sys.stdout) -> None:
     graph.print(cases, file=file)
 
 
-def pprint(cases: list[TestCase], file: TextIO = sys.stdout) -> None:
+def pprint(cases: list["TestCase"], file: TextIO = sys.stdout) -> None:
     _, max_width = terminal_size()
     tree: dict[str, list[str]] = {}
     for case in cases:

@@ -9,7 +9,6 @@ import os
 from ....config.argparsing import Parser
 from ....config.schemas import testpaths_schema
 from ....finder import is_test_file
-from ....testcase import TestCase
 from ....third_party.color import colorize
 from ....util.filesystem import find_work_tree
 from ....util.filesystem import working_dir
@@ -185,6 +184,8 @@ class PathSpec(argparse.Action):
 
     @staticmethod
     def parse_in_session(values: list[str]) -> tuple[list[str], str | None]:
+        from ....testcase import TestCase
+
         paths: list[str] = []
         case_specs: list[str] = []
         path: str | None = None

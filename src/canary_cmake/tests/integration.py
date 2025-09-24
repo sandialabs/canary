@@ -10,6 +10,7 @@ import sys
 
 import pytest
 
+import _canary.config
 import _canary.util.executable as ex
 import _canary.util.filesystem as fs
 
@@ -17,6 +18,20 @@ f1 = fs.which("gcc") or os.getenv("CC")
 f2 = fs.which("cmake")
 nvf = str(importlib.resources.files("_canary").joinpath("../canary/tools/Canary.cmake"))
 good = f1 is not None and f2 is not None and os.path.exists(nvf)
+
+
+@pytest.fixture(scope="function", autouse=True)
+def config(request):
+    try:
+        env_copy = os.environ.copy()
+        os.environ.pop("CANARYCFG64", None)
+        os.environ["CANARY_DISABLE_KB"] = "1"
+        _canary.config._config = _canary.config.Config()
+        _canary.config.resource_pool.populate(cpus=6, gpus=0)
+        yield
+    except:
+        os.environ.clear()
+        os.environ.update(env_copy)
 
 
 @pytest.mark.skipif(not good, reason="gcc and/or cmake not on PATH")
@@ -63,6 +78,7 @@ good = good and f3 is not None
 
 @pytest.mark.skipif(not good, reason="gcc, cmake, and/or mpirun not found on PATH")
 def test_cmake_integration_parallel(tmpdir):
+    assert f3 is not None
     mpi_home = os.path.dirname(os.path.dirname(f3))
     from _canary.main import CanaryCommand
 
@@ -102,6 +118,7 @@ good = good and f3 is not None
 
 @pytest.mark.skipif(not good, reason="gcc, cmake, and/or mpirun not found on PATH")
 def test_cmake_integration_parallel_override(tmpdir):
+    assert f3 is not None
     mpi_home = os.path.dirname(os.path.dirname(f3))
     with fs.working_dir(tmpdir.strpath, create=True):
         with open("foo.c", "w") as fh:

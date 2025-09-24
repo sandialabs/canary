@@ -67,6 +67,7 @@ scripts.nvtest = "canary:console_main"
 [project.entry-points."canary"]
 canary_cmake = "canary_cmake"
 canary_hpc = "canary_hpc"
+canary_vvtest = "canary_vvtest"
 
 [tool.setuptools.dynamic]
 version = { attr = "_canary.util.dynamic_version.__generate_dynamic_version__" }
@@ -99,7 +100,7 @@ indent = 4
 max_supported_python = "3.14"
 
 [tool.pytest.ini_options]
-testpaths = [ "tests" ]
+testpaths = [ "tests", "src/canary_vvtest/tests", "src/canary_cmake/tests" ]
 norecursedirs = "mock"
 addopts = "-ra --durations=10"
 cache_dir = ".cache/pytest"
@@ -192,6 +193,19 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = [ "_canary.third_party.*" ]
 ignore_errors = true
+
+[tool.ty.src]
+exclude = [
+    "src/canary/examples",
+    "src/canary_cmake/cdash/xmlreporter.py",
+    "src/_canary/third_party/distro.py",
+    "src/_canary/third_party/programoutput/*",
+    "src/_canary/third_party/monkeypatch.py",
+    "src/_canary/third_party/cloudpickle.py",
+    "src/_canary/third_party/docstring_parser/*",
+    "src/_canary/third_party/imagesvg/*",
+]
+include = ["src"]
 
 
 [tool.bandit]

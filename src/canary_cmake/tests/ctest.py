@@ -281,6 +281,7 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
             queue.put(case)
             queue.prepare()
             _, c = queue.get()
+            assert isinstance(c, canary.TestCase)
             with c.rc_environ():
                 assert os.environ["CTEST_RESOURCE_GROUP_COUNT"] == "3"
                 assert os.environ["CTEST_RESOURCE_GROUP_0"] == "gpus"

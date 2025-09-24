@@ -9,7 +9,6 @@ from typing import Any
 from typing import TextIO
 
 from ... import config
-from ...testcase import TestCase
 from ...util import logging
 from ...util.filesystem import force_remove
 from ...util.filesystem import mkdirp
@@ -18,6 +17,7 @@ from ..types import CanaryReporter
 
 if TYPE_CHECKING:
     from ...session import Session
+    from ...testcase import TestCase
 
 logger = logging.get_logger(__name__)
 
@@ -66,7 +66,7 @@ class HTMLReporter(CanaryReporter):
     def head(self) -> str:
         return f"<head>\n{self.style}\n</head>\n"
 
-    def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
+    def generate_case_file(self, case: "TestCase", fh: TextIO) -> None:
         if case.masked():
             return
         fh.write("<html>\n")
@@ -100,7 +100,7 @@ class HTMLReporter(CanaryReporter):
         ):
             fh.write(f"<th>{col}</th>")
         fh.write("</tr>\n")
-        totals: dict[str, list[TestCase]] = {}
+        totals: dict[str, list["TestCase"]] = {}
         for case in session.active_cases():
             group = case.status.name.title()
             totals.setdefault(group, []).append(case)

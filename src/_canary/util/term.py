@@ -13,7 +13,7 @@ def terminal_size():
 
     def ioctl_gwinsz(fd):
         try:
-            rc = struct.unpack("hh", fcntl.ioctl(fd, termios.TIOCGWINSZ, "1234"))
+            rc = struct.unpack("hh", fcntl.ioctl(fd, termios.TIOCGWINSZ, "1234"))  # ty: ignore[no-matching-overload]
         except BaseException:
             return
         return rc

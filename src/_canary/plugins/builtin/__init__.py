@@ -18,7 +18,6 @@ from . import resource
 from . import runtest_protocol
 from . import runtests
 from . import testcase_generator
-from . import vvtest
 
 plugins = [
     discover,
@@ -37,5 +36,4 @@ plugins = [
     runtest_protocol,
     runtests,
     testcase_generator,
-    vvtest,
 ]

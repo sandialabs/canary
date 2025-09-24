@@ -9,7 +9,6 @@ from typing import Any
 from typing import TextIO
 
 from ... import config
-from ...testcase import TestCase
 from ...util import logging
 from ...util.filesystem import force_remove
 from ...util.filesystem import mkdirp
@@ -18,6 +17,7 @@ from ..types import CanaryReporter
 
 if TYPE_CHECKING:
     from ...session import Session
+    from ...testcase import TestCase
 
 logger = logging.get_logger(__name__)
 
@@ -55,7 +55,7 @@ class MarkdownReporter(CanaryReporter):
         f = os.path.relpath(self.index, config.invocation_dir)
         logger.info(f"Markdown report written to {f}")
 
-    def generate_case_file(self, case: TestCase, fh: TextIO) -> None:
+    def generate_case_file(self, case: "TestCase", fh: TextIO) -> None:
         if case.masked():
             return
         fh.write(f"# {case.display_name}\n\n")
@@ -65,7 +65,7 @@ class MarkdownReporter(CanaryReporter):
         fh.write(case.output())
         fh.write("```\n\n")
 
-    def render_test_info_table(self, case: TestCase, fh: TextIO) -> None:
+    def render_test_info_table(self, case: "TestCase", fh: TextIO) -> None:
         info: dict[str, str] = {
             "**Status**": case.status.name,
             "**Exit code**": str(case.returncode),
@@ -84,7 +84,7 @@ class MarkdownReporter(CanaryReporter):
             "| Site | Project | Not Run | Timeout | Fail | Diff | Pass | Invalid | Cancelled | Total |\n"
         )
         fh.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
-        totals: dict[str, list[TestCase]] = {}
+        totals: dict[str, list["TestCase"]] = {}
         for case in session.active_cases():
             group = case.status.name.title()
             totals.setdefault(group, []).append(case)
