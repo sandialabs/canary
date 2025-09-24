@@ -26,8 +26,8 @@ jobs:
       - name: Pytest
         run: |
           pip install .[dev]
-          pytest src/canary_cmake
-          pytest src/canary_vvtest
+          pytest src/canary_cmake/tests
+          pytest src/canary_vvtest/tests
           pytest tests
       - name: Coverage
         run: |
