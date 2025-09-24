@@ -29,6 +29,7 @@ EMIT = builtin_logging.CRITICAL + 5
 
 
 builtin_print = print
+root_log_name = "canary"
 
 
 class FileHandler(builtin_logging.FileHandler): ...
@@ -68,9 +69,9 @@ class Formatter(builtin_logging.Formatter):
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
         }
         if not hasattr(record, "prefix"):
-            if record.levelno in (INFO, DEBUG):
+            if record.levelno in (TRACE, DEBUG, INFO):
                 prefix = "@*%s{==>} " % level_color(record.levelno)
-            elif record.levelno in (ERROR, WARNING):
+            elif record.levelno in (WARNING, ERROR, CRITICAL):
                 prefix = "@*%s{==>} %s: " % (level_color(record.levelno), record.levelname.title())
             else:
                 prefix = "@*{==>} "
@@ -95,8 +96,15 @@ def level_name_mapping() -> dict[int, str]:
     return mapping
 
 
-def get_logger(name: str) -> builtin_logging.Logger:
-    return builtin_logging.getLogger(name)
+def get_logger(name: str | None) -> builtin_logging.Logger:
+    if name is None:
+        name = root_log_name
+    parts = name.split(".")
+    if parts[0] != root_log_name:
+        parts.insert(0, root_log_name)
+        name = ".".join(parts)
+    logger = builtin_logging.getLogger(name)
+    return logger
 
 
 def get_level_name(levelno: int | None = None) -> str:
@@ -117,24 +125,29 @@ def set_level(level: int | str) -> None:
         levelno = get_levelno(level)
     else:
         levelno = level
-    for handler in builtin_logging.getLogger("_canary").handlers:
+    for handler in builtin_logging.getLogger(root_log_name).handlers:
         if levelno < handler.level:
             handler.setLevel(levelno)
 
 
 def setup_logging() -> None:
+    logger = builtin_logging.getLogger(root_log_name)
     builtin_logging.addLevelName(TRACE, "TRACE")
     builtin_logging.addLevelName(EMIT, "EMIT")
-    sh = StreamHandler(sys.stderr)
-    fmt = Formatter(color=sys.stderr.isatty())
-    sh.setFormatter(fmt)
-    sh.setLevel(INFO)
-    logger = builtin_logging.getLogger("_canary")
-    logger.addHandler(sh)
-    logger.setLevel(TRACE)
+    if not logger.handlers:
+        sh = StreamHandler(sys.stderr)
+        fmt = Formatter(color=sys.stderr.isatty())
+        sh.setFormatter(fmt)
+        sh.setLevel(INFO)
+        logger.addHandler(sh)
+        logger.setLevel(TRACE)
 
 
 def add_file_handler(file: str, levelno: int) -> None:
+    logger = builtin_logging.getLogger(root_log_name)
+    for handler in logger.handlers:
+        if isinstance(handler, FileHandler) and handler.baseFilename == file:
+            return
     os.makedirs(os.path.dirname(file), exist_ok=True)
     fh = FileHandler(file)
     fmt = Formatter(
@@ -144,13 +157,14 @@ def add_file_handler(file: str, levelno: int) -> None:
     )
     fh.setFormatter(fmt)
     fh.setLevel(levelno)
-    logger = builtin_logging.getLogger("_canary")
     logger.addHandler(fh)
 
 
 def level_color(levelno: int) -> str:
     if levelno == NOTSET:
         return "c"
+    elif levelno == TRACE:
+        return "m"
     elif levelno == DEBUG:
         return "g"
     elif levelno == INFO:
@@ -167,7 +181,7 @@ def level_color(levelno: int) -> str:
 
 
 def get_level() -> int:
-    logger = builtin_logging.getLogger("_canary")
+    logger = builtin_logging.getLogger(root_log_name)
     for handler in logger.handlers:
         if isinstance(handler, StreamHandler):
             return handler.level

@@ -11,29 +11,26 @@ import os
 import shlex
 import signal
 import time
-import warnings
 from datetime import datetime
+from functools import lru_cache
 from itertools import repeat
 from typing import Any
 from typing import Sequence
 
 import hpc_connect
+import yaml
 
-from . import config
-from .atc import AbstractTestCase
-from .status import Status
-from .testcase import TestCase
-from .util import logging
-from .util.filesystem import force_remove
-from .util.filesystem import mkdirp
-from .util.filesystem import touchp
-from .util.hash import hashit
-from .util.misc import digits
-from .util.string import pluralize
-from .util.time import hhmmss
-from .util.time import time_in_seconds
+import canary
+from _canary.atc import AbstractTestCase
+from _canary.status import Status
+from _canary.util import logging
+from _canary.util.hash import hashit
+from _canary.util.misc import digits
+from _canary.util.string import pluralize
+from _canary.util.time import hhmmss
+from _canary.util.time import time_in_seconds
 
-logger = logging.get_logger(__name__)
+logger = canary.get_logger(__name__)
 
 
 class TestBatch(AbstractTestCase):
@@ -46,7 +43,7 @@ class TestBatch(AbstractTestCase):
 
     def __init__(
         self,
-        cases: Sequence[TestCase],
+        cases: Sequence[canary.TestCase],
         runtime: float | None = None,
     ) -> None:
         super().__init__()
@@ -61,7 +58,7 @@ class TestBatch(AbstractTestCase):
         self._runtime: float
         if runtime is None:
             self._runtime = self.find_approximate_runtime()
-        elif config.getoption("timeout:batch") == "conservative":
+        elif canary.config.getoption("timeout:batch") == "conservative":
             self._runtime = max(runtime, self.find_approximate_runtime())
         else:
             self._runtime = runtime
@@ -97,11 +94,11 @@ class TestBatch(AbstractTestCase):
         return self._runtime
 
     def find_approximate_runtime(self) -> float:
-        from .util import partitioning
+        from .partitioning import packed_perimeter
 
         if len(self.cases) == 1:
             return self.cases[0].runtime
-        _, height = partitioning.packed_perimeter(self.cases)
+        _, height = packed_perimeter(self.cases)
         t = sum(c.runtime for c in self)
         return float(min(height, t))
 
@@ -146,7 +143,7 @@ class TestBatch(AbstractTestCase):
             return -1
         return stop - start
 
-    def validate(self, cases: Sequence[TestCase]):
+    def validate(self, cases: Sequence[canary.TestCase]):
         errors = 0
         for case in cases:
             if case.masked():
@@ -230,9 +227,13 @@ class TestBatch(AbstractTestCase):
     def path(self) -> str:
         return os.path.join(".canary/batches", self.id[:2], self.id[2:])
 
+    @property
+    def working_directory(self) -> str:
+        return self.path
+
     def save(self):
         f = os.path.join(self.stage(self.id), "index")
-        mkdirp(os.path.dirname(f))
+        canary.filesystem.mkdirp(os.path.dirname(f))
         with open(f, "w") as fh:
             json.dump([case.id for case in self], fh, indent=2)
 
@@ -252,7 +253,7 @@ class TestBatch(AbstractTestCase):
         replacements: dict[str, str] = {
             "%id": self.id[:7],
             "%p": self.path,
-            "%P": os.path.dirname(self.path),
+            "%P": self.stage(self.id),
             "%n": repr(self),
             "%j": self.jobid or "none",
             "%l": str(len(self)),
@@ -261,7 +262,7 @@ class TestBatch(AbstractTestCase):
             "%s.v": self.status.value,
             "%s.d": self.status.details or "unknown",
         }
-        if config.getoption("format", "short") == "long":
+        if canary.config.getoption("format", "short") == "long":
             replacements["%X"] = replacements["%p"]
         else:
             replacements["%X"] = replacements["%n"]
@@ -298,7 +299,7 @@ class TestBatch(AbstractTestCase):
 
     @staticmethod
     def stage(batch_id: str) -> str:
-        work_tree = config.get("session:work_tree")
+        work_tree = canary.config.get("session:work_tree")
         assert work_tree is not None
         root = os.path.join(work_tree, ".canary/batches", batch_id[:2])
         if os.path.exists(root) and os.path.exists(os.path.join(root, batch_id[2:])):
@@ -312,7 +313,7 @@ class TestBatch(AbstractTestCase):
     @staticmethod
     def find(batch_id: str) -> str:
         """Find the full batch ID from batch_id"""
-        work_tree = config.get("session:work_tree")
+        work_tree = canary.config.get("session:work_tree")
         assert work_tree is not None
         pattern = os.path.join(work_tree, ".canary/batches", batch_id[:2], f"{batch_id[2:]}*")
         candidates = glob.glob(pattern)
@@ -323,7 +324,9 @@ class TestBatch(AbstractTestCase):
     def setup(self) -> None:
         pass
 
-    def run(self, qsize: int = 1, qrank: int = 1) -> None:
+    def run(  # type: ignore[override]
+        self, backend: hpc_connect.HPCSubmissionManager, qsize: int = 1, qrank: int = 1
+    ) -> None:
         def cancel(sig, frame):
             nonlocal proc
             logger.info(f"Cancelling run due to captured signal {sig!r}")
@@ -335,33 +338,34 @@ class TestBatch(AbstractTestCase):
             elif sig == signal.SIGTERM:
                 os._exit(1)
 
+        pbar = (
+            canary.config.getoption("format") == "progress-bar"
+            or logging.get_level() > logging.INFO
+        )
         logger.debug(f"Running batch {self.id[:7]}")
         start = time.monotonic()
         variables = dict(self.variables)
         variables["CANARY_LEVEL"] = "1"
         variables["CANARY_DISABLE_KB"] = "1"
-        variables["CANARY_HPCC_BACKEND"] = "null"  # guard against infinite batch recursion
-        if config.get("config:debug"):
+        if canary.config.get("config:debug"):
             variables["CANARY_DEBUG"] = "on"
 
-        batchopts = config.getoption("batch", {})
+        batchopts = canary.config.getoption("batchopts", {})
         flat = batchopts["spec"]["layout"] == "flat"
         try:
             breadcrumb = os.path.join(self.stage(self.id), ".running")
-            touchp(breadcrumb)
+            canary.filesystem.touchp(breadcrumb)
             default_int_signal = signal.signal(signal.SIGINT, cancel)
             default_term_signal = signal.signal(signal.SIGTERM, cancel)
-            backend = config.hpcc_backend
-            assert backend is not None
             proc: hpc_connect.HPCProcess | None = None
             logger.debug(f"Submitting batch {self.id}")
             if backend.supports_subscheduling and flat:
                 scriptdir = os.path.dirname(self.submission_script_filename())
-                timeoutx = config.get("config:timeout:multiplier", 1.0)
+                timeoutx = canary.config.get("config:timeout:multiplier", 1.0)
                 variables.pop("CANARY_BATCH_ID", None)
                 proc = backend.submitn(
                     [case.id for case in self],
-                    [[canary_invocation(case)] for case in self],
+                    [[self.canary_testcase_invocation(case, backend)] for case in self],
                     cpus=[case.cpus for case in self],
                     gpus=[case.gpus for case in self],
                     scriptname=[os.path.join(scriptdir, f"{case.id}-inp.sh") for case in self],
@@ -372,12 +376,13 @@ class TestBatch(AbstractTestCase):
                     qtime=[case.runtime * timeoutx for case in self],
                 )
             else:
-                timeoutx = config.get("config:timeout:multiplier", 1.0)
+                timeoutx = canary.config.get("config:timeout:multiplier", 1.0)
                 qtime = self.qtime() * timeoutx
+                nodes = self.nodes_required(backend)
                 proc = backend.submit(
                     f"canary.{self.id[:7]}",
-                    [canary_invocation(self)],
-                    nodes=nodes_required(self),
+                    [self.canary_batch_invocation(backend)],
+                    nodes=nodes,
                     scriptname=self.submission_script_filename(),
                     output=self.logfile(self.id),
                     error=self.logfile(self.id),
@@ -388,11 +393,8 @@ class TestBatch(AbstractTestCase):
             assert proc is not None
             if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
                 self.jobid = proc.jobid
-            bar = config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
-            if not bar:
-                logger.log(
-                    logging.EMIT, self.job_submission_summary(qrank, qsize), extra={"prefix": ""}
-                )
+            if not pbar:
+                emit(self.submission_summary(qrank, qsize), extra={"prefix": ""})
             while True:
                 try:
                     if proc.poll() is not None:
@@ -401,13 +403,13 @@ class TestBatch(AbstractTestCase):
                     logger.exception(self.format("Batch @*b{%id}: polling job failed!"))
                 time.sleep(backend.polling_frequency)
         finally:
-            force_remove(breadcrumb)
+            canary.filesystem.force_remove(breadcrumb)
             signal.signal(signal.SIGINT, default_int_signal)
             signal.signal(signal.SIGTERM, default_term_signal)
             self.total_duration = time.monotonic() - start
             self.refresh()
             if all([_.status.satisfies(("ready", "pending")) for _ in self.cases]):
-                f = "Batch @*b{%id}: no test cases have started; check %p for any emitted scheduler log files."
+                f = "Batch @*b{%id}: no test cases have started; check %P for any emitted scheduler log files."
                 logger.warning(self.format(f))
             for case in self.cases:
                 if case.status == "skipped":
@@ -428,18 +430,15 @@ class TestBatch(AbstractTestCase):
                 logger.debug(
                     self.format(f"Batch @*b{{%id}}: batch processing exited with code {rc}")
                 )
-            bar = config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
-            if not bar:
-                logger.log(
-                    logging.EMIT, self.job_completion_summary(qrank, qsize), extra={"prefix": ""}
-                )
+            if not pbar:
+                emit(self.completion_summary(qrank, qsize), extra={"prefix": ""})
 
         return
 
     def finish(self) -> None:
         pass
 
-    def job_submission_summary(self, qrank: int | None, qsize: int | None) -> str:
+    def submission_summary(self, qrank: int | None, qsize: int | None) -> str:
         fmt = io.StringIO()
         if os.getenv("GITLAB_CI"):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
@@ -450,7 +449,7 @@ class TestBatch(AbstractTestCase):
             fmt.write(" (jobid: %j)")
         return self.format(fmt.getvalue().strip())
 
-    def job_completion_summary(self, qrank: int | None, qsize: int | None) -> str:
+    def completion_summary(self, qrank: int | None, qsize: int | None) -> str:
         fmt = io.StringIO()
         if os.getenv("GITLAB_CI"):
             fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
@@ -465,69 +464,122 @@ class TestBatch(AbstractTestCase):
         fmt.write(")")
         return self.format(fmt.getvalue().strip())
 
-
-def canary_invocation(arg: "TestBatch | TestCase") -> str:
-    """Write the canary invocation used to run this batch."""
-
-    fp = io.StringIO()
-    fp.write("canary ")
-
-    if isinstance(arg, TestBatch):
-        # The batch will be run in a compute node, so hpc_connect won't set the machine limits
-        resource_types: set[str] = set()
-        for case in arg:
+    @lru_cache
+    def nodes_required(self, backend: hpc_connect.HPCSubmissionManager) -> int:
+        """Nodes required to run cases in ``batch``"""
+        max_count_per_type: dict[str, int] = {}
+        for case in self:
             reqd_resources = case.required_resources()
-            for group in reqd_resources[0]:
-                resource_types.add(group["type"])
-        cfg: dict[str, Any] = {}
-        pool = cfg.setdefault("resource_pool", {})
-        pool["nodes"] = nodes_required(arg)
-        for type in resource_types:
-            key = f"{type}_per_node"
-            pool[key] = config.resource_pool.pinfo(key)
-        batch_stage = arg.stage(arg.id)
-        config_file = os.path.join(batch_stage, "config")
+            total_slots_per_type: dict[str, int] = {}
+            for group in reqd_resources:
+                for member in group:
+                    type = member["type"]
+                    total_slots_per_type[type] = total_slots_per_type.get(type, 0) + member["slots"]
+            for type, count in total_slots_per_type.items():
+                max_count_per_type[type] = max(max_count_per_type.get(type, 0), count)
+        node_count: int = 1
+        for type, count in max_count_per_type.items():
+            try:
+                count_per_node = backend.config.count_per_node(type)
+            except ValueError:
+                continue
+            node_count = max(node_count, int(math.ceil(count / count_per_node)))
+        return node_count
+
+    def canary_testcase_invocation(
+        self, case: canary.TestCase, backend: hpc_connect.HPCSubmissionManager
+    ) -> str:
+        """Write the canary invocation used to run this test case"""
+        reqd_resources = case.required_resources()
+        count_per_type: dict[str, int] = {}
+        resources: dict[str, list[Any]] = {}
+        for group in reqd_resources:
+            for member in group:
+                type = member["type"]
+                rspec: list[dict] = resources.setdefault(type, [])
+                rspec.append({"id": str(len(rspec)), "slots": member["slots"]})
+                count_per_type[type] = count_per_type.get(type, 0) + member["slots"]
+        node_count: int = 1
+        counts_per_node: dict[str, int] = {}
+        for type, count in count_per_type.items():
+            count_per_node = backend.config.count_per_node(type)
+            node_count = max(node_count, int(math.ceil(count / count_per_node)))
+            counts_per_node[f"{type}_per_node"] = count_per_node
+        cfg: dict[str, Any] = {
+            "resource_pool": {
+                "resources": resources,
+                "additional_properties": {
+                    "hpc_connect": {
+                        "backend": backend.name,
+                        "nodes": node_count,
+                        "case": case.id,
+                        **counts_per_node,
+                    }
+                },
+            }
+        }
+        config_file = os.path.join(self.stage(self.id), f"config.{case.id}")
         with open(config_file, "w") as fh:
-            json.dump(cfg, fh, indent=2)
-        fp.write(f"-f {config_file} ")
-    if config.get("config:debug"):
-        fp.write("-d ")
-    fp.write(f"-C {config.get('session:work_tree')} run ")
-    if isinstance(arg, TestBatch):
-        batchopts = config.getoption("batch", {})
+            yaml.dump(cfg, fh, indent=2)
+        args: list[str] = ["canary", "-f", config_file]
+        if canary.config.get("config:debug"):
+            args.append("-d")
+        args.extend(["-C", canary.config.get("session:work_tree")])
+        args.extend(
+            ["run", "-b", "scheduler=null", f"/{case.id}"]
+        )  # guard against infinite recursion
+        return shlex.join(args)
+
+    def canary_batch_invocation(self, backend: hpc_connect.HPCSubmissionManager) -> str:
+        """Write the canary invocation used to run this batch."""
+        types: set[str] = set()
+        for case in self:
+            reqd_resources = case.required_resources()
+            for group in reqd_resources:
+                types.update([member["type"] for member in group])
+        resources: dict[str, list[Any]] = {}
+        counts_per_node: dict[str, int] = {}
+        node_count = self.nodes_required(backend)
+        for type in types:
+            counts_per_node[f"{type}_per_node"] = count = backend.config.count_per_node(type)
+            slots = 1
+            resources[type] = [{"id": str(j), "slots": slots} for j in range(count * node_count)]
+        cfg: dict[str, Any] = {
+            "resource_pool": {
+                "resources": resources,
+                "additional_properties": {
+                    "hpc_connect": {
+                        "backend": backend.name,
+                        "nodes": node_count,
+                        **counts_per_node,
+                    }
+                },
+            }
+        }
+        config_file = os.path.join(self.stage(self.id), "config")
+        with open(config_file, "w") as fh:
+            yaml.dump(cfg, fh, indent=2)
+        args: list[str] = ["canary", "-f", config_file]
+        if canary.config.get("config:debug"):
+            args.append("-d")
+        args.extend(["-C", canary.config.get("session:work_tree")])
+        args.extend(["run", "-b", "scheduler=null", f"--batch-id={self.id}"])
+        batchopts = canary.config.getoption("batchopts", {})
         if workers := batchopts.get("workers"):
-            fp.write(f"--workers={workers} ")
-    fp.write("-b scheduler=null ")  # guard against infinite batch recursion
-    sigil = "^" if isinstance(arg, TestBatch) else "/"
-    fp.write(f"{sigil}{arg.id}")
-    return fp.getvalue()
-
-
-def nodes_required(arg: TestCase | TestBatch) -> int:
-    nodes: int
-    if isinstance(arg, TestCase):
-        nodes = config.resource_pool.nodes_required(arg.required_resources())
-    else:
-        assert isinstance(arg, TestBatch)
-        nodes = max(config.resource_pool.nodes_required(c.required_resources()) for c in arg)
-        if nodes_per_batch := os.getenv("CANARY_NODES_PER_BATCH"):
-            nodes = max(nodes, int(nodes_per_batch))
-    return nodes
+            args.append(f"--workers={workers}")
+        return shlex.join(args)
 
 
 def batch_options() -> list[str]:
-    options: list[str] = list(config.get("batch:default_options") or [])
-    if varargs := os.getenv("CANARY_BATCH_ARGS"):
-        warnings.warn(
-            "Use CANARY_RUN_ADDOPTS instead of CANARY_BATCH_ARGS",
-            category=DeprecationWarning,
-            stacklevel=0,
-        )
-        options.extend(shlex.split(varargs))
-    batchopts = config.getoption("batch", {})
+    options: list[str] = []
+    batchopts = canary.config.getoption("batchopts", {})
     if args := batchopts.get("options"):
         options.extend(args)
     return options
+
+
+def emit(text: str, **kwargs: Any) -> None:
+    logger.log(logging.EMIT, text, **kwargs)
 
 
 class BatchNotFound(Exception):

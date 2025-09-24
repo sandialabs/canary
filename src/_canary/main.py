@@ -37,18 +37,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     :returns: An exit code.
     """
-    if "CANARY_LEVEL" not in os.environ:
-        os.environ["CANARY_LEVEL"] = "0"
-
     with CanaryMain(argv) as m:
         parser = make_argument_parser()
         parser.add_main_epilog(parser)
-        for command in config.plugin_manager.get_subcommands():
+        for command in config.pluginmanager.get_subcommands():
             parser.add_command(command)
         with monkeypatch.context() as mp:
             mp.setattr(parser, "add_argument", parser.add_plugin_argument)
             mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
-            config.plugin_manager.hook.canary_addoption(parser=parser)
+            config.pluginmanager.hook.canary_addoption(parser=parser)
         args = parser.parse_args(m.argv)
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
@@ -57,8 +54,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             color.set_color_when(args.color)
 
         config.set_main_options(args)
-        config.plugin_manager.hook.canary_addhooks(pluginmanager=config.plugin_manager)
-        config.plugin_manager.hook.canary_configure(config=config)
+        config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
+        config.pluginmanager.hook.canary_configure(config=config)
         command = parser.get_command(args.command)
         if command is None:
             parser.print_help()
@@ -94,7 +91,7 @@ class CanaryMain:
         # main command line. This allows plugins to define a subcommand (which must be registered
         # before it can be run)
         for p in args.plugins:
-            config.plugin_manager.consider_plugin(p)
+            config.pluginmanager.consider_plugin(p)
         return self
 
     def __exit__(self, ex_type, ex_value, ex_traceback):
@@ -104,7 +101,7 @@ class CanaryMain:
 class CanaryCommand:
     def __init__(self, command_name: str, debug: bool = False) -> None:
         # plugin.load_from_entry_points()
-        for command in config.plugin_manager.get_subcommands():
+        for command in config.pluginmanager.get_subcommands():
             if command.name == command_name:
                 self.command = command
                 break
@@ -125,16 +122,16 @@ class CanaryCommand:
                     reraise = True
                 argv = [self.command.name] + list(args_in)
                 parser = make_argument_parser()
-                for command in cfg.plugin_manager.get_subcommands():
+                for command in cfg.pluginmanager.get_subcommands():
                     parser.add_command(command)
                 with monkeypatch.context() as mp:
                     mp.setattr(parser, "add_argument", parser.add_plugin_argument)
                     mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
-                    cfg.plugin_manager.hook.canary_addoption(parser=parser)
+                    cfg.pluginmanager.hook.canary_addoption(parser=parser)
                 args = parser.parse_args(argv)
                 cfg.set_main_options(args)
-                cfg.plugin_manager.hook.canary_addhooks(pluginmanager=cfg.plugin_manager)
-                cfg.plugin_manager.hook.canary_configure(config=cfg)
+                cfg.pluginmanager.hook.canary_addhooks(pluginmanager=cfg.pluginmanager)
+                cfg.pluginmanager.hook.canary_configure(config=cfg)
                 rc = self.command.execute(args)
                 self.returncode = rc
         except Exception:
@@ -174,7 +171,7 @@ class Profiler:
     def __exit__(self, *args):
         if self.type == 1:
             self.profiler.stop()
-            self.profiler.print()
+            self.profiler.print(show_all=True)
         else:
             import pstats
 
@@ -198,10 +195,18 @@ def invoke_profiled_command(command, args):
 
 def determine_plugin_from_tb(tb: traceback.StackSummary) -> None | Any:
     """Determine if the exception was raised inside a plugin"""
+
+    def filename(obj):
+        import inspect
+
+        if f := getattr(obj, "__file__", None):
+            return f
+        return inspect.getfile(obj.__class__)
+
     for frame in tb[::-1]:
         # Check if the frame corresponds to a registered plugin
-        for plugin in config.plugin_manager.get_plugins():
-            if plugin and frame.filename == plugin.__file__:
+        for plugin in config.pluginmanager.get_plugins():
+            if plugin and frame.filename == filename(plugin):
                 return plugin
     return None
 
@@ -259,6 +264,6 @@ def console_main() -> int:
         tb = traceback.extract_tb(e.__traceback__)
         err = str(e)
         if plugin := determine_plugin_from_tb(tb):
-            err += f" (from plugin: {plugin.__name__})"
+            err += f" (from plugin: {plugin})"
         logger.error(err)
         return 3

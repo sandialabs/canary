@@ -103,7 +103,7 @@ class Run(CanarySubcommand):
     def execute(self, args: "argparse.Namespace") -> int:
         from ...session import Session
 
-        config.plugin_manager.hook.canary_runtests_startup()
+        config.pluginmanager.hook.canary_runtests_startup(args=args)
 
         session: Session
         if args.mode == "w":
@@ -157,13 +157,12 @@ class Run(CanarySubcommand):
                     start=args.start,
                     keyword_exprs=args.keyword_exprs,
                     parameter_expr=args.parameter_expr,
-                    case_specs=getattr(args, "case_specs", None),
+                    case_specs=case_specs,
                 )
         else:
-            assert args.mode == "b"
-            session = Session.batch_view(args.work_tree, args.batch_id)
-        session.run(fail_fast=config.getoption("fail_fast") or False)
-        config.plugin_manager.hook.canary_runtests_summary(
+            raise ValueError(f"Unknown session mode {args.mode!r}")
+        session.run()
+        config.pluginmanager.hook.canary_runtests_summary(
             cases=session.active_cases(), include_pass=False, truncate=10
         )
         return session.exitstatus

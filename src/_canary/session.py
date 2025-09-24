@@ -16,12 +16,13 @@ from typing import IO
 from typing import Any
 from typing import Generator
 
+import psutil
+
 from . import config
 from . import finder
 from .error import StopExecution
 from .error import notests_exit_status
 from .generator import AbstractTestGenerator
-from .testbatch import TestBatch
 from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_state as testcase_from_state
@@ -35,8 +36,6 @@ from .util.graph import TopologicalSorter
 from .util.graph import find_reachable_nodes
 from .util.graph import static_order
 from .util.procutils import cleanup_children
-from .util.rprobe import cpu_count
-from .util.string import pluralize
 from .util.time import timestamp
 
 # Session modes are analogous to file modes
@@ -133,11 +132,7 @@ class Session:
         self.returncode = -1
         self.start = -1.0
         self.stop = -1.0
-
-        os.environ.setdefault("CANARY_LEVEL", "0")
         os.environ["CANARY_WORK_TREE"] = self.work_tree
-        self.level = int(os.environ["CANARY_LEVEL"])
-
         self.db = Database(self.config_dir, mode=mode)
         if mode in ("r", "r+", "a", "a+"):
             self.restore_settings()
@@ -148,12 +143,12 @@ class Session:
                 self.cases.extend(cases)
         else:
             self.initialize()
-            config.plugin_manager.hook.canary_session_startup(session=self)
+            config.pluginmanager.hook.canary_session_startup(session=self)
 
         if self.mode == "w":
             self.save(ini=True)
 
-        f = os.path.join(self.config_dir, "log.txt")
+        f = os.path.join(self.config_dir, "canary-out.txt")
         logging.add_file_handler(f, levelno=logging.DEBUG)
 
     @classmethod
@@ -171,7 +166,7 @@ class Session:
         operations"""
         self = cls(path, mode="a+")
         cases = self.load_testcases()
-        config.plugin_manager.hook.canary_testsuite_mask(
+        config.pluginmanager.hook.canary_testsuite_mask(
             cases=cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
@@ -182,7 +177,7 @@ class Session:
             ignore_dependencies=True,
         )
         for case in static_order(cases):
-            config.plugin_manager.hook.canary_testcase_modify(case=case)
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
         self.cases.clear()
         for case in static_order(cases):
             if case.wont_run():
@@ -223,29 +218,6 @@ class Session:
             elif case.pending() and not all(dep.id in ids for dep in case.dependencies):
                 case.mask = "one or more missing dependencies"
             self.cases.append(case)
-        return self
-
-    @classmethod
-    def batch_view(cls, path: str, batch_id: str) -> "Session":
-        """Create a view of this session that only includes cases in ``batch_id``"""
-        ids = TestBatch.loadindex(batch_id)
-        if ids is None:
-            raise ValueError(f"could not find index for batch {batch_id}")
-        expected = len(ids)
-        logger.info(f"Selecting {expected} {pluralize('test', expected)} from batch {batch_id}")
-        self = cls(path, mode="a+")
-        self.cases.clear()
-        for case in self.load_testcases(ids=ids):
-            if case.id not in ids:
-                continue
-            case.mark_as_ready()
-            if not case.status.satisfies(("pending", "ready")):
-                logger.error(f"{case}: will not run: {case.status.details}")
-            elif case.pending() and not all(_.id in ids for _ in case.dependencies):
-                case.mask = "one or more missing dependencies"
-            self.cases.append(case)
-        ready = len(self.get_ready())
-        logger.info(f"Selected {ready} {pluralize('test', expected)} from batch {batch_id}")
         return self
 
     def load_from_lockfile(self, file) -> None:
@@ -308,7 +280,7 @@ class Session:
             if len(self.cases) < 100:
                 [case.save() for case in self.cases]
             else:
-                cpus = cpu_count()
+                cpus = psutil.cpu_count()
                 args = ((case.getstate(), case.lockfile) for case in self.cases)
                 pool = multiprocessing.Pool(cpus)
                 pool.imap_unordered(json_dump, args, chunksize=len(self.cases) // cpus or 1)
@@ -438,7 +410,6 @@ class Session:
     def set_config_values(self):
         """Set ``section`` configuration values"""
         config.set("session:work_tree", self.work_tree, scope="defaults")
-        config.set("session:level", self.level, scope="defaults")
         config.set("session:mode", self.mode, scope="defaults")
 
     def save(self, ini: bool = False) -> None:
@@ -522,7 +493,7 @@ class Session:
 
         """
         cases = finder.generate_test_cases(self.generators, on_options=on_options)
-        config.plugin_manager.hook.canary_testsuite_mask(
+        config.pluginmanager.hook.canary_testsuite_mask(
             cases=cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
@@ -533,7 +504,7 @@ class Session:
             ignore_dependencies=False,
         )
         for case in static_order(cases):
-            config.plugin_manager.hook.canary_testcase_modify(case=case)
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
 
         self.cases.clear()
         for case in cases:
@@ -542,7 +513,7 @@ class Session:
             if not case.wont_run():
                 case.mark_as_ready()
                 self.cases.append(case)
-        config.plugin_manager.hook.canary_collectreport(cases=cases)
+        config.pluginmanager.hook.canary_collectreport(cases=cases)
         if not self.get_ready():
             raise StopExecution("No tests to run", notests_exit_status)
 
@@ -570,7 +541,7 @@ class Session:
 
         """
         cases = self.active_cases()
-        config.plugin_manager.hook.canary_testsuite_mask(
+        config.pluginmanager.hook.canary_testsuite_mask(
             cases=cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
@@ -581,33 +552,28 @@ class Session:
             ignore_dependencies=False,
         )
         for case in static_order(cases):
-            config.plugin_manager.hook.canary_testcase_modify(case=case)
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
         for case in cases:
             if not case.wont_run():
                 case.mark_as_ready()
-        config.plugin_manager.hook.canary_collectreport(cases=cases)
+        config.pluginmanager.hook.canary_collectreport(cases=cases)
 
-    def run(self, *, fail_fast: bool = False) -> list[TestCase]:
+    def run(self) -> list[TestCase]:
         """Run each test case in ``cases``.
 
-        Args:
-          cases: test cases to run
-          fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
-            continuing running until all tests have been run.
-
         Returns:
-          The session returncode (0 for success)
+          The cases that were run
 
         """
         cases = self.get_ready()
         if not cases:
             raise StopExecution("No tests to run", notests_exit_status)
         self.start = timestamp()
-        rc = config.plugin_manager.hook.canary_runtests(cases=cases, fail_fast=fail_fast)
+        rc = config.pluginmanager.hook.canary_runtests(cases=cases)
         self.stop = timestamp()
         self.returncode = rc
         self.exitstatus = rc
-        config.plugin_manager.hook.canary_session_finish(session=self, exitstatus=self.exitstatus)
+        config.pluginmanager.hook.canary_session_finish(session=self, exitstatus=self.exitstatus)
         self.save()
         for case in self.cases:
             # we wont run invalid cases, but we want to include them in reports

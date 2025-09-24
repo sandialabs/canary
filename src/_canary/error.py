@@ -27,6 +27,10 @@ def excepthook(exctype, value, trace):
 sys.excepthook, sys_excepthook = excepthook, sys.excepthook
 
 
+class ResourceUnsatisfiableError(Exception):
+    pass
+
+
 class TestFailed(MyException):
     exit_code = fail_exit_status
 

@@ -5,100 +5,18 @@
 import argparse
 import os
 import re
-from typing import TYPE_CHECKING
+import shlex
 from typing import Any
 
-from ... import config
-from ...third_party.color import colorize
-from ...util import logging
-from ...util import partitioning
-from ...util.string import csvsplit
-from ...util.string import strip_quotes
-from ...util.time import time_in_seconds
-from ..hookspec import hookimpl
+import canary
+from _canary.third_party.color import colorize
+from _canary.util.string import csvsplit
+from _canary.util.string import strip_quotes
+from _canary.util.time import time_in_seconds
 
-if TYPE_CHECKING:
-    from ...config import Config as CanaryConfig
-    from ...config.argparsing import Parser
-    from ...testbatch import TestBatch
-    from ...testcase import TestCase
+from . import partitioning
 
-logger = logging.get_logger(__name__)
-
-
-@hookimpl(trylast=True)
-def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
-    batchopts = config.getoption("batch", {})
-    if not batchopts:
-        return None
-    spec = batchopts["spec"]
-    nodes = spec["nodes"] or "any"
-    layout = spec["layout"] or "flat"
-    if spec["duration"] is not None:
-        duration = float(spec["duration"])  # 30 minute default
-        logger.debug(f"Batching test cases using duration={duration}")
-        return partitioning.partition_t(cases, t=duration, nodes=nodes)
-    else:
-        assert spec["count"] is not None
-        count = int(spec["count"])
-        logger.debug(f"Batching test cases using count={count}")
-        if layout == "atomic":
-            return partitioning.partition_n_atomic(cases, n=count)
-        return partitioning.partition_n(cases, n=count, nodes=nodes)
-
-
-@hookimpl
-def canary_configure(config: "CanaryConfig") -> None:
-    """Do some post configuration checks"""
-    batchopts = config.getoption("batch")
-    if batchopts:
-        if config.hpcc_backend is None:
-            raise ValueError("Test batching requires a batch:scheduler")
-        validate_and_set_defaults(batchopts)
-
-
-@hookimpl
-def canary_addoption(parser: "Parser") -> None:
-    parser.add_argument(
-        "-b",
-        action=BatchResourceSetter,
-        metavar="resource",
-        command=("run", "find"),
-        group="batch control",
-        dest="batch",
-        help=BatchResourceSetter.help_page("-b"),
-    )
-
-
-def validate_and_set_defaults(batchopts: dict) -> None:
-    if "spec" not in batchopts:
-        batchopts["spec"] = {
-            "nodes": "any",
-            "layout": "flat",
-            "count": None,
-            "duration": 30 * 60,
-        }
-    spec = batchopts["spec"]
-    if spec.get("duration") is None and spec.get("count") is None:
-        spec["duration"] = 30 * 60  # 30 minutes
-        spec["count"] = None
-    if "duration" not in spec:
-        spec["duration"] = None
-    if "count" not in spec:
-        spec["count"] = None
-    if "nodes" not in spec:
-        spec["nodes"] = "any"
-    if spec["nodes"] is None:
-        spec["nodes"] = "any"
-    if "layout" not in spec:
-        spec["layout"] = "flat"
-    if spec["layout"] is None:
-        spec["layout"] = "flat"
-    if spec["duration"] is not None and spec["count"] is not None:
-        raise ValueError("batch spec: duration not allowed with count")
-    if spec["layout"] == "atomic" and spec["nodes"] == "same":
-        raise ValueError("batch spec: layout:atomic not allowed with nodes:same")
-    batchopts["spec"] = spec
+logger = canary.get_logger(__name__)
 
 
 class BatchResourceSetter(argparse.Action):
@@ -186,6 +104,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             raw = match.group(2)
             return ("scheduler", raw)
         elif match := re.search(r"^(option|args|scheduler_args|with)[:=](.*)$", arg):
+            setdefaultopts(namespace)
             raw = strip_quotes(match.group(2))
             return ("options", csvsplit(raw))
         # Deprecated options, use spec
@@ -221,6 +140,32 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         else:
             raise ValueError(f"invalid resource arg: {arg!r}")
 
+    @staticmethod
+    def validate_and_set_defaults(batchopts: dict) -> None:
+        default_spec = {"nodes": "any", "layout": "flat", "count": None, "duration": 30 * 60}
+        batchopts.setdefault("spec", default_spec)
+        spec = batchopts["spec"]
+        if spec.get("duration") is None and spec.get("count") is None:
+            spec["duration"] = 30 * 60  # 30 minutes
+            spec["count"] = None
+        if "duration" not in spec:
+            spec["duration"] = None
+        if "count" not in spec:
+            spec["count"] = None
+        if "nodes" not in spec:
+            spec["nodes"] = "any"
+        if spec["nodes"] is None:
+            spec["nodes"] = "any"
+        if "layout" not in spec:
+            spec["layout"] = "flat"
+        if spec["layout"] is None:
+            spec["layout"] = "flat"
+        if spec["duration"] is not None and spec["count"] is not None:
+            raise ValueError("batch spec: duration not allowed with count")
+        if spec["layout"] == "atomic" and spec["nodes"] == "same":
+            raise ValueError("batch spec: layout:atomic not allowed with nodes:same")
+        batchopts["spec"] = spec
+
 
 def bold(arg: str) -> str:
     if os.getenv("COLOR_WHEN", "auto") == "never":
@@ -230,8 +175,18 @@ def bold(arg: str) -> str:
 
 def setdefaultspec(namespace: argparse.Namespace) -> dict[str, Any]:
     default = {"nodes": None, "layout": None, "count": None, "duration": None}
-    if not hasattr(namespace, "spec"):
-        namespace.spec = default
-    elif not namespace.spec:
-        namespace.spec = default
-    return namespace.spec
+    if not getattr(namespace, "batchopts", None):
+        namespace.batchopts = {}
+    namespace.batchopts.setdefault("spec", default)
+    return namespace.batchopts["spec"]
+
+
+def setdefaultopts(namespace: argparse.Namespace) -> list[str]:
+    if not getattr(namespace, "batchopts", None):
+        namespace.batchopts = {}
+    if "options" not in namespace.batchopts:
+        options = namespace.batchopts.setdefault("options", [])
+        options.extend(list(canary.config.get("batch:default_options") or []))
+        if arg := os.getenv("CANARY_BATCH_ARGS"):
+            options.extend(shlex.split(arg))
+    return namespace.batchopts["options"]

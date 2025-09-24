@@ -30,32 +30,52 @@ echo "------------------------Test 1----------------------"
 echo " "
 # Test 1
 exit_code=0
-canary run -w -b scheduler=flux ./examples || exit_code=$?
-if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+canary -d run --show-excluded-tests -w -b scheduler=flux ./examples || exit_code=$?
+if [ "${exit_code}" -ne 30 ]; then
+  cat TestResults/.canary/config || true
+  cat TestResults/.canary/batches/*/*/config || true
+  cat TestResults/.canary/batches/*/*/canary-out.txt || true
+  exit 1
+fi
 
 echo " "
 echo "------------------------Test 2----------------------"
 echo " "
 # Test 2
 exit_code=0
-canary run -w -b scheduler=flux -b spec=count:3 ./examples || exit_code=$?
-if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+canary -d run --show-excluded-tests -w -b scheduler=flux -b spec=count:3 ./examples || exit_code=$?
+if [ "${exit_code}" -ne 30 ]; then
+  cat TestResults/.canary/config || true
+  cat TestResults/.canary/batches/*/*/config || true
+  cat TestResults/.canary/batches/*/*/canary-out.txt || true
+  exit 1
+fi
 
 echo " "
 echo "------------------------Test 3----------------------"
 echo " "
 # Test 3
 exit_code=0
-canary run -w -b scheduler=flux -b spec=count:3,layout:atomic ./examples || exit_code=$?
-if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+canary -d run --show-excluded-tests -w -b scheduler=flux -b spec=count:3,layout:atomic ./examples || exit_code=$?
+if [ "${exit_code}" -ne 30 ]; then
+  cat TestResults/.canary/config || true
+  cat TestResults/.canary/batches/*/*/config || true
+  cat TestResults/.canary/batches/*/*/canary-out.txt || true
+  exit 1
+fi
 
 echo " "
 echo "------------------------Test 4----------------------"
 echo " "
 # Test 4
 exit_code=0
-canary run -w -b scheduler=flux -b spec=count:auto,layout:flat ./examples || exit_code=$?
-if [ "${exit_code}" -ne 30 ]; then exit 1; fi
+canary -d run --show-excluded-tests -w -b scheduler=flux -b spec=count:auto,layout:flat ./examples || exit_code=$?
+if [ "${exit_code}" -ne 30 ]; then
+  cat TestResults/.canary/config || true
+  cat TestResults/.canary/batches/*/*/config || true
+  cat TestResults/.canary/batches/*/*/canary-out.txt || true
+  exit 1
+fi
 
 echo " "
 echo " "

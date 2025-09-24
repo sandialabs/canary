@@ -39,6 +39,7 @@ dependencies = [
     "pluggy>=1.5",
     "psutil",
     "pyyaml",
+    "schema",
 ]
 
 optional-dependencies.dev = [
@@ -64,11 +65,11 @@ scripts.canary = "canary:console_main"
 scripts.nvtest = "canary:console_main"
 
 [project.entry-points."canary"]
-canary_cmake = "canary_cmake.plugin"
-
+canary_cmake = "canary_cmake"
+canary_hpc = "canary_hpc"
 
 [tool.setuptools.dynamic]
-version = { attr = "_canary.util.generate_version.__generate_dynamic_version__" }
+version = { attr = "_canary.util.dynamic_version.__generate_dynamic_version__" }
 
 [tool.ruff]
 target-version = "py311"
@@ -130,6 +131,10 @@ exclude = [
 
 [[tool.mypy.overrides]]
 module = "requests.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "schema.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

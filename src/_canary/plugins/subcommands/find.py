@@ -70,7 +70,7 @@ class Find(CanarySubcommand):
 
         cases = finder.generate_test_cases(generators, on_options=args.on_options)
 
-        config.plugin_manager.hook.canary_testsuite_mask(
+        config.pluginmanager.hook.canary_testsuite_mask(
             cases=cases,
             keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,
@@ -82,12 +82,12 @@ class Find(CanarySubcommand):
             ignore_dependencies=False,
         )
         for case in static_order(cases):
-            config.plugin_manager.hook.canary_testcase_modify(case=case)
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
         cases_to_run = [case for case in cases if not case.wont_run()]
         if not cases_to_run:
             raise StopExecution("No tests to run", 7)
         if not quiet:
-            config.plugin_manager.hook.canary_collectreport(cases=cases)
+            config.pluginmanager.hook.canary_collectreport(cases=cases)
         cases_to_run.sort(key=lambda x: x.name)
         if args.print_paths:
             finder.pprint_paths(cases_to_run)
