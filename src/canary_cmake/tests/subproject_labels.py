@@ -33,6 +33,8 @@ def test_cdash_subproject_label(tmpdir):
 def run_the_thing_and_check():
     env = dict(os.environ)
     env["PYTHONPATH"] = os.getcwd()
+    env.pop("CANARYCFG64", None)
+    env["CANARY_DISABLE_KB"] = "1"
     subprocess.run([f"{sys.prefix}/bin/canary", "-p", "baz", "run", "."], env=env)
     subprocess.run(
         [f"{sys.prefix}/bin/canary", "-C", "TestResults", "report", "cdash", "create"], env=env
