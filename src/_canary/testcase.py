@@ -1036,7 +1036,7 @@ class TestCase(AbstractTestCase):
         dirname = os.path.dirname(start or self.file)
         while True:
             if os.path.isdir(os.path.join(dirname, anchor)):
-                return os.path.relpath(self.file, dirname)
+                return str(os.path.relpath(self.file, dirname))
             dirname = os.path.dirname(dirname)
             if dirname == os.path.sep:
                 break

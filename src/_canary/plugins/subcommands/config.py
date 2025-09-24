@@ -131,7 +131,9 @@ def show_config(args: "argparse.Namespace"):
 
 def pretty_print(text: str, fmt: str):
     from pygments import highlight
-    from pygments.formatters import TerminalTrueColorFormatter as Formatter
+    from pygments.formatters import (
+        TerminalTrueColorFormatter as Formatter,  # ty: ignore[unresolved-import]
+    )
     from pygments.lexers import get_lexer_by_name
 
     lexer = get_lexer_by_name(fmt)

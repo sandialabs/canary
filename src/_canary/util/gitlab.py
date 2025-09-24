@@ -295,7 +295,7 @@ class repo:
         encoded_params = urlencode(params)
         url = self.build_api_url(path=f"projects/{self.project_id}/releases", query=encoded_params)
         request = Request(url=url, headers=headers, method="POST")
-        request.get_method = lambda: "POST"
+        request.get_method = lambda: "POST"  # ty: ignore[invalid-assignment]
         opener = build_opener(HTTPHandler)
         with opener.open(request):
             pass
@@ -314,7 +314,7 @@ class repo:
         headers = {"PRIVATE-TOKEN": self.access_token}
         data = urlencode({"name": filename, "url": fileurl}).encode("utf-8")
         request = Request(url=url, headers=headers, data=data, method="POST")
-        request.get_method = lambda: "POST"
+        request.get_method = lambda: "POST"  # ty: ignore[invalid-assignment]
         opener = build_opener(HTTPHandler)
         with opener.open(request):
             pass
@@ -426,7 +426,7 @@ class repo:
             method = "POST"
 
         request = Request(url=url, headers=headers, method=method)
-        request.get_method = lambda: method
+        request.get_method = lambda: method  # ty: ignore[invalid-assignment]
         opener = build_opener(HTTPHandler)
         with opener.open(request):
             pass
@@ -438,7 +438,7 @@ class repo:
         encoded_params = urlencode(data)
         url = f"{base_url}?{encoded_params}"
         request = Request(url=url, headers=headers, method="POST")
-        request.get_method = lambda: "POST"
+        request.get_method = lambda: "POST"  # ty: ignore[invalid-assignment]
         issue = json.load(urlopen(request))  # nosec B310
         return issue.get("iid")
 
@@ -679,7 +679,7 @@ class merge_request:
             path=f"projects/{pid}/merge_requests/{self.iid}/notes", query=encoded_params
         )
         request = Request(url=url, headers=headers, method="POST")
-        request.get_method = lambda: "POST"
+        request.get_method = lambda: "POST"  # ty: ignore[invalid-assignment]
         with opener.open(request):
             pass
 
@@ -693,7 +693,7 @@ class merge_request:
             path=f"projects/{pid}/merge_requests/{self.iid}", query=encoded_params
         )
         request = Request(url=url, headers=headers, method="PUT")
-        request.get_method = lambda: "PUT"
+        request.get_method = lambda: "PUT"  # ty: ignore[invalid-assignment]
         with opener.open(request):
             pass
 
@@ -707,7 +707,7 @@ class merge_request:
             path=f"projects/{pid}/merge_requests/{self.iid}", query=encoded_params
         )
         request = Request(url=url, headers=headers, method="PUT")
-        request.get_method = lambda: "PUT"
+        request.get_method = lambda: "PUT"  # ty: ignore[invalid-assignment]
         with opener.open(request):
             pass
 

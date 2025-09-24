@@ -32,13 +32,13 @@ def canary_testcase_generator(
     root: str, path: str | None
 ) -> "AbstractTestGenerator | Type[AbstractTestGenerator]":
     """Returns an implementation of AbstractTestGenerator"""
-    ...
+    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
 def canary_generator(root: str, path: str | None) -> "AbstractTestGenerator":
     """Returns an implementation of AbstractTestGenerator"""
-    ...
+    raise NotImplementedError
 
 
 @hookspec
@@ -78,7 +78,7 @@ def canary_subcommand() -> CanarySubcommand:
            return MyCommand()
 
     """
-    ...
+    raise NotImplementedError
 
 
 @hookspec
@@ -92,48 +92,52 @@ _impl_warning = "canary_session_start is deprecated and will be removed, use can
 
 @hookspec(warn_on_impl=DeprecationWarning(_impl_warning))
 def canary_session_start(session: "Session") -> None:
-    pass
+    raise NotImplementedError
 
 
 @hookspec
 def canary_session_finish(session: "Session", exitstatus: int) -> None:
     """Called after the test session has finished allowing plugins to perform custom actions after
     all tests have been run."""
+    raise NotImplementedError
 
 
 @hookspec
 def canary_runtests_startup(args: argparse.Namespace) -> None:
     """Called at the beginning of `canary run`"""
+    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
 def canary_resource_requirements_satisfiable(case: "TestCase") -> bool:
     """Are there enough resources to run ``case``?"""
-    ...
+    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
-def canary_runtests(cases: list["TestCase"]) -> int: ...
+def canary_runtests(cases: list["TestCase"]) -> int:
+    raise NotImplementedError
 
 
 @hookspec
-def canary_runtests_summary(cases: list["TestCase"], include_pass: bool, truncate: int) -> None: ...
+def canary_runtests_summary(cases: list["TestCase"], include_pass: bool, truncate: int) -> None:
+    raise NotImplementedError
 
 
 @hookspec
 def canary_session_reporter() -> CanaryReporter:
     """Register Canary report type"""
-    ...
+    raise NotImplementedError
 
 
 @hookspec
 def canary_statusreport(session: "Session") -> None:
-    pass
+    raise NotImplementedError
 
 
 @hookspec
 def canary_collectreport(cases: list["TestCase"]) -> None:
-    pass
+    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
@@ -159,7 +163,7 @@ def canary_discover_generators(
         generator
 
     """
-    ...
+    raise NotImplementedError
 
 
 @hookspec
@@ -202,7 +206,7 @@ def canary_testcase_setup(case: "AbstractTestCase") -> bool:
       This function is called inside the test case's working directory
 
     """
-    ...
+    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
@@ -216,7 +220,7 @@ def canary_testcase_run(case: "AbstractTestCase", qsize: int, qrank: int) -> boo
       This function is called inside the test case's working directory
 
     """
-    ...
+    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
@@ -232,20 +236,21 @@ def canary_testcase_finish(case: "AbstractTestCase") -> bool:
       This function is called inside the test case's working directory
 
     """
-    ...
+    raise NotImplementedError
 
 
 @hookspec
-def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None: ...
+def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
+    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
 def canary_resource_count_per_node(type: str) -> int:
     """Return the number of resource type ``type`` per node"""
-    ...
+    raise NotImplementedError
 
 
 @hookspec
 def canary_resource_types() -> list[str]:
     """Return the resource types avaiable"""
-    ...
+    raise NotImplementedError

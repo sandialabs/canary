@@ -39,10 +39,15 @@ def test_concurrency(tmpdir):
     with fs.working_dir(tmpdir.strpath):
         create_db()
         a, b = 0, 20
-        workers = os.cpu_count() - 1
-        workers = 100
-        a, b = 0, 200
+        workers = os.cpu_count()
+        if os.getenv("HEAVY_DB_TESTING"):
+            workers = 100
+            a, b = 0, 200
         with multiprocessing.Pool(workers) as pool:
             pool.map(insert_db, range(a, b))
+        pool.close()
+        pool.join()
         with multiprocessing.Pool(workers) as pool:
             pool.map(read_db, range(a, b))
+        pool.close()
+        pool.join()

@@ -6,14 +6,13 @@ import argparse
 import os
 from typing import TYPE_CHECKING
 
-from _canary.testcase import TestCase
-
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
+    from ...testcase import TestCase
 
 
 @hookimpl
@@ -36,7 +35,7 @@ class Log(CanarySubcommand):
         )
         parser.add_argument("testspec", nargs="?", help="Test name or /TEST_ID")
 
-    def get_logfile(self, case: TestCase, args: argparse.Namespace) -> str:
+    def get_logfile(self, case: "TestCase", args: argparse.Namespace) -> str:
         if args.error:
             return case.stderr_file or ""
         else:

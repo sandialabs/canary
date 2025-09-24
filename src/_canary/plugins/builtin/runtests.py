@@ -10,6 +10,7 @@ import threading
 import time
 from concurrent.futures.process import BrokenProcessPool
 from functools import partial
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
 from typing import Sequence
@@ -20,7 +21,6 @@ from ...error import StopExecution
 from ...queue import Busy as BusyQueue
 from ...queue import Empty as EmptyQueue
 from ...queue import ResourceQueue
-from ...testcase import TestCase
 from ...util import keyboard
 from ...util import logging
 from ...util.filesystem import working_dir
@@ -32,12 +32,15 @@ from ...util.time import hhmmss
 from ...util.time import timestamp
 from ..hookspec import hookimpl
 
+if TYPE_CHECKING:
+    from ...testcase import TestCase
+
 global_session_lock = threading.Lock()
 logger = logging.get_logger(__name__)
 
 
 @hookimpl(trylast=True)
-def canary_runtests(cases: Sequence[TestCase]) -> int:
+def canary_runtests(cases: Sequence["TestCase"]) -> int:
     """Run each test case in ``cases``.
 
     Args:
@@ -152,7 +155,7 @@ class KeyboardQuit(Exception):
 class Runner:
     """Class for running ``AbstractTestCase``."""
 
-    def __call__(self, case: TestCase, *args: str, **kwargs: Any) -> None:
+    def __call__(self, case: "TestCase", *args: str, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
         config.ensure_loaded()
         try:

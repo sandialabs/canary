@@ -179,7 +179,10 @@ class server:
         try:
             result = curl("-k", url, output=str, error=os.devnull)
             doc = dom.parseString(result.get_output())
-            buildid = doc.getElementsByTagName("buildid")[0].firstChild.data.strip()
+            if el := doc.getElementsByTagName("buildid"):
+                buildid = el[0].firstChild.data.strip()
+            else:
+                buildid = "not found"
         except xml.parsers.expat.ExpatError:
             buildid = "not found"
         logger.debug(f"build id = {buildid}")

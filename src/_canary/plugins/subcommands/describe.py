@@ -9,13 +9,13 @@ from typing import Any
 import yaml
 
 from ...generator import AbstractTestGenerator
-from ...testcase import TestCase
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
+    from ...testcase import TestCase
 
 
 @hookimpl
@@ -77,9 +77,11 @@ def dump(data: dict[str, Any]) -> str:
     return yaml.dump(data, default_flow_style=False)
 
 
-def describe_testcase(case: TestCase, indent: str = "") -> None:
+def describe_testcase(case: "TestCase", indent: str = "") -> None:
     from pygments import highlight
-    from pygments.formatters import TerminalTrueColorFormatter as Formatter
+    from pygments.formatters import (
+        TerminalTrueColorFormatter as Formatter,  # ty: ignore[unresolved-import]
+    )
     from pygments.lexers import get_lexer_by_name
 
     if case.work_tree is None:
@@ -92,7 +94,7 @@ def describe_testcase(case: TestCase, indent: str = "") -> None:
     print(formatted_text)
 
 
-def describe_batch(batch_id: str, cases: list[TestCase]) -> None:
+def describe_batch(batch_id: str, cases: list["TestCase"]) -> None:
     from ... import config
 
     print(f"Batch {batch_id}")

@@ -1,6 +1,7 @@
 import argparse
 import io
 import json
+import json.decoder
 import os
 import sys
 from collections.abc import ValuesView

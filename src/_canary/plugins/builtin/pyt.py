@@ -9,6 +9,7 @@ import os
 import warnings
 from string import Template
 from types import ModuleType
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
 
@@ -18,9 +19,6 @@ from ... import when as m_when
 from ...error import diff_exit_status
 from ...generator import AbstractTestGenerator
 from ...paramset import ParameterSet
-from ...testcase import DependencyPatterns
-from ...testcase import TestCase
-from ...testcase import TestMultiCase
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
 from ...util import logging
@@ -28,6 +26,11 @@ from ...util.string import pluralize
 from ...util.string import stringify
 from ...util.time import time_in_seconds
 from ..hookspec import hookimpl
+
+if TYPE_CHECKING:
+    from ...testcase import DependencyPatterns
+    from ...testcase import TestCase
+
 
 WhenType = str | dict[str, str]
 
@@ -113,7 +116,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                     if dst and dst != os.path.basename(src):
                         file.write(f" -> {dst}")
                     file.write("\n")
-        cases: list[TestCase] = self.lock(on_options=on_options)
+        cases: list["TestCase"] = self.lock(on_options=on_options)
         n = len(cases)
         opts = ", ".join(on_options or [])
         file.write(f"{n} test {pluralize('case', n)} using on_options={opts}:\n")
@@ -139,7 +142,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                         option_expressions.add(a.when.option_expr)
         return list(option_expressions)
 
-    def lock(self, on_options: list[str] | None = None) -> list[TestCase]:
+    def lock(self, on_options: list[str] | None = None) -> list["TestCase"]:
         try:
             cases = self._lock(on_options=on_options)
             return cases
@@ -148,16 +151,19 @@ class PYTTestGenerator(AbstractTestGenerator):
                 raise
             raise ValueError(f"Failed to lock {self.file}: {e}") from None
 
-    def _lock(self, on_options: list[str] | None = None) -> list[TestCase]:
-        testcases: list[TestCase] = []
+    def _lock(self, on_options: list[str] | None = None) -> list["TestCase"]:
+        from ...testcase import TestCase
+        from ...testcase import TestMultiCase
+
+        testcases: list["TestCase"] = []
 
         names = ", ".join(self.names())
         logger.debug(f"Generating test cases for {self} using the following test names: {names}")
-        dependencies: dict[str, list[DependencyPatterns]] = {}
+        dependencies: dict[str, list["DependencyPatterns"]] = {}
         for name in self.names():
             skip_reason = self.skipif_reason
 
-            cases: list[TestCase] = []
+            cases: list["TestCase"] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
                 test_mask: str | None = skip_reason
@@ -260,7 +266,7 @@ class PYTTestGenerator(AbstractTestGenerator):
         return testcases
 
     def resolve_inter_dependencies(
-        self, cases: list[TestCase], dependencies: dict[str, list[DependencyPatterns]]
+        self, cases: list["TestCase"], dependencies: dict[str, list["DependencyPatterns"]]
     ) -> None:
         logger.debug(f"Resolving dependencies in test {self}")
         for case in cases:
@@ -546,7 +552,9 @@ class PYTTestGenerator(AbstractTestGenerator):
         testname: str | None = None,
         on_options: list[str] | None = None,
         parameters: dict[str, Any] | None = None,
-    ) -> list[DependencyPatterns]:
+    ) -> list["DependencyPatterns"]:
+        from ...testcase import DependencyPatterns
+
         kwds: dict[str, Any] = {}
         if parameters:
             kwds.update({k: stringify(v) for k, v in parameters.items()})
@@ -554,7 +562,7 @@ class PYTTestGenerator(AbstractTestGenerator):
             kwds["name"] = testname
         for key in list(kwds.keys()):
             kwds[key.upper()] = kwds[key]
-        dependencies: list[DependencyPatterns] = []
+        dependencies: list["DependencyPatterns"] = []
         for ns in self._depends_on:
             result = ns.when.evaluate(
                 testname=testname, on_options=on_options, parameters=parameters

@@ -4,6 +4,7 @@
 
 import argparse
 import json
+import json.decoder
 import os
 import pstats
 import re
@@ -11,6 +12,7 @@ import shlex
 import sys
 import textwrap as textwrap
 import urllib
+import urllib.parse
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
@@ -158,8 +160,8 @@ class Parser(argparse.ArgumentParser):
             formatter_class=HelpFormatter,
         )
         if command.add_help or add_help_override:
-            kwds["add_help"] = False
-            kwds["epilog"] = command.epilog
+            kwds["add_help"] = False  # ty: ignore[invalid-assignment]
+            kwds["epilog"] = command.epilog  # ty: ignore[invalid-assignment]
             kwds["help"] = command.description
         subparser = self.subparsers.add_parser(command.name, **kwds)
         subparser.register("type", None, identity)

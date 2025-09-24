@@ -26,6 +26,7 @@ from _canary.util.filesystem import which
 
 #: editors to try if VISUAL and EDITOR are not set
 _default_editors = ["vim", "vi", "emacs", "nano", "notepad", "code"]
+logger = logging.get_logger(__name__)
 
 
 def _find_exe_from_env_var(var: str) -> SimpleNamespace | None:
@@ -99,7 +100,7 @@ def editor(*args_in: str, exec_fn: Callable[[str, list[str]], int] = os.execv) -
 
             # Show variable we were trying to use, if it's from one
             p = path if var is None else f"${var} ({path})"
-            logging.warning(f"Could not execute ${p} due to error: {e}")
+            logger.warning(f"Could not execute ${p} due to error: {e}")
             return False
 
     def try_env(var):
@@ -113,7 +114,7 @@ def editor(*args_in: str, exec_fn: Callable[[str, list[str]], int] = os.execv) -
 
         ns = _find_exe_from_env_var(var)
         if ns is None:
-            logging.warning(f"${var}={os.environ[var]} is not an executable")
+            logger.warning(f"${var}={os.environ[var]} is not an executable")
             return False
 
         return try_exec(ns.path, ns.default_args + list(args_in), var)

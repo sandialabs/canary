@@ -10,7 +10,6 @@ from typing import Any
 
 from ... import config
 from ...status import Status
-from ...testcase import TestCase
 from ...third_party.color import ccenter
 from ...third_party.color import colorize
 from ...util import glyphs
@@ -81,7 +80,7 @@ def print_banner():
 
 @hookimpl(specname="canary_runtests_summary", tryfirst=True)
 def print_short_test_status_summary(
-    cases: list[TestCase], include_pass: bool, truncate: int
+    cases: list["TestCase"], include_pass: bool, truncate: int
 ) -> None:
     """Return a summary of the completed test cases.  if ``include_pass is True``, include
     passed tests in the summary
@@ -93,7 +92,7 @@ def print_short_test_status_summary(
     if not cases:
         file.write("Nothing to report\n")
     else:
-        totals: dict[str, list[TestCase]] = {}
+        totals: dict[str, list["TestCase"]] = {}
         for case in cases:
             totals.setdefault(case.status.value, []).append(case)
         for status in Status.members:
@@ -121,7 +120,7 @@ def print_short_test_status_summary(
 
 
 @hookimpl(specname="canary_runtests_summary")
-def print_runtests_durations(cases: list[TestCase], include_pass: bool, truncate: int) -> None:
+def print_runtests_durations(cases: list["TestCase"], include_pass: bool, truncate: int) -> None:
     if N := config.getoption("durations"):
         return print_durations(cases, N)
 
@@ -134,7 +133,7 @@ def print_statusreport_durations(session: "Session") -> None:
 
 @hookimpl(specname="canary_runtests_summary", trylast=True)
 def runtests_footer(
-    cases: list[TestCase], include_pass: bool, truncate: int, title: str | None = None
+    cases: list["TestCase"], include_pass: bool, truncate: int, title: str | None = None
 ) -> None:
     """Return a short, high-level, summary of test results"""
     print_footer(cases, "Session done")
@@ -154,7 +153,7 @@ def runtest_report_status(session: "Session") -> None:
     cases_to_show = determine_cases_to_show(session, report_chars)
     if cases_to_show:
         file = io.StringIO()
-        totals: dict[str, list[TestCase]] = {}
+        totals: dict[str, list["TestCase"]] = {}
         for case in cases_to_show:
             totals.setdefault(case.status.value, []).append(case)
         for member in Status.members:
@@ -168,7 +167,7 @@ def runtest_report_status(session: "Session") -> None:
 
 @hookimpl
 def canary_collectreport(cases: list["TestCase"]) -> None:
-    excluded: list[TestCase] = []
+    excluded: list["TestCase"] = []
     for case in cases:
         if case.wont_run():
             excluded.append(case)
@@ -177,7 +176,7 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
     if excluded:
         n = len(excluded)
         logger.info("@*{Excluding} %d test cases for the following reasons:" % n)
-        reasons: dict[str | None, list[TestCase]] = {}
+        reasons: dict[str | None, list["TestCase"]] = {}
         for case in excluded:
             if case.mask:
                 reasons.setdefault(case.mask, []).append(case)
@@ -193,7 +192,7 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
                     logger.log(logging.EMIT, f"... {case.format('%N')}", extra={"prefix": ""})
 
 
-def print_durations(cases: list[TestCase], N: int) -> None:
+def print_durations(cases: list["TestCase"], N: int) -> None:
     string = io.StringIO()
     cases = [c for c in cases if c.duration >= 0]
     sorted_cases = sorted(cases, key=lambda x: x.duration)
@@ -207,7 +206,7 @@ def print_durations(cases: list[TestCase], N: int) -> None:
     logger.log(logging.EMIT, string.getvalue(), extra={"prefix": ""})
 
 
-def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
+def sort_cases_by(cases: list["TestCase"], field="duration") -> list["TestCase"]:
     if cases and isinstance(getattr(cases[0], field), str):
         return sorted(cases, key=lambda case: getattr(case, field).lower())
     return sorted(cases, key=lambda case: getattr(case, field))
@@ -215,9 +214,11 @@ def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
 
 def determine_cases_to_show(
     session: "Session", report_chars: str, pathspec: str | None = None
-) -> list[TestCase]:
-    cases: list[TestCase] = session.cases
-    cases_to_show: list[TestCase]
+) -> list["TestCase"]:
+    from ...testcase import TestCase
+
+    cases: list["TestCase"] = session.cases
+    cases_to_show: list["TestCase"]
     rc = set(report_chars)
     if pathspec is not None:
         if TestCase.spec_like(pathspec):
@@ -309,7 +310,7 @@ def _show_capture(case: "TestCase", what="oe") -> None:
         print(text)
 
 
-def print_footer(cases: list[TestCase], title: str) -> None:
+def print_footer(cases: list["TestCase"], title: str) -> None:
     """Return a short, high-level, summary of test results"""
     string = io.StringIO()
     duration = -1.0
@@ -319,7 +320,7 @@ def print_footer(cases: list[TestCase], title: str) -> None:
         finish = max(_.stop for _ in cases if _.stop > 0)
         start = min(_.start for _ in cases if _.start > 0)
         duration = finish - start
-    totals: dict[str, list[TestCase]] = {}
+    totals: dict[str, list["TestCase"]] = {}
     for case in cases:
         totals.setdefault(case.status.value, []).append(case)
     N = len(cases)

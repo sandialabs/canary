@@ -6,7 +6,7 @@ import os
 import re
 
 import canary
-from _canary.plugins.builtin.vvtest import VVTTestGenerator
+from canary_vvtest import VVTTestGenerator
 
 
 def test_issue_85(tmpdir):

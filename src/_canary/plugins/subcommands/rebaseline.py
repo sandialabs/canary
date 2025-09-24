@@ -41,7 +41,7 @@ class Rebaseline(CanarySubcommand):
 
         if not args.keyword_exprs and not args.start and not args.parameter_expr:
             # Rebaseline diffed tests by default
-            args.keyword_exprs = "diff"
+            args.keyword_exprs = ["diff"]
 
         logger.log(logging.EMIT, banner(), extra={"prefix": ""})
         session = Session(args.work_tree, mode="r")

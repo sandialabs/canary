@@ -8,7 +8,6 @@ import re
 from typing import TYPE_CHECKING
 from typing import Any
 
-from ...testcase import TestCase
 from ...util import gitlab
 from ...util import logging
 from ..hookspec import hookimpl
@@ -17,6 +16,7 @@ from ..types import CanaryReporter
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
     from ...session import Session
+    from ...testcase import TestCase
 
 
 @hookimpl
@@ -85,7 +85,7 @@ class MergeRequest:
 
     def report_failed(
         self,
-        failed_cases: dict[str, list[TestCase]],
+        failed_cases: dict[str, list["TestCase"]],
         cdash_build_url: str | None = None,
     ):
         fp = io.StringIO()
@@ -122,8 +122,8 @@ class MergeRequest:
         self.add_note(note)
 
 
-def group_failed_tests(cases: list[TestCase]):
-    failed: dict[str, list[TestCase]] = {}
+def group_failed_tests(cases: list["TestCase"]):
+    failed: dict[str, list["TestCase"]] = {}
     nonpass = (
         "skipped",
         "diffed",

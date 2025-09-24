@@ -87,9 +87,9 @@ def which(
     else:
         path = os.getenv("PATH") or []
 
-    paths: list[str]
+    paths: list[str] = []
     if isinstance(path, str):
-        paths = path.split(os.pathsep)
+        paths.extend(path.split(os.pathsep))
     else:
         paths.extend(path)
 
