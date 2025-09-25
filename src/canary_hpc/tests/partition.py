@@ -4,7 +4,7 @@
 
 import pytest
 
-from _canary import finder
+import _canary.finder
 from _canary.util.filesystem import mkdirp
 from canary_hpc import partitioning
 
@@ -27,11 +27,11 @@ def generate_files(tmpdir):
 
 def test_partition_n(generate_files):
     workdir = generate_files
-    f = finder.Finder()
+    f = _canary.finder.Finder()
     f.add(workdir)
     f.prepare()
     files = f.discover()
-    cases = finder.generate_test_cases(files)
+    cases = _canary.finder.generate_test_cases(files)
     assert len([c for c in cases if c.status != "masked"]) == num_cases
     partitions = partitioning.partition_n(cases, n=5)
     assert len(partitions) == 5
@@ -42,11 +42,11 @@ def test_partition_n(generate_files):
 
 def test_partition_t(generate_files):
     workdir = generate_files
-    f = finder.Finder()
+    f = _canary.finder.Finder()
     f.add(workdir)
     f.prepare()
     files = f.discover()
-    cases = finder.generate_test_cases(files)
+    cases = _canary.finder.generate_test_cases(files)
     assert len([c for c in cases if c.status != "masked"]) == num_cases
     partitions = partitioning.partition_t(cases, t=15 * 60)  # 5x long test case duration
     assert sum(len(_) for _ in partitions) == num_cases

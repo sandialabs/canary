@@ -153,6 +153,8 @@ class Check(CanarySubcommand):
                 pytest("./tests")
                 logger.info(f"Running tests in {self.root}/canary_cmake/tests")
                 pytest("./src/canary_cmake/tests")
+                logger.info(f"Running tests in {self.root}/canary_hpc/tests")
+                pytest("./src/canary_hpc/tests")
                 logger.info(f"Running tests in {self.root}/canary_vvtest/tests")
                 pytest("./src/canary_vvtest/tests")
             else:

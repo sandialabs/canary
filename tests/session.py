@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import glob
 import os
 import types
 
@@ -47,27 +46,6 @@ def test_session_filter(tmpdir):
             cases = s.get_ready()
             assert len(cases) == 1
             assert cases[0].name == "test_exec_dir.np=4.x=1.234e7"
-
-
-def test_session_bfilter(tmpdir):
-    p = paths()
-    with working_dir(tmpdir.strpath, create=True):
-        with config.override():
-            config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
-            config.options.batchopts = {
-                "scheduler": "shell",
-                "spec": {"count": 2, "duration": None, "layout": "flat", "nodes": "any"},
-            }
-            config.pluginmanager.hook.canary_configure(config=config)
-            s = session.Session("tests", mode="w", force=True)
-            s.add_search_paths([os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")])
-            s.discover()
-            s.lock()
-            s.run()
-            # test batchfile
-
-            files = glob.glob("tests/.canary/batches/**/config", recursive=True)
-            assert len(files) == 2
 
 
 def test_session_fail_fast(tmpdir):

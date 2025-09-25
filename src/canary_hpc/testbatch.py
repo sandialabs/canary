@@ -18,7 +18,6 @@ from typing import Any
 from typing import Sequence
 
 import hpc_connect
-import yaml
 
 import canary
 from _canary.atc import AbstractTestCase
@@ -285,15 +284,12 @@ class TestBatch(AbstractTestCase):
         return duration, running, time_in_queue
 
     @staticmethod
-    def loadindex(batch_id: str) -> list[str] | None:
-        try:
-            full_batch_id = TestBatch.find(batch_id)
-        except BatchNotFound:
-            return None
+    def loadindex(batch_id: str) -> list[str]:
+        full_batch_id = TestBatch.find(batch_id)
         stage = TestBatch.stage(full_batch_id)
         f = os.path.join(stage, "index")
         if not os.path.exists(f):
-            return None
+            raise ValueError(f"Index for batch {batch_id} not found in {stage}")
         with open(f, "r") as fh:
             return json.load(fh)
 
@@ -490,84 +486,38 @@ class TestBatch(AbstractTestCase):
         self, case: canary.TestCase, backend: hpc_connect.HPCSubmissionManager
     ) -> str:
         """Write the canary invocation used to run this test case"""
-        reqd_resources = case.required_resources()
-        count_per_type: dict[str, int] = {}
-        resources: dict[str, list[Any]] = {}
-        for group in reqd_resources:
-            for member in group:
-                type = member["type"]
-                rspec: list[dict] = resources.setdefault(type, [])
-                rspec.append({"id": str(len(rspec)), "slots": member["slots"]})
-                count_per_type[type] = count_per_type.get(type, 0) + member["slots"]
-        node_count: int = 1
-        counts_per_node: dict[str, int] = {}
-        for type, count in count_per_type.items():
-            count_per_node = backend.config.count_per_node(type)
-            node_count = max(node_count, int(math.ceil(count / count_per_node)))
-            counts_per_node[f"{type}_per_node"] = count_per_node
-        cfg: dict[str, Any] = {
-            "resource_pool": {
-                "resources": resources,
-                "additional_properties": {
-                    "hpc_connect": {
-                        "backend": backend.name,
-                        "nodes": node_count,
-                        "case": case.id,
-                        **counts_per_node,
-                    }
-                },
-            }
-        }
-        config_file = os.path.join(self.stage(self.id), f"config.{case.id}")
-        with open(config_file, "w") as fh:
-            yaml.dump(cfg, fh, indent=2)
-        args: list[str] = ["canary", "-f", config_file]
+        args: list[str] = ["canary"]
         if canary.config.get("config:debug"):
             args.append("-d")
         args.extend(["-C", canary.config.get("session:work_tree")])
-        args.extend(
-            ["run", "-b", "scheduler=null", f"/{case.id}"]
-        )  # guard against infinite recursion
+        args.extend(["run", "-b", f"exec=backend:{backend.name},batch:{self.id},case:{case.id}"])
         return shlex.join(args)
 
     def canary_batch_invocation(self, backend: hpc_connect.HPCSubmissionManager) -> str:
         """Write the canary invocation used to run this batch."""
-        types: set[str] = set()
-        for case in self:
-            reqd_resources = case.required_resources()
-            for group in reqd_resources:
-                types.update([member["type"] for member in group])
-        resources: dict[str, list[Any]] = {}
-        counts_per_node: dict[str, int] = {}
-        node_count = self.nodes_required(backend)
-        for type in types:
-            counts_per_node[f"{type}_per_node"] = count = backend.config.count_per_node(type)
-            slots = 1
-            resources[type] = [{"id": str(j), "slots": slots} for j in range(count * node_count)]
-        cfg: dict[str, Any] = {
-            "resource_pool": {
-                "resources": resources,
-                "additional_properties": {
-                    "hpc_connect": {
-                        "backend": backend.name,
-                        "nodes": node_count,
-                        **counts_per_node,
-                    }
-                },
-            }
-        }
-        config_file = os.path.join(self.stage(self.id), "config")
-        with open(config_file, "w") as fh:
-            yaml.dump(cfg, fh, indent=2)
-        args: list[str] = ["canary", "-f", config_file]
+        args: list[str] = ["canary"]
         if canary.config.get("config:debug"):
             args.append("-d")
         args.extend(["-C", canary.config.get("session:work_tree")])
-        args.extend(["run", "-b", "scheduler=null", f"--batch-id={self.id}"])
+        args.extend(["run", "-b", f"exec=backend:{backend.name},batch:{self.id}"])
         batchopts = canary.config.getoption("batchopts", {})
         if workers := batchopts.get("workers"):
             args.append(f"--workers={workers}")
         return shlex.join(args)
+
+    @staticmethod
+    def load_resource_file(batch_id) -> dict[str, Any]:
+        stage = TestBatch.stage(batch_id)
+        with open(os.path.join(stage, "resources")) as fh:
+            return json.load(fh)
+
+    def save_resource_requirements(self):
+        resources: dict[str, Any] = {}
+        for case in self:
+            resources[case.id] = case.required_resources()
+        config_file = os.path.join(self.stage(self.id), "resources")
+        with open(config_file, "w") as fh:
+            json.dump(resources, fh, indent=2)
 
 
 def batch_options() -> list[str]:

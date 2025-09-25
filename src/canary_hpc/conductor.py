@@ -1,4 +1,4 @@
-# G Copyright NTESS. See COPYRIGHT file for details.
+# Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
 
@@ -27,6 +27,7 @@ from _canary.util.procutils import ProcessPoolExecutor
 from _canary.util.procutils import cleanup_children
 from _canary.util.returncode import compute_returncode
 
+from .backend import BatchBackend
 from .queue import ResourceQueue
 from .testbatch import TestBatch
 
@@ -34,61 +35,67 @@ global_lock = threading.Lock()
 logger = canary.get_logger(__name__)
 
 
-def runtests(*, backend: hpc_connect.HPCSubmissionManager, cases: Sequence[canary.TestCase]) -> int:
-    """Run each test case in ``cases``.
+class BatchConductor(BatchBackend):
+    @canary.hookimpl(tryfirst=True)
+    def canary_runtests(self, cases: Sequence[canary.TestCase]) -> int:
+        """Run each test case in ``cases``.
 
-    Args:
-      cases: test cases to run
+        Args:
+        cases: test cases to run
 
-    Returns:
-      The session returncode (0 for success)
+        Returns:
+        The session returncode (0 for success)
 
-    """
-    returncode: int = -10
-    atexit.register(cleanup_children)
-    queue = ResourceQueue.factory(global_lock, cases)
-    nbatches = len(queue)
-    runner = Runner()
-    pbar = canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
-    assert canary.config.get("session:work_tree") is not None
-    with canary.filesystem.working_dir(canary.config.get("session:work_tree")):
-        cleanup_queue = True
-        try:
-            what = canary.string.pluralize("batch", nbatches)
-            logger.info("@*{Running} %d %s" % (nbatches, what))
-            start = canary.time.timestamp()
-            stop = -1.0
-            logger.debug("Start: processing queue")
-            process_queue(backend=backend, runner=runner, queue=queue)
-        except KeyboardInterrupt:
-            logger.debug("keyboard interrupt: killing child processes and exiting")
-            returncode = signal.SIGINT.value
-            cleanup_queue = False
-            raise
-        except StopExecution as e:
-            logger.debug("stop execution: killing child processes and exiting")
-            returncode = e.exit_code
-        except FailFast as e:
-            logger.debug("fail fast: killing child processes and exiting")
-            code = compute_returncode(e.failed)
-            returncode = code
-            cleanup_queue = False
-            names = ",".join(_.name for _ in e.failed)
-            raise StopExecution(f"fail_fast: {names}", code)
-        except Exception:
-            logger.exception("unknown failure: killing child processes and exiting")
-            returncode = compute_returncode(queue.cases())
-            raise
-        else:
-            if pbar:
-                queue.update_progress_bar(start, last=True)
-            returncode = compute_returncode(queue.cases())
-            queue.close(cleanup=cleanup_queue)
-            stop = canary.time.timestamp()
-            dt = stop - start
-            logger.info("@*{Finished} %d %s (%s)" % (nbatches, what, canary.time.hhmmss(dt)))
-            atexit.unregister(cleanup_children)
-    return returncode
+        """
+        returncode: int = -10
+        atexit.register(cleanup_children)
+        queue = ResourceQueue.factory(global_lock, cases)
+        nbatches = len(queue)
+        runner = Runner()
+        pbar = (
+            canary.config.getoption("format") == "progress-bar"
+            or logging.get_level() > logging.INFO
+        )
+        work_tree = canary.config.get("session:work_tree")
+        assert work_tree is not None
+        with canary.filesystem.working_dir(work_tree):
+            cleanup_queue = True
+            try:
+                what = canary.string.pluralize("batch", nbatches)
+                logger.info("@*{Running} %d %s" % (nbatches, what))
+                start = canary.time.timestamp()
+                stop = -1.0
+                logger.debug("Start: processing queue")
+                process_queue(backend=self.backend, runner=runner, queue=queue)
+            except KeyboardInterrupt:
+                logger.debug("keyboard interrupt: killing child processes and exiting")
+                returncode = signal.SIGINT.value
+                cleanup_queue = False
+                raise
+            except StopExecution as e:
+                logger.debug("stop execution: killing child processes and exiting")
+                returncode = e.exit_code
+            except FailFast as e:
+                logger.debug("fail fast: killing child processes and exiting")
+                code = compute_returncode(e.failed)
+                returncode = code
+                cleanup_queue = False
+                names = ",".join(_.name for _ in e.failed)
+                raise StopExecution(f"fail_fast: {names}", code)
+            except Exception:
+                logger.exception("unknown failure: killing child processes and exiting")
+                returncode = compute_returncode(queue.cases())
+                raise
+            else:
+                if pbar:
+                    queue.update_progress_bar(start, last=True)
+                returncode = compute_returncode(queue.cases())
+                queue.close(cleanup=cleanup_queue)
+                stop = canary.time.timestamp()
+                dt = stop - start
+                logger.info("@*{Finished} %d %s (%s)" % (nbatches, what, canary.time.hhmmss(dt)))
+                atexit.unregister(cleanup_children)
+        return returncode
 
 
 def process_queue(

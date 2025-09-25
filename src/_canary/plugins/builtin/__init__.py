@@ -14,7 +14,6 @@ from . import post_clean
 from . import pyt
 from . import repeat
 from . import reporting
-from . import resource
 from . import runtest_protocol
 from . import runtests
 from . import testcase_generator
@@ -32,7 +31,6 @@ plugins = [
     pyt,
     repeat,
     reporting,
-    resource,
     runtest_protocol,
     runtests,
     testcase_generator,

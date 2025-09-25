@@ -89,8 +89,29 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
                 raise ValueError(f"invalid batch spec arg: {arg}")
 
     @staticmethod
+    def parse_execspec(arg_in: str) -> dict[str, str]:
+        """Parse the -b exec=... option"""
+        spec: dict[str, str] = {}
+        for arg in csvsplit(arg_in):
+            if match := re.search(r"^backend:(.*)$", arg.lower()):
+                spec["backend"] = match.group(1)
+            elif match := re.search(r"^batch:(.*)$", arg.lower()):
+                spec["batch"] = match.group(1)
+            elif match := re.search(r"^case:(.*)$", arg.lower()):
+                spec["case"] = match.group(1)
+        if "backend" not in spec:
+            raise ValueError("Batch exec spec missing required key 'backend'")
+        if "batch" not in spec:
+            raise ValueError("Batch exec spec missing required key 'batch'")
+        return spec
+
+    @staticmethod
     def parse(arg: str, namespace: argparse.Namespace) -> tuple[str, Any]:
-        if match := re.search(r"^spec=(.*)$", arg):
+        if match := re.search(r"^exec=(.*)$", arg):
+            raw = strip_quotes(match.group(1))
+            execspec = BatchResourceSetter.parse_execspec(raw)
+            return ("exec", execspec)
+        elif match := re.search(r"^spec=(.*)$", arg):
             spec = setdefaultspec(namespace)
             raw = strip_quotes(match.group(1))
             BatchResourceSetter.parse_spec(raw, spec=spec)
@@ -142,6 +163,14 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
 
     @staticmethod
     def validate_and_set_defaults(batchopts: dict) -> None:
+        if execopts := batchopts.get("exec"):
+            if len(batchopts) > 1:
+                raise ValueError("-b exec= is mutually exclusive with any other -b options")
+            if "batch" not in execopts:
+                raise ValueError("Batch exec spec missing required key 'batch'")
+            if "backend" not in batchopts["exec"]:
+                raise ValueError("Batch exec spec missing required key 'backend'")
+            return
         default_spec = {"nodes": "any", "layout": "flat", "count": None, "duration": 30 * 60}
         batchopts.setdefault("spec", default_spec)
         spec = batchopts["spec"]
