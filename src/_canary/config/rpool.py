@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 import copy
-import dataclasses
 import io
 import pickle  # nosec B403
 from typing import Any
@@ -17,12 +16,6 @@ from .schemas import resource_pool_schema
 logger = logging.get_logger(__name__)
 
 resource_spec = list[dict[str, str | int]]
-
-
-@dataclasses.dataclass
-class Result:
-    success: bool = True
-    reason: str | None = None
 
 
 class ResourcePool:

@@ -505,20 +505,6 @@ class TestBatch(AbstractTestCase):
             args.append(f"--workers={workers}")
         return shlex.join(args)
 
-    @staticmethod
-    def load_resource_file(batch_id) -> dict[str, Any]:
-        stage = TestBatch.stage(batch_id)
-        with open(os.path.join(stage, "resources")) as fh:
-            return json.load(fh)
-
-    def save_resource_requirements(self):
-        resources: dict[str, Any] = {}
-        for case in self:
-            resources[case.id] = case.required_resources()
-        config_file = os.path.join(self.stage(self.id), "resources")
-        with open(config_file, "w") as fh:
-            json.dump(resources, fh, indent=2)
-
 
 def batch_options() -> list[str]:
     options: list[str] = []
