@@ -227,7 +227,7 @@ class ResourcePool:
                 for item in group:
                     type, slots = item["type"], item["slots"]
                     if type not in self.resources:
-                        raise TypeError(f"unknown resource requirement type {type!r}")
+                        raise TypeError(f"Unknown resource requirement type {type!r}")
                     rspec = self._get_from_pool(item["type"], item["slots"])
                     local.setdefault(type, []).append(rspec)
                     totals[type] = totals.get(type, 0) + slots
