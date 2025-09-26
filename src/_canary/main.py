@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
 
+import yaml
+
 from . import config
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
@@ -211,6 +213,13 @@ def determine_plugin_from_tb(tb: traceback.StackSummary) -> None | Any:
     return None
 
 
+def print_current_config() -> None:
+    state = config.getstate(pretty=True)
+    text = yaml.dump(state, default_flow_style=False)
+    print("Current canary configuration:")
+    print(text)
+
+
 def console_main() -> int:
     """The CLI entry point of canary.
 
@@ -242,6 +251,8 @@ def console_main() -> int:
     except TimeoutError as e:
         if reraise:
             raise
+        if config.get("config:debug"):
+            print_current_config()
         logger.error(e.args[0])
         return 4
     except KeyboardInterrupt:
@@ -253,12 +264,16 @@ def console_main() -> int:
     except SystemExit as e:
         if e.code == 0:
             return 0
+        if config.get("config:debug"):
+            print_current_config()
         if reraise:
             traceback.print_exc()
         if isinstance(e.code, int):
             return e.code
         return 1
     except Exception as e:
+        if config.get("config:debug"):
+            print_current_config()
         if reraise:
             raise
         tb = traceback.extract_tb(e.__traceback__)
