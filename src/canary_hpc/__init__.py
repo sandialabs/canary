@@ -7,104 +7,41 @@ import glob
 import json
 import os
 from typing import Any
-from typing import Generator
 
 import psutil
 
 import canary
 
-from . import schedulers
+from .backend import BatchBackend
 from .batchopts import BatchResourceSetter
-from .testbatch import TestBatch
+from .conductor import BatchConductor
+from .executor import BatchExecutor
 
 logger = canary.get_logger(__name__)
-
-
-class BatchHooks:
-    @canary.hookspec
-    def canary_hpc_add_scheduler(self) -> dict[str, str | list[str]]:  # type: ignore[empty-body]
-        """Add the name of a recognized scheduler
-
-        Returns
-        -------
-           info: dict
-             info['name'] (required) is the name of the scheduler
-             info['aliases'] (optional) is a list of aliases
-
-        """
-
-    @canary.hookspec(firstresult=True)
-    def canary_hpc_get_scheduler(self, scheduler: str) -> Any:  # type: ignore[empty-body]
-        ...
-
-
-@canary.hookimpl
-def canary_addhooks(pluginmanager: "canary.CanaryPluginManager") -> None:
-    pluginmanager.add_hookspecs(BatchHooks)
-    pluginmanager.register(schedulers)
-
-
-@canary.hookimpl(wrapper=True)
-def canary_hpc_add_scheduler() -> Generator[None, list[dict[str, str | list[str]]], list[str]]:
-    schedulers: set[str] = set()
-    res = yield
-    for info in res:
-        schedulers.add(info["name"])  # type: ignore
-        if aliases := info.get("aliases"):
-            schedulers.update(aliases)  # type: ignore
-    return list(schedulers)
-
-
-@canary.hookimpl
-def canary_resource_count_per_node(type: str) -> int | None:
-    """determine if the resources for this test are satisfiable"""
-    if props := canary.config.resource_pool.additional_properties.get("hpc_connect"):
-        if count_per_node := props.get(f"{type}_per_node"):
-            return count_per_node
-    return None
 
 
 @canary.hookimpl
 def canary_configure(config: "canary.Config") -> None:
     """Do some post configuration checks"""
-    batchopts: dict[str, Any] = config.getoption("batchopts")
-    if batchopts:
-        scheduler = batchopts.pop("scheduler", None)
-        if scheduler == "null":
-            batchopts.clear()
-        elif scheduler is None:
-            raise ValueError("Test batching requires a batchopts:scheduler")
-        else:
-            schedulers = config.pluginmanager.hook.canary_hpc_add_scheduler()
-            if scheduler not in schedulers:
-                raise ValueError(
-                    f"Unknown scheduler {scheduler!r}, choose from {', '.join(schedulers)}"
-                )
-            batchopts["scheduler"] = scheduler
+    batchopts: dict[str, Any] = config.getoption("batchopts") or {}
+    if not batchopts:
+        return
+    hook_provider: BatchBackend
+    if execopts := batchopts.get("exec"):
+        hook_provider = BatchExecutor(
+            backend=execopts["backend"], batch=execopts["batch"], case=execopts.get("case")
+        )
+    elif scheduler := batchopts.get("scheduler"):
         if n := batchopts.get("workers"):
             if n > psutil.cpu_count():
                 raise ValueError(f"-b workers={n} > cpu_count={psutil.cpu_count(logical=True)}")
+        BatchResourceSetter.validate_and_set_defaults(batchopts)
         setattr(config.options, "batchopts", batchopts)
-        if batchopts:
-            BatchResourceSetter.validate_and_set_defaults(batchopts)
-            sched = canary.config.pluginmanager.hook.canary_hpc_get_scheduler(scheduler=scheduler)
-            canary.config.pluginmanager.register(sched, f"canary_hpc{sched.backend.name}")
-
-
-@canary.hookimpl
-def canary_runtests_startup(args: argparse.Namespace) -> None:
-    if batch_id := getattr(args, "batch_id", None):
-        if "CANARY_BATCH_ID" not in os.environ:
-            os.environ["CANARY_BATCH_ID"] = str(batch_id)
-        elif not batch_id == os.environ["CANARY_BATCH_ID"]:
-            raise ValueError("env batch id inconsistent with cli batch id")
-        args.mode = "a"
-        case_ids = TestBatch.loadindex(batch_id)
-        if case_ids is None:
-            raise ValueError(f"could not load case ids for batch {batch_id!r}")
-        n = len(case_ids)
-        logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {batch_id}")
-        setattr(args, "case_specs", [f"/{_}" for _ in case_ids])
+        hook_provider = BatchConductor(backend=scheduler)
+    else:
+        raise ValueError("Missing required option -b scheduler=SCHEDULER")
+    hook_provider.set_resource_pool(config)
+    canary.config.pluginmanager.register(hook_provider, f"canary_hpc{hook_provider.backend.name}")
 
 
 @canary.hookimpl
@@ -118,7 +55,6 @@ def canary_addoption(parser: "canary.Parser") -> None:
         dest="batchopts",
         help=BatchResourceSetter.help_page("-b"),
     )
-    parser.add_argument("--batch-id", command="run", group="batch control", help="Run this batch")
 
 
 @canary.hookimpl

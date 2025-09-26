@@ -6,8 +6,25 @@ import glob
 import os
 import re
 
+import pytest
+
+import _canary.config
 from _canary.main import CanaryCommand
 from _canary.util.filesystem import working_dir
+
+
+@pytest.fixture(scope="function", autouse=True)
+def config(request):
+    try:
+        env_copy = os.environ.copy()
+        os.environ.pop("CANARYCFG64", None)
+        os.environ["CANARY_DISABLE_KB"] = "1"
+        _canary.config._config = _canary.config.Config()
+        _canary.config.resource_pool.populate(cpus=6, gpus=0)
+        yield
+    except:
+        os.environ.clear()
+        os.environ.update(env_copy)
 
 
 def test_batched(tmpdir):

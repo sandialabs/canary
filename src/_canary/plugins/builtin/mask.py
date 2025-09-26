@@ -8,7 +8,6 @@ import time
 from typing import TYPE_CHECKING
 
 from ... import when
-from ...error import ResourceUnsatisfiableError
 from ...util import filesystem
 from ...util import graph
 from ...util import logging
@@ -83,9 +82,9 @@ def canary_testsuite_mask(
                 continue
 
             try:
-                config.pluginmanager.hook.canary_resource_requirements_satisfiable(case=case)
-            except ResourceUnsatisfiableError as e:
-                case.mask = "@*{ResourceUnsatisfiable}(%r)" % e.args[0]
+                config.resource_pool.satisfiable(case.required_resources())
+            except Exception as e:
+                case.mask = "@*{%s}(%r)" % (e.__class__.__name__, e.args[0])
                 continue
 
             if owners and not owners.intersection(case.owners):

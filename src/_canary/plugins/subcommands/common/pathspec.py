@@ -8,7 +8,6 @@ import os
 
 from ....config.argparsing import Parser
 from ....config.schemas import testpaths_schema
-from ....finder import is_test_file
 from ....third_party.color import colorize
 from ....util.filesystem import find_work_tree
 from ....util.filesystem import working_dir
@@ -278,3 +277,9 @@ def code(arg: str) -> str:
     if os.getenv("COLOR_WHEN", "auto") == "never":
         return f"``{arg}``"
     return colorize("@*{%s}" % arg)
+
+
+def is_test_file(arg: str) -> bool:
+    import _canary.finder
+
+    return _canary.finder.is_test_file(arg)

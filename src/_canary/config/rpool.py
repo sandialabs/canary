@@ -184,7 +184,7 @@ class ResourcePool:
                 continue
             self.slots_per_resource_type[type] = sum([_["slots"] for _ in self.resources[type]])
 
-    def satisfiable(self, required: list[list[dict[str, Any]]]) -> bool:
+    def satisfiable(self, required: list[list[dict[str, Any]]]) -> None:
         """determine if the resources for this test are satisfiable"""
         if self.empty():
             raise EmptyResourcePoolError
@@ -194,7 +194,7 @@ class ResourcePool:
                 type = item["type"]
                 if item["type"] not in self.resources:
                     msg = f"required resource type {type!r} is not registered with canary"
-                    raise ResourceUnsatisfiableError(msg)
+                    raise ResourceUnavailable(msg)
                 slots_reqd[type] = slots_reqd.get(type, 0) + item["slots"]
         for type, slots in slots_reqd.items():
             slots_avail = self.slots(type)
@@ -203,7 +203,7 @@ class ResourcePool:
                     f"insufficient slots of {type!r} available, "
                     f"requested: {slots}, available: {slots_avail}"
                 )
-        return True
+        return
 
     def acquire(self, required: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
         """Returns resources available to the test
