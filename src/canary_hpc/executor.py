@@ -35,8 +35,9 @@ class BatchExecutor:
         pool = self.generate_resource_pool()
         config.resource_pool.fill(pool)
         stage = TestBatch.stage(self.batch)
-        if self.case is None:
-            with open(os.path.join(stage, "resource_pool.json"), "w") as fh:
+        f = os.path.join(stage, "resource_pool.json")
+        if not os.path.exists(f):
+            with open(f, "w") as fh:
                 json.dump({"resource_pool": pool}, fh, indent=2)
 
     def generate_resource_pool(self) -> dict[str, Any]:
