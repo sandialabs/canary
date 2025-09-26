@@ -476,10 +476,11 @@ class TestBatch(AbstractTestCase):
         node_count: int = 1
         for type, count in max_count_per_type.items():
             try:
-                count_per_node = backend.config.count_per_node(type)
+                count_per_node: int = backend.config.count_per_node(type)
             except ValueError:
                 continue
-            node_count = max(node_count, int(math.ceil(count / count_per_node)))
+            if count_per_node > 0:
+                node_count = max(node_count, int(math.ceil(count / count_per_node)))
         return node_count
 
     def canary_testcase_invocation(

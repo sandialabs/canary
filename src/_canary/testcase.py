@@ -1119,10 +1119,12 @@ class TestCase(AbstractTestCase):
             node_count = config.pluginmanager.hook.canary_resource_count(type="node")
             cpu_count = config.pluginmanager.hook.canary_resource_count(type="cpu")
             cpus_per_node = math.ceil(cpu_count / node_count)
-            nodes = max(nodes, math.ceil(self.cpus / cpus_per_node))
+            if cpus_per_node > 0:
+                nodes = max(nodes, math.ceil(self.cpus / cpus_per_node))
             if gpu_count := config.pluginmanager.hook.canary_resource_count(type="gpu"):
                 gpus_per_node = math.ceil(gpu_count / node_count)
-                nodes = max(nodes, math.ceil(self.gpus / gpus_per_node))
+                if gpus_per_node > 0:
+                    nodes = max(nodes, math.ceil(self.gpus / gpus_per_node))
         return nodes
 
     @property
