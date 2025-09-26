@@ -236,3 +236,21 @@ def canary_testcase_finish(case: "AbstractTestCase") -> bool:
 @hookspec
 def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
     raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_resource_satisfiable(case: "TestCase") -> bool:
+    """Determine if ``case`` can be run."""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_resource_count(type: str) -> int:
+    """Return the number resources available of type ``type``"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_resource_types() -> list[str]:
+    """Return the names of available resources"""
+    raise NotImplementedError

@@ -4,18 +4,20 @@
 
 import argparse
 import os
+from typing import Any
+
+import hpc_connect
 
 import canary
 
-from .backend import BatchBackend
 from .testbatch import TestBatch
 
 logger = canary.get_logger(__name__)
 
 
-class BatchExecutor(BatchBackend):
+class BatchExecutor:
     def __init__(self, *, backend: str, batch: str, case: str | None = None) -> None:
-        super().__init__(backend=backend)
+        self.backend: hpc_connect.HPCSubmissionManager = hpc_connect.get_backend(backend)
         if "CANARY_BATCH_ID" not in os.environ:
             os.environ["CANARY_BATCH_ID"] = batch
         elif batch != os.environ["CANARY_BATCH_ID"]:
@@ -27,6 +29,25 @@ class BatchExecutor(BatchBackend):
         else:
             cases = TestBatch.loadindex(self.batch)
             self.cases.extend(cases)
+
+    def set_resource_pool(self, config: canary.Config) -> None:
+        config.resource_pool.fill(self.generate_resource_pool())
+
+    def generate_resource_pool(self) -> dict[str, Any]:
+        # set the resource pool for this backend
+        resources: dict[str, list[Any]] = {}
+        node_count = self.backend.config.node_count
+        for type in self.backend.config.resource_types():
+            if not type.endswith("s"):
+                type += "s"
+            count = self.backend.config.count_per_node(type)
+            slots = 1
+            resources[type] = [{"id": str(j), "slots": slots} for j in range(count * node_count)]
+        pool: dict[str, Any] = {
+            "resources": resources,
+            "additional_properties": {"nodes": node_count},
+        }
+        return pool
 
     @property
     def case_specs(self) -> list[str]:
@@ -40,3 +61,21 @@ class BatchExecutor(BatchBackend):
         n = len(case_specs)
         logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
         setattr(args, "case_specs", case_specs)
+
+    @canary.hookimpl
+    def canary_resource_count(self, type: str) -> int:
+        node_count = self.backend.config.node_count
+        if type in ("nodes", "node"):
+            return node_count
+        type_per_node = self.backend.config.count_per_node(type)
+        return node_count * type_per_node
+
+    @canary.hookimpl
+    def canary_resource_satisfiable(self, case: canary.TestCase) -> bool:
+        # The resource pool was already set above, so we can just leverage it
+        return canary.config.resource_pool.satisfiable(case.required_resources())
+
+    @canary.hookimpl
+    def canary_resource_types(self) -> list[str]:
+        # The resource pool was already set above, so we can just leverage it
+        return canary.config.resource_pool.types

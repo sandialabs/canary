@@ -275,7 +275,7 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
             canary.config.resource_pool.fill({"additional_properties": {}, "resources": pool})
             file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
             [case] = file.lock()
-            canary.config.resource_pool.satisfiable(case.required_resources())
+            canary.config.pluginmanager.hook.canary_resource_satisfiable(case=case)
             case.status.set("ready")
             queue = ResourceQueue(threading.Lock())
             queue.put(case)

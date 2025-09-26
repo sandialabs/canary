@@ -127,8 +127,12 @@ class ResourcePool:
         return len(self.resources) == 0
 
     def count(self, type: str) -> int:
+        if type in ("node", "nodes"):
+            return 1
         if type in self.resources:
             return len(self.resources[type])
+        elif f"{type}s" in self.resources:
+            return len(self.resources[f"{type}s"])
         raise ResourceUnavailable(type)
 
     def slots(self, type: str) -> int:
@@ -184,7 +188,7 @@ class ResourcePool:
                 continue
             self.slots_per_resource_type[type] = sum([_["slots"] for _ in self.resources[type]])
 
-    def satisfiable(self, required: list[list[dict[str, Any]]]) -> None:
+    def satisfiable(self, required: list[list[dict[str, Any]]]) -> bool:
         """determine if the resources for this test are satisfiable"""
         if self.empty():
             raise EmptyResourcePoolError
@@ -203,7 +207,7 @@ class ResourcePool:
                     f"insufficient slots of {type!r} available, "
                     f"requested: {slots}, available: {slots_avail}"
                 )
-        return
+        return True
 
     def acquire(self, required: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
         """Returns resources available to the test

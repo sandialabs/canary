@@ -116,7 +116,7 @@ def partition_n(
         if nodes == "same":
             node_groups: dict[int, list[canary.TestCase]] = {}
             for case in ready:
-                node_groups.setdefault(case.nodes, []).append(case)
+                node_groups.setdefault(nodes_required(case), []).append(case)
             groups.extend(node_groups.values())
         else:
             groups.append(list(ready))
@@ -196,7 +196,7 @@ def partition_t(
         if nodes == "same":
             node_groups: dict[int, list[canary.TestCase]] = {}
             for case in ready:
-                node_groups.setdefault(case.nodes, []).append(case)
+                node_groups.setdefault(nodes_required(case), []).append(case)
             for group in node_groups.values():
                 _pack_ready_nodes(packer, batches, group, cpus_per_node)
         else:
@@ -206,6 +206,10 @@ def partition_t(
         raise ValueError("Incorrect partition lengths!")
     logger.debug(f"Partitioned {len(cases)} test cases in to {len(batches)} batches")
     return [b for b in batches if len(b)]
+
+
+def nodes_required(case: canary.TestCase) -> int:
+    return case.nodes
 
 
 class _Partition(set):

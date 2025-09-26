@@ -82,7 +82,7 @@ def canary_testsuite_mask(
                 continue
 
             try:
-                config.resource_pool.satisfiable(case.required_resources())
+                config.pluginmanager.hook.canary_resource_satisfiable(case=case)
             except Exception as e:
                 case.mask = "@*{%s}(%r)" % (e.__class__.__name__, e.args[0])
                 continue

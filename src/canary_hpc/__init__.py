@@ -12,7 +12,6 @@ import psutil
 
 import canary
 
-from .backend import BatchBackend
 from .batchopts import BatchResourceSetter
 from .conductor import BatchConductor
 from .executor import BatchExecutor
@@ -26,22 +25,23 @@ def canary_configure(config: "canary.Config") -> None:
     batchopts: dict[str, Any] = config.getoption("batchopts") or {}
     if not batchopts:
         return
-    hook_provider: BatchBackend
     if execopts := batchopts.get("exec"):
-        hook_provider = BatchExecutor(
+        # Batch is being executed within an allocation
+        hooks = BatchExecutor(
             backend=execopts["backend"], batch=execopts["batch"], case=execopts.get("case")
         )
+        hooks.set_resource_pool(config)
+        canary.config.pluginmanager.register(hooks, f"canary_hpc{hooks.backend.name}")
     elif scheduler := batchopts.get("scheduler"):
         if n := batchopts.get("workers"):
             if n > psutil.cpu_count():
                 raise ValueError(f"-b workers={n} > cpu_count={psutil.cpu_count(logical=True)}")
         BatchResourceSetter.validate_and_set_defaults(batchopts)
         setattr(config.options, "batchopts", batchopts)
-        hook_provider = BatchConductor(backend=scheduler)
+        hooks = BatchConductor(backend=scheduler)
+        canary.config.pluginmanager.register(hooks, f"canary_hpc{hooks.backend.name}")
     else:
         raise ValueError("Missing required option -b scheduler=SCHEDULER")
-    hook_provider.set_resource_pool(config)
-    canary.config.pluginmanager.register(hook_provider, f"canary_hpc{hook_provider.backend.name}")
 
 
 @canary.hookimpl

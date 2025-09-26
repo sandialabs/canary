@@ -6,14 +6,12 @@ from typing import Any
 
 import hpc_connect
 
-import canary
-
 
 class BatchBackend:
     def __init__(self, *, backend: str) -> None:
         self.backend: hpc_connect.HPCSubmissionManager = hpc_connect.get_backend(backend)
 
-    def set_resource_pool(self, config: canary.Config) -> None:
+    def generate_resource_pool(self) -> dict[str, Any]:
         # set the resource pool for this backend
         resources: dict[str, list[Any]] = {}
         node_count = self.backend.config.node_count
@@ -27,4 +25,4 @@ class BatchBackend:
             "resources": resources,
             "additional_properties": {"nodes": node_count},
         }
-        config.resource_pool.fill(pool)
+        return pool

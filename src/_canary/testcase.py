@@ -138,7 +138,7 @@ class Parameters(dict):
             yield key, value
 
     def validate_known_resource_types(self, key: str, value: Any) -> None:
-        resource_types = config.resource_pool.types
+        resource_types = config.pluginmanager.hook.canary_resource_types()
         if key.lower() in resource_types:
             if not isinstance(value, int):
                 raise InvalidTypeError(key, value)
@@ -585,11 +585,11 @@ class TestCase(AbstractTestCase):
         if "nodes" in self.parameters:
             nodes = self.parameters["nodes"]
             # request all available resources per node
-            resource_types = config.resource_pool.types
-            nodes_in_pool = int(config.resource_pool.additional_properties.get("nodes", 1))
+            resource_types = config.pluginmanager.hook.canary_resource_types()
+            node_count = config.pluginmanager.hook.canary_resource_count(type="node")
             for type in resource_types:
-                ntype_in_pool = config.resource_pool.count(type)
-                count_per_node = math.ceil(ntype_in_pool / nodes_in_pool)
+                ntype_in_pool = config.pluginmanager.hook.canary_resource_count(type=type)
+                count_per_node = math.ceil(ntype_in_pool / node_count)
                 n = nodes * count_per_node
                 parameters[type] = n
                 # np, ndevice, nnode: backward compatibility with vvtest
@@ -612,7 +612,7 @@ class TestCase(AbstractTestCase):
 
     def size(self) -> float:
         vec: list[float | int] = [self.timeout]
-        resource_types = config.resource_pool.types
+        resource_types = config.pluginmanager.hook.canary_resource_types()
         for name, value in self.parameters.items():
             if name in resource_types:
                 assert isinstance(value, int)
@@ -623,7 +623,7 @@ class TestCase(AbstractTestCase):
     def required_resources(self) -> list[list[dict[str, Any]]]:
         group: list[dict[str, Any]] = []
         parameters = self.parameters | self.implicit_parameters
-        resource_types = config.resource_pool.types
+        resource_types = config.pluginmanager.hook.canary_resource_types()
         for name, value in parameters.items():
             if name in resource_types:
                 assert isinstance(value, int)
@@ -1104,9 +1104,9 @@ class TestCase(AbstractTestCase):
             cpus = int(self.parameters["np"])
         elif "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])
-            nodes_in_pool = int(config.resource_pool.additional_properties.get("nodes", 1))
-            cpus_in_pool = config.resource_pool.count("cpus")
-            cpus_per_node = math.ceil(cpus_in_pool / nodes_in_pool)
+            node_count = config.pluginmanager.hook.canary_resource_count(type="node")
+            cpu_count = config.pluginmanager.hook.canary_resource_count(type="cpus")
+            cpus_per_node = math.ceil(cpu_count / node_count)
             cpus = nodes * cpus_per_node
         return cpus
 
@@ -1116,10 +1116,13 @@ class TestCase(AbstractTestCase):
         if "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])  # type: ignore
         else:
-            nodes_in_pool = int(config.resource_pool.additional_properties.get("nodes", 1))
-            cpus_in_pool = config.resource_pool.count("cpus")
-            cpus_per_node = math.ceil(cpus_in_pool / nodes_in_pool)
-            nodes = math.ceil(self.cpus / cpus_per_node)
+            node_count = config.pluginmanager.hook.canary_resource_count(type="node")
+            cpu_count = config.pluginmanager.hook.canary_resource_count(type="cpu")
+            cpus_per_node = math.ceil(cpu_count / node_count)
+            nodes = max(nodes, math.ceil(self.cpus / cpus_per_node))
+            if gpu_count := config.pluginmanager.hook.canary_resource_count(type="gpu"):
+                gpus_per_node = math.ceil(gpu_count / node_count)
+                nodes = max(nodes, math.ceil(self.gpus / gpus_per_node))
         return nodes
 
     @property
@@ -1131,9 +1134,9 @@ class TestCase(AbstractTestCase):
             gpus = int(self.parameters["ndevice"])  # type: ignore
         elif "nodes" in self.parameters:
             nodes = int(self.parameters["nodes"])
-            nodes_in_pool = int(config.resource_pool.additional_properties.get("nodes", 1))
-            gpus_in_pool = config.resource_pool.count("gpus")
-            gpus_per_node = math.ceil(gpus_in_pool / nodes_in_pool)
+            node_count = config.pluginmanager.hook.canary_resource_count(type="node")
+            gpu_count = config.pluginmanager.hook.canary_resource_count(type="gpu")
+            gpus_per_node = math.ceil(gpu_count / node_count)
             gpus = nodes * gpus_per_node
         return gpus
 

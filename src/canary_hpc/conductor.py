@@ -27,7 +27,6 @@ from _canary.util.procutils import ProcessPoolExecutor
 from _canary.util.procutils import cleanup_children
 from _canary.util.returncode import compute_returncode
 
-from .backend import BatchBackend
 from .queue import ResourceQueue
 from .testbatch import TestBatch
 
@@ -35,7 +34,37 @@ global_lock = threading.Lock()
 logger = canary.get_logger(__name__)
 
 
-class BatchConductor(BatchBackend):
+class BatchConductor:
+    def __init__(self, *, backend: str) -> None:
+        self.backend: hpc_connect.HPCSubmissionManager = hpc_connect.get_backend(backend)
+        # compute the total slots per resource type so that we can determine whether a test can be
+        # run by this backend.
+        self.slots: dict[str, int] = {}
+        node_count = self.backend.config.node_count
+        slots_per_type: int = 1
+        for type in self.backend.config.resource_types():
+            count = self.backend.config.count_per_node(type)
+            if not type.endswith("s"):
+                type += "s"
+            self.slots[type] = slots_per_type * count * node_count
+
+    @canary.hookimpl
+    def canary_resource_count(self, type: str) -> int:
+        node_count = self.backend.config.node_count
+        if type in ("nodes", "node"):
+            return node_count
+        type_per_node = self.backend.config.count_per_node(type)
+        return node_count * type_per_node
+
+    @canary.hookimpl
+    def canary_resource_satisfiable(self, case: canary.TestCase) -> bool:
+        # The resource pool was already set above, so we can just leverage it
+        return self.satisfiable(case)
+
+    @canary.hookimpl
+    def canary_resource_types(self) -> list[str]:
+        return self.backend.config.resource_types()
+
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, cases: Sequence[canary.TestCase]) -> int:
         """Run each test case in ``cases``.
@@ -96,6 +125,26 @@ class BatchConductor(BatchBackend):
                 logger.info("@*{Finished} %d %s (%s)" % (nbatches, what, canary.time.hhmmss(dt)))
                 atexit.unregister(cleanup_children)
         return returncode
+
+    def satisfiable(self, case: canary.TestCase) -> bool:
+        """determine if the resources for this test are satisfiable"""
+        required = case.required_resources()
+        slots_reqd: dict[str, int] = {}
+        for group in required:
+            for item in group:
+                type = item["type"]
+                if item["type"] not in self.slots:
+                    msg = f"required resource type {type!r} is not registered with canary"
+                    raise ResourceUnavailable(msg)
+                slots_reqd[type] = slots_reqd.get(type, 0) + item["slots"]
+        for type, slots in slots_reqd.items():
+            slots_avail = self.slots[type]
+            if slots_avail < slots:
+                raise ResourceUnsatisfiableError(
+                    f"insufficient slots of {type!r} available, "
+                    f"requested: {slots}, available: {slots_avail}"
+                )
+        return True
 
 
 def process_queue(
@@ -216,3 +265,9 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
             logger.debug(f"Batch {batch}: test case failed: {case}")
     if failed and canary.config.getoption("fail_fast"):
         raise FailFast(failed=failed)
+
+
+class ResourceUnavailable(Exception): ...
+
+
+class ResourceUnsatisfiableError(Exception): ...
