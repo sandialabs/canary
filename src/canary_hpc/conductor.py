@@ -63,7 +63,12 @@ class BatchConductor:
 
     @canary.hookimpl
     def canary_resource_types(self) -> list[str]:
-        return self.backend.config.resource_types()
+        types: set[str] = {"cpus", "gpus"}
+        for type in self.backend.config.resource_types():
+            if not type.endswith("s"):
+                type += "s"
+            types.add(type)
+        return sorted(types)
 
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, cases: Sequence[canary.TestCase]) -> int:

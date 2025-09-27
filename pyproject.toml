@@ -197,7 +197,7 @@ ignore_errors = true
 [tool.ty.src]
 exclude = [
     "src/canary/examples",
-    "src/canary_cmake/cdash/xmlreporter.py",
+    "src/canary_cmake/cdash/xmlreporter.py",  # this file raises a bug in ty
     "src/_canary/third_party/distro.py",
     "src/_canary/third_party/programoutput/*",
     "src/_canary/third_party/monkeypatch.py",

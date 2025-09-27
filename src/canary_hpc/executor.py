@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import json
 import os
 from typing import Any
 
@@ -31,7 +32,13 @@ class BatchExecutor:
             self.cases.extend(cases)
 
     def set_resource_pool(self, config: canary.Config) -> None:
-        config.resource_pool.fill(self.generate_resource_pool())
+        pool = self.generate_resource_pool()
+        config.resource_pool.fill(pool)
+        stage = TestBatch.stage(self.batch)
+        f = os.path.join(stage, "resource_pool.json")
+        if not os.path.exists(f):
+            with open(f, "w") as fh:
+                json.dump({"resource_pool": pool}, fh, indent=2)
 
     def generate_resource_pool(self) -> dict[str, Any]:
         # set the resource pool for this backend
