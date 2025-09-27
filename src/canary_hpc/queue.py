@@ -20,7 +20,7 @@ logger = canary.get_logger(__name__)
 
 
 class ResourceQueue(queue.AbstractResourceQueue):
-    def __init__(self, *, lock: threading.Lock, workers: int | None = None) -> None:
+    def __init__(self, *, lock: threading.Lock) -> None:
         workers = int(canary.config.getoption("workers", -1))
         super().__init__(lock=lock, workers=5 if workers < 0 else workers)
         self.tmp_buffer: list[canary.TestCase] = []
