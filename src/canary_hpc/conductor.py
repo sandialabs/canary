@@ -53,8 +53,12 @@ class BatchConductor:
         node_count = self.backend.config.node_count
         if type in ("nodes", "node"):
             return node_count
-        type_per_node = self.backend.config.count_per_node(type)
-        return node_count * type_per_node
+        try:
+            type_per_node = self.backend.config.count_per_node(type)
+        except ValueError:
+            return 0
+        else:
+            return node_count * type_per_node
 
     @canary.hookimpl
     def canary_resource_satisfiable(self, case: canary.TestCase) -> bool:
