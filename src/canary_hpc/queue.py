@@ -40,7 +40,7 @@ class ResourceQueue(queue.AbstractResourceQueue):
         return list(self.buffer.keys())
 
     def prepare(self, **kwds: Any) -> None:
-        logger.debug("Preparting batch queue")
+        logger.debug("Preparing batch queue")
         batchopts = canary.config.getoption("batchopts", {})
         if not batchopts:
             raise ValueError("Cannot partition test cases: missing batching options")
