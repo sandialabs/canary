@@ -42,7 +42,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     with CanaryMain(argv) as m:
         parser = make_argument_parser()
         parser.add_main_epilog(parser)
-        for command in config.pluginmanager.get_subcommands():
+        for command in config.pluginmanager.hook.canary_subcommand():
             parser.add_command(command)
         with monkeypatch.context() as mp:
             mp.setattr(parser, "add_argument", parser.add_plugin_argument)
@@ -103,7 +103,7 @@ class CanaryMain:
 class CanaryCommand:
     def __init__(self, command_name: str, debug: bool = False) -> None:
         # plugin.load_from_entry_points()
-        for command in config.pluginmanager.get_subcommands():
+        for command in config.pluginmanager.hook.canary_subcommand():
             if command.name == command_name:
                 self.command = command
                 break
@@ -124,7 +124,7 @@ class CanaryCommand:
                     reraise = True
                 argv = [self.command.name] + list(args_in)
                 parser = make_argument_parser()
-                for command in cfg.pluginmanager.get_subcommands():
+                for command in cfg.pluginmanager.hook.canary_subcommand():
                     parser.add_command(command)
                 with monkeypatch.context() as mp:
                     mp.setattr(parser, "add_argument", parser.add_plugin_argument)

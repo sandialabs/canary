@@ -11,7 +11,6 @@ import pluggy
 from . import builtin
 from . import hookspec
 from . import subcommands
-from .types import CanarySubcommand
 
 if TYPE_CHECKING:
     pass
@@ -33,10 +32,6 @@ class CanaryPluginManager(pluggy.PluginManager):
             self.register(p, name=name)
         self.load_setuptools_entrypoints(hookspec.project_name)
         return self
-
-    def get_subcommands(self) -> list[CanarySubcommand]:
-        hook = self.hook.canary_subcommand
-        return hook()
 
     def consider_plugin(self, name: str) -> None:
         assert isinstance(name, str), f"module name as text required, got {name!r}"
