@@ -18,7 +18,7 @@ def test_session_bfilter(tmpdir):
         with config.override():
             config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
             config.options.batchopts = {
-                "scheduler": "shell",
+                "backend": "shell",
                 "spec": {"count": 2, "duration": None, "layout": "flat", "nodes": "any"},
             }
             config.pluginmanager.hook.canary_configure(config=config)

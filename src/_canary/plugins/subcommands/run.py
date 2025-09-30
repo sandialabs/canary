@@ -103,7 +103,7 @@ class Run(CanarySubcommand):
     def execute(self, args: "argparse.Namespace") -> int:
         from ...session import Session
 
-        config.pluginmanager.hook.canary_runtests_startup(args=args)
+        config.pluginmanager.hook.canary_runtests_startup()
 
         session: Session
         if args.mode == "w":

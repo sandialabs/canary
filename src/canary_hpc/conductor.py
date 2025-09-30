@@ -48,6 +48,8 @@ class BatchConductor:
                 type += "s"
             self.slots[type] = slots_per_type * count * node_count
 
+    def setup(self, *, config: canary.Config) -> None: ...
+
     @canary.hookimpl
     def canary_resource_count(self, type: str) -> int:
         node_count = self.backend.config.node_count

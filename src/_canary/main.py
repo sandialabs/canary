@@ -44,6 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.add_main_epilog(parser)
         for command in config.pluginmanager.hook.canary_subcommand():
             parser.add_command(command)
+        config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
         with monkeypatch.context() as mp:
             mp.setattr(parser, "add_argument", parser.add_plugin_argument)
             mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
@@ -54,18 +55,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             sys.stderr.write(shlex.join(a) + "\n")
         if args.color:
             color.set_color_when(args.color)
-
         config.set_main_options(args)
-        config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
         config.pluginmanager.hook.canary_configure(config=config)
         command = parser.get_command(args.command)
         if command is None:
             parser.print_help()
             return -1
         if args.canary_profile:
-            return invoke_profiled_command(command, args)
+            return invoke_profiled_command(command, config.options)
         else:
-            return invoke_command(command, args)
+            return invoke_command(command, config.options)
 
 
 class CanaryMain:
@@ -122,6 +121,7 @@ class CanaryCommand:
                     cfg.push_scope(scope)
                     save_reraise = reraise
                     reraise = True
+                cfg.pluginmanager.hook.canary_addhooks(pluginmanager=cfg.pluginmanager)
                 argv = [self.command.name] + list(args_in)
                 parser = make_argument_parser()
                 for command in cfg.pluginmanager.hook.canary_subcommand():
@@ -132,9 +132,8 @@ class CanaryCommand:
                     cfg.pluginmanager.hook.canary_addoption(parser=parser)
                 args = parser.parse_args(argv)
                 cfg.set_main_options(args)
-                cfg.pluginmanager.hook.canary_addhooks(pluginmanager=cfg.pluginmanager)
                 cfg.pluginmanager.hook.canary_configure(config=cfg)
-                rc = self.command.execute(args)
+                rc = self.command.execute(cfg.options)
                 self.returncode = rc
         except Exception:
             if fail_on_error:

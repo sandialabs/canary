@@ -4,7 +4,6 @@
 
 # mypy: disable-error-code=empty-body
 
-import argparse
 from typing import TYPE_CHECKING
 from typing import Type
 
@@ -103,7 +102,7 @@ def canary_session_finish(session: "Session", exitstatus: int) -> None:
 
 
 @hookspec
-def canary_runtests_startup(args: argparse.Namespace) -> None:
+def canary_runtests_startup() -> None:
     """Called at the beginning of `canary run`"""
     raise NotImplementedError
 
@@ -235,6 +234,7 @@ def canary_testcase_finish(case: "AbstractTestCase") -> bool:
 
 @hookspec
 def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
+    "Called at plugin registration time to add new hooks"
     raise NotImplementedError
 
 

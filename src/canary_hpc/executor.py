@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import argparse
 import json
 import os
 from typing import Any
@@ -31,7 +30,7 @@ class BatchExecutor:
             cases = TestBatch.loadindex(self.batch)
             self.cases.extend(cases)
 
-    def set_resource_pool(self, config: canary.Config) -> None:
+    def setup(self, *, config: canary.Config) -> None:
         pool = self.generate_resource_pool()
         config.resource_pool.fill(pool)
         stage = TestBatch.stage(self.batch)
@@ -39,6 +38,11 @@ class BatchExecutor:
         if not os.path.exists(f):
             with open(f, "w") as fh:
                 json.dump({"resource_pool": pool}, fh, indent=2)
+        config.options.mode = "a"
+        case_specs = self.case_specs
+        n = len(case_specs)
+        logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
+        setattr(config.options, "case_specs", case_specs)
 
     def generate_resource_pool(self) -> dict[str, Any]:
         # set the resource pool for this backend
@@ -59,15 +63,6 @@ class BatchExecutor:
     @property
     def case_specs(self) -> list[str]:
         return [f"/{case}" for case in self.cases]
-
-    @canary.hookimpl
-    def canary_runtests_startup(self, args: argparse.Namespace) -> None:
-        # Inject the case specs from this batch
-        args.mode = "a"
-        case_specs = self.case_specs
-        n = len(case_specs)
-        logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
-        setattr(args, "case_specs", case_specs)
 
     @canary.hookimpl
     def canary_resource_count(self, type: str) -> int:

@@ -45,7 +45,7 @@ if __name__ == '__main__':
                 )
 
         run = CanaryCommand("run")
-        rc = run("-w", "-b", "spec=count:4", "-b", "scheduler=shell", ".")
+        rc = run("-w", "-b", "spec=count:4", "-b", "backend=shell", ".")
         dirs = os.listdir("TestResults")
         expected = [".canary"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)

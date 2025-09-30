@@ -60,6 +60,14 @@ def test_batch_options():
 
     args = parser.parse_args(["-b", "scheduler=shell"])
     BatchResourceSetter.validate_and_set_defaults(args.batch)
+    assert args.batch["backend"] == "shell"
+    assert args.batch["spec"]["layout"] == "flat"
+    assert args.batch["spec"]["duration"] == 60 * 30
+    assert args.batch["spec"]["nodes"] == "any"
+
+    args = parser.parse_args(["-b", "backend=shell"])
+    BatchResourceSetter.validate_and_set_defaults(args.batch)
+    assert args.batch["backend"] == "shell"
     assert args.batch["spec"]["layout"] == "flat"
     assert args.batch["spec"]["duration"] == 60 * 30
     assert args.batch["spec"]["nodes"] == "any"

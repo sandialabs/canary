@@ -43,9 +43,9 @@ class BatchResourceSetter(argparse.Action):
         text = """\
 Defines resources required to batch and schedule test batches. The %(r_arg)s argument is of
 the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
-• scheduler=S: Submit test batches to scheduler 'S'.\n\n
+• backend=NAME: Submit test batches to this backend's scheduler 'S'.\n\n
 • workers=N: Execute tests in a batch asynchronously using a pool of at most N workers [default: auto]\n\n
-• option=%(opt)s: Pass %(opt)s to the scheduler.  If %(opt)s contains commas, it is split into multiple options at the commas.\n\n
+• option=%(opt)s: Pass %(opt)s to the backend's scheduler.  If %(opt)s contains commas, it is split into multiple options at the commas.\n\n
 • spec=%(spec)s: Batch spec with possible option:value pairs:\n\n
 [pad]%(count)s: Batch count.  max: one test per batch.  N>=1: split into at most N batches.\n\n
 [pad]%(duration)s: Group tests into batches with total runtime approximate T seconds (accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s).\n\n
@@ -67,20 +67,20 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
     def parse_spec(spec_arg: str, spec: dict[str, Any]) -> None:
         """Parse the -b spec=... option"""
         for arg in csvsplit(spec_arg):
-            if match := re.search(r"^nodes:(any|same)$", arg.lower()):
+            if match := re.search(r"^nodes[:=](any|same)$", arg.lower()):
                 spec["nodes"] = match.group(1)
-            elif match := re.search(r"^layout:(flat|atomic)$", arg.lower()):
+            elif match := re.search(r"^layout[:=](flat|atomic)$", arg.lower()):
                 spec["layout"] = match.group(1)
-            elif match := re.search(r"^count:([-]?\d+)$", arg.lower()):
+            elif match := re.search(r"^count[:=]([-]?\d+)$", arg.lower()):
                 count = int(match.group(1))
                 if count < 0:
                     raise ValueError("count <= -1")
                 spec["count"] = count
-            elif match := re.search(r"^count:auto$", arg.lower()):
+            elif match := re.search(r"^count[:=]auto$", arg.lower()):
                 spec["count"] = partitioning.AUTO
-            elif match := re.search(r"^count:max$", arg.lower()):
+            elif match := re.search(r"^count[:=]max$", arg.lower()):
                 spec["count"] = partitioning.ONE_PER_BATCH
-            elif match := re.search(r"^duration:(.*)$", arg.lower()):
+            elif match := re.search(r"^duration[:=](.*)$", arg.lower()):
                 duration = time_in_seconds(match.group(1))
                 if duration <= 0:
                     raise ValueError("batch duration <= 0")
@@ -93,11 +93,11 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
         """Parse the -b exec=... option"""
         spec: dict[str, str] = {}
         for arg in csvsplit(arg_in):
-            if match := re.search(r"^backend:(.*)$", arg.lower()):
+            if match := re.search(r"^backend[:=](.*)$", arg.lower()):
                 spec["backend"] = match.group(1)
-            elif match := re.search(r"^batch:(.*)$", arg.lower()):
+            elif match := re.search(r"^batch[:=](.*)$", arg.lower()):
                 spec["batch"] = match.group(1)
-            elif match := re.search(r"^case:(.*)$", arg.lower()):
+            elif match := re.search(r"^case[:=](.*)$", arg.lower()):
                 spec["case"] = match.group(1)
         if "backend" not in spec:
             raise ValueError("Batch exec spec missing required key 'backend'")
@@ -121,10 +121,10 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             if workers <= 0:
                 raise ValueError("batch workers <= 0")
             return ("workers", workers)
-        elif match := re.search(r"^(runner|scheduler|type)[:=](\w+)$", arg):
+        elif match := re.search(r"^(backend|scheduler|type)[:=](\w+)$", arg):
             raw = match.group(2)
-            return ("scheduler", raw)
-        elif match := re.search(r"^(option|args|scheduler_args|with)[:=](.*)$", arg):
+            return ("backend", raw)
+        elif match := re.search(r"^(option|args|options|with)[:=](.*)$", arg):
             setdefaultopts(namespace)
             raw = strip_quotes(match.group(2))
             return ("options", csvsplit(raw))

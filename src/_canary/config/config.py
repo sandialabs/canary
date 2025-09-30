@@ -573,6 +573,8 @@ def try_loads(arg):
 def merge_namespaces(dest: argparse.Namespace, source: argparse.Namespace) -> argparse.Namespace:
     for attr, value in vars(source).items():
         if value is None:
+            if not hasattr(dest, attr):
+                setattr(dest, attr, None)
             continue
         elif not hasattr(dest, attr):
             setattr(dest, attr, value)
