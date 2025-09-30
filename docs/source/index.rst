@@ -14,7 +14,6 @@ canary
    :hidden:
 
    User's guide <user/index>
-   Plugins <plugins/index>
    API reference <api-docs/index>
    Developer's guide <dev/index>
    Release notes<release/index>
