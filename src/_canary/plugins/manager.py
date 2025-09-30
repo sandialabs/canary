@@ -4,17 +4,12 @@
 
 import sys
 import warnings
-from typing import TYPE_CHECKING
 
 import pluggy
 
 from . import builtin
 from . import hookspec
 from . import subcommands
-
-if TYPE_CHECKING:
-    pass
-
 
 warnings.simplefilter("once", DeprecationWarning)
 
