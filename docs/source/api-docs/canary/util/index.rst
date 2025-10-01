@@ -9,15 +9,15 @@ util
    :maxdepth: 1
 
    _difflib
+   _json
    banner
-   cdash
    collections
    compression
+   dynamic_version
    editor
    entry_points
    executable
    filesystem
-   generate_version
    gitlab
    glyphs
    graph
@@ -27,12 +27,10 @@ util
    misc
    module
    parallel
-   partitioning
    procutils
    progress
    returncode
    rprobe
-   scalar
    sendmail
    shell
    singleton

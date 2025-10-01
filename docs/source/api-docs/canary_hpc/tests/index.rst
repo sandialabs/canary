@@ -2,14 +2,13 @@
 
    SPDX-License-Identifier: MIT
 
-util
-====
+tests
+=====
 
 .. toctree::
    :maxdepth: 1
 
-   collections
-   dynamic_version
-   string
-   tengine
-   time
+   basic
+   bfilter
+   bparsing
+   partition

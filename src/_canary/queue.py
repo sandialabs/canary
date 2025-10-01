@@ -189,7 +189,7 @@ class ResourceQueue(AbstractResourceQueue):
         for case in cases:
             if config.get("config:debug"):
                 # The case should have already been validated
-                config.pluginmanager.hook.canary_resource_satisfiable(case=case)
+                config.pluginmanager.hook.canary_resources_avail(case=case)
             super().put(case)
 
     def skip(self, obj_no: int) -> None:

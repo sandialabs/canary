@@ -86,7 +86,20 @@ if __name__ == "__main__":
             make_api_docs(
                 os.path.join(start, "src/_canary"),
                 os.path.join(start, "docs/source/api-docs/canary"),
-                skip_dirs=["third_party", "cdash/validators"],
+                skip_dirs=["third_party",],
+            )
+            make_api_docs(
+                os.path.join(start, "src/canary_cmake"),
+                os.path.join(start, "docs/source/api-docs/canary_cmake"),
+                skip_dirs=["cdash/validators"],
+            )
+            make_api_docs(
+                os.path.join(start, "src/canary_hpc"),
+                os.path.join(start, "docs/source/api-docs/canary_hpc"),
+            )
+            make_api_docs(
+                os.path.join(start, "src/canary_vvtest"),
+                os.path.join(start, "docs/source/api-docs/canary_vvtest"),
             )
             make_api_docs(
                 os.path.join(start, "../hpc-connect/src/hpc_connect"),

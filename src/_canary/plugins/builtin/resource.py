@@ -8,8 +8,8 @@ if TYPE_CHECKING:
 
 
 @hookimpl(trylast=True)
-def canary_resource_satisfiable(case: "TestCase") -> bool:
-    return config.resource_pool.satisfiable(case.required_resources())
+def canary_resources_avail(case: "TestCase") -> bool:
+    return config.resource_pool.accommodates(case.required_resources())
 
 
 @hookimpl(trylast=True)

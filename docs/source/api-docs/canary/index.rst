@@ -18,11 +18,9 @@ _canary
    main
    paramset
    plugins/index
-   queues
-   runners
+   queue
    session
    status
-   testbatch
    testcase
    testinstance
    util/index

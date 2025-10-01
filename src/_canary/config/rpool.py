@@ -188,8 +188,8 @@ class ResourcePool:
                 continue
             self.slots_per_resource_type[type] = sum([_["slots"] for _ in self.resources[type]])
 
-    def satisfiable(self, required: list[list[dict[str, Any]]]) -> bool:
-        """determine if the resources for this test are satisfiable"""
+    def accommodates(self, required: list[list[dict[str, Any]]]) -> bool:
+        """determine if the resources for this test are available"""
         if self.empty():
             raise EmptyResourcePoolError
         slots_reqd: dict[str, int] = {}

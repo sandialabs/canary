@@ -2,14 +2,16 @@
 
    SPDX-License-Identifier: MIT
 
-util
-====
+canary_hpc
+==========
 
 .. toctree::
    :maxdepth: 1
 
-   collections
-   dynamic_version
-   string
-   tengine
-   time
+   batchopts
+   conductor
+   executor
+   partitioning
+   queue
+   testbatch
+   tests/index

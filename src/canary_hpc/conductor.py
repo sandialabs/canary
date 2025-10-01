@@ -39,14 +39,21 @@ class BatchConductor:
         self.backend: hpc_connect.HPCSubmissionManager = hpc_connect.get_backend(backend)
         # compute the total slots per resource type so that we can determine whether a test can be
         # run by this backend.
-        self.slots: dict[str, int] = {}
-        node_count = self.backend.config.node_count
-        slots_per_type: int = 1
-        for type in self.backend.config.resource_types():
-            count = self.backend.config.count_per_node(type)
-            if not type.endswith("s"):
-                type += "s"
-            self.slots[type] = slots_per_type * count * node_count
+        self._slots: dict[str, int] | None = None
+
+    @property
+    def slots(self) -> dict[str, int]:
+        if self._slots is None:
+            self._slots = {}
+            node_count = self.backend.config.node_count
+            slots_per_type: int = 1
+            for type in self.backend.config.resource_types():
+                count = self.backend.config.count_per_node(type)
+                if not type.endswith("s"):
+                    type += "s"
+                self._slots[type] = slots_per_type * count * node_count
+        assert self._slots is not None
+        return self._slots
 
     def setup(self, *, config: canary.Config) -> None: ...
 
@@ -63,9 +70,8 @@ class BatchConductor:
             return node_count * type_per_node
 
     @canary.hookimpl
-    def canary_resource_satisfiable(self, case: canary.TestCase) -> bool:
-        # The resource pool was already set above, so we can just leverage it
-        return self.satisfiable(case)
+    def canary_resources_avail(self, case: canary.TestCase) -> bool:
+        return self.resources_avail(case)
 
     @canary.hookimpl
     def canary_resource_types(self) -> list[str]:
@@ -137,8 +143,8 @@ class BatchConductor:
                 atexit.unregister(cleanup_children)
         return returncode
 
-    def satisfiable(self, case: canary.TestCase) -> bool:
-        """determine if the resources for this test are satisfiable"""
+    def resources_avail(self, case: canary.TestCase) -> bool:
+        """determine if the resources for this test are available"""
         required = case.required_resources()
         slots_reqd: dict[str, int] = {}
         for group in required:

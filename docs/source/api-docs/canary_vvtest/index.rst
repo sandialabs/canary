@@ -2,14 +2,12 @@
 
    SPDX-License-Identifier: MIT
 
-util
-====
+canary_vvtest
+=============
 
 .. toctree::
    :maxdepth: 1
 
-   collections
-   dynamic_version
-   string
-   tengine
-   time
+   generator
+   scalar
+   tests/index

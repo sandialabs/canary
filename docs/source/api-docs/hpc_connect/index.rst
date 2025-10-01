@@ -2,8 +2,6 @@
 
    SPDX-License-Identifier: MIT
 
-.. _hpc-connect:
-
 hpc_connect
 ===========
 
@@ -13,8 +11,8 @@ hpc_connect
    command/index
    config
    hookspec
-   launch/index
+   launch
    pluginmanager
-   submit/index
+   submit
    util/index
    version

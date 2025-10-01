@@ -239,7 +239,7 @@ def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
 
 
 @hookspec(firstresult=True)
-def canary_resource_satisfiable(case: "TestCase") -> bool:
+def canary_resources_avail(case: "TestCase") -> bool:
     """Determine if ``case`` can be run."""
     raise NotImplementedError
 

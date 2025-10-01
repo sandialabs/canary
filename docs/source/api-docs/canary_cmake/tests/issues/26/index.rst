@@ -2,14 +2,10 @@
 
    SPDX-License-Identifier: MIT
 
-util
-====
+tests.issues.26
+===============
 
 .. toctree::
    :maxdepth: 1
 
-   collections
-   dynamic_version
-   string
-   tengine
-   time
+   issue_26

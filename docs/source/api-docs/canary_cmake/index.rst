@@ -2,14 +2,13 @@
 
    SPDX-License-Identifier: MIT
 
-util
-====
+canary_cmake
+============
 
 .. toctree::
    :maxdepth: 1
 
-   collections
-   dynamic_version
-   string
-   tengine
-   time
+   .mypy_cache/index
+   cdash/index
+   ctest
+   tests/index

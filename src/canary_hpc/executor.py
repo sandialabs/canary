@@ -73,9 +73,9 @@ class BatchExecutor:
         return node_count * type_per_node
 
     @canary.hookimpl
-    def canary_resource_satisfiable(self, case: canary.TestCase) -> bool:
+    def canary_resources_avail(self, case: canary.TestCase) -> bool:
         # The resource pool was already set above, so we can just leverage it
-        return canary.config.resource_pool.satisfiable(case.required_resources())
+        return canary.config.resource_pool.accommodates(case.required_resources())
 
     @canary.hookimpl
     def canary_resource_types(self) -> list[str]:

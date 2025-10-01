@@ -19,9 +19,9 @@ run [label="$ canary run [options] ...", shape="box", fontcolor="white", style="
 run_0 [label="$ canary run -b spec=...", shape="box", fontcolor="white", style="rounded,filled", fillcolor="black"]
 run_1 [label="$ canary run -b exec=backend:NAME,batch:ID ...", shape="box", fontcolor="white", style="rounded,filled", fillcolor="black"]
 
-run_execute [label="run.execute(config.options)"]
-run_execute_0 [label="run.execute(config.options)"]
-run_execute_1 [label="run.execute(config.options)"]
+run_execute [label="run.execute(config.options)", style="filled", fillcolor="lightgreen"]
+run_execute_0 [label="run.execute(config.options)", style="filled", fillcolor="lightgreen"]
+run_execute_1 [label="run.execute(config.options)", style="filled", fillcolor="lightgreen"]
 
 main [label="console_main()"]
 main_0 [label="console_main()"]
@@ -39,16 +39,21 @@ canary_addhooks [label="canary_addhooks()", tooltip="Add additional plugin hooks
 canary_addhooks_0 [label="canary_addhooks()", tooltip="Add additional plugin hooks to canary", style="filled", fillcolor="lightgreen"]
 canary_addhooks_1 [label="canary_addhooks()", tooltip="Add additional plugin hooks to canary", style="filled", fillcolor="lightgreen"]
 
-parse_args [label="parser.parser_args()", tooltip="parse the command line and determine subcommand to run"]
-parse_args_0 [label="parser.parser_args()", tooltip="parse the command line and determine subcommand to run"]
-parse_args_1 [label="parser.parser_args()", tooltip="parse the command line and determine subcommand to run"]
+parse_args [label="parser.parse_args()", tooltip="parse the command line and determine subcommand to run"]
+parse_args_0 [label="parser.parse_args()", tooltip="parse the command line and determine subcommand to run"]
+parse_args_1 [label="parser.parse_args()", tooltip="parse the command line and determine subcommand to run"]
 
 canary_discover_generators [label="canary_discover_generators(...)", tooltip="Search directories for testcase generators", style="filled", fillcolor="lightgreen"]
 canary_discover_generators_0 [label="canary_discover_generators(...)", tooltip="Search directories for testcase generators", style="filled", fillcolor="lightgreen"]
+
 lock [label="lock(...)", tooltip="Generate testcases from generators"]
 lock_0 [label="lock(...)", tooltip="Generate testcases from generators"]
+
 canary_testsuite_mask [label="canary_testsuite_mask(...)", tooltip="Filter tests", style="filled", fillcolor="lightgreen"]
 canary_testsuite_mask_0 [label="canary_testsuite_mask(...)", tooltip="Filter tests", style="filled", fillcolor="lightgreen"]
+
+canary_resources_avail [label="canary_resources_avail(case)", tooltip="Filter tests", style="filled", fillcolor="lightgreen"]
+canary_resources_avail_0 [label="canary_resources_avail(case)", tooltip="Filter tests", style="filled", fillcolor="lightcyan"]
 
 canary_runtests [label="canary_runtests(cases)", tooltip="Run test cases asynchronously", style="filled", fillcolor="lightgreen"]
 canary_runtests_0 [label="canary_runtests(cases)", tooltip="Run test cases asynchronously", style="filled", fillcolor="lightgreen"]
@@ -56,7 +61,7 @@ hpc_runtests [label="conductor.canary_runtests(cases):\l    batches = batch_test
 
 canary_configure [label="canary_configure(config)", tooltip="Add configurations", style="filled", fillcolor="lightgreen"]
 hpc_configure_0 [label="canary_hpc.canary_configure(config):\l    conductor = canary_hpc.Conductor()\l    conductor.setup(config)\l    config.pluginmanager.register(conductor)\l", style="filled", fillcolor="lightcyan", tooltip="For batched runs, the canary_hpc.Conductor manages batching and running test cases."]
-hpc_configure_1 [label="canary_hpc.canary_configure(config):\l    executor = canary_hpc.Executor()\l    executor.setup(config)\l    config.pluginmanager.register(executor)\l", style="filled", fillcolor="lightcyan", tooltip="For batched runs, the canary_hpc.Conductor manages in-process running of test cases within a batch."]
+hpc_configure_1 [label="canary_hpc.canary_configure(config):\l    executor = canary_hpc.Executor()\l    executor.setup(config)\l    config.pluginmanager.register(executor)\l", style="filled", fillcolor="lightcyan", tooltip="For batched runs, the canary_hpc.Executor manages in-process running of test cases within a batch."]
 
 canary_addoption [label="canary_addoption(parser)", style="filled", fillcolor="lightgreen", tooltip="Add canary_hpc command line options"]
 hpc_addoption [label="canary_hpc.canary_addoption(parser)", style="filled", fillcolor="lightcyan", tooltip="Add canary_hpc command line options"]
@@ -72,11 +77,14 @@ subgraph cluster_00 {
 }
 
 subgraph cluster_10 {
-  label="Standard Canary run";
   run -> main -> preparse -> canary_subcommand
   canary_subcommand -> canary_addhooks -> canary_addoption -> parse_args
   parse_args -> canary_configure -> run_execute -> canary_discover_generators -> lock -> canary_testsuite_mask
-  canary_testsuite_mask -> canary_runtests
+  subgraph cluster_11 {
+    canary_testsuite_mask -> canary_resources_avail [style="invis"]
+  }
+  canary_resources_avail -> canary_runtests
+  label="Standard Canary run";
 }
 
 subgraph cluster_20 {
@@ -85,7 +93,10 @@ subgraph cluster_21 {
   canary_subcommand_0 -> canary_addhooks_0 -> hpc_addoption -> parse_args_0
   parse_args_0 -> hpc_configure_0
   hpc_configure_0 -> run_execute_0 -> canary_discover_generators_0 -> lock_0 -> canary_testsuite_mask_0
-  canary_testsuite_mask_0 -> hpc_runtests
+  subgraph cluster_22 {
+    canary_testsuite_mask_0 -> canary_resources_avail_0 [style="invis"]
+  }
+  canary_resources_avail_0 -> hpc_runtests
 }
 subgraph cluster_22 {
   run_1 -> main_1 -> preparse_1 -> canary_subcommand_1
