@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import importlib.resources
 import io
 import os
 
@@ -80,32 +81,54 @@ def make_api_docs(source_dir: str, dest_dir: str, skip_dirs: list[str] | None = 
 
 
 if __name__ == "__main__":
-    start = os.path.dirname(__file__)
-    while True:
-        if os.path.exists(os.path.join(start, "pyproject.toml")):
-            make_api_docs(
-                os.path.join(start, "src/_canary"),
-                os.path.join(start, "docs/source/api-docs/canary"),
-                skip_dirs=["third_party",],
-            )
-            make_api_docs(
-                os.path.join(start, "src/canary_cmake"),
-                os.path.join(start, "docs/source/api-docs/canary_cmake"),
-                skip_dirs=["cdash/validators"],
-            )
-            make_api_docs(
-                os.path.join(start, "src/canary_hpc"),
-                os.path.join(start, "docs/source/api-docs/canary_hpc"),
-            )
-            make_api_docs(
-                os.path.join(start, "src/canary_vvtest"),
-                os.path.join(start, "docs/source/api-docs/canary_vvtest"),
-            )
-            make_api_docs(
-                os.path.join(start, "../hpc-connect/src/hpc_connect"),
-                os.path.join(start, "docs/source/api-docs/hpc_connect"),
-            )
-            break
-        start = os.path.dirname(start)
-        if start == os.path.sep:
-            break
+    canary = str(importlib.resources.files("canary"))
+    canary_root = os.path.join(canary, "../..")
+    if os.path.exists(os.path.join(canary_root, "pyproject.toml")):
+        print("Making canary api docs")
+        make_api_docs(
+            os.path.join(canary_root, "src/_canary"),
+            os.path.join(canary_root, "docs/source/api-docs/canary"),
+            skip_dirs=["third_party",],
+        )
+        make_api_docs(
+            os.path.join(canary_root, "src/canary_cmake"),
+            os.path.join(canary_root, "docs/source/api-docs/canary_cmake"),
+            skip_dirs=["cdash/validators"],
+        )
+        make_api_docs(
+            os.path.join(canary_root, "src/canary_hpc"),
+            os.path.join(canary_root, "docs/source/api-docs/canary_hpc"),
+        )
+        make_api_docs(
+            os.path.join(canary_root, "src/canary_vvtest"),
+            os.path.join(canary_root, "docs/source/api-docs/canary_vvtest"),
+        )
+    else:
+        print("Could not find canary root")
+
+    hpc_connect = str(importlib.resources.files("hpc_connect"))
+    hpcc_root = os.path.join(hpc_connect, "../..")
+    if os.path.exists(os.path.join(hpcc_root, "pyproject.toml")):
+        print("Making hpc_connect api docs")
+        make_api_docs(
+            os.path.join(hpcc_root, "src/hpc_connect"),
+            os.path.join(canary_root, "docs/source/api-docs/hpc_connect"),
+        )
+        make_api_docs(
+            os.path.join(hpcc_root, "src/hpcc_pbs"),
+            os.path.join(canary_root, "docs/source/api-docs/hpcc_pbs"),
+        )
+        make_api_docs(
+            os.path.join(hpcc_root, "src/hpcc_slurm"),
+            os.path.join(canary_root, "docs/source/api-docs/hpcc_slurm"),
+        )
+        make_api_docs(
+            os.path.join(hpcc_root, "src/hpcc_flux"),
+            os.path.join(canary_root, "docs/source/api-docs/hpcc_flux"),
+        )
+        make_api_docs(
+            os.path.join(hpcc_root, "src/hpcc_subprocess"),
+            os.path.join(canary_root, "docs/source/api-docs/hpcc_subprocess"),
+        )
+    else:
+        print("Could not find hpc_connect root")
