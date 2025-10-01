@@ -88,7 +88,7 @@ if __name__ == "__main__":
         make_api_docs(
             os.path.join(canary_root, "src/_canary"),
             os.path.join(canary_root, "docs/source/api-docs/canary"),
-            skip_dirs=["third_party",],
+            skip_dirs=["third_party"],
         )
         make_api_docs(
             os.path.join(canary_root, "src/canary_cmake"),
