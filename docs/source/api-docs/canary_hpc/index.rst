@@ -14,4 +14,3 @@ canary_hpc
    partitioning
    queue
    testbatch
-   tests/index

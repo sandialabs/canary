@@ -10,4 +10,3 @@ canary_vvtest
 
    generator
    scalar
-   tests/index

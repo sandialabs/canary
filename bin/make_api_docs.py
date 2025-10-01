@@ -32,12 +32,16 @@ def dump(text: str, file: str) -> None:
 def make_api_docs(source_dir: str, dest_dir: str, skip_dirs: list[str] | None = None) -> None:
     skip_dirs = skip_dirs or []
     skip_dirs.append("__pycache__")
+    skip_dirs.append(".mypy_cache")
 
     source_dir = os.path.normpath(source_dir)
     pkgname = os.path.basename(source_dir)
 
     package_data: dict[str, dict[str, set[str]]] = {}
     for dirname, dirs, files in os.walk(os.path.abspath(source_dir)):
+        if os.path.basename(dirname).startswith("."):
+            del dirs[:]
+            continue
         if dirname.endswith(tuple(skip_dirs)):
             del dirs[:]
             continue
@@ -47,9 +51,7 @@ def make_api_docs(source_dir: str, dest_dir: str, skip_dirs: list[str] | None = 
         namespace = ".".join(p)
         data = package_data.setdefault(namespace, {})
         data["modules"] = [module_name(f) for f in files if module_name(f)]
-        data["packages"] = [
-            d for d in dirs if d not in ("__pycache__", "third_party", "validators", "templates")
-        ]
+        data["packages"] = [d for d in dirs if not d.endswith(tuple(skip_dirs))]
 
     for namespace, data in package_data.items():
         dest = os.path.join(dest_dir, namespace.replace(".", os.path.sep).lstrip(os.path.sep))
@@ -93,15 +95,17 @@ if __name__ == "__main__":
         make_api_docs(
             os.path.join(canary_root, "src/canary_cmake"),
             os.path.join(canary_root, "docs/source/api-docs/canary_cmake"),
-            skip_dirs=["cdash/validators"],
+            skip_dirs=["validators", "tests"],
         )
         make_api_docs(
             os.path.join(canary_root, "src/canary_hpc"),
             os.path.join(canary_root, "docs/source/api-docs/canary_hpc"),
+            skip_dirs=["tests"],
         )
         make_api_docs(
             os.path.join(canary_root, "src/canary_vvtest"),
             os.path.join(canary_root, "docs/source/api-docs/canary_vvtest"),
+            skip_dirs=["tests"],
         )
     else:
         print("Could not find canary root")
@@ -113,22 +117,27 @@ if __name__ == "__main__":
         make_api_docs(
             os.path.join(hpcc_root, "src/hpc_connect"),
             os.path.join(canary_root, "docs/source/api-docs/hpc_connect"),
+            skip_dirs=["tests", "templates"],
         )
         make_api_docs(
             os.path.join(hpcc_root, "src/hpcc_pbs"),
             os.path.join(canary_root, "docs/source/api-docs/hpcc_pbs"),
+            skip_dirs=["tests", "templates"],
         )
         make_api_docs(
             os.path.join(hpcc_root, "src/hpcc_slurm"),
             os.path.join(canary_root, "docs/source/api-docs/hpcc_slurm"),
+            skip_dirs=["tests", "templates"],
         )
         make_api_docs(
             os.path.join(hpcc_root, "src/hpcc_flux"),
             os.path.join(canary_root, "docs/source/api-docs/hpcc_flux"),
+            skip_dirs=["tests", "templates"],
         )
         make_api_docs(
             os.path.join(hpcc_root, "src/hpcc_subprocess"),
             os.path.join(canary_root, "docs/source/api-docs/hpcc_subprocess"),
+            skip_dirs=["tests", "templates"],
         )
     else:
         print("Could not find hpc_connect root")
