@@ -10,6 +10,7 @@ from . import json
 from . import junit
 from . import markdown
 from . import mask
+from . import oversubscribe
 from . import post_clean
 from . import pyt
 from . import repeat
@@ -28,6 +29,7 @@ plugins = [
     junit,
     markdown,
     mask,
+    oversubscribe,
     post_clean,
     pyt,
     repeat,

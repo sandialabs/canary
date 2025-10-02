@@ -34,7 +34,6 @@ from .schemas import build_schema
 from .schemas import config_schema
 from .schemas import environment_schema
 from .schemas import environment_variable_schema
-from .schemas import machine_schema
 from .schemas import plugin_schema
 from .schemas import resource_pool_schema
 from .schemas import user_schema
@@ -51,7 +50,6 @@ section_schemas: dict[str, Schema] = {
     "system": any_schema,
     "plugin": plugin_schema,
     "user": user_schema,
-    "machine": machine_schema,
 }
 
 
@@ -620,7 +618,6 @@ def default_config_values() -> dict[str, Any]:
             "mode": None,
         },
         "system": _machine.system_config(),
-        "machine": _machine.machine_config(),
     }
     return defaults
 

@@ -147,6 +147,12 @@ class ResourcePool:
         for type, instances in pool["resources"].items():
             self.slots_per_resource_type[type] = sum([_["slots"] for _ in instances])
 
+    def pop(self, type: str) -> resource_spec | None:
+        if type in self.resources:
+            self.slots_per_resource_type.pop(type)
+            return self.resources.pop(type)
+        return None
+
     def getstate(self) -> dict[str, Any]:
         state = {
             "additional_properties": copy.deepcopy(self.additional_properties),
@@ -159,33 +165,17 @@ class ResourcePool:
         self.additional_properties.clear()
 
     def populate(self, **kwds: int) -> None:
-        slots_per_instance: dict[str, int] = {}
         if "cpus" not in kwds:
             kwds["cpus"] = psutil.cpu_count()
-        for type, count in kwds.items():
-            if type.startswith("slots_per_"):
-                slots_per_instance[f"{type[10:]}s"] = count
         resources: dict[str, resource_spec] = {}
         for type, count in kwds.items():
-            if type.startswith("slots_per_"):
-                continue
-            slots = slots_per_instance.get(type, 1)
-            resources[type] = [{"id": str(j), "slots": slots} for j in range(count)]
+            resources[type] = [{"id": str(j), "slots": 1} for j in range(count)]
         self.fill({"resources": resources, "additional_properties": {}})
 
     def modify(self, **kwds: int) -> None:
         for type, count in kwds.items():
-            if type.startswith("slots_per_"):
-                continue
             self.resources[type] = [{"id": str(j), "slots": 1} for j in range(count)]
-        for key, count in kwds.items():
-            if key.startswith("slots_per_"):
-                type = f"{key[10:]}s"
-                for instance in self.resources[type]:
-                    instance["slots"] = count
         for type in kwds:
-            if type.startswith("slots_per_"):
-                continue
             self.slots_per_resource_type[type] = sum([_["slots"] for _ in self.resources[type]])
 
     def accommodates(self, required: list[list[dict[str, Any]]]) -> bool:
@@ -239,9 +229,8 @@ class ResourcePool:
         if logging.get_level() <= logging.DEBUG:
             for type, n in totals.items():
                 N = sum([instance["slots"] for instance in self.resources[type]]) + n  # type: ignore[misc]
-                if n == 1 and type.endswith("s"):
-                    type = type[:-1]
-                logger.debug(f"Acquiring {n} {type} from {N} available")
+                key = type[:-1] if n == 1 and type.endswith("s") else type
+                logger.debug(f"Acquiring {n} {key} from {N} available")
         return acquired
 
     def reclaim(self, resources: list[dict[str, list[dict]]]) -> None:
@@ -253,9 +242,8 @@ class ResourcePool:
                     types[type] = types.setdefault(type, 0) + n
         if logging.get_level() <= logging.DEBUG:
             for type, n in types.items():
-                if n == 1 and type.endswith("s"):
-                    type = type[:-1]
-                logger.debug(f"Reclaimed {n} {type}")
+                key = type[:-1] if n == 1 and type.endswith("s") else type
+                logger.debug(f"Reclaimed {n} {key}")
 
     def _get_from_pool(self, type: str, slots: int) -> dict[str, Any]:
         instances = sorted(self.resources[type], key=lambda x: x["slots"])

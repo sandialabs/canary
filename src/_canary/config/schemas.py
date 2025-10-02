@@ -71,15 +71,8 @@ def boolean(arg: typing.Any) -> bool:
 
 positive_int = And(int, lambda x: x > 0)
 nonnegative_int = And(int, lambda x: x >= 0)
-id_list = Schema([{"id": Use(str), Optional("slots", default=1): Or(int, float)}])
 
 any_schema = Schema({}, ignore_extra_keys=True)
-machine_schema = Schema(
-    {
-        Optional("node_count"): int,
-        Optional(Regex("^[a-z_][a-z0-9_]*_per_node")): nonnegative_int,
-    }
-)
 build_schema = Schema(
     {
         Optional("project"): optional_str,

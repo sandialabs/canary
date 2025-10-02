@@ -70,17 +70,38 @@ class BatchConductor:
             return node_count * type_per_node
 
     @canary.hookimpl
-    def canary_resources_avail(self, case: canary.TestCase) -> bool:
-        return self.resources_avail(case)
-
-    @canary.hookimpl
     def canary_resource_types(self) -> list[str]:
         types: set[str] = {"cpus", "gpus"}
         for type in self.backend.config.resource_types():
-            if not type.endswith("s"):
-                type += "s"
+            # canary resource pool uses the plural, whereas the hpc-connect resource set uses
+            # the singular
+            type = type if type.endswith("s") else f"{type}s"
             types.add(type)
         return sorted(types)
+
+    @canary.hookimpl
+    def canary_resources_avail(self, case: canary.TestCase) -> bool:
+        return self.resources_avail(case)
+
+    def resources_avail(self, case: canary.TestCase) -> bool:
+        """determine if the resources for this test are available"""
+        required = case.required_resources()
+        slots_reqd: dict[str, int] = {}
+        for group in required:
+            for item in group:
+                type = item["type"]
+                if item["type"] not in self.slots:
+                    msg = f"required resource type {type!r} is not registered with canary"
+                    raise ResourceUnavailable(msg)
+                slots_reqd[type] = slots_reqd.get(type, 0) + item["slots"]
+        for type, slots in slots_reqd.items():
+            slots_avail = self.slots[type]
+            if slots_avail < slots:
+                raise ResourceUnsatisfiableError(
+                    f"insufficient slots of {type!r} available, "
+                    f"requested: {slots}, available: {slots_avail}"
+                )
+        return True
 
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, cases: Sequence[canary.TestCase]) -> int:
@@ -142,26 +163,6 @@ class BatchConductor:
                 logger.info("@*{Finished} %d %s (%s)" % (nbatches, what, canary.time.hhmmss(dt)))
                 atexit.unregister(cleanup_children)
         return returncode
-
-    def resources_avail(self, case: canary.TestCase) -> bool:
-        """determine if the resources for this test are available"""
-        required = case.required_resources()
-        slots_reqd: dict[str, int] = {}
-        for group in required:
-            for item in group:
-                type = item["type"]
-                if item["type"] not in self.slots:
-                    msg = f"required resource type {type!r} is not registered with canary"
-                    raise ResourceUnavailable(msg)
-                slots_reqd[type] = slots_reqd.get(type, 0) + item["slots"]
-        for type, slots in slots_reqd.items():
-            slots_avail = self.slots[type]
-            if slots_avail < slots:
-                raise ResourceUnsatisfiableError(
-                    f"insufficient slots of {type!r} available, "
-                    f"requested: {slots}, available: {slots_avail}"
-                )
-        return True
 
 
 def process_queue(

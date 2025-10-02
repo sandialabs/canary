@@ -133,15 +133,11 @@ def test_resource_populate():
 def test_resource_pool_modify():
     rp = ResourcePool()
     rp.populate(cpus=1)
+    assert rp.resources == {"cpus": [{"id": "0", "slots": 1}]}
     rp.modify(gpus=1)
     assert rp.resources == {
         "cpus": [{"id": "0", "slots": 1}],
         "gpus": [{"id": "0", "slots": 1}],
-    }
-    rp.modify(slots_per_cpu=2, slots_per_gpu=3)
-    assert rp.resources == {
-        "cpus": [{"id": "0", "slots": 2}],
-        "gpus": [{"id": "0", "slots": 3}],
     }
 
 

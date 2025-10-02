@@ -31,6 +31,7 @@ class CanaryPluginManager(pluggy.PluginManager):
     def consider_plugin(self, name: str) -> None:
         assert isinstance(name, str), f"module name as text required, got {name!r}"
         if name.startswith("no:"):
+            self.unregister(name=name[3:])
             self.set_blocked(name[3:])
         else:
             self.import_plugin(name)
