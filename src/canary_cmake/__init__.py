@@ -5,6 +5,9 @@ import canary
 
 from .cdash import CDashReporter
 from .ctest import CTestTestGenerator
+from .ctest import read_resource_specs
+
+logger = canary.get_logger(__name__)
 
 
 @canary.hookimpl(specname="canary_testcase_generator")
@@ -35,6 +38,13 @@ def add_ctest_options(parser: canary.Parser) -> None:
         group="ctest options",
         command="run",
         help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--ctest-resource-spec-file",
+        metavar="FILE",
+        group="ctest options",
+        command="run",
+        help="Set the resource spec file to use.",
     )
     parser.add_argument(
         "--recurse-ctest",
@@ -94,3 +104,15 @@ def canary_addhooks(pluginmanager: "canary.CanaryPluginManager"):
 def canary_cdash_labels(case: canary.TestCase) -> list[str]:
     """Default implementation: return the test case's keywords"""
     return list(case.keywords)
+
+
+@canary.hookimpl
+def canary_configure(config: canary.Config) -> None:
+    if f := config.getoption("ctest_resource_spec_file"):
+        logger.info("Setting resource pool from ctest resource spec file")
+        resource_specs = read_resource_specs(f)
+        pool = {
+            "resources": resource_specs["local"],
+            "additional_properties": {"ctest resource spec file": f},
+        }
+        config.resource_pool.fill(pool)

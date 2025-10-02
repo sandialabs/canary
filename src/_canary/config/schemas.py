@@ -11,7 +11,6 @@ from schema import Regex
 from schema import Schema
 from schema import SchemaError
 from schema import SchemaMissingKeyError
-from schema import SchemaOnlyOneAllowedError
 from schema import Use
 
 from ..util.time import time_in_seconds
@@ -144,13 +143,6 @@ class RPSchema(Schema):
     def validate(self, data, is_root_eval=True):
         data = super().validate(data, is_root_eval=False)
         if is_root_eval:
-            if "local" in data and "resources" in data:
-                cond = Or("resources", "local")
-                raise SchemaOnlyOneAllowedError(
-                    ["There are multiple keys present from the %r condition" % cond]
-                )
-            elif "local" in data:
-                data["resources"] = data.pop("local")
             data.setdefault("additional_properties", {})
             for key in list(data.keys()):
                 if key in ("additional_properties", "resources"):
@@ -166,9 +158,8 @@ class RPSchema(Schema):
 
 resource_pool_schema = RPSchema(
     {
-        Optional("additional_properties"): dict,
         Optional("resources"): resource_spec_schema,
-        Optional("local"): resource_spec_schema,
+        Optional("additional_properties"): dict,
         Optional(str): int,
     }
 )

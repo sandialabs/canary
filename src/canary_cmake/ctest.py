@@ -14,6 +14,8 @@ from functools import lru_cache
 from typing import Any
 from typing import Generator
 
+import schema
+
 import canary
 
 warning_cache = set()
@@ -640,3 +642,26 @@ def parse_environment_modification(environment_modification: list[str]) -> list[
             name, op, value = match.group(1), match.group(2), match.group(3)
             envmod.append({"name": name, "op": op, "value": value})
     return envmod
+
+
+def read_resource_specs(file: str) -> dict:
+    with open(file) as fh:
+        data = json.load(fh)
+    resource_specs = validate_resource_specs(data)
+    return resource_specs
+
+
+def validate_resource_specs(resource_specs: dict) -> dict:
+    resource_spec_schema = schema.Schema(
+        {
+            "local": {
+                str: [
+                    {
+                        "id": schema.Use(str),
+                        schema.Optional("slots", default=1): schema.Or(int, float),
+                    }
+                ]
+            }
+        }
+    )
+    return resource_spec_schema.validate(resource_specs)

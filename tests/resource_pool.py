@@ -10,18 +10,6 @@ from _canary.config.rpool import ResourcePool
 from _canary.status import Status
 
 
-def test_ctest_schema():
-    data = {
-        "local": {
-            "cpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],
-            "gpus": [{"id": "0", "slots": 1}],
-        }
-    }
-    validated = schemas.resource_pool_schema.validate(data)
-    assert "resources" in validated
-    assert "local" not in validated
-
-
 def test_fill_simple():
     data = {"cpus": 2, "gpus": 1}
     validated = schemas.resource_pool_schema.validate(data)
