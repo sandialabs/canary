@@ -9,15 +9,21 @@ sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /
 
 yum update -y
 yum upgrade -y
-yum install -y python3-pip python3-venv libjson-glib-devel
+yum install -y openssl-devlel bzip2-devel libffi-devel
+yum groupinstall "Development Tools"
+wget https://www.python.org/ftp/python/3.11.13/Python-3.11.13.tgz
+tar -xzf Python-3.11.13.tgz
+cd Python-3.11.13
+./configure --enable-optimizations
+make altinstall
 
-qmgr -c create node pbs
-qmgr -c set node pbs queue=workq
+qmgr -c create node pbs || true
+qmgr -c set node pbs queue=workq || true
 
 # Install canary
-python3 -m venv canary
+python3.11 -m venv canary
 source canary/bin/activate
-python3 -m pip install "canary-wm@git+https://git@github.com/sandialabs/canary@$BRANCH_NAME"
+python3.11 -m pip install "canary-wm@git+https://git@github.com/sandialabs/canary@$BRANCH_NAME"
 canary fetch examples
 
 echo " "
