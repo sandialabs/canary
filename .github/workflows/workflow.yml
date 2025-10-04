@@ -68,6 +68,19 @@ jobs:
           echo "Building for branch: $BRANCH_NAME"
           docker run --rm --user root -v /home/runner/work/canary/canary/docker/flux/test.sh:/home/fluxuser/test.sh -e BRANCH_NAME=$BRANCH_NAME fluxrm/flux-sched:latest env flux start --test-size=3 "./test.sh $BRANCH_NAME"
 
+  pbs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pull the PBS Docker image
+        run: |
+          docker pull pbspro/pbspro:latest
+      - name: Run PBS tests
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          echo "Building for branch: $BRANCH_NAME"
+          docker run --rm --user root -v /home/runner/work/canary/canary/docker/pbs/test.sh:/home/pbsuser/test.sh -e BRANCH_NAME=$BRANCH_NAME -e PBS_START_MOM=1 pbspro/pbspro:latest "./test.sh $BRANCH_NAME"
+
   lint:
     runs-on: ubuntu-latest
     strategy:
