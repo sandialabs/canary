@@ -1,11 +1,11 @@
 # Install necessary dependencies
 echo " "
 echo "Setting up the pbs tests for branch $BRANCH_NAME"
-echo "USER: $USER"
-echo "HOME: $HOME"
-echo "PATH: $PATH"
-find / -name qmgr
+export PATH=/opt/pbs/bin:/opt/pbs/sbin:$PATH
 echo " "
+
+sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
 
 yum update -y
 yum upgrade -y
