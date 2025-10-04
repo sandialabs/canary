@@ -3,6 +3,7 @@ set -x
 echo " "
 echo "Setting up the pbs tests for branch $BRANCH_NAME"
 export PATH=/opt/pbs/bin:/opt/pbs/sbin:$PATH
+export CONDA_PLUGINS_AUTO_ACCEPT_TOS=yes
 echo " "
 
 sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
