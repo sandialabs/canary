@@ -1,4 +1,5 @@
 # Install necessary dependencies
+set -x
 echo " "
 echo "Setting up the pbs tests for branch $BRANCH_NAME"
 export PATH=/opt/pbs/bin:/opt/pbs/sbin:$PATH
@@ -9,21 +10,23 @@ sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /
 
 yum update -y
 yum upgrade -y
-yum install -y wget openssl-devlel bzip2-devel libffi-devel
-yum groupinstall -y "Development Tools"
-wget https://www.python.org/ftp/python/3.11.13/Python-3.11.13.tgz
-tar -xzf Python-3.11.13.tgz
-cd Python-3.11.13
-./configure --enable-optimizations
-make altinstall
+yum install -y curl openssl-devlel bzip2-devel libffi-devel
+curl -sSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o /tmp/miniconda.sh
+bash /tmp/miniconda.sh -bfp /usr/local/miniconda
+rm -rf /tmp/miniconda.sh
+export PATH="/usr/local/miniconda/bin:$PATH"
+source /usr/local/miniconda/bin/activate
+conda init --all
+conda create --name canary python=3.11
+conda activate canary
 
 qmgr -c create node pbs || true
 qmgr -c set node pbs queue=workq || true
 
 # Install canary
-python3.11 -m venv canary
+python3 -m venv canary
 source canary/bin/activate
-python3.11 -m pip install "canary-wm@git+https://git@github.com/sandialabs/canary@$BRANCH_NAME"
+python3 -m pip install "canary-wm@git+https://git@github.com/sandialabs/canary@$BRANCH_NAME"
 canary fetch examples
 
 echo " "
