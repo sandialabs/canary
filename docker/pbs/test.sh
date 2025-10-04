@@ -17,10 +17,9 @@ bash /tmp/miniconda.sh -bfp /usr/local/miniconda
 rm -rf /tmp/miniconda.sh
 export PATH="/usr/local/miniconda/bin:$PATH"
 source /usr/local/miniconda/bin/activate
+
 conda init --all
 conda install git
-conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
-conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
 conda create --name canary python=3.11
 conda activate canary
 
