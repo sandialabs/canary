@@ -26,8 +26,9 @@ conda install git
 conda create --name canary python=3.11
 conda activate canary
 
-#qmgr -c "create node pbs" || true
-#qmgr -c "set node pbs queue=workq" || true
+qmgr -c "create node pbs" || true
+qmgr -c "set node pbs queue=workq" || true
+qmgr -c "set server acl_roots=root"
 
 # Install canary
 python3 -m venv canary

@@ -79,7 +79,7 @@ jobs:
         run: |
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "Building for branch: $BRANCH_NAME"
-          docker run --rm --user root -h pbs -v /home/runner/work/canary/canary/docker/pbs/test.sh:/tmp/testing/test.sh -e BRANCH_NAME=$BRANCH_NAME -e PBS_START_MOM=1 pbspro/pbspro:latest "sudu -H -u pbsuser /tmp/testing/test.sh"
+          docker run --rm --user root -h pbs -v /home/runner/work/canary/canary/docker/pbs/test.sh:/tmp/testing/test.sh -e BRANCH_NAME=$BRANCH_NAME -e PBS_START_MOM=1 pbspro/pbspro:latest /tmp/testing/test.sh
 
   lint:
     runs-on: ubuntu-latest
