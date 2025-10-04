@@ -3,9 +3,9 @@ echo " "
 echo "Setting up the pbs tests for branch $BRANCH_NAME"
 echo " "
 
-sudo apt-get update -y
-sudo apt-get upgrade -y
-sudo apt-get install -y python3-pip python3-venv libjson-glib-dev 
+apt-get update -y
+apt-get upgrade -y
+apt-get install -y python3-pip python3-venv libjson-glib-dev
 
 qmgr -c create node pbs
 qmgr -c set node pbs queue=workq
