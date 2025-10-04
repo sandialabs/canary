@@ -1,6 +1,9 @@
 # Install necessary dependencies
 echo " "
 echo "Setting up the pbs tests for branch $BRANCH_NAME"
+echo "USER: $USER"
+echo "HOME: $HOME"
+echo "PATH: $PATH"
 echo " "
 
 apt-get update -y
