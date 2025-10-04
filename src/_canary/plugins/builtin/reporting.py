@@ -4,6 +4,7 @@
 import io
 import os
 import random
+import sys
 from textwrap import indent
 from typing import TYPE_CHECKING
 from typing import Any
@@ -75,7 +76,8 @@ def canary_addoption(parser: "Parser") -> None:
 @hookimpl(specname="canary_runtests_startup", tryfirst=True)
 def print_banner():
     if not config.getoption("no_header"):
-        logger.log(logging.EMIT, banner(), extra={"prefix": ""})
+        print(colorize(banner()), file=sys.stderr)
+        # logger.log(logging.EMIT, banner(), extra={"prefix": ""})
 
 
 @hookimpl(specname="canary_runtests_summary", tryfirst=True)

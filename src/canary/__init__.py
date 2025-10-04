@@ -48,7 +48,7 @@ from . import directives
 from . import patterns
 
 get_logger = _logging.get_logger
-logging = _logging.get_logger("_canary")
+logging = _logging.get_logger()
 
 
 class TestParser(argparse.ArgumentParser):

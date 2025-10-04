@@ -1,8 +1,10 @@
-# Copyright NTESS. See COPYRIGHT file for details.
+# /Formatter
+#  Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
 
 import datetime
+import json
 import logging as builtin_logging
 import math
 import os
@@ -82,6 +84,44 @@ class Formatter(builtin_logging.Formatter):
         return colorize(result, color=self.color)
 
 
+class JsonFormatter(builtin_logging.Formatter):
+    def __init__(self, **kwargs):
+        fmt = kwargs.pop("fmt", "%(prefix)s%(message)s")
+        super().__init__(fmt, **kwargs)
+
+    def format(self, record):
+        extra = {
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f"),
+        }
+        if not hasattr(record, "prefix"):
+            if record.levelno in (TRACE, DEBUG, INFO):
+                prefix = "@*%s{==>} " % level_color(record.levelno)
+            elif record.levelno in (WARNING, ERROR, CRITICAL):
+                prefix = "@*%s{==>} %s: " % (level_color(record.levelno), record.levelname.title())
+            else:
+                prefix = "@*{==>} "
+            extra["prefix"] = prefix
+        record.__dict__.update(extra)
+        record.message = record.getMessage()
+        log_record = {
+            "logger": record.name,
+            "modulename": record.module,
+            "func": record.funcName,
+            "file": record.filename,
+            "lineno": record.lineno,
+            "level": record.levelname,
+            "process": record.process,
+            "thread": record.thread,
+            "time": self.formatTime(record),
+            "message": colorize(record.message, color=False),
+        }
+        if record.exc_info:
+            log_record["exception"] = self.formatException(record.exc_info).replace("\n", " | ")
+        if record.stack_info:
+            log_record["stack"] = self.formatStack(record.stack_info).replace("\n", " | ")
+        return json.dumps(log_record)
+
+
 def level_name_mapping() -> dict[int, str]:
     mapping = {
         NOTSET: "NOTSET",
@@ -96,7 +136,7 @@ def level_name_mapping() -> dict[int, str]:
     return mapping
 
 
-def get_logger(name: str | None) -> builtin_logging.Logger:
+def get_logger(name: str | None = None) -> builtin_logging.Logger:
     if name is None:
         name = root_log_name
     parts = name.split(".")
@@ -139,6 +179,8 @@ def setup_logging() -> None:
         fmt = Formatter(color=sys.stderr.isatty())
         sh.setFormatter(fmt)
         sh.setLevel(INFO)
+        # set the logger level higher than the streamhandler to assure that the messages of level
+        # INFO will be emmitted.
         logger.addHandler(sh)
         logger.setLevel(TRACE)
 
@@ -149,12 +191,8 @@ def add_file_handler(file: str, levelno: int) -> None:
         if isinstance(handler, FileHandler) and handler.baseFilename == file:
             return
     os.makedirs(os.path.dirname(file), exist_ok=True)
-    fh = FileHandler(file)
-    fmt = Formatter(
-        fmt="[%(asctime)s] %(levelname)s: %(name)s::%(funcName)s:%(lineno)d: %(message)s",
-        datefmt="%Y-%m-%d-%H:%M:%S",
-        color=False,
-    )
+    fh = FileHandler(file, mode="a")
+    fmt = JsonFormatter()
     fh.setFormatter(fmt)
     fh.setLevel(levelno)
     logger.addHandler(fh)

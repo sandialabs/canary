@@ -56,7 +56,7 @@ section_schemas: dict[str, Schema] = {
 log_levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG)
 env_archive_name = "CANARYCFG64"
 
-logger = logging.get_logger("_canary")
+logger = logging.get_logger(__name__)
 
 
 class ConfigScope:
@@ -422,6 +422,8 @@ class Config:
         self.working_dir = properties["working_dir"]
         self.invocation_dir = properties["invocation_dir"]
         if pool := properties.pop("resource_pool", None):
+            if isinstance(pool, list):
+                pool = convert_legacy_resource_pool(pool)
             self._resource_pool.clear()
             self._resource_pool.fill(pool)
         if options := properties.pop("options", None):
@@ -437,12 +439,8 @@ class Config:
         if logging.get_level_name(logger.level) != log_level:
             logging.set_level(log_level)
         if root := find_work_tree():
-            f = os.path.abspath(os.path.join(root, ".canary/log.txt"))
-            for handler in logger.handlers:
-                if isinstance(handler, logging.FileHandler) and handler.baseFilename == f:
-                    break
-            else:
-                logging.add_file_handler(f, logging.DEBUG)
+            f = os.path.abspath(os.path.join(root, ".canary/canary-log.txt"))
+            logging.add_file_handler(f, logging.DEBUG)
 
     def dump_snapshot(self, file: IO[Any], indent: int | None = None) -> None:
         snapshot: dict[str, Any] = {}
@@ -691,3 +689,16 @@ def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
     data["config"].pop("_config_dir", None)
     snapshot.setdefault("scopes", []).append(scope)
     return snapshot
+
+
+def convert_legacy_resource_pool(legacy: list) -> dict[str, Any]:
+    pool: dict[str, Any] = {}
+    resources = pool.setdefault("resources", {})
+    for node in legacy:
+        for type, instances in node.items():
+            spec = resources.setdefault(type, [])
+            for instance in instances:
+                slots = instance["slots"]
+                id = str(len(spec))
+                spec.append({"id": id, "slots": slots})
+    return pool
