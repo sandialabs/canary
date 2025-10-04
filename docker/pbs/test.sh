@@ -9,8 +9,8 @@ sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /
 
 yum update -y
 yum upgrade -y
-yum install -y openssl-devlel bzip2-devel libffi-devel
-yum groupinstall "Development Tools"
+yum install -y wget openssl-devlel bzip2-devel libffi-devel
+yum groupinstall -y "Development Tools"
 wget https://www.python.org/ftp/python/3.11.13/Python-3.11.13.tgz
 tar -xzf Python-3.11.13.tgz
 cd Python-3.11.13
