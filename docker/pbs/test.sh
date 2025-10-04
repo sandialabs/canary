@@ -2,9 +2,9 @@
 set -x
 echo " "
 echo "Setting up the pbs tests for branch $BRANCH_NAME"
+whoami
 echo "HOME: $HOME"
 echo "USER: $USER"
-cut -d: -f1 /etc/passwd
 export PATH=/opt/pbs/bin:/opt/pbs/sbin:$PATH
 export CONDA_PLUGINS_AUTO_ACCEPT_TOS=yes
 echo " "
