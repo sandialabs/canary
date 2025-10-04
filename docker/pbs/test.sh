@@ -6,25 +6,25 @@ export PATH=/opt/pbs/bin:/opt/pbs/sbin:$PATH
 export CONDA_PLUGINS_AUTO_ACCEPT_TOS=yes
 echo " "
 
-sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
-sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+#sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+#sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
 
-yum update -y
-yum upgrade -y
-yum install -y curl openssl-devlel bzip2-devel libffi-devel
-curl -sSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o /tmp/miniconda.sh
-bash /tmp/miniconda.sh -bfp /usr/local/miniconda
-rm -rf /tmp/miniconda.sh
-export PATH="/usr/local/miniconda/bin:$PATH"
-source /usr/local/miniconda/bin/activate
+#yum update -y
+#yum upgrade -y
+#yum install -y curl openssl-devlel bzip2-devel libffi-devel
+curl -sSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o miniconda.sh
+bash miniconda.sh -bfp $HOME/miniconda
+rm -rf miniconda.sh
+export PATH="$HOME/miniconda/bin:$PATH"
+source $HOME/miniconda/bin/activate
 
 conda init --all
 conda install git
 conda create --name canary python=3.11
 conda activate canary
 
-qmgr -c create node pbs || true
-qmgr -c set node pbs queue=workq || true
+#qmgr -c "create node pbs" || true
+#qmgr -c "set node pbs queue=workq" || true
 
 # Install canary
 python3 -m venv canary
