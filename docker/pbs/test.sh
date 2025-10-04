@@ -4,11 +4,12 @@ echo "Setting up the pbs tests for branch $BRANCH_NAME"
 echo "USER: $USER"
 echo "HOME: $HOME"
 echo "PATH: $PATH"
+find / -name qmgr
 echo " "
 
-apt-get update -y
-apt-get upgrade -y
-apt-get install -y python3-pip python3-venv libjson-glib-dev
+yum update -y
+yum upgrade -y
+yum install -y python3-pip python3-venv libjson-glib-devel
 
 qmgr -c create node pbs
 qmgr -c set node pbs queue=workq
