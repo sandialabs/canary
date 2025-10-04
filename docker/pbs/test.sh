@@ -1,6 +1,10 @@
 BRANCH_NAME=$1
 
 # Install necessary dependencies
+echo " "
+echo "Setting up the pbs tests"
+echo " "
+
 sudo apt-get update -y
 sudo apt-get upgrade -y
 sudo apt-get install -y python3-pip python3-venv libjson-glib-dev 
