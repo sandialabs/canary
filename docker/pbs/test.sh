@@ -1,8 +1,6 @@
-BRANCH_NAME=$1
-
 # Install necessary dependencies
 echo " "
-echo "Setting up the pbs tests"
+echo "Setting up the pbs tests for branch $BRANCH_NAME"
 echo " "
 
 sudo apt-get update -y
