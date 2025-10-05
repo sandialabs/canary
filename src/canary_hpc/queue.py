@@ -98,7 +98,11 @@ class ResourceQueue(queue.AbstractResourceQueue):
         for case in cases:
             if canary.config.get("config:debug"):
                 # The case should have already been validated
-                canary.config.pluginmanager.hook.canary_resources_avail(case=case)
+                check = canary.config.pluginmanager.hook.canary_resources_avail(case=case)
+                if not check:
+                    raise ValueError(
+                        f"Unable to run {case} for the the following reason: {check.reason}"
+                    )
             status = case.status
             if status == "skipped":
                 case.save()

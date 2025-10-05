@@ -4,14 +4,12 @@
 
 import argparse
 import glob
-import io
 import json
 import math
 import os
 import shlex
 import signal
 import time
-from datetime import datetime
 from functools import lru_cache
 from itertools import repeat
 from typing import Any
@@ -24,9 +22,6 @@ from _canary.atc import AbstractTestCase
 from _canary.status import Status
 from _canary.util import logging
 from _canary.util.hash import hashit
-from _canary.util.misc import digits
-from _canary.util.string import pluralize
-from _canary.util.time import hhmmss
 from _canary.util.time import time_in_seconds
 
 logger = canary.get_logger(__name__)
@@ -389,8 +384,6 @@ class TestBatch(AbstractTestCase):
             assert proc is not None
             if getattr(proc, "jobid", None) not in (None, "none", "<none>"):
                 self.jobid = proc.jobid
-            if not pbar:
-                emit(self.submission_summary(qrank, qsize), extra={"prefix": ""})
             while True:
                 try:
                     if proc.poll() is not None:
@@ -426,39 +419,11 @@ class TestBatch(AbstractTestCase):
                 logger.debug(
                     self.format(f"Batch @*b{{%id}}: batch processing exited with code {rc}")
                 )
-            if not pbar:
-                emit(self.completion_summary(qrank, qsize), extra={"prefix": ""})
 
         return
 
     def finish(self) -> None:
         pass
-
-    def submission_summary(self, qrank: int | None, qsize: int | None) -> str:
-        fmt = io.StringIO()
-        if os.getenv("GITLAB_CI"):
-            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        if qrank is not None and qsize is not None:
-            fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-        fmt.write(f"Submitted batch @*b{{%id}}: %l {pluralize('test', len(self))}")
-        if self.jobid:
-            fmt.write(" (jobid: %j)")
-        return self.format(fmt.getvalue().strip())
-
-    def completion_summary(self, qrank: int | None, qsize: int | None) -> str:
-        fmt = io.StringIO()
-        if os.getenv("GITLAB_CI"):
-            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        if qrank is not None and qsize is not None:
-            fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-        times = self.times()
-        fmt.write(f"Finished batch @*b{{%id}}: %S (time: {hhmmss(times[0], threshold=0)}")
-        if times[1]:
-            fmt.write(f", running: {hhmmss(times[1], threshold=0)}")
-        if times[2]:
-            fmt.write(f", queued: {hhmmss(times[2], threshold=0)}")
-        fmt.write(")")
-        return self.format(fmt.getvalue().strip())
 
     @lru_cache
     def nodes_required(self, backend: hpc_connect.HPCSubmissionManager) -> int:
@@ -513,10 +478,6 @@ def batch_options() -> list[str]:
     if args := batchopts.get("options"):
         options.extend(args)
     return options
-
-
-def emit(text: str, **kwargs: Any) -> None:
-    logger.log(logging.EMIT, text, **kwargs)
 
 
 class BatchNotFound(Exception):

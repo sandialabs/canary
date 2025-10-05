@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from ..session import Session
     from ..testcase import TestCase
     from .manager import CanaryPluginManager
+    from .types import Result
 
 project_name = "canary"
 hookspec = pluggy.HookspecMarker(project_name)
@@ -239,7 +240,7 @@ def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
 
 
 @hookspec(firstresult=True)
-def canary_resources_avail(case: "TestCase") -> bool:
+def canary_resources_avail(case: "TestCase") -> "Result":
     """Determine if ``case`` can be run."""
     raise NotImplementedError
 

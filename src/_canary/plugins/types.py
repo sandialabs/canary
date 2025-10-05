@@ -78,3 +78,21 @@ class CanaryReporter:
     def not_implemented(self, session: "Session | None" = None, **kwargs: Any) -> None:
         action = kwargs["action"]
         raise NotImplementedError(f"{self}: {action} method is not implemented")
+
+
+class Result:
+    def __init__(self, ok: bool | None = None, reason: str | None = None) -> None:
+        if not ok:
+            ok = not bool(reason)
+        if not ok and not reason:
+            raise ValueError(f"{self.__class__.__name__}(False) requires a reason")
+        self.ok: bool = ok
+        self.reason: str | None = reason
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+    def __repr__(self) -> str:
+        state = "ok" if self.ok else "fail"
+        reason = f": {self.reason}" if self.reason else ""
+        return f"<{self.__class__.__name__} {state}{reason}>"

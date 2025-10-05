@@ -149,7 +149,7 @@ class Session:
             self.save(ini=True)
 
         f = os.path.join(self.config_dir, "canary-log.txt")
-        logging.add_file_handler(f, levelno=logging.DEBUG)
+        logging.add_file_handler(f, levelno=logging.TRACE)
 
     @classmethod
     def filter_view(

@@ -9,6 +9,7 @@ from typing import Any
 import hpc_connect
 
 import canary
+from _canary.plugins.types import Result
 
 from .testbatch import TestBatch
 
@@ -56,7 +57,7 @@ class BatchExecutor:
             resources[type] = [{"id": str(j), "slots": slots} for j in range(count * node_count)]
         pool: dict[str, Any] = {
             "resources": resources,
-            "additional_properties": {"nodes": node_count},
+            "additional_properties": {"nodes": node_count, "backend": self.backend.name},
         }
         return pool
 
@@ -73,7 +74,7 @@ class BatchExecutor:
         return node_count * type_per_node
 
     @canary.hookimpl
-    def canary_resources_avail(self, case: canary.TestCase) -> bool:
+    def canary_resources_avail(self, case: canary.TestCase) -> Result:
         # The resource pool was already set above, so we can just leverage it
         return canary.config.resource_pool.accommodates(case.required_resources())
 

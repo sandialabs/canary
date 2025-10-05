@@ -23,7 +23,7 @@ def canary_testcase_setup(case: AbstractTestCase) -> Generator[None, None, bool]
 def canary_testcase_run(
     case: AbstractTestCase, qsize: int, qrank: int
 ) -> Generator[None, None, bool]:
-    case.run(qsize=qsize, qrank=qrank)
+    case.run()
     yield
     case.save()
     return True

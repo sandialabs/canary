@@ -82,10 +82,14 @@ def canary_testsuite_mask(
                 continue
 
             try:
-                config.pluginmanager.hook.canary_resources_avail(case=case)
+                check = config.pluginmanager.hook.canary_resources_avail(case=case)
             except Exception as e:
                 case.mask = "@*{%s}(%r)" % (e.__class__.__name__, e.args[0])
                 continue
+            else:
+                if not check:
+                    case.mask = check.reason
+                    continue
 
             if owners and not owners.intersection(case.owners):
                 case.mask = "not owned by @*{%r}" % case.owners

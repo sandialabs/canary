@@ -159,7 +159,7 @@ the form: %(r_form)s.  The possible %(r_form)s settings are\n\n
             logger.warning(f"Deprecated syntax: -b scheme={raw}, use -b spec={raw}:...")
             return (".ignore", None)
         else:
-            raise ValueError(f"invalid resource arg: {arg!r}")
+            raise ValueError(f"invalid batch arg: {arg!r}")
 
     @staticmethod
     def validate_and_set_defaults(batchopts: dict) -> None:

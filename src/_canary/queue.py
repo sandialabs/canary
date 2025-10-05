@@ -189,7 +189,11 @@ class ResourceQueue(AbstractResourceQueue):
         for case in cases:
             if config.get("config:debug"):
                 # The case should have already been validated
-                config.pluginmanager.hook.canary_resources_avail(case=case)
+                check = config.pluginmanager.hook.canary_resources_avail(case=case)
+                if not check:
+                    raise ValueError(
+                        f"Unable to run {case} for the the following reason: {check.reason}"
+                    )
             super().put(case)
 
     def skip(self, obj_no: int) -> None:
@@ -281,7 +285,7 @@ class ResourceQueue(AbstractResourceQueue):
         hb["busy cpus"] = [cpu_id for case in busy for cpu_id in case.cpu_ids]
         hb["busy gpus"] = [gpu_id for case in busy for gpu_id in case.gpu_ids]
         text = json.dumps(hb)
-        logger.debug(f"Hearbeat: {text}")
+        logger.log(logging.TRACE, f"Hearbeat: {text}")
         return None
 
 

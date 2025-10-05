@@ -53,7 +53,14 @@ section_schemas: dict[str, Schema] = {
 }
 
 
-log_levels = (logging.ERROR, logging.WARNING, logging.INFO, logging.DEBUG)
+log_levels: tuple[int, ...] = (
+    logging.TRACE,
+    logging.DEBUG,
+    logging.INFO,
+    logging.WARNING,
+    logging.ERROR,
+    logging.CRITICAL,
+)
 env_archive_name = "CANARYCFG64"
 
 logger = logging.get_logger(__name__)
@@ -349,13 +356,18 @@ class Config:
             color.set_color_when(args.color)
 
         if args.q or args.v:
-            i = min(max(2 - args.q + args.v, 0), 4)
-            data.setdefault("config", {})["log_level"] = logging.get_level_name(log_levels[i])
-            logging.set_level(log_levels[i])
+            level_index: int = log_levels.index(logging.INFO)
+            if args.q:
+                level_index = min(len(log_levels), level_index + args.q)
+            if args.v:
+                level_index = max(0, level_index - args.v)
+            levelno = log_levels[level_index]
+            data.setdefault("config", {})["log_level"] = logging.get_level_name(levelno)
+            logging.set_level(levelno)
 
         if args.debug:
             data.setdefault("config", {})["debug"] = True
-            data.setdefault("config", {})["log_level"] = logging.get_level_name(log_levels[3])
+            data.setdefault("config", {})["log_level"] = logging.get_level_name(logging.DEBUG)
             logging.set_level(logging.DEBUG)
 
         errors: int = 0
@@ -440,7 +452,7 @@ class Config:
             logging.set_level(log_level)
         if root := find_work_tree():
             f = os.path.abspath(os.path.join(root, ".canary/canary-log.txt"))
-            logging.add_file_handler(f, logging.DEBUG)
+            logging.add_file_handler(f, logging.TRACE)
 
     def dump_snapshot(self, file: IO[Any], indent: int | None = None) -> None:
         snapshot: dict[str, Any] = {}

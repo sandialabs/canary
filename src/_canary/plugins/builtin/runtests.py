@@ -4,11 +4,13 @@
 
 import atexit
 import concurrent.futures
+import io
 import os
 import signal
 import threading
 import time
 from concurrent.futures.process import BrokenProcessPool
+from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING
 from typing import Any
@@ -24,6 +26,7 @@ from ...queue import ResourceQueue
 from ...util import keyboard
 from ...util import logging
 from ...util.filesystem import working_dir
+from ...util.misc import digits
 from ...util.procutils import ProcessPoolExecutor
 from ...util.procutils import cleanup_children
 from ...util.returncode import compute_returncode
@@ -58,8 +61,8 @@ def canary_runtests(cases: Sequence["TestCase"]) -> int:
     with working_dir(config.get("session:work_tree")):
         cleanup_queue = True
         try:
-            what = pluralize("test case", len(queue))
-            logger.info("@*{Running} %d %s" % (len(queue), what))
+            what = pluralize("test case", len(cases))
+            logger.info("@*{Running} %d %s" % (len(cases), what))
             start = timestamp()
             stop = -1.0
             logger.debug("Start: processing queue")
@@ -90,7 +93,7 @@ def canary_runtests(cases: Sequence["TestCase"]) -> int:
             queue.close(cleanup=cleanup_queue)
             stop = timestamp()
             dt = stop - start
-            logger.info("@*{Finished} %d %s (%s)" % (len(queue), what, hhmmss(dt)))
+            logger.info("@*{Finished} %d %s (%s)" % (len(cases), what, hhmmss(dt)))
             atexit.unregister(cleanup_children)
     return returncode
 
@@ -159,11 +162,15 @@ class Runner:
         # Ensure the config is loaded, since this may be called in a new subprocess
         config.ensure_loaded()
         try:
+            qsize = kwargs.get("qsize", 1)
+            qrank = kwargs.get("qrank", 0)
+            if summary := job_start_summary(case, qrank=qrank, qsize=qsize):
+                logger.log(logging.EMIT, summary, extra={"prefix": ""})
             config.pluginmanager.hook.canary_testcase_setup(case=case)
-            config.pluginmanager.hook.canary_testcase_run(
-                case=case, qsize=kwargs.get("qsize", 1), qrank=kwargs.get("qrank", 0)
-            )
+            config.pluginmanager.hook.canary_testcase_run(case=case, qsize=qsize, qrank=qrank)
         finally:
+            if summary := job_finish_summary(case, qrank=qrank, qsize=qsize):
+                logger.log(logging.EMIT, summary, extra={"prefix": ""})
             config.pluginmanager.hook.canary_testcase_finish(case=case)
 
 
@@ -196,3 +203,27 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
     if config.getoption("fail_fast") and not case.status.satisfies(("success", "skipped")):
         raise FailFast(failed=[case])
     logger.debug(f"Finished {case} ({case.duration} s.)")
+
+
+def job_start_summary(case: "TestCase", *, qrank: int | None, qsize: int | None) -> str:
+    if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+        return ""
+    fmt = io.StringIO()
+    if os.getenv("GITLAB_CI"):
+        fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+    if qrank is not None and qsize is not None:
+        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
+    fmt.write("Starting @*b{%id}: %X")
+    return case.format(fmt.getvalue()).strip()
+
+
+def job_finish_summary(case: "TestCase", *, qrank: int | None, qsize: int | None) -> str:
+    if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+        return ""
+    fmt = io.StringIO()
+    if os.getenv("GITLAB_CI"):
+        fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+    if qrank is not None and qsize is not None:
+        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
+    fmt.write("Finished @*b{%id}: %X %s.n")
+    return case.format(fmt.getvalue()).strip()

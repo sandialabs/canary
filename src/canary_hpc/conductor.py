@@ -4,12 +4,14 @@
 
 import atexit
 import concurrent.futures
+import io
 import os
 import signal
 import threading
 import time
 from collections import Counter
 from concurrent.futures.process import BrokenProcessPool
+from datetime import datetime
 from functools import partial
 from typing import Any
 from typing import Callable
@@ -20,13 +22,18 @@ import hpc_connect
 import canary
 from _canary.error import FailFast
 from _canary.error import StopExecution
+from _canary.plugins.types import Result
 from _canary.queue import Busy as BusyQueue
 from _canary.queue import Empty as EmptyQueue
+from _canary.third_party.color import colorize
 from _canary.util import keyboard
 from _canary.util import logging
+from _canary.util.misc import digits
 from _canary.util.procutils import ProcessPoolExecutor
 from _canary.util.procutils import cleanup_children
 from _canary.util.returncode import compute_returncode
+from _canary.util.string import pluralize
+from _canary.util.time import hhmmss
 
 from .queue import ResourceQueue
 from .testbatch import TestBatch
@@ -81,27 +88,41 @@ class BatchConductor:
         return sorted(types)
 
     @canary.hookimpl
-    def canary_resources_avail(self, case: canary.TestCase) -> bool:
-        return self.backend_accommodates(case.required_resources())
+    def canary_resources_avail(self, case: canary.TestCase) -> Result:
+        return self.backend_accommodates(case)
 
-    def backend_accommodates(self, resource_groups: list[list[dict[str, Any]]]) -> bool:
+    def backend_accommodates(self, case: canary.TestCase) -> Result:
         """determine if the resources for this test are available"""
         slots_needed: Counter[str] = Counter()
-        for group in resource_groups:
+        missing: set[str] = set()
+        for group in case.required_resources():
             for member in group:
                 rtype = member["type"]
-                if rtype not in self.slots:
-                    msg = f"required resource type {rtype!r} is not registered with canary"
-                    raise ResourceUnavailable(msg)
-                slots_needed[rtype] += member["slots"]
+                if rtype in self.slots:
+                    slots_needed[rtype] += member["slots"]
+                else:
+                    missing.add(rtype)
+        if missing:
+            types = colorize("@*{%s}" % ",".join(missing))
+            key = canary.string.pluralize("Resource", n=len(missing))
+            return Result(False, reason=f"{key} unavailable: {types}")
+        wanting: dict[str, tuple[int, int]] = {}
         for rtype, slots in slots_needed.items():
             slots_avail = self.slots[rtype]
             if slots_avail < slots:
-                raise ResourceUnsatisfiableError(
-                    f"insufficient slots of {rtype!r} available, "
-                    f"requested: {slots}, available: {slots_avail}"
-                )
-        return True
+                wanting[rtype] = (slots, slots_avail)
+        if wanting:
+            types: str
+            reason: str
+            if canary.config.get("config:debug"):
+                map = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
+                types = ", ".join(map(k, *v) for k, v in wanting.items())
+                reason = f"{case}: insufficent slots of {types}"
+            else:
+                types = ", ".join(colorize("@*{%s}" % t) for t in wanting)
+                reason = f"insufficent slots of {types}"
+            return Result(False, reason=reason)
+        return Result(True)
 
     @canary.hookimpl(tryfirst=True)
     def canary_runtests(self, cases: Sequence[canary.TestCase]) -> int:
@@ -160,7 +181,7 @@ class BatchConductor:
                 queue.close(cleanup=cleanup_queue)
                 stop = canary.time.timestamp()
                 dt = stop - start
-                logger.info("@*{Finished} %d %s (%s)" % (nbatches, what, canary.time.hhmmss(dt)))
+                logger.info("@*{Finished} %d %s (%s)" % (nbatches, what, hhmmss(dt)))
                 atexit.unregister(cleanup_children)
         return returncode
 
@@ -228,9 +249,17 @@ class Runner:
     def __call__(self, batch: TestBatch, backend_name: str, *args: str, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
         canary.config.ensure_loaded()
-        backend = hpc_connect.get_backend(backend_name)
-        batch.save()
-        batch.run(backend=backend, qsize=kwargs.get("qsize", 1), qrank=kwargs.get("qrank", 0))
+        try:
+            backend = hpc_connect.get_backend(backend_name)
+            qrank = kwargs.get("qrank", 0)
+            qsize = kwargs.get("qsize", 1)
+            if summary := batch_start_summary(batch, qrank=qrank, qsize=qsize):
+                logger.log(logging.EMIT, summary, extra={"prefix": ""})
+            batch.save()
+            batch.run(backend=backend, qsize=kwargs.get("qsize", 1), qrank=kwargs.get("qrank", 0))
+        finally:
+            if summary := batch_finish_summary(batch, qrank=qrank, qsize=qsize):
+                logger.log(logging.EMIT, summary, extra={"prefix": ""})
 
 
 def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Future) -> None:
@@ -285,7 +314,33 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
         raise FailFast(failed=failed)
 
 
-class ResourceUnavailable(Exception): ...
+def batch_start_summary(batch: TestBatch, qrank: int | None, qsize: int | None) -> str:
+    if canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+        return ""
+    fmt = io.StringIO()
+    if os.getenv("GITLAB_CI"):
+        fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+    if qrank is not None and qsize is not None:
+        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
+    fmt.write(f"Submitted batch @*b{{%id}}: %l {pluralize('test', len(batch))}")
+    if batch.jobid:
+        fmt.write(" (jobid: %j)")
+    return batch.format(fmt.getvalue().strip())
 
 
-class ResourceUnsatisfiableError(Exception): ...
+def batch_finish_summary(batch: TestBatch, qrank: int | None, qsize: int | None) -> str:
+    if canary.config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+        return ""
+    fmt = io.StringIO()
+    if os.getenv("GITLAB_CI"):
+        fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
+    if qrank is not None and qsize is not None:
+        fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
+    times = batch.times()
+    fmt.write(f"Finished batch @*b{{%id}}: %S (time: {hhmmss(times[0], threshold=0)}")
+    if times[1]:
+        fmt.write(f", running: {hhmmss(times[1], threshold=0)}")
+    if times[2]:
+        fmt.write(f", queued: {hhmmss(times[2], threshold=0)}")
+    fmt.write(")")
+    return batch.format(fmt.getvalue().strip())

@@ -5,14 +5,20 @@ import copy
 import io
 import pickle  # nosec B403
 from collections import Counter
+from typing import TYPE_CHECKING
 from typing import Any
 
 import psutil
 import yaml
 
-from ..error import ResourceUnsatisfiableError
+from ..plugins.types import Result
+from ..third_party.color import colorize
 from ..util import logging
+from ..util.string import pluralize
 from .schemas import resource_pool_schema
+
+if TYPE_CHECKING:
+    from ..testcase import TestCase
 
 logger = logging.get_logger(__name__)
 
@@ -179,26 +185,41 @@ class ResourcePool:
         for type in kwds:
             self.slots_per_resource_type[type] = sum([_["slots"] for _ in self.resources[type]])
 
-    def accommodates(self, resource_groups: list[list[dict[str, Any]]]) -> bool:
+    def accommodates(self, case: "TestCase") -> Result:
         """determine if the resources for this test are available"""
         if self.empty():
             raise EmptyResourcePoolError
         slots_needed: Counter[str] = Counter()
-        for group in resource_groups:
+        missing: set[str] = set()
+        for group in case.required_resources():
             for member in group:
                 rtype = member["type"]
-                if rtype not in self.resources:
-                    msg = f"required resource type {rtype!r} is not registered with canary"
-                    raise ResourceUnavailable(msg)
-                slots_needed[rtype] += member["slots"]
+                if rtype in self.resources:
+                    slots_needed[rtype] += member["slots"]
+                else:
+                    missing.add(rtype)
+        if missing:
+            types = colorize("@*{%s}" % ",".join(missing))
+            key = pluralize("Resource", n=len(missing))
+            return Result(False, reason=f"{key} unavailable: {types}")
+        wanting: dict[str, tuple[int, int]] = {}
         for rtype, slots in slots_needed.items():
             slots_avail = self.slots(rtype)
             if slots_avail < slots:
-                raise ResourceUnsatisfiableError(
-                    f"insufficient slots of {rtype!r} available, "
-                    f"requested: {slots}, available: {slots_avail}"
-                )
-        return True
+                wanting[rtype] = (slots, slots_avail)
+        if wanting:
+            types: str
+            reason: str
+            levelno: int = logging.get_level()
+            if levelno <= logging.DEBUG:
+                map = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
+                types = ", ".join(map(k, *v) for k, v in wanting.items())
+                reason = f"{case}: insufficent slots of {types}"
+            else:
+                types = ", ".join(colorize("@*{%s}" % t) for t in wanting)
+                reason = f"insufficent slots of {types}"
+            return Result(False, reason=reason)
+        return Result(True)
 
     def acquire(self, resource_groups: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
         """Returns resources available to the test

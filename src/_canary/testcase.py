@@ -48,7 +48,6 @@ from .util.filesystem import copyfile
 from .util.filesystem import max_name_length
 from .util.filesystem import mkdirp
 from .util.misc import boolean
-from .util.misc import digits
 from .util.module import load as load_module
 from .util.procutils import get_process_metrics
 from .util.shell import source_rcfile
@@ -1696,7 +1695,7 @@ class TestCase(AbstractTestCase):
                 setattr(self, name, value)
         return
 
-    def run(self, qsize: int = 1, qrank: int = 0, attempt: int = 0) -> None:
+    def run(self, qsize: int = 1, qrank: int = 0) -> None:
         """Run the test case"""
 
         cmd = self.command()
@@ -1724,9 +1723,6 @@ class TestCase(AbstractTestCase):
                 raise KeyboardInterrupt
             elif sig == signal.SIGTERM:
                 os._exit(1)
-
-        if summary := self.job_submission_summary(qrank, qsize, attempt=attempt):
-            logger.log(logging.EMIT, summary, extra={"prefix": ""})
 
         tee_output = config.getoption("capture") == "tee"
         sleep_interval = config.get("config:polling_frequency:testcase") or 0.05
@@ -1794,9 +1790,6 @@ class TestCase(AbstractTestCase):
             else:
                 self.status.set_from_code(self.returncode)
         finally:
-            if summary := self.job_completion_summary(qrank, qsize, attempt=attempt):
-                logger.log(logging.EMIT, summary, extra={"prefix": ""})
-
             signal.signal(signal.SIGINT, default_int_handler)
             signal.signal(signal.SIGTERM, default_term_handler)
             if self.status != "skipped":
@@ -1821,32 +1814,6 @@ class TestCase(AbstractTestCase):
         else:
             self.stdout.write(text)
         sys.stderr.write(text)
-
-    def job_submission_summary(self, qrank: int | None, qsize: int | None, attempt: int) -> str:
-        if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
-            return ""
-        fmt = io.StringIO()
-        if os.getenv("GITLAB_CI"):
-            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        if qrank is not None and qsize is not None:
-            fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-        action = "Starting" if attempt == 0 else "Repeating"
-        fmt.write(f"{action} @*b{{%id}}: %X")
-        return self.format(fmt.getvalue()).strip()
-
-    def job_completion_summary(self, qrank: int | None, qsize: int | None, attempt: int = 0) -> str:
-        if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
-            return ""
-        fmt = io.StringIO()
-        if os.getenv("GITLAB_CI"):
-            fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
-        if qrank is not None and qsize is not None:
-            fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-        if attempt == 0:
-            fmt.write("Finished @*b{%id}: %X %s.n")
-        else:
-            fmt.write(f"Finished @*b{{%id}} (attempt {attempt + 1}): %X %s.n")
-        return self.format(fmt.getvalue()).strip()
 
 
 class TestMultiCase(TestCase):
