@@ -142,9 +142,6 @@ class ResourcePool:
             return len(self.resources[f"{type}s"])
         raise ResourceUnavailable(type)
 
-    def slots(self, type: str) -> int:
-        return self.slots_per_resource_type[type]
-
     def fill(self, pool: dict[str, Any]) -> None:
         pool = resource_pool_schema.validate(pool)
         self.clear()
@@ -189,8 +186,11 @@ class ResourcePool:
         """determine if the resources for this test are available"""
         if self.empty():
             raise EmptyResourcePoolError
+
         slots_needed: Counter[str] = Counter()
         missing: set[str] = set()
+
+        # Step 1: Gathre resource requirements and detect missing types
         for group in case.required_resources():
             for member in group:
                 rtype = member["type"]
@@ -199,12 +199,14 @@ class ResourcePool:
                 else:
                     missing.add(rtype)
         if missing:
-            types = colorize("@*{%s}" % ",".join(missing))
+            types = colorize("@*{%s}" % ",".join(sorted(missing)))
             key = pluralize("Resource", n=len(missing))
             return Result(False, reason=f"{key} unavailable: {types}")
+
+        # Step 2: Check available slots vs. needed slots
         wanting: dict[str, tuple[int, int]] = {}
         for rtype, slots in slots_needed.items():
-            slots_avail = self.slots(rtype)
+            slots_avail = self.slots_per_resource_type[rtype]
             if slots_avail < slots:
                 wanting[rtype] = (slots, slots_avail)
         if wanting:
@@ -212,13 +214,15 @@ class ResourcePool:
             reason: str
             levelno: int = logging.get_level()
             if levelno <= logging.DEBUG:
-                map = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
-                types = ", ".join(map(k, *v) for k, v in wanting.items())
-                reason = f"{case}: insufficent slots of {types}"
+                fmt = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
+                types = ", ".join(fmt(k, *wanting[k]) for k in sorted(wanting))
+                reason = f"{case}: insufficient slots of {types}"
             else:
                 types = ", ".join(colorize("@*{%s}" % t) for t in wanting)
-                reason = f"insufficent slots of {types}"
+                reason = f"insufficient slots of {types}"
             return Result(False, reason=reason)
+
+        # Step 3: all good
         return Result(True)
 
     def acquire(self, resource_groups: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:

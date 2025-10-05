@@ -47,21 +47,21 @@ class BatchConductor:
         self.backend: hpc_connect.HPCSubmissionManager = hpc_connect.get_backend(backend)
         # compute the total slots per resource type so that we can determine whether a test can be
         # run by this backend.
-        self._slots: dict[str, int] | None = None
+        self._slots_per_resource_type: Counter[str] | None = None
 
     @property
-    def slots(self) -> dict[str, int]:
-        if self._slots is None:
-            self._slots = {}
+    def slots_per_resource_type(self) -> Counter[str]:
+        if self._slots_per_resource_type is None:
+            self._slots_per_resource_type = Counter()
             node_count = self.backend.config.node_count
             slots_per_type: int = 1
             for type in self.backend.config.resource_types():
                 count = self.backend.config.count_per_node(type)
                 if not type.endswith("s"):
                     type += "s"
-                self._slots[type] = slots_per_type * count * node_count
-        assert self._slots is not None
-        return self._slots
+                self._slots_per_resource_type[type] = slots_per_type * count * node_count
+        assert self._slots_per_resource_type is not None
+        return self._slots_per_resource_type
 
     def setup(self, *, config: canary.Config) -> None: ...
 
@@ -93,35 +93,42 @@ class BatchConductor:
 
     def backend_accommodates(self, case: canary.TestCase) -> Result:
         """determine if the resources for this test are available"""
+
         slots_needed: Counter[str] = Counter()
         missing: set[str] = set()
+
+        # Step 1: Gathre resource requirements and detect missing types
         for group in case.required_resources():
             for member in group:
                 rtype = member["type"]
-                if rtype in self.slots:
+                if rtype in self.slots_per_resource_type:
                     slots_needed[rtype] += member["slots"]
                 else:
                     missing.add(rtype)
         if missing:
-            types = colorize("@*{%s}" % ",".join(missing))
+            types = colorize("@*{%s}" % ",".join(sorted(missing)))
             key = canary.string.pluralize("Resource", n=len(missing))
             return Result(False, reason=f"{key} unavailable: {types}")
+
+        # Step 2: Check available slots vs. needed slots
         wanting: dict[str, tuple[int, int]] = {}
         for rtype, slots in slots_needed.items():
-            slots_avail = self.slots[rtype]
+            slots_avail = self.slots_per_resource_type[rtype]
             if slots_avail < slots:
                 wanting[rtype] = (slots, slots_avail)
         if wanting:
             types: str
             reason: str
             if canary.config.get("config:debug"):
-                map = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
-                types = ", ".join(map(k, *v) for k, v in wanting.items())
-                reason = f"{case}: insufficent slots of {types}"
+                fmt = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
+                types = ", ".join(fmt(k, *wanting[k]) for k in sorted(wanting))
+                reason = f"{case}: insufficient slots of {types}"
             else:
                 types = ", ".join(colorize("@*{%s}" % t) for t in wanting)
-                reason = f"insufficent slots of {types}"
+                reason = f"insufficient slots of {types}"
             return Result(False, reason=reason)
+
+        # Step 3: all good
         return Result(True)
 
     @canary.hookimpl(tryfirst=True)
