@@ -76,7 +76,7 @@ class BatchExecutor:
     @canary.hookimpl
     def canary_resources_avail(self, case: canary.TestCase) -> Result:
         # The resource pool was already set above, so we can just leverage it
-        return canary.config.resource_pool.accommodates(case.required_resources())
+        return canary.config.resource_pool.accommodates(case)
 
     @canary.hookimpl
     def canary_resource_types(self) -> list[str]:
