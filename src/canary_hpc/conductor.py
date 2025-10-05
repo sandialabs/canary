@@ -8,6 +8,7 @@ import os
 import signal
 import threading
 import time
+from collections import Counter
 from concurrent.futures.process import BrokenProcessPool
 from functools import partial
 from typing import Any
@@ -85,20 +86,19 @@ class BatchConductor:
 
     def resources_avail(self, case: canary.TestCase) -> bool:
         """determine if the resources for this test are available"""
-        required = case.required_resources()
-        slots_reqd: dict[str, int] = {}
-        for group in required:
-            for item in group:
-                type = item["type"]
-                if item["type"] not in self.slots:
-                    msg = f"required resource type {type!r} is not registered with canary"
+        slots_reqd: Counter[str] = Counter()
+        for group in case.required_resources():
+            for member in group:
+                rtype = member["type"]
+                if rtype not in self.slots:
+                    msg = f"required resource type {rtype!r} is not registered with canary"
                     raise ResourceUnavailable(msg)
-                slots_reqd[type] = slots_reqd.get(type, 0) + item["slots"]
-        for type, slots in slots_reqd.items():
-            slots_avail = self.slots[type]
+                slots_reqd[rtype] += member["slots"]
+        for rtype, slots in slots_reqd.items():
+            slots_avail = self.slots[rtype]
             if slots_avail < slots:
                 raise ResourceUnsatisfiableError(
-                    f"insufficient slots of {type!r} available, "
+                    f"insufficient slots of {rtype!r} available, "
                     f"requested: {slots}, available: {slots_avail}"
                 )
         return True
