@@ -82,19 +82,19 @@ class BatchConductor:
 
     @canary.hookimpl
     def canary_resources_avail(self, case: canary.TestCase) -> bool:
-        return self.resources_avail(case)
+        return self.backend_accommodates(case.required_resources())
 
-    def resources_avail(self, case: canary.TestCase) -> bool:
+    def backend_accommodates(self, resource_groups: list[list[dict[str, Any]]]) -> bool:
         """determine if the resources for this test are available"""
-        slots_reqd: Counter[str] = Counter()
-        for group in case.required_resources():
+        slots_needed: Counter[str] = Counter()
+        for group in resource_groups:
             for member in group:
                 rtype = member["type"]
                 if rtype not in self.slots:
                     msg = f"required resource type {rtype!r} is not registered with canary"
                     raise ResourceUnavailable(msg)
-                slots_reqd[rtype] += member["slots"]
-        for rtype, slots in slots_reqd.items():
+                slots_needed[rtype] += member["slots"]
+        for rtype, slots in slots_needed.items():
             slots_avail = self.slots[rtype]
             if slots_avail < slots:
                 raise ResourceUnsatisfiableError(
