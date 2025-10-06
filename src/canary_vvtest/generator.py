@@ -6,12 +6,12 @@ import dataclasses
 import importlib.util
 import io
 import json
+import json.decoder
 import os
 import re
 import shlex
 import sys
 import tokenize
-from functools import wraps
 from itertools import repeat
 from pathlib import Path
 from types import SimpleNamespace
@@ -50,6 +50,8 @@ class VVTTestGenerator(PYTTestGenerator):
                     self.f_TIMEOUT(arg)
                 case "skipif":
                     self.f_SKIPIF(arg)
+                case "filter_warnings":
+                    self.f_FILTER_WARNINGS(arg)
                 case "baseline":
                     self.f_BASELINE(arg)
                 case "enable":
@@ -134,6 +136,11 @@ class VVTTestGenerator(PYTTestGenerator):
         except InvalidTimeFormat:
             raise VVTParseError(f"invalid time format: {arg.line!r}", arg) from None
         self.m_timeout(seconds, when=arg.when)
+
+    def f_FILTER_WARNINGS(self, arg: SimpleNamespace) -> None:
+        """# VVT: filter_warnings [:=] BOOL_EXPR"""
+        filter_warnings = p_FILTER_WARNINGS(arg)
+        self.m_filter_warnings(filter_warnings)
 
     def f_SKIPIF(self, arg: SimpleNamespace) -> None:
         """# VVT: skipif ( reason=STRING ) [:=] BOOL_EXPR"""
@@ -549,6 +556,14 @@ def p_OPTIONS(filename: str, tokens: list[tokenize.TokenInfo]) -> list[tuple[str
     return options
 
 
+def p_FILTER_WARNINGS(arg: SimpleNamespace) -> bool:
+    expression = arg.argument
+    filter_warnings = evaluate_boolean_expression(expression)
+    if filter_warnings is None:
+        raise VVTParseError(f"failed to evaluate the expression {expression!r}", arg)
+    return filter_warnings
+
+
 def importable(module_name: str) -> bool:
     return importlib.util.find_spec(module_name) is not None
 
@@ -558,20 +573,15 @@ def safe_eval(expression: str) -> Any:
     return eval(expression, globals, {})  # nosec B307
 
 
-def cached(func):
-    cache = {}
-
-    @wraps(func)
-    def inner(arg, *args, **kwargs):
-        expression = arg.argument
-        if expression not in cache:
-            cache[expression] = func(arg, *args, **kwargs)
-        return cache[expression]
-
-    return inner
-
-
 def evaluate_boolean_expression(expression: str) -> bool | None:
+    result: Any
+    try:
+        result = json.loads(expression)
+    except json.decoder.JSONDecodeError:
+        pass
+    else:
+        if isinstance(result, (int, bool)):
+            return bool(result)
     try:
         result = safe_eval(expression)
     except Exception:
@@ -579,7 +589,6 @@ def evaluate_boolean_expression(expression: str) -> bool | None:
     return bool(result)
 
 
-@cached
 def p_SKIPIF(arg: SimpleNamespace) -> tuple[bool, str]:
     expression = arg.argument
     options = dict(arg.options)

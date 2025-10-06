@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from typing import IO
 from typing import Any
 from typing import Generator
+from typing import Literal
 
 from ..third_party.color import clen
 from ..third_party.color import colorize
@@ -160,14 +161,29 @@ def get_levelno(levelname: str) -> int:
     raise ValueError(f"Invalid logging level name {levelname!r}")
 
 
-def set_level(level: int | str) -> None:
+def set_level(level: int | str, only: Literal["stream", "file"] | None = None) -> int | None:
+    if only is not None:
+        if only not in ("stream", "file"):
+            raise ValueError(f"illegal value only={only}, (expected stream or file)")
     if isinstance(level, str):
         levelno = get_levelno(level)
     else:
         levelno = level
     for handler in builtin_logging.getLogger(root_log_name).handlers:
-        if levelno < handler.level:
-            handler.setLevel(levelno)
+        if only == "stream":
+            if isinstance(handler, StreamHandler):
+                hold = handler.level
+                handler.setLevel(levelno)
+                return hold
+        elif only == "file":
+            if isinstance(handler, FileHandler):
+                hold = handler.level
+                handler.setLevel(levelno)
+                return hold
+        else:
+            if levelno < handler.level:
+                handler.setLevel(levelno)
+    return None
 
 
 def setup_logging() -> None:

@@ -1200,6 +1200,57 @@ def set_attribute(*, when: WhenType | None = None, **attributes: Any) -> None:
     """
 
 
+def filter_warnings(arg: bool) -> None:
+    """Don't write warnings to the console when scanning files.
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code:: python
+
+       import canary
+       canary.directives.filter_warnings(arg)
+
+    ``.vvt``:
+
+    .. code:: python
+
+       #VVT: filter_warnings : python_expression
+
+    Parameters
+    ----------
+
+    * ``arg``: If ``True``, the test will be skipped.
+
+    .vvt Parameters
+    ---------------
+
+    * ``python_expression``: String that is evaluated and cast to a ``bool``. If
+      the result is ``True`` warnings at file scanning time will be filtered.
+
+    Examples
+    --------
+
+    .. code:: python
+
+       import sys
+       import canary
+       canary.directives.filter_warnings(True)
+
+    .. code:: python
+
+       #VVT: filter_warnings : true
+
+    Evaluation namespace
+    --------------------
+
+    ``python_expression`` is evaluated in a minimal namespace consisting of the
+    ``os`` module, ``sys`` module, and ``importable`` function.
+
+    """
+
 def skipif(arg: bool, *, reason: str) -> None:
     """Conditionally skip tests
 

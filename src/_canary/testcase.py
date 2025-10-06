@@ -4,6 +4,7 @@
 
 import dataclasses
 import fnmatch
+import glob
 import hashlib
 import io
 import itertools
@@ -1932,8 +1933,6 @@ def from_lockfile(lockfile: str) -> TestCase | TestMultiCase:
 
 
 def from_id(id: str) -> TestCase | TestMultiCase:
-    import glob
-
     work_tree = config.get("session:work_tree")
     if work_tree is None:
         raise ValueError(f"cannot find test case {id} outside a test session")

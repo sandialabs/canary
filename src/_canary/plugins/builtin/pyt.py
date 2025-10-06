@@ -89,10 +89,14 @@ class PYTTestGenerator(AbstractTestGenerator):
         self._rcfiles: list[FilterNamespace] = []
         self._artifacts: list[FilterNamespace] = []
         self._depends_on: list[FilterNamespace] = []
+        self._filter_warnings: bool = False
         self._skipif_reason: str | None = None
         self._exclusive: FilterNamespace | None = None
         self._xstatus: FilterNamespace | None = None
         self.load()
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self.path})"
 
     def describe(self, on_options: list[str] | None = None) -> str:
         file = io.StringIO()
@@ -143,13 +147,19 @@ class PYTTestGenerator(AbstractTestGenerator):
         return list(option_expressions)
 
     def lock(self, on_options: list[str] | None = None) -> list["TestCase"]:
+        previous_level: int | None = None
         try:
+            if self.filter_warnings:
+                previous_level = logging.set_level(logging.ERROR, only="stream")
             cases = self._lock(on_options=on_options)
             return cases
         except Exception as e:
             if config.get("config:debug"):
                 raise
             raise ValueError(f"Failed to lock {self.file}: {e}") from None
+        finally:
+            if previous_level is not None:
+                logging.set_level(previous_level, only="stream")
 
     def _lock(self, on_options: list[str] | None = None) -> list["TestCase"]:
         from ...testcase import TestCase
@@ -289,6 +299,14 @@ class PYTTestGenerator(AbstractTestGenerator):
                     case.unresolved_dependencies.append(dep)
 
     # -------------------------------------------------------------------------------- #
+
+    @property
+    def filter_warnings(self) -> bool:
+        return self._filter_warnings
+
+    @filter_warnings.setter
+    def filter_warnings(self, arg: bool) -> None:
+        self._filter_warnings = arg
 
     @property
     def skipif_reason(self) -> str | None:
@@ -516,6 +534,7 @@ class PYTTestGenerator(AbstractTestGenerator):
             kwds[key.upper()] = kwds[key]
         sources: dict[str, list[tuple[str, str | None]]] = {}
         dirname = os.path.join(self.root, os.path.dirname(self.path))
+        src_not_found: dict[str, set[str]] = {}
         for ns in self._sources:
             assert isinstance(ns.action, str)
             result = ns.when.evaluate(
@@ -526,25 +545,35 @@ class PYTTestGenerator(AbstractTestGenerator):
             src, dst = ns.value
             src = self.safe_substitute(src, **kwds)
             src = src if os.path.isabs(src) else os.path.join(dirname, src)
-            if not os.path.exists(src):
-                logger.warning(f"File not found: {src!r}")
-            if dst is None:
-                if os.path.exists(src):
-                    file = os.path.relpath(src, dirname)
-                    sources.setdefault(ns.action, []).append((file, None))
-                elif files := glob.glob(src):
-                    for file in files:
-                        # keep paths relative to dirname
-                        file = os.path.relpath(file, dirname)
-                        sources.setdefault(ns.action, []).append((file, None))
-                else:
-                    # Source does not exist, we'll store it for now and raise an error lazily
-                    file = os.path.relpath(src, dirname)
-                    sources.setdefault(ns.action, []).append((file, None))
-            else:
+
+            # Find paths to sources
+            found = glob.glob(src)
+            if not found:
+                # Source does not exist, we'll warn for now and raise an error lazily when
+                # the file is needed
+                src_not_found.setdefault(ns.action, set()).add(src)
+                fd = None if dst is None else self.safe_substitute(dst, **kwds)
+                sources.setdefault(ns.action, []).append((os.path.relpath(src, dirname), fd))
+            elif dst is not None:
+                # Explicitly request to copy/link source to a new destination
+                if len(found) > 1:
+                    raise ValueError(
+                        f"{self}: {ns.action} {src} -> {dst}: cannot {ns.action} "
+                        "multiple sources to a single destination"
+                    )
                 dst = self.safe_substitute(dst, **kwds)
-                file = os.path.relpath(src, dirname)
-                sources.setdefault(ns.action, []).append((file, dst))
+                sources.setdefault(ns.action, []).append((os.path.relpath(found[0], dirname), dst))
+            else:
+                for src in found:
+                    sources.setdefault(ns.action, []).append((os.path.relpath(src, dirname), None))
+
+        if src_not_found:
+            msg = io.StringIO()
+            msg.write(f"{self}: the following support files were not found:\n")
+            for action in src_not_found:
+                for src in sorted(src_not_found[action]):
+                    msg.write(f"...  {src} (action: {action})\n")
+            logger.warning(msg.getvalue().strip())
         return sources
 
     def depends_on(
@@ -765,6 +794,10 @@ class PYTTestGenerator(AbstractTestGenerator):
         ns = FilterNamespace(arg, when=when)
         self._timeout.append(ns)
 
+    def m_filter_warnings(self, arg: bool) -> None:
+        if arg:
+            self.filter_warnings = True
+
     def m_skipif(self, arg: bool, *, reason: str) -> None:
         if arg:
             self.skipif_reason = reason
@@ -939,6 +972,9 @@ class PYTTestGenerator(AbstractTestGenerator):
 
     def f_set_attribute(self, *, when: WhenType | None = None, **attributes: Any) -> None:
         self.m_set_attribute(when=when, **attributes)
+
+    def f_filter_warnings(self, arg: bool) -> None:
+        self.m_filter_warnings(arg)
 
     def f_skipif(self, arg: bool, *, reason: str) -> None:
         self.m_skipif(arg, reason=reason)
