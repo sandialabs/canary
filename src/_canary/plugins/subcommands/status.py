@@ -3,9 +3,12 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import json
+import os
 from typing import TYPE_CHECKING
 
 from ... import config
+from ..builtin.reporting import determine_cases_to_show
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import load_session
@@ -63,11 +66,21 @@ class Status(CanarySubcommand):
             choices=("duration", "name"),
             help="Sort cases by this field [default: %(default)s]",
         )
+        parser.add_argument(
+            "--dump", action="store_true", help="Dump test cases to lock lock file [default: False]"
+        )
         parser.add_argument("pathspec", nargs="?", help="Limit status results to this path")
 
     def execute(self, args: "argparse.Namespace") -> int:
         session = load_session()
-        config.plugin_manager.hook.canary_statusreport(session=session)
+        config.pluginmanager.hook.canary_statusreport(session=session)
+        if args.dump:
+            report_chars = args.report_chars or "dftns"
+            cases_to_show = determine_cases_to_show(session, report_chars)
+            cases = [case.getstate() for case in cases_to_show]
+            file = os.path.join(config.invocation_dir, "testcases.lock")
+            with open(file, "w") as fh:
+                json.dump({"testcases": cases}, fh, indent=2)
         return 0
 
 

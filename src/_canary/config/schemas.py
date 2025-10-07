@@ -4,16 +4,15 @@
 
 import typing
 
-from ..third_party.schema import And
-from ..third_party.schema import Forbidden
-from ..third_party.schema import Optional
-from ..third_party.schema import Or
-from ..third_party.schema import Regex
-from ..third_party.schema import Schema
-from ..third_party.schema import SchemaError
-from ..third_party.schema import SchemaMissingKeyError
-from ..third_party.schema import Use
-from ..util.rprobe import cpu_count
+from schema import And
+from schema import Optional
+from schema import Or
+from schema import Regex
+from schema import Schema
+from schema import SchemaError
+from schema import SchemaMissingKeyError
+from schema import Use
+
 from ..util.time import time_in_seconds
 
 
@@ -42,87 +41,48 @@ def vardict(arg: typing.Any) -> bool:
     return True
 
 
-def log_levels(arg: typing.Any) -> bool:
-    if not isinstance(arg, str):
-        return False
-    elif arg.upper() not in ("TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "FATAL"):
-        return False
-    return True
+def log_level_name(arg: typing.Any) -> str:
+    logging_levels = ("TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+    if isinstance(arg, str):
+        level_name = arg.upper()
+        if level_name not in logging_levels:
+            s = ", ".join(logging_levels)
+            raise SchemaError(
+                f"Wrong log level {level_name!r}, choose from {', '.join(logging_levels)}"
+            )
+        return level_name
+    raise SchemaError(f"Wrong log level {arg!r}, choose from {', '.join(logging_levels)}")
 
 
 def multiprocessing_contexts(arg: typing.Any) -> bool:
     if not isinstance(arg, str):
         return False
-    elif arg.upper() not in ("FORK", "SPAWN"):
+    elif arg not in ("fork", "spawn"):
         return False
     return True
 
 
 def boolean(arg: typing.Any) -> bool:
     if isinstance(arg, str):
-        return arg.lower() in ("0", "off", "false", "no")
+        return arg.lower() not in ("0", "off", "false", "no")
     return bool(arg)
 
 
-config_schema = Schema(
-    {
-        "config": {
-            Optional("debug"): Use(boolean),
-            Optional("log_level"): log_levels,
-            Optional("cache_dir"): str,
-            Optional("multiprocessing_context"): multiprocessing_contexts,
-        }
-    }
-)
+positive_int = And(int, lambda x: x > 0)
+nonnegative_int = And(int, lambda x: x >= 0)
 
-
-batch_schema = Schema(
-    {
-        "batch": {
-            Optional("duration"): Use(time_in_seconds),
-            Optional("default_options"): list_of_str,
-        }
-    }
-)
-
-
-plugin_schema = Schema({"plugins": list_of_str})
-
-test_schema = Schema({"test": {"timeout": {Optional(str): Use(time_in_seconds)}}})
-
-machine_schema = Schema({"machine": {Optional("cpu_count"): Use(int)}})
-python_schema = Schema({"python": {"executable": str, "version": str, "version_info": list}})
-testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
-environment_schema = Schema(
-    {
-        "environment": {
-            Optional("set"): vardict,
-            Optional("unset"): list_of_str,
-            Optional("prepend-path"): vardict,
-            Optional("append-path"): vardict,
-        }
-    }
-)
-
+any_schema = Schema({}, ignore_extra_keys=True)
 build_schema = Schema(
     {
-        "build": {
-            Optional("project"): optional_str,
-            Optional("type"): optional_str,
-            Optional("date"): optional_str,
-            Optional("build_directory"): optional_str,
-            Optional("source_directory"): optional_str,
-            Optional("compiler"): {
-                Optional("vendor"): optional_str,
-                Optional("version"): optional_str,
-                Optional("paths"): {
-                    Optional("cc"): optional_str,
-                    Optional("cxx"): optional_str,
-                    Optional("fc"): optional_str,
-                    Optional("mpicc"): optional_str,
-                    Optional("mpicxx"): optional_str,
-                    Optional("mpifc"): optional_str,
-                },
+        Optional("project"): optional_str,
+        Optional("type"): optional_str,
+        Optional("date"): optional_str,
+        Optional("build_directory"): optional_str,
+        Optional("source_directory"): optional_str,
+        Optional("compiler"): {
+            Optional("vendor"): optional_str,
+            Optional("version"): optional_str,
+            Optional("paths"): {
                 Optional("cc"): optional_str,
                 Optional("cxx"): optional_str,
                 Optional("fc"): optional_str,
@@ -130,116 +90,111 @@ build_schema = Schema(
                 Optional("mpicxx"): optional_str,
                 Optional("mpifc"): optional_str,
             },
-            Optional("options"): optional_dict,
-        }
+            Optional("cc"): optional_str,
+            Optional("cxx"): optional_str,
+            Optional("fc"): optional_str,
+            Optional("mpicc"): optional_str,
+            Optional("mpicxx"): optional_str,
+            Optional("mpifc"): optional_str,
+        },
+        Optional("options"): optional_dict,
     },
     ignore_extra_keys=True,
 )
-
-any_schema = Schema({}, ignore_extra_keys=True)
-
-
-positive_int = And(int, lambda x: x > 0)
-nonnegative_int = And(int, lambda x: x >= 0)
-id_list = Schema([{"id": Use(str), Optional("slots", default=1): Or(int, float)}])
-
-
-ctest_resource_pool_schema = Schema(
+config_schema = Schema(
     {
-        "local": {
-            Optional(Regex("^[a-z_][a-z0-9_]*?(?<!_per_node)$")): id_list,
-        }
+        Optional("debug"): Use(boolean),
+        Optional("log_level"): Use(log_level_name),
+        Optional("cache_dir"): str,
+        Optional("multiprocessing"): {
+            Optional("context"): multiprocessing_contexts,
+            Optional("max_tasks_per_child"): positive_int,
+        },
+        Optional("timeout"): {Optional(str): Use(time_in_seconds)},
+        Optional("polling_frequency"): {
+            Optional("testcase"): Use(time_in_seconds),
+        },
+        Optional("plugins"): list_of_str,
+    }
+)
+environment_schema = Schema(
+    {
+        Optional("set"): vardict,
+        Optional("unset"): list_of_str,
+        Optional("prepend-path"): vardict,
+        Optional("append-path"): vardict,
+    }
+)
+plugin_schema = Schema({str: dict}, ignore_extra_keys=True)
+user_schema = Schema({}, ignore_extra_keys=True)
+
+testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
+
+# --- Resource pool schemas
+resource_spec_schema = Schema(
+    {str: [{"id": Use(str), Optional("slots", default=1): Or(int, float)}]}
+)
+
+
+class RPSchema(Schema):
+    def rspec(self, count):
+        return [{"id": str(j), "slots": 1} for j in range(count)]
+
+    def validate(self, data, is_root_eval=True):
+        data = super().validate(data, is_root_eval=False)
+        if is_root_eval:
+            data.setdefault("additional_properties", {})
+            for key in list(data.keys()):
+                if key in ("additional_properties", "resources"):
+                    continue
+                count = data.pop(key)
+                data.setdefault("resources", {})[key] = self.rspec(count)
+            if "resources" not in data:
+                message = "Missing key: resources"
+                message = self._prepend_schema_name(message)
+                raise SchemaMissingKeyError(message, None)
+        return data
+
+
+resource_pool_schema = RPSchema(
+    {
+        Optional("resources"): resource_spec_schema,
+        Optional("additional_properties"): dict,
+        Optional(str): int,
     }
 )
 
 
-local_resource_pool_schema = Schema(
-    {
-        "resource_pool": {
-            # The local schema does not allow nodes
-            Forbidden("nodes"): object,
-            Optional("cpus", default=cpu_count()): positive_int,
-            # local schema disallows *_per_node
-            Optional(Regex("^[a-z_][a-z0-9_]*?(?<!_per_node)$")): nonnegative_int,
-        }
-    }
-)
-
-
-uniform_resource_pool_schema = Schema(
-    {
-        "resource_pool": {
-            "nodes": positive_int,
-            "cpus_per_node": positive_int,
-            Optional(Regex("^[a-z_][a-z0-9_]*_per_node")): nonnegative_int,
-        }
-    }
-)
-
-
-heterogeneous_resource_pool_schema = Schema(
-    {
-        "resource_pool": [
-            {
-                "id": Use(str),
-                "cpus": id_list,
-                # local schema disallows *_per_node
-                Optional(Regex("^[a-z_][a-z0-9_]*?(?<!_per_node)$")): id_list,
-            }
-        ]
-    }
-)
-
-
-class ResourceSchema(Schema):
-    def __init__(self):
-        self.schemas = {
-            "ctest": ctest_resource_pool_schema,
-            "local": local_resource_pool_schema,
-            "uniform": uniform_resource_pool_schema,
-            "heterogeneous": heterogeneous_resource_pool_schema,
-        }
-
-    def validate(self, data):
-        if not isinstance(data, dict):
-            raise SchemaError("Expected resource_pool to be a dict")
-        if "local" in data:
-            validated = self.schemas["ctest"].validate(data)
-            if "cpus" not in validated["local"]:
-                validated["local"]["cpus"] = self.uniform_pool_object(cpu_count())
-            return {"resource_pool": [{"id": "0"} | validated["local"]]}
-        if "resource_pool" not in data:
-            raise SchemaMissingKeyError("Missing key: 'resource_pool'", self._error)
-        resource_pool = data["resource_pool"]
-        if isinstance(resource_pool, dict) and "nodes" in resource_pool:
-            # uniform resource pool
-            validated = self.schemas["uniform"].validate(data)
-            rp = []
-            for i in range(validated["resource_pool"].pop("nodes")):
-                x = {"id": str(i)}
-                for name, count in validated["resource_pool"].items():
-                    x[name[:-9]] = self.uniform_pool_object(count)
-                rp.append(x)
-            return {"resource_pool": rp}
-        if isinstance(resource_pool, dict):
-            # uniform resource pool, single node
-            validated = self.schemas["local"].validate(data)
-            if "cpus" not in validated["resource_pool"]:
-                validated["resource_pool"]["cpus"] = cpu_count()
-            rp = {"id": "0"}
-            for name, count in validated["resource_pool"].items():
-                rp[name] = self.uniform_pool_object(count)
-            return {"resource_pool": [rp]}
-        if isinstance(resource_pool, list):
-            validated = self.schemas["heterogeneous"].validate(data)
+class EnvarSchema(Schema):
+    def validate(self, data, is_root_eval=True):
+        data = super().validate(data, is_root_eval=False)
+        if is_root_eval:
+            validated = {}
+            config = validated.setdefault("config", {})
+            for key, val in data.items():
+                name = key[7:].lower()
+                if name.startswith(("timeout_", "multiprocessing_")):
+                    root, _, leaf = name.partition("_")
+                    config.setdefault(root, {})[leaf] = val
+                elif name.endswith("_polling_frequency"):
+                    leaf, _, root = name.partition("_")
+                    config.setdefault(root, {})[leaf] = val
+                else:
+                    config[name] = val
             return validated
-        raise SchemaError("Unrecognized resource_pool layout")
-
-    @staticmethod
-    def uniform_pool_object(n: int) -> list[dict[str, typing.Any]]:
-        if n < 0:
-            raise ValueError(f"expected pool object count > 0, got {n=}")
-        return [{"id": str(i), "slots": 1} for i in range(n)]
+        return data
 
 
-resource_schema = ResourceSchema()
+environment_variable_schema = EnvarSchema(
+    {
+        Optional("CANARY_DEBUG"): Use(boolean),
+        Optional("CANARY_LOG_LEVEL"): Use(log_level_name),
+        Optional("CANARY_CACHE_DIR"): Use(str),
+        Optional("CANARY_PLUGINS"): Use(lambda x: [_.strip() for _ in x.split(",") if _.split()]),
+        Optional("CANARY_MULTIPROCESSING_CONTEXT"): multiprocessing_contexts,
+        Optional("CANARY_MULTIPROCESSING_MAX_TASKS_PER_CHILD"): positive_int,
+        Optional(Regex("CANARY_TIMEOUT_w+")): Use(time_in_seconds),
+        Optional("CANARY_TESTCASE_POLLING_FREQUENCY"): Use(time_in_seconds),
+    },
+    ignore_extra_keys=True,
+)

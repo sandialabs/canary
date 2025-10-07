@@ -48,34 +48,14 @@ def test_session_filter(tmpdir):
             assert cases[0].name == "test_exec_dir.np=4.x=1.234e7"
 
 
-def test_session_bfilter(tmpdir):
-    p = paths()
-    with working_dir(tmpdir.strpath, create=True):
-        with config.override():
-            config.options.batch = {
-                "scheduler": "none",
-                "spec": {"count": 2, "duration": None, "layout": "flat", "nodes": "any"},
-            }
-            config.setup_hpc_connect("none")
-            s = session.Session("tests", mode="w", force=True)
-            s.add_search_paths([os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")])
-            s.discover()
-            s.lock()
-            s.run()
-            # test batchfile
-            d1 = os.listdir("tests/.canary/batches")[0]
-            d2 = os.listdir(os.path.join("tests/.canary/batches", d1))[0]
-            id = d1 + d2
-            with working_dir("tests"):
-                s = session.Session.batch_view(".", id)
-
-
 def test_session_fail_fast(tmpdir):
     p = paths()
     with working_dir(tmpdir.strpath, create=True):
-        s = session.Session("tests", mode="w", force=True)
-        s.add_search_paths(os.path.join(p.examples, "status"))
-        s.discover()
-        s.lock()
-        rc = s.run(fail_fast=True)
-        assert rc != 0
+        with config.override():
+            config.options.fail_fast = True
+            s = session.Session("tests", mode="w", force=True)
+            s.add_search_paths(os.path.join(p.examples, "status"))
+            s.discover()
+            s.lock()
+            rc = s.run()
+            assert rc != 0

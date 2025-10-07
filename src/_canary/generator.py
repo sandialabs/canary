@@ -7,9 +7,10 @@ import os
 from abc import ABC
 from abc import abstractmethod
 from typing import TYPE_CHECKING
+from typing import Any
 
 if TYPE_CHECKING:
-    from .test.case import TestCase
+    from .testcase import TestCase
 
 
 class AbstractTestGenerator(ABC):
@@ -58,6 +59,9 @@ class AbstractTestGenerator(ABC):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = os.path.splitext(os.path.basename(self.path))[0]
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(file={self.file!r})"
+
     def stop_recursion(self) -> bool:
         return False
 
@@ -70,9 +74,14 @@ class AbstractTestGenerator(ABC):
     def always_matches(cls, path: str) -> bool:
         return cls.matches(path)
 
-    @abstractmethod
     def describe(self, on_options: list[str] | None = None) -> str:
         """Return a description of the test"""
+        return repr(self)
+
+    def info(self) -> dict[str, Any]:
+        info: dict[str, Any] = {}
+        info["type"] = self.__class__.__name__
+        return info
 
     @abstractmethod
     def lock(self, on_options: list[str] | None = None) -> list["TestCase"]:
@@ -105,8 +114,7 @@ class AbstractTestGenerator(ABC):
     def factory(root: str, path: str | None = None) -> "AbstractTestGenerator":
         from . import config
 
-        for gen_type in config.plugin_manager.get_generators():
-            if gen_type.always_matches(root if path is None else path):
-                return gen_type(root, path=path)
+        if generator := config.pluginmanager.hook.canary_testcase_generator(root=root, path=path):
+            return generator
         f = root if path is None else os.path.join(root, path)
         raise TypeError(f"No test generator for {f}")

@@ -1,20 +1,21 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import io
 import os
 import random
+import sys
 from textwrap import indent
 from typing import TYPE_CHECKING
+from typing import Any
 
 from ... import config
 from ...status import Status
-from ...test.case import TestCase
 from ...third_party.color import ccenter
 from ...third_party.color import colorize
 from ...util import glyphs
 from ...util import logging
+from ...util.banner import banner
 from ...util.string import pluralize
 from ...util.term import terminal_size
 from ...util.time import hhmmss
@@ -23,12 +24,65 @@ from ..hookspec import hookimpl
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
     from ...session import Session
-    from ...test.case import TestCase
+    from ...testcase import TestCase
+
+
+logger = logging.get_logger(__name__)
+
+
+@hookimpl
+def canary_addoption(parser: "Parser") -> None:
+    def add_group_argument(p: "Parser", *args: Any, **kwargs: Any):
+        p.add_argument(*args, group="console reporting", command="run", **kwargs)
+
+    add_group_argument(
+        parser,
+        "--no-header",
+        action="store_true",
+        help="Disable printing header [default: %(default)s]",
+    )
+    add_group_argument(
+        parser,
+        "--no-summary",
+        action="store_true",
+        help="Disable summary [default: %(default)s]",
+    )
+    add_group_argument(
+        parser,
+        "--durations",
+        type=int,
+        metavar="N",
+        help="Show N slowest test durations (N<0 for all)",
+    )
+    add_group_argument(
+        parser,
+        "--show-capture",
+        nargs="?",
+        choices=("o", "e", "oe", "no"),
+        default="no",
+        const="oe",
+        help="Show captured stdout (o), stderr (e), or both (oe) "
+        "for failed tests [default: %(default)s]",
+    )
+    add_group_argument(
+        parser,
+        "--show-excluded-tests",
+        action="store_true",
+        default=False,
+        help="Show names of tests that are excluded from the test session %(default)s",
+    )
+
+
+@hookimpl(specname="canary_runtests_startup", tryfirst=True)
+def print_banner():
+    if not config.getoption("no_header"):
+        print(colorize(banner()), file=sys.stderr)
+        # logger.log(logging.EMIT, banner(), extra={"prefix": ""})
 
 
 @hookimpl(specname="canary_runtests_summary", tryfirst=True)
 def print_short_test_status_summary(
-    cases: list[TestCase], include_pass: bool, truncate: int
+    cases: list["TestCase"], include_pass: bool, truncate: int
 ) -> None:
     """Return a summary of the completed test cases.  if ``include_pass is True``, include
     passed tests in the summary
@@ -40,7 +94,7 @@ def print_short_test_status_summary(
     if not cases:
         file.write("Nothing to report\n")
     else:
-        totals: dict[str, list[TestCase]] = {}
+        totals: dict[str, list["TestCase"]] = {}
         for case in cases:
             totals.setdefault(case.status.value, []).append(case)
         for status in Status.members:
@@ -54,21 +108,21 @@ def print_short_test_status_summary(
                     n += 1
                     if truncate > 0 and truncate == n:
                         cname = case.status.cname
-                        bullets = colorize("@*{%s}" % (3 * "."))
+                        bullets = "@*{%s}" % (3 * ".")
                         fmt = "%s %s %s truncating summary to the first %d entries. "
                         alert = io.StringIO()
                         alert.write(fmt % (glyph, cname, bullets, truncate))
-                        alert.write(colorize("See @*{canary status} for the full summary\n"))
+                        alert.write("See @*{canary status} for the full summary\n")
                         file.write(alert.getvalue())
                         break
     string = file.getvalue()
     if string.strip():
-        string = colorize("@*{Short test summary info}\n") + string + "\n"
-    logging.emit(string)
+        string = "@*{Short test summary info}\n" + string
+    logger.log(logging.EMIT, string, extra={"prefix": ""})
 
 
 @hookimpl(specname="canary_runtests_summary")
-def print_runtests_durations(cases: list[TestCase], include_pass: bool, truncate: int) -> None:
+def print_runtests_durations(cases: list["TestCase"], include_pass: bool, truncate: int) -> None:
     if N := config.getoption("durations"):
         return print_durations(cases, N)
 
@@ -81,7 +135,7 @@ def print_statusreport_durations(session: "Session") -> None:
 
 @hookimpl(specname="canary_runtests_summary", trylast=True)
 def runtests_footer(
-    cases: list[TestCase], include_pass: bool, truncate: int, title: str | None = None
+    cases: list["TestCase"], include_pass: bool, truncate: int, title: str | None = None
 ) -> None:
     """Return a short, high-level, summary of test results"""
     print_footer(cases, "Session done")
@@ -101,7 +155,7 @@ def runtest_report_status(session: "Session") -> None:
     cases_to_show = determine_cases_to_show(session, report_chars)
     if cases_to_show:
         file = io.StringIO()
-        totals: dict[str, list[TestCase]] = {}
+        totals: dict[str, list["TestCase"]] = {}
         for case in cases_to_show:
             totals.setdefault(case.status.value, []).append(case)
         for member in Status.members:
@@ -110,32 +164,37 @@ def runtest_report_status(session: "Session") -> None:
                     glyph = Status.glyph(case.status.value)
                     description = case.describe()
                     file.write("%s %s\n" % (glyph, description))
-        file.write("\n")
-        logging.emit(file.getvalue())
+        logger.log(logging.EMIT, file.getvalue(), extra={"prefix": ""})
 
 
 @hookimpl
 def canary_collectreport(cases: list["TestCase"]) -> None:
-    excluded: list[TestCase] = []
+    excluded: list["TestCase"] = []
     for case in cases:
         if case.wont_run():
             excluded.append(case)
     n = len(cases) - len(excluded)
-    logging.info(colorize("@*{Selected} %d test %s" % (n, pluralize("case", n))))
+    logger.info("@*{Selected} %d test %s" % (n, pluralize("case", n)))
     if excluded:
         n = len(excluded)
-        logging.info(colorize("@*{Excluding} %d test cases for the following reasons:" % n))
-        reasons: dict[str | None, int] = {}
+        logger.info("@*{Excluding} %d test cases for the following reasons:" % n)
+        reasons: dict[str | None, list["TestCase"]] = {}
         for case in excluded:
-            if case.status.satisfies(("masked", "invalid")):
-                reasons[case.status.details] = reasons.get(case.status.details, 0) + 1
-        keys = sorted(reasons, key=lambda x: reasons[x])
+            if case.mask:
+                reasons.setdefault(case.mask, []).append(case)
+            elif case.status == "invalid":
+                reasons.setdefault(case.status.details, []).append(case)
+        keys = sorted(reasons, key=lambda x: len(reasons[x]))
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
-            logging.emit(f"{3 * glyphs.bullet} {reasons[key]}: {reason}\n")
+            n = len(reasons[key])
+            logger.log(logging.EMIT, f"{'@M{==>}'} {n}: {reason}", extra={"prefix": ""})
+            if config.getoption("show_excluded_tests"):
+                for case in reasons[key]:
+                    logger.log(logging.EMIT, f"... {case.format('%N')}", extra={"prefix": ""})
 
 
-def print_durations(cases: list[TestCase], N: int) -> None:
+def print_durations(cases: list["TestCase"], N: int) -> None:
     string = io.StringIO()
     cases = [c for c in cases if c.duration >= 0]
     sorted_cases = sorted(cases, key=lambda x: x.duration)
@@ -146,10 +205,10 @@ def print_durations(cases: list[TestCase], N: int) -> None:
     for case in sorted_cases:
         string.write("  %6.2f   %s\n" % (case.duration, case.format("%id   %X")))
     string.write("\n")
-    logging.emit(string.getvalue())
+    logger.log(logging.EMIT, string.getvalue(), extra={"prefix": ""})
 
 
-def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
+def sort_cases_by(cases: list["TestCase"], field="duration") -> list["TestCase"]:
     if cases and isinstance(getattr(cases[0], field), str):
         return sorted(cases, key=lambda case: getattr(case, field).lower())
     return sorted(cases, key=lambda case: getattr(case, field))
@@ -157,9 +216,11 @@ def sort_cases_by(cases: list[TestCase], field="duration") -> list[TestCase]:
 
 def determine_cases_to_show(
     session: "Session", report_chars: str, pathspec: str | None = None
-) -> list[TestCase]:
-    cases: list[TestCase] = session.cases
-    cases_to_show: list[TestCase]
+) -> list["TestCase"]:
+    from ...testcase import TestCase
+
+    cases: list["TestCase"] = session.cases
+    cases_to_show: list["TestCase"]
     rc = set(report_chars)
     if pathspec is not None:
         if TestCase.spec_like(pathspec):
@@ -208,31 +269,6 @@ def determine_cases_to_show(
     return cases_to_show
 
 
-@hookimpl
-def canary_addoption(parser: "Parser") -> None:
-    parser.add_argument(
-        "--show-capture",
-        command="run",
-        group="console reporting",
-        nargs="?",
-        choices=("o", "e", "oe", "no"),
-        default="no",
-        const="oe",
-        help="Show captured stdout (o), stderr (e), or both (oe) "
-        "for failed tests [default: %(default)s]",
-    )
-    parser.add_argument(
-        "--capture",
-        command="run",
-        choices=("log", "tee"),
-        default="log",
-        group="console reporting",
-        help="Log test output to a file only (log) or log and print output "
-        "to the screen (tee).  Warning: this could result in a large amount of text printed "
-        "to the screen [default: log]",
-    )
-
-
 @hookimpl(specname="canary_session_finish", trylast=True)
 def show_capture(session: "Session", exitstatus: int) -> None:
     what = config.getoption("show_capture")
@@ -242,7 +278,7 @@ def show_capture(session: "Session", exitstatus: int) -> None:
     failed = [case for case in cases if not case.status.satisfies(("success", "xdiff", "xfail"))]
     if failed:
         _, width = terminal_size()
-        print(ccenter(colorize(" @*R{%d Test failures} " % len(failed)), width, "="), end="\n\n")
+        print(ccenter(" @*R{%d Test failures} " % len(failed), width, "="), end="\n\n")
         for case in failed:
             _show_capture(case, what=what)
 
@@ -251,7 +287,7 @@ def _show_capture(case: "TestCase", what="oe") -> None:
     _, width = terminal_size()
     color = "g" if case.status == "success" else "R" if case.status == "failed" else "y"
     fp = io.StringIO()
-    fp.write(ccenter(colorize(" @*%s{%s} " % (color, case.display_name)), width, "-") + "\n")
+    fp.write(ccenter(" @*%s{%s} " % (color, case.display_name), width, "-") + "\n")
     fp.write(f"{bold('Status')}: {case.status.cname}\n")
     fp.write(f"{bold('Execution directory')}: {case.execution_directory}\n")
     fp.write(f"{bold('Command')}: {' '.join(case.command())}\n")
@@ -276,7 +312,7 @@ def _show_capture(case: "TestCase", what="oe") -> None:
         print(text)
 
 
-def print_footer(cases: list[TestCase], title: str) -> None:
+def print_footer(cases: list["TestCase"], title: str) -> None:
     """Return a short, high-level, summary of test results"""
     string = io.StringIO()
     duration = -1.0
@@ -286,7 +322,7 @@ def print_footer(cases: list[TestCase], title: str) -> None:
         finish = max(_.stop for _ in cases if _.stop > 0)
         start = min(_.start for _ in cases if _.start > 0)
         duration = finish - start
-    totals: dict[str, list[TestCase]] = {}
+    totals: dict[str, list["TestCase"]] = {}
     for case in cases:
         totals.setdefault(case.status.value, []).append(case)
     N = len(cases)
@@ -296,7 +332,7 @@ def print_footer(cases: list[TestCase], title: str) -> None:
         if n:
             c = Status.colors[member]
             stat = totals[member][0].status.name
-            summary.append(colorize("@%s{%d %s}" % (c, n, stat.lower())))
+            summary.append("@%s{%d %s}" % (c, n, stat.lower()))
     emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
     x, y = random.sample(emojis, 2)
     kwds = {
@@ -306,8 +342,8 @@ def print_footer(cases: list[TestCase], title: str) -> None:
         "t": hhmmss(None if duration < 0 else duration),
         "title": title,
     }
-    string.write(colorize("%(x)s%(x)s @*{%(title)s} -- %(s)s in @*{%(t)s}\n" % kwds))
-    logging.emit(string.getvalue())
+    string.write("%(x)s%(x)s @*{%(title)s} -- %(s)s in @*{%(t)s}" % kwds)
+    logger.log(logging.EMIT, string.getvalue(), extra={"prefix": ""})
 
 
 def bold(string: str) -> str:

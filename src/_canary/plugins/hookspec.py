@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+# mypy: disable-error-code=empty-body
+
 from typing import TYPE_CHECKING
 from typing import Type
 
@@ -11,20 +13,30 @@ from .types import CanaryReporter
 from .types import CanarySubcommand
 
 if TYPE_CHECKING:
+    from ..atc import AbstractTestCase
     from ..config.argparsing import Parser
-    from ..config.config import Config
+    from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
     from ..session import Session
-    from ..test.batch import TestBatch
-    from ..test.case import TestCase
+    from ..testcase import TestCase
+    from .manager import CanaryPluginManager
+    from .types import Result
 
 project_name = "canary"
 hookspec = pluggy.HookspecMarker(project_name)
 hookimpl = pluggy.HookimplMarker(project_name)
 
 
-@hookspec
-def canary_testcase_generator() -> Type["AbstractTestGenerator"]:
+@hookspec(firstresult=True)
+def canary_testcase_generator(
+    root: str, path: str | None
+) -> "AbstractTestGenerator | Type[AbstractTestGenerator]":
+    """Returns an implementation of AbstractTestGenerator"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_generator(root: str, path: str | None) -> "AbstractTestGenerator":
     """Returns an implementation of AbstractTestGenerator"""
     raise NotImplementedError
 
@@ -35,7 +47,7 @@ def canary_addoption(parser: "Parser") -> None:
 
 
 @hookspec
-def canary_configure(config: "Config") -> None:
+def canary_configure(config: "CanaryConfig") -> None:
     """Perform custom configuration of the test environment"""
 
 
@@ -70,24 +82,40 @@ def canary_subcommand() -> CanarySubcommand:
 
 
 @hookspec
-def canary_session_start(session: "Session") -> None:
+def canary_session_startup(session: "Session") -> None:
     """Called after the session object has been created and before performing collection and
     entering the run test loop."""
+
+
+_impl_warning = "canary_session_start is deprecated and will be removed, use canary_session_startup"
+
+
+@hookspec(warn_on_impl=DeprecationWarning(_impl_warning))
+def canary_session_start(session: "Session") -> None:
+    raise NotImplementedError
 
 
 @hookspec
 def canary_session_finish(session: "Session", exitstatus: int) -> None:
     """Called after the test session has finished allowing plugins to perform custom actions after
     all tests have been run."""
-
-
-@hookspec(firstresult=True)
-def canary_runtests(cases: list["TestCase"], fail_fast: bool) -> int:
     raise NotImplementedError
 
 
 @hookspec
-def canary_runtests_summary(cases: list["TestCase"], include_pass: bool, truncate: int) -> None: ...
+def canary_runtests_startup() -> None:
+    """Called at the beginning of `canary run`"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_runtests(cases: list["TestCase"]) -> int:
+    raise NotImplementedError
+
+
+@hookspec
+def canary_runtests_summary(cases: list["TestCase"], include_pass: bool, truncate: int) -> None:
+    raise NotImplementedError
 
 
 @hookspec
@@ -98,12 +126,12 @@ def canary_session_reporter() -> CanaryReporter:
 
 @hookspec
 def canary_statusreport(session: "Session") -> None:
-    pass
+    raise NotImplementedError
 
 
 @hookspec
 def canary_collectreport(cases: list["TestCase"]) -> None:
-    pass
+    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
@@ -141,6 +169,7 @@ def canary_testsuite_mask(
     regex: str | None,
     case_specs: list[str] | None,
     start: str | None,
+    ignore_dependencies: bool,
 ) -> None:
     """Filter test cases (mask test cases that don't meet a specific criteria)
 
@@ -153,18 +182,13 @@ def canary_testsuite_mask(
     """
 
 
-@hookspec(firstresult=True)
-def canary_testcases_batch(cases: list["TestCase"]) -> list["TestBatch"] | None:
-    """Batch test cases"""
-
-
 @hookspec
 def canary_testcase_modify(case: "TestCase") -> None:
     """Modify the test case before the test run."""
 
 
-@hookspec
-def canary_testcase_setup(case: "TestCase") -> None:
+@hookspec(firstresult=True)
+def canary_testcase_setup(case: "AbstractTestCase") -> bool:
     """Called to perform the setup phase for a test case.
 
     The default implementation runs ``case.setup()``.
@@ -176,10 +200,11 @@ def canary_testcase_setup(case: "TestCase") -> None:
       This function is called inside the test case's working directory
 
     """
+    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
-def canary_testcase_run(case: "TestCase", qsize: int, qrank: int) -> None:
+def canary_testcase_run(case: "AbstractTestCase", qsize: int, qrank: int) -> bool:
     """Called to run the test case
 
     Args:
@@ -189,10 +214,11 @@ def canary_testcase_run(case: "TestCase", qsize: int, qrank: int) -> None:
       This function is called inside the test case's working directory
 
     """
+    raise NotImplementedError
 
 
-@hookspec
-def canary_testcase_finish(case: "TestCase") -> None:
+@hookspec(firstresult=True)
+def canary_testcase_finish(case: "AbstractTestCase") -> bool:
     """Called to perform the finishing tasks for the test case
 
     The default implementation runs ``case.finish()``
@@ -204,37 +230,28 @@ def canary_testcase_finish(case: "TestCase") -> None:
       This function is called inside the test case's working directory
 
     """
+    raise NotImplementedError
 
 
 @hookspec
-def canary_testbatch_setup(batch: "TestBatch") -> None:
-    """Called to perform the setup phase for a batch of test cases.
-
-    The default implementation runs ``batch.setup()``.
-
-    Args:
-        The test case batch.
-
-    """
+def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
+    "Called at plugin registration time to add new hooks"
+    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
-def canary_testbatch_run(batch: "TestBatch", qsize: int, qrank: int) -> None:
-    """Called to run the test case batch
-
-    Args:
-        The test case batch.
-
-    """
+def canary_resources_avail(case: "TestCase") -> "Result":
+    """Determine if ``case`` can be run."""
+    raise NotImplementedError
 
 
-@hookspec
-def canary_testbatch_finish(batch: "TestBatch") -> None:
-    """Called to perform the finishing tasks for the test case batch
+@hookspec(firstresult=True)
+def canary_resource_count(type: str) -> int:
+    """Return the number resources available of type ``type``"""
+    raise NotImplementedError
 
-    The default implementation runs ``batch.finish()``
 
-    Args:
-        The test case.
-
-    """
+@hookspec(firstresult=True)
+def canary_resource_types() -> list[str]:
+    """Return the names of available resources"""
+    raise NotImplementedError

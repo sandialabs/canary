@@ -921,7 +921,7 @@ class LinuxDistribution(object):
             try:
                 process = subprocess.Popen(
                     cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-                )
+                )  # nosec B602
                 break
             except BlockingIOError:
                 time.sleep(0.5)

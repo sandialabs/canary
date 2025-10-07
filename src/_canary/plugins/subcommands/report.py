@@ -6,7 +6,6 @@ import os
 from argparse import Namespace
 from typing import TYPE_CHECKING
 
-from ...util import logging
 from ..hookspec import hookimpl
 from ..types import CanaryReporter
 from ..types import CanarySubcommand
@@ -29,7 +28,7 @@ class Report(CanarySubcommand):
 
         parser.epilog = self.in_session_note()
         subparsers = parser.add_subparsers(dest="type", metavar="subcommands")
-        for reporter in config.plugin_manager.hook.canary_session_reporter():
+        for reporter in config.pluginmanager.hook.canary_session_reporter():
             parent = subparsers.add_parser(reporter.type, help=reporter.description)
             reporter.setup_parser(parent)
 
@@ -39,7 +38,7 @@ class Report(CanarySubcommand):
         from ...session import Session
 
         reporter: CanaryReporter
-        for reporter in config.plugin_manager.hook.canary_session_reporter():
+        for reporter in config.pluginmanager.hook.canary_session_reporter():
             if reporter.type == args.type:
                 break
         else:
@@ -47,8 +46,7 @@ class Report(CanarySubcommand):
 
         session: Session | None
         try:
-            with logging.level(logging.WARNING):
-                session = Session(os.getcwd(), mode="r")
+            session = Session(os.getcwd(), mode="r")
         except NotASession:
             session = None
         kwargs = vars(args)

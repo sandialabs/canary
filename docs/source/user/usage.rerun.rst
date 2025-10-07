@@ -23,9 +23,7 @@ or
 
 where ``TEST_RESULTS_DIR`` is the test results directory.
 
-By default, only tests that had previously not run, or failed, will be rerun, ie, those tests having ``failed``, ``diffed``, ``timeout``, and ``cancelled`` :ref:`status <basics-status>`.
-
-Optionally, a ``PATH`` argument can be passed to the ``canary run`` invocation, causing ``canary`` to rerun only those tests that are in ``PATH`` and its children:
+By default, only tests that had previously not run will be rerun, unless the test is explicitly requested via keyowrd or other :ref:`filters <usage-filter>`.  Optionally, a ``PATH`` argument can be passed to the ``canary run`` invocation, causing ``canary`` to rerun only those tests that are in ``PATH`` and its children:
 
 .. code-block:: console
 
@@ -35,11 +33,6 @@ Filter tests based on previous status
 -------------------------------------
 
 In rerun mode, the previous test status is included implicitly as a test keyword which allows :ref:`filtering <usage-filter>` based on previous statuses.
-
-Batch considerations
---------------------
-
-When a test session is created in :ref:`batched mode <usage-run-batched>`, the batch arguments from the test session invocation are inherited in future reruns.
 
 Examples
 --------
@@ -53,8 +46,9 @@ Examples
 Rerun all failed tests
 ~~~~~~~~~~~~~~~~~~~~~~
 
-.. command-output:: canary -C TestResults.Rerun run .
+.. command-output:: canary -C TestResults.Rerun run -k 'not success'
     :cwd: /examples
+    :setup: canary run -w -d TestResults.Rerun ./status
     :returncode: 30
 
 Rerun only the diffed tests

@@ -10,6 +10,6 @@ util
 
    collections
    dynamic_version
-   proc
+   string
    tengine
    time

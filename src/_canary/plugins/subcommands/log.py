@@ -6,14 +6,13 @@ import argparse
 import os
 from typing import TYPE_CHECKING
 
-from _canary.test.case import TestCase
-
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
+    from ...testcase import TestCase
 
 
 @hookimpl
@@ -27,33 +26,36 @@ class Log(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         parser.epilog = self.in_session_note()
-        parser.add_argument("testspec", help="Test name, /TEST_ID, or ^BATCH_ID")
         parser.add_argument(
+            "-e",
             "--error",
             default=False,
             action="store_true",
             help="Display test stderr if it exists",
         )
+        parser.add_argument("testspec", nargs="?", help="Test name or /TEST_ID")
 
-    def get_logfile(self, case: TestCase, args: argparse.Namespace) -> str:
+    def get_logfile(self, case: "TestCase", args: argparse.Namespace) -> str:
         if args.error:
             return case.stderr_file or ""
         else:
             return case.stdout_file
 
     def execute(self, args: argparse.Namespace) -> int:
-        from ...test.batch import TestBatch
-        from ...test.case import from_id as testcase_from_id
+        from ...testcase import from_id as testcase_from_id
 
         file: str
+        if not args.testspec:
+            session = load_session()
+            file = os.path.join(session.config_dir, "canary-log.txt")
+            if os.path.exists(file):
+                display_file(file)
+                return 0
+            raise ValueError(f"no log file found in {session.config_dir}")
+
         if args.testspec.startswith("/"):
             case = testcase_from_id(args.testspec[1:])
             file = self.get_logfile(case, args)
-            display_file(file)
-            return 0
-
-        if args.testspec.startswith("^"):
-            file = TestBatch.logfile(args.testspec[1:])
             display_file(file)
             return 0
 

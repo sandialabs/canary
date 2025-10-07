@@ -9,6 +9,7 @@ import json
 import os
 from typing import TYPE_CHECKING
 
+import pluggy
 import yaml
 
 from ...util.filesystem import find_work_tree
@@ -32,6 +33,12 @@ class ConfigCmd(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         sp = parser.add_subparsers(dest="subcommand")
         p = sp.add_parser("show", help="Show the current configuration")
+        p.add_argument(
+            "-r",
+            action="store_true",
+            default=False,
+            help="Include resource pool in configuration that is shown",
+        )
         p.add_argument(
             "-p",
             "--paths",
@@ -78,7 +85,7 @@ class ConfigCmd(CanarySubcommand):
             show_config(args)
             return 0
         elif args.subcommand == "add":
-            config.save(args.path, scope=args.scope)
+            config.add(args.path, scope=args.scope)
             return 0
         elif args.subcommand is None:
             raise ValueError("canary config: missing required subcommand (choose from show, add)")
@@ -91,8 +98,8 @@ def show_config(args: "argparse.Namespace"):
 
     text: str
     if args.paths:
-        global_f = config.config_file("global")
-        local_f = os.path.realpath(config.config_file("local") or "canary.yaml")
+        global_f = config.get_scope_filename("global")
+        local_f = os.path.realpath(config.get_scope_filename("local") or "canary.yaml")
         with io.StringIO() as fp:
             fp.write("configuration paths:\n")
             fp.write(f"  global: {global_f}\n")
@@ -106,6 +113,8 @@ def show_config(args: "argparse.Namespace"):
         state = config.getstate(pretty=True)
         if args.section is not None:
             state = {args.section: state[args.section]}
+        elif not args.r:
+            state["resource_pool"] = "... (-r to include resource pool)"
         if args.format == "json":
             text = json.dumps(state, indent=2)
         else:
@@ -122,7 +131,9 @@ def show_config(args: "argparse.Namespace"):
 
 def pretty_print(text: str, fmt: str):
     from pygments import highlight
-    from pygments.formatters import TerminalTrueColorFormatter as Formatter
+    from pygments.formatters import (
+        TerminalTrueColorFormatter as Formatter,  # ty: ignore[unresolved-import]
+    )
     from pygments.lexers import get_lexer_by_name
 
     lexer = get_lexer_by_name(fmt)
@@ -131,27 +142,26 @@ def pretty_print(text: str, fmt: str):
     print(formatted_text)
 
 
-def print_active_plugin_descriptions() -> None:
-    import hpc_connect
+def list_name_plugin(pluginmanager: pluggy.PluginManager) -> list[tuple[str, str, str]]:
+    plugins: list[tuple[str, str, str]] = []
 
-    from ... import config
-
-    table: list[tuple[str, str, str]] = []
-    widths = [len("Namespace"), len("Name"), 0]
-    for name, plugin in config.plugin_manager.list_name_plugin():
+    for name, plugin in pluginmanager.list_name_plugin():
         file = inspect.getfile(plugin)  # type: ignore
         namespace = plugin.__package__.split(".")[0]  # type: ignore
         if namespace == "_canary":
             namespace = "builtin"
         row = (namespace, name, file)
-        for i, ri in enumerate(row):
-            widths[i] = max(widths[i], len(ri))
-        table.append(row)
-    for backend in hpc_connect.backends().values():  # type: ignore
-        try:
-            row = ("hpc_connect", backend.name, inspect.getfile(backend))
-        except Exception:
-            continue
+        plugins.append(row)
+    return plugins
+
+
+def print_active_plugin_descriptions() -> None:
+    from ... import config
+
+    table: list[tuple[str, str, str]] = []
+    widths = [len("Namespace"), len("Name"), 0]
+    for namespace, name, file in list_name_plugin(config.pluginmanager):
+        row = (namespace, name, file)
         for i, ri in enumerate(row):
             widths[i] = max(widths[i], len(ri))
         table.append(row)

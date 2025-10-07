@@ -28,16 +28,16 @@ canary user's guide
    configuration
 
 .. toctree::
+   :caption: Creating reports
+   :maxdepth: 2
+
+   reporting
+
+.. toctree::
    :caption: Extending canary through plugins
    :maxdepth: 2
 
    extending
-
-.. toctree::
-   :caption: Integrating with other applications
-   :maxdepth: 2
-
-   integrations
 
 .. toctree::
    :caption: Commands and directives

@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import _canary.config as config
-import _canary.test.case as tc
+import _canary.testcase as tc
 import canary
 from _canary import finder
 from _canary.util.filesystem import mkdirp
@@ -30,6 +30,7 @@ def mask(
         regex=regex,
         case_specs=case_specs,
         start=start,
+        ignore_dependencies=False,
     )
 
 
@@ -142,7 +143,7 @@ def test_cpu_count(tmpdir):
             fh.write("import canary\n")
             fh.write("canary.directives.parameterize('cpus', [1, 4, 8, 32])\n")
     with canary.config.override():
-        canary.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=42)
+        canary.config.resource_pool.populate(cpus=42)
         f = finder.Finder()
         f.add(workdir)
         f.prepare()
@@ -150,7 +151,7 @@ def test_cpu_count(tmpdir):
         cases = finder.generate_test_cases(files)
         assert len([c for c in cases if not c.masked()]) == 4
     with canary.config.override():
-        canary.config.resource_pool.fill_uniform(node_count=1, cpus_per_node=2)
+        canary.config.resource_pool.populate(cpus=2)
         cases = finder.generate_test_cases(files)
         mask(cases)
         assert len([c for c in cases if not c.masked()]) == 1
@@ -244,22 +245,18 @@ canary.directives.name('baz')
 canary.directives.generate_composite_base_case()
 canary.directives.owner('me')
 canary.directives.keywords('test', 'unit')
-canary.directives.parameterize('cpus', (1, 2, 3), when="options='baz'")
+canary.directives.parameterize('cpus', (1, 2), when="options='baz'")
 canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333)])
 """
             )
         with config.override():
-            config.test.cpu_count = (1, 10)
-            config.test.gpu_count = (0, 0)
-            config.test.node_count = (1, 1)
-
             f = finder.Finder()
             f.add(".")
             f.prepare()
             files = f.discover()
             cases = finder.generate_test_cases(files, on_options=["baz"])
             mask(cases, keyword_exprs=["test and unit"], owners=["me"])
-            assert len(cases) == 10
+            assert len(cases) == 7
             assert isinstance(cases[-1], tc.TestMultiCase)
             for case in cases:
                 assert not case.masked(), f"{case}: {case.status}"
@@ -273,15 +270,15 @@ canary.directives.parameterize('a,b,c', [(1, 11, 111), (2, 22, 222), (3, 33, 333
             assert isinstance(cases[-1], tc.TestMultiCase)
             assert not cases[-1].masked()
 
-            # with cpus<3, some of the cases will be filtered
+            # with cpus<2, some of the cases will be filtered
             cases = finder.generate_test_cases(files, on_options=["baz"])
-            mask(cases, keyword_exprs=["test and unit"], parameter_expr="cpus < 3", owners=["me"])
-            assert len(cases) == 10
+            mask(cases, keyword_exprs=["test and unit"], parameter_expr="cpus < 2", owners=["me"])
+            assert len(cases) == 7
             assert isinstance(cases[-1], tc.TestMultiCase)
             assert cases[-1].masked()
             for case in cases[:-1]:
                 assert isinstance(case, tc.TestCase)
-                if case.cpus == 3:
+                if case.cpus == 2:
                     assert case.masked()
                 else:
                     assert not case.masked()
@@ -295,22 +292,18 @@ def test_vvt_generator(tmpdir):
 # VVT: name: baz
 # VVT: analyze : --analyze
 # VVT: keywords: test unit
-# VVT: parameterize (options=baz) : np=1 2 3
+# VVT: parameterize (options=baz) : np=1 2
 # VVT: parameterize : a,b,c=1,11,111 2,22,222 3,33,333
 """
             )
         with config.override():
-            config.test.cpu_count = (1, 10)
-            config.test.gpu_count = (0, 0)
-            config.test.node_count = (1, 1)
-
             f = finder.Finder()
             f.add(".")
             f.prepare()
             files = f.discover()
             cases = finder.generate_test_cases(files, on_options=["baz"])
             mask(cases, keyword_exprs=["test and unit"])
-            assert len(cases) == 10
+            assert len(cases) == 7
             assert isinstance(cases[-1], tc.TestMultiCase)
             for case in cases:
                 assert not case.masked()
@@ -324,15 +317,15 @@ def test_vvt_generator(tmpdir):
             assert isinstance(cases[-1], tc.TestMultiCase)
             assert not cases[-1].masked()
 
-            # with np<3, some of the cases will be filtered
+            # with np<2, some of the cases will be filtered
             cases = finder.generate_test_cases(files, on_options=["baz"])
-            mask(cases, keyword_exprs=["test and unit"], parameter_expr="np < 3")
-            assert len(cases) == 10
+            mask(cases, keyword_exprs=["test and unit"], parameter_expr="np < 2")
+            assert len(cases) == 7
             assert isinstance(cases[-1], tc.TestMultiCase)
             assert cases[-1].masked()
             for case in cases[:-1]:
                 assert isinstance(case, tc.TestCase)
-                if case.cpus == 3:
+                if case.cpus == 2:
                     assert case.masked()
                 else:
                     assert not case.masked()

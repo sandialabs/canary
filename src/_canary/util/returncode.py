@@ -2,13 +2,18 @@
 #
 # SPDX-License-Identifier: MIT
 
+from typing import TYPE_CHECKING
 from typing import Sequence
 
-from ..test.case import TestCase
 from . import logging
 
+if TYPE_CHECKING:
+    from ..testcase import TestCase
 
-def compute_returncode(cases: Sequence[TestCase], permissive: bool = False) -> int:
+logger = logging.get_logger(__name__)
+
+
+def compute_returncode(cases: Sequence["TestCase"], permissive: bool = False) -> int:
     returncode: int = 0
 
     results: dict[str, int] = {}
@@ -33,6 +38,6 @@ def compute_returncode(cases: Sequence[TestCase], permissive: bool = False) -> i
                 # any other code is a failure
                 returncode |= 2**6
                 if case.status.value not in warned:
-                    logging.warning(f"{case}: unhandled status: {case.status}")
+                    logger.warning(f"{case}: unhandled status: {case.status}")
                     warned.add(case.status.value)
     return returncode

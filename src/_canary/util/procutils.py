@@ -2,20 +2,25 @@
 #
 # SPDX-License-Identifier: MIT
 
+import concurrent.futures
+import multiprocessing
 import os
+import sys
 import warnings
 from typing import Any
 
 import psutil
 
+from .. import config
 from . import logging
+
+logger = logging.get_logger(__name__)
 
 
 def cleanup_children(pid: int | None = None, include_parent: bool = False) -> None:
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
         pid = pid or os.getpid()
-        logging.debug("killing child processes")
         try:
             fd = os.open(os.devnull, os.O_WRONLY)
             stdout = os.dup(1)
@@ -77,11 +82,11 @@ def get_process_metrics(
         names = valid_names - skip_names
         new_metrics = proc.as_dict(names)
     except psutil.NoSuchProcess:
-        logging.debug(f"Process with PID {proc.pid} does not exist.")
+        logger.debug(f"Process with PID {proc.pid} does not exist.")
     except psutil.AccessDenied:
-        logging.debug(f"Access denied to process with PID {proc.pid}.")
+        logger.debug(f"Access denied to process with PID {proc.pid}.")
     except psutil.ZombieProcess:
-        logging.debug(f"Process with PID {proc.pid} is a Zombie process.")
+        logger.debug(f"Process with PID {proc.pid} is a Zombie process.")
     else:
         for name, metric in new_metrics.items():
             if name == "open_files":
@@ -104,3 +109,15 @@ def get_process_metrics(
                 metrics[name] = metric
     finally:
         return metrics
+
+
+class ProcessPoolExecutor(concurrent.futures.ProcessPoolExecutor):
+    def __init__(self, *, workers: int) -> None:
+        context = config.get("config:multiprocessing:context") or "spawn"
+        mp_context = multiprocessing.get_context(context)
+        max_tasks_per_child = config.get("config:multiprocessing:max_tasks_per_child") or 1
+        if sys.version_info[:2] >= (3, 11):
+            n = max_tasks_per_child if context == "spawn" else None
+            super().__init__(max_workers=workers, mp_context=mp_context, max_tasks_per_child=n)
+        else:
+            super().__init__(max_workers=workers, mp_context=mp_context)

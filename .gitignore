@@ -1,4 +1,5 @@
 my-env.sh
+bin/my-deploy.sh
 junit.xml
 .coverage
 coverage.xml
@@ -45,3 +46,6 @@ venv
 dist
 
 canary.yaml
+
+testcase.lock
+testcases.lock

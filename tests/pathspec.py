@@ -58,7 +58,7 @@ def test_pathspec_parse_new(tmpdir):
 
 
 def test_run_from_file(tmpdir):
-    from _canary.main import CanaryCommand
+    from _canary.util.testing import CanaryCommand
 
     with working_dir(tmpdir.strpath, create=True):
         touchp("tests/regression/2D/test_1.pyt")

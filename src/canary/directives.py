@@ -374,7 +374,7 @@ def depends_on(
        canary.directives.depends_on("baz")
 
        def test():
-           self = canary.test.instance
+           self = canary.testinstance
            baz = self.dependencies[0]
            print(f"baz's results can be found in {baz.working directory}")
 
@@ -403,7 +403,7 @@ def depends_on(
        canary.directives.depends_on("baz", result="*")
 
        def test():
-           self = canary.test.instance
+           self = canary.testinstance
            baz = self.dependencies[0]
            print(f"baz's results can be found in {baz.working directory}")
 
@@ -432,7 +432,7 @@ def depends_on(
        canary.directives.depends_on("baz.cpus=1")
 
        def test():
-           self = canary.test.instance
+           self = canary.testinstance
            baz = self.dependencies[0]
            print(f"baz's results can be found in {baz.working directory}")
 
@@ -561,7 +561,7 @@ def generate_composite_base_case(
        # VVT: parameterize : a,b = 1,2 3,4
 
     will run an analysis job after jobs ``[a=1,b=3]`` and ``[a=2,b=4]`` have run
-    to completion.  The ``canary.test.instance`` and ``vvtest_util`` modules
+    to completion.  The ``canary.testinstance`` and ``vvtest_util`` modules
     will contain information regarding the previously run jobs so that a
     collective analysis can be performed.
 
@@ -1196,6 +1196,58 @@ def set_attribute(*, when: WhenType | None = None, **attributes: Any) -> None:
        canary.directives.set_attribute(program="program_name")
 
     will set the attribute ``program`` on the test case with value "program_name".
+
+    """
+
+
+def filter_warnings(arg: bool) -> None:
+    """Don't write warnings to the console when scanning files.
+
+    Usage
+    -----
+
+    ``.pyt``:
+
+    .. code:: python
+
+       import canary
+       canary.directives.filter_warnings(arg)
+
+    ``.vvt``:
+
+    .. code:: python
+
+       #VVT: filter_warnings : python_expression
+
+    Parameters
+    ----------
+
+    * ``arg``: If ``True``, the test will be skipped.
+
+    .vvt Parameters
+    ---------------
+
+    * ``python_expression``: String that is evaluated and cast to a ``bool``. If
+      the result is ``True`` warnings at file scanning time will be filtered.
+
+    Examples
+    --------
+
+    .. code:: python
+
+       import sys
+       import canary
+       canary.directives.filter_warnings(True)
+
+    .. code:: python
+
+       #VVT: filter_warnings : true
+
+    Evaluation namespace
+    --------------------
+
+    ``python_expression`` is evaluated in a minimal namespace consisting of the
+    ``os`` module, ``sys`` module, and ``importable`` function.
 
     """
 

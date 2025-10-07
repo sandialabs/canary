@@ -29,9 +29,11 @@
     "level": null
   },
   "test": {
-    "timeout_fast": 120.0,
-    "timeout_default": 300.0,
-    "timeout_long": 900.0
+    "timeout": {
+      "fast": 120.0,
+      "default": 300.0,
+      "long": 900.0
+    }
   },
   "environment": {},
   "batch": {

@@ -103,7 +103,7 @@ html_sidebars = {"index": ["search-button-field"], "**": ["search-button-field",
 html_theme_options = {
     "navigation_depth": 4,
     "show_toc_level": 1,
-    "githum_url": "https://github.com/sandialabs/canary",
+    "github_url": "https://github.com/sandialabs/canary",
     "navbar_start": ["navbar-logo"],
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "logo": {"text": f"canary {version}"},

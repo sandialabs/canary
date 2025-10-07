@@ -8,11 +8,13 @@ hpc_connect
 .. toctree::
    :maxdepth: 1
 
-   _launch
+   command/index
    config
+   discover
    hookspec
-   impl/index
+   launch
    pluginmanager
-   types
+   schemas
+   submit
    util/index
    version

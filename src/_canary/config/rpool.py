@@ -2,13 +2,27 @@
 #
 # SPDX-License-Identifier: MIT
 import copy
-import math
-import pickle
+import io
+import pickle  # nosec B403
+from collections import Counter
+from typing import TYPE_CHECKING
 from typing import Any
-from typing import Iterable
 
+import psutil
+import yaml
+
+from ..plugins.types import Result
+from ..third_party.color import colorize
 from ..util import logging
-from ..util.rprobe import cpu_count
+from ..util.string import pluralize
+from .schemas import resource_pool_schema
+
+if TYPE_CHECKING:
+    from ..testcase import TestCase
+
+logger = logging.get_logger(__name__)
+
+resource_spec = list[dict[str, str | int]]
 
 
 class ResourcePool:
@@ -44,281 +58,240 @@ class ResourcePool:
           - id: "04"
             slots: 1
 
-    canary adopts a similar layout to work on multi-node systems by allowing for a list of
-    objects (similar to ctest's ``local``) each with its own ``id``:
+    canary adopts a similar layout:
 
     .. code-block:: yaml
 
         resource_pool:
-        - id: str
-          <resource name>:
-          - id: str
-            slots: int
+          additional_properties: {}
+          resources:
+            <resource name>:
+            - id: str
+              slots: int
+            ...
 
-    For example, a machine having 2 nodes with 4 GPUs per node may have
+    For example, a machine having 8 CPUs and 4 GPUs may have
 
     .. code-block:: yaml
 
         resource_pool:
-        - id: "01"
-          gpus:
-          - id: "01"
-            slots: 1
-          - id: "02"
-            slots: 1
-          - id: "03"
-            slots: 1
-          - id: "04"
-            slots: 1
-        - id: "02"
-          gpus:
-          - id: "01"
-            slots: 1
-          - id: "02"
-            slots: 1
-          - id: "03"
-            slots: 1
-          - id: "04"
-            slots: 1
-
-    Resource allocation
-    -------------------
-
-    Resources are allocated from a global resource pool that is generated from the list of ``node``
-    resource specifications.  A global-to-local mapping is maintained which maps the global resource
-    ID understood by ``canary`` to the local resource ID given in the ``node`` resource spec.
-    E.g., ``gid = map[type][(pid, lid)]``.
-
-    Internal representation
-    -----------------------
-
-    Internally, the pool of resources is stored as a dictionary with layout (eg, for the example
-    above):
-
-    .. code-block:: python
-
-       pool = [
-         {
-           "id": "01",
-           "gpus": [
-             {"id": "01", "slots": 1},
-             {"id": "02", "slots": 1},
-             {"id": "03", "slots": 1},
-             {"id": "04", "slots": 1},
-           ]
-         }
-       ]
+          additional_properties: {}
+          resources:
+            gpus:
+            - id: "01"
+              slots: 1
+            - id: "02"
+              slots: 1
+            - id: "03"
+              slots: 1
+            - id: "04"
+              slots: 1
+            cpus:
+            - id: "01"
+              slots: 1
+            - id: "02"
+              slots: 1
+            - id: "03"
+              slots: 1
+            - id: "04"
+              slots: 1
+            - id: "05"
+              slots: 1
+            - id: "06"
+              slots: 1
+            - id: "07"
+              slots: 1
+            - id: "08"
+              slots: 1
 
     """
 
-    __slots__ = ("map", "pool", "types", "_stash", "slots_per")
+    __slots__ = ("additional_properties", "resources", "slots_per_resource_type")
 
-    def __init__(self, pool: list[dict[str, Any]] | None = None) -> None:
-        self.map: dict[str, dict[tuple[str, str], int]] = {}
-        self.pool: list[dict[str, Any]] = []
-        self.types: set[str] = {"cpus", "gpus"}
-        self._stash: bytes | None = None
-        self.slots_per: dict[str, int] = {}
+    def __init__(self, pool: dict[str, Any] | None = None) -> None:
+        self.additional_properties: dict[str, Any] = {}
+        self.resources: dict[str, resource_spec] = {}
+        self.slots_per_resource_type: Counter[str] = Counter()
         if pool:
             self.fill(pool)
-        else:
-            self.fill_uniform(node_count=1, cpus_per_node=cpu_count(), gpus_per_node=0)
 
-    def update(self, *args: Any, **kwargs: Any) -> None:
-        self.fill(args[0])
+    def __repr__(self) -> str:
+        pool = {"additional_properties": self.additional_properties, "resources": self.resources}
+        fh = io.StringIO()
+        yaml.dump({"resource_pool": pool}, fh, default_flow_style=False)
+        return fh.getvalue()
 
-    def fill(self, pool: list[dict[str, Any]]) -> None:
+    def __contains__(self, type: str) -> bool:
+        return type in self.resources
+
+    @property
+    def types(self) -> list[str]:
+        types: set[str] = {"cpus", "gpus"}
+        types.update(self.resources.keys())
+        return sorted(types)
+
+    def empty(self) -> bool:
+        return len(self.resources) == 0
+
+    def count(self, type: str) -> int:
+        if type in ("node", "nodes"):
+            return 1
+        if type in self.resources:
+            return len(self.resources[type])
+        elif f"{type}s" in self.resources:
+            return len(self.resources[f"{type}s"])
+        raise ResourceUnavailable(type)
+
+    def fill(self, pool: dict[str, Any]) -> None:
+        pool = resource_pool_schema.validate(pool)
         self.clear()
-        gids: dict[str, int] = {}
-        for i, local in enumerate(pool):
-            pid = str(local.pop("id", i))
-            if "cpus" not in local:
-                raise TypeError(f"required resource 'cpus' not defined in pool instance {i}")
-            if "gpus" not in local:
-                local["gpus"] = []
-            # fraction usable
-            for type, instances in local.items():
-                self.types.add(type)
-                slots = self.slots_per.get(type, 0)
-                for instance in instances:
-                    lid = instance["id"]
-                    slots += instance["slots"]
-                    gid = gids.setdefault(type, 0)
-                    self.map.setdefault(type, {})[(pid, lid)] = gid
-                    gids[type] += 1
-                self.slots_per[type] = slots
-            local["id"] = pid
-            self.pool.append(local)
+        if "additional_properties" in pool:
+            self.additional_properties.update(pool["additional_properties"])
+        self.resources.update(pool["resources"])
+        for type, instances in pool["resources"].items():
+            self.slots_per_resource_type[type] = sum([_["slots"] for _ in instances])
 
-    def pinfo(self, item: str) -> Any:
-        if item == "node_count":
-            return len(self.pool)
-        if item.endswith("_per_node"):
-            arg = item[:-9]
-            for local in self.pool:
-                if key := contains(local, (arg, f"{arg}s")):
-                    return len(local[key])
-            return 0
-        if item.endswith("_count"):
-            count = 0
-            arg = item[:-6]
-            for local in self.pool:
-                if key := contains(local, (arg, f"{arg}s")):
-                    count += len(local[key])
-            return count
-        raise KeyError(item)
+    def pop(self, type: str) -> resource_spec | None:
+        if type in self.resources:
+            del self.slots_per_resource_type[type]
+            return self.resources.pop(type)
+        return None
 
-    def getstate(self) -> list[dict[str, Any]]:
-        return copy.deepcopy(self.pool)
-
-    def gid(self, type: str, pid: str, lid: str) -> int:
-        return self.map[type][(pid, lid)]
-
-    def local_ids(self, type: str, arg_gid: int) -> tuple[str, str]:
-        for key, gid in self.map[type].items():
-            if arg_gid == gid:
-                return key[0], key[1]
-        raise KeyError((type, arg_gid))
-
-    def nodes_required(self, required: list[list[dict[str, Any]]]) -> int:
-        """Determine the number of nodes required by ``obj``"""
-        node_count: int = 1
-        for group in required:
-            for type in self.types:
-                count: int = 0
-                count_per_node = len(self.pool[0][type])
-                for item in group:
-                    if item["type"] == type:
-                        count += item["slots"]
-                if count_per_node and count:
-                    node_count = max(math.ceil(count / count_per_node), node_count)
-        return node_count
+    def getstate(self) -> dict[str, Any]:
+        state = {
+            "additional_properties": copy.deepcopy(self.additional_properties),
+            "resources": copy.deepcopy(self.resources),
+        }
+        return state
 
     def clear(self) -> None:
-        self.map.clear()
-        self.pool.clear()
-        self.types.clear()
-        self.slots_per.clear()
+        self.resources.clear()
+        self.additional_properties.clear()
 
-    def fill_uniform(self, *, node_count: int, cpus_per_node: int, **kwds: int) -> None:
-        pool: list[dict[str, Any]] = []
-        for i in range(node_count):
-            local: dict[str, Any] = {}
-            for j in range(cpus_per_node):
-                local.setdefault("cpus", []).append({"id": str(j), "slots": 1})
-            for name, count in kwds.items():
-                if name.endswith("_per_node"):
-                    for j in range(count):
-                        local.setdefault(name[:-9], []).append({"id": str(j), "slots": 1})
-            local["id"] = str(i)
-            pool.append(local)
-        self.fill(pool)
+    def populate(self, **kwds: int) -> None:
+        if "cpus" not in kwds:
+            kwds["cpus"] = psutil.cpu_count()
+        resources: dict[str, resource_spec] = {}
+        for type, count in kwds.items():
+            resources[type] = [{"id": str(j), "slots": 1} for j in range(count)]
+        self.fill({"resources": resources, "additional_properties": {}})
 
-    def stash(self) -> None:
-        # pickling faster than taking a deep copy of the pool
-        self._stash = pickle.dumps(self.pool)
+    def modify(self, **kwds: int) -> None:
+        for type, count in kwds.items():
+            self.resources[type] = [{"id": str(j), "slots": 1} for j in range(count)]
+        for type in kwds:
+            self.slots_per_resource_type[type] = sum([_["slots"] for _ in self.resources[type]])
 
-    def unstash(self) -> None:
-        assert self._stash is not None
-        self.pool.clear()
-        self.pool.extend(pickle.loads(self._stash))
-        self._stash = None
+    def accommodates(self, case: "TestCase") -> Result:
+        """determine if the resources for this test are available"""
+        if self.empty():
+            raise EmptyResourcePoolError
 
-    def _get_from_pool(self, type: str, slots: int) -> dict[str, Any]:
-        for local in self.pool:
-            instances = sorted(local[type], key=lambda x: x["slots"])
-            for instance in instances:
-                if slots <= instance["slots"]:
-                    instance["slots"] -= slots
-                    gid = self.gid(type, local["id"], instance["id"])
-                    return {"gid": gid, "slots": slots}
-        raise ResourceUnavailable
+        slots_needed: Counter[str] = Counter()
+        missing: set[str] = set()
 
-    def satisfiable(self, required: list[list[dict[str, Any]]]) -> None:
-        """determine if the resources for this test are satisfiable"""
-        slots_reqd: dict[str, int] = {}
-        for group in required:
-            for item in group:
-                if item["type"] not in self.types:
-                    t = item["type"]
-                    msg = f"required resource type {t!r} is not registered with canary"
-                    raise ResourceUnsatisfiable(msg)
-                slots_reqd[item["type"]] = slots_reqd.get(item["type"], 0) + item["slots"]
-        for type, slots in slots_reqd.items():
-            if self.slots_per[type] < slots:
-                msg = f"insufficient slots of {type!r} available"
-                raise ResourceUnsatisfiable(msg) from None
+        # Step 1: Gathre resource requirements and detect missing types
+        for group in case.required_resources():
+            for member in group:
+                rtype = member["type"]
+                if rtype in self.resources:
+                    slots_needed[rtype] += member["slots"]
+                else:
+                    missing.add(rtype)
+        if missing:
+            types = colorize("@*{%s}" % ",".join(sorted(missing)))
+            key = pluralize("Resource", n=len(missing))
+            return Result(False, reason=f"{key} unavailable: {types}")
 
-    def acquire(self, required: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
+        # Step 2: Check available slots vs. needed slots
+        wanting: dict[str, tuple[int, int]] = {}
+        for rtype, slots in slots_needed.items():
+            slots_avail = self.slots_per_resource_type[rtype]
+            if slots_avail < slots:
+                wanting[rtype] = (slots, slots_avail)
+        if wanting:
+            types: str
+            reason: str
+            levelno: int = logging.get_level()
+            if levelno <= logging.DEBUG:
+                fmt = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
+                types = ", ".join(fmt(k, *wanting[k]) for k in sorted(wanting))
+                reason = f"{case}: insufficient slots of {types}"
+            else:
+                types = ", ".join(colorize("@*{%s}" % t) for t in wanting)
+                reason = f"insufficient slots of {types}"
+            return Result(False, reason=reason)
+
+        # Step 3: all good
+        return Result(True)
+
+    def acquire(self, resource_groups: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
         """Returns resources available to the test
 
-        local[i] = {<type>: [{'gid': <gid>, 'slots': <slots>}, ...], ... }
+        local[i] = {<type>: [{'id': <id>, 'slots': <slots>}, ...], ... }
 
         """
-        totals: dict[str, int] = {}
+        if self.empty():
+            raise EmptyResourcePoolError
+        totals: Counter[str] = Counter()
         acquired: list[dict[str, list[dict]]] = []
         try:
-            self.stash()
-            for group in required:
-                # {type: [{gid: ..., slots: ...}]}
+            stash: bytes = pickle.dumps(self.resources)  # nosec B301
+            for group in resource_groups:
+                # {type: [{id: ..., slots: ...}]}
                 local: dict[str, list[dict]] = {}
-                for item in group:
-                    type, slots = item["type"], item["slots"]
-                    if type not in self.types:
-                        raise TypeError(f"unknown resource requirement type {type!r}")
-                    r = self._get_from_pool(item["type"], item["slots"])
-                    items = local.setdefault(type, [])
-                    items.append(r)
-                    totals[type] = totals.get(type, 0) + slots
+                for member in group:
+                    rtype, slots = member["type"], member["slots"]
+                    if rtype not in self.resources:
+                        raise TypeError(f"Unknown resource requirement type {rtype!r}")
+                    rspec = self._get_from_pool(rtype, slots)
+                    local.setdefault(rtype, []).append(rspec)
+                    totals[rtype] += slots
                 acquired.append(local)
         except Exception:
-            self.unstash()
+            self.resources.clear()
+            self.resources.update(pickle.loads(stash))  # nosec B301
             raise
-        else:
-            self._stash = None
-        if logging.LEVEL <= logging.DEBUG:
-            for type, n in totals.items():
-                N = sum([_["slots"] for local in self.pool for _ in local[type]]) + n
-                if n == 1 and type.endswith("s"):
-                    type = type[:-1]
-                logging.debug(f"Acquiring {n} {type} from {N} available")
+        if logging.get_level() <= logging.DEBUG:
+            for rtype, n in totals.items():
+                N = sum([instance["slots"] for instance in self.resources[rtype]]) + n  # type: ignore[misc]
+                key = rtype[:-1] if n == 1 and rtype.endswith("s") else rtype
+                logger.debug(f"Acquiring {n} {key} from {N} available")
         return acquired
 
     def reclaim(self, resources: list[dict[str, list[dict]]]) -> None:
-        def _reclaim(type, rspec):
-            pid, lid = self.local_ids(type, rspec["gid"])
-            for local in self.pool:
-                if local["id"] == pid:
-                    for instance in local[type]:
-                        if instance["id"] == lid:
-                            slots = rspec["slots"]
-                            instance["slots"] += slots
-                            return slots
-            raise ValueError(f"Attempting to reclaim a resource whose ID is unknown: {rspec!r}")
-
         types: dict[str, int] = {}
         for resource in resources:  # list[dict[str, list[dict]]]) -> None:
             for type, rspecs in resource.items():
                 for rspec in rspecs:
-                    n = _reclaim(type, rspec)
+                    n = self._return_to_pool(type, rspec)
                     types[type] = types.setdefault(type, 0) + n
-        if logging.LEVEL <= logging.DEBUG:
+        if logging.get_level() <= logging.DEBUG:
             for type, n in types.items():
-                if n == 1 and type.endswith("s"):
-                    type = type[:-1]
-                logging.debug(f"Reclaimed {n} {type}")
+                key = type[:-1] if n == 1 and type.endswith("s") else type
+                logger.debug(f"Reclaimed {n} {key}")
 
+    def _get_from_pool(self, type: str, slots: int) -> dict[str, Any]:
+        instances = sorted(self.resources[type], key=lambda x: x["slots"])
+        for instance in instances:
+            if slots <= instance["slots"]:  # type: ignore[operator]
+                instance["slots"] -= slots  # type: ignore[operator]
+                rspec: dict[str, Any] = {"id": instance["id"], "slots": slots}
+                return rspec
+        raise ResourceUnavailable
 
-def contains(sequence: Iterable[Any], args: tuple[Any, ...]) -> Any:
-    for arg in args:
-        if arg in sequence:
-            return arg
-    return None
-
-
-class ResourceUnsatisfiable(Exception):
-    pass
+    def _return_to_pool(self, type: str, rspec: dict[str, Any]) -> int:
+        for instance in self.resources[type]:
+            if instance["id"] == rspec["id"]:
+                slots = rspec["slots"]
+                instance["slots"] += slots
+                return slots
+        raise ValueError(f"Attempting to reclaim a resource whose ID is unknown: {rspec!r}")
 
 
 class ResourceUnavailable(Exception):
+    pass
+
+
+class EmptyResourcePoolError(Exception):
     pass

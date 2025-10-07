@@ -8,6 +8,7 @@ skip_exit_status = 63
 diff_exit_status = 64
 fail_exit_status = 65
 timeout_exit_status = 66
+notests_exit_status = 7
 
 
 class MyException(Exception):
@@ -24,6 +25,10 @@ def excepthook(exctype, value, trace):
 # Overwrite the builtin excepthook with our custom version that will set the
 # correct exit code
 sys.excepthook, sys_excepthook = excepthook, sys.excepthook
+
+
+class ResourceUnsatisfiableError(Exception):
+    pass
 
 
 class TestFailed(MyException):

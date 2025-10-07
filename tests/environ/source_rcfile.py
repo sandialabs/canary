@@ -4,9 +4,9 @@
 
 import os
 
-from _canary.main import CanaryCommand
 from _canary.util import shell
 from _canary.util.filesystem import working_dir
+from _canary.util.testing import CanaryCommand
 
 
 def test_source_rcfile_1(tmpdir):
@@ -28,10 +28,10 @@ if __name__ == "__main__":
 """
             )
         run = CanaryCommand("run")
-        rc = run(".")
-        if rc != 0:
+        cp = run(".")
+        if cp.returncode != 0:
             print(open("TestResults/file/canary-out.txt").read())
-        assert rc == 0
+        assert cp.returncode == 0
 
 
 def test_source_rcfile_2(tmpdir):
@@ -53,10 +53,10 @@ if __name__ == "__main__":
 """
             )
         run = CanaryCommand("run")
-        rc = run(".")
-        if rc != 0:
+        cp = run(".")
+        if cp.returncode != 0:
             print(open("TestResults/file/canary-out.txt").read())
-        assert rc == 0
+        assert cp.returncode == 0
 
 
 def test_source(tmpdir):

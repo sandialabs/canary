@@ -4,12 +4,15 @@
 
 import argparse
 import json
+import json.decoder
 import os
 import pstats
 import re
 import shlex
 import sys
 import textwrap as textwrap
+import urllib
+import urllib.parse
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
@@ -84,32 +87,19 @@ class Parser(argparse.ArgumentParser):
     def convert_arg_line_to_args(self, arg_line: str) -> list[str]:
         return shlex.split(arg_line.split("#", 1)[0].strip())
 
-    def preparse(self, args: list[str], addopts: bool = True):
-        known_commands = [
-            "run",
-            "report",
-            "log",
-            "location",
-            "info",
-            "help",
-            "find",
-            "fetch",
-            "describe",
-            "config",
-        ]
+    def preparse(self, args: list[str], addopts: bool = False):
         ns = argparse.Namespace(plugins=[], debug=False, C=None)
         if addopts:
-            if env_opts := os.getenv("CANARY_ADDOPTS"):
-                args[0:0] = shlex.split(env_opts)
+            self.add_opts_from_environment(args)
+        for i, arg in enumerate(args):
+            args[i] = urllib.parse.unquote(arg)
         i = 0
         n = len(args)
+        commands = known_commands()
         while i < n:
             opt = args[i]
             i += 1
-            if opt in known_commands:
-                if addopts:
-                    if env_opts := os.getenv(f"CANARY_{opt.upper()}_ADDOPTS"):
-                        args[i:i] = shlex.split(env_opts)
+            if opt in commands:
                 return ns
             if isinstance(opt, str):
                 if opt == "-p":
@@ -133,6 +123,18 @@ class Parser(argparse.ArgumentParser):
                 else:
                     continue
         return ns
+
+    def add_opts_from_environment(self, argv: list[str]) -> None:
+        if env_opts := os.getenv("CANARY_ADDOPTS"):
+            argv[0:0] = shlex.split(env_opts)
+        i: int = 0
+        n: int = len(argv)
+        commands = known_commands()
+        while i < n:
+            arg = argv[i]
+            i += 1
+            if arg in commands and (env_opts := os.getenv(f"CANARY_{arg.upper()}_ADDOPTS")):
+                argv[i:i] = shlex.split(env_opts)
 
     def parse_known_args(self, args=None, namespace=None):
         if args is not None:
@@ -158,8 +160,8 @@ class Parser(argparse.ArgumentParser):
             formatter_class=HelpFormatter,
         )
         if command.add_help or add_help_override:
-            kwds["add_help"] = False
-            kwds["epilog"] = command.epilog
+            kwds["add_help"] = False  # ty: ignore[invalid-assignment]
+            kwds["epilog"] = command.epilog  # ty: ignore[invalid-assignment]
             kwds["help"] = command.description
         subparser = self.subparsers.add_parser(command.name, **kwds)
         subparser.register("type", None, identity)
@@ -232,7 +234,7 @@ class Parser(argparse.ArgumentParser):
 more help:
   canary help --all        list all commands and options
   canary help --pathspec   help on the path specification syntax
-  canary docs              open http://ascic-test-infra.cee-gitlab.lan/canary in a browser
+  canary docs              open https://canary-wm.readthedocs.io/en/production in a browser
 """
         parser.epilog = epilog
 
@@ -241,11 +243,13 @@ def identity(arg):
     return arg
 
 
-class EnvironmentModification(argparse.Action):
-    def __init__(self, option_strings, dest, default_scope="session", **kwargs):
-        self.default_scope = default_scope
-        super().__init__(option_strings, dest, **kwargs)
+def known_commands() -> list[str]:
+    from ..plugins.subcommands import plugins
 
+    return [p.__name__.split(".")[-1] for p in plugins]
+
+
+class EnvironmentModification(argparse.Action):
     def __call__(
         self,
         parser: argparse.ArgumentParser,
@@ -257,21 +261,32 @@ class EnvironmentModification(argparse.Action):
         try:
             var, val = [_.strip() for _ in option.split("=", 1)]
         except ValueError:
-            raise argparse.ArgumentTypeError(
-                f"Invalid environment variable {option!r} specification. Expected form NAME=VAL"
-            ) from None
-        scope = self.default_scope
-        if ":" in var:
-            scope, var = var.split(":", 1)
-        env_mods: dict[str, dict[str, str]] = getattr(namespace, self.dest, None) or {}
-        env_mods.setdefault(scope, {})[var] = val
-        setattr(namespace, self.dest, env_mods)
+            msg = f"Invalid environment variable {option!r} specification. Expected form NAME=VAL"
+            raise argparse.ArgumentTypeError(msg) from None
+        config_mods = getattr(namespace, self.dest, None) or {}
+        env_section = config_mods.setdefault("environment", {})
+        env_section.setdefault("set", {}).update({var: val})
+        setattr(namespace, self.dest, config_mods)
+
+
+class RegisterPlugin(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        option: str | Sequence[Any] | None,
+        option_str: str | None = None,
+    ):
+        config_mods = getattr(namespace, self.dest, None) or {}
+        config_section = config_mods.setdefault("config", {})
+        config_section.setdefault("plugins", []).append(option)
+        setattr(namespace, self.dest, config_mods)
 
 
 class ConfigMods(argparse.Action):
     def __call__(self, parser, namespace, option, option_str=None):
-        *parts, value = option.split(":")
         data = {}
+        *parts, value = option.split(":")
         current = data
         while len(parts) > 1:
             key = parts.pop(0)
@@ -301,13 +316,6 @@ def make_argument_parser(**kwargs):
         help="show version and exit",
     )
     parser.add_argument(
-        "-W",
-        choices=("all", "ignore", "error"),
-        default="all",
-        dest="warnings",
-        help="Issue all warnings (default), ignore warnings, or treat warnings as errors",
-    )
-    parser.add_argument(
         "-C",
         default=None,
         metavar="path",
@@ -317,9 +325,9 @@ def make_argument_parser(**kwargs):
     )
     parser.add_argument(
         "-p",
+        action=RegisterPlugin,
         default=None,
-        dest="plugins",
-        action="append",
+        dest="config_mods",
         metavar="name",
         help="Load given plugin module name (multi-allowed). "
         "To avoid loading of plugins, use the `no:` prefix.",
@@ -391,7 +399,7 @@ def make_argument_parser(**kwargs):
         "-f",
         dest="config_file",
         metavar="file",
-        help="Read local configuration settings from this file",
+        help="Read configuration settings from this file",
     )
     group.add_argument(
         "-c",
@@ -403,11 +411,10 @@ def make_argument_parser(**kwargs):
     )
     group.add_argument(
         "-e",
-        dest="env_mods",
+        dest="config_mods",
         metavar="var=val",
         default=None,
         action=EnvironmentModification,
-        default_scope="session",
         help="Add environment variable %s to the testing environment with value %s.  Accepts "
         "optional scope using the form %s:var=val.  Valid scopes are: "
         "session: set environment variable for whole session; "

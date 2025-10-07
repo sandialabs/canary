@@ -3,16 +3,19 @@
 # SPDX-License-Identifier: MIT
 
 import os
+import time
 
 from ... import config
 from ...generator import AbstractTestGenerator
-from ...third_party.color import colorize
 from ...util import logging
 from ...util.executable import Executable
 from ...util.filesystem import working_dir
 from ..hookspec import hookimpl
 
 skip_dirs = ["__nvcache__", "__pycache__", ".git", ".svn", ".canary"]
+
+
+logger = logging.get_logger(__name__)
 
 
 @hookimpl(trylast=True)
@@ -22,13 +25,17 @@ def canary_discover_generators(
     relroot = os.path.relpath(root, config.invocation_dir)
     generators: list[AbstractTestGenerator] = []
     errors: int = 0
-    with logging.context(colorize("@*{Searching} %s for test generators" % relroot)):
+
+    created = time.monotonic()
+    msg = "@*{Searching} %s for test generators" % relroot
+    logger.log(logging.INFO, msg, extra={"end": "..."})
+    try:
         if os.path.isfile(root):
             try:
                 f = AbstractTestGenerator.factory(root)
             except Exception as e:
                 errors += 1
-                logging.exception(f"Failed to parse {root}", e)
+                logger.exception(f"Failed to parse {root}")
             else:
                 generators.append(f)
         elif root.startswith(("git@", "repo@")):
@@ -43,7 +50,7 @@ def canary_discover_generators(
                         f = AbstractTestGenerator.factory(root, path)
                     except Exception as e:
                         errors += 1
-                        logging.exception(f"Failed to parse {root}/{path}", e)
+                        logger.exception(f"Failed to parse {root}/{path}")
                     else:
                         generators.append(f)
                 elif os.path.isdir(p):
@@ -52,11 +59,21 @@ def canary_discover_generators(
                     errors += p_errors
                 else:
                     errors += 1
-                    logging.error(f"No such file: {path}")
+                    logger.error(f"No such file: {path}")
         else:
             found, p_errors = rfind(root)
             generators.extend(found)
             errors += p_errors
+    except Exception:
+        state = "failed"
+        raise
+    else:
+        state = "done"
+    finally:
+        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+        extra = {"end": end, "rewind": True}
+        logger.log(logging.INFO, msg, extra=extra)
+
     return generators, errors
 
 
@@ -69,21 +86,20 @@ def vcfind(root: str) -> tuple[list[AbstractTestGenerator], int]:
     elif type == "repo":
         files = repo_ls(root)
     else:
-        logging.error("Unknown vc type {type!r}, choose from git, repo")
+        logger.error("Unknown vc type {type!r}, choose from git, repo")
         return [], 1
     errors: int = 0
     generators: list[AbstractTestGenerator] = []
     with working_dir(root):
-        gen_types = config.plugin_manager.get_generators()
         for file in files:
-            for gen_type in gen_types:
-                if gen_type.matches(file):
-                    try:
-                        generators.append(gen_type(root, file))
-                    except Exception as e:
-                        errors += 1
-                        logging.exception(f"Failed to parse {root}/{file}", e)
-                    break
+            try:
+                if generator := config.pluginmanager.hook.canary_testcase_generator(
+                    root=root, path=file
+                ):
+                    generators.append(generator)
+            except Exception as e:
+                errors += 1
+                logger.exception(f"Failed to parse {root}/{file}")
     return generators, errors
 
 
@@ -99,7 +115,6 @@ def rfind(root: str, subdir: str | None = None) -> tuple[list[AbstractTestGenera
 
     start = root if subdir is None else os.path.join(root, subdir)
     errors: int = 0
-    gen_types = config.plugin_manager.get_generators()
     generators: list[AbstractTestGenerator] = []
     for dirname, dirs, files in os.walk(start):
         if skip(dirname):
@@ -108,18 +123,18 @@ def rfind(root: str, subdir: str | None = None) -> tuple[list[AbstractTestGenera
         try:
             for f in files:
                 file = os.path.join(dirname, f)
-                for gen_type in gen_types:
-                    if gen_type.matches(file):
-                        try:
-                            generator = gen_type(root, os.path.relpath(file, root))
-                        except Exception as e:
-                            errors += 1
-                            logging.exception(f"Failed to parse {file}", e)
-                        else:
-                            generators.append(generator)
-                            if generator.stop_recursion():
-                                raise StopRecursion
-                        break
+                generator: AbstractTestGenerator | None
+                try:
+                    if generator := config.pluginmanager.hook.canary_testcase_generator(
+                        root=root, path=os.path.relpath(file, root)
+                    ):
+                        generators.append(generator)
+                except Exception as e:
+                    errors += 1
+                    logger.exception(f"Failed to parse {file}")
+                else:
+                    if generator and generator.stop_recursion():
+                        raise StopRecursion
         except StopRecursion:
             del dirs[:]
             continue

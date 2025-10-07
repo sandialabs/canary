@@ -6,9 +6,9 @@ import glob
 import os
 import sys
 
-from _canary.main import CanaryCommand
 from _canary.util.filesystem import set_executable
 from _canary.util.filesystem import working_dir
+from _canary.util.testing import CanaryCommand
 
 
 def test_analyze(tmpdir):
@@ -42,11 +42,11 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        if rc != 0:
+        cp = run("-w", ".")
+        if cp.returncode != 0:
             for file in glob.glob("TestResults/**/canary-out.txt"):
                 print(open(file).read())
-        assert rc == 0
+        assert cp.returncode == 0
 
 
 def test_analyze_alt_flag(tmpdir):
@@ -80,11 +80,11 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        if rc != 0:
+        cp = run("-w", ".")
+        if cp.returncode != 0:
             for file in glob.glob("TestResults/**/canary-out.txt"):
                 print(open(file).read())
-        assert rc == 0
+        assert cp.returncode == 0
 
 
 def test_analyze_script(tmpdir):
@@ -113,9 +113,9 @@ if __name__ == '__main__':
             fh.write(f"#!{sys.executable}\nimport sys\nsys.exit(0)")
         set_executable("baz.py")
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        if rc != 0:
+        cp = run("-w", ".")
+        if cp.returncode != 0:
             print(os.listdir("TestResults/f"))
             for file in glob.glob("TestResults/**/canary-out.txt"):
                 print(open(file).read())
-        assert rc == 0
+        assert cp.returncode == 0

@@ -7,6 +7,9 @@ BUILDDIR      = build
 help:
 	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
+api-docs:
+	../bin/make_api_docs.py
+
 clean_cache:
 	rm -rf ./source/.cache
 

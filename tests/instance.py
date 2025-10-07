@@ -4,7 +4,7 @@
 
 import os
 
-import _canary.test.instance as inst
+import _canary.testinstance as inst
 import canary
 from _canary import finder
 from _canary.util.filesystem import mkdirp
@@ -29,7 +29,7 @@ def test_instance_deps(tmpdir):
     work_tree = os.path.join(workdir, "tests")
     mkdirp(work_tree)
     with canary.config.override():
-        canary.config.session.work_tree = work_tree
+        canary.config.set("session:work_tree", work_tree, scope="defaults")
         for case in cases:
             case.save()
             instance = inst.load(case.working_directory)

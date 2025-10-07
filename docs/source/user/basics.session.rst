@@ -21,9 +21,6 @@ A test session consists of the following phases:
   "Lock" test files into test cases based on :ref:`filtering<usage-filter>` criteria and
   :ref:`parameterizations<usage-parameterize>`.
 
-:ref:`Batch<batch>`:
-  For :ref:`batched<usage-run-batched>` sessions, group test cases into batches to run in a batch runner.
-
 :ref:`Run<run>`:
   For each test, move into its execution directory and run the test script (after each dependency has completed, if necessary).
 
@@ -64,22 +61,6 @@ During the ``lock`` stage, test files are :ref:`filtered <usage-filter>`, ``para
 .. command-output:: canary run --no-header --until=lock -k centered_space .
    :cwd: /examples
    :setup: rm -rf TestResults
-
-.. _batch:
-
-Batch
-.....
-
-[Optional] Group test cases into batches to run in a batch runner.  The default batching scheme is to:
-
-1. group cases by the number of compute nodes required to run; and
-2. partition each group into batches that complete in a set time (defined by the ``-b spec=duration:T`` option).
-
-.. note::
-
-   A test is always batched with tests requiring the same node count.
-
-Optionally, a fixed number of batches can be requested (``-b spec=count:N``).
 
 .. _run:
 

@@ -4,8 +4,8 @@
 
 import glob
 
-from _canary.main import CanaryCommand
 from _canary.util.filesystem import working_dir
+from _canary.util.testing import CanaryCommand
 
 
 def test_keywords(tmpdir):
@@ -19,8 +19,8 @@ def test_keywords(tmpdir):
             fh.write("    assert self.keywords == ['a', 'b', 'c']\n")
             fh.write("if __name__ == '__main__':\n    sys.exit(test())\n")
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        assert rc == 0
+        cp = run("-w", ".")
+        assert cp.returncode == 0
 
 
 def test_keywords_testname(tmpdir):
@@ -41,8 +41,8 @@ def test_keywords_testname(tmpdir):
             fh.write("        assert self.keywords == ['kw_b']\n")
             fh.write("if __name__ == '__main__':\n    sys.exit(test())\n")
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        assert rc == 0
+        cp = run("-w", ".")
+        assert cp.returncode == 0
 
 
 def test_keywords_parameters(tmpdir):
@@ -70,8 +70,8 @@ def test_keywords_parameters(tmpdir):
             fh.write("        assert set(self.keywords) == {'kw_8', 'kw_9', 'kw_10'}\n")
             fh.write("if __name__ == '__main__':\n    sys.exit(test())\n")
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        if rc != 0:
+        cp = run("-w", ".")
+        if cp.returncode != 0:
             for file in glob.glob("TestResults/**/canary-out.txt"):
                 print(open(file).read())
-        assert rc == 0
+        assert cp.returncode == 0

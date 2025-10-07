@@ -4,8 +4,8 @@
 
 import glob
 
-from _canary.main import CanaryCommand
 from _canary.util.filesystem import working_dir
+from _canary.util.testing import CanaryCommand
 
 
 def test_parameterize(tmpdir):
@@ -25,11 +25,11 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        if rc != 0:
+        cp = run("-w", ".")
+        if cp.returncode != 0:
             for file in glob.glob("TestResults/**/canary-out.txt"):
                 print(open(file).read())
-        assert rc == 0
+        assert cp.returncode == 0
 
 
 def test_parameterize_prod(tmpdir):
@@ -80,7 +80,7 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        rc = run("-w", ".")
+        cp = run("-w", ".")
         for file in glob.glob("TestResults/**/canary-out.txt"):
             print(open(file).read())
-        assert rc == 0
+        assert cp.returncode == 0

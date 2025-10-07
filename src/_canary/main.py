@@ -8,9 +8,12 @@ import shlex
 import signal
 import sys
 import traceback
+import urllib.parse
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
+
+import yaml
 
 from . import config
 from .config.argparsing import make_argument_parser
@@ -18,6 +21,7 @@ from .error import StopExecution
 from .third_party import color
 from .third_party.monkeypatch import monkeypatch
 from .util import logging
+from .util.collections import contains_any
 
 if TYPE_CHECKING:
     from .plugins.types import CanarySubcommand
@@ -35,112 +39,64 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     :returns: An exit code.
     """
-    if "CANARY_LEVEL" not in os.environ:
-        os.environ["CANARY_LEVEL"] = "0"
-
     with CanaryMain(argv) as m:
         parser = make_argument_parser()
         parser.add_main_epilog(parser)
-        for command in config.plugin_manager.get_subcommands():
+        for command in config.pluginmanager.hook.canary_subcommand():
             parser.add_command(command)
+        config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
         with monkeypatch.context() as mp:
             mp.setattr(parser, "add_argument", parser.add_plugin_argument)
             mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
-            config.plugin_manager.hook.canary_addoption(parser=parser)
+            config.pluginmanager.hook.canary_addoption(parser=parser)
         args = parser.parse_args(m.argv)
-        if args.color:
-            color.set_color_when(args.color)
-
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]
-            logging.emit(shlex.join(a) + "\n")
+            sys.stderr.write(shlex.join(a) + "\n")
+        if args.color:
+            color.set_color_when(args.color)
         config.set_main_options(args)
-        config.plugin_manager.hook.canary_configure(config=config)
+        config.pluginmanager.hook.canary_configure(config=config)
         command = parser.get_command(args.command)
         if command is None:
             parser.print_help()
             return -1
         if args.canary_profile:
-            return invoke_profiled_command(command, args)
+            return invoke_profiled_command(command, config.options)
         else:
-            return invoke_command(command, args)
+            return invoke_command(command, config.options)
 
 
 class CanaryMain:
     """Set up and teardown this canary session"""
 
     def __init__(self, argv: Sequence[str] | None = None) -> None:
-        self.argv: Sequence[str] = argv or sys.argv[1:]
+        self.argv: Sequence[str] = list(argv or sys.argv[1:])
         config.invocation_dir = config.working_dir = os.getcwd()
 
     def __enter__(self) -> "CanaryMain":
         """Preparsing is necessary to parse out options that need to take effect before the main
         program starts up"""
         global reraise
-        if "GITLAB_CI" in os.environ:
+        if contains_any(os.environ.keys(), "CANARY_RERAISE_ERRORS", "GITLAB_CI"):
             reraise = True
         parser = make_argument_parser()
-        args = parser.preparse(self.argv)
+        args = parser.preparse(self.argv, addopts=True)
         if args.debug:
             reraise = True
         if args.C:
             config.working_dir = args.C
         os.chdir(config.working_dir)
+
+        # Consider plugins passed in the environment and the command line early, before parsing the
+        # main command line. This allows plugins to define a subcommand (which must be registered
+        # before it can be run)
         for p in args.plugins:
-            config.plugin_manager.consider_plugin(p)
+            config.pluginmanager.consider_plugin(p)
         return self
 
     def __exit__(self, ex_type, ex_value, ex_traceback):
         os.chdir(config.invocation_dir)
-
-
-class CanaryCommand:
-    def __init__(self, command_name: str, debug: bool = False) -> None:
-        # plugin.load_from_entry_points()
-        for command in config.plugin_manager.get_subcommands():
-            if command.name == command_name:
-                self.command = command
-                break
-        else:
-            raise ValueError(f"Unknown command {command_name!r}")
-        self.debug = debug
-        self.returncode = -1
-
-    def __call__(self, *args_in: str, fail_on_error: bool = True) -> int:
-        try:
-            global reraise
-            save_debug: bool | None = None
-            save_reraise: bool | None = None
-            if self.debug:
-                save_debug = config.debug
-                config.debug = True
-                save_reraise = reraise
-                reraise = True
-            argv = [self.command.name] + list(args_in)
-            parser = make_argument_parser()
-            args = parser.preparse(argv, addopts=False)
-            for p in args.plugins:
-                config.plugin_manager.consider_plugin(p)
-            for command in config.plugin_manager.get_subcommands():
-                parser.add_command(command)
-            with monkeypatch.context() as mp:
-                mp.setattr(parser, "add_argument", parser.add_plugin_argument)
-                mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
-                config.plugin_manager.hook.canary_addoption(parser=parser)
-            args = parser.parse_args(argv)
-            config.set_main_options(args)
-            rc = self.command.execute(args)
-            self.returncode = rc
-        except Exception:
-            if fail_on_error:
-                raise
-            self.returncode = 1
-        finally:
-            if save_debug is not None:
-                config.debug = save_debug
-            if save_reraise is not None:
-                reraise = save_reraise
-        return self.returncode
 
 
 def invoke_command(command: "CanarySubcommand", args: argparse.Namespace) -> int:
@@ -170,7 +126,7 @@ class Profiler:
     def __exit__(self, *args):
         if self.type == 1:
             self.profiler.stop()
-            self.profiler.print()
+            self.profiler.print(show_all=True)
         else:
             import pstats
 
@@ -194,12 +150,27 @@ def invoke_profiled_command(command, args):
 
 def determine_plugin_from_tb(tb: traceback.StackSummary) -> None | Any:
     """Determine if the exception was raised inside a plugin"""
+
+    def filename(obj):
+        import inspect
+
+        if f := getattr(obj, "__file__", None):
+            return f
+        return inspect.getfile(obj.__class__)
+
     for frame in tb[::-1]:
         # Check if the frame corresponds to a registered plugin
-        for plugin in config.plugin_manager.get_plugins():
-            if plugin and frame.filename == plugin.__file__:
+        for plugin in config.pluginmanager.get_plugins():
+            if plugin and frame.filename == filename(plugin):
                 return plugin
     return None
+
+
+def print_current_config() -> None:
+    state = config.getstate(pretty=True)
+    text = yaml.dump(state, default_flow_style=False)
+    print("Current canary configuration:")
+    print(text)
 
 
 def console_main() -> int:
@@ -207,6 +178,13 @@ def console_main() -> int:
 
     This function is not meant for programmable use; use `main()` instead.
     """
+
+    # Some CI/CD agents use yaml to describe jobs.  Quoting can get wonky between parsing the
+    # yaml and passing it to the shell.  So, we allow url encoded strings and unquote them
+    # here.
+    logger = logging.get_logger(__name__)
+    for i, arg in enumerate(sys.argv):
+        sys.argv[i] = urllib.parse.unquote(arg)
     try:
         returncode = main()
         sys.stdout.flush()
@@ -219,35 +197,41 @@ def console_main() -> int:
         return 1  # Python exits with error code 1 on EPIPE
     except StopExecution as e:
         if e.exit_code == 0:
-            logging.info(e.message)
+            logger.info(e.message)
         else:
-            logging.error(e.message)
+            logger.error(e.message)
         return e.exit_code
     except TimeoutError as e:
         if reraise:
             raise
-        logging.error(e.args[0])
+        if config.get("config:debug"):
+            print_current_config()
+        logger.error(e.args[0])
         return 4
     except KeyboardInterrupt:
         if reraise:
             raise
         sys.stderr.write("\n")
-        logging.error("Keyboard interrupt.")
+        logger.error("Keyboard interrupt.")
         return signal.SIGINT.value
     except SystemExit as e:
         if e.code == 0:
             return 0
+        if config.get("config:debug"):
+            print_current_config()
         if reraise:
             traceback.print_exc()
         if isinstance(e.code, int):
             return e.code
         return 1
     except Exception as e:
+        if config.get("config:debug"):
+            print_current_config()
         if reraise:
             raise
         tb = traceback.extract_tb(e.__traceback__)
         err = str(e)
         if plugin := determine_plugin_from_tb(tb):
-            err += f" (from plugin: {plugin.__name__})"
-        logging.error(err)
+            err += f" (from plugin: {plugin})"
+        logger.error(err)
         return 3

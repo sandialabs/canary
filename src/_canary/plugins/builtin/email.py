@@ -14,7 +14,9 @@ from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...session import Session
-    from ...test.case import TestCase
+    from ...testcase import TestCase
+
+logger = logging.get_logger(__name__)
 
 
 @hookimpl
@@ -44,7 +46,7 @@ def canary_session_finish(session: "Session", exitstatus: int) -> None:
     date = datetime.datetime.fromtimestamp(session.start)
     st_time = date.strftime("%m/%d/%Y")
     subject = f"Canary Summary for {st_time}"
-    logging.info(f"Sending summary to {', '.join(recvaddrs)}")
+    logger.info(f"Sending summary to {', '.join(recvaddrs)}")
     sendmail(sendaddr, recvaddrs, subject, html_report, subtype="html")
 
 

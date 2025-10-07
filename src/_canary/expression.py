@@ -234,7 +234,7 @@ class Expression:
 
         :returns: Whether the expression matches or not.
         """
-        ret: bool = eval(self.code, {"__builtins__": {}}, MatcherAdapter(matcher))
+        ret: bool = eval(self.code, {"__builtins__": {}}, MatcherAdapter(matcher))  # nosec B307
         return ret
 
 
@@ -298,6 +298,15 @@ class ParameterExpression:
             elif token.type == tokenize.OP:
                 if token.string == "=":
                     token = TokenInfo(tokenize.OP, "==", token.start, token.end, token.line)
+                elif token.string == "*" and parts[-1].string == "==":
+                    # something of the form name=*, meaning accept any value
+                    parts.pop()  # remove ==
+                    string = f"defined({parts[-1].string!r})"
+                    token = TokenInfo(
+                        tokenize.ENDMARKER, string, parts[-1].start, token.end, parts[-1].line
+                    )
+                    parts[-1] = token
+                    continue
                 elif token.string == "!":
                     # This situation can arise for something like `!cpus`
                     start = token.start
@@ -318,21 +327,35 @@ class ParameterExpression:
         return " ".join(_.string for _ in parts)
 
     def evaluate(self, parameters: dict[str, Any]) -> bool:
-        global_vars = dict(parameters)
-        global_vars["not_defined"] = not_defined(list(parameters.keys()))
+        # SECURITY: Only allow whitelisted names/functions in eval, and remove builtins.
+        # This prevents arbitrary code execution via builtins or unexpected globals.
+        safe_globals: dict[str, Any] = {"__builtins__": {}}
+        # Only expose parameter keys, plus defined/not_defined helpers
+        safe_globals.update({k: v for k, v in parameters.items()})
+        safe_globals["not_defined"] = NotDefined(list(parameters.keys()))
+        safe_globals["defined"] = Defined([key for key, value in parameters.items() if value])
         local_vars: dict = {}
         assert isinstance(self.expression, str)
         try:
-            return bool(eval(self.expression, global_vars, local_vars))
+            return bool(eval(self.expression, safe_globals, local_vars))  # nosec B307
         except NameError:
             return False
 
 
-def not_defined(names: list[str]) -> Callable:
-    def inner(name):
-        return name not in names
+class NotDefined:
+    def __init__(self, names: list[str]) -> None:
+        self.names = names
 
-    return inner
+    def __call__(self, name: str) -> bool:
+        return name not in self.names
+
+
+class Defined:
+    def __init__(self, names: list[str]) -> None:
+        self.names = names
+
+    def __call__(self, name: str) -> bool:
+        return name in self.names
 
 
 def get_tokens(code):

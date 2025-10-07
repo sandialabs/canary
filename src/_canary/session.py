@@ -9,21 +9,23 @@ import json
 import multiprocessing
 import os
 import sys
+import time
 from contextlib import contextmanager
 from datetime import datetime
 from typing import IO
 from typing import Any
 from typing import Generator
 
+import psutil
+
 from . import config
 from . import finder
 from .error import StopExecution
+from .error import notests_exit_status
 from .generator import AbstractTestGenerator
-from .test.batch import TestBatch
-from .test.case import TestCase
-from .test.case import TestMultiCase
-from .test.case import from_state as testcase_from_state
-from .third_party.color import colorize
+from .testcase import TestCase
+from .testcase import TestMultiCase
+from .testcase import from_state as testcase_from_state
 from .third_party.lock import Lock
 from .third_party.lock import LockError
 from .util import logging
@@ -31,10 +33,9 @@ from .util.filesystem import find_work_tree
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
 from .util.graph import TopologicalSorter
+from .util.graph import find_reachable_nodes
 from .util.graph import static_order
 from .util.procutils import cleanup_children
-from .util.rprobe import cpu_count
-from .util.string import pluralize
 from .util.time import timestamp
 
 # Session modes are analogous to file modes
@@ -45,6 +46,9 @@ session_modes = (
     "r",  # open an existing session to read (read-only)
     "r+",  # open an existing session to read, don't reload test cases (lazyily-loaded as needed)
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 class Session:
@@ -109,7 +113,7 @@ class Session:
             path = os.path.abspath(path)
             if force and os.path.exists(path):
                 if not os.getenv("CANARY_MAKE_DOCS"):
-                    logging.warning(f"Removing {path}")
+                    logger.warning(f"Removing {path}")
                 force_remove(path)
             if os.path.exists(path):
                 raise DirectoryExistsError(f"{path}: directory exists")
@@ -128,11 +132,7 @@ class Session:
         self.returncode = -1
         self.start = -1.0
         self.stop = -1.0
-
-        os.environ.setdefault("CANARY_LEVEL", "0")
         os.environ["CANARY_WORK_TREE"] = self.work_tree
-        self.level = int(os.environ["CANARY_LEVEL"])
-
         self.db = Database(self.config_dir, mode=mode)
         if mode in ("r", "r+", "a", "a+"):
             self.restore_settings()
@@ -143,10 +143,55 @@ class Session:
                 self.cases.extend(cases)
         else:
             self.initialize()
-            config.plugin_manager.hook.canary_session_start(session=self)
+            config.pluginmanager.hook.canary_session_startup(session=self)
 
         if self.mode == "w":
             self.save(ini=True)
+
+        f = os.path.join(self.config_dir, "canary-log.txt")
+        logging.add_file_handler(f, levelno=logging.TRACE)
+
+    @classmethod
+    def filter_view(
+        cls,
+        path: str,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: set[str] | None = None,
+        regex: str | None = None,
+        start: str | None = None,
+        case_specs: list[str] | None = None,
+    ) -> "Session":
+        """Create a view of this session that only includes cases resulting from filtering
+        operations"""
+        self = cls(path, mode="a+")
+        cases = self.load_testcases()
+        config.pluginmanager.hook.canary_testsuite_mask(
+            cases=cases,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+            case_specs=case_specs,
+            start=start,
+            ignore_dependencies=True,
+        )
+        for case in static_order(cases):
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
+        self.cases.clear()
+        for case in static_order(cases):
+            if case.wont_run():
+                continue
+            if case.dependencies:
+                flags = case.dep_condition_flags()
+                if any([flag == "wont_run" for flag in flags]):
+                    case.mask = "one or more dependencies not satisfied"
+            if not case.masked():
+                case.mark_as_ready()
+            if not case.status.satisfies(("pending", "ready")):
+                logger.error(f"{case}: will not run: {case.status.details}")
+            self.cases.append(case)
+        return self
 
     @classmethod
     def casespecs_view(cls, path: str, case_specs: list[str]) -> "Session":
@@ -169,34 +214,38 @@ class Session:
                 continue
             case.mark_as_ready()
             if not case.status.satisfies(("pending", "ready")):
-                logging.error(f"{case}: will not run: {case.status.details}")
+                logger.error(f"{case}: will not run: {case.status.details}")
             elif case.pending() and not all(dep.id in ids for dep in case.dependencies):
                 case.mask = "one or more missing dependencies"
             self.cases.append(case)
         return self
 
-    @classmethod
-    def batch_view(cls, path: str, batch_id: str) -> "Session":
-        """Create a view of this session that only includes cases in ``batch_id``"""
-        ids = TestBatch.loadindex(batch_id)
-        if ids is None:
-            raise ValueError(f"could not find index for batch {batch_id}")
-        expected = len(ids)
-        logging.info(f"Selecting {expected} {pluralize('test', expected)} from batch {batch_id}")
-        self = cls(path, mode="a+")
+    def load_from_lockfile(self, file) -> None:
+        with open(file) as fh:
+            data = json.load(fh)
+        fgen = lambda p: AbstractTestGenerator.factory(p["file_root"], p["file_path"])
+        self.generators.clear()
+        self.generators.extend([fgen(_["properties"]) for _ in data["testcases"]])
+        self.dump_testcase_generators()
+        ts: TopologicalSorter = TopologicalSorter()
+        map: dict[str, int] = {}
+        for i, state in enumerate(data["testcases"]):
+            deps = [_["properties"]["id"] for _ in state["properties"]["dependencies"]]
+            ts.add(state["properties"]["id"], *deps)
+            map[state["properties"]["id"]] = i
+        cases: dict[str, TestCase | TestMultiCase] = {}
+        for id in ts.static_order():
+            i = map[id]
+            state = data["testcases"][i]
+            state["properties"]["work_tree"] = self.work_tree
+            for j, dep_state in enumerate(state["properties"]["dependencies"]):
+                state["properties"]["dependencies"][j] = cases[dep_state["properties"]["id"]]
+            cases[id] = testcase_from_state(state)
+            cases[id].mark_as_ready()
+            assert id == cases[id].id
         self.cases.clear()
-        for case in self.load_testcases(ids=ids):
-            if case.id not in ids:
-                continue
-            case.mark_as_ready()
-            if not case.status.satisfies(("pending", "ready")):
-                logging.error(f"{case}: will not run: {case.status.details}")
-            elif case.pending() and not all(_.id in ids for _ in case.dependencies):
-                case.mask = "one or more missing dependencies"
-            self.cases.append(case)
-        ready = len(self.get_ready())
-        logging.info(f"Selected {ready} {pluralize('test', expected)} from batch {batch_id}")
-        return self
+        self.cases.extend(cases.values())
+        self.dump_testcases()
 
     def get_ready(self) -> list[TestCase]:
         return [case for case in self.cases if case.ready() or case.pending()]
@@ -224,11 +273,14 @@ class Session:
 
     def dump_testcases(self) -> None:
         """Dump each case's state in this session to ``file`` in json format"""
-        with logging.context(colorize("@*{Generating} test case lockfiles")):
+        msg = "@*{Generating} test case lockfiles"
+        created = time.monotonic()
+        logger.log(logging.INFO, msg, extra={"end": "..."})
+        try:
             if len(self.cases) < 100:
                 [case.save() for case in self.cases]
             else:
-                cpus = cpu_count()
+                cpus = psutil.cpu_count()
                 args = ((case.getstate(), case.lockfile) for case in self.cases)
                 pool = multiprocessing.Pool(cpus)
                 pool.imap_unordered(json_dump, args, chunksize=len(self.cases) // cpus or 1)
@@ -237,49 +289,67 @@ class Session:
             index = {case.id: [dep.id for dep in case.dependencies] for case in self.cases}
             with self.db.open("cases/index", "w") as fh:
                 json.dump({"index": index}, fh, indent=2)
+        except Exception:
+            state = "failed"
+            raise
+        else:
+            state = "done"
+        finally:
+            end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+            extra = {"end": end, "rewind": True}
+            logger.log(logging.INFO, msg, extra=extra)
 
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
         """Load test cases previously dumped by ``dump_testcases``.  Dependency resolution is also
         performed
         """
-        ctx = logging.context(colorize("@*{Loading} test cases"), level=logging.DEBUG)
-        ctx.start()
-        with self.db.open("cases/index", "r") as fh:
-            # index format: {ID: [DEPS_IDS]}
-            index = json.load(fh)["index"]
-        ids_to_load: set[str] = set()
-        if ids:
-            # we must not only load the requested IDs, but also their dependencies
-            for id in ids:
-                ids_to_load.add(id)
-                ids_to_load.update(index[id])
-        ts: TopologicalSorter = TopologicalSorter()
-        cases: dict[str, TestCase | TestMultiCase] = {}
-        for id, deps in index.items():
-            ts.add(id, *deps)
-        for id in ts.static_order():
-            if ids_to_load and id not in ids_to_load:
-                continue
-            # see TestCase.lockfile for file pattern
-            file = self.db.join_path("cases", id[:2], id[2:], TestCase._lockfile)
-            with self.db.open(file) as fh:
-                try:
-                    state = json.load(fh)
-                except json.JSONDecodeError:
-                    logging.warning(f"Unable to load {file}!")
+        msg = "@*{Loading} test cases"
+        created = time.monotonic()
+        logger.log(logging.DEBUG, msg, extra={"end": "..."})
+        try:
+            with self.db.open("cases/index", "r") as fh:
+                # index format: {ID: [DEPS_IDS]}
+                index = json.load(fh)["index"]
+            ids_to_load: set[str] = set()
+            if ids:
+                # we must not only load the requested IDs, but also their dependencies
+                for id in ids:
+                    ids_to_load.update(find_reachable_nodes(index, id))
+            ts: TopologicalSorter = TopologicalSorter()
+            cases: dict[str, TestCase | TestMultiCase] = {}
+            for id, deps in index.items():
+                ts.add(id, *deps)
+            for id in ts.static_order():
+                if ids_to_load and id not in ids_to_load:
                     continue
-            state["properties"]["work_tree"] = self.work_tree
-            for i, dep_state in enumerate(state["properties"]["dependencies"]):
-                # assign dependencies from existing dependencies
-                state["properties"]["dependencies"][i] = cases[dep_state["properties"]["id"]]
-            cases[id] = testcase_from_state(state)
-            assert id == cases[id].id
-        ctx.stop()
+                # see TestCase.lockfile for file pattern
+                file = self.db.join_path("cases", id[:2], id[2:], TestCase._lockfile)
+                with self.db.open(file) as fh:
+                    try:
+                        state = json.load(fh)
+                    except json.JSONDecodeError:
+                        logger.warning(f"Unable to load {file}!")
+                        continue
+                state["properties"]["work_tree"] = self.work_tree
+                for i, dep_state in enumerate(state["properties"]["dependencies"]):
+                    # assign dependencies from existing dependencies
+                    state["properties"]["dependencies"][i] = cases[dep_state["properties"]["id"]]
+                cases[id] = testcase_from_state(state)
+                assert id == cases[id].id
+        except Exception:
+            state = "failed"
+            raise
+        else:
+            state = "done"
+        finally:
+            end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+            extra = {"end": end, "rewind": True}
+            logger.log(logging.DEBUG, msg, extra=extra)
         return list(cases.values())
 
     def dump_testcase_generators(self) -> None:
         """Dump each test file (test generator) in this session to ``file`` in json format"""
-        logging.debug("Dumping test case generators")
+        logger.debug("Dumping test case generators")
         testfiles = [f.getstate() for f in self.generators]
         with self.db.open("files", mode="w") as file:
             json.dump(testfiles, file, indent=2)
@@ -287,12 +357,22 @@ class Session:
     def load_testcase_generators(self) -> None:
         """Load test files (test generators) previously dumped by ``dump_testcase_generators``"""
         self.generators.clear()
-        ctx = logging.context(colorize("@*{Loading} test case generators"), level=logging.DEBUG)
-        ctx.start()
-        with self.db.open("files", "r") as file:
-            states = json.load(file)
-            self.generators.extend(map(AbstractTestGenerator.from_state, states))
-        ctx.stop()
+        msg = "@*{Loading} test case generators"
+        logger.log(logging.DEBUG, msg, extra={"end": "..."})
+        created = time.monotonic()
+        try:
+            with self.db.open("files", "r") as file:
+                states = json.load(file)
+                self.generators.extend(map(AbstractTestGenerator.from_state, states))
+        except Exception:
+            state = "failed"
+            raise
+        else:
+            state = "done"
+        finally:
+            end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+            extra = {"end": end, "rewind": True}
+            logger.log(logging.DEBUG, msg, extra=extra)
         return
 
     def restore_settings(self) -> None:
@@ -303,12 +383,12 @@ class Session:
         * set configuration values.
 
         """
-        logging.debug(f"Loading test session in {self.work_tree}")
-        if config.session.work_tree is None:
-            config.session.work_tree = self.work_tree
-        elif not os.path.samefile(config.session.work_tree, self.work_tree):
+        logger.debug(f"Loading test session in {self.work_tree}")
+        if config.get("session:work_tree") is None:
+            config.set("session:work_tree", self.work_tree, scope="defaults")
+        elif not os.path.samefile(config.get("session:work_tree"), self.work_tree):
             msg = "Expected config.session.work_tree=%r but got %s"
-            raise RuntimeError(msg % (self.work_tree, config.session.work_tree))
+            raise RuntimeError(msg % (self.work_tree, config.get("session:work_tree")))
         self.load_attrs()
         self.set_config_values()
 
@@ -319,7 +399,7 @@ class Session:
         * save local configuration values to the session configuration scope
 
         """
-        logging.debug(f"Initializing test session in {self.work_tree}")
+        logger.debug(f"Initializing test session in {self.work_tree}")
         file = os.path.join(self.config_dir, self.tagfile)
         mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
@@ -329,9 +409,8 @@ class Session:
 
     def set_config_values(self):
         """Set ``section`` configuration values"""
-        config.session.work_tree = self.work_tree
-        config.session.level = self.level
-        config.session.mode = self.mode
+        config.set("session:work_tree", self.work_tree, scope="defaults")
+        config.set("session:mode", self.mode, scope="defaults")
 
     def save(self, ini: bool = False) -> None:
         """Save session data, excluding data that is stored separately in the database"""
@@ -339,7 +418,7 @@ class Session:
         if ini:
             file = os.path.join(self.config_dir, "config")
             with open(file, "w") as fh:
-                config.snapshot(fh, pretty_print=True)
+                config.dump_snapshot(fh, indent=2)
 
     def add_search_paths(self, search_paths: dict[str, list[str]] | list[str] | str) -> None:
         """Add paths to this session's search paths
@@ -365,14 +444,14 @@ class Session:
                 vcs, _, root = root.partition("@")
             if not os.path.isdir(root):
                 errors += 1
-                logging.warning(f"{root}: directory does not exist and will not be searched")
+                logger.warning(f"{root}: directory does not exist and will not be searched")
             else:
                 root = os.path.abspath(root)
                 if vcs:
                     root = f"{vcs}@{root}"
                 self.search_paths[root] = paths
         if errors:
-            logging.warning("one or more search paths does not exist")
+            logger.warning("one or more search paths does not exist")
         self.save()
 
     def discover(self, pedantic: bool = True) -> None:
@@ -383,7 +462,7 @@ class Session:
         f.prepare()
         self.generators = f.discover(pedantic=pedantic)
         self.dump_testcase_generators()
-        logging.debug(f"Discovered {len(self.generators)} test files")
+        logger.debug(f"Discovered {len(self.generators)} test files")
 
     def lock(
         self,
@@ -414,7 +493,7 @@ class Session:
 
         """
         cases = finder.generate_test_cases(self.generators, on_options=on_options)
-        config.plugin_manager.hook.canary_testsuite_mask(
+        config.pluginmanager.hook.canary_testsuite_mask(
             cases=cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
@@ -422,9 +501,10 @@ class Session:
             regex=regex,
             case_specs=None,
             start=None,
+            ignore_dependencies=False,
         )
         for case in static_order(cases):
-            config.plugin_manager.hook.canary_testcase_modify(case=case)
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
 
         self.cases.clear()
         for case in cases:
@@ -433,9 +513,9 @@ class Session:
             if not case.wont_run():
                 case.mark_as_ready()
                 self.cases.append(case)
-        config.plugin_manager.hook.canary_collectreport(cases=cases)
+        config.pluginmanager.hook.canary_collectreport(cases=cases)
         if not self.get_ready():
-            raise StopExecution("No tests to run", 7)
+            raise StopExecution("No tests to run", notests_exit_status)
 
         self.dump_testcases()
 
@@ -461,7 +541,7 @@ class Session:
 
         """
         cases = self.active_cases()
-        config.plugin_manager.hook.canary_testsuite_mask(
+        config.pluginmanager.hook.canary_testsuite_mask(
             cases=cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
@@ -469,37 +549,31 @@ class Session:
             regex=regex,
             case_specs=case_specs,
             start=start,
+            ignore_dependencies=False,
         )
-        for case in static_order(self.cases):
-            config.plugin_manager.hook.canary_testcase_modify(case=case)
+        for case in static_order(cases):
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
         for case in cases:
             if not case.wont_run():
                 case.mark_as_ready()
-        config.plugin_manager.hook.canary_collectreport(cases=cases)
+        config.pluginmanager.hook.canary_collectreport(cases=cases)
 
-    def run(self, *, fail_fast: bool = False) -> list[TestCase]:
+    def run(self) -> list[TestCase]:
         """Run each test case in ``cases``.
 
-        Args:
-          cases: test cases to run
-          fail_fast: If ``True``, stop the execution at the first detected test failure, otherwise
-            continuing running until all tests have been run.
-
         Returns:
-          The session returncode (0 for success)
+          The cases that were run
 
         """
         cases = self.get_ready()
         if not cases:
-            raise StopExecution("No tests to run", 7)
+            raise StopExecution("No tests to run", notests_exit_status)
         self.start = timestamp()
-        rc = config.plugin_manager.hook.canary_runtests(
-            session=self, cases=cases, fail_fast=fail_fast
-        )
+        rc = config.pluginmanager.hook.canary_runtests(cases=cases)
         self.stop = timestamp()
         self.returncode = rc
         self.exitstatus = rc
-        config.plugin_manager.hook.canary_session_finish(session=self, exitstatus=self.exitstatus)
+        config.pluginmanager.hook.canary_session_finish(session=self, exitstatus=self.exitstatus)
         self.save()
         for case in self.cases:
             # we wont run invalid cases, but we want to include them in reports

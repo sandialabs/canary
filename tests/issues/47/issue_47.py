@@ -5,15 +5,15 @@
 import os
 
 import canary
-from _canary.main import CanaryCommand
+from _canary.util.testing import CanaryCommand
 
 
 def test_issue_47(tmpdir):
     with canary.filesystem.working_dir(os.path.dirname(__file__)):
         run = CanaryCommand("run")
         f = os.path.join(os.path.dirname(__file__), "issue-47.vvt")
-        rc = run("-d", os.path.join(tmpdir.strpath, "47"), f)
-        assert rc == 0
+        cp = run("-d", os.path.join(tmpdir.strpath, "47"), f)
+        assert cp.returncode == 0
         files = os.listdir(os.path.join(tmpdir.strpath, "47"))
         assert len(files) == 7
         assert set(files) == {

@@ -35,10 +35,11 @@ classifiers = [
 
 dynamic = [ "version" ]
 dependencies = [
-    "hpc-connect @ git+https://github.com/sandialabs/hpc-connect",
+    "hpc-connect==25.10.7",
     "pluggy>=1.5",
     "psutil",
     "pyyaml",
+    "schema",
 ]
 
 optional-dependencies.dev = [
@@ -63,8 +64,14 @@ urls.Repository = "https://github.com/sandialabs/canary"
 scripts.canary = "canary:console_main"
 scripts.nvtest = "canary:console_main"
 
+[project.entry-points."canary"]
+canary_cmake = "canary_cmake"
+canary_gitlab = "canary_gitlab"
+canary_hpc = "canary_hpc"
+canary_vvtest = "canary_vvtest"
+
 [tool.setuptools.dynamic]
-version = { attr = "_canary.util.generate_version.__generate_dynamic_version__" }
+version = { attr = "_canary.util.dynamic_version.__generate_dynamic_version__" }
 
 [tool.ruff]
 target-version = "py311"
@@ -78,12 +85,11 @@ format.docstring-code-line-length = "dynamic"
 format.docstring-code-format = false
 lint.select = [ "F", "I" ]
 lint.ignore = [ "E731", "E741", "F841" ]
-lint.per-file-ignores."src/_canary/abc/__init__.py" = [ "F401" ]
-lint.per-file-ignores."src/_canary/command/__init__.py" = [ "F401" ]
 lint.per-file-ignores."src/_canary/plugins/*/__init__.py" = [ "F401", "F403", "F405" ]
 lint.per-file-ignores."src/_canary/plugins/__init__.py" = [ "F401", "F403", "F405" ]
 lint.per-file-ignores."src/_canary/third_party/*.py" = [ "F401", "F403", "F405" ]
 lint.per-file-ignores."src/canary/__init__.py" = [ "F401" ]
+lint.per-file-ignores."src/canary_cmake/third_party/*.py" = [ "F401", "F403", "F405" ]
 lint.isort.force-single-line = true
 
 [tool.check-wheel-contents]
@@ -95,7 +101,13 @@ indent = 4
 max_supported_python = "3.14"
 
 [tool.pytest.ini_options]
-testpaths = [ "tests" ]
+testpaths = [
+    "tests",
+    "src/canary_vvtest/tests",
+    "src/canary_cmake/tests",
+    "src/canary_hpc/tests",
+    "src/canary_junit/tests"
+]
 norecursedirs = "mock"
 addopts = "-ra --durations=10"
 cache_dir = ".cache/pytest"
@@ -127,6 +139,10 @@ exclude = [
 
 [[tool.mypy.overrides]]
 module = "requests.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "schema.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
@@ -184,3 +200,31 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = [ "_canary.third_party.*" ]
 ignore_errors = true
+
+[tool.ty.src]
+exclude = [
+    "src/canary/examples",
+    "src/canary_cmake/cdash/xmlreporter.py",  # this file raises a bug in ty
+    "src/_canary/third_party/distro.py",
+    "src/_canary/third_party/programoutput/*",
+    "src/_canary/third_party/monkeypatch.py",
+    "src/_canary/third_party/cloudpickle.py",
+    "src/_canary/third_party/docstring_parser/*",
+    "src/_canary/third_party/imagesvg/*",
+]
+include = ["src"]
+
+
+[tool.bandit]
+skips = [
+    "B101",  # ignore asserts
+    "B311",  # ignore warnings about random numbers
+    "B318",  # xml.dom.minidom.parse to parse XML
+    "B324",  # non-cryptographic hashes allowed (they are used to generate IDs only)
+    "B404",  # consider security risks when using subprocess module
+    "B406",  # xml.sax.saxutils to parse XML
+    "B408",  # allow use of xml parsers
+    "B603",
+    "B607", # start_process_with_partial_path"
+]
+exclude_dirs = ["src/canary/examples"]

@@ -8,7 +8,6 @@ from .error import diff_exit_status
 from .error import fail_exit_status
 from .error import skip_exit_status
 from .error import timeout_exit_status
-from .third_party.color import colorize
 from .util import glyphs
 
 
@@ -16,7 +15,6 @@ class Status:
     """The status of a ``canary`` test case."""
 
     members = (
-        "masked",
         "invalid",
         "created",
         "retry",
@@ -35,7 +33,6 @@ class Status:
         "timeout",
     )
     colors = {
-        "masked": "c",
         "invalid": "r",
         "created": "b",
         "retry": "r",
@@ -111,12 +108,11 @@ class Status:
             "timeout": glyphs.ballotx,
             "not_run": glyphs.ballotx,
             "unknown": glyphs.ballotx,
-            "masked": glyphs.masked,
             "invalid": glyphs.ballotx,
         }
         glyph = map[status]
         color = Status.colors[status]
-        return colorize("@*%s{%s}" % (color, glyph))
+        return "@*%s{%s}" % (color, glyph)
 
     def set_from_code(self, arg: int) -> None:
         assert isinstance(arg, int)
@@ -137,9 +133,7 @@ class Status:
 
     @property
     def name(self) -> str:
-        if self.value == "masked":
-            return "EXCLUDED"
-        elif self.value == "invalid":
+        if self.value == "invalid":
             return "INVALID (NOOP)"
         elif self.value == "success":
             return "PASS"
@@ -154,7 +148,7 @@ class Status:
 
     @property
     def cname(self) -> str:
-        return colorize("@*%s{%s}" % (self.color, self.name))
+        return "@*%s{%s}" % (self.color, self.name)
 
     @property
     def color(self) -> str:

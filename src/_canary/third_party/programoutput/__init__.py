@@ -109,7 +109,7 @@ class ProgramOutputDirective(rst.Directive):
         cwd=unchanged,
         caption=unchanged,
         name=unchanged,
-    )
+    )  # nosec B604
 
     def run(self):
         env = self.state.document.settings.env
@@ -228,7 +228,7 @@ class Command(_Command):
             stdout=g_fp,
             stderr=open(os.devnull, "a") if self.hide_standard_error else STDOUT,
             cwd=self.working_directory,
-        )
+        )  # nosec B602
         return proc
 
     def get_output(self):
@@ -416,6 +416,7 @@ def setup(app):
 
 
 def hashit(arg, length=15):
+    """Create a non-cryptographic hash solely for the purpose of creating a reproducible ID"""
     if isinstance(arg, (list, tuple)):
         arg = " ".join(arg)
     obj = hashlib.md5(arg.encode("utf-8"))

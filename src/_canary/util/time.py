@@ -30,7 +30,6 @@ def time_in_seconds(arg: int | float | str) -> float:
 def hhmmss(seconds: float | None, threshold: float = 2.0) -> str:
     if seconds is None:
         return "--:--:--"
-    t = datetime.fromtimestamp(seconds)
     utc = datetime.fromtimestamp(seconds, timezone.utc)
     if seconds < threshold:
         return datetime.strftime(utc, "%H:%M:%S.%f")[:-4]
@@ -119,7 +118,6 @@ class Duration:
             hours, minutes, seconds = [float(_) for _ in duration.split(":")]
             units = Duration.units
             microseconds = hours * units["h"] + minutes * units["m"] + seconds * units["s"]
-            print(microseconds / Duration._microsecond_size)
             return timedelta(microseconds=sign * microseconds / Duration._microsecond_size)
         elif re.search(r"^\d{1,2}:\d{1,2}(\.\d+)?$", duration):
             minutes, seconds = [float(_) for _ in duration.split(":")]

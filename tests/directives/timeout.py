@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
-from _canary.main import CanaryCommand
 from _canary.util.filesystem import working_dir
+from _canary.util.testing import CanaryCommand
 
 
 def test_timeout(tmpdir):
@@ -22,5 +22,5 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        assert rc == 8
+        cp = run("-w", ".")
+        assert cp.returncode == 8

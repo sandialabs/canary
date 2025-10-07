@@ -1,0 +1,153 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  ACTIONS_RUNNER_DEBUG: "true"
+
+jobs:
+  unit-tests:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Pytest
+        run: |
+          pip install .[dev]
+          pytest src/canary_cmake/tests
+          pytest src/canary_vvtest/tests
+          pytest src/canary_hpc/tests
+          pytest tests
+      - name: Coverage
+        run: |
+          coverage run
+          coverage report
+          coverage xml
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ matrix.python-version }}-${{ matrix.coverage-tool }}
+          path: coverage.xml
+          retention-days: 30
+
+  slurm:
+   runs-on: ubuntu-latest
+   steps:
+     - uses: actions/checkout@v4
+     - name: Build the Slurm Docker image
+       run: |
+         BRANCH_NAME=${GITHUB_REF#refs/heads/}
+         echo "Building for branch: $BRANCH_NAME"
+         docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file docker/slurm/Dockerfile --tag slurm-test ./docker/slurm
+     - name: Run Slurm tests
+       run: |
+         docker run --rm slurm-test /bin/bash -c "./test.sh"
+
+  flux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pull the Flux Docker image
+        run: |
+          docker pull fluxrm/flux-sched:latest
+      - name: Run Flux tests
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          echo "Building for branch: $BRANCH_NAME"
+          docker run --rm --user root -v /home/runner/work/canary/canary/docker/flux/test.sh:/home/fluxuser/test.sh -e BRANCH_NAME=$BRANCH_NAME fluxrm/flux-sched:latest env flux start --test-size=3 "./test.sh $BRANCH_NAME"
+
+  pbs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pull the PBS Docker image
+        run: |
+          docker pull pbspro/pbspro:latest
+      - name: Run PBS tests
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          echo "Building for branch: $BRANCH_NAME"
+          docker run --rm --user root -h pbs -v /home/runner/work/canary/canary/docker/pbs/test.sh:/tmp/testing/test.sh -e BRANCH_NAME=$BRANCH_NAME -e PBS_START_MOM=1 pbspro/pbspro:latest /tmp/testing/test.sh
+
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: "--version"
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install mypy mypy-gitlab-code-quality
+
+      - name: Ruff
+        run: |
+          ruff format --check --diff
+          ruff check --show-fixes --exclude=src/canary/__init__.py
+
+      - name: MyPy type checking
+        run: |
+          pip install .[dev]
+          mypy ./src --no-error-summary > mypy-out.txt || true
+          mypy-gitlab-code-quality < mypy-out.txt > codequality.json
+
+      - name: Upload Ruff report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruff-report-${{ matrix.python-version }}
+          path: ruff.xml
+          retention-days: 30
+
+      - name: Upload CodeQuality report
+        uses: actions/upload-artifact@v4
+        with:
+          name: codequality-report-${{ matrix.python-version }}
+          path: codequality.json
+          retention-days: 30
+
+  security:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          if [ "$(python -c 'import sys; print(sys.version_info.major * 100 + sys.version_info.minor)')" -lt "311" ]; then
+            pip install bandit[toml]
+          else
+            pip install bandit
+          fi
+
+      - name: Bandit
+        run: |
+          bandit -c pyproject.toml -r src

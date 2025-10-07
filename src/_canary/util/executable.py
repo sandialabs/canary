@@ -15,6 +15,8 @@ from . import logging
 
 IOType = type[str] | TextIO | Path | str
 
+logger = logging.get_logger(__name__)
+
 
 class Executable:
     """Create a callable object for the executable ``name``
@@ -151,7 +153,7 @@ class Executable:
         result = Result(shlex.join(args))
 
         if verbose:
-            logging.info(f"Command line: {result.cmd}")
+            logger.info(f"Command line: {result.cmd}")
 
         try:
             f1: _StreamHandler
@@ -182,21 +184,21 @@ class Executable:
             msg = f"{self.file}: {e.strerror}"
             if fail_on_error:
                 raise ProcessError(msg)
-            logging.error(msg)
+            logger.error(msg)
 
         except CommandTimedOutError as e:
             result.returncode = self.returncode = 101
             msg = f"{e}\nExecution timed out when invoking command: {result.cmd}"
             if fail_on_error:
                 raise TimeoutError(msg) from None
-            logging.error(msg)
+            logger.error(msg)
 
         except Exception as e:
             result.returncode = self.returncode = 1
             msg = f"{e}\nUnknown failure occurred when invoking command: {result.cmd}"
             if fail_on_error:
                 raise ProcessError(msg)
-            logging.error(msg)
+            logger.error(msg)
 
         return result
 
@@ -238,11 +240,11 @@ class _StreamHandler:
         elif fp is str:
             self.temporary = self.owned = True
             self.stream = tempfile.NamedTemporaryFile(mode="w+")
-            self.name = self.stream.name
+            self.name = self.stream.name  # ty: ignore[possibly-unbound-attribute]
         elif isinstance(fp, (str, Path)):
             self.owned = True
             self.stream = open(fp, "w")
-            self.name = self.stream.name
+            self.name = self.stream.name  # ty: ignore[possibly-unbound-attribute]
         else:
             raise TypeError(f"{fp}: unknown input argument type: {type(fp).__class__.__name__}")
 
@@ -266,6 +268,14 @@ class Result:
     returncode: int = -1
     out: str | None = None
     err: str | None = None
+
+    @property
+    def stdout(self) -> str | None:
+        return self.out
+
+    @property
+    def stderr(self) -> str | None:
+        return self.err
 
     def get_output(self) -> str:
         if self.out is None:
