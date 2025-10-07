@@ -9,8 +9,8 @@ import re
 import pytest
 
 import _canary.config
-from _canary.main import CanaryCommand
 from _canary.util.filesystem import working_dir
+from _canary.util.testing import CanaryCommand
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -45,7 +45,7 @@ if __name__ == '__main__':
                 )
 
         run = CanaryCommand("run")
-        rc = run("-w", "-b", "spec=count:4", "-b", "backend=shell", ".")
+        cp = run("-w", "-b", "spec=count:4", "-b", "backend=shell", ".")
         dirs = os.listdir("TestResults")
         expected = [".canary"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
@@ -53,7 +53,7 @@ if __name__ == '__main__':
         assert len(files) == 4
         files = glob.glob("TestResults/.canary/batches/**/canary-out.txt", recursive=True)
         assert len(files) == 4
-        assert rc == 0
+        assert cp.returncode == 0
 
 
 def test_batched_extra_args(tmpdir):
@@ -77,7 +77,7 @@ if __name__ == '__main__':
         args = ["-w", "-b", "spec=count:4", "-b", "scheduler=shell"]
         args.extend(["-b", "args='-l place=scatter:excl,-q debug,-A XYZ123'"])
         args.append(".")
-        rc = run(*args)
+        cp = run(*args)
         dirs = os.listdir("TestResults")
         expected = [".canary"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
@@ -94,11 +94,11 @@ if __name__ == '__main__':
             elif re.search(r"#\s*BASH:? -A XYZ123", line):
                 found += 1
         assert found == 3
-        if rc != 0:
+        if cp.returncode != 0:
             print(open(files[0], "r").read())
         assert len(files) == 4
         files = glob.glob("TestResults/.canary/batches/**/canary-out.txt", recursive=True)
         assert len(files) == 4
-        if rc != 0:
+        if cp.returncode != 0:
             print(open(files[0], "r").read())
-        assert rc == 0
+        assert cp.returncode == 0

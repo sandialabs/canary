@@ -36,7 +36,7 @@ def config(request):
 
 @pytest.mark.skipif(not good, reason="gcc and/or cmake not on PATH")
 def test_cmake_integration(tmpdir):
-    from _canary.main import CanaryCommand
+    from _canary.util.testing import CanaryCommand
 
     workdir = tmpdir.strpath
     with fs.working_dir(workdir, create=True):
@@ -64,8 +64,8 @@ def test_cmake_integration(tmpdir):
             make = ex.Executable("make")
             make()
             print(os.listdir("."))
-            run = CanaryCommand("run", debug=True)
-            run("-w", "--recurse-ctest", ".")
+            run = CanaryCommand("run")
+            run("-w", "--recurse-ctest", ".", debug=True)
             dirs = sorted(os.listdir("TestResults"))
             dirs.remove(".canary")
             assert len(dirs) == 3
@@ -80,7 +80,7 @@ good = good and f3 is not None
 def test_cmake_integration_parallel(tmpdir):
     assert f3 is not None
     mpi_home = os.path.dirname(os.path.dirname(f3))
-    from _canary.main import CanaryCommand
+    from _canary.util.testing import CanaryCommand
 
     with fs.working_dir(tmpdir.strpath, create=True):
         with open("foo.c", "w") as fh:
@@ -101,9 +101,9 @@ def test_cmake_integration_parallel(tmpdir):
             assert os.path.exists("foo.pyt")
             make = ex.Executable("make")
             make()
-            run = CanaryCommand("run", debug=True)
-            run("-w", ".", fail_on_error=False)
-            if run.returncode != 0:
+            run = CanaryCommand("run")
+            cp = run("-w", ".", debug=True, check=False)
+            if cp.returncode != 0:
                 files = glob.glob("TestResults/**/canary-*.txt", recursive=True)
                 for file in files:
                     print(f"{file}:")

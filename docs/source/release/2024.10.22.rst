@@ -48,7 +48,7 @@ Additionally, user plugins are called during different phases of test session ex
 Integration with other tools
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``nvtest`` integrates with popular developer tools like :ref:`CMake <integrations-cmake>`, :ref:`CDash <integrations-cdash>`, and :ref:`GitLab <integrations-gitlab>`, streamlining the testing and continuous integration (CI) processes.
+``nvtest`` integrates with popular developer tools like :ref:`CMake <integrations-cmake>`, :ref:`CDash <integrations-cdash>`, and :ref:`GitLab <canary-gitlab>`, streamlining the testing and continuous integration (CI) processes.
 
 Documentation
 ~~~~~~~~~~~~~

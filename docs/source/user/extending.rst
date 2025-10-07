@@ -22,4 +22,4 @@ Extending canary
    canary_cmake</canary_cmake/index>
    canary_gitlab</canary_gitlab/index>
    canary_hpc</canary_hpc/index>
-   canary_junit</canary_junit/index>
+   canary_vvtest</canary_vvtest/index>

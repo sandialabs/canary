@@ -5,8 +5,8 @@
 import glob
 import os
 
-from _canary.main import CanaryCommand
 from _canary.util.filesystem import working_dir
+from _canary.util.testing import CanaryCommand
 
 
 def test_depends_on_one_to_one(tmpdir):
@@ -39,13 +39,13 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        if rc != 0:
+        cp = run("-w", ".")
+        if cp.returncode != 0:
             for file in glob.glob("TestResults/**/canary-out.txt", recursive=True):
                 print(open(file).read())
         assert os.path.exists("TestResults/f1")
         assert os.path.exists("TestResults/f2")
-        assert rc == 0
+        assert cp.returncode == 0
 
 
 def test_depends_on_one_to_many(tmpdir):
@@ -93,14 +93,14 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        if rc != 0:
+        cp = run("-w", ".")
+        if cp.returncode != 0:
             for file in glob.glob("TestResults/**/canary-out.txt", recursive=True):
                 print(open(file).read())
         assert os.path.exists("TestResults/f1")
         assert os.path.exists("TestResults/f2")
         assert os.path.exists("TestResults/f3")
-        assert rc == 0
+        assert cp.returncode == 0
 
 
 def test_depends_on_glob(tmpdir):
@@ -138,11 +138,11 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        if rc != 0:
+        cp = run("-w", ".")
+        if cp.returncode != 0:
             for file in glob.glob("TestResults/**/canary-out.txt", recursive=True):
                 print(open(file).read())
-        assert rc == 0
+        assert cp.returncode == 0
 
 
 def test_depends_on_many_to_one(tmpdir):
@@ -180,8 +180,8 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        if rc != 0:
+        cp = run("-w", ".")
+        if cp.returncode != 0:
             for file in glob.glob("TestResults/**/canary-out.txt", recursive=True):
                 print(open(file).read())
-        assert rc == 0
+        assert cp.returncode == 0

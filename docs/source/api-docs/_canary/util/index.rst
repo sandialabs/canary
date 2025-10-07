@@ -35,4 +35,5 @@ util
    singleton
    string
    term
+   testing
    time

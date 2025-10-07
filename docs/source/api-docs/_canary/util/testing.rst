@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-reporter
-========
+testing
+=======
 
-.. automodule:: canary_junit.reporter
+.. automodule:: _canary.util.testing
    :members:
    :undoc-members:
    :show-inheritance:

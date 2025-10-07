@@ -4,8 +4,8 @@
 
 import glob
 
-from _canary.main import CanaryCommand
 from _canary.util.filesystem import working_dir
+from _canary.util.testing import CanaryCommand
 
 
 def test_baseline(tmpdir):
@@ -28,15 +28,15 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        if rc != 0:
+        cp = run("-w", ".")
+        if cp.returncode != 0:
             for file in glob.glob("TestResults/**/canary-out.txt"):
                 print(open(file).read())
-        assert rc == 0
+        assert cp.returncode == 0
         with working_dir("TestResults"):
             rebaseline = CanaryCommand("rebaseline")
-            rc = rebaseline(".")
-        assert rc == 0
+            cp = rebaseline(".")
+        assert cp.returncode == 0
         assert open("a.txt").read() == "a=1"
 
 
@@ -71,13 +71,13 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        rc = run("-w", ".")
-        if rc != 0:
+        cp = run("-w", ".")
+        if cp.returncode != 0:
             for file in glob.glob("TestResults/**/canary-out.txt"):
                 print(open(file).read())
-        assert rc == 0
+        assert cp.returncode == 0
         with working_dir("TestResults"):
             rebaseline = CanaryCommand("rebaseline")
-            rc = rebaseline(".")
-        assert rc == 0
+            cp = rebaseline(".")
+        assert cp.returncode == 0
         assert open("a.txt").read() == "a=1"

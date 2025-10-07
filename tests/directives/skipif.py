@@ -4,11 +4,8 @@
 
 import os
 
-import pytest
-
-from _canary.error import StopExecution
-from _canary.main import CanaryCommand
 from _canary.util.filesystem import working_dir
+from _canary.util.testing import CanaryCommand
 
 
 def test_skipif(tmpdir):
@@ -27,12 +24,11 @@ if __name__ == '__main__':
 """
             )
         run = CanaryCommand("run")
-        rc = run("-w", ".")
+        cp = run("-w", ".")
         assert set(os.listdir("TestResults")) == {".canary", "f1"}
         assert len(os.listdir("TestResults")) == 2
-        assert rc == 0
-        with pytest.raises(StopExecution):
-            # Error raised due to empty test session
-            os.environ["CANARY_BAZ"] = "1"
-            rc = run("-w", "-o", "baz", ".")
+        assert cp.returncode == 0
+        os.environ["CANARY_BAZ"] = "1"
+        cp = run("-w", "-o", "baz", ".")
+        assert cp.returncode == 7
         os.environ.pop("CANARY_BAZ", None)

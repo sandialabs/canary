@@ -1,7 +1,7 @@
 import os
 
 import _canary.util.filesystem as fs
-from _canary.main import CanaryCommand
+from _canary.util.testing import CanaryCommand
 
 
 def test_issue_90(tmpdir):
@@ -9,15 +9,15 @@ def test_issue_90(tmpdir):
     with fs.working_dir(tmpdir.strpath, create=True):
         with open("test.pyt", "w") as fh:
             write_testfile(fh)
-        rc = run("-w", ".", fail_on_error=False)
-        assert rc != 0
+        cp = run("-w", ".", check=False)
+        assert cp.returncode != 0
         with fs.working_dir("TestResults"):
             try:
                 os.environ["FIX_B"] = "1"
-                rc = run("-k", "not success", ".", fail_on_error=False)
+                cp = run("-k", "not success", ".", check=False)
             finally:
                 os.environ.pop("FIX_B")
-            assert rc == 0
+            assert cp.returncode == 0
             assert os.path.exists("a/canary-out.txt")
 
 

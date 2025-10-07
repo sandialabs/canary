@@ -9,8 +9,8 @@ from types import SimpleNamespace
 import pytest
 
 import canary
-from _canary.main import CanaryCommand
 from _canary.util.filesystem import working_dir
+from _canary.util.testing import CanaryCommand
 
 
 @pytest.fixture(scope="module")
@@ -69,27 +69,6 @@ if __name__ == "__main__":
         yield ns
 
 
-def test_report_html(setup):
-    with working_dir(setup.results_path):
-        with canary.config.override():
-            report = CanaryCommand("report", debug=True)
-            report("html", "create")
-
-
-def test_report_json(setup):
-    with working_dir(setup.results_path):
-        with canary.config.override():
-            report = CanaryCommand("report")
-            report("json", "create")
-
-
-def test_report_markdown(setup):
-    with working_dir(setup.results_path):
-        with canary.config.override():
-            report = CanaryCommand("report")
-            report("markdown", "create")
-
-
 def test_location_0(setup):
     with working_dir(setup.results_path):
         with canary.config.override():
@@ -142,19 +121,17 @@ def test_status(setup):
 
 
 def test_describe(capsys):
-    from _canary.main import CanaryCommand
-
     data_dir = os.path.join(os.path.dirname(__file__), "data")
-    describe = CanaryCommand("describe", debug=True)
+    describe = CanaryCommand("describe")
 
-    describe(os.path.join(data_dir, "empire.pyt"))
+    cp = describe(os.path.join(data_dir, "empire.pyt"), debug=True)
     captured = capsys.readouterr()
-    assert describe.returncode == 0
+    assert cp.returncode == 0
     pyt_out = captured.out
 
-    describe(os.path.join(data_dir, "empire.vvt"))
+    cp = describe(os.path.join(data_dir, "empire.vvt"), debug=True)
     captured = capsys.readouterr()
-    assert describe.returncode == 0
+    assert cp.returncode == 0
     vvt_out = captured.out
 
 

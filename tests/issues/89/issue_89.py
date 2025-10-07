@@ -1,5 +1,5 @@
-import _canary.main
 import _canary.util.filesystem as fs
+from _canary.util.testing import CanaryCommand
 
 
 def test_issue_89(tmpdir):
@@ -16,6 +16,6 @@ print("Hello world")
     with fs.working_dir(tmpdir.strpath, create=True):
         with open("demo.vvt", "w") as fh:
             fh.write(demo)
-        run = _canary.main.CanaryCommand("run")
-        run(".")
-        assert run.returncode == 0
+        run = CanaryCommand("run")
+        cp = run(".")
+        assert cp.returncode == 0

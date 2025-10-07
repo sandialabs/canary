@@ -4,8 +4,29 @@
 
 .. _integrations-junit:
 
+JUnit style reports
+===================
+
+Canary can generate `JUnit XML files <https://www.ibm.com/docs/en/developer-for-zos/16.0?topic=formats-junit-xml-format>`_ for a completed test session.  The JUnit XML report format is a standardized structure for representing the results of unit tests, commonly used in continuous integration and continuous deployment (CI/CD) pipelines. This format, which is based on XML (Extensible Markup Language), allows for the systematic recording of test outcomes, including details such as the number of tests run, passed, failed, and skipped, as well as specific error messages and stack traces for failed tests.
+
+A junit report of a test session can be generated after the session has completed:
+
+.. command-output:: canary run -d TestResults.junit ./basic
+    :cwd: /examples
+    :nocache:
+    :setup: rm -rf TestResults.junit
+    :ellipsis: 0
+
+.. command-output:: canary -C TestResults.junit report junit create
+    :nocache:
+    :cwd: /examples
+
+.. command-output:: cat TestResults.junit/junit.xml
+    :nocache:
+    :cwd: /examples
+
 JUnit spec
-==========
+----------
 
 ``canary`` supports the following tags and attributes:
 

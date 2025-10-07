@@ -68,7 +68,6 @@ scripts.nvtest = "canary:console_main"
 canary_cmake = "canary_cmake"
 canary_gitlab = "canary_gitlab"
 canary_hpc = "canary_hpc"
-canary_junit = "canary_junit"
 canary_vvtest = "canary_vvtest"
 
 [tool.setuptools.dynamic]

@@ -6,6 +6,7 @@ from . import discover
 from . import email
 from . import html
 from . import json
+from . import junit
 from . import markdown
 from . import mask
 from . import oversubscribe
@@ -23,6 +24,7 @@ plugins = [
     email,
     html,
     json,
+    junit,
     markdown,
     mask,
     oversubscribe,

@@ -99,52 +99,6 @@ class CanaryMain:
         os.chdir(config.invocation_dir)
 
 
-class CanaryCommand:
-    def __init__(self, command_name: str, debug: bool = False) -> None:
-        # plugin.load_from_entry_points()
-        for command in config.pluginmanager.hook.canary_subcommand():
-            if command.name == command_name:
-                self.command = command
-                break
-        else:
-            raise ValueError(f"Unknown command {command_name!r}")
-        self.debug = debug
-        self.returncode = -1
-
-    def __call__(self, *args_in: str, fail_on_error: bool = True) -> int:
-        try:
-            global reraise
-            with config.override() as cfg:
-                save_reraise: bool | None = None
-                if self.debug:
-                    scope = config.ConfigScope("tmp", None, {"config": {"debug": True}})
-                    cfg.push_scope(scope)
-                    save_reraise = reraise
-                    reraise = True
-                cfg.pluginmanager.hook.canary_addhooks(pluginmanager=cfg.pluginmanager)
-                argv = [self.command.name] + list(args_in)
-                parser = make_argument_parser()
-                for command in cfg.pluginmanager.hook.canary_subcommand():
-                    parser.add_command(command)
-                with monkeypatch.context() as mp:
-                    mp.setattr(parser, "add_argument", parser.add_plugin_argument)
-                    mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
-                    cfg.pluginmanager.hook.canary_addoption(parser=parser)
-                args = parser.parse_args(argv)
-                cfg.set_main_options(args)
-                cfg.pluginmanager.hook.canary_configure(config=cfg)
-                rc = self.command.execute(cfg.options)
-                self.returncode = rc
-        except Exception:
-            if fail_on_error:
-                raise
-            self.returncode = 1
-        finally:
-            if save_reraise is not None:
-                reraise = save_reraise
-        return self.returncode
-
-
 def invoke_command(command: "CanarySubcommand", args: argparse.Namespace) -> int:
     return command.execute(args)
 

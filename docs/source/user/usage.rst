@@ -24,7 +24,6 @@ canary usage
    usage.rerun
    usage.rebaseline
    usage.location
-   usage.report
    usage.enable
    usage.copy_and_link
    usage.execute_and_analyze

@@ -12,6 +12,7 @@ plugins.builtin
    email
    html
    json
+   junit
    markdown
    mask
    oversubscribe
