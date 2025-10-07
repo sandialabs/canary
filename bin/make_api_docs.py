@@ -103,6 +103,16 @@ if __name__ == "__main__":
             skip_dirs=["tests"],
         )
         make_api_docs(
+            os.path.join(canary_root, "src/canary_gitlab"),
+            os.path.join(canary_root, "docs/source/api-docs/canary_gitlab"),
+            skip_dirs=["tests"],
+        )
+        make_api_docs(
+            os.path.join(canary_root, "src/canary_junit"),
+            os.path.join(canary_root, "docs/source/api-docs/canary_junit"),
+            skip_dirs=["tests"],
+        )
+        make_api_docs(
             os.path.join(canary_root, "src/canary_vvtest"),
             os.path.join(canary_root, "docs/source/api-docs/canary_vvtest"),
             skip_dirs=["tests"],

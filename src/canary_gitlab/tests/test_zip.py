@@ -5,7 +5,7 @@
 import os
 import zipfile
 
-from _canary.util import gitlab
+from canary_gitlab import gitlab
 
 
 def make_zip_with_traversal(zip_path):
@@ -34,9 +34,9 @@ def test_zip_slip_extraction(tmp_path):
             pass
 
     # Monkeypatch urlopen in gitlab module
-    import _canary.util.gitlab as gitlab_mod
+    import canary_gitlab.gitlab as gitlab_mod
 
-    gitlab_mod.urlopen = lambda req: DummyResponse()
+    gitlab_mod.urlopen = lambda req: DummyResponse()  # type: ignore[invalid-assignment]
     # Call get_job_artifacts, which will extract the zip
     outdir = tmp_path / "out"
     os.makedirs(outdir, exist_ok=True)

@@ -8,5 +8,6 @@ hpcc_slurm
 .. toctree::
    :maxdepth: 1
 
+   discover
    launch
    submit

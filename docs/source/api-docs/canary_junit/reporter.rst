@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-gitlab
-======
+reporter
+========
 
-.. automodule:: _canary.plugins.builtin.gitlab
+.. automodule:: canary_junit.reporter
    :members:
    :undoc-members:
    :show-inheritance:

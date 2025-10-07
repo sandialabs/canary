@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-gitlab
-======
+discover
+========
 
-.. automodule:: _canary.util.gitlab
+.. automodule:: hpc_connect.discover
    :members:
    :undoc-members:
    :show-inheritance:

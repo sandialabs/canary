@@ -76,13 +76,6 @@ def test_report_html(setup):
             report("html", "create")
 
 
-def test_report_cdash(setup):
-    with working_dir(setup.results_path):
-        with canary.config.override():
-            report = CanaryCommand("report")
-            report("cdash", "create")
-
-
 def test_report_json(setup):
     with working_dir(setup.results_path):
         with canary.config.override():
@@ -95,13 +88,6 @@ def test_report_markdown(setup):
         with canary.config.override():
             report = CanaryCommand("report")
             report("markdown", "create")
-
-
-def test_report_junit(setup):
-    with working_dir(setup.results_path):
-        with canary.config.override():
-            report = CanaryCommand("report")
-            report("junit", "create")
 
 
 def test_location_0(setup):

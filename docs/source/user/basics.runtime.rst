@@ -10,7 +10,7 @@ Time resources
 Runtime
 -------
 
-Test runtimes are written to ``<root>/.canary_cache/timing``, where ``<root>`` is the the test's project root (as determined by the presence of a ``.git`` directory) or the test's root test search directory if the project root could not be determined.  This cache is automatically created when a session is run and can be ignored from source control.  However, if the timing cache is kept and updated, the data contained therein can aid in speeding up :ref:`batched <usage-run-batched>` test runs by allowing more accurate determinations of batch sizes.
+Test runtimes are written to ``<root>/.canary_cache/timing``, where ``<root>`` is the the test's project root (as determined by the presence of a ``.git`` directory) or the test's root test search directory if the project root could not be determined.  This cache is automatically created when a session is run and can be ignored from source control.  However, if the timing cache is kept and updated, the data contained therein can aid in speeding up test runs.
 
 Timeout
 -------

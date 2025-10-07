@@ -234,7 +234,7 @@ class Parser(argparse.ArgumentParser):
 more help:
   canary help --all        list all commands and options
   canary help --pathspec   help on the path specification syntax
-  canary docs              open http://ascic-test-infra.cee-gitlab.lan/canary in a browser
+  canary docs              open https://canary-wm.readthedocs.io/en/production in a browser
 """
         parser.epilog = epilog
 

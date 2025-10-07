@@ -4,10 +4,8 @@
 
 from . import discover
 from . import email
-from . import gitlab
 from . import html
 from . import json
-from . import junit
 from . import markdown
 from . import mask
 from . import oversubscribe
@@ -23,10 +21,8 @@ from . import testcase_generator
 plugins = [
     discover,
     email,
-    gitlab,
     html,
     json,
-    junit,
     markdown,
     mask,
     oversubscribe,

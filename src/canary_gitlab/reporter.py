@@ -5,33 +5,20 @@
 import io
 import os
 import re
-from typing import TYPE_CHECKING
 from typing import Any
 
-from ...util import gitlab
-from ...util import logging
-from ..hookspec import hookimpl
-from ..types import CanaryReporter
+import canary
 
-if TYPE_CHECKING:
-    from ...config.argparsing import Parser
-    from ...session import Session
-    from ...testcase import TestCase
+from . import gitlab
+
+logger = canary.get_logger(__name__)
 
 
-@hookimpl
-def canary_session_reporter() -> CanaryReporter:
-    return GitLabMRReporter()
-
-
-logger = logging.get_logger(__name__)
-
-
-class GitLabMRReporter(CanaryReporter):
+class GitLabMRReporter(canary.CanaryReporter):
     type = "gitlab-mr"
     description = "GitLab reporter"
 
-    def setup_parser(self, parser: "Parser") -> None:
+    def setup_parser(self, parser: "canary.Parser") -> None:
         sp = parser.add_subparsers(dest="action", metavar="subcommands")
         p = sp.add_parser("create", help="Create GitLab merge request reports")
         p.add_argument("--cdash-url", help="Add a link to a CDash report for this MR")
@@ -41,7 +28,7 @@ class GitLabMRReporter(CanaryReporter):
             help="GitLab access token that allows to GET/POST to the merge request API",
         )
 
-    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
+    def create(self, session: "canary.Session | None" = None, **kwargs: Any) -> None:
         if session is None:
             raise ValueError("canary report html: session required")
 
@@ -85,7 +72,7 @@ class MergeRequest:
 
     def report_failed(
         self,
-        failed_cases: dict[str, list["TestCase"]],
+        failed_cases: dict[str, list["canary.TestCase"]],
         cdash_build_url: str | None = None,
     ):
         fp = io.StringIO()
@@ -122,8 +109,8 @@ class MergeRequest:
         self.add_note(note)
 
 
-def group_failed_tests(cases: list["TestCase"]):
-    failed: dict[str, list["TestCase"]] = {}
+def group_failed_tests(cases: list["canary.TestCase"]):
+    failed: dict[str, list["canary.TestCase"]] = {}
     nonpass = (
         "skipped",
         "diffed",

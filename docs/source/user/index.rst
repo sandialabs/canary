@@ -34,12 +34,6 @@ canary user's guide
    extending
 
 .. toctree::
-   :caption: Integrating with other applications
-   :maxdepth: 2
-
-   integrations
-
-.. toctree::
    :caption: Commands and directives
    :maxdepth: 1
 

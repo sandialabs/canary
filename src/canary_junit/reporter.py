@@ -8,29 +8,17 @@ import xml.dom.minidom as xdom
 import xml.sax.saxutils
 from datetime import datetime
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
 from typing import Any
 
-from ...util.filesystem import mkdirp
-from ..hookspec import hookimpl
-from ..types import CanaryReporter
-
-if TYPE_CHECKING:
-    from ...session import Session
-    from ...testcase import TestCase
+import canary
 
 
-@hookimpl
-def canary_session_reporter() -> CanaryReporter:
-    return JunitReporter()
-
-
-class JunitReporter(CanaryReporter):
+class JunitReporter(canary.CanaryReporter):
     type = "junit"
     description = "JUnit reporter"
     default_output = "junit.xml"
 
-    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
+    def create(self, session: "canary.Session | None" = None, **kwargs: Any) -> None:
         if session is None:
             raise ValueError("canary report junit: session required")
 
@@ -48,7 +36,7 @@ class JunitReporter(CanaryReporter):
             root.appendChild(suite)
         doc.appendChild(root)
         file = os.path.abspath(output)
-        mkdirp(os.path.dirname(file))
+        canary.filesystem.mkdirp(os.path.dirname(file))
         with open(file, "w") as fh:
             fh.write(doc.toprettyxml(indent="  ", newl="\n"))
 
@@ -62,9 +50,9 @@ def get_root_name() -> str:
     return name
 
 
-def groupby_classname(cases: list["TestCase"]) -> dict[str, list["TestCase"]]:
+def groupby_classname(cases: list["canary.TestCase"]) -> dict[str, list["canary.TestCase"]]:
     """Group tests by status"""
-    grouped: dict[str, list["TestCase"]] = {}
+    grouped: dict[str, list["canary.TestCase"]] = {}
     for case in cases:
         grouped.setdefault(case.classname, []).append(case)
     return grouped
@@ -83,7 +71,7 @@ class JunitDocument(xdom.Document):
         return node
 
     def create_testsuite_element(
-        self, cases: list["TestCase"], tagname: str = "testsuite", **attrs: str
+        self, cases: list["canary.TestCase"], tagname: str = "testsuite", **attrs: str
     ) -> xdom.Element:
         """Create a testcase element with the following structure
 
@@ -105,7 +93,7 @@ class JunitDocument(xdom.Document):
         element.setAttribute("timestamp", stats.timestamp)
         return element
 
-    def create_testcase_element(self, case: "TestCase") -> xdom.Element:
+    def create_testcase_element(self, case: "canary.TestCase") -> xdom.Element:
         """Create a testcase element with the following structure:
 
         .. code-block: xml
@@ -153,7 +141,7 @@ class JunitDocument(xdom.Document):
         return testcase
 
 
-def gather_statistics(cases: list["TestCase"]) -> SimpleNamespace:
+def gather_statistics(cases: list["canary.TestCase"]) -> SimpleNamespace:
     stats = SimpleNamespace(
         num_skipped=0,
         num_failed=0,

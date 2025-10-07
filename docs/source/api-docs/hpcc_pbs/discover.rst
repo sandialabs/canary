@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-junit
-=====
+discover
+========
 
-.. automodule:: _canary.plugins.builtin.junit
+.. automodule:: hpcc_pbs.discover
    :members:
    :undoc-members:
    :show-inheritance:

@@ -78,16 +78,6 @@ Set test timeouts based on :ref:`keywords<directive-keywords>`.  The ``fast`` an
 
   The same can be accomplished on the command line: ``canary -c test:timeout:unit_test:1s ...``.
 
-batch
------
-
-Set batch settings.
-
-.. code-block:: yaml
-
-   batch:
-     default_options: []  # (list of str)
-
 environment
 -----------
 

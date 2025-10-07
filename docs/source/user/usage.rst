@@ -23,7 +23,6 @@ canary usage
    usage.log
    usage.rerun
    usage.rebaseline
-   usage.run_batched
    usage.location
    usage.report
    usage.enable

@@ -4,12 +4,8 @@
 
 .. _integrations-junit:
 
-JUnit integration
-=================
-
-``canary`` can emit `JUnit XML files <https://www.ibm.com/docs/en/developer-for-zos/16.0?topic=formats-junit-xml-format>`_ for a completed test session.  The JUnit XML report format is a standardized structure for representing the results of unit tests, commonly used in continuous integration and continuous deployment (CI/CD) pipelines. This format, which is based on XML (Extensible Markup Language), allows for the systematic recording of test outcomes, including details such as the number of tests run, passed, failed, and skipped, as well as specific error messages and stack traces for failed tests.
-
-See :ref:`usage-junit` for examples of creating JUnit formatted reports.
+JUnit spec
+==========
 
 ``canary`` supports the following tags and attributes:
 

@@ -2,12 +2,10 @@
 
    SPDX-License-Identifier: MIT
 
-hpcc_flux
-=========
+canary_junit
+============
 
 .. toctree::
    :maxdepth: 1
 
-   discover
-   submit_api
-   submit_hl
+   reporter

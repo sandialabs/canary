@@ -2,7 +2,7 @@
 
    SPDX-License-Identifier: MIT
 
-.. _usage-run-batched:
+.. _canary_hpc-run:
 
 Running tests in a scheduler
 ============================
@@ -62,6 +62,27 @@ Batch concurrency can be controlled by
 
 * ``--workers=N``: Submit ``N`` concurrent batches to the scheduler at any one time.  The default is 5.
 * ``-b workers=N``: Execute the batch asynchronously using a pool of at most ``N`` workers.  By default, the maximum number of available workers is used.
+
+Rerunning tests
+---------------
+
+Navigate to the test results directory and execute :ref:`canary run<canary-run>` to rerun tests:
+
+.. code-block:: console
+
+   canary -C TEST_RESULTS_DIR run [OPTIONS]
+
+
+or
+
+.. code-block:: console
+
+   cd TEST_RESULTS_DIR
+   canary run [OPTIONS]
+
+where ``TEST_RESULTS_DIR`` is the test results directory.
+
+When a test session is created in batched mode, the batch arguments from the test session invocation are inherited in future reruns.
 
 Examples
 --------

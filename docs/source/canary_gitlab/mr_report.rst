@@ -2,10 +2,10 @@
 
    SPDX-License-Identifier: MIT
 
-.. _integrations-gitlab:
+.. _canary_gitlab-mr_report:
 
-Integrate with GitLab
-=====================
+Merge request reporting
+=======================
 
 Upon completion of a test session, launched in a GitLab merge request environment, ``canary`` can report back to the merge request the status of the test session.  To enable this integration, define the variable ``GITLAB_ACCESS_TOKEN`` in your runner's environment with an access token that has GitLab API read/write permissions.
 

@@ -10,12 +10,11 @@ plugins.builtin
 
    discover
    email
-   gitlab
    html
    json
-   junit
    markdown
    mask
+   oversubscribe
    post_clean
    pyt
    repeat

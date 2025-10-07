@@ -66,7 +66,9 @@ scripts.nvtest = "canary:console_main"
 
 [project.entry-points."canary"]
 canary_cmake = "canary_cmake"
+canary_gitlab = "canary_gitlab"
 canary_hpc = "canary_hpc"
+canary_junit = "canary_junit"
 canary_vvtest = "canary_vvtest"
 
 [tool.setuptools.dynamic]
@@ -100,7 +102,13 @@ indent = 4
 max_supported_python = "3.14"
 
 [tool.pytest.ini_options]
-testpaths = [ "tests", "src/canary_vvtest/tests", "src/canary_cmake/tests", "src/canary_hpc/tests" ]
+testpaths = [
+    "tests",
+    "src/canary_vvtest/tests",
+    "src/canary_cmake/tests",
+    "src/canary_hpc/tests",
+    "src/canary_junit/tests"
+]
 norecursedirs = "mock"
 addopts = "-ra --durations=10"
 cache_dir = ".cache/pytest"

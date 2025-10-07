@@ -7,7 +7,7 @@ import io
 import os
 import re
 
-from _canary.util import gitlab
+import canary_gitlab.gitlab
 from _canary.util import logging
 
 from . import interface
@@ -80,7 +80,7 @@ def create_issues_from_failed_tests(
         for test_name, test_realizations in group.items():
             issue = generate_test_issue(test_name, test_realizations)
             issue_data.append(issue)
-    repo = gitlab.repo(
+    repo = canary_gitlab.gitlab.repo(
         url=gitlab_url,
         access_token=access_token,
         project_id=int(gitlab_project_id),

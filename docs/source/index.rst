@@ -27,7 +27,7 @@ canary
 
 **Python**: Test files are written in `Python <https://www.python.org>`_, giving developers access to the full Python ecosystem.
 
-**Integration**: ``canary`` :ref:`integrates<integrations>` with popular developer tools like :ref:`CMake <integrations-cmake>`, :ref:`CDash <integrations-cdash>`, :ref:`CTest <integrations-ctest>`, and :ref:`GitLab <integrations-gitlab>`, streamlining the testing and continuous integration (CI) processes.
+**Integration**: ``canary`` integrates with popular developer tools like :ref:`CMake <canary-cmake>`, :ref:`CDash <integrations-cdash>`, :ref:`CTest <integrations-ctest>`, and :ref:`GitLab <canary-gitlab>`, streamlining the testing and continuous integration (CI) processes.
 
 **Extensibility**: ``canary`` can be extended through :ref:`user plugins <extending>`, allowing developers to customize their test sessions according to their specific needs.
 

@@ -18,7 +18,6 @@ util
    entry_points
    executable
    filesystem
-   gitlab
    glyphs
    graph
    hash

@@ -10,9 +10,11 @@ hpc_connect
 
    command/index
    config
+   discover
    hookspec
    launch
    pluginmanager
+   schemas
    submit
    util/index
    version
