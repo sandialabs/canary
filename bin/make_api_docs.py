@@ -75,7 +75,9 @@ class APIDocsMaker:
             data["modules"] = [module_name(f) for f in files if module_name(f)]
             data["packages"] = [d for d in dirs if not d.endswith(tuple(skip_dirs))]
         for namespace, data in package_data.items():
-            dest = os.path.join(self.dest, pkgname, namespace.replace(".", os.path.sep).lstrip(os.path.sep))
+            dest = os.path.join(
+                self.dest, pkgname, namespace.replace(".", os.path.sep).lstrip(os.path.sep)
+            )
             title = pkgname if namespace == "." else namespace
             fp = io.StringIO()
             fp.write(copyright)
