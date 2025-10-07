@@ -467,8 +467,8 @@ class TestBatch(AbstractTestCase):
         args.extend(["-C", canary.config.get("session:work_tree")])
         args.extend(["run", "-b", f"exec=backend:{backend.name},batch:{self.id}"])
         batchopts = canary.config.getoption("batchopts", {})
-        if workers := batchopts.get("workers"):
-            args.append(f"--workers={workers}")
+        workers = batchopts.get("workers") or -1
+        args.append(f"--workers={workers}")
         return shlex.join(args)
 
 
