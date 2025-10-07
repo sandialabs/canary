@@ -1276,23 +1276,6 @@ class TestCase(AbstractTestCase):
             self.measurements[_arg1] = _arg2
         self.measurements.update(kwds)
 
-    def update(self, **attrs: Any) -> None:
-        """Restore values from a snapshot"""
-        for name, value in attrs.items():
-            if name == "id":
-                if value != self.id:
-                    raise ValueError("Incorrect case ID")
-            elif name == "dependencies":
-                for i, dep in enumerate(value):
-                    if isinstance(dep, TestCase):
-                        self.dependencies[i] = dep
-            elif name == "cpu_ids":
-                self._cpu_ids = value
-            elif name == "gpu_ids":
-                self._gpu_ids = value
-            else:
-                setattr(self, name, value)
-
     def describe(self) -> str:
         """Write a string describing the test case"""
         format_spec: str = "%s.n @*b{%id} %X"
@@ -1664,7 +1647,8 @@ class TestCase(AbstractTestCase):
 
     def setstate(self, state: dict[str, Any]) -> None:
         """The reverse of getstate - set the object state from a dict"""
-        # replace values in state with their instantiated objects
+
+        # Step 1: Replace serialized values in state with their instantiated objects
         properties = state["properties"]
         for name, value in properties.items():
             if name == "paramsets":
@@ -1681,19 +1665,24 @@ class TestCase(AbstractTestCase):
                         )
             elif name == "status":
                 properties[name] = Status(value["value"], details=value["details"])
+
+        # Step 2: Set dependencies
         if "dependencies" in properties:
+            dependencies = properties.pop("dependencies")
+            dep_done_criteria = properties.pop("dep_done_criteria")
             self.dependencies.clear()
             self.dep_done_criteria.clear()
-            dep_done_criteria = properties.pop("dep_done_criteria")
-            for i, dep in enumerate(properties.pop("dependencies")):
+            for i, dep in enumerate(dependencies):
                 self.add_dependency(dep, dep_done_criteria[i])
+
+        # Step 3: Set the rest of the properties
+        allowed_none: tuple[str, ...] = ("efile",)
         for name, value in properties.items():
-            if name == "cpu_ids":
-                self._cpu_ids = value
-            elif name == "gpu_ids":
-                self._gpu_ids = value
-            elif value is not None:
+            if value is not None:
                 setattr(self, name, value)
+            elif name in allowed_none:
+                setattr(self, name, value)
+
         return
 
     def run(self, qsize: int = 1, qrank: int = 0) -> None:
