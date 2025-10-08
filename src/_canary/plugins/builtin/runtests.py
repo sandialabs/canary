@@ -169,9 +169,9 @@ class Runner:
             config.pluginmanager.hook.canary_testcase_setup(case=case)
             config.pluginmanager.hook.canary_testcase_run(case=case, qsize=qsize, qrank=qrank)
         finally:
+            config.pluginmanager.hook.canary_testcase_finish(case=case)
             if summary := job_finish_summary(case, qrank=qrank, qsize=qsize):
                 logger.log(logging.EMIT, summary, extra={"prefix": ""})
-            config.pluginmanager.hook.canary_testcase_finish(case=case)
 
 
 def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Future) -> None:

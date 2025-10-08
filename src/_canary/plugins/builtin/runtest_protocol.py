@@ -10,7 +10,7 @@ from ...atc import AbstractTestCase
 from ..hookspec import hookimpl
 
 
-@hookimpl(wrapper=True, trylast=True)
+@hookimpl(wrapper=True)
 def canary_testcase_setup(case: AbstractTestCase) -> Generator[None, None, bool]:
     if not config.getoption("dont_restage"):
         case.setup()
@@ -19,7 +19,7 @@ def canary_testcase_setup(case: AbstractTestCase) -> Generator[None, None, bool]
     return True
 
 
-@hookimpl(wrapper=True, trylast=True)
+@hookimpl(wrapper=True)
 def canary_testcase_run(
     case: AbstractTestCase, qsize: int, qrank: int
 ) -> Generator[None, None, bool]:
@@ -29,7 +29,7 @@ def canary_testcase_run(
     return True
 
 
-@hookimpl(wrapper=True, trylast=True)
+@hookimpl(wrapper=True)
 def canary_testcase_finish(case: AbstractTestCase) -> Generator[None, None, bool]:
     case.finish()
     yield
