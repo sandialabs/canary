@@ -400,9 +400,12 @@ class Config:
             if n > psutil.cpu_count():
                 raise ValueError(f"workers={n} > cpu_count={psutil.cpu_count()}")
 
-        if t := getattr(args, "timeouts", None):
-            c = data.setdefault("config", {})
-            c.setdefault("timeout", {}).update(t)
+        if t := getattr(args, "timeout", None):
+            config_settings: dict = data.setdefault("config", {})
+            timeout_settings: dict[str, Any] = config_settings.setdefault("timeout", {})
+            for key, val in t.items():
+                timeout_settings[key] = val
+            config_settings["timeout"] = timeout_settings
 
         self.options = merge_namespaces(self.options, args)
 

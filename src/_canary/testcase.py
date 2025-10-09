@@ -395,7 +395,7 @@ class TestCase(AbstractTestCase):
 
         self.ofile = "canary-out.txt"
         output_strategy = config.getoption("testcase_output_strategy")
-        self.efile: str | None = None if output_strategy == "merge" else "canary-err.txt"
+        self.efile: str = "<none>" if output_strategy == "merge" else "canary-err.txt"
         self._stdout: IO[Any] | None = None
         self._stderr: IO[Any] | None = None
 
@@ -501,7 +501,7 @@ class TestCase(AbstractTestCase):
 
     @property
     def stderr_file(self) -> str | None:
-        if self.efile is None:
+        if self.efile == "<none>":
             return None
         return os.path.join(self.working_directory, self.efile)
 
@@ -1203,7 +1203,7 @@ class TestCase(AbstractTestCase):
             else:
                 timeout = 2.0 * max_runtime
         else:
-            if t := config.get("config:timeout:all"):
+            if t := config.get("config:timeout:*"):
                 timeout = float(t)
             else:
                 for keyword in self.keywords:
@@ -1545,16 +1545,15 @@ class TestCase(AbstractTestCase):
                 f"\t{cwd=}"
             )
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
-        ts = lambda: datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
-        self.stdout.write(f"[{ts()}] Preparing test: {self.name}\n")
-        self.stdout.write(f"[{ts()}] Directory: {os.getcwd()}\n")
-        self.stdout.write(f"[{ts()}] Cleaning work directory...\n")
-        self.stdout.write(f"[{ts()}] Linking and copying working files...\n")
+        self.stdout.write(f"[{strtimestamp()}] Preparing test: {self.name}\n")
+        self.stdout.write(f"[{strtimestamp()}] Directory: {os.getcwd()}\n")
+        self.stdout.write(f"[{strtimestamp()}] Cleaning work directory...\n")
+        self.stdout.write(f"[{strtimestamp()}] Linking and copying working files...\n")
         if copy_all_resources:
-            self.stdout.write(f"[{ts()}] Copying {self.file} to {cwd}\n")
+            self.stdout.write(f"[{strtimestamp()}] Copying {self.file} to {cwd}\n")
             fs.force_copy(self.file, os.path.basename(self.file))
         else:
-            self.stdout.write(f"[{ts()}] Linking {self.file} to {cwd}\n")
+            self.stdout.write(f"[{strtimestamp()}] Linking {self.file} to {cwd}\n")
             fs.force_symlink(self.file, os.path.basename(self.file))
         self.copy_sources_to_workdir()
 
@@ -1590,7 +1589,7 @@ class TestCase(AbstractTestCase):
         keep.add(os.path.basename(self.file))
         keep.add("testcase.lock")
         keep.add(self.ofile)
-        if self.efile is not None:
+        if self.efile != "<none>":
             keep.add(self.efile)
         with fs.working_dir(self.working_directory):
             files = os.listdir(".")
@@ -1689,13 +1688,16 @@ class TestCase(AbstractTestCase):
         """Run the test case"""
 
         cmd = self.command()
-        cmd_line = shlex.join(cmd)
-        self.stdout.write(f"==> Running {self.display_name}\n")
-        self.stdout.write(f"==> Working directory: {self.working_directory}\n")
-        self.stdout.write(f"==> Execution directory: {self.execution_directory}\n")
-        self.stdout.write(f"==> Command line: {cmd_line}\n")
-        if (timeoutx := config.get("config:timeout:multiplier")) and (timeoutx != 1.0):
-            self.stdout.write(f"==> Timeout multiplier: {timeoutx}\n")
+        cmd_line: str = shlex.join(cmd)
+        timeout: float = self.timeout
+        timeoutx: float | None = config.get("config:timeout:multiplier")
+        self.stdout.write(f"[{strtimestamp()}] Running {self.display_name}\n")
+        self.stdout.write(f"[{strtimestamp()}] Working directory: {self.working_directory}\n")
+        self.stdout.write(f"[{strtimestamp()}] Execution directory: {self.execution_directory}\n")
+        self.stdout.write(f"[{strtimestamp()}] Command line: {cmd_line}\n")
+        self.stdout.write(f"[{strtimestamp()}] Timeout: {timeout}\n")
+        if timeoutx and timeoutx != 1.0:
+            self.stdout.write(f"[{strtimestamp()}] Timeout multiplier: {timeoutx}\n")
         self.stdout.flush()
 
         def cancel(sig, frame):
@@ -1719,14 +1721,10 @@ class TestCase(AbstractTestCase):
         try:
             default_int_handler = signal.signal(signal.SIGINT, cancel)
             default_term_handler = signal.signal(signal.SIGTERM, cancel)
-
             proc: psutil.Popen | None = None
             metrics: dict[str, Any] | None = None
-            timeout = self.timeout
-            if timeoutx := config.get("config:timeout:multiplier"):
+            if timeoutx:
                 timeout *= timeoutx
-            cmd = self.command()
-            cmd_line = shlex.join(cmd)
             with fs.working_dir(self.working_directory):
                 with self.rc_environ():
                     start_marker: float = time.monotonic()
@@ -1738,7 +1736,7 @@ class TestCase(AbstractTestCase):
                         stdout = stderr = subprocess.PIPE
                     else:
                         stdout = self.stdout
-                        stderr = subprocess.STDOUT if self.efile is None else self.stderr
+                        stderr = subprocess.STDOUT if self.efile == "<none>" else self.stderr
                     self.start = timestamp()
                     self.status.set("running")
                     proc = psutil.Popen(cmd, stdout=stdout, stderr=stderr, cwd=cwd)
@@ -1931,6 +1929,10 @@ def from_id(id: str) -> TestCase | TestMultiCase:
     if lockfiles:
         return from_lockfile(lockfiles[0])
     raise ValueError(f"no test case associated with {id} found in {work_tree}")
+
+
+def strtimestamp() -> str:
+    return datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
 
 
 class MissingSourceError(Exception):

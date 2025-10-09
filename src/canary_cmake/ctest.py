@@ -269,7 +269,7 @@ class CTestTestCase(canary.TestCase):
             warn_unsupported_ctest_option("timeout_signal_name")
 
         # concatenate stdout and stderr
-        self.efile = None
+        self.efile = "<none>"
 
     def set_default_timeout(self) -> None:
         """Sets the default timeout which is 1500 for CMake generated files."""

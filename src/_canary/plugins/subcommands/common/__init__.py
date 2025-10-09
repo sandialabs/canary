@@ -112,7 +112,7 @@ def add_resource_arguments(parser: "Parser") -> None:
         "(accepts Go's duration format, eg, 40s, 1h20m, 2h, 4h30m30s). "
         f"If type={bold('session')}, the timeout T is applied to the entire test session.  "
         f"If type={bold('multiplier')}, the multiplier T is applied to each test's timeout.  "
-        f"If type={bold('all')}, the timeout T is applied to each individual test.  "
+        f"If type={bold('*')}, the timeout T is applied to each individual test.  "
         f"Otherwise, a timeout of T is applied to tests having keyword {bold('type')}.  "
         "For example, --timeout fast=2 would apply a timeout of 2 seconds to all tests having "
         "the 'fast' keyword; common types are fast, long, default, and ctest. "
@@ -131,8 +131,6 @@ def add_resource_arguments(parser: "Parser") -> None:
 
 
 class TimeoutResource(argparse.Action):
-    _types = ("fast", "long", "default", "session", "ctest", "multiplier")
-
     def __call__(self, parser, args, values, option_string=None):
         if option_string == "--session-timeout":
             logger.warning(
@@ -146,27 +144,19 @@ class TimeoutResource(argparse.Action):
             )
             type = "multiplier"
             value = time_in_seconds(values)
+        elif option_string == "--test-timeout":
+            logger.warning(f"option --test-timeout is deprecated, use --timeout all={values}")
+            type = "*"
+            value = time_in_seconds(values)
         else:
-            if match := re.search(r"^(\w*)[:=](.*)$", values):
+            if match := re.search(r"^(\*|\w*)[:=](.*)$", values):
                 type = match.group(1).lower()
-                raw = match.group(2)
-                if type == "batch":
-                    if raw not in ("conservative", "aggressive"):
-                        raise ValueError(f"Incorrect batch timeout choice: {raw}")
-                    value = raw
-                else:
-                    value = time_in_seconds(match.group(2))
+                value = time_in_seconds(match.group(2))
             else:
                 raise ValueError(f"Incorrect test timeout spec: {values}, expected 'type=value'")
-
-        if type == "session":
-            args.session_timeout = value
-        elif type == "multiplier":
-            args.timeout_multiplier = value
-
-        timeouts = getattr(args, "timeouts", None) or {}
+        timeouts = getattr(args, "timeout", None) or {}
         timeouts[type] = value
-        setattr(args, "timeouts", timeouts)
+        setattr(args, "timeout", timeouts)
 
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:
