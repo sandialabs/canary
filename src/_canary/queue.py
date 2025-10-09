@@ -151,7 +151,7 @@ class AbstractResourceQueue(abc.ABC):
         with self.lock:
             progress(self.cases(), timestamp() - start)
             if last:
-                logger.info(logging.EMIT, "\n", extra={"prefix": ""})
+                logger.log(logging.EMIT, "\n", extra={"prefix": ""})
 
 
 class ResourceQueue(AbstractResourceQueue):
