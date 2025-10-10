@@ -42,7 +42,7 @@ global_lock = threading.Lock()
 logger = canary.get_logger(__name__)
 
 
-class BatchConductor:
+class CanaryHPCConductor:
     def __init__(self, *, backend: str) -> None:
         self.backend: hpc_connect.HPCSubmissionManager = hpc_connect.get_backend(backend)
         # compute the total slots per resource type so that we can determine whether a test can be

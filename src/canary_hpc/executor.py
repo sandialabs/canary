@@ -16,7 +16,7 @@ from .testbatch import TestBatch
 logger = canary.get_logger(__name__)
 
 
-class BatchExecutor:
+class CanaryHPCExecutor:
     def __init__(self, *, backend: str, batch: str, case: str | None = None) -> None:
         self.backend: hpc_connect.HPCSubmissionManager = hpc_connect.get_backend(backend)
         if "CANARY_BATCH_ID" not in os.environ:
@@ -39,6 +39,10 @@ class BatchExecutor:
         if not os.path.exists(f):
             with open(f, "w") as fh:
                 json.dump({"resource_pool": pool}, fh, indent=2)
+        f = os.path.join(stage, "hpc_connect.yaml")
+        if not os.path.exists(f):
+            with open(f, "w") as fh:
+                self.backend.config.dump(fh)
         config.options.mode = "a"
         case_specs = self.case_specs
         n = len(case_specs)

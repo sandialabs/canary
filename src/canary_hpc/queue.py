@@ -41,12 +41,12 @@ class ResourceQueue(queue.AbstractResourceQueue):
 
     def prepare(self, **kwds: Any) -> None:
         logger.debug("Preparing batch queue")
-        batchopts = canary.config.getoption("batchopts", {})
-        if not batchopts:
+        opts = canary.config.getoption("canary_hpc", {})
+        if not opts:
             raise ValueError("Cannot partition test cases: missing batching options")
         batches: list[TestBatch] = partition_testcases(
             cases=self.tmp_buffer,
-            batchspec=batchopts["spec"],
+            batchspec=opts["batch_spec"],
             cpus_per_node=kwds.get("cpus_per_node"),
         )
         if not batches:

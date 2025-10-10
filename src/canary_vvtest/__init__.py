@@ -26,7 +26,7 @@ def canary_testcase_generator(root: str, path: str | None) -> canary.AbstractTes
 def canary_testcase_modify(case: "canary.TestCase") -> None:
     if case.file_path.endswith(".vvt"):
         case.ofile = "execute.log"
-        case.efile = None
+        case.efile = "<none>"  # causes stderr to be merged into stdout
 
 
 @canary.hookimpl
