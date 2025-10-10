@@ -1675,11 +1675,8 @@ class TestCase(AbstractTestCase):
                 self.add_dependency(dep, dep_done_criteria[i])
 
         # Step 3: Set the rest of the properties
-        allowed_none: tuple[str, ...] = ("efile",)
         for name, value in properties.items():
             if value is not None:
-                setattr(self, name, value)
-            elif name in allowed_none:
                 setattr(self, name, value)
 
         return
