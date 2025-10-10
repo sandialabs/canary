@@ -50,9 +50,10 @@ class TestBatch(AbstractTestCase):
         self.max_cpus_required = max([case.cpus for case in self.cases])
         self.max_gpus_required = max([case.gpus for case in self.cases])
         self._runtime: float
+        opts: dict[str, Any] = canary.config.getoption("canary_hpc", {})
         if runtime is None:
             self._runtime = self.find_approximate_runtime()
-        elif canary.config.getoption("timeout:batch") == "conservative":
+        elif opts.get("batch_timeout_strategy") == "conservative":
             self._runtime = max(runtime, self.find_approximate_runtime())
         else:
             self._runtime = runtime
@@ -97,10 +98,10 @@ class TestBatch(AbstractTestCase):
         return float(min(height, t))
 
     def qtime(self) -> float:
-        batch_opts = batch_options()
+        scheduler_args = get_scheduler_args()
         p = argparse.ArgumentParser()
         p.add_argument("--time", dest="qtime")
-        a, _ = p.parse_known_args(batch_opts)
+        a, _ = p.parse_known_args(scheduler_args)
         if a.qtime:
             return time_in_seconds(a.qtime)
         if len(self.cases) == 1:
@@ -341,8 +342,8 @@ class TestBatch(AbstractTestCase):
         if canary.config.get("config:debug"):
             variables["CANARY_DEBUG"] = "on"
 
-        batchopts = canary.config.getoption("batchopts", {})
-        flat = batchopts["spec"]["layout"] == "flat"
+        opts = canary.config.getoption("canary_hpc", {})
+        flat = opts["batch_spec"]["layout"] == "flat"
         try:
             breadcrumb = os.path.join(self.stage(self.id), ".running")
             canary.filesystem.touchp(breadcrumb)
@@ -362,7 +363,7 @@ class TestBatch(AbstractTestCase):
                     scriptname=[os.path.join(scriptdir, f"{case.id}-inp.sh") for case in self],
                     output=[os.path.join(scriptdir, f"{case.id}-out.txt") for case in self],
                     error=[os.path.join(scriptdir, f"{case.id}-err.txt") for case in self],
-                    submit_flags=list(repeat(batch_options(), len(self))),
+                    submit_flags=list(repeat(get_scheduler_args(), len(self))),
                     variables=list(repeat(variables, len(self))),
                     qtime=[case.runtime * timeoutx for case in self],
                 )
@@ -377,7 +378,7 @@ class TestBatch(AbstractTestCase):
                     scriptname=self.submission_script_filename(),
                     output=self.logfile(self.id),
                     error=self.logfile(self.id),
-                    submit_flags=batch_options(),
+                    submit_flags=get_scheduler_args(),
                     variables=variables,
                     qtime=qtime,
                 )
@@ -456,7 +457,8 @@ class TestBatch(AbstractTestCase):
         if canary.config.get("config:debug"):
             args.append("-d")
         args.extend(["-C", canary.config.get("session:work_tree")])
-        args.extend(["run", "-b", f"exec=backend:{backend.name},batch:{self.id},case:{case.id}"])
+        execspec = f"backend:{backend.name},batch:{self.id},case:{case.id}"
+        args.extend(["run", f"--hpc-batch-exec={execspec}"])
         return shlex.join(args)
 
     def canary_batch_invocation(self, backend: hpc_connect.HPCSubmissionManager) -> str:
@@ -465,17 +467,18 @@ class TestBatch(AbstractTestCase):
         if canary.config.get("config:debug"):
             args.append("-d")
         args.extend(["-C", canary.config.get("session:work_tree")])
-        args.extend(["run", "-b", f"exec=backend:{backend.name},batch:{self.id}"])
-        batchopts = canary.config.getoption("batchopts", {})
-        workers = batchopts.get("workers") or -1
+        execspec = f"backend:{backend.name},batch:{self.id}"
+        args.extend(["run", f"--hpc-batch-exec={execspec}"])
+        opts = canary.config.getoption("canary_hpc", {})
+        workers = opts.get("batch_workers") or -1
         args.append(f"--workers={workers}")
         return shlex.join(args)
 
 
-def batch_options() -> list[str]:
+def get_scheduler_args() -> list[str]:
     options: list[str] = []
-    batchopts = canary.config.getoption("batchopts", {})
-    if args := batchopts.get("options"):
+    opts = canary.config.getoption("canary_hpc", {})
+    if args := opts.get("scheduler_args"):
         options.extend(args)
     return options
 

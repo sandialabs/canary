@@ -126,6 +126,7 @@ class Config:
         self._resource_pool: ResourcePool = ResourcePool()
         self.pluginmanager: CanaryPluginManager = CanaryPluginManager.factory()
         self.options: argparse.Namespace = argparse.Namespace()
+        self.ioptions: argparse.Namespace = argparse.Namespace()
         self.scopes: dict[str, ConfigScope] = {}
         if envcfg := os.getenv(env_archive_name):
             with io.StringIO() as fh:
@@ -407,6 +408,7 @@ class Config:
                 timeout_settings[key] = val
             config_settings["timeout"] = timeout_settings
 
+        self.ioptions = args
         self.options = merge_namespaces(self.options, args)
 
         if args.config_file:
