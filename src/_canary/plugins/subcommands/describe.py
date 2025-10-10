@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from ...generator import AbstractTestGenerator
+from ...third_party.color import colorize
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import load_session
@@ -25,7 +26,7 @@ def canary_subcommand() -> CanarySubcommand:
 
 class Describe(CanarySubcommand):
     name = "describe"
-    description = "Print information about a test file, test case, or test batch"
+    description = "Print information about a test file, test case"
 
     def setup_parser(self, parser: "Parser") -> None:
         parser.add_argument(
@@ -40,14 +41,6 @@ class Describe(CanarySubcommand):
 
     def execute(self, args: argparse.Namespace) -> int:
         import _canary.finder as finder
-
-        if args.testspec.startswith("^"):
-            session = load_session()
-            batch_id = args.testspec[1:]
-            session.bfilter(batch_id=batch_id)
-            cases = session.get_ready()
-            describe_batch(batch_id, cases)
-            return 0
 
         if finder.is_test_file(args.testspec):
             file = finder.find(args.testspec)
@@ -70,7 +63,7 @@ def describe_generator(
     on_options: list[str] | None = None,
 ) -> None:
     description = file.describe(on_options=on_options)
-    print(description.rstrip())
+    print(colorize(description.rstrip()))
 
 
 def dump(data: dict[str, Any]) -> str:
@@ -92,13 +85,3 @@ def describe_testcase(case: "TestCase", indent: str = "") -> None:
     formatter = Formatter(bg="dark", style="monokai")
     formatted_text = highlight(text.strip(), lexer, formatter)
     print(formatted_text)
-
-
-def describe_batch(batch_id: str, cases: list["TestCase"]) -> None:
-    from ... import config
-
-    print(f"Batch {batch_id}")
-    for case in cases:
-        if case.work_tree is None:
-            case.work_tree = config.get("session:work_tree")
-        print(f"{case.display_name}\n  {case.working_directory}")

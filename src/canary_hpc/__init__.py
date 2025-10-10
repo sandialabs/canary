@@ -153,6 +153,8 @@ class Batch(canary.CanarySubcommand):
         p = subparsers.add_parser("status", help="List statuses of each case in batch")
         p.add_argument("batch_id")
         subparsers.add_parser("list", help="List batch IDs")
+        p = subparsers.add_parser("describe", help="Print each test case in batch")
+        p.add_argument("batch_id")
         p = subparsers.add_parser("help", help="Additional canary_hpc help topics")
         p.add_argument(
             "--spec",
@@ -173,6 +175,8 @@ class Batch(canary.CanarySubcommand):
             print("\n".join(batches))
         elif args.type == "status":
             self.print_status(args.batch_id)
+        elif args.type == "describe":
+            self.describe(args.batch_id)
         elif args.type == "help":
             self.extra_help(args)
         else:
@@ -214,6 +218,21 @@ class Batch(canary.CanarySubcommand):
     def extra_help(self, args: argparse.Namespace) -> None:
         if args.spec:
             print(CanaryHPCBatchSpec.helppage())
+        return
+
+    def describe(self, batch_id: str) -> None:
+        print(f"Batch {batch_id}")
+        location = self.location(batch_id)
+        f = os.path.join(location, "index")
+        with open(f, "r") as fh:
+            case_ids = json.load(fh)
+        session = canary.Session(os.getcwd(), mode="r")
+        for case in session.cases:
+            if case.id not in case_ids:
+                continue
+            if case.work_tree is None:
+                case.work_tree = session.work_tree
+            print(f"- name: {case.display_name}\n  location: {case.working_directory}")
         return
 
 
