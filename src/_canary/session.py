@@ -141,6 +141,9 @@ class Session:
                 self.cases.clear()
                 cases = self.load_testcases()
                 self.cases.extend(cases)
+            # restore mode
+            self.mode = mode
+            self.set_config_values()
         else:
             self.initialize()
             config.pluginmanager.hook.canary_session_startup(session=self)
@@ -390,7 +393,6 @@ class Session:
             msg = "Expected config.session.work_tree=%r but got %s"
             raise RuntimeError(msg % (self.work_tree, config.get("session:work_tree")))
         self.load_attrs()
-        self.set_config_values()
 
     def initialize(self) -> None:
         """Initialize the the test session:

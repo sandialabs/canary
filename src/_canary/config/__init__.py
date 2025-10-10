@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
     pluginmanager = _config.pluginmanager
     invocation_dir = _config.invocation_dir
+    ioptions = _config.ioptions
     working_dir = _config.working_dir
     resource_pool = _config.resource_pool
     getoption = _config.getoption

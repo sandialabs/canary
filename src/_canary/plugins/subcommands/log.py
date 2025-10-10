@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import datetime
+import io
+import json
 import os
 from typing import TYPE_CHECKING
 
@@ -22,7 +25,7 @@ def canary_subcommand() -> CanarySubcommand:
 
 class Log(CanarySubcommand):
     name = "log"
-    description = "Show the test case's log file"
+    description = "Show the session or a test case's log file"
 
     def setup_parser(self, parser: "Parser") -> None:
         parser.epilog = self.in_session_note()
@@ -33,7 +36,17 @@ class Log(CanarySubcommand):
             action="store_true",
             help="Display test stderr if it exists",
         )
-        parser.add_argument("testspec", nargs="?", help="Test name or /TEST_ID")
+        parser.add_argument(
+            "--raw",
+            default=False,
+            action="store_true",
+            help="Show raw log file contents (applicable only to the session log file)",
+        )
+        parser.add_argument(
+            "testspec",
+            nargs="?",
+            help="Test name or /TEST_ID.  If not given, the session log will be shown",
+        )
 
     def get_logfile(self, case: "TestCase", args: argparse.Namespace) -> str:
         if args.error:
@@ -46,10 +59,15 @@ class Log(CanarySubcommand):
 
         file: str
         if not args.testspec:
-            session = load_session()
+            session = load_session(mode="r+")
             file = os.path.join(session.config_dir, "canary-log.txt")
             if os.path.exists(file):
-                display_file(file)
+                text: str
+                if args.raw:
+                    text = open(file).read()
+                else:
+                    text = reconstruct_log(file)
+                page_text(text)
                 return 0
             raise ValueError(f"no log file found in {session.config_dir}")
 
@@ -69,10 +87,28 @@ class Log(CanarySubcommand):
         raise ValueError(f"{args.testspec}: no matching test found in {session.work_tree}")
 
 
-def display_file(file: str) -> None:
-    import pydoc
+def reconstruct_log(file: str) -> str:
+    fp = io.StringIO()
+    if not os.path.isfile(file):
+        raise ValueError(f"{file}: no such file")
+    fmt = "[%(time)s] %(level)s: %(message)s\n"
+    records: list[dict[str, str]] = []
+    for line in open(file):
+        record = json.loads(line)
+        records.append(record)
+    for record in sorted(records, key=lambda x: datetime.datetime.fromisoformat(x["time"])):
+        fp.write(fmt % record)
+    return fp.getvalue()
 
+
+def display_file(file: str) -> None:
     print(f"{file}:")
     if not os.path.isfile(file):
         raise ValueError(f"{file}: no such file")
-    pydoc.pager(open(file).read())
+    page_text(open(file).read())
+
+
+def page_text(text: str) -> None:
+    import pydoc
+
+    pydoc.pager(text)
