@@ -15,8 +15,8 @@ User defined commands are created by returning a :class:`~_canary.plugins.types.
     import canary
 
     @canary.hookimpl
-    def canary_subcommand():
-        return Email()
+    def canary_addcommand(parser: canary.Parser) -> None:
+        parser.add_command(Email())
 
 
     class Email(canary.CanarySubcommand):

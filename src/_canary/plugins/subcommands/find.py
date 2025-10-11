@@ -25,8 +25,8 @@ logger = logging.get_logger(__name__)
 
 
 @hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return Find()
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Find())
 
 
 class Find(CanarySubcommand):

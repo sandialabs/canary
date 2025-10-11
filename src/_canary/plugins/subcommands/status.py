@@ -18,8 +18,8 @@ if TYPE_CHECKING:
 
 
 @hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return Status()
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Status())
 
 
 class Status(CanarySubcommand):

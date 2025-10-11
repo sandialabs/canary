@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 
 
 @hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return Help()
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Help())
 
 
 class Help(CanarySubcommand):

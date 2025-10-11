@@ -260,12 +260,12 @@ class ResourcePool:
         return acquired
 
     def reclaim(self, resources: list[dict[str, list[dict]]]) -> None:
-        types: dict[str, int] = {}
+        types: Counter[str] = Counter()
         for resource in resources:  # list[dict[str, list[dict]]]) -> None:
             for type, rspecs in resource.items():
                 for rspec in rspecs:
                     n = self._return_to_pool(type, rspec)
-                    types[type] = types.setdefault(type, 0) + n
+                    types[type] += n
         if logging.get_level() <= logging.DEBUG:
             for type, n in types.items():
                 key = type[:-1] if n == 1 and type.endswith("s") else type

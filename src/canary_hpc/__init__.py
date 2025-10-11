@@ -135,8 +135,8 @@ def setup_parser(parser: "canary.Parser") -> None:
 
 
 @canary.hookimpl
-def canary_subcommand() -> canary.CanarySubcommand:
-    return Batch()
+def canary_addcommand(parser: canary.Parser) -> None:
+    parser.add_command(Batch())
 
 
 class Batch(canary.CanarySubcommand):

@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 
 
 @hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return Tree()
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Tree())
 
 
 class Tree(CanarySubcommand):

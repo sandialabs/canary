@@ -19,7 +19,6 @@ from . import config
 from .config.argparsing import make_argument_parser
 from .error import StopExecution
 from .third_party import color
-from .third_party.monkeypatch import monkeypatch
 from .util import logging
 from .util.collections import contains_any
 
@@ -42,13 +41,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     with CanaryMain(argv) as m:
         parser = make_argument_parser()
         parser.add_main_epilog(parser)
-        for command in config.pluginmanager.hook.canary_subcommand():
-            parser.add_command(command)
         config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
-        with monkeypatch.context() as mp:
-            mp.setattr(parser, "add_argument", parser.add_plugin_argument)
-            mp.setattr(parser, "add_argument_group", parser.add_plugin_argument_group)
-            config.pluginmanager.hook.canary_addoption(parser=parser)
+        config.pluginmanager.hook.canary_addcommand(parser=parser)
+        config.pluginmanager.hook.canary_addoption(parser=parser)
         args = parser.parse_args(m.argv)
         if args.echo:
             a = [os.path.join(sys.prefix, "bin/canary")] + [_ for _ in m.argv if _ != "--echo"]

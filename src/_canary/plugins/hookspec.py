@@ -47,13 +47,8 @@ def canary_addoption(parser: "Parser") -> None:
 
 
 @hookspec
-def canary_configure(config: "CanaryConfig") -> None:
-    """Perform custom configuration of the test environment"""
-
-
-@hookspec
-def canary_subcommand() -> CanarySubcommand:
-    """Register Canary subcommands
+def canary_addcommand(parser: "Parser") -> None:
+    """Add a subcommand to Canary
 
     Example:
 
@@ -74,11 +69,20 @@ def canary_subcommand() -> CanarySubcommand:
                ...
 
        @plugins.hookimpl
-       def canary_subcommand():
-           return MyCommand()
+       def canary_addcommand(parser: canary.Parser):
+           parser.add_command(MyCommand())
 
     """
+
+
+@hookspec
+def canary_subcommand() -> CanarySubcommand:
     raise NotImplementedError
+
+
+@hookspec
+def canary_configure(config: "CanaryConfig") -> None:
+    """Perform custom configuration of the test environment"""
 
 
 @hookspec

@@ -53,20 +53,25 @@ def canary_runtests(cases: Sequence["TestCase"]) -> int:
       The session returncode (0 for success)
 
     """
-    returncode: int = -10
     atexit.register(cleanup_children)
     queue = ResourceQueue.factory(global_session_lock, cases)
     runner = Runner()
+    return process_queue(queue, runner)
+
+
+def process_queue(queue: ResourceQueue, runner: Callable) -> int:
+    returncode: int = -10
     assert config.get("session:work_tree") is not None
+    njobs = len(queue)
     with working_dir(config.get("session:work_tree")):
         cleanup_queue = True
         try:
-            what = pluralize("test case", len(cases))
-            logger.info("@*{Running} %d %s" % (len(cases), what))
+            what = pluralize("test case", njobs)
+            logger.info("@*{Running} %d %s" % (njobs, what))
             start = timestamp()
             stop = -1.0
             logger.debug("Start: processing queue")
-            process_queue(runner=runner, queue=queue)
+            _process_queue(runner=runner, queue=queue)
         except KeyboardInterrupt:
             logger.debug("keyboard interrupt: killing child processes and exiting")
             returncode = signal.SIGINT.value
@@ -93,12 +98,12 @@ def canary_runtests(cases: Sequence["TestCase"]) -> int:
             queue.close(cleanup=cleanup_queue)
             stop = timestamp()
             dt = stop - start
-            logger.info("@*{Finished} %d %s (%s)" % (len(cases), what, hhmmss(dt)))
+            logger.info("@*{Finished} %d %s (%s)" % (njobs, what, hhmmss(dt)))
             atexit.unregister(cleanup_children)
     return returncode
 
 
-def process_queue(*, runner: Callable, queue: ResourceQueue) -> None:
+def _process_queue(*, runner: Callable, queue: ResourceQueue) -> None:
     """Process the test queue, asynchronously
 
     Args:

@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from . import addoption
 from . import discover
 from . import email
 from . import html
@@ -20,6 +21,7 @@ from . import runtests
 from . import testcase_generator
 
 plugins = [
+    addoption,
     discover,
     email,
     html,

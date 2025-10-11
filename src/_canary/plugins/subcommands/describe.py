@@ -20,8 +20,8 @@ if TYPE_CHECKING:
 
 
 @hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return Describe()
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Describe())
 
 
 class Describe(CanarySubcommand):

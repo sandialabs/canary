@@ -19,8 +19,8 @@ logger = logging.get_logger(__name__)
 
 
 @hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return Rebaseline()
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Rebaseline())
 
 
 class Rebaseline(CanarySubcommand):

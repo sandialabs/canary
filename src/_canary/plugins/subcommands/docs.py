@@ -5,13 +5,14 @@
 import argparse
 import webbrowser
 
+from ...config.argparsing import Parser
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
 
 @hookimpl
-def canary_subcommand() -> CanarySubcommand:
-    return Docs()
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Docs())
 
 
 class Docs(CanarySubcommand):

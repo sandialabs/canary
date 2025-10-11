@@ -48,6 +48,13 @@ class CanaryHPCConductor:
         # compute the total slots per resource type so that we can determine whether a test can be
         # run by this backend.
         self._slots_per_resource_type: Counter[str] | None = None
+        rtypes: set[str] = {"cpus", "gpus"}
+        for rtype in self.backend.config.resource_types():
+            # canary resource pool uses the plural, whereas the hpc-connect resource set uses
+            # the singular
+            rtype = rtype if rtype.endswith("s") else f"{rtype}s"
+            rtypes.add(rtype)
+        self.available_resource_types = sorted(rtypes)
 
     @property
     def slots_per_resource_type(self) -> Counter[str]:
@@ -79,13 +86,7 @@ class CanaryHPCConductor:
 
     @canary.hookimpl
     def canary_resource_types(self) -> list[str]:
-        types: set[str] = {"cpus", "gpus"}
-        for type in self.backend.config.resource_types():
-            # canary resource pool uses the plural, whereas the hpc-connect resource set uses
-            # the singular
-            type = type if type.endswith("s") else f"{type}s"
-            types.add(type)
-        return sorted(types)
+        return self.available_resource_types
 
     @canary.hookimpl
     def canary_resources_avail(self, case: canary.TestCase) -> Result:
