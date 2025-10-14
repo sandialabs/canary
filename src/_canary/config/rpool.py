@@ -190,7 +190,7 @@ class ResourcePool:
         slots_needed: Counter[str] = Counter()
         missing: set[str] = set()
 
-        # Step 1: Gathre resource requirements and detect missing types
+        # Step 1: Gather resource requirements and detect missing types
         for group in case.required_resources():
             for member in group:
                 rtype = member["type"]
@@ -225,7 +225,7 @@ class ResourcePool:
         # Step 3: all good
         return Result(True)
 
-    def acquire(self, resource_groups: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
+    def checkout(self, resource_groups: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
         """Returns resources available to the test
 
         local[i] = {<type>: [{'id': <id>, 'slots': <slots>}, ...], ... }
@@ -259,7 +259,7 @@ class ResourcePool:
                 logger.debug(f"Acquiring {n} {key} from {N} available")
         return acquired
 
-    def reclaim(self, resources: list[dict[str, list[dict]]]) -> None:
+    def checkin(self, resources: list[dict[str, list[dict]]]) -> None:
         types: Counter[str] = Counter()
         for resource in resources:  # list[dict[str, list[dict]]]) -> None:
             for type, rspecs in resource.items():
@@ -269,7 +269,7 @@ class ResourcePool:
         if logging.get_level() <= logging.DEBUG:
             for type, n in types.items():
                 key = type[:-1] if n == 1 and type.endswith("s") else type
-                logger.debug(f"Reclaimed {n} {key}")
+                logger.debug(f"Checked in {n} {key}")
 
     def _get_from_pool(self, type: str, slots: int) -> dict[str, Any]:
         instances = sorted(self.resources[type], key=lambda x: x["slots"])
@@ -286,7 +286,7 @@ class ResourcePool:
                 slots = rspec["slots"]
                 instance["slots"] += slots
                 return slots
-        raise ValueError(f"Attempting to reclaim a resource whose ID is unknown: {rspec!r}")
+        raise ValueError(f"Attempting to checkin a resource whose ID is unknown: {rspec!r}")
 
 
 class ResourceUnavailable(Exception):

@@ -81,11 +81,11 @@ class Case(AbstractTestCase):
         return [group]
 
 
-def test_resource_pool_acquire():
+def test_resource_pool_checkout():
     case = Case()
     with canary.config.override():
         canary.config.resource_pool.populate(cpus=4, gpus=4)
-        resources = canary.config.resource_pool.acquire(case.required_resources())
+        resources = canary.config.resource_pool.checkout(case.required_resources())
         expected = [
             {
                 "cpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],
@@ -141,7 +141,7 @@ def test_resource_pool_fill():
     rp.fill(pool)
 
 
-def test_resource_acquire():
+def test_resource_checkout():
     rp = ResourcePool()
     pool = {
         "additional_properties": {"baz": "spam"},
@@ -151,8 +151,8 @@ def test_resource_acquire():
         },
     }
     rp.fill(pool)
-    x = rp.acquire([[{"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 1}]])
+    x = rp.checkout([[{"type": "cpus", "slots": 1}, {"type": "gpus", "slots": 1}]])
     assert x == [{"cpus": [{"id": "01", "slots": 1}], "gpus": [{"id": "02", "slots": 1}]}]
-    rp.reclaim(x)
-    x = rp.acquire([[{"type": "cpus", "slots": 3}, {"type": "gpus", "slots": 3}]])
+    rp.checkin(x)
+    x = rp.checkout([[{"type": "cpus", "slots": 3}, {"type": "gpus", "slots": 3}]])
     assert x == [{"cpus": [{"id": "ab", "slots": 3}], "gpus": [{"id": "02", "slots": 3}]}]

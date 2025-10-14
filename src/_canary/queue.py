@@ -133,7 +133,7 @@ class AbstractResourceQueue(abc.ABC):
                         required = obj.required_resources()
                         if not required:
                             raise ValueError(f"{obj}: a test should require at least 1 cpu")
-                        acquired = config.resource_pool.acquire(required)
+                        acquired = config.resource_pool.checkout(required)
                         obj.assign_resources(acquired)
                     except config.ResourceUnavailable:
                         continue
@@ -210,7 +210,7 @@ class ResourceQueue(AbstractResourceQueue):
             obj = self._finished[obj_no] = self._busy.pop(obj_no)
             if obj.exclusive:
                 self.exclusive_lock = False
-            config.resource_pool.reclaim(obj.resources)
+            config.resource_pool.checkin(obj.resources)
             obj.free_resources()
             for case in self.buffer.values():
                 for i, dep in enumerate(case.dependencies):

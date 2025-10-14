@@ -20,7 +20,6 @@ import hpc_connect
 import canary
 from _canary.atc import AbstractTestCase
 from _canary.status import Status
-from _canary.util import logging
 from _canary.util.hash import hashit
 from _canary.util.time import time_in_seconds
 
@@ -330,10 +329,6 @@ class TestBatch(AbstractTestCase):
             elif sig == signal.SIGTERM:
                 os._exit(1)
 
-        pbar = (
-            canary.config.getoption("format") == "progress-bar"
-            or logging.get_level() > logging.INFO
-        )
         logger.debug(f"Running batch {self.id[:7]}")
         start = time.monotonic()
         variables = dict(self.variables)

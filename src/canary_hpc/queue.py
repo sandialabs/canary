@@ -64,7 +64,7 @@ class ResourceQueue(queue.AbstractResourceQueue):
             if obj_no not in self._busy:
                 raise RuntimeError(f"batch {obj_no} is not running")
             obj = self._finished[obj_no] = self._busy.pop(obj_no)
-            canary.config.resource_pool.reclaim(obj.resources)
+            canary.config.resource_pool.checkin(obj.resources)
             obj.free_resources()
             completed = dict([(_.id, _) for _ in self.finished()])
             for batch in self.buffer.values():

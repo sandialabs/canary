@@ -37,20 +37,22 @@ def canary_testcase_setup(case: "canary.TestCase") -> None:
 
 
 class RerunAction(argparse.Action):
-    def __call__(self, parser, args, values, option_string=None):
-        keywords = getattr(args, "keyword_exprs", None) or []
+    def __call__(self, parser, namespace, values, option_string=None):
+        keywords = getattr(namespace, "keyword_exprs", None) or []
         keywords.append(":all:")
-        args.keyword_exprs = list(keywords)
-        setattr(args, self.dest, True)
+        namespace.keyword_exprs = list(keywords)
+        setattr(namespace, self.dest, True)
 
 
 class AnalyzeAction(argparse.Action):
-    def __call__(self, parser, args, values, option_string=None):
-        script_args = getattr(args, "script_args", None) or []
+    def __call__(self, parser, namespace, values, option_string=None):
+        script_args = getattr(namespace, "script_args", None) or []
         script_args.append("--execute-analysis-sections")
-        args.script_args = list(script_args)
-        setattr(args, self.dest, True)
-        setattr(args, "dont_restage", True)
+        setattr(namespace, "script_args", list(script_args))
+        opts = getattr(namespace, "canary_vvtest", None) or {}
+        opts[self.dest] = True
+        setattr(namespace, "canary_vvtest", opts)
+        setattr(namespace, "dont_restage", True)
 
 
 @canary.hookimpl
@@ -71,7 +73,7 @@ def canary_addoption(parser: "canary.Parser") -> None:
         nargs=0,
         command="run",
         group="vvtest options",
-        dest="vvtest_analyze",
+        dest="analyze",
         help="Only run the analysis sections of each test. Note that a test must be written to "
         "support this option (using the vvtest_util.is_analysis_only flag) otherwise the whole "
         "test is run.",
