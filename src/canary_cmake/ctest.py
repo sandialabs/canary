@@ -47,8 +47,7 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
         return False
 
     def stop_recursion(self) -> bool:
-        opts = canary.config.getoption("canary_cmake") or {}
-        if opts.get("recurse_ctest", False):
+        if canary.config.getoption("canary_cmake_recurse_ctest", False):
             return False
         return True
 
@@ -275,8 +274,7 @@ class CTestTestCase(canary.TestCase):
     def set_default_timeout(self) -> None:
         """Sets the default timeout which is 1500 for CMake generated files."""
         timeout: float
-        opts = canary.config.getoption("canary_cmake") or {}
-        if var := opts.get("test_timeout"):
+        if var := canary.config.getoption("canary_cmake_test_timeout"):
             timeout = float(var)
         elif var := os.getenv("CTEST_TEST_TIMEOUT"):
             timeout = canary.time.time_in_seconds(var)
@@ -518,10 +516,9 @@ def load(file: str) -> dict[str, Any]:
             project_source_dir = infer_project_source_dir(project_binary_dir)
 
         try:
-            opts = canary.config.getoption("canary_cmake") or {}
             with open(".ctest-json-v1.json", "w") as fh:
                 args = [ctest, "--show-only=json-v1"]
-                if ctest_config := opts.get("config"):
+                if ctest_config := canary.config.getoption("canary_cmake_ctest_config"):
                     args.extend(["-C", ctest_config])
                 p = subprocess.Popen(args, stdout=fh)
                 p.wait()

@@ -22,24 +22,12 @@ def add_default_ctest_timeout(config: canary.Config):
     config.set("config:timeout:ctest", 1500.0, scope="defaults")
 
 
-class CTestOption(argparse.Action):
-    def __init__(self, *args, use=str, **kwargs):
-        self.use = use
-        super().__init__(*args, **kwargs)
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        opts = getattr(namespace, "canary_cmake", None) or {}
-        opts[self.dest] = self.use(values)
-        setattr(namespace, "canary_cmake", opts)
-
-
 @canary.hookimpl(specname="canary_addoption")
 def add_ctest_options(parser: canary.Parser) -> None:
     parser.add_argument(
         "--ctest-config",
         metavar="cfg",
-        dest="config",
-        action=CTestOption,
+        dest="canary_cmake_ctest_config",
         group="ctest options",
         command=["run", "find"],
         help="Choose configuration to test",
@@ -47,9 +35,8 @@ def add_ctest_options(parser: canary.Parser) -> None:
     parser.add_argument(
         "--ctest-test-timeout",
         metavar="T",
-        dest="test_timeout",
-        action=CTestOption,
-        use=canary.time.time_in_seconds,
+        dest="canary_cmake_test_timeout",
+        type=canary.time.time_in_seconds,
         group="ctest options",
         command="run",
         help=argparse.SUPPRESS,
@@ -57,8 +44,7 @@ def add_ctest_options(parser: canary.Parser) -> None:
     parser.add_argument(
         "--ctest-resource-spec-file",
         metavar="FILE",
-        dest="resource_spec_file",
-        action=CTestOption,
+        dest="canary_cmake_resource_spec_file",
         group="ctest options",
         command="run",
         help="Set the resource spec file to use.",
@@ -66,10 +52,9 @@ def add_ctest_options(parser: canary.Parser) -> None:
     parser.add_argument(
         "--recurse-ctest",
         group="ctest options",
-        dest="recurse_ctest",
-        action=CTestOption,
-        nargs=0,
-        use=lambda x: True,
+        dest="canary_cmake_recurse_ctest",
+        action="store_true",
+        default=False,
         command=["run", "find"],
         help="Recurse CMake binary directory for test files.  CTest tests can be detected "
         "from the root CTestTestfile.cmake, so this is option is not necessary unless there "
@@ -126,8 +111,7 @@ def canary_cdash_labels(case: canary.TestCase) -> list[str]:
 
 @canary.hookimpl
 def canary_configure(config: canary.Config) -> None:
-    opts = config.getoption("canary_cmake") or {}
-    if f := opts.get("resource_spec_file"):
+    if f := config.getoption("canary_cmake_resource_spec_file"):
         logger.info("Setting resource pool from ctest resource spec file")
         resource_specs = read_resource_specs(f)
         pool = {
