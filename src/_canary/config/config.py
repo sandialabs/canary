@@ -399,7 +399,7 @@ class Config:
 
         if n := getattr(args, "workers", None):
             if n > psutil.cpu_count():
-                raise ValueError(f"workers={n} > cpu_count={psutil.cpu_count()}")
+                logger.warning(f"workers={n} > cpu_count={psutil.cpu_count()}")
 
         if t := getattr(args, "timeout", None):
             config_settings: dict = data.setdefault("config", {})
