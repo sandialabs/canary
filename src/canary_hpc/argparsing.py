@@ -20,32 +20,8 @@ from . import partitioning
 logger = canary.get_logger(__name__)
 
 
-class CanaryHPCOption(argparse.Action):
-    """Base class for all canary_hpc command line options.  This class stores all options
-    in namespace.canary_hpc
-
-    """
-
-    def __call__(self, parser, namespace, value, option_string=None):
-        if not getattr(namespace, "canary_hpc", None):
-            namespace.canary_hpc = {}
-        namespace.canary_hpc[self.dest] = value
-
-    def getoption(self, namespace: argparse.Namespace, name: str, default: Any = None) -> None:
-        if not getattr(namespace, "canary_hpc", None):
-            namespace.canary_hpc = {}
-        return namespace.canary_hpc.get(name, default)
-
-    def setoption(self, namespace: argparse.Namespace, name: str, value: Any) -> None:
-        if not getattr(namespace, "canary_hpc", None):
-            namespace.canary_hpc = {}
-        namespace.canary_hpc[name] = value
-
-
-class CanaryHPCSchedulerArgs(CanaryHPCOption):
+class CanaryHPCSchedulerArgs(argparse.Action):
     """Arguments to pass directly to scheduler"""
-
-    p_dest = "scheduler_args"
 
     @staticmethod
     def defaults() -> list[str]:
@@ -55,23 +31,21 @@ class CanaryHPCSchedulerArgs(CanaryHPCOption):
         return options
 
     def __call__(self, parser, namespace, value, option_string=None):
-        args = self.getoption(namespace, self.dest, self.defaults())
+        args = getattr(namespace, self.dest, None) or self.defaults()
         args.extend(self.parse(strip_quotes(value)))
-        self.setoption(namespace, self.dest, args)
+        setattr(namespace, self.dest, args)
 
     @staticmethod
     def parse(arg: str) -> list[str]:
         return csvsplit(arg)
 
 
-class CanaryHPCBatchExec(CanaryHPCOption):
+class CanaryHPCBatchExec(argparse.Action):
     "Arguments to determine how to partition test cases"
-
-    p_dest = "batch_exec"
 
     def __call__(self, parser, namespace, value, option_string=None):
         spec = self.parse(strip_quotes(value))
-        self.setoption(namespace, self.dest, spec)
+        setattr(namespace, self.dest, spec)
 
     @staticmethod
     def parse(value: str) -> dict[str, str]:
@@ -90,17 +64,15 @@ class CanaryHPCBatchExec(CanaryHPCOption):
         return spec
 
 
-class CanaryHPCBatchSpec(CanaryHPCOption):
-    p_dest = "batch_spec"
-
+class CanaryHPCBatchSpec(argparse.Action):
     @staticmethod
     def defaults() -> dict[str, Any]:
         return {"nodes": None, "layout": None, "count": None, "duration": None}
 
     def __call__(self, parser, namespace, value, option_string=None):
-        spec = self.getoption(namespace, self.dest, self.defaults())
+        spec = getattr(namespace, self.dest, None) or self.defaults()
         spec.update(self.parse(strip_quotes(value)))
-        self.setoption(namespace, self.dest, spec)
+        setattr(namespace, self.dest, spec)
 
     @staticmethod
     def parse(value: str) -> dict[str, Any]:
@@ -165,10 +137,7 @@ Examples:
         return description
 
     @staticmethod
-    def validate_and_set_defaults(opts: dict) -> None:
-        default_spec = {"nodes": "any", "layout": "flat", "count": None, "duration": 30 * 60}
-        opts.setdefault("batch_spec", default_spec)
-        spec = opts["batch_spec"]
+    def validate_and_set_defaults(spec: dict) -> None:
         if spec.get("duration") is None and spec.get("count") is None:
             spec["duration"] = 30 * 60  # 30 minutes
             spec["count"] = None
@@ -188,42 +157,41 @@ Examples:
             raise ValueError("batch spec: duration not allowed with count")
         if spec["layout"] == "atomic" and spec["nodes"] == "same":
             raise ValueError("batch spec: layout:atomic not allowed with nodes:same")
-        opts["batch_spec"] = spec
 
 
-class CanaryHPCResourceSetter(CanaryHPCOption):
+class CanaryHPCResourceSetter(argparse.Action):
     """Set all options from -b option.  This is kept for backward compatibility"""
 
     def __call__(self, parser, namespace, value, option_string=None):
         if match := re.search(r"^spec=(.*)$", value):
-            dest = CanaryHPCBatchSpec.p_dest
+            dest = "canary_hpc_batchspec"
             raw = strip_quotes(match.group(1))
-            spec = self.getoption(namespace, dest, CanaryHPCBatchSpec.defaults())
+            spec = getattr(namespace, dest, None) or CanaryHPCBatchSpec.defaults()
             spec.update(CanaryHPCBatchSpec.parse(raw))
-            self.setoption(namespace, dest, spec)
+            setattr(namespace, dest, spec)
         elif match := re.search(r"^exec=(.*)$", value):
-            dest = CanaryHPCBatchExec.p_dest
+            dest = "canary_hpc_batchexec"
             raw = strip_quotes(match.group(1))
             spec = CanaryHPCBatchExec.parse(raw)
-            self.setoption(namespace, dest, spec)
+            setattr(namespace, dest, spec)
         elif match := re.search(r"^workers[:=](\d+)$", value):
             workers = int(match.group(1))
             if workers <= 0:
                 raise ValueError("batch workers <= 0")
-            self.setoption(namespace, "batch_workers", workers)
+            setattr(namespace, "canary_hpc_batch_workers", workers)
         elif match := re.search(r"^(backend|scheduler|type)[:=](\w+)$", value):
             raw = match.group(2)
-            self.setoption(namespace, "scheduler", raw)
+            setattr(namespace, "canary_hpc_scheduler", raw)
         elif match := re.search(r"^timeout[:=](.+)$", value):
             raw = strip_quotes(match.group(1))
             if raw not in ("conservative", "agressive"):
                 raise ValueError(f"Incorrect batch timeout choice: {raw}")
-            self.setoption(namespace, "batch_timeout_strategy", raw)
+            setattr(namespace, "canary_hpc_batch_timeout_strategy", raw)
         elif match := re.search(r"^(option|args|options|with)[:=](.*)$", value):
-            dest = CanaryHPCSchedulerArgs.p_dest
-            opts = self.getoption(namespace, dest, CanaryHPCSchedulerArgs.defaults())
+            dest = "canary_hpc_scheduler_args"
+            opts = getattr(namespace, dest, None) or CanaryHPCSchedulerArgs.defaults()
             raw = strip_quotes(match.group(2))
             opts.extend(CanaryHPCSchedulerArgs.parse(raw))
-            self.setoption(namespace, dest, opts)
+            setattr(namespace, dest, opts)
         else:
             raise ValueError(f"invalid batch value: {value!r}")

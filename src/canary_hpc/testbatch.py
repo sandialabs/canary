@@ -49,10 +49,9 @@ class TestBatch(AbstractTestCase):
         self.max_cpus_required = max([case.cpus for case in self.cases])
         self.max_gpus_required = max([case.gpus for case in self.cases])
         self._runtime: float
-        opts: dict[str, Any] = canary.config.getoption("canary_hpc", {})
         if runtime is None:
             self._runtime = self.find_approximate_runtime()
-        elif opts.get("batch_timeout_strategy") == "conservative":
+        elif canary.config.getoption("canary_hpc_batch_timeout_strategy") == "conservative":
             self._runtime = max(runtime, self.find_approximate_runtime())
         else:
             self._runtime = runtime
@@ -337,8 +336,8 @@ class TestBatch(AbstractTestCase):
         if canary.config.get("config:debug"):
             variables["CANARY_DEBUG"] = "on"
 
-        opts = canary.config.getoption("canary_hpc", {})
-        flat = opts["batch_spec"]["layout"] == "flat"
+        batchspec = canary.config.getoption("canary_hpc_batchspec")
+        flat = batchspec["layout"] == "flat"
         try:
             breadcrumb = os.path.join(self.stage(self.id), ".running")
             canary.filesystem.touchp(breadcrumb)
@@ -464,16 +463,14 @@ class TestBatch(AbstractTestCase):
         args.extend(["-C", canary.config.get("session:work_tree")])
         execspec = f"backend:{backend.name},batch:{self.id}"
         args.extend(["run", f"--hpc-batch-exec={execspec}"])
-        opts = canary.config.getoption("canary_hpc", {})
-        workers = opts.get("batch_workers") or -1
+        workers = canary.config.getoption("canary_hpc_batch_workers") or -1
         args.append(f"--workers={workers}")
         return shlex.join(args)
 
 
 def get_scheduler_args() -> list[str]:
     options: list[str] = []
-    opts = canary.config.getoption("canary_hpc", {})
-    if args := opts.get("scheduler_args"):
+    if args := canary.config.getoption("canary_hpc_scheduler_args"):
         options.extend(args)
     return options
 

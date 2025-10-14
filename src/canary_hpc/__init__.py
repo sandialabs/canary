@@ -6,7 +6,6 @@ import argparse
 import glob
 import json
 import os
-from typing import Any
 
 import psutil
 
@@ -14,7 +13,6 @@ import canary
 
 from .argparsing import CanaryHPCBatchExec
 from .argparsing import CanaryHPCBatchSpec
-from .argparsing import CanaryHPCOption
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
 from .conductor import CanaryHPCConductor
@@ -26,36 +24,32 @@ logger = canary.get_logger(__name__)
 @canary.hookimpl
 def canary_configure(config: "canary.Config") -> None:
     """Do some post configuration checks"""
-    opts: dict[str, Any] = config.getoption("canary_hpc") or {}
-    if not opts:
-        return
-    if execopts := opts.get("batch_exec"):
+    if execopts := config.getoption("canary_hpc_batchexec"):
         # Batch is being executed within an allocation
         hooks = CanaryHPCExecutor(
             backend=execopts["backend"], batch=execopts["batch"], case=execopts.get("case")
         )
         hooks.setup(config=config)
         config.pluginmanager.register(hooks, f"canary_hpc{hooks.backend.name}")
-    elif scheduler := opts.get("scheduler"):
-        if n := opts.get("batch_workers"):
+    elif scheduler := config.getoption("canary_hpc_scheduler"):
+        if n := config.getoption("canary_hpc_batch_workers"):
             if n > psutil.cpu_count():
                 raise ValueError(f"--hpc-batch-workers={n} > cpu_count={psutil.cpu_count()}")
-        dest = CanaryHPCBatchSpec.p_dest
-        iopts = getattr(canary.config.ioptions, "canary_hpc", {})
-        if dest in iopts:
+        if ival := getattr(config.ioptions, "canary_hpc_batchspec", None):
             # canary.config.set_main_options merges new options with old.  For the batch spec, we
             # don't want the merged result, so use the actual value passed on the command line
-            opts[dest] = iopts[dest]
+            setattr(config.options, "canary_hpc_batchspec", ival)
         else:
             # use the defaults, rather than risk using the merged result.
-            opts[dest] = CanaryHPCBatchSpec.defaults()
-        CanaryHPCBatchSpec.validate_and_set_defaults(opts)
-        setattr(config.options, "canary_hpc", opts)
+            setattr(config.options, "canary_hpc_batchspec", CanaryHPCBatchSpec.defaults())
+        batchspec = getattr(config.options, "canary_hpc_batchspec")
+        CanaryHPCBatchSpec.validate_and_set_defaults(batchspec)
+        setattr(config.options, "canary_hpc_batchspec", batchspec)
         hooks = CanaryHPCConductor(backend=scheduler)
         hooks.setup(config=config)
         config.pluginmanager.register(hooks, f"canary_hpc{hooks.backend.name}")
     else:
-        raise ValueError("Missing required option -b backend=BACKEND")
+        return None
 
 
 @canary.hookimpl
@@ -74,16 +68,15 @@ def setup_parser(parser: "canary.Parser") -> None:
     )
     parser.add_argument(
         "--hpc-scheduler",
-        dest="scheduler",
+        dest="canary_hpc_scheduler",
         command=("run", "find"),
         group="canary hpc",
         metavar="SCHEDULER",
-        action=CanaryHPCOption,
         help="Submit batches to this HPC scheduler [alias: -b scheduler=SCHEDULER] [default: None]",
     )
     parser.add_argument(
         "--hpc-scheduler-args",
-        dest=CanaryHPCSchedulerArgs.p_dest,
+        dest="canary_hpc_scheduler_args",
         command=("run", "find"),
         group="canary hpc",
         metavar="ARGS",
@@ -93,7 +86,7 @@ def setup_parser(parser: "canary.Parser") -> None:
     )
     parser.add_argument(
         "--hpc-batch-spec",
-        dest=CanaryHPCBatchSpec.p_dest,
+        dest="canary_hpc_batchspec",
         command=("run", "find"),
         group="canary hpc",
         metavar="SPEC",
@@ -104,27 +97,25 @@ def setup_parser(parser: "canary.Parser") -> None:
     )
     parser.add_argument(
         "--hpc-batch-workers",
-        dest="batch_workers",
+        dest="canary_hpc_batch_workers",
         command=("run", "find"),
         group="canary hpc",
         metavar="WORKERS",
-        action=CanaryHPCOption,
         help="Run test cases in batches using WORKERS workers [alias: -b workers=WORKERS]",
     )
     parser.add_argument(
         "--hpc-batch-timeout-strategy",
-        dest="batch_timeout_strategy",
+        dest="canary_hpc_batch_timeout_strategy",
         command=("run", "find"),
         group="canary hpc",
         metavar="STRATEGY",
-        action=CanaryHPCOption,
         choices=("aggressive", "conservative"),
         help="Estimate batch runtime (queue time) conservatively or aggressively "
         "[alias: -b timeout=STRATEGY] [default: aggressive]",
     )
     parser.add_argument(
         "--hpc-batch-exec",
-        dest=CanaryHPCBatchExec.p_dest,
+        dest="canary_hpc_batchexec",
         command=("run", "find"),
         group="canary hpc",
         metavar="SPEC",

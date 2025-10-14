@@ -17,13 +17,19 @@ def test_session_bfilter(tmpdir):
     with working_dir(tmpdir.strpath, create=True):
         with config.override():
             config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
-            config.options.canary_hpc = {
-                "scheduler": "shell",
-                "batch_spec": {"count": 2, "duration": None, "layout": "flat", "nodes": "any"},
+            config.options.canary_hpc_scheduler = "shell"
+            config.options.canary_hpc_batchspec = {
+                "count": 2,
+                "duration": None,
+                "layout": "flat",
+                "nodes": "any",
             }
-            config.ioptions.canary_hpc = {
-                "scheduler": "shell",
-                "batch_spec": {"count": 2, "duration": None, "layout": "flat", "nodes": "any"},
+            config.ioptions.canary_hpc_scheduler = "shell"
+            config.ioptions.canary_hpc_batchspec = {
+                "count": 2,
+                "duration": None,
+                "layout": "flat",
+                "nodes": "any",
             }
             config.pluginmanager.hook.canary_configure(config=config)
             s = session.Session("tests", mode="w", force=True)
