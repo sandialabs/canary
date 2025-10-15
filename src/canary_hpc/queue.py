@@ -13,8 +13,8 @@ from _canary import queue
 from _canary.third_party import color
 from _canary.util.time import hhmmss
 
-from .batching import batch_testcases
 from .testbatch import TestBatch
+from .testbatch import batch_testcases
 
 logger = canary.get_logger(__name__)
 

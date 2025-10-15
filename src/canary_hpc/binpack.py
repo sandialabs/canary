@@ -5,15 +5,15 @@ import math
 import statistics
 from graphlib import TopologicalSorter
 from typing import Generator
-from typing import Sequence
 from typing import Literal
+from typing import Sequence
 
 import canary
 
 logger = canary.get_logger(__name__)
 
 AUTO = 1000001  # automically choose batch size
-ONE_PER_BUCKET = 1000002  # One block per bucket
+ONE_PER_BIN = 1000002  # One block per bin
 
 
 class Block:
@@ -71,7 +71,7 @@ class Node:
         self.right: Node | None = None
 
 
-class Bucket:
+class Bin:
     def __init__(self, blocks: Sequence[Block] | None = None) -> None:
         self.blocks: list[Block] = []
         if blocks is not None:
@@ -104,12 +104,12 @@ class Bucket:
         return math.sqrt(vector[0] ** 2 + vector[1] ** 2)
 
 
-def pack_by_count_atomic(blocks: Sequence[Block], count: int = 8) -> list[Bucket]:
+def pack_by_count_atomic(blocks: Sequence[Block], count: int = 8) -> list[Bin]:
     """Partition blocks into ``count`` blocks.
 
     A note on the value of ``count``:
 
-    * If ``count == ONE_PER_BUCKET``, tests are put into individual batches
+    * If ``count == ONE_PER_BIN``, tests are put into individual batches
     * If ``count == AUTO``, tests are put into batches automatically
     * If ``count >= 1``, tests are put into *at most* ``count`` batches, though it may be less.
 
@@ -117,47 +117,47 @@ def pack_by_count_atomic(blocks: Sequence[Block], count: int = 8) -> list[Bucket
     if count <= 0:
         raise ValueError(f"{count=} must be > 0")
     if count == 1:
-        return [Bucket(blocks)]
+        return [Bin(blocks)]
     groups = groupby_dep(blocks)
     if count == AUTO:
-        buckets: list[Bucket] = [Bucket(list(group)) for group in groups if len(group) > 1]
-        mean_bucket_size = statistics.mean([b.size() for b in buckets])
-        bucket: Bucket = Bucket()
+        bins: list[Bin] = [Bin(list(group)) for group in groups if len(group) > 1]
+        mean_bin_size = statistics.mean([b.size() for b in bins])
+        bin: Bin = Bin()
         # Handle groups of length 1 individually
         for group in groups:
             if len(group) == 1:
-                bucket.update(group)
-                if bucket.size() >= mean_bucket_size:
-                    buckets.append(Bucket(list(group)))
-                    bucket.clear()
-        if bucket:
-            buckets.append(bucket)
-        return buckets
+                bin.update(group)
+                if bin.size() >= mean_bin_size:
+                    bins.append(Bin(list(group)))
+                    bin.clear()
+        if bin:
+            bins.append(bin)
+        return bins
     else:
-        buckets: list[Bucket] = [Bucket() for i in range(count)]
+        bins: list[Bin] = [Bin() for i in range(count)]
         for group in groups:
-            bucket = min(buckets, key=lambda b: b.size())
-            bucket.update(group)
-        return buckets
+            bin = min(bins, key=lambda b: b.size())
+            bin.update(group)
+        return bins
 
 
 def pack_by_count(
     blocks: Sequence[Block], count: int = 8, groupby: Literal["extent", "auto"] = "auto"
-) -> list[Bucket]:
-    """Pack blocks into ``count`` buckets such that each bucket has no
-    intra-dependencies.  Buckets can depend on other buckets.
+) -> list[Bin]:
+    """Pack blocks into ``count`` bins such that each bin has no
+    intra-dependencies.  Bin can depend on other bins.
 
     A note on the value of ``count``:
 
-    * If ``count == ONE_PER_BUCKET``, tests are put into individual batches
+    * If ``count == ONE_PER_BIN``, tests are put into individual batches
     * If ``count == AUTO``, tests are batched such that each batch contains no inter-batch dependencies
     * If ``count >= 1``, tests are put into *at most* ``count`` batches, though it may be less.
 
     """
-    if count == ONE_PER_BUCKET:
-        return [Bucket([block]) for block in blocks]
+    if count == ONE_PER_BIN:
+        return [Bin([block]) for block in blocks]
     elif count == 1:
-        return [Bucket(blocks)]
+        return [Bin(blocks)]
     graph = {}
     for block in blocks:
         graph[block] = [dep for dep in block.dependencies if dep in blocks]
@@ -177,46 +177,46 @@ def pack_by_count(
         sizes.append(sum(b.norm() for b in groups[-1]))
         ts.done(*ready)
     if count == AUTO:
-        return [Bucket(group) for group in groups]
+        return [Bin(group) for group in groups]
     if len(groups) > count:
         raise ValueError(f"{count=} insufficient to partition blocks")
-    # determine the number of buckets each partition will receive
+    # determine the number of bins each partition will receive
     total_size = sum(sizes)
     ix = sorted(range(len(groups)), key=lambda i: sizes[i])
     groups = [groups[i] for i in ix]
     sizes = [sizes[i] for i in ix]
-    nbuckets_each = [max(1, math.floor(count * t / total_size)) for t in sizes[:-1]]
-    nbuckets_each.append(count - sum(nbuckets_each))
-    buckets: list[Bucket] = []
+    nbins_each = [max(1, math.floor(count * t / total_size)) for t in sizes[:-1]]
+    nbins_each.append(count - sum(nbins_each))
+    bins: list[Bin] = []
     for i, group in enumerate(groups):
-        tmp_buckets: list[Bucket] = [Bucket() for _ in range(nbuckets_each[i])]
+        tmp_bins: list[Bin] = [Bin() for _ in range(nbins_each[i])]
         for block in group:
-            b = min(tmp_buckets, key=lambda b: b.size())
+            b = min(tmp_bins, key=lambda b: b.size())
             b.add(block)
-        buckets.extend([b for b in tmp_buckets if len(b)])
-    return buckets
+        bins.extend([b for b in tmp_bins if len(b)])
+    return bins
 
 
 def pack_to_height(
     blocks: Sequence[Block],
     height: int = 1800,
     groupby: Literal["extent", "auto"] = "auto",
-) -> list[Bucket]:
+) -> list[Bin]:
     """Partition blocks by tiling in the 2D space defined by width x height"""
     logger.debug(f"Partitioning {len(blocks)} blocks")
 
-    def _pack_ready_nodes(packer: "Packer", buckets: list[Bucket], ready: list[Block]) -> None:
+    def _pack_ready_nodes(packer: "Packer", bins: list[Bin], ready: list[Block]) -> None:
         width = max(block.extent for block in ready)
         max_height = max(block.height for block in ready)
         target_height = int(max(max_height, height))
         packer.pack(ready, width, target_height)
-        buckets.append(Bucket([map[b.id] for b in ready if b.fit]))
+        bins.append(Bin([map[b.id] for b in ready if b.fit]))
         unfit = [block for block in ready if not block.fit]
         while unfit:
             width = max(block.extent for block in unfit)
             target_height = int(max(max_height, height))
             packer.pack(unfit, width, target_height)
-            buckets.append(Bucket([map[b.id] for b in unfit if b.fit]))
+            bins.append(Bin([map[b.id] for b in unfit if b.fit]))
             tmp = [block for block in unfit if not block.fit]
             if len(tmp) == len(unfit):
                 raise RuntimeError("Unable to partition blocks")
@@ -229,7 +229,7 @@ def pack_to_height(
     ts = TopologicalSorter(graph)
     ts.prepare()
     packer = Packer()
-    buckets: list[Bucket] = []
+    bins: list[Bin] = []
     while ts.is_active():
         ready = sorted(ts.get_ready(), key=lambda b: b.norm(), reverse=True)
         if groupby == "extent":
@@ -237,14 +237,14 @@ def pack_to_height(
             for block in ready:
                 egroups.setdefault(block.extent, []).append(block)
             for group in egroups.values():
-                _pack_ready_nodes(packer, buckets, group)
+                _pack_ready_nodes(packer, bins, group)
         else:
-            _pack_ready_nodes(packer, buckets, ready)
+            _pack_ready_nodes(packer, bins, ready)
         ts.done(*ready)
-    if len(blocks) != sum([len(bucket) for bucket in buckets]):
+    if len(blocks) != sum([len(bin) for bin in bins]):
         raise ValueError("Incorrect partition lengths!")
-    logger.debug(f"Partitioned {len(blocks)} test cases in to {len(buckets)} buckets")
-    return [bucket for bucket in buckets if len(bucket)]
+    logger.debug(f"Partitioned {len(blocks)} test cases in to {len(bins)} bins")
+    return [bin for bin in bins if len(bin)]
 
 
 def groupby_dep(blocks: Sequence[Block]) -> list[set[Block]]:

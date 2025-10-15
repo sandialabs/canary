@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 from _canary.config.argparsing import Parser as CanaryParser
-from canary_hpc import partitioning
+from canary_hpc import binpack
 from canary_hpc import setup_parser
 from canary_hpc.argparsing import CanaryHPCBatchSpec
 
@@ -49,9 +49,9 @@ def test_parsing():
     args = parser.parse_args(["--hpc-batch-spec=layout:flat"])
     assert args.canary_hpc_batchspec["layout"] == "flat"
     args = parser.parse_args(["--hpc-batch-spec=count:auto"])
-    assert args.canary_hpc_batchspec["count"] == partitioning.AUTO
+    assert args.canary_hpc_batchspec["count"] == binpack.AUTO
     args = parser.parse_args(["--hpc-batch-spec=count:max"])
-    assert args.canary_hpc_batchspec["count"] == partitioning.ONE_PER_BUCKET
+    assert args.canary_hpc_batchspec["count"] == binpack.ONE_PER_BIN
 
     args = parser.parse_args(["--hpc-scheduler=shell"])
     spec = getattr(args, "canary_hpc_batchspec", None) or {}
@@ -117,9 +117,9 @@ def test_parsing_legacy():
     args = parser.parse_args(["-b", "spec=layout:flat"])
     assert args.canary_hpc_batchspec["layout"] == "flat"
     args = parser.parse_args(["-b", "spec=count:auto"])
-    assert args.canary_hpc_batchspec["count"] == partitioning.AUTO
+    assert args.canary_hpc_batchspec["count"] == binpack.AUTO
     args = parser.parse_args(["-b", "spec=count:max"])
-    assert args.canary_hpc_batchspec["count"] == partitioning.ONE_PER_BUCKET
+    assert args.canary_hpc_batchspec["count"] == binpack.ONE_PER_BIN
 
     args = parser.parse_args(["-b", "scheduler=shell"])
     spec = getattr(args, "canary_hpc_batchspec", None) or {}
