@@ -90,7 +90,7 @@ class CanaryHPCBatchSpec(argparse.Action):
             elif match := re.search(r"^count[:=]auto$", arg.lower()):
                 spec["count"] = partitioning.AUTO
             elif match := re.search(r"^count[:=]max$", arg.lower()):
-                spec["count"] = partitioning.ONE_PER_BATCH
+                spec["count"] = partitioning.ONE_PER_BUCKET
             elif match := re.search(r"^duration[:=](.*)$", arg.lower()):
                 duration = time_in_seconds(match.group(1))
                 if duration <= 0:

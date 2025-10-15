@@ -87,7 +87,7 @@ class TestBatch(AbstractTestCase):
         return self._runtime
 
     def find_approximate_runtime(self) -> float:
-        from .partitioning import packed_perimeter
+        from .batching import packed_perimeter
 
         if len(self.cases) == 1:
             return self.cases[0].runtime

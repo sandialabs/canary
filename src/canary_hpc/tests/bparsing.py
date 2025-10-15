@@ -51,7 +51,7 @@ def test_parsing():
     args = parser.parse_args(["--hpc-batch-spec=count:auto"])
     assert args.canary_hpc_batchspec["count"] == partitioning.AUTO
     args = parser.parse_args(["--hpc-batch-spec=count:max"])
-    assert args.canary_hpc_batchspec["count"] == partitioning.ONE_PER_BATCH
+    assert args.canary_hpc_batchspec["count"] == partitioning.ONE_PER_BUCKET
 
     args = parser.parse_args(["--hpc-scheduler=shell"])
     spec = getattr(args, "canary_hpc_batchspec", None) or {}
@@ -119,7 +119,7 @@ def test_parsing_legacy():
     args = parser.parse_args(["-b", "spec=count:auto"])
     assert args.canary_hpc_batchspec["count"] == partitioning.AUTO
     args = parser.parse_args(["-b", "spec=count:max"])
-    assert args.canary_hpc_batchspec["count"] == partitioning.ONE_PER_BATCH
+    assert args.canary_hpc_batchspec["count"] == partitioning.ONE_PER_BUCKET
 
     args = parser.parse_args(["-b", "scheduler=shell"])
     spec = getattr(args, "canary_hpc_batchspec", None) or {}

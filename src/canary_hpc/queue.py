@@ -13,7 +13,7 @@ from _canary import queue
 from _canary.third_party import color
 from _canary.util.time import hhmmss
 
-from .partitioning import partition_testcases
+from .batching import batch_testcases
 from .testbatch import TestBatch
 
 logger = canary.get_logger(__name__)
@@ -44,7 +44,7 @@ class ResourceQueue(queue.AbstractResourceQueue):
         batchspec = canary.config.getoption("canary_hpc_batchspec")
         if not batchspec:
             raise ValueError("Cannot partition test cases: missing batching options")
-        batches: list[TestBatch] = partition_testcases(
+        batches: list[TestBatch] = batch_testcases(
             cases=self.tmp_buffer,
             batchspec=batchspec,
             cpus_per_node=kwds.get("cpus_per_node"),

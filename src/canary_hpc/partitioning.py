@@ -1,293 +1,51 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import math
 import statistics
 from graphlib import TopologicalSorter
-from typing import Any
+from typing import Generator
 from typing import Sequence
-
-import psutil
+from typing import Literal
 
 import canary
-from _canary.util.collections import defaultlist
 
-from .testbatch import TestBatch
-
-size_t = tuple[int, int]
-
-
-AUTO = 1027  # automically choose batch size
-ONE_PER_BATCH = 1028  # One test per batch
 logger = canary.get_logger(__name__)
 
-
-def partition_testcases(
-    *,
-    cases: list["canary.TestCase"],
-    batchspec: dict[str, Any] | None = None,
-    cpus_per_node: int | None = None,
-) -> list["TestBatch"]:
-    cpus_per_node = cpus_per_node or psutil.cpu_count(logical=True)
-    batchspec = batchspec or {"nodes": "any", "layout": "flat", "count": None, "duration": 30 * 60}
-    nodes = batchspec["nodes"] or "any"
-    layout = batchspec["layout"] or "flat"
-    if batchspec["duration"] is not None:
-        duration = float(batchspec["duration"])  # 30 minute default
-        logger.debug(f"Batching test cases using duration={duration}")
-        return partition_t(cases, t=duration, nodes=nodes, cpus_per_node=cpus_per_node)
-    else:
-        assert batchspec["count"] is not None
-        count = int(batchspec["count"])
-        logger.debug(f"Batching test cases using count={count}")
-        if layout == "atomic":
-            return partition_n_atomic(cases, n=count)
-        return partition_n(cases, n=count, nodes=nodes)
-
-
-def partition_n_atomic(cases: Sequence[canary.TestCase], n: int = 8) -> list["TestBatch"]:
-    """Partition tests cases into ``n`` "atomic" partitions such that each partition is independent
-    of any other partition.  This applies that each partition may have test cases dependent on other
-    cases in the partition (intra-partition dependencies).
-
-    A note on the value of ``n``:
-
-    * If ``n == ONE_PER_BATCH``, tests are put into individual batches
-    * If ``n == AUTO``, tests are put into batches automatically
-    * If ``n >= 1``, tests are put into *at most* ``n`` batches, though it may be less.
-
-    """
-    if n <= 0:
-        raise ValueError(f"Cannot create atomic batches with count {n=}")
-    if n == ONE_PER_BATCH:
-        raise ValueError("Cannot create atomic batches with one test per batch")
-    if n == 1:
-        return [TestBatch(cases)]
-    groups = groupby_dep(cases)
-    if n == AUTO:
-        batches: list[TestBatch] = [TestBatch(list(group)) for group in groups if len(group) > 1]
-        mean_batch_length = statistics.mean([b.size() for b in batches])
-        p: _Partition = _Partition()
-        for group in groups:
-            if len(group) == 1:
-                p.update(group)
-                if p.size() >= mean_batch_length:
-                    batches.append(TestBatch(list(p)))
-                    p.clear()
-        if p:
-            batches.append(TestBatch(list(p)))
-        return batches
-    else:
-        partitions = defaultlist(_Partition, n)
-        for group in groups:
-            partition = min(partitions, key=lambda p: p.size())
-            partition.update(group)
-        return [TestBatch(p) for p in partitions if len(p)]
-
-
-def partition_n(
-    cases: Sequence[canary.TestCase], n: int = 8, nodes: str = "any"
-) -> list["TestBatch"]:
-    """Partition tests cases into ``n`` partitions such that each partition has no
-    intra-dependencies.  Partitions can depend on other partitions.
-
-    A note on the value of ``n``:
-
-    * If ``n == ONE_PER_BATCH``, tests are put into individual batches
-    * If ``n == AUTO``, tests are batched such that each batch contains no inter-batch dependencies
-    * If ``n >= 1``, tests are put into *at most* ``n`` batches, though it may be less.
-
-    """
-    assert nodes in ("any", "same")
-    if n == ONE_PER_BATCH:
-        return [TestBatch([case]) for case in cases]
-    elif n == 1:
-        return [TestBatch(cases)]
-    graph = {}
-    for case in cases:
-        graph[case] = [dep for dep in case.dependencies if dep in cases]
-    ts = TopologicalSorter(graph)
-    ts.prepare()
-    sizes: list[float] = []
-    groups: list[list[canary.TestCase]] = []
-    while ts.is_active():
-        ready = ts.get_ready()
-        if nodes == "same":
-            node_groups: dict[int, list[canary.TestCase]] = {}
-            for case in ready:
-                node_groups.setdefault(nodes_required(case), []).append(case)
-            groups.extend(node_groups.values())
-        else:
-            groups.append(list(ready))
-        sizes.append(sum(c.size() for c in groups[-1] if not c.wont_run()))
-        ts.done(*ready)
-    if n == AUTO:
-        return [TestBatch(list(group)) for group in groups]
-    if len(groups) > n:
-        raise ValueError(f"At least {len(groups)} required to partition test cases")
-    # determine the number of batches each partition will receive
-    total_size = sum(sizes)
-    ix = sorted(range(len(groups)), key=lambda i: sizes[i])
-    groups = [groups[i] for i in ix]
-    sizes = [sizes[i] for i in ix]
-    nbatches_each = [max(1, math.floor(n * t / total_size)) for t in sizes[:-1]]
-    nbatches_each.append(n - sum(nbatches_each))
-    batches: list[TestBatch] = []
-    for i, group in enumerate(groups):
-        ps = defaultlist(_Partition, nbatches_each[i])
-        for case in group:
-            p = min(ps, key=lambda p: p.size())
-            p.add(case)
-        batches.extend([TestBatch(p) for p in ps if len(p)])
-    return batches
-
-
-def partition_t(
-    cases: Sequence[canary.TestCase],
-    t: float = 60 * 30,
-    nodes: str = "any",
-    cpus_per_node: int | None = None,
-) -> list[TestBatch]:
-    """Partition test cases by tiling them in the 2D space defined by num_cpus x run_time"""
-    logger.debug(f"Partitioning {len(cases)} test cases")
-
-    cpus_per_node = cpus_per_node or psutil.cpu_count(logical=True)
-    assert isinstance(cpus_per_node, int)
-
-    def _pack_ready_nodes(
-        packer: "Packer", batches: list[TestBatch], ready: list[canary.TestCase], cpus_per_node: int
-    ):
-        blocks = [Block(case.id, case.cpus, math.ceil(runtime(case))) for case in ready]
-        cpus = max(block.size[0] for block in blocks)
-        nodes_reqd = math.ceil(cpus / cpus_per_node)
-        width = nodes_reqd * cpus_per_node
-        for i, block in enumerate(blocks):
-            if ready[i].exclusive:
-                block.width = width
-        max_height = max(block.size[1] for block in blocks)
-        height = int(max(max_height, t))
-        packer.pack(blocks, width, height)
-        batches.append(TestBatch([map[b.id] for b in blocks if b.fit], runtime=float(height)))
-        unfit = [block for block in blocks if not block.fit]
-        while unfit:
-            cpus = max(block.size[0] for block in unfit)
-            nodes_reqd = math.ceil(cpus / cpus_per_node)
-            width = nodes_reqd * cpus_per_node
-            max_height = max(block.size[1] for block in unfit)
-            height = int(max(max_height, t))
-            packer.pack(unfit, width, height)
-            batches.append(TestBatch([map[b.id] for b in unfit if b.fit], runtime=float(height)))
-            tmp = [block for block in unfit if not block.fit]
-            if len(tmp) == len(unfit):
-                raise RuntimeError("Unable to partition blocks")
-            unfit = tmp
-
-    map: dict[str, canary.TestCase] = {case.id: case for case in cases}
-    graph: dict[canary.TestCase, list[canary.TestCase]] = {}
-    for case in cases:
-        graph[case] = [dep for dep in case.dependencies if dep in cases]
-    ts = TopologicalSorter(graph)
-    ts.prepare()
-    packer = Packer()
-    batches: list[TestBatch] = []
-    while ts.is_active():
-        ready = sorted(ts.get_ready(), key=lambda c: c.size(), reverse=True)
-        if nodes == "same":
-            node_groups: dict[int, list[canary.TestCase]] = {}
-            for case in ready:
-                node_groups.setdefault(nodes_required(case), []).append(case)
-            for group in node_groups.values():
-                _pack_ready_nodes(packer, batches, group, cpus_per_node)
-        else:
-            _pack_ready_nodes(packer, batches, ready, cpus_per_node)
-        ts.done(*ready)
-    if len(cases) != sum([len(b) for b in batches]):
-        raise ValueError("Incorrect partition lengths!")
-    logger.debug(f"Partitioned {len(cases)} test cases in to {len(batches)} batches")
-    return [b for b in batches if len(b)]
-
-
-def nodes_required(case: canary.TestCase) -> int:
-    return case.nodes
-
-
-class _Partition(set):
-    def size(self):
-        vector = [0.0, 0.0, 0.0]
-        for case in self:
-            if not case.wont_run():
-                vector[0] += case.cpus
-                vector[1] += case.gpus
-                vector[2] += case.runtime
-        return math.sqrt(sum(x**2 for x in vector))
-
-
-def groupby_dep(cases: Sequence[canary.TestCase]) -> list[set[canary.TestCase]]:
-    """Group cases such that a case and any of its dependencies are in the same
-    group
-    """
-    sets = [{case} | set(case.dependencies) for case in cases]
-    groups: list[set[canary.TestCase]] = []
-    while sets:
-        first, *rest = sets
-        combined = True
-        while combined:
-            combined = False
-            for s in rest:
-                if first & s:
-                    first |= s
-                    s.clear()
-                    combined = True
-        groups.append(first)
-        sets = rest
-    groups = [_ for _ in groups if _]
-    if len(cases) != sum([len(group) for group in groups]):
-        raise ValueError("Incorrect partition lengths!")
-    return groups
-
-
-# modified from https://gist.github.com/shihrer/aa90d023ae0f7662919f
+AUTO = 1000001  # automically choose batch size
+ONE_PER_BUCKET = 1000002  # One block per bucket
 
 
 class Block:
-    """
-    Args:
-      id: a string id
-      width: the block width
-      height: the block height
-
-    Attributes:
-      fit: Stores a Node object for output.
-
-    """
-
-    def __init__(self, id: str, width: int, height: int):
+    def __init__(
+        self,
+        id: str,
+        width: int,
+        height: int,
+        extent: int | None = None,
+        dependencies: list["Block"] | None = None,
+    ) -> None:
         self.id: str = id
-        self.size: size_t = (width, height)
+        self.width: int = width
+        self.height: int = height
+        self.extent: int = extent or width
+        self.dependencies: list[Block] = []
+        if dependencies:
+            self.dependencies.extend(dependencies)
         self.fit: Node | None = None
 
+    def __hash__(self) -> int:
+        return hash(self.id)
+
     def __repr__(self):
-        return f"Block({self.id}, {self.size[0]}, {self.size[1]})"
+        return f"Block({self.id}, {self.width}, {self.height})"
 
     def norm(self) -> float:
-        return math.sqrt(self.size[0] ** 2 + self.size[1] ** 2)
+        return math.sqrt(self.width**2 + self.height**2)
 
     @property
-    def width(self) -> int:
-        return self.size[0]
-
-    @width.setter
-    def width(self, arg: int) -> None:
-        self.size = (arg, self.height)
-
-    @property
-    def height(self) -> int:
-        return self.size[1]
-
-    @height.setter
-    def height(self, arg: int) -> None:
-        self.size = (self.width, arg)
+    def size(self) -> tuple[int, int]:
+        return (self.width, self.height)
 
 
 class Node:
@@ -305,12 +63,215 @@ class Node:
       right: A node located to the right of the current node.
     """
 
-    def __init__(self, origin: size_t, size: size_t):
-        self.origin: size_t = origin
-        self.size: size_t = size
+    def __init__(self, origin: tuple[int, int], size: tuple[int, int]):
+        self.origin: tuple[int, int] = origin
+        self.size: tuple[int, int] = size
         self.used: bool = False
         self.down: Node | None = None
         self.right: Node | None = None
+
+
+class Bucket:
+    def __init__(self, blocks: Sequence[Block] | None = None) -> None:
+        self.blocks: list[Block] = []
+        if blocks is not None:
+            self.blocks.extend(blocks)
+
+    def __iter__(self) -> Generator[Block, None, None]:
+        for block in self.blocks:
+            yield block
+
+    def __len__(self) -> int:
+        return len(self.blocks)
+
+    def __bool__(self) -> bool:
+        return len(self.blocks) > 0
+
+    def add(self, block: Block) -> None:
+        self.blocks.append(block)
+
+    def update(self, blocks: list[Block] | set[Block]) -> None:
+        self.blocks.extend(blocks)
+
+    def clear(self) -> None:
+        self.blocks.clear()
+
+    def size(self) -> float:
+        vector: list[float] = [0.0, 0.0]
+        for block in self:
+            vector[0] += block.width
+            vector[1] += block.height
+        return math.sqrt(vector[0] ** 2 + vector[1] ** 2)
+
+
+def pack_by_count_atomic(blocks: Sequence[Block], count: int = 8) -> list[Bucket]:
+    """Partition blocks into ``count`` blocks.
+
+    A note on the value of ``count``:
+
+    * If ``count == ONE_PER_BUCKET``, tests are put into individual batches
+    * If ``count == AUTO``, tests are put into batches automatically
+    * If ``count >= 1``, tests are put into *at most* ``count`` batches, though it may be less.
+
+    """
+    if count <= 0:
+        raise ValueError(f"{count=} must be > 0")
+    if count == 1:
+        return [Bucket(blocks)]
+    groups = groupby_dep(blocks)
+    if count == AUTO:
+        buckets: list[Bucket] = [Bucket(list(group)) for group in groups if len(group) > 1]
+        mean_bucket_size = statistics.mean([b.size() for b in buckets])
+        bucket: Bucket = Bucket()
+        # Handle groups of length 1 individually
+        for group in groups:
+            if len(group) == 1:
+                bucket.update(group)
+                if bucket.size() >= mean_bucket_size:
+                    buckets.append(Bucket(list(group)))
+                    bucket.clear()
+        if bucket:
+            buckets.append(bucket)
+        return buckets
+    else:
+        buckets: list[Bucket] = [Bucket() for i in range(count)]
+        for group in groups:
+            bucket = min(buckets, key=lambda b: b.size())
+            bucket.update(group)
+        return buckets
+
+
+def pack_by_count(
+    blocks: Sequence[Block], count: int = 8, groupby: Literal["extent", "auto"] = "auto"
+) -> list[Bucket]:
+    """Pack blocks into ``count`` buckets such that each bucket has no
+    intra-dependencies.  Buckets can depend on other buckets.
+
+    A note on the value of ``count``:
+
+    * If ``count == ONE_PER_BUCKET``, tests are put into individual batches
+    * If ``count == AUTO``, tests are batched such that each batch contains no inter-batch dependencies
+    * If ``count >= 1``, tests are put into *at most* ``count`` batches, though it may be less.
+
+    """
+    if count == ONE_PER_BUCKET:
+        return [Bucket([block]) for block in blocks]
+    elif count == 1:
+        return [Bucket(blocks)]
+    graph = {}
+    for block in blocks:
+        graph[block] = [dep for dep in block.dependencies if dep in blocks]
+    ts = TopologicalSorter(graph)
+    ts.prepare()
+    sizes: list[float] = []
+    groups: list[list[Block]] = []
+    while ts.is_active():
+        ready = ts.get_ready()
+        if groupby == "extent":
+            egroups: dict[int, list[Block]] = {}
+            for block in ready:
+                egroups.setdefault(block.extent, []).append(block)
+            groups.extend(egroups.values())
+        else:
+            groups.append(list(ready))
+        sizes.append(sum(b.norm() for b in groups[-1]))
+        ts.done(*ready)
+    if count == AUTO:
+        return [Bucket(group) for group in groups]
+    if len(groups) > count:
+        raise ValueError(f"{count=} insufficient to partition blocks")
+    # determine the number of buckets each partition will receive
+    total_size = sum(sizes)
+    ix = sorted(range(len(groups)), key=lambda i: sizes[i])
+    groups = [groups[i] for i in ix]
+    sizes = [sizes[i] for i in ix]
+    nbuckets_each = [max(1, math.floor(count * t / total_size)) for t in sizes[:-1]]
+    nbuckets_each.append(count - sum(nbuckets_each))
+    buckets: list[Bucket] = []
+    for i, group in enumerate(groups):
+        tmp_buckets: list[Bucket] = [Bucket() for _ in range(nbuckets_each[i])]
+        for block in group:
+            b = min(tmp_buckets, key=lambda b: b.size())
+            b.add(block)
+        buckets.extend([b for b in tmp_buckets if len(b)])
+    return buckets
+
+
+def pack_to_height(
+    blocks: Sequence[Block],
+    height: int = 1800,
+    groupby: Literal["extent", "auto"] = "auto",
+) -> list[Bucket]:
+    """Partition blocks by tiling in the 2D space defined by width x height"""
+    logger.debug(f"Partitioning {len(blocks)} blocks")
+
+    def _pack_ready_nodes(packer: "Packer", buckets: list[Bucket], ready: list[Block]) -> None:
+        width = max(block.extent for block in ready)
+        max_height = max(block.height for block in ready)
+        target_height = int(max(max_height, height))
+        packer.pack(ready, width, target_height)
+        buckets.append(Bucket([map[b.id] for b in ready if b.fit]))
+        unfit = [block for block in ready if not block.fit]
+        while unfit:
+            width = max(block.extent for block in unfit)
+            target_height = int(max(max_height, height))
+            packer.pack(unfit, width, target_height)
+            buckets.append(Bucket([map[b.id] for b in unfit if b.fit]))
+            tmp = [block for block in unfit if not block.fit]
+            if len(tmp) == len(unfit):
+                raise RuntimeError("Unable to partition blocks")
+            unfit = tmp
+
+    map: dict[str, Block] = {block.id: block for block in blocks}
+    graph: dict[Block, list[Block]] = {}
+    for block in blocks:
+        graph[block] = [dep for dep in block.dependencies if dep in blocks]
+    ts = TopologicalSorter(graph)
+    ts.prepare()
+    packer = Packer()
+    buckets: list[Bucket] = []
+    while ts.is_active():
+        ready = sorted(ts.get_ready(), key=lambda b: b.norm(), reverse=True)
+        if groupby == "extent":
+            egroups: dict[int, list[Block]] = {}
+            for block in ready:
+                egroups.setdefault(block.extent, []).append(block)
+            for group in egroups.values():
+                _pack_ready_nodes(packer, buckets, group)
+        else:
+            _pack_ready_nodes(packer, buckets, ready)
+        ts.done(*ready)
+    if len(blocks) != sum([len(bucket) for bucket in buckets]):
+        raise ValueError("Incorrect partition lengths!")
+    logger.debug(f"Partitioned {len(blocks)} test cases in to {len(buckets)} buckets")
+    return [bucket for bucket in buckets if len(bucket)]
+
+
+def groupby_dep(blocks: Sequence[Block]) -> list[set[Block]]:
+    """Group cases such that a case and any of its dependencies are in the same
+    group
+    """
+    sets = [{block} | set(block.dependencies) for block in blocks]
+    groups: list[set[Block]] = []
+    while sets:
+        first, *rest = sets
+        combined = True
+        while combined:
+            combined = False
+            for s in rest:
+                if first & s:
+                    first |= s
+                    s.clear()
+                    combined = True
+        groups.append(first)
+        sets = rest
+    groups = [_ for _ in groups if _]
+    if len(blocks) != sum([len(group) for group in groups]):
+        raise ValueError("Incorrect partition lengths!")
+    return groups
+
+
+# modified from https://gist.github.com/shihrer/aa90d023ae0f7662919f
 
 
 class Packer:
@@ -341,7 +302,7 @@ class Packer:
                 block.fit = self.grow_node(block.size)
         return None
 
-    def find_node(self, node: Node, size: size_t) -> Node | None:
+    def find_node(self, node: Node, size: tuple[int, int]) -> Node | None:
         if node.used:
             assert node.right is not None and node.down is not None
             return self.find_node(node.right, size) or self.find_node(node.down, size)
@@ -350,7 +311,7 @@ class Packer:
         else:
             return None
 
-    def split_node(self, node: Node, size: size_t) -> Node:
+    def split_node(self, node: Node, size: tuple[int, int]) -> Node:
         node.used = True
         node.down = Node(
             (node.origin[0], node.origin[1] + size[1]), (node.size[0], node.size[1] - size[1])
@@ -360,7 +321,7 @@ class Packer:
         )
         return node
 
-    def grow_node(self, size: size_t) -> Node | None:
+    def grow_node(self, size: tuple[int, int]) -> Node | None:
         assert self.root is not None
         can_go_right = self.auto[0] and size[1] <= self.root.size[1]
         can_go_down = self.auto[1] and size[0] <= self.root.size[0]
@@ -379,7 +340,7 @@ class Packer:
         else:
             return None
 
-    def grow_right(self, size: size_t) -> Node | None:
+    def grow_right(self, size: tuple[int, int]) -> Node | None:
         assert self.root is not None
         root = Node((0, 0), (self.root.size[0] + size[0], self.root.size[1]))
         root.used = True
@@ -394,7 +355,7 @@ class Packer:
         else:
             return None
 
-    def grow_down(self, size: size_t) -> Node | None:
+    def grow_down(self, size: tuple[int, int]) -> Node | None:
         assert self.root is not None
         root = Node((0, 0), (self.root.size[0], self.root.size[1] + size[1]))
         root.used = True
@@ -410,7 +371,7 @@ class Packer:
             return None
 
 
-def perimeter(blocks: list[Block]) -> size_t:
+def perimeter(blocks: list[Block]) -> tuple[int, int]:
     max_x = max_y = 0
     for block in blocks:
         if block.fit is None:
@@ -418,60 +379,3 @@ def perimeter(blocks: list[Block]) -> size_t:
         max_x = max(max_x, block.fit.origin[0] + block.fit.size[0])
         max_y = max(max_y, block.fit.origin[1] + block.fit.size[1])
     return max_x, max_y
-
-
-def runtime(case: canary.TestCase) -> float:
-    t = case.runtime
-    if t <= 5.0:
-        return 5.0 * t
-    elif t <= 10.0:
-        return 4.0 * t
-    elif t <= 30.0:
-        return 3.0 * t
-    elif t <= 90.0:
-        return 2.0 * t
-    elif t <= 300.0:
-        return 2.0 * t
-    return 1.25 * t
-
-
-def packed_perimeter(cases: Sequence[canary.TestCase], cpus_per_node: int | None = None) -> size_t:
-    cpus_per_node = cpus_per_node or psutil.cpu_count(logical=True)
-    cases = sorted(cases, key=lambda c: c.size(), reverse=True)
-    cpus = max(case.cpus for case in cases)
-    nodes = math.ceil(cpus / cpus_per_node)
-    width = nodes * cpus_per_node
-    blocks = [Block(case.id, case.cpus, math.ceil(runtime(case))) for case in cases]
-    for i, block in enumerate(blocks):
-        if cases[i].exclusive:
-            block.width = width
-    packer = Packer()
-    packer.pack(blocks, width=width)
-    return perimeter(blocks)
-
-
-def tile(cases: Sequence[canary.TestCase], width: int) -> list[list[canary.TestCase]]:
-    """Tile test cases in a way that minimizes total runtime.
-
-    Args:
-      cases: Sequence of TestCase objects
-      width: the number of cores available
-
-    The strategy employed is the First-Fit Decreasing (heuristic) bin-packing
-    algorithm to create a 2D grid of test cases with dimensions width x runtime
-
-    1. Sort cases in decreasing runtime order
-    2. Place each test case in the first row where it fits
-    3. If it doesn't fit in any existing row, create a new row
-
-    """
-    grid: list[list[canary.TestCase]] = []
-    for case in sorted(cases, key=lambda c: c.size(), reverse=True):
-        for row in grid:
-            row_cpus = sum(c.cpus for c in row)
-            if row_cpus + case.cpus <= width:
-                row.append(case)
-                break
-        else:
-            grid.append([case])
-    return grid
