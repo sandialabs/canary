@@ -43,10 +43,6 @@ class Block:
     def norm(self) -> float:
         return math.sqrt(self.width**2 + self.height**2)
 
-    @property
-    def size(self) -> tuple[int, int]:
-        return (self.width, self.height)
-
 
 class Node:
     """
@@ -97,7 +93,7 @@ class Bin:
     def clear(self) -> None:
         self.blocks.clear()
 
-    def size(self) -> float:
+    def norm(self) -> float:
         vector: list[float] = [0.0, 0.0]
         for block in self:
             vector[0] += block.width
@@ -106,7 +102,7 @@ class Bin:
 
     def accommodates(self, block: Block) -> bool | None:
         if self.width == -1:
-            return None
+            return True
         return block.width <= self.width
 
 
@@ -127,13 +123,13 @@ def pack_by_count_atomic(blocks: Sequence[Block], count: int = 8) -> list[Bin]:
     groups = groupby_dep(blocks)
     if count == AUTO:
         bins: list[Bin] = [Bin(list(group)) for group in groups if len(group) > 1]
-        mean_bin_size = statistics.mean([b.size() for b in bins])
+        mean_bin_size = statistics.mean([b.norm() for b in bins])
         bin: Bin = Bin()
         # Handle groups of length 1 individually
         for group in groups:
             if len(group) == 1:
                 bin.update(group)
-                if bin.size() >= mean_bin_size:
+                if bin.norm() >= mean_bin_size:
                     bins.append(Bin(list(group)))
                     bin.clear()
         if bin:
@@ -142,7 +138,7 @@ def pack_by_count_atomic(blocks: Sequence[Block], count: int = 8) -> list[Bin]:
     else:
         bins: list[Bin] = [Bin() for i in range(count)]
         for group in groups:
-            bin = min(bins, key=lambda b: b.size())
+            bin = min(bins, key=lambda b: b.norm())
             bin.update(group)
         return bins
 
@@ -197,7 +193,7 @@ def pack_by_count(
     for i, group in enumerate(groups):
         tmp_bins: list[Bin] = [Bin() for _ in range(nbins_each[i])]
         for block in group:
-            b = min(tmp_bins, key=lambda b: b.size())
+            b = min(tmp_bins, key=lambda b: b.norm())
             b.add(block)
         bins.extend([b for b in tmp_bins if len(b)])
     return bins
@@ -295,17 +291,17 @@ class Packer:
         self.auto.extend((False, False))
         if width is None:
             self.auto[0] = True
-            width = math.ceil(1.5 * max(block.size[0] for block in blocks))
+            width = math.ceil(1.5 * max(block.width for block in blocks))
         if height is None:
             self.auto[1] = True
-            height = math.ceil(1.5 * max(block.size[1] for block in blocks))
+            height = math.ceil(1.5 * max(block.height for block in blocks))
         self.root = Node((0, 0), (width, height))
         for block in blocks:
-            node = self.find_node(self.root, block.size)
+            node = self.find_node(self.root, (block.width, block.height))
             if node is not None:
-                block.fit = self.split_node(node, block.size)
+                block.fit = self.split_node(node, (block.width, block.height))
             else:
-                block.fit = self.grow_node(block.size)
+                block.fit = self.grow_node((block.width, block.height))
         return None
 
     def find_node(self, node: Node, size: tuple[int, int]) -> Node | None:
