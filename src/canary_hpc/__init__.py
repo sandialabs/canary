@@ -31,7 +31,7 @@ def canary_configure(config: "canary.Config") -> None:
         # Run with the HPC.execute command
         config.ioptions.command = "hpc"
         config.options.command = "hpc"
-        config.options.batch_cmd = "run"
+        config.options.hpc_cmd = "run"
         if ival := getattr(config.ioptions, "canary_hpc_batchspec", None):
             # ioptions is the argparse.Namespace parsed from the command line, options is the
             # argparse.Namespace merged from the original invocation of canary.  They are only
