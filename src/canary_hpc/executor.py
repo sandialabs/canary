@@ -43,11 +43,6 @@ class CanaryHPCExecutor:
         if not os.path.exists(f):
             with open(f, "w") as fh:
                 self.backend.config.dump(fh)
-        config.options.mode = "a"
-        case_specs = self.case_specs
-        n = len(case_specs)
-        logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {self.batch}")
-        setattr(config.options, "case_specs", case_specs)
 
     def generate_resource_pool(self) -> dict[str, Any]:
         # set the resource pool for this backend

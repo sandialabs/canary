@@ -70,8 +70,6 @@ class CanaryHPCConductor:
         assert self._slots_per_resource_type is not None
         return self._slots_per_resource_type
 
-    def setup(self, *, config: canary.Config) -> None: ...
-
     @canary.hookimpl
     def canary_resource_count(self, type: str) -> int:
         node_count = self.backend.config.node_count

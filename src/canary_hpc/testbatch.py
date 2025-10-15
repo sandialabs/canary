@@ -453,9 +453,8 @@ class TestBatch(AbstractTestCase):
         args: list[str] = ["canary"]
         if canary.config.get("config:debug"):
             args.append("-d")
-        args.extend(["-C", canary.config.get("session:work_tree")])
-        execspec = f"backend:{backend.name},batch:{self.id},case:{case.id}"
-        args.extend(["run", f"--hpc-batch-exec={execspec}"])
+        args.extend(["-C", canary.config.get("session:work_tree"), "hpc", "exec"])
+        args.extend([f"--backend={backend.name}", f"--case={case.id}", self.id])
         return shlex.join(args)
 
     def canary_batch_invocation(self, backend: hpc_connect.HPCSubmissionManager) -> str:
@@ -463,11 +462,9 @@ class TestBatch(AbstractTestCase):
         args: list[str] = ["canary"]
         if canary.config.get("config:debug"):
             args.append("-d")
-        args.extend(["-C", canary.config.get("session:work_tree")])
-        execspec = f"backend:{backend.name},batch:{self.id}"
-        args.extend(["run", f"--hpc-batch-exec={execspec}"])
         workers = canary.config.getoption("canary_hpc_batch_workers") or -1
-        args.append(f"--workers={workers}")
+        args.extend(["-C", canary.config.get("session:work_tree"), "hpc", "exec"])
+        args.extend([f"--workers={workers}", f"--backend={backend.name}", self.id])
         return shlex.join(args)
 
 
