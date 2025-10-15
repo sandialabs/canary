@@ -44,14 +44,22 @@ class Executable:
     @staticmethod
     def find(name: str | Path) -> Path:
         """Find the path to the command ``name``"""
-        if is_executable(name):
-            return Path(name).absolute()
-        paths = [Path(p) for p in os.getenv("PATH", "").split(os.pathsep) if p.split()]
-        for path in paths:
-            file = path.joinpath(name)
-            if is_executable(file):
-                return file
-        raise FileNotFoundError(name)
+        found: Path | None = None
+        if os.path.exists(name):
+            found = Path(name).absolute()
+        else:
+            PATH = [Path(p) for p in os.getenv("PATH", "").split(os.pathsep) if p.split()]
+            for path in PATH:
+                file = path.joinpath(name)
+                if os.path.exists(file):
+                    found = file
+                    break
+        if found is not None and os.access(found, os.X_OK):
+            return found
+        elif found is None:
+            raise FileNotFoundError(name)
+        else:
+            raise FileNotExecutableError(found)
 
     @property
     def command(self) -> str:
@@ -295,4 +303,8 @@ class ProcessError(Exception):
 
 
 class CommandTimedOutError(Exception):
+    pass
+
+
+class FileNotExecutableError(Exception):
     pass
