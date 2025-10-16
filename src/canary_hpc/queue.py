@@ -10,6 +10,7 @@ from typing import Sequence
 
 import canary
 from _canary import queue
+from _canary.config.rpool import ResourcePool
 from _canary.third_party import color
 from _canary.util.time import hhmmss
 
@@ -20,16 +21,24 @@ logger = canary.get_logger(__name__)
 
 
 class ResourceQueue(queue.AbstractResourceQueue):
-    def __init__(self, *, lock: threading.Lock) -> None:
+    def __init__(self, *, lock: threading.Lock, resource_pool: ResourcePool) -> None:
         workers = int(canary.config.getoption("workers", -1))
-        super().__init__(lock=lock, workers=5 if workers < 0 else workers)
+        super().__init__(
+            lock=lock,
+            resource_pool=resource_pool,
+            workers=5 if workers < 0 else workers,
+        )
         self.tmp_buffer: list[canary.TestCase] = []
 
     @classmethod
     def factory(
-        cls, lock: threading.Lock, cases: Sequence[canary.TestCase], **kwds: Any
+        cls,
+        lock: threading.Lock,
+        cases: Sequence[canary.TestCase],
+        resource_pool: ResourcePool,
+        **kwds: Any,
     ) -> "ResourceQueue":
-        self = ResourceQueue(lock=lock)
+        self = ResourceQueue(lock=lock, resource_pool=resource_pool)
         self.put(*cases)
         self.prepare(**kwds)
         if self.empty():
@@ -64,7 +73,7 @@ class ResourceQueue(queue.AbstractResourceQueue):
             if obj_no not in self._busy:
                 raise RuntimeError(f"batch {obj_no} is not running")
             obj = self._finished[obj_no] = self._busy.pop(obj_no)
-            canary.config.resource_pool.checkin(obj.resources)
+            self.resource_pool.checkin(obj.resources)
             obj.free_resources()
             completed = dict([(_.id, _) for _ in self.finished()])
             for batch in self.buffer.values():

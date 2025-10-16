@@ -6,16 +6,11 @@ import argparse
 import glob
 import json
 import os
-from typing import Sequence
-
-import psutil
 
 import canary
 from _canary.plugins.subcommands.run import Run
 
 from .argparsing import CanaryHPCBatchSpec
-from .argparsing import CanaryHPCResourceSetter
-from .argparsing import CanaryHPCSchedulerArgs
 from .conductor import CanaryHPCConductor
 from .executor import CanaryHPCExecutor
 
@@ -43,71 +38,9 @@ def canary_configure(config: "canary.Config") -> None:
             setattr(config.options, "canary_hpc_batchspec", CanaryHPCBatchSpec.defaults())
 
 
-class LegacyParserAdapter:
-    def __init__(self, parser: "canary.Parser") -> None:
-        self.parser = parser
-        self.parser.add_argument(
-            "-b",
-            command=("run", "find"),
-            group="canary hpc",
-            metavar="option=value",
-            action=CanaryHPCResourceSetter,
-            help="Short cut for setting batch options.",
-        )
-
-    def add_argument(self, flag: str, *args, **kwargs):
-        flag = "--hpc-" + flag[2:]
-        self.parser.add_argument(flag, *args, command=("run", "find"), group="canary hpc", **kwargs)
-
-    def parse_args(self, args: Sequence[str] | None = None) -> argparse.Namespace:
-        return self.parser.parse_args(args)
-
-
 @canary.hookimpl
 def canary_addoption(parser: "canary.Parser") -> None:
-    p = LegacyParserAdapter(parser)
-    setup_parser(p)
-
-
-def setup_parser(parser: canary.Parser | LegacyParserAdapter | argparse._ArgumentGroup) -> None:
-    """Exists to accomodate ``canary hpc run`` and ``canary run -b ...``"""
-    parser.add_argument(
-        "--scheduler",
-        dest="canary_hpc_scheduler",
-        metavar="SCHEDULER",
-        help="Submit batches to this HPC scheduler [alias: -b scheduler=SCHEDULER] [default: None]",
-    )
-    parser.add_argument(
-        "--scheduler-args",
-        dest="canary_hpc_scheduler_args",
-        metavar="ARGS",
-        action=CanaryHPCSchedulerArgs,
-        help="Comma separated list of options to pass directly "
-        "to the scheduler [alias: -b options=ARGS]",
-    )
-    parser.add_argument(
-        "--batch-spec",
-        dest="canary_hpc_batchspec",
-        metavar="SPEC",
-        action=CanaryHPCBatchSpec,
-        help="Comma separated list of options to partition test cases into batches. "
-        "See canary batch help --spec for help on batch specification syntax "
-        "[alias: -b spec=SPEC]",
-    )
-    parser.add_argument(
-        "--batch-workers",
-        dest="canary_hpc_batch_workers",
-        metavar="WORKERS",
-        help="Run test cases in batches using WORKERS workers [alias: -b workers=WORKERS]",
-    )
-    parser.add_argument(
-        "--batch-timeout-strategy",
-        dest="canary_hpc_batch_timeout_strategy",
-        metavar="STRATEGY",
-        choices=("aggressive", "conservative"),
-        help="Estimate batch runtime (queue time) conservatively or aggressively "
-        "[alias: -b timeout=STRATEGY] [default: aggressive]",
-    )
+    CanaryHPCConductor.setup_legacy_parser(parser)
 
 
 @canary.hookimpl
@@ -126,13 +59,10 @@ class HPC(canary.CanarySubcommand):
         p = subparsers.add_parser("run", help="Batch test cases and submit to HPC scheduler")
         Run().setup_parser(p)
         group = p.add_argument_group(title="Batched execution options")
-        setup_parser(group)
+        CanaryHPCConductor.setup_parser(group)
 
         p = subparsers.add_parser("exec", help="Execute (run) the batch")
-        p.add_argument("--workers", type=int, help="Run tests in batch using this many workers")
-        p.add_argument("--backend", dest="canary_hpc_backend", help="The HPC connect backend name")
-        p.add_argument("--case", dest="canary_hpc_case", help="Run only this case")
-        p.add_argument("batch_id")
+        CanaryHPCExecutor.setup_parser(p)
 
         p = subparsers.add_parser("help", help="Additional canary_hpc help topics")
         p.add_argument(
@@ -147,17 +77,9 @@ class HPC(canary.CanarySubcommand):
             scheduler = args.canary_hpc_scheduler
             if scheduler is None:
                 raise ValueError("canary hpc run requires --scheduler")
-            if n := args.canary_hpc_batch_workers:
-                if n > psutil.cpu_count():
-                    logger.warning(f"--hpc-batch-workers={n} > cpu_count={psutil.cpu_count()}")
-            batchspec = args.canary_hpc_batchspec or CanaryHPCBatchSpec.defaults()
-            CanaryHPCBatchSpec.validate_and_set_defaults(batchspec)
-            setattr(canary.config.options, "canary_hpc_batchspec", batchspec)
-            # Registering the conductor registers the canary_runtests implementation
             conductor = CanaryHPCConductor(backend=scheduler)
-            canary.config.pluginmanager.register(conductor, f"canary_hpc{conductor.backend.name}")
-            Run().execute(args)
-
+            conductor.register(canary.config.pluginmanager)
+            return conductor.run(args)
         elif args.hpc_cmd == "exec":
             # Batch is being executed within an allocation
             # register the CanaryHPCExector plugin so that executor.runtests is registered
@@ -165,18 +87,9 @@ class HPC(canary.CanarySubcommand):
             executor = CanaryHPCExecutor(
                 backend=backend, batch=args.batch_id, case=args.canary_hpc_case
             )
-            executor.setup(config=canary.config._config)
-            canary.config.pluginmanager.register(executor, f"canary_hpc{executor.backend.name}")
-            n = len(executor.cases)
-            logger.info(
-                f"Selected {n} {canary.string.pluralize('test', n)} from batch {args.batch_id}"
-            )
-            case_specs = [f"/{case}" for case in executor.cases]
-            session = canary.Session.casespecs_view(os.getcwd(), case_specs)
-            session.run()
-            canary.config.pluginmanager.hook.canary_runtests_summary(
-                cases=session.active_cases(), include_pass=False, truncate=10
-            )
+            executor.setup(canary.config._config)
+            executor.register(canary.config.pluginmanager)
+            return executor.run(args)
         elif args.hpc_cmd == "help":
             self.extra_help(args)
         else:

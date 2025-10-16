@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import argparse
 import atexit
 import concurrent.futures
 import io
@@ -18,10 +19,13 @@ from typing import Callable
 from typing import Sequence
 
 import hpc_connect
+import psutil
 
 import canary
+from _canary.config.rpool import ResourcePool
 from _canary.error import FailFast
 from _canary.error import StopExecution
+from _canary.plugins.subcommands.run import Run
 from _canary.plugins.types import Result
 from _canary.queue import Busy as BusyQueue
 from _canary.queue import Empty as EmptyQueue
@@ -35,6 +39,9 @@ from _canary.util.returncode import compute_returncode
 from _canary.util.string import pluralize
 from _canary.util.time import hhmmss
 
+from .argparsing import CanaryHPCBatchSpec
+from .argparsing import CanaryHPCResourceSetter
+from .argparsing import CanaryHPCSchedulerArgs
 from .queue import ResourceQueue
 from .testbatch import TestBatch
 
@@ -55,6 +62,25 @@ class CanaryHPCConductor:
             rtype = rtype if rtype.endswith("s") else f"{rtype}s"
             rtypes.add(rtype)
         self.available_resource_types = sorted(rtypes)
+
+        # The batch conductor resource pool is used for checking in/out resources to run the
+        # _batches_, which amounts to submitting the batch to the scheduler and waiting for the job
+        # to finish.  Batches have no specialized resource requirements, just need cpus to run the
+        # submission on.
+        self.rpool = ResourcePool()
+        self.rpool.populate(cpus=psutil.cpu_count())
+
+    def register(self, pluginmanager: canary.CanaryPluginManager) -> None:
+        pluginmanager.register(self, "canary_hpc_conductor")
+
+    def run(self, args: argparse.Namespace) -> int:
+        if n := args.canary_hpc_batch_workers:
+            if n > psutil.cpu_count():
+                logger.warning(f"--hpc-batch-workers={n} > cpu_count={psutil.cpu_count()}")
+        batchspec = args.canary_hpc_batchspec or CanaryHPCBatchSpec.defaults()
+        CanaryHPCBatchSpec.validate_and_set_defaults(batchspec)
+        setattr(canary.config.options, "canary_hpc_batchspec", batchspec)
+        return Run().execute(args)
 
     @property
     def slots_per_resource_type(self) -> Counter[str]:
@@ -143,7 +169,7 @@ class CanaryHPCConductor:
         """
         returncode: int = -10
         atexit.register(cleanup_children)
-        queue = ResourceQueue.factory(global_lock, cases)
+        queue = ResourceQueue.factory(global_lock, cases, resource_pool=self.rpool)
         nbatches = len(queue)
         runner = Runner()
         pbar = (
@@ -190,6 +216,74 @@ class CanaryHPCConductor:
                 logger.info("@*{Finished} %d %s (%s)" % (nbatches, what, hhmmss(dt)))
                 atexit.unregister(cleanup_children)
         return returncode
+
+    @staticmethod
+    def setup_parser(
+        parser: "canary.Parser | LegacyParserAdapter | argparse._ArgumentGroup",
+    ) -> None:
+        """Exists to accomodate ``canary hpc run`` and ``canary run -b ...``"""
+        parser.add_argument(
+            "--scheduler",
+            dest="canary_hpc_scheduler",
+            metavar="SCHEDULER",
+            help="Submit batches to this HPC scheduler [alias: -b scheduler=SCHEDULER] [default: None]",
+        )
+        parser.add_argument(
+            "--scheduler-args",
+            dest="canary_hpc_scheduler_args",
+            metavar="ARGS",
+            action=CanaryHPCSchedulerArgs,
+            help="Comma separated list of options to pass directly "
+            "to the scheduler [alias: -b options=ARGS]",
+        )
+        parser.add_argument(
+            "--batch-spec",
+            dest="canary_hpc_batchspec",
+            metavar="SPEC",
+            action=CanaryHPCBatchSpec,
+            help="Comma separated list of options to partition test cases into batches. "
+            "See canary batch help --spec for help on batch specification syntax "
+            "[alias: -b spec=SPEC]",
+        )
+        parser.add_argument(
+            "--batch-workers",
+            dest="canary_hpc_batch_workers",
+            metavar="WORKERS",
+            help="Run test cases in batches using WORKERS workers [alias: -b workers=WORKERS]",
+        )
+        parser.add_argument(
+            "--batch-timeout-strategy",
+            dest="canary_hpc_batch_timeout_strategy",
+            metavar="STRATEGY",
+            choices=("aggressive", "conservative"),
+            help="Estimate batch runtime (queue time) conservatively or aggressively "
+            "[alias: -b timeout=STRATEGY] [default: aggressive]",
+        )
+
+    @staticmethod
+    def setup_legacy_parser(parser: canary.Parser) -> None:
+        p = LegacyParserAdapter(parser)
+        CanaryHPCConductor.setup_parser(p)
+
+
+class LegacyParserAdapter:
+    def __init__(self, parser: "canary.Parser") -> None:
+        self.parser = parser
+        self.parser.add_argument(
+            "-b",
+            command=("run", "find"),
+            group="canary hpc",
+            metavar="option=value",
+            action=CanaryHPCResourceSetter,
+            help="Short cut for setting batch options.",
+        )
+
+    def add_argument(self, flag: str, *args, **kwargs):
+        flag = "--hpc-" + flag[2:]
+        self.parser.add_argument(flag, *args, command=("run", "find"), group="canary hpc", **kwargs)
+
+    def parse_args(self, args: Sequence[str] | None = None) -> argparse.Namespace:
+        return self.parser.parse_args(args)
 
 
 def process_queue(

@@ -3,10 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 from _canary.config.argparsing import Parser as CanaryParser
-from canary_hpc import LegacyParserAdapter
 from canary_hpc import binpack
-from canary_hpc import setup_parser
 from canary_hpc.argparsing import CanaryHPCBatchSpec
+from canary_hpc.conductor import CanaryHPCConductor
 
 
 class Parser(CanaryParser):
@@ -18,12 +17,13 @@ class Parser(CanaryParser):
 
 def make_legacy_parser():
     parser = Parser()
-    return LegacyParserAdapter(parser)
+    CanaryHPCConductor.setup_legacy_parser(parser)
+    return parser
 
 
 def test_parsing_0():
-    parser = make_legacy_parser()
-    setup_parser(parser)
+    parser = Parser()
+    CanaryHPCConductor.setup_legacy_parser(parser)
     args = parser.parse_args(
         [
             "--hpc-scheduler-args=--account=XYZ123",
@@ -71,7 +71,7 @@ def test_parsing_0():
 
 def test_parsing_1():
     parser = Parser()
-    setup_parser(parser)
+    CanaryHPCConductor.setup_parser(parser)
     args = parser.parse_args(
         [
             "--scheduler-args=--account=XYZ123",
@@ -118,8 +118,8 @@ def test_parsing_1():
 
 
 def test_parsing_legacy():
-    parser = make_legacy_parser()
-    setup_parser(parser)
+    parser = Parser()
+    CanaryHPCConductor.setup_legacy_parser(parser)
     args = parser.parse_args(
         [
             "-b",

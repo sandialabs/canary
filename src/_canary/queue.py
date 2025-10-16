@@ -3,23 +3,40 @@
 # SPDX-License-Identifier: MIT
 
 import abc
+import atexit
+import concurrent.futures
 import io
 import json
 import math
+import os
+import signal
 import threading
 import time
+from concurrent.futures.process import BrokenProcessPool
 from datetime import datetime
+from functools import partial
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import Callable
 from typing import Sequence
 
 import psutil
 
 from . import config
 from .atc import AbstractTestCase
+from .config.rpool import ResourcePool
+from .config.rpool import ResourceUnavailable
+from .error import FailFast
+from .error import StopExecution
 from .third_party import color
+from .util import keyboard
 from .util import logging
+from .util.filesystem import working_dir
+from .util.procutils import ProcessPoolExecutor
+from .util.procutils import cleanup_children
 from .util.progress import progress
+from .util.returncode import compute_returncode
+from .util.string import pluralize
 from .util.time import hhmmss
 from .util.time import timestamp
 
@@ -30,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 
 class AbstractResourceQueue(abc.ABC):
-    def __init__(self, *, lock: threading.Lock, workers: int) -> None:
+    def __init__(self, *, lock: threading.Lock, workers: int, resource_pool: ResourcePool) -> None:
         self.workers: int = workers
         self.buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
@@ -39,6 +56,8 @@ class AbstractResourceQueue(abc.ABC):
         self.meta: dict[int, dict] = {}
         self.lock = lock
         self.exclusive_lock: bool = False
+        self.resource_pool = resource_pool
+        assert not self.resource_pool.empty()
 
     def __len__(self) -> int:
         return len(self.buffer)
@@ -133,9 +152,9 @@ class AbstractResourceQueue(abc.ABC):
                         required = obj.required_resources()
                         if not required:
                             raise ValueError(f"{obj}: a test should require at least 1 cpu")
-                        acquired = config.resource_pool.checkout(required)
+                        acquired = self.resource_pool.checkout(required)
                         obj.assign_resources(acquired)
-                    except config.ResourceUnavailable:
+                    except ResourceUnavailable:
                         continue
                     else:
                         self._busy[i] = self.buffer.pop(i)
@@ -155,17 +174,21 @@ class AbstractResourceQueue(abc.ABC):
 
 
 class ResourceQueue(AbstractResourceQueue):
-    def __init__(self, lock: threading.Lock) -> None:
+    def __init__(self, *, lock: threading.Lock, resource_pool: ResourcePool) -> None:
         workers = int(config.getoption("workers", -1))
         if workers < 0:
             workers = min(psutil.cpu_count(logical=False), 50)
-        super().__init__(lock=lock, workers=workers)
+        super().__init__(lock=lock, workers=workers, resource_pool=resource_pool)
 
     @classmethod
     def factory(
-        cls, lock: threading.Lock, cases: Sequence["TestCase"], **kwds: Any
+        cls,
+        lock: threading.Lock,
+        cases: Sequence["TestCase"],
+        resource_pool: ResourcePool,
+        **kwds: Any,
     ) -> "ResourceQueue":
-        self = ResourceQueue(lock=lock)
+        self = ResourceQueue(lock=lock, resource_pool=resource_pool)
         for case in cases:
             if case.status == "skipped":
                 case.save()
@@ -210,7 +233,7 @@ class ResourceQueue(AbstractResourceQueue):
             obj = self._finished[obj_no] = self._busy.pop(obj_no)
             if obj.exclusive:
                 self.exclusive_lock = False
-            config.resource_pool.checkin(obj.resources)
+            self.resource_pool.checkin(obj.resources)
             obj.free_resources()
             for case in self.buffer.values():
                 for i, dep in enumerate(case.dependencies):
@@ -287,6 +310,135 @@ class ResourceQueue(AbstractResourceQueue):
         text = json.dumps(hb)
         logger.log(logging.TRACE, f"Hearbeat: {text}")
         return None
+
+
+def process_queue(queue: ResourceQueue, runner: Callable) -> int:
+    atexit.register(cleanup_children)
+    returncode: int = -10
+    assert config.get("session:work_tree") is not None
+    njobs = len(queue)
+    with working_dir(config.get("session:work_tree")):
+        cleanup_queue = True
+        try:
+            what = pluralize("test case", njobs)
+            logger.info("@*{Running} %d %s" % (njobs, what))
+            start = timestamp()
+            stop = -1.0
+            logger.debug("Start: processing queue")
+            _process_queue(runner=runner, queue=queue)
+        except KeyboardInterrupt:
+            logger.debug("keyboard interrupt: killing child processes and exiting")
+            returncode = signal.SIGINT.value
+            cleanup_queue = False
+            raise
+        except StopExecution as e:
+            logger.debug("stop execution: killing child processes and exiting")
+            returncode = e.exit_code
+        except FailFast as e:
+            logger.debug("fail fast: killing child processes and exiting")
+            code = compute_returncode(e.failed)
+            returncode = code
+            cleanup_queue = False
+            names = ",".join(_.name for _ in e.failed)
+            raise StopExecution(f"fail_fast: {names}", code)
+        except Exception:
+            logger.exception("unknown failure: killing child processes and exiting")
+            returncode = compute_returncode(queue.cases())
+            raise
+        else:
+            if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+                queue.update_progress_bar(start, last=True)
+            returncode = compute_returncode(queue.cases())
+            queue.close(cleanup=cleanup_queue)
+            stop = timestamp()
+            dt = stop - start
+            logger.info("@*{Finished} %d %s (%s)" % (njobs, what, hhmmss(dt)))
+            atexit.unregister(cleanup_children)
+    return returncode
+
+
+def _process_queue(*, runner: Callable, queue: ResourceQueue) -> None:
+    """Process the test queue, asynchronously
+
+    Args:
+        queue: the test queue to process
+
+    """
+    futures: dict = {}
+    start = timestamp()
+    duration = lambda: timestamp() - start
+    timeout = float(config.get("config:timeout:session", -1))
+    qsize = queue.qsize
+    qrank = 0
+    ppe = None
+    progress_bar = (
+        config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
+    )
+    try:
+        config.archive(os.environ)
+        with ProcessPoolExecutor(workers=queue.workers) as ppe:
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            while True:
+                if key := keyboard.get_key():
+                    if key in "sS":
+                        logger.log(logging.EMIT, queue.status(start=start), extra={"prefix": ""})
+                    elif key in "qQ":
+                        ppe.shutdown(cancel_futures=True)
+                        cleanup_children()
+                        raise KeyboardInterrupt
+                if progress_bar:
+                    queue.update_progress_bar(start)
+                if timeout >= 0.0 and duration() > timeout:
+                    raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
+                try:
+                    iid, obj = queue.get()
+                    queue.heartbeat()
+                except Busy:
+                    time.sleep(0.005)
+                    continue
+                except Empty:
+                    break
+                logger.debug(f"Submitting {obj} to process pool for execution")
+                future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank)
+                qrank += 1
+                callback = partial(done_callback, queue, iid)
+                future.add_done_callback(callback)
+                logger.debug(f"Process pool execution for {obj} finished")
+                futures[iid] = (obj, future)
+    finally:
+        if ppe is not None:
+            ppe.shutdown(cancel_futures=True)
+
+
+def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Future) -> None:
+    """Function registered to the process pool executor to be called when a test completes
+
+    Args:
+        queue: the queue
+        iid: the queue's internal ID of the test
+        future: the future return by the process pool executor
+
+    """
+    if future.cancelled():
+        return
+    try:
+        future.result()
+    except BrokenProcessPool:
+        # The future was probably killed by fail_fast or a keyboard interrupt
+        return
+    except BrokenPipeError:
+        # something bad happened.  On some HPCs we have seen:
+        # BrokenPipeError: [Errno 108] Cannot send after transport endpoint shutdown
+        # Seems to be a filesystem issue, punt for now
+        return
+
+    # The case was run in a subprocess.  The object must be
+    # refreshed so that the state in this main thread is up to date.
+    case = queue.done(iid)
+    case.refresh()
+    if config.getoption("fail_fast") and not case.status.satisfies(("success", "skipped")):
+        raise FailFast(failed=[case])
+    logger.debug(f"Finished {case} ({case.duration} s.)")
 
 
 class Empty(Exception):

@@ -388,6 +388,7 @@ class TestBatch(AbstractTestCase):
                         break
                 except Exception as e:
                     logger.exception(self.format("Batch @*b{%id}: polling job failed!"))
+                    break
                 time.sleep(backend.polling_frequency)
         finally:
             canary.filesystem.force_remove(breadcrumb)

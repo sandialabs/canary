@@ -44,8 +44,8 @@ if __name__ == '__main__':
 """
                 )
 
-        run = CanaryCommand("run")
-        cp = run("-w", "--hpc-batch-spec=count=4", "--hpc-scheduler=shell", ".")
+        hpc = CanaryCommand("hpc")
+        cp = hpc("run", "-w", "--batch-spec=count=4", "--scheduler=shell", ".")
         dirs = os.listdir("TestResults")
         expected = [".canary"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
@@ -73,11 +73,11 @@ if __name__ == '__main__':
 """
                 )
 
-        run = CanaryCommand("run")
-        args = ["-w", "--hpc-batch-spec=count:4", "--hpc-scheduler=shell"]
-        args.append("--hpc-scheduler-args='-l place=scatter:excl,-q debug,-A XYZ123'")
+        hpc = CanaryCommand("hpc")
+        args = ["run", "-w", "--batch-spec=count:4", "--scheduler=shell"]
+        args.append("--scheduler-args='-l place=scatter:excl,-q debug,-A XYZ123'")
         args.append(".")
-        cp = run(*args)
+        cp = hpc(*args)
         dirs = os.listdir("TestResults")
         expected = [".canary"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)

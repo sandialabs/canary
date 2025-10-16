@@ -279,7 +279,7 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
             if not check:
                 raise ValueError(check.reason)
             case.status.set("ready")
-            queue = ResourceQueue(threading.Lock())
+            queue = ResourceQueue(lock=threading.Lock(), resource_pool=canary.config.resource_pool)
             queue.put(case)
             queue.prepare()
             _, c = queue.get()
