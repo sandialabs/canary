@@ -496,20 +496,21 @@ def batch_testcases(
         for case in ready:
             map[case.id] = case
             width = case.cpus
-            extent = case.nodes * cpus_per_node
-            if case.exclusive:
-                width = extent
             dependencies: list[binpack.Block] = [blocks[dep.id] for dep in case.dependencies]
             blocks[case.id] = binpack.Block(
-                case.id, width, math.ceil(case.runtime), extent=extent, dependencies=dependencies
+                case.id, width, math.ceil(case.runtime), dependencies=dependencies
             )
         ts.done(*ready)
-    groupby = "extent" if batchspec["nodes"] == "same" else "auto"
+    extents: list[int] | None = None
+    if batchspec["nodes"] == "same":
+        max_cpus = max([case.cpus for case in cases])
+        max_nodes = math.ceil(max_cpus / cpus_per_node)
+        extents = [cpus_per_node * (i + 1) for i in range(max_nodes)]
     bins: list[binpack.Bin]
     if batchspec["duration"] is not None:
         height = math.ceil(float(batchspec["duration"]))
         logger.debug(f"Batching test cases using duration={height}")
-        bins = binpack.pack_to_height(list(blocks.values()), height=height, groupby=groupby)
+        bins = binpack.pack_to_height(list(blocks.values()), height=height, extents=extents)
     else:
         assert batchspec["count"] is not None
         count = int(batchspec["count"])
@@ -517,7 +518,7 @@ def batch_testcases(
         if batchspec["layout"] == "atomic":
             bins = binpack.pack_by_count_atomic(list(blocks.values()), count)
         else:
-            bins = binpack.pack_by_count(list(blocks.values()), count, groupby=groupby)
+            bins = binpack.pack_by_count(list(blocks.values()), count, extents=extents)
     return [TestBatch([map[block.id] for block in bin]) for bin in bins]
 
 
@@ -531,11 +532,7 @@ def packed_perimeter(
     width = nodes * cpus_per_node
     blocks: list[binpack.Block] = []
     for case in cases:
-        width = case.cpus
-        extent = case.nodes * cpus_per_node
-        if case.exclusive:
-            width = extent
-        blocks.append(binpack.Block(case.id, width, math.ceil(case.runtime), extent=extent))
+        blocks.append(binpack.Block(case.id, case.cpus, math.ceil(case.runtime)))
     packer = binpack.Packer()
     packer.pack(blocks, width=width)
     return binpack.perimeter(blocks)

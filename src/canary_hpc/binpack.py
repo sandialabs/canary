@@ -5,7 +5,6 @@ import math
 import statistics
 from graphlib import TopologicalSorter
 from typing import Generator
-from typing import Literal
 from typing import Sequence
 
 import canary
@@ -22,13 +21,11 @@ class Block:
         id: str,
         width: int,
         height: int,
-        extent: int | None = None,
         dependencies: list["Block"] | None = None,
     ) -> None:
         self.id: str = id
         self.width: int = width
         self.height: int = height
-        self.extent: int = extent or width
         self.dependencies: list[Block] = []
         if dependencies:
             self.dependencies.extend(dependencies)
@@ -144,7 +141,7 @@ def pack_by_count_atomic(blocks: Sequence[Block], count: int = 8) -> list[Bin]:
 
 
 def pack_by_count(
-    blocks: Sequence[Block], count: int = 8, groupby: Literal["extent", "auto"] = "auto"
+    blocks: Sequence[Block], count: int = 8, extents: list[int] | None = None
 ) -> list[Bin]:
     """Pack blocks into ``count`` bins such that each bin has no
     intra-dependencies.  Bin can depend on other bins.
@@ -169,10 +166,8 @@ def pack_by_count(
     groups: list[list[Block]] = []
     while ts.is_active():
         ready = ts.get_ready()
-        if groupby == "extent":
-            egroups: dict[int, list[Block]] = {}
-            for block in ready:
-                egroups.setdefault(block.extent, []).append(block)
+        if extents:
+            egroups = groupby_extent(ready, extents)
             groups.extend(egroups.values())
         else:
             groups.append(list(ready))
@@ -202,22 +197,34 @@ def pack_by_count(
 def pack_to_height(
     blocks: Sequence[Block],
     height: int = 1800,
-    groupby: Literal["extent", "auto"] = "auto",
+    width: int = -1,
+    extents: list[int] | None = None,
 ) -> list[Bin]:
     """Partition blocks by tiling in the 2D space defined by width x height"""
     logger.debug(f"Partitioning {len(blocks)} blocks")
 
+    if width > 0:
+        errors = 0
+        for block in blocks:
+            if block.width > width:
+                errors += 1
+                logger.error(f"{block.width=} > target {width=}")
+        if errors:
+            raise ValueError("Stopping due to previous errors")
+
     def _pack_ready_nodes(packer: "Packer", bins: list[Bin], ready: list[Block]) -> None:
-        width = max(block.extent for block in ready)
+        max_width = max(block.width for block in ready)
+        target_width = max_width if width < 0 else width
         max_height = max(block.height for block in ready)
         target_height = int(max(max_height, height))
-        packer.pack(ready, width, target_height)
+        packer.pack(ready, target_width, target_height)
         bins.append(Bin([map[b.id] for b in ready if b.fit]))
         unfit = [block for block in ready if not block.fit]
         while unfit:
-            width = max(block.extent for block in unfit)
+            max_width = max(block.width for block in unfit)
+            target_width = max_width if width < 0 else width
             target_height = int(max(max_height, height))
-            packer.pack(unfit, width, target_height)
+            packer.pack(unfit, target_width, target_height)
             bins.append(Bin([map[b.id] for b in unfit if b.fit]))
             tmp = [block for block in unfit if not block.fit]
             if len(tmp) == len(unfit):
@@ -234,10 +241,8 @@ def pack_to_height(
     bins: list[Bin] = []
     while ts.is_active():
         ready = sorted(ts.get_ready(), key=lambda b: b.norm(), reverse=True)
-        if groupby == "extent":
-            egroups: dict[int, list[Block]] = {}
-            for block in ready:
-                egroups.setdefault(block.extent, []).append(block)
+        if extents:
+            egroups = groupby_extent(ready, extents)
             for group in egroups.values():
                 _pack_ready_nodes(packer, bins, group)
         else:
@@ -247,6 +252,18 @@ def pack_to_height(
         raise ValueError("Incorrect partition lengths!")
     logger.debug(f"Partitioned {len(blocks)} test cases in to {len(bins)} bins")
     return [bin for bin in bins if len(bin)]
+
+
+def groupby_extent(blocks: Sequence[Block], extents: list[int]) -> dict[int, list[Block]]:
+    groups: dict[int, list[Block]] = {}
+    for block in blocks:
+        for extent in sorted(extents):
+            if block.width <= extent:
+                groups.setdefault(extent, []).append(block)
+                break
+        else:
+            raise ValueError(f"{block.width=} larger than largest requested extent {max(extents)}")
+    return groups
 
 
 def groupby_dep(blocks: Sequence[Block]) -> list[set[Block]]:
