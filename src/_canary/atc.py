@@ -111,6 +111,9 @@ class AbstractTestCase(abc.ABC):
     def refresh(self) -> None: ...
 
     @abc.abstractmethod
+    def reload_and_check(self) -> Any: ...
+
+    @abc.abstractmethod
     def command(self) -> list[str]: ...
 
     @property

@@ -77,7 +77,7 @@ def job_start_summary(case: "TestCase", *, qrank: int | None, qsize: int | None)
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
     if qrank is not None and qsize is not None:
         fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    fmt.write("Starting @*b{%id}: %X")
+    fmt.write("Starting test case @*b{%id}: %X")
     return case.format(fmt.getvalue()).strip()
 
 
@@ -89,5 +89,5 @@ def job_finish_summary(case: "TestCase", *, qrank: int | None, qsize: int | None
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
     if qrank is not None and qsize is not None:
         fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    fmt.write("Finished @*b{%id}: %X %s.n")
+    fmt.write("Finished test case @*b{%id}: %X %s.n")
     return case.format(fmt.getvalue()).strip()

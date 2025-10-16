@@ -72,28 +72,28 @@ class AbstractResourceQueue(abc.ABC):
     def iter_keys(self) -> list[int]: ...
 
     @abc.abstractmethod
-    def done(self, obj_id: int) -> Any: ...
+    def done(self, obj_id: int) -> AbstractTestCase: ...
 
-    @abc.abstractmethod
-    def retry(self, obj_id: int) -> Any: ...
+    def retry(self, obj_id: int) -> None:
+        raise NotImplementedError
 
     @abc.abstractmethod
     def cases(self) -> list["TestCase"]: ...
 
     @abc.abstractmethod
-    def queued(self) -> list[Any]: ...
+    def queued(self) -> list[AbstractTestCase]: ...
 
     @abc.abstractmethod
-    def busy(self) -> list[Any]: ...
+    def busy(self) -> list[AbstractTestCase]: ...
 
     @abc.abstractmethod
-    def finished(self) -> list[Any]: ...
+    def finished(self) -> list[AbstractTestCase]: ...
 
     @abc.abstractmethod
-    def notrun(self) -> list[Any]: ...
+    def notrun(self) -> list[AbstractTestCase]: ...
 
     @abc.abstractmethod
-    def failed(self) -> list["TestCase"]: ...
+    def failed(self) -> list[AbstractTestCase]: ...
 
     def empty(self) -> bool:
         return len(self.buffer) == 0
@@ -111,7 +111,7 @@ class AbstractResourceQueue(abc.ABC):
     def qsize(self):
         return len(self.buffer)
 
-    def put(self, *cases: Any) -> None:
+    def put(self, *cases: AbstractTestCase) -> None:
         for case in cases:
             self.buffer[len(self.buffer)] = case
 
@@ -204,9 +204,6 @@ class ResourceQueue(AbstractResourceQueue):
         # want bigger tests first
         norm = lambda c: math.sqrt(c.cpus**2 + c.runtime**2)
         return sorted(self.buffer.keys(), key=lambda k: norm(self.buffer[k]), reverse=True)
-
-    def retry(self, obj_id: int) -> Any:
-        raise NotImplementedError
 
     def put(self, *cases: Any) -> None:
         for case in cases:
@@ -312,20 +309,22 @@ class ResourceQueue(AbstractResourceQueue):
         return None
 
 
-def process_queue(queue: ResourceQueue, runner: Callable) -> int:
+def process_queue(queue: AbstractResourceQueue, runner: Callable, **kwargs: Any) -> int:
     atexit.register(cleanup_children)
     returncode: int = -10
-    assert config.get("session:work_tree") is not None
     njobs = len(queue)
-    with working_dir(config.get("session:work_tree")):
+    pbar = config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
+    work_tree = config.get("session:work_tree")
+    assert work_tree is not None
+    with working_dir(work_tree):
         cleanup_queue = True
         try:
-            what = pluralize("test case", njobs)
+            what = pluralize("job", njobs)
             logger.info("@*{Running} %d %s" % (njobs, what))
             start = timestamp()
             stop = -1.0
             logger.debug("Start: processing queue")
-            _process_queue(runner=runner, queue=queue)
+            _process_queue(queue, runner, **kwargs)
         except KeyboardInterrupt:
             logger.debug("keyboard interrupt: killing child processes and exiting")
             returncode = signal.SIGINT.value
@@ -346,7 +345,7 @@ def process_queue(queue: ResourceQueue, runner: Callable) -> int:
             returncode = compute_returncode(queue.cases())
             raise
         else:
-            if config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO:
+            if pbar:
                 queue.update_progress_bar(start, last=True)
             returncode = compute_returncode(queue.cases())
             queue.close(cleanup=cleanup_queue)
@@ -357,7 +356,7 @@ def process_queue(queue: ResourceQueue, runner: Callable) -> int:
     return returncode
 
 
-def _process_queue(*, runner: Callable, queue: ResourceQueue) -> None:
+def _process_queue(queue: AbstractResourceQueue, runner: Callable, **kwargs: Any) -> None:
     """Process the test queue, asynchronously
 
     Args:
@@ -371,9 +370,7 @@ def _process_queue(*, runner: Callable, queue: ResourceQueue) -> None:
     qsize = queue.qsize
     qrank = 0
     ppe = None
-    progress_bar = (
-        config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
-    )
+    pbar = config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
     try:
         config.archive(os.environ)
         with ProcessPoolExecutor(workers=queue.workers) as ppe:
@@ -383,10 +380,11 @@ def _process_queue(*, runner: Callable, queue: ResourceQueue) -> None:
                     if key in "sS":
                         logger.log(logging.EMIT, queue.status(start=start), extra={"prefix": ""})
                     elif key in "qQ":
+                        logger.debug(f"Quiting due to caputuring {key!r} from the keyboard")
                         ppe.shutdown(cancel_futures=True)
                         cleanup_children()
                         raise KeyboardInterrupt
-                if progress_bar:
+                if pbar:
                     queue.update_progress_bar(start)
                 if timeout >= 0.0 and duration() > timeout:
                     raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
@@ -399,7 +397,7 @@ def _process_queue(*, runner: Callable, queue: ResourceQueue) -> None:
                 except Empty:
                     break
                 logger.debug(f"Submitting {obj} to process pool for execution")
-                future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank)
+                future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank, **kwargs)
                 qrank += 1
                 callback = partial(done_callback, queue, iid)
                 future.add_done_callback(callback)
@@ -432,13 +430,13 @@ def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Fut
         # Seems to be a filesystem issue, punt for now
         return
 
-    # The case was run in a subprocess.  The object must be
+    # The job was run in a subprocess.  The object must be
     # refreshed so that the state in this main thread is up to date.
-    case = queue.done(iid)
-    case.refresh()
-    if config.getoption("fail_fast") and not case.status.satisfies(("success", "skipped")):
-        raise FailFast(failed=[case])
-    logger.debug(f"Finished {case} ({case.duration} s.)")
+    obj = queue.done(iid)
+    failed = obj.reload_and_check()
+    if failed and config.getoption("fail_fast"):
+        raise FailFast(failed)
+    logger.debug(f"Finished {obj} ({obj.duration} s.)")
 
 
 class Empty(Exception):

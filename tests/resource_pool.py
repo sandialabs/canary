@@ -54,6 +54,9 @@ class Case(AbstractTestCase):
     def refresh(self) -> None:
         raise NotImplementedError
 
+    def reload_and_check(self) -> None:
+        raise NotImplementedError
+
     def run(self) -> None:
         raise NotImplementedError
 
