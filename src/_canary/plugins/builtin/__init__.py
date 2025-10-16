@@ -21,6 +21,7 @@ from .conductor import Conductor
 
 plugins = [
     addoption,
+    Conductor(),
     discover,
     email,
     html,
@@ -36,6 +37,3 @@ plugins = [
     runtest_protocol,
     testcase_generator,
 ]
-
-
-plugin_instances = [Conductor()]

@@ -2,8 +2,10 @@
 #
 # SPDX-License-Identifier: MIT
 
+import inspect
 import sys
 import warnings
+from typing import Any
 
 import pluggy
 
@@ -23,10 +25,8 @@ class CanaryPluginManager(pluggy.PluginManager):
             name = subcommand.__name__.split(".")[-1].lower()
             self.register(subcommand, name=name)
         for p in builtin.plugins:
-            name = p.__name__.split(".")[-1].lower()
-            self.register(p, name=name)
-        for p in builtin.plugin_instances:
-            self.register(p, name=f"builtin.{type(p).__name__.lower()}")
+            name = getname(p)
+            self.register(p, getname(p))
         self.load_setuptools_entrypoints(hookspec.project_name)
         return self
 
@@ -57,6 +57,15 @@ class CanaryPluginManager(pluggy.PluginManager):
                 msg = f"Plugin {name} already registered under the name {other}"
                 raise PluginAlreadyImportedError(msg)
             self.register(mod, name)
+
+
+def getname(obj: Any) -> str:
+    if inspect.ismodule(obj):
+        return obj.__name__.split(".")[-1].lower()
+    elif type(obj) is type:
+        return obj.__name__.lower()
+    else:
+        return type(obj).__name__.lower()
 
 
 class PluginAlreadyImportedError(Exception): ...

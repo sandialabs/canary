@@ -8,6 +8,7 @@ import io
 import json
 import os
 from typing import TYPE_CHECKING
+from typing import Any
 
 import pluggy
 import yaml
@@ -146,13 +147,28 @@ def list_name_plugin(pluginmanager: pluggy.PluginManager) -> list[tuple[str, str
     plugins: list[tuple[str, str, str]] = []
 
     for name, plugin in pluginmanager.list_name_plugin():
-        file = inspect.getfile(plugin)  # type: ignore
-        namespace = plugin.__package__.split(".")[0]  # type: ignore
-        if namespace == "_canary":
-            namespace = "builtin"
-        row = (namespace, name, file)
+        file = getfile(plugin)
+        namespace = getnamespace(plugin)
+        root_namespace = namespace.split(".")[0]
+        if root_namespace == "_canary":
+            root_namespace = "builtin"
+        row = (root_namespace, name, file)
         plugins.append(row)
-    return plugins
+    return sorted(plugins, key=lambda x: (x[0], x[1]))
+
+
+def getfile(obj: Any) -> str:
+    try:
+        return inspect.getfile(obj)
+    except TypeError:
+        return inspect.getfile(type(obj))
+
+
+def getnamespace(obj: Any) -> str:
+    try:
+        return obj.__package__
+    except AttributeError:
+        return obj.__module__
 
 
 def print_active_plugin_descriptions() -> None:
