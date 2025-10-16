@@ -15,10 +15,9 @@ from . import post_clean
 from . import pyt
 from . import repeat
 from . import reporting
-from . import resource
 from . import runtest_protocol
-from . import runtests
 from . import testcase_generator
+from .conductor import Conductor
 
 plugins = [
     addoption,
@@ -34,8 +33,9 @@ plugins = [
     pyt,
     repeat,
     reporting,
-    resource,
     runtest_protocol,
-    runtests,
     testcase_generator,
 ]
+
+
+plugin_instances = [Conductor()]

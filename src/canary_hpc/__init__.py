@@ -7,14 +7,10 @@ import glob
 import json
 import os
 
-import psutil
-
 import canary
+from _canary.plugins.subcommands.run import Run
 
-from .argparsing import CanaryHPCBatchExec
 from .argparsing import CanaryHPCBatchSpec
-from .argparsing import CanaryHPCResourceSetter
-from .argparsing import CanaryHPCSchedulerArgs
 from .conductor import CanaryHPCConductor
 from .executor import CanaryHPCExecutor
 
@@ -24,128 +20,50 @@ logger = canary.get_logger(__name__)
 @canary.hookimpl
 def canary_configure(config: "canary.Config") -> None:
     """Do some post configuration checks"""
-    if execopts := config.getoption("canary_hpc_batchexec"):
-        # Batch is being executed within an allocation
-        hooks = CanaryHPCExecutor(
-            backend=execopts["backend"], batch=execopts["batch"], case=execopts.get("case")
-        )
-        hooks.setup(config=config)
-        config.pluginmanager.register(hooks, f"canary_hpc{hooks.backend.name}")
-    elif scheduler := config.getoption("canary_hpc_scheduler"):
-        if n := config.getoption("canary_hpc_batch_workers"):
-            if n > psutil.cpu_count():
-                raise ValueError(f"--hpc-batch-workers={n} > cpu_count={psutil.cpu_count()}")
+    scheduler = config.getoption("canary_hpc_scheduler")
+    command = config.getoption("command")
+    if scheduler is not None and command == "run":
+        # Run with the HPC.execute command
+        config.ioptions.command = "hpc"
+        config.options.command = "hpc"
+        config.options.hpc_cmd = "run"
         if ival := getattr(config.ioptions, "canary_hpc_batchspec", None):
-            # canary.config.set_main_options merges new options with old.  For the batch spec, we
-            # don't want the merged result, so use the actual value passed on the command line
+            # ioptions is the argparse.Namespace parsed from the command line, options is the
+            # argparse.Namespace merged from the original invocation of canary.  They are only
+            # different if this is a re-run scenario.  If the batchspec is defined in ioptions,
+            # we use it (it was passed on the command line this invocation)
             setattr(config.options, "canary_hpc_batchspec", ival)
         else:
-            # use the defaults, rather than risk using the merged result.
+            # no batchspec was passed on the command line, so set the defaults
             setattr(config.options, "canary_hpc_batchspec", CanaryHPCBatchSpec.defaults())
-        batchspec = getattr(config.options, "canary_hpc_batchspec")
-        CanaryHPCBatchSpec.validate_and_set_defaults(batchspec)
-        setattr(config.options, "canary_hpc_batchspec", batchspec)
-        hooks = CanaryHPCConductor(backend=scheduler)
-        hooks.setup(config=config)
-        config.pluginmanager.register(hooks, f"canary_hpc{hooks.backend.name}")
-    else:
-        return None
 
 
 @canary.hookimpl
 def canary_addoption(parser: "canary.Parser") -> None:
-    setup_parser(parser)
-
-
-def setup_parser(parser: "canary.Parser") -> None:
-    parser.add_argument(
-        "-b",
-        command=("run", "find"),
-        group="canary hpc",
-        metavar="option=value",
-        action=CanaryHPCResourceSetter,
-        help="Short cut for setting batch options.",
-    )
-    parser.add_argument(
-        "--hpc-scheduler",
-        dest="canary_hpc_scheduler",
-        command=("run", "find"),
-        group="canary hpc",
-        metavar="SCHEDULER",
-        help="Submit batches to this HPC scheduler [alias: -b scheduler=SCHEDULER] [default: None]",
-    )
-    parser.add_argument(
-        "--hpc-scheduler-args",
-        dest="canary_hpc_scheduler_args",
-        command=("run", "find"),
-        group="canary hpc",
-        metavar="ARGS",
-        action=CanaryHPCSchedulerArgs,
-        help="Comma separated list of options to pass directly "
-        "to the scheduler [alias: -b options=ARGS]",
-    )
-    parser.add_argument(
-        "--hpc-batch-spec",
-        dest="canary_hpc_batchspec",
-        command=("run", "find"),
-        group="canary hpc",
-        metavar="SPEC",
-        action=CanaryHPCBatchSpec,
-        help="Comma separated list of options to partition test cases into batches. "
-        "See canary batch help --spec for help on batch specification syntax "
-        "[alias: -b spec=SPEC]",
-    )
-    parser.add_argument(
-        "--hpc-batch-workers",
-        dest="canary_hpc_batch_workers",
-        command=("run", "find"),
-        group="canary hpc",
-        metavar="WORKERS",
-        help="Run test cases in batches using WORKERS workers [alias: -b workers=WORKERS]",
-    )
-    parser.add_argument(
-        "--hpc-batch-timeout-strategy",
-        dest="canary_hpc_batch_timeout_strategy",
-        command=("run", "find"),
-        group="canary hpc",
-        metavar="STRATEGY",
-        choices=("aggressive", "conservative"),
-        help="Estimate batch runtime (queue time) conservatively or aggressively "
-        "[alias: -b timeout=STRATEGY] [default: aggressive]",
-    )
-    parser.add_argument(
-        "--hpc-batch-exec",
-        dest="canary_hpc_batchexec",
-        command=("run", "find"),
-        group="canary hpc",
-        metavar="SPEC",
-        action=CanaryHPCBatchExec,
-        help="Run the batch given by SPEC.  Note, this option is designed to be used internally "
-        "by canary_hpc.CanaryHPCConductor to run batches [alias: -b exec=SPEC]",
-    )
+    CanaryHPCConductor.setup_legacy_parser(parser)
 
 
 @canary.hookimpl
 def canary_addcommand(parser: canary.Parser) -> None:
     parser.add_command(Batch())
+    parser.add_command(HPC())
 
 
-class Batch(canary.CanarySubcommand):
-    name = "batch"
-    description = "Get information about batch jobs"
+class HPC(canary.CanarySubcommand):
+    name = "hpc"
+    description = "Manage and run job batches on an HPC scheduler"
 
     def setup_parser(self, parser: canary.Parser):
-        parser.epilog = self.in_session_note()
-        subparsers = parser.add_subparsers(dest="type", metavar="subcommands")
-        p = subparsers.add_parser("location", help="Print the location of the batch")
-        p.add_argument("batch_id")
-        p = subparsers.add_parser("log", help="Print the batch's log to the console")
-        p.add_argument("batch_id")
-        p = subparsers.add_parser("status", help="List statuses of each case in batch")
-        p.add_argument("batch_id")
-        subparsers.add_parser("list", help="List batch IDs")
-        p = subparsers.add_parser("describe", help="Print each test case in batch")
-        p.add_argument("batch_id")
+        subparsers = parser.add_subparsers(dest="hpc_cmd", title="subcommands", metavar="")
+
+        p = subparsers.add_parser("run", help="Batch test cases and submit to HPC scheduler")
+        Run().setup_parser(p)
+        group = p.add_argument_group(title="Batched execution options")
+        CanaryHPCConductor.setup_parser(group)
+
+        p = subparsers.add_parser("exec", help="Execute (run) the batch")
+        CanaryHPCExecutor.setup_parser(p)
+
         p = subparsers.add_parser("help", help="Additional canary_hpc help topics")
         p.add_argument(
             "--spec",
@@ -155,23 +73,73 @@ class Batch(canary.CanarySubcommand):
         )
 
     def execute(self, args: argparse.Namespace) -> int:
-        if args.type == "location":
-            location = self.location(args.batch_id)
-            print(location)
-        elif args.type == "log":
-            location = self.location(args.batch_id)
-            display_file(os.path.join(location, "canary-out.txt"))
-        elif args.type == "list":
-            batches = self.find_batches()
-            print("\n".join(batches))
-        elif args.type == "status":
-            self.print_status(args.batch_id)
-        elif args.type == "describe":
-            self.describe(args.batch_id)
-        elif args.type == "help":
+        if args.hpc_cmd == "run":
+            scheduler = args.canary_hpc_scheduler
+            if scheduler is None:
+                raise ValueError("canary hpc run requires --scheduler")
+            conductor = CanaryHPCConductor(backend=scheduler)
+            conductor.register(canary.config.pluginmanager)
+            return conductor.run(args)
+        elif args.hpc_cmd == "exec":
+            # Batch is being executed within an allocation
+            # register the CanaryHPCExector plugin so that executor.runtests is registered
+            backend = args.canary_hpc_backend or canary.config.getoption("canary_hpc_scheduler")
+            executor = CanaryHPCExecutor(
+                backend=backend, batch=args.batch_id, case=args.canary_hpc_case
+            )
+            executor.setup(canary.config._config)
+            executor.register(canary.config.pluginmanager)
+            return executor.run(args)
+        elif args.hpc_cmd == "help":
             self.extra_help(args)
         else:
-            raise ValueError(f"canary batch: unknown batch subcommand {args.type!r}")
+            raise ValueError(f"canary hpc: unknown subcommand {args.hpc_cmd!r}")
+        return 0
+
+    def extra_help(self, args: argparse.Namespace) -> None:
+        if args.spec:
+            print(CanaryHPCBatchSpec.helppage())
+        return
+
+
+class Batch(canary.CanarySubcommand):
+    name = "batch"
+    description = "Manage and run job batches"
+
+    def setup_parser(self, parser: canary.Parser):
+        parser.epilog = self.in_session_note()
+        subparsers = parser.add_subparsers(dest="batch_cmd", title="subcommands", metavar="")
+
+        p = subparsers.add_parser("location", help="Print the location of the batch")
+        p.add_argument("batch_id")
+
+        p = subparsers.add_parser("log", help="Print the batch's log to the console")
+        p.add_argument("batch_id")
+
+        p = subparsers.add_parser("status", help="List statuses of each case in batch")
+        p.add_argument("batch_id")
+
+        subparsers.add_parser("list", help="List batch IDs")
+
+        p = subparsers.add_parser("describe", help="Print each test case in batch")
+        p.add_argument("batch_id")
+
+    def execute(self, args: argparse.Namespace) -> int:
+        if args.batch_cmd == "location":
+            location = self.location(args.batch_id)
+            print(location)
+        elif args.batch_cmd == "log":
+            location = self.location(args.batch_id)
+            display_file(os.path.join(location, "canary-out.txt"))
+        elif args.batch_cmd == "list":
+            batches = self.find_batches()
+            print("\n".join(batches))
+        elif args.batch_cmd == "status":
+            self.print_status(args.batch_id)
+        elif args.batch_cmd == "describe":
+            self.describe(args.batch_id)
+        else:
+            raise ValueError(f"canary batch: unknown subcommand {args.batch_cmd!r}")
         return 0
 
     def location(self, batch_id: str) -> str:
@@ -205,11 +173,6 @@ class Batch(canary.CanarySubcommand):
                 case.mask = "[MASKED]"
         canary.config.options.report_chars = "A"
         canary.config.pluginmanager.hook.canary_statusreport(session=session)
-
-    def extra_help(self, args: argparse.Namespace) -> None:
-        if args.spec:
-            print(CanaryHPCBatchSpec.helppage())
-        return
 
     def describe(self, batch_id: str) -> None:
         print(f"Batch {batch_id}")

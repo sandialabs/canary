@@ -35,6 +35,8 @@ if [ "${exit_code}" -ne 30 ]; then
   cat TestResults/.canary/config || true
   cat TestResults/.canary/batches/*/*/resource_pool.json || true
   cat TestResults/.canary/batches/*/*/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
 fi
 
@@ -48,6 +50,8 @@ if [ "${exit_code}" -ne 30 ]; then
   cat TestResults/.canary/config || true
   cat TestResults/.canary/batches/*/*/resource_pool.json || true
   cat TestResults/.canary/batches/*/*/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
 fi
 
@@ -61,6 +65,8 @@ if [ "${exit_code}" -ne 30 ]; then
   cat TestResults/.canary/config || true
   cat TestResults/.canary/batches/*/*/resource_pool.json || true
   cat TestResults/.canary/batches/*/*/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
 fi
 
@@ -74,6 +80,8 @@ if [ "${exit_code}" -ne 30 ]; then
   cat TestResults/.canary/config || true
   cat TestResults/.canary/batches/*/*/resource_pool.json || true
   cat TestResults/.canary/batches/*/*/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-out.txt || true
+  cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
 fi
 

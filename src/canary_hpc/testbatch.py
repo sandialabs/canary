@@ -11,17 +11,22 @@ import shlex
 import signal
 import time
 from functools import lru_cache
+from graphlib import TopologicalSorter
 from itertools import repeat
 from typing import Any
+from typing import Iterable
 from typing import Sequence
 
 import hpc_connect
+import psutil
 
 import canary
 from _canary.atc import AbstractTestCase
 from _canary.status import Status
 from _canary.util.hash import hashit
 from _canary.util.time import time_in_seconds
+
+from . import binpack
 
 logger = canary.get_logger(__name__)
 
@@ -87,8 +92,6 @@ class TestBatch(AbstractTestCase):
         return self._runtime
 
     def find_approximate_runtime(self) -> float:
-        from .partitioning import packed_perimeter
-
         if len(self.cases) == 1:
             return self.cases[0].runtime
         _, height = packed_perimeter(self.cases)
@@ -385,6 +388,7 @@ class TestBatch(AbstractTestCase):
                         break
                 except Exception as e:
                     logger.exception(self.format("Batch @*b{%id}: polling job failed!"))
+                    break
                 time.sleep(backend.polling_frequency)
         finally:
             canary.filesystem.force_remove(breadcrumb)
@@ -450,9 +454,8 @@ class TestBatch(AbstractTestCase):
         args: list[str] = ["canary"]
         if canary.config.get("config:debug"):
             args.append("-d")
-        args.extend(["-C", canary.config.get("session:work_tree")])
-        execspec = f"backend:{backend.name},batch:{self.id},case:{case.id}"
-        args.extend(["run", f"--hpc-batch-exec={execspec}"])
+        args.extend(["-C", canary.config.get("session:work_tree"), "hpc", "exec"])
+        args.extend([f"--backend={backend.name}", f"--case={case.id}", self.id])
         return shlex.join(args)
 
     def canary_batch_invocation(self, backend: hpc_connect.HPCSubmissionManager) -> str:
@@ -460,11 +463,9 @@ class TestBatch(AbstractTestCase):
         args: list[str] = ["canary"]
         if canary.config.get("config:debug"):
             args.append("-d")
-        args.extend(["-C", canary.config.get("session:work_tree")])
-        execspec = f"backend:{backend.name},batch:{self.id}"
-        args.extend(["run", f"--hpc-batch-exec={execspec}"])
         workers = canary.config.getoption("canary_hpc_batch_workers") or -1
-        args.append(f"--workers={workers}")
+        args.extend(["-C", canary.config.get("session:work_tree"), "hpc", "exec"])
+        args.extend([f"--workers={workers}", f"--backend={backend.name}", self.id])
         return shlex.join(args)
 
 
@@ -473,6 +474,71 @@ def get_scheduler_args() -> list[str]:
     if args := canary.config.getoption("canary_hpc_scheduler_args"):
         options.extend(args)
     return options
+
+
+def batch_testcases(
+    *,
+    cases: list["canary.TestCase"],
+    batchspec: dict[str, Any] | None = None,
+    cpus_per_node: int | None = None,
+) -> list[TestBatch]:
+    cpus_per_node = cpus_per_node or psutil.cpu_count()
+    batchspec = batchspec or {"nodes": "any", "layout": "flat", "count": None, "duration": 30 * 60}
+    blocks: dict[str, binpack.Block] = {}
+    map: dict[str, canary.TestCase] = {}
+    graph: dict[canary.TestCase, list[canary.TestCase]] = {}
+    for case in cases:
+        graph[case] = [dep for dep in case.dependencies if dep in cases]
+    ts = TopologicalSorter(graph)
+    ts.prepare()
+    while ts.is_active():
+        ready = ts.get_ready()
+        for case in ready:
+            map[case.id] = case
+            width = case.cpus
+            extent = case.nodes * cpus_per_node
+            if case.exclusive:
+                width = extent
+            dependencies: list[binpack.Block] = [blocks[dep.id] for dep in case.dependencies]
+            blocks[case.id] = binpack.Block(
+                case.id, width, math.ceil(case.runtime), extent=extent, dependencies=dependencies
+            )
+        ts.done(*ready)
+    groupby = "extent" if batchspec["nodes"] == "same" else "auto"
+    bins: list[binpack.Bin]
+    if batchspec["duration"] is not None:
+        height = math.ceil(float(batchspec["duration"]))
+        logger.debug(f"Batching test cases using duration={height}")
+        bins = binpack.pack_to_height(list(blocks.values()), height=height, groupby=groupby)
+    else:
+        assert batchspec["count"] is not None
+        count = int(batchspec["count"])
+        logger.debug(f"Batching test cases using count={count}")
+        if batchspec["layout"] == "atomic":
+            bins = binpack.pack_by_count_atomic(list(blocks.values()), count)
+        else:
+            bins = binpack.pack_by_count(list(blocks.values()), count, groupby=groupby)
+    return [TestBatch([map[block.id] for block in bin]) for bin in bins]
+
+
+def packed_perimeter(
+    cases: Iterable[canary.TestCase], cpus_per_node: int | None = None
+) -> tuple[int, int]:
+    cpus_per_node = cpus_per_node or psutil.cpu_count()
+    cases = sorted(cases, key=lambda c: c.size(), reverse=True)
+    cpus = max(case.cpus for case in cases)
+    nodes = math.ceil(cpus / cpus_per_node)
+    width = nodes * cpus_per_node
+    blocks: list[binpack.Block] = []
+    for case in cases:
+        width = case.cpus
+        extent = case.nodes * cpus_per_node
+        if case.exclusive:
+            width = extent
+        blocks.append(binpack.Block(case.id, width, math.ceil(case.runtime), extent=extent))
+    packer = binpack.Packer()
+    packer.pack(blocks, width=width)
+    return binpack.perimeter(blocks)
 
 
 class BatchNotFound(Exception):

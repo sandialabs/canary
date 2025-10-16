@@ -6,7 +6,8 @@ import pytest
 
 import _canary.finder
 from _canary.util.filesystem import mkdirp
-from canary_hpc import partitioning
+from canary_hpc import testbatch
+from canary_hpc.binpack import ONE_PER_BIN
 
 num_cases = 25
 num_base_cases = 5
@@ -25,7 +26,7 @@ def generate_files(tmpdir):
     yield workdir
 
 
-def test_partition_n(generate_files):
+def test_batch_n(generate_files):
     workdir = generate_files
     f = _canary.finder.Finder()
     f.add(workdir)
@@ -33,14 +34,16 @@ def test_partition_n(generate_files):
     files = f.discover()
     cases = _canary.finder.generate_test_cases(files)
     assert len([c for c in cases if c.status != "masked"]) == num_cases
-    partitions = partitioning.partition_n(cases, n=5)
-    assert len(partitions) == 5
-    assert sum(len(_) for _ in partitions) == num_cases
-    partitions = partitioning.partition_n(cases, n=partitioning.ONE_PER_BATCH)
-    assert len(partitions) == num_cases
+    spec = {"count": 5, "duration": None, "nodes": "any", "layout": "flat"}
+    batches = testbatch.batch_testcases(cases=cases, batchspec=spec)
+    assert len(batches) == 5
+    assert sum(len(_) for _ in batches) == num_cases
+    spec = {"count": ONE_PER_BIN, "duration": None, "nodes": "any", "layout": "flat"}
+    batches = testbatch.batch_testcases(cases=cases, batchspec=spec)
+    assert len(batches) == num_cases
 
 
-def test_partition_t(generate_files):
+def test_batch_t(generate_files):
     workdir = generate_files
     f = _canary.finder.Finder()
     f.add(workdir)
@@ -48,7 +51,9 @@ def test_partition_t(generate_files):
     files = f.discover()
     cases = _canary.finder.generate_test_cases(files)
     assert len([c for c in cases if c.status != "masked"]) == num_cases
-    partitions = partitioning.partition_t(cases, t=15 * 60)  # 5x long test case duration
-    assert sum(len(_) for _ in partitions) == num_cases
-    partitions = partitioning.partition_t(cases, t=15 * 60, nodes="match")
-    assert sum(len(_) for _ in partitions) == num_cases
+    spec = {"count": None, "duration": 15 * 60, "nodes": "any", "layout": "flat"}
+    batches = testbatch.batch_testcases(cases=cases, batchspec=spec)  # 5x long test case duration
+    assert sum(len(_) for _ in batches) == num_cases
+    spec = {"count": None, "duration": 15 * 60, "nodes": "same", "layout": "flat"}
+    batches = testbatch.batch_testcases(cases=cases, batchspec=spec)
+    assert sum(len(_) for _ in batches) == num_cases

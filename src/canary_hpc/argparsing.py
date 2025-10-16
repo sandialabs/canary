@@ -15,7 +15,7 @@ from _canary.util.string import csvsplit
 from _canary.util.string import strip_quotes
 from _canary.util.time import time_in_seconds
 
-from . import partitioning
+from . import binpack
 
 logger = canary.get_logger(__name__)
 
@@ -88,9 +88,9 @@ class CanaryHPCBatchSpec(argparse.Action):
                     raise ValueError("count <= -1")
                 spec["count"] = count
             elif match := re.search(r"^count[:=]auto$", arg.lower()):
-                spec["count"] = partitioning.AUTO
+                spec["count"] = binpack.AUTO
             elif match := re.search(r"^count[:=]max$", arg.lower()):
-                spec["count"] = partitioning.ONE_PER_BATCH
+                spec["count"] = binpack.ONE_PER_BIN
             elif match := re.search(r"^duration[:=](.*)$", arg.lower()):
                 duration = time_in_seconds(match.group(1))
                 if duration <= 0:

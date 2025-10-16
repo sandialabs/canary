@@ -25,6 +25,8 @@ class CanaryPluginManager(pluggy.PluginManager):
         for p in builtin.plugins:
             name = p.__name__.split(".")[-1].lower()
             self.register(p, name=name)
+        for p in builtin.plugin_instances:
+            self.register(p, name=f"builtin.{type(p).__name__.lower()}")
         self.load_setuptools_entrypoints(hookspec.project_name)
         return self
 
