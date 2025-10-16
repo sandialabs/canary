@@ -69,7 +69,6 @@ class Bin:
         self.blocks: list[Block] = []
         if blocks is not None:
             self.blocks.extend(blocks)
-        self.width: int = width or -1
 
     def __iter__(self) -> Generator[Block, None, None]:
         for block in self.blocks:
@@ -80,6 +79,10 @@ class Bin:
 
     def __bool__(self) -> bool:
         return len(self.blocks) > 0
+
+    def __repr__(self) -> str:
+        s = ", ".join(str(block) for block in self)
+        return "Bin(%s)" % s
 
     def add(self, block: Block) -> None:
         self.blocks.append(block)
@@ -96,11 +99,6 @@ class Bin:
             vector[0] += block.width
             vector[1] += block.height
         return math.sqrt(vector[0] ** 2 + vector[1] ** 2)
-
-    def accommodates(self, block: Block) -> bool | None:
-        if self.width == -1:
-            return True
-        return block.width <= self.width
 
 
 def pack_by_count_atomic(blocks: Sequence[Block], count: int = 8) -> list[Bin]:
