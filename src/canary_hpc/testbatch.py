@@ -15,6 +15,7 @@ from graphlib import TopologicalSorter
 from itertools import repeat
 from typing import Any
 from typing import Iterable
+from typing import Literal
 from typing import Sequence
 
 import hpc_connect
@@ -207,6 +208,24 @@ class TestBatch(AbstractTestCase):
         for case in self:
             case.refresh()
 
+    def reload_and_check(self) -> list[canary.TestCase]:
+        self.refresh()
+        failed: list[canary.TestCase] = []
+        for case in self:
+            if case.status == "running":
+                # Job was cancelled
+                case.status.set("cancelled", "batch cancelled")
+            elif case.status == "skipped":
+                pass
+            elif case.status == "ready":
+                case.status.set("not_run", "test not run for unknown reasons")
+            elif case.start > 0 and case.stop < 0:
+                case.status.set("cancelled", "test case cancelled")
+            if not case.status.satisfies(("skipped", "success")):
+                failed.append(case)
+                logger.debug(f"Batch {self}: test case failed: {case}")
+        return failed
+
     @property
     def id(self) -> str:
         return self._id
@@ -395,7 +414,8 @@ class TestBatch(AbstractTestCase):
             signal.signal(signal.SIGINT, default_int_signal)
             signal.signal(signal.SIGTERM, default_term_signal)
             self.total_duration = time.monotonic() - start
-            self.refresh()
+            for case in self:
+                case.refresh()
             if all([_.status.satisfies(("ready", "pending")) for _ in self.cases]):
                 f = "Batch @*b{%id}: no test cases have started; check %P for any emitted scheduler log files."
                 logger.warning(self.format(f))
@@ -479,11 +499,23 @@ def get_scheduler_args() -> list[str]:
 def batch_testcases(
     *,
     cases: list["canary.TestCase"],
-    batchspec: dict[str, Any] | None = None,
+    nodes: Literal["any", "same"] = "any",
+    layout: Literal["flat", "atomic"] = "flat",
+    count: int | None = None,
+    duration: float | None = None,
     cpus_per_node: int | None = None,
 ) -> list[TestBatch]:
-    cpus_per_node = cpus_per_node or psutil.cpu_count()
-    batchspec = batchspec or {"nodes": "any", "layout": "flat", "count": None, "duration": 30 * 60}
+    if duration is None and count is None:
+        duration = 30 * 60  # 30 minute default
+    elif duration is not None and count is not None:
+        raise ValueError("duration and count are mutually exclusive")
+
+    bins: list[binpack.Bin] = []
+
+    grouper: binpack.GrouperType | None = None
+    if nodes == "same":
+        grouper = GroupByNodes(cpus_per_node=cpus_per_node)
+    # The binpacking code works with Block not TestCase.
     blocks: dict[str, binpack.Block] = {}
     map: dict[str, canary.TestCase] = {}
     graph: dict[canary.TestCase, list[canary.TestCase]] = {}
@@ -501,24 +533,17 @@ def batch_testcases(
                 case.id, width, math.ceil(case.runtime), dependencies=dependencies
             )
         ts.done(*ready)
-    extents: list[int] | None = None
-    if batchspec["nodes"] == "same":
-        max_cpus = max([case.cpus for case in cases])
-        max_nodes = math.ceil(max_cpus / cpus_per_node)
-        extents = [cpus_per_node * (i + 1) for i in range(max_nodes)]
-    bins: list[binpack.Bin]
-    if batchspec["duration"] is not None:
-        height = math.ceil(float(batchspec["duration"]))
+    if duration is not None:
+        height = math.ceil(float(duration))
         logger.debug(f"Batching test cases using duration={height}")
-        bins = binpack.pack_to_height(list(blocks.values()), height=height, extents=extents)
+        bins = binpack.pack_to_height(list(blocks.values()), height=height, grouper=grouper)
     else:
-        assert batchspec["count"] is not None
-        count = int(batchspec["count"])
+        assert isinstance(count, int)
         logger.debug(f"Batching test cases using count={count}")
-        if batchspec["layout"] == "atomic":
+        if layout == "atomic":
             bins = binpack.pack_by_count_atomic(list(blocks.values()), count)
         else:
-            bins = binpack.pack_by_count(list(blocks.values()), count, extents=extents)
+            bins = binpack.pack_by_count(list(blocks.values()), count, grouper=grouper)
     return [TestBatch([map[block.id] for block in bin]) for bin in bins]
 
 
@@ -536,6 +561,18 @@ def packed_perimeter(
     packer = binpack.Packer()
     packer.pack(blocks, width=width)
     return binpack.perimeter(blocks)
+
+
+class GroupByNodes:
+    def __init__(self, cpus_per_node: int | None) -> None:
+        self.cpus_per_node: int = cpus_per_node or psutil.cpu_count()
+
+    def __call__(self, blocks: list[binpack.Block]) -> list[list[binpack.Block]]:
+        groups: dict[int, list[binpack.Block]] = {}
+        for block in blocks:
+            nodes_reqd = math.ceil(block.width / self.cpus_per_node)
+            groups.setdefault(nodes_reqd, []).append(block)
+        return list(groups.values())
 
 
 class BatchNotFound(Exception):

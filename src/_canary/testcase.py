@@ -1445,6 +1445,11 @@ class TestCase(AbstractTestCase):
             for dep in self.dependencies:
                 dep.refresh()
 
+    def reload_and_check(self) -> Any:
+        self.refresh()
+        if not self.status.satisfies(("success", "skipped")):
+            return self
+
     @contextmanager
     def rc_environ(self, **env: str) -> Generator[None, None, None]:
         save_env = os.environ.copy()

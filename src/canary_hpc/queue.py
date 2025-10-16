@@ -55,7 +55,10 @@ class ResourceQueue(queue.AbstractResourceQueue):
             raise ValueError("Cannot partition test cases: missing batching options")
         batches: list[TestBatch] = batch_testcases(
             cases=self.tmp_buffer,
-            batchspec=batchspec,
+            layout=batchspec["layout"],
+            count=batchspec["count"],
+            duration=batchspec["duration"],
+            nodes=batchspec["nodes"],
             cpus_per_node=kwds.get("cpus_per_node"),
         )
         if not batches:
