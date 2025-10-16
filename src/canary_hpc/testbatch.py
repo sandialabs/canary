@@ -414,8 +414,7 @@ class TestBatch(AbstractTestCase):
             signal.signal(signal.SIGINT, default_int_signal)
             signal.signal(signal.SIGTERM, default_term_signal)
             self.total_duration = time.monotonic() - start
-            for case in self:
-                case.refresh()
+            self.refresh()
             if all([_.status.satisfies(("ready", "pending")) for _ in self.cases]):
                 f = "Batch @*b{%id}: no test cases have started; check %P for any emitted scheduler log files."
                 logger.warning(self.format(f))
@@ -503,6 +502,7 @@ def batch_testcases(
     layout: Literal["flat", "atomic"] = "flat",
     count: int | None = None,
     duration: float | None = None,
+    width: int | None = None,
     cpus_per_node: int | None = None,
 ) -> list[TestBatch]:
     if duration is None and count is None:
@@ -527,16 +527,17 @@ def batch_testcases(
         ready = ts.get_ready()
         for case in ready:
             map[case.id] = case
-            width = case.cpus
             dependencies: list[binpack.Block] = [blocks[dep.id] for dep in case.dependencies]
             blocks[case.id] = binpack.Block(
-                case.id, width, math.ceil(case.runtime), dependencies=dependencies
+                case.id, case.cpus, math.ceil(case.runtime), dependencies=dependencies
             )
         ts.done(*ready)
     if duration is not None:
         height = math.ceil(float(duration))
         logger.debug(f"Batching test cases using duration={height}")
-        bins = binpack.pack_to_height(list(blocks.values()), height=height, grouper=grouper)
+        bins = binpack.pack_to_height(
+            list(blocks.values()), height=height, width=width, grouper=grouper
+        )
     else:
         assert isinstance(count, int)
         logger.debug(f"Batching test cases using count={count}")

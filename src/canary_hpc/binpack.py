@@ -199,13 +199,13 @@ def pack_by_count(
 def pack_to_height(
     blocks: Sequence[Block],
     height: int = 1800,
-    width: int = -1,
+    width: int | None = None,
     grouper: Callable[[list[Block]], list[list[Block]]] | None = None,
 ) -> list[Bin]:
     """Partition blocks by tiling in the 2D space defined by width x height"""
     logger.debug(f"Partitioning {len(blocks)} blocks")
 
-    if width > 0:
+    if width is not None:
         errors = 0
         for block in blocks:
             if block.width > width:
@@ -216,7 +216,7 @@ def pack_to_height(
 
     def _pack_ready_nodes(packer: "Packer", bins: list[Bin], ready: list[Block]) -> None:
         max_width = max(block.width for block in ready)
-        target_width = max_width if width < 0 else width
+        target_width = max_width if width is None else width
         max_height = max(block.height for block in ready)
         target_height = int(max(max_height, height))
         packer.pack(ready, target_width, target_height)
@@ -224,7 +224,7 @@ def pack_to_height(
         unfit = [block for block in ready if not block.fit]
         while unfit:
             max_width = max(block.width for block in unfit)
-            target_width = max_width if width < 0 else width
+            target_width = max_width if width is None else width
             target_height = int(max(max_height, height))
             packer.pack(unfit, target_width, target_height)
             bins.append(Bin([map[b.id] for b in unfit if b.fit]))
