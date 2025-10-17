@@ -28,8 +28,8 @@ from _canary.util.time import hhmmss
 from .argparsing import CanaryHPCBatchSpec
 from .argparsing import CanaryHPCResourceSetter
 from .argparsing import CanaryHPCSchedulerArgs
+from .batching import TestBatch
 from .queue import ResourceQueue
-from .testbatch import TestBatch
 
 global_lock = threading.Lock()
 logger = canary.get_logger(__name__)

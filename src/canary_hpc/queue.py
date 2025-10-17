@@ -14,8 +14,8 @@ from _canary.config.rpool import ResourcePool
 from _canary.third_party import color
 from _canary.util.time import hhmmss
 
-from .testbatch import TestBatch
-from .testbatch import batch_testcases
+from .batching import TestBatch
+from .batching import batch_testcases
 
 logger = canary.get_logger(__name__)
 

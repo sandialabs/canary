@@ -16,7 +16,7 @@ from _canary.plugins.types import Result
 from _canary.queue import ResourceQueue
 from _canary.queue import process_queue
 
-from .testbatch import TestBatch
+from .batching import TestBatch
 
 global_lock = threading.Lock()
 logger = canary.get_logger(__name__)
