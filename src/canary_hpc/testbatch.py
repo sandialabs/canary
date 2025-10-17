@@ -40,11 +40,7 @@ class TestBatch(AbstractTestCase):
 
     """
 
-    def __init__(
-        self,
-        cases: Sequence[canary.TestCase],
-        runtime: float | None = None,
-    ) -> None:
+    def __init__(self, cases: Sequence[canary.TestCase], runtime: float | None = None) -> None:
         super().__init__()
         self.validate(cases)
         self.cases = list(cases)

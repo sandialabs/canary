@@ -52,6 +52,18 @@ class AbstractTestCase(abc.ABC):
 
     @property
     def resources(self) -> list[dict[str, list[dict]]]:
+        """resources is of the form
+
+        resources[i] = {str: [{"id": str, "slots": int}]}
+
+        If the test required 2 cpus and 2 gpus, resources would look like
+
+        resources = [
+          {"cpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}]},
+          {"gpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}]},
+        ]
+
+        """
         return self._resources
 
     @resources.setter
