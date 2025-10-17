@@ -46,10 +46,6 @@ class TestBatch(AbstractTestCase):
         self.cases = list(cases)
         self._id = hashit(",".join(case.id for case in self.cases), length=20)
         self.total_duration: float = -1
-        self._submit_cpus = 1
-        self._submit_gpus = 0
-        self.max_cpus_required = max([case.cpus for case in self.cases])
-        self.max_gpus_required = max([case.gpus for case in self.cases])
         self._runtime: float
         if runtime is None:
             self._runtime = self.find_approximate_runtime()
@@ -162,15 +158,11 @@ class TestBatch(AbstractTestCase):
 
     @property
     def cpus(self) -> int:
-        return self._submit_cpus
+        return 1  # only one CPU needed to submit this batch and wait for scheduler
 
     @property
     def gpus(self) -> int:
-        return self._submit_gpus
-
-    @gpus.setter
-    def gpus(self, arg: int) -> None:
-        self._gpus = arg
+        return 0  # no GPU needed to submit this batch and wait for scheduler
 
     @property
     def jobid(self) -> str | None:
