@@ -71,22 +71,13 @@ class ResourceQueue(queue.AbstractResourceQueue):
         for batch in batches:
             self.buffer[len(self.buffer)] = batch
 
-    def done(self, obj_no: int) -> TestBatch:  # type: ignore[override]
-        with self.lock:
-            if obj_no not in self._busy:
-                raise RuntimeError(f"batch {obj_no} is not running")
-            obj = self._finished[obj_no] = self._busy.pop(obj_no)
-            if obj.exclusive:
-                self.exclusive_lock = False
-            self.resource_pool.checkin(obj.resources)
-            obj.free_resources()
-            completed = dict([(_.id, _) for _ in self.finished()])
-            for batch in self.buffer.values():
-                for case in batch:
-                    for i, dep in enumerate(case.dependencies):
-                        if dep.id in completed:
-                            case.dependencies[i] = completed[dep.id]
-            return self._finished[obj_no]
+    def update_pending(self, obj: TestBatch) -> None:
+        completed = dict([(case.id, case) for case in obj])
+        for batch in self.buffer.values():
+            for case in batch:
+                for i, dep in enumerate(case.dependencies):
+                    if dep.id in completed:
+                        case.dependencies[i] = completed[dep.id]
 
     def retry(self, obj_no: int) -> None:
         if obj_no not in self._finished:

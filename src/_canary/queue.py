@@ -71,9 +71,6 @@ class AbstractResourceQueue(abc.ABC):
     @abc.abstractmethod
     def iter_keys(self) -> list[int]: ...
 
-    @abc.abstractmethod
-    def done(self, obj_id: int) -> AbstractTestCase: ...
-
     def retry(self, obj_id: int) -> None:
         raise NotImplementedError
 
@@ -94,6 +91,9 @@ class AbstractResourceQueue(abc.ABC):
 
     @abc.abstractmethod
     def failed(self) -> list[AbstractTestCase]: ...
+
+    @abc.abstractmethod
+    def update_pending(self, obj: AbstractTestCase) -> None: ...
 
     def empty(self) -> bool:
         return len(self.buffer) == 0
@@ -163,6 +163,17 @@ class AbstractResourceQueue(abc.ABC):
                         return (i, self._busy[i])
         raise Busy
 
+    def done(self, obj_no: int) -> AbstractTestCase:
+        with self.lock:
+            if obj_no not in self._busy:
+                raise RuntimeError(f"job {obj_no} is not running")
+            obj = self._finished[obj_no] = self._busy.pop(obj_no)
+            if obj.exclusive:
+                self.exclusive_lock = False
+            self.resource_pool.checkin(obj.free_resources())
+            self.update_pending(obj)
+            return obj
+
     @abc.abstractmethod
     def status(self, start: float | None = None) -> str: ...
 
@@ -223,20 +234,11 @@ class ResourceQueue(AbstractResourceQueue):
                 if dep.id == self._finished[obj_no].id:
                     case.dependencies[i] = self._finished[obj_no]
 
-    def done(self, obj_no: int) -> "TestCase":
-        with self.lock:
-            if obj_no not in self._busy:
-                raise RuntimeError(f"case {obj_no} is not running")
-            obj = self._finished[obj_no] = self._busy.pop(obj_no)
-            if obj.exclusive:
-                self.exclusive_lock = False
-            self.resource_pool.checkin(obj.resources)
-            obj.free_resources()
-            for case in self.buffer.values():
-                for i, dep in enumerate(case.dependencies):
-                    if dep.id == self._finished[obj_no].id:
-                        case.dependencies[i] = self._finished[obj_no]
-            return self._finished[obj_no]
+    def update_pending(self, obj: "TestCase") -> None:
+        for pending in self.buffer.values():
+            for i, dep in enumerate(pending.dependencies):
+                if dep.id == obj.id:
+                    pending.dependencies[i] = obj
 
     def cases(self) -> list["TestCase"]:
         return self.queued() + self.busy() + self.finished() + self.notrun()

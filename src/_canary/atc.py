@@ -74,8 +74,10 @@ class AbstractTestCase(abc.ABC):
         self._resources.clear()
         self._resources.extend(arg)
 
-    def free_resources(self) -> None:
-        self._resources.clear()
+    def free_resources(self) -> list[dict[str, list[dict]]]:
+        tmp = self._resources
+        self._resources = []
+        return tmp
 
     @property
     @abc.abstractmethod
