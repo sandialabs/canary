@@ -11,8 +11,3 @@ def test_issue_78():
     with open(os.path.join(os.path.dirname(__file__), "config.json"), "r") as fh:
         conf = Config()
         conf.load_snapshot(fh)
-
-    rp = conf.resource_pool
-
-    assert rp.count("cpus") != 0
-    assert rp.count("gpus") != 0

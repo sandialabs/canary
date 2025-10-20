@@ -31,7 +31,6 @@ def config(request):
         else:
             gpus = 0
         _canary.config._config = _canary.config.config.Config()
-        _canary.config.resource_pool.populate(cpus=int(cpus), gpus=int(gpus))
         yield
     except:
         os.environ.clear()

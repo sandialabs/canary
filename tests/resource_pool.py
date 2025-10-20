@@ -4,9 +4,8 @@
 
 
 import _canary.config.schemas as schemas
-import canary
 from _canary.atc import AbstractTestCase
-from _canary.config.rpool import ResourcePool
+from _canary.resource_pool import ResourcePool
 from _canary.status import Status
 
 
@@ -86,30 +85,30 @@ class Case(AbstractTestCase):
 
 def test_resource_pool_checkout():
     case = Case()
-    with canary.config.override():
-        canary.config.resource_pool.populate(cpus=4, gpus=4)
-        resources = canary.config.resource_pool.checkout(case.required_resources())
-        expected = [
-            {
-                "cpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],
-                "gpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],
-            }
-        ]
-        assert resources == expected
-        assert canary.config.resource_pool.resources == {
-            "cpus": [
-                {"id": "0", "slots": 0},
-                {"id": "1", "slots": 0},
-                {"id": "2", "slots": 1},
-                {"id": "3", "slots": 1},
-            ],
-            "gpus": [
-                {"id": "0", "slots": 0},
-                {"id": "1", "slots": 0},
-                {"id": "2", "slots": 1},
-                {"id": "3", "slots": 1},
-            ],
+    pool = ResourcePool()
+    pool.populate(cpus=4, gpus=4)
+    resources = pool.checkout(case.required_resources())
+    expected = [
+        {
+            "cpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],
+            "gpus": [{"id": "0", "slots": 1}, {"id": "1", "slots": 1}],
         }
+    ]
+    assert resources == expected
+    assert pool.resources == {
+        "cpus": [
+            {"id": "0", "slots": 0},
+            {"id": "1", "slots": 0},
+            {"id": "2", "slots": 1},
+            {"id": "3", "slots": 1},
+        ],
+        "gpus": [
+            {"id": "0", "slots": 0},
+            {"id": "1", "slots": 0},
+            {"id": "2", "slots": 1},
+            {"id": "3", "slots": 1},
+        ],
+    }
 
 
 def test_resource_populate():

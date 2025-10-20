@@ -11,6 +11,10 @@ from typing import Any
 class CanaryCommand:
     def __init__(self, command_name: str) -> None:
         self.command_name = command_name
+        self.default_args: list[str] = []
+
+    def add_default_args(self, *args: str) -> None:
+        self.default_args.extend(args)
 
     def __call__(self, *args: str, **kwargs: Any) -> subprocess.CompletedProcess:
         env: dict[str, str] = {}
@@ -42,6 +46,7 @@ class CanaryCommand:
             cmd.extend(["-c", f"resource_pool:cpus:{cpus}"])
         if gpus > 0:
             cmd.extend(["-c", f"resource_pool:gpus:{gpus}"])
+        cmd.extend(self.default_args)
         cmd.append(self.command_name)
         cmd.extend(args)
         cp = subprocess.run(cmd, **kwargs)

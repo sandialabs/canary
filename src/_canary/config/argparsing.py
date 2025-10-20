@@ -293,9 +293,14 @@ class ConfigMods(argparse.Action):
             current[key] = {}
             current = current[key]
         current[parts[0]] = safe_loads(value)
-        config = getattr(namespace, self.dest, None) or {}
-        config = merge(config, data)
-        setattr(namespace, self.dest, config)
+        if "resource_pool" in data:
+            mods = getattr(namespace, "resource_pool_mods", None) or {}
+            mods = merge(mods, data.pop("resource_pool"))
+            setattr(namespace, "resource_pool_mods", mods)
+        if data:
+            config = getattr(namespace, self.dest, None) or {}
+            config = merge(config, data)
+            setattr(namespace, self.dest, config)
 
 
 def make_argument_parser(**kwargs):

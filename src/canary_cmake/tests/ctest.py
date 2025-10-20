@@ -9,6 +9,7 @@ import pytest
 
 import canary
 from _canary.queue import ResourceQueue
+from _canary.resource_pool import ResourcePool
 from _canary.util.executable import Executable
 from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import set_executable
@@ -272,14 +273,14 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
         }
         with canary.config.override():
             canary.config.set("session:work_tree", f"{os.getcwd()}/foo", scope="defaults")
-            canary.config.resource_pool.fill({"additional_properties": {}, "resources": pool})
+            pool = ResourcePool({"additional_properties": {}, "resources": pool})
             file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
             [case] = file.lock()
-            check = canary.config.pluginmanager.hook.canary_resources_avail(case=case)
+            check = pool.accommodates(case.required_resources())
             if not check:
                 raise ValueError(check.reason)
             case.status.set("ready")
-            queue = ResourceQueue(lock=threading.Lock(), resource_pool=canary.config.resource_pool)
+            queue = ResourceQueue(lock=threading.Lock(), resource_pool=pool)
             queue.put(case)
             queue.prepare()
             _, c = queue.get()

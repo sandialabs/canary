@@ -15,10 +15,10 @@ import hpc_connect
 import psutil
 
 import canary
-from _canary.config.rpool import ResourcePool
 from _canary.plugins.subcommands.run import Run
 from _canary.plugins.types import Result
 from _canary.queue import process_queue
+from _canary.resource_pool import ResourcePool
 from _canary.third_party.color import colorize
 from _canary.util import logging
 from _canary.util.misc import digits

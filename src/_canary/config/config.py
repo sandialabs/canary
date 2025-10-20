@@ -28,14 +28,12 @@ from ..util.filesystem import find_work_tree
 from ..util.filesystem import mkdirp
 from ..util.string import strip_quotes
 from . import _machine
-from .rpool import ResourcePool
 from .schemas import any_schema
 from .schemas import build_schema
 from .schemas import config_schema
 from .schemas import environment_schema
 from .schemas import environment_variable_schema
 from .schemas import plugin_schema
-from .schemas import resource_pool_schema
 from .schemas import user_schema
 
 invocation_dir = os.getcwd()
@@ -45,7 +43,6 @@ section_schemas: dict[str, Schema] = {
     "build": build_schema,
     "config": config_schema,
     "environment": environment_schema,
-    "resource_pool": resource_pool_schema,
     "session": any_schema,
     "system": any_schema,
     "plugin": plugin_schema,
@@ -123,7 +120,6 @@ class Config:
     def __init__(self) -> None:
         self.invocation_dir = invocation_dir
         self.working_dir = os.getcwd()
-        self._resource_pool: ResourcePool = ResourcePool()
         self.pluginmanager: CanaryPluginManager = CanaryPluginManager.factory()
         self.options: argparse.Namespace = argparse.Namespace()
         self.ioptions: argparse.Namespace = argparse.Namespace()
@@ -163,7 +159,6 @@ class Config:
         for section in sections:
             section_data = self.get_config(section)
             data[section] = section_data
-        data["resource_pool"] = self.resource_pool.getstate()
         data["options"] = vars(self.options)
         data["invocation_dir"] = self.invocation_dir
         data["working_dir"] = self.working_dir
@@ -188,18 +183,10 @@ class Config:
         create_cache_dir(cache_dir)
         return cache_dir
 
-    @property
-    def resource_pool(self) -> ResourcePool:
-        if self._resource_pool.empty():
-            self._resource_pool.populate(cpus=psutil.cpu_count())
-        return self._resource_pool
-
     def read_only_scope(self, scope: str) -> bool:
         return scope in ("defaults", "environment", "command_line")
 
     def push_scope(self, scope: ConfigScope) -> None:
-        if pool := scope.pop_section("resource_pool"):
-            self._resource_pool.fill(pool)
         if envmods := scope.get_section("environment"):
             self.apply_environment_mods(envmods)
         self.scopes[scope.name] = scope
@@ -375,11 +362,6 @@ class Config:
         if args.config_mods:
             data.update(deepcopy(args.config_mods))
 
-        # handle resource pool separately
-        resource_pool_mods: dict[str, int] = {}
-        if "resource_pool" in data:
-            resource_pool_mods.update(data.pop("resource_pool"))
-
         for section, section_data in data.items():
             if section not in section_schemas:
                 errors += 1
@@ -387,12 +369,6 @@ class Config:
                 continue
             schema = section_schemas[section]
             data[section] = schema.validate(section_data)
-
-        if resource_pool_mods:
-            if self._resource_pool.empty():
-                self._resource_pool.populate(**resource_pool_mods)
-            else:
-                self._resource_pool.modify(**resource_pool_mods)
 
         if errors:
             raise ValueError("Stopping due to previous errors")
@@ -438,11 +414,6 @@ class Config:
         properties: dict[str, Any] = snapshot["properties"]
         self.working_dir = properties["working_dir"]
         self.invocation_dir = properties["invocation_dir"]
-        if pool := properties.pop("resource_pool", None):
-            if isinstance(pool, list):
-                pool = convert_legacy_resource_pool(pool)
-            self._resource_pool.clear()
-            self._resource_pool.fill(pool)
         if options := properties.pop("options", None):
             self.options = argparse.Namespace(**options)
         self.scopes.clear()
@@ -462,7 +433,6 @@ class Config:
     def dump_snapshot(self, file: IO[Any], indent: int | None = None) -> None:
         snapshot: dict[str, Any] = {}
         properties = snapshot.setdefault("properties", {})
-        properties["resource_pool"] = self.resource_pool.getstate()
         properties["options"] = vars(self.options)
         properties["invocation_dir"] = self.invocation_dir
         properties["working_dir"] = self.working_dir
@@ -679,10 +649,6 @@ def create_cache_dir(path: str) -> None:
 def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
     snapshot: dict[str, Any] = {}
     properties = snapshot.setdefault("properties", {})
-    legacy_pool = legacy["resource_pool"]
-    pool = legacy_pool[0]
-    pool.pop("id")
-    properties["resource_pool"] = {"additional_properties": {}, "resources": pool}
     properties["options"] = legacy["options"]
     properties["invocation_dir"] = legacy["config"].pop("invocation_dir")
     properties["working_dir"] = legacy["config"].pop("working_dir")
@@ -706,16 +672,3 @@ def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
     data["config"].pop("_config_dir", None)
     snapshot.setdefault("scopes", []).append(scope)
     return snapshot
-
-
-def convert_legacy_resource_pool(legacy: list) -> dict[str, Any]:
-    pool: dict[str, Any] = {}
-    resources = pool.setdefault("resources", {})
-    for node in legacy:
-        for type, instances in node.items():
-            spec = resources.setdefault(type, [])
-            for instance in instances:
-                slots = instance["slots"]
-                id = str(len(spec))
-                spec.append({"id": id, "slots": slots})
-    return pool

@@ -11,10 +11,11 @@ from typing import Sequence
 import hpc_connect
 
 import canary
-from _canary.plugins.builtin.conductor import Runner
+from _canary.plugins.builtin.executor import Runner
 from _canary.plugins.types import Result
 from _canary.queue import ResourceQueue
 from _canary.queue import process_queue
+from _canary.resource_pool import ResourcePool
 
 from .batching import TestBatch
 
@@ -36,15 +37,14 @@ class CanaryHPCExecutor:
         else:
             cases = TestBatch.loadindex(self.batch)
             self.cases.extend(cases)
-
-    def setup(self, config: canary.Config) -> None:
         pool = self.generate_resource_pool()
-        config.resource_pool.fill(pool)
+        self.pool = ResourcePool(pool)
         stage = TestBatch.stage(self.batch)
         f = os.path.join(stage, "resource_pool.json")
         if not os.path.exists(f):
             with open(f, "w") as fh:
                 json.dump({"resource_pool": pool}, fh, indent=2)
+        stage = TestBatch.stage(self.batch)
         f = os.path.join(stage, "hpc_connect.yaml")
         if not os.path.exists(f):
             with open(f, "w") as fh:
@@ -90,11 +90,11 @@ class CanaryHPCExecutor:
 
     @canary.hookimpl
     def canary_resources_avail(self, case: canary.TestCase) -> Result:
-        return canary.config.resource_pool.accommodates(case)
+        return self.pool.accommodates(case.required_resources())
 
     @canary.hookimpl
     def canary_resource_types(self) -> list[str]:
-        return canary.config.resource_pool.types
+        return self.pool.types
 
     @canary.hookimpl
     def canary_runtests(self, cases: Sequence["canary.TestCase"]) -> int:
@@ -107,7 +107,7 @@ class CanaryHPCExecutor:
         The session returncode (0 for success)
 
         """
-        queue = ResourceQueue.factory(global_lock, cases, resource_pool=canary.config.resource_pool)
+        queue = ResourceQueue.factory(global_lock, cases, resource_pool=self.pool)
         runner = Runner()
         return process_queue(queue, runner)
 

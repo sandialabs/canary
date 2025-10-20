@@ -9,30 +9,48 @@ from typing import Sequence
 from ... import config
 from ...queue import ResourceQueue
 from ...queue import process_queue
+from ...resource_pool import make_resource_pool
 from ...util import logging
 from ...util.misc import digits
 from ..hookspec import hookimpl
 from ..types import Result
 
 if TYPE_CHECKING:
+    from ...resource_pool import ResourcePool
     from ...testcase import TestCase
 
 global_lock = threading.Lock()
 logger = logging.get_logger(__name__)
 
 
-class Conductor:
+class TestCaseExecutor:
+    """Defines plugin implementations for executing test cases"""
+
+    def __init__(self):
+        self._rpool: "ResourcePool | None" = None
+
+    def get_rpool(self) -> "ResourcePool":
+        # Use a function instead of @property since pluggy tries to inspect properties and causes
+        # the resource pool to be instantiated prematurely
+        if self._rpool is None:
+            self._rpool = make_resource_pool(config._config)
+        assert self._rpool is not None
+        return self._rpool
+
     @hookimpl(trylast=True)
     def canary_resources_avail(self, case: "TestCase") -> Result:
-        return config.resource_pool.accommodates(case)
+        rpool = self.get_rpool()
+        return rpool.accommodates(case.required_resources())
 
     @hookimpl(trylast=True)
     def canary_resource_count(self, type: "str") -> int:
-        return config.resource_pool.count(type)
+        rpool = self.get_rpool()
+        return rpool.count(type)
 
     @hookimpl(trylast=True)
     def canary_resource_types(self) -> list[str]:
-        return config.resource_pool.types
+        rpool = self.get_rpool()
+        return rpool.types
 
     @hookimpl(trylast=True)
     def canary_runtests(self, cases: Sequence["TestCase"]) -> int:
@@ -45,7 +63,8 @@ class Conductor:
         The session returncode (0 for success)
 
         """
-        queue = ResourceQueue.factory(global_lock, cases, resource_pool=config.resource_pool)
+        rpool = self.get_rpool()
+        queue = ResourceQueue.factory(global_lock, cases, resource_pool=rpool)
         runner = Runner()
         return process_queue(queue, runner)
 

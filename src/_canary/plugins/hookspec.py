@@ -5,6 +5,7 @@
 # mypy: disable-error-code=empty-body
 
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import Type
 
 import pluggy
@@ -241,6 +242,13 @@ def canary_testcase_finish(case: "AbstractTestCase") -> bool:
 def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
     "Called at plugin registration time to add new hooks"
     raise NotImplementedError
+
+
+@hookspec
+def canary_fill_resource_pool(
+    config: "CanaryConfig", resources: dict[str, list[dict[str, Any]]]
+) -> None:
+    """Fill ``resources`` with available resources."""
 
 
 @hookspec(firstresult=True)

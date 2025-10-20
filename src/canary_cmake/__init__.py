@@ -1,5 +1,6 @@
 import argparse
 import os
+from typing import Any
 
 import canary
 
@@ -110,12 +111,11 @@ def canary_cdash_labels(case: canary.TestCase) -> list[str]:
 
 
 @canary.hookimpl
-def canary_configure(config: canary.Config) -> None:
+def canary_fill_resource_pool(
+    config: canary.Config, resources: dict[str, list[dict[str, Any]]]
+) -> None:
     if f := config.getoption("canary_cmake_resource_spec_file"):
         logger.info("Setting resource pool from ctest resource spec file")
         resource_specs = read_resource_specs(f)
-        pool = {
-            "resources": resource_specs["local"],
-            "additional_properties": {"ctest resource spec file": f},
-        }
-        config.resource_pool.fill(pool)
+        for rtype, rspec in resource_specs["local"].items():
+            resources[rtype] = rspec

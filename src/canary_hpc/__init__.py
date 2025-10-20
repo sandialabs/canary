@@ -87,7 +87,6 @@ class HPC(canary.CanarySubcommand):
             executor = CanaryHPCExecutor(
                 backend=backend, batch=args.batch_id, case=args.canary_hpc_case
             )
-            executor.setup(canary.config._config)
             executor.register(canary.config.pluginmanager)
             return executor.run(args)
         elif args.hpc_cmd == "help":
