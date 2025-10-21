@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-testbatch
-=========
+startup
+=======
 
-.. automodule:: canary_hpc.testbatch
+.. automodule:: _canary.resource_pool.startup
    :members:
    :undoc-members:
    :show-inheritance:

@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-runtests
-========
+binpack
+=======
 
-.. automodule:: _canary.plugins.builtin.runtests
+.. automodule:: canary_hpc.binpack
    :members:
    :undoc-members:
    :show-inheritance:

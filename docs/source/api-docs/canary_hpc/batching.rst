@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-oversubscribe
-=============
+batching
+========
 
-.. automodule:: _canary.plugins.builtin.oversubscribe
+.. automodule:: canary_hpc.batching
    :members:
    :undoc-members:
    :show-inheritance:

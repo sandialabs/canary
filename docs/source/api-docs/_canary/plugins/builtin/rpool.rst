@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-batchopts
-=========
+rpool
+=====
 
-.. automodule:: canary_hpc.batchopts
+.. automodule:: _canary.plugins.builtin.rpool
    :members:
    :undoc-members:
    :show-inheritance:

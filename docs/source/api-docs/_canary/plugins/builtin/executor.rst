@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-rpool
-=====
+executor
+========
 
-.. automodule:: _canary.config.rpool
+.. automodule:: _canary.plugins.builtin.executor
    :members:
    :undoc-members:
    :show-inheritance:
