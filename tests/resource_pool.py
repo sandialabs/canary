@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 
-import _canary.config.schemas as schemas
+import _canary.resource_pool.schemas as schemas
 from _canary.atc import AbstractTestCase
 from _canary.resource_pool import ResourcePool
 from _canary.status import Status
