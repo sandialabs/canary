@@ -5,8 +5,8 @@ import copy
 import io
 import pickle  # nosec B403
 from collections import Counter
-from typing import TYPE_CHECKING
 from typing import IO
+from typing import TYPE_CHECKING
 from typing import Any
 
 import psutil
