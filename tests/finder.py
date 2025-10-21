@@ -143,7 +143,7 @@ class Hook:
         self.cpus = cpus
 
     @hookimpl
-    def canary_resources_avail(self, case):
+    def canary_resource_pool_canrun(self, case):
         if case.cpus > self.cpus:
             return Result(False, reason="Not enough cpus")
         return Result(True)

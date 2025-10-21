@@ -12,7 +12,7 @@ Resource allocation
 Resource pool specification
 ---------------------------
 
-The resource pool is defined by the ``resource_pool`` :ref:`configuration <configuration>` field.  ``resource_pool`` is a JSON object whose entries describe the resources available to ``canary``.  For example, a machine having ``N-1`` CPUs is defined by:
+The resource pool is defined by the ``resource_pool`` :ref:`configuration <configuration>` field.  ``resource_pool`` is a JSON object whose entries describe the resources available to ``canary``.  For example, a machine having ``N`` CPUs is defined by:
 
 .. code-block:: json
 

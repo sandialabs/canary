@@ -291,7 +291,7 @@ class ResourcePool:
 
 def make_resource_pool(config: "Config"):
     resources: dict[str, list[dict[str, Any]]] = {}
-    config.pluginmanager.hook.canary_fill_resource_pool(config=config, resources=resources)
+    config.pluginmanager.hook.canary_resource_pool_fill(config=config, resources=resources)
     pool = resource_pool_schema.validate({"resources": resources, "additional_properties": {}})
     return ResourcePool(pool)
 

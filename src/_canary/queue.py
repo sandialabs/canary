@@ -222,7 +222,7 @@ class ResourceQueue(AbstractResourceQueue):
         for case in cases:
             if config.get("config:debug"):
                 # The case should have already been validated
-                check = config.pluginmanager.hook.canary_resources_avail(case=case)
+                check = config.pluginmanager.hook.canary_resource_pool_canrun(case=case)
                 if not check:
                     raise ValueError(
                         f"Unable to run {case} for the the following reason: {check.reason}"

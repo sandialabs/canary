@@ -51,13 +51,13 @@ def canary_addoption(parser: "Parser") -> None:
     )
 
 
-@hookimpl(tryfirst=True, specname="canary_fill_resource_pool")
+@hookimpl(tryfirst=True, specname="canary_resource_pool_fill")
 def initialize_resource_pool_counts(config: "Config", resources: rspec_type) -> None:
     resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(psutil.cpu_count())]
     resources["gpus"] = []
 
 
-@hookimpl(trylast=True, specname="canary_fill_resource_pool")
+@hookimpl(trylast=True, specname="canary_resource_pool_fill")
 def finalize_resource_pool_counts(config: "Config", resources: rspec_type) -> None:
     # Command line options take precedence, so they are filled last and overwrite whatever else is
     # present

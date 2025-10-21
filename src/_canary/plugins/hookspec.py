@@ -245,25 +245,25 @@ def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
 
 
 @hookspec
-def canary_fill_resource_pool(
+def canary_resource_pool_fill(
     config: "CanaryConfig", resources: dict[str, list[dict[str, Any]]]
 ) -> None:
     """Fill ``resources`` with available resources."""
 
 
 @hookspec(firstresult=True)
-def canary_resources_avail(case: "TestCase") -> "Result":
-    """Determine if ``case`` can be run."""
+def canary_resource_pool_canrun(case: "TestCase") -> "Result":
+    """Determine if there are sufficient resource to run ``case``."""
     raise NotImplementedError
 
 
 @hookspec(firstresult=True)
-def canary_resource_count(type: str) -> int:
+def canary_resource_pool_count(type: str) -> int:
     """Return the number resources available of type ``type``"""
     raise NotImplementedError
 
 
 @hookspec(firstresult=True)
-def canary_resource_types() -> list[str]:
+def canary_resource_pool_types() -> list[str]:
     """Return the names of available resources"""
     raise NotImplementedError

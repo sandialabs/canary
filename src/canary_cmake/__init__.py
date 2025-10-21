@@ -111,7 +111,7 @@ def canary_cdash_labels(case: canary.TestCase) -> list[str]:
 
 
 @canary.hookimpl
-def canary_fill_resource_pool(
+def canary_resource_pool_fill(
     config: canary.Config, resources: dict[str, list[dict[str, Any]]]
 ) -> None:
     if f := config.getoption("canary_cmake_resource_spec_file"):

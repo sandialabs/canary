@@ -43,9 +43,9 @@ section_schemas: dict[str, Schema] = {
     "build": build_schema,
     "config": config_schema,
     "environment": environment_schema,
+    "plugin": plugin_schema,
     "session": any_schema,
     "system": any_schema,
-    "plugin": plugin_schema,
     "user": user_schema,
 }
 

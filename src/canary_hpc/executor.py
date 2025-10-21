@@ -81,7 +81,7 @@ class CanaryHPCExecutor:
         return session.exitstatus
 
     @canary.hookimpl
-    def canary_resource_count(self, type: str) -> int:
+    def canary_resource_pool_count(self, type: str) -> int:
         node_count = self.backend.config.node_count
         if type in ("nodes", "node"):
             return node_count
@@ -89,11 +89,11 @@ class CanaryHPCExecutor:
         return node_count * type_per_node
 
     @canary.hookimpl
-    def canary_resources_avail(self, case: canary.TestCase) -> Result:
+    def canary_resource_pool_canrun(self, case: canary.TestCase) -> Result:
         return self.pool.accommodates(case.required_resources())
 
     @canary.hookimpl
-    def canary_resource_types(self) -> list[str]:
+    def canary_resource_pool_types(self) -> list[str]:
         return self.pool.types
 
     @canary.hookimpl
