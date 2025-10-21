@@ -1,5 +1,7 @@
 import argparse
 import re
+import shutil
+import subprocess
 from collections import Counter
 from typing import TYPE_CHECKING
 from typing import Any
@@ -54,7 +56,14 @@ def canary_addoption(parser: "Parser") -> None:
 @hookimpl(tryfirst=True, specname="canary_resource_pool_fill")
 def initialize_resource_pool_counts(config: "Config", resources: rspec_type) -> None:
     resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(psutil.cpu_count())]
-    resources["gpus"] = []
+    gpu_ids: list[str] = []
+    if nvidia_smi := shutil.which("nvidia-smi"):
+        args = [nvidia_smi, "--list-gpus"]
+        p = subprocess.run(args, stdout=subprocess.PIPE, text=True)
+        for line in p.stdout.split("\n"):
+            if match := re.search("GPU (\d+):", line):
+                gpu_ids.append(match.group(1))
+    resources["gpus"] = [{"id": gpu_id, "slots": 1} for gpu_id in gpu_ids]
 
 
 @hookimpl(trylast=True, specname="canary_resource_pool_fill")
