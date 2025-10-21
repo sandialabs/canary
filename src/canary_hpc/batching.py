@@ -297,7 +297,12 @@ class TestBatch(AbstractTestCase):
 
     @staticmethod
     def stage(batch_id: str) -> Path:
-        return canary_hpc_stage() / "batches" / batch_id[:2] / batch_id[2:]
+        root = canary_hpc_stage() / "batches" / batch_id[:2]
+        if (root / batch_id[2:]).exists():
+            return root / batch_id[2:]
+        for match in root.glob(f"{batch_id[2:]}*"):
+            return match
+        return root / batch_id[2:]
 
     @staticmethod
     def find(batch_id: str) -> str:
@@ -464,7 +469,9 @@ class TestBatch(AbstractTestCase):
 
 
 def canary_hpc_stage() -> Path:
-    return canary.config.stage(suffix="canary_hpc")
+    work_tree = canary.config.get("session:work_tree")
+    assert work_tree is not None
+    return Path(work_tree).absolute() / ".canary/canary_hpc"
 
 
 def get_scheduler_args() -> list[str]:
