@@ -234,11 +234,6 @@ class TestBatch(AbstractTestCase):
     def working_directory(self) -> str:
         return self.stage(self.id)
 
-    def save(self):
-        f = self.stage(self.id) / "index"
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps([case.id for case in self], indent=2))
-
     def _combined_status(self) -> str:
         """Return a string like
 
@@ -287,13 +282,13 @@ class TestBatch(AbstractTestCase):
         return duration, running, time_in_queue
 
     @staticmethod
-    def loadindex(batch_id: str) -> list[str]:
-        full_batch_id = TestBatch.find(batch_id)
-        stage = TestBatch.stage(full_batch_id)
-        f = stage / "index"
-        if not f.exists():
-            raise ValueError(f"Index for batch {batch_id} not found in {stage}")
-        return json.loads(f.read_text())
+    def loadconfig(batch_id: str) -> dict[str, Any]:
+        file = TestBatch.configfile(batch_id)
+        return json.loads(file.read_text())
+
+    @staticmethod
+    def configfile(batch_id: str) -> Path:
+        return TestBatch.stage(batch_id) / "config.json"
 
     @staticmethod
     def stage(batch_id: str) -> Path:
@@ -313,7 +308,10 @@ class TestBatch(AbstractTestCase):
         raise BatchNotFound(f"cannot find stage for batch {batch_id}")
 
     def setup(self) -> None:
-        pass
+        file = self.configfile(self.id)
+        file.parent.mkdir(parents=True, exist_ok=True)
+        config = {"cases": [case.id for case in self]}
+        file.write_text(json.dumps(config, indent=2))
 
     def run(  # type: ignore[override]
         self, backend: hpc_connect.HPCSubmissionManager, qsize: int = 1, qrank: int = 1

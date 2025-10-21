@@ -31,12 +31,12 @@ class CanaryHPCExecutor:
         elif batch != os.environ["CANARY_BATCH_ID"]:
             raise ValueError("env batch id inconsistent with cli batch id")
         self.batch = batch
+        config = TestBatch.loadconfig(self.batch)
         self.cases: list[str] = []
         if case is not None:
             self.cases.append(case)
         else:
-            cases = TestBatch.loadindex(self.batch)
-            self.cases.extend(cases)
+            self.cases.extend(config["cases"])
         pool = self.generate_resource_pool()
         self.pool = ResourcePool(pool)
         stage = TestBatch.stage(self.batch)

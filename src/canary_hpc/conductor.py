@@ -242,7 +242,7 @@ class Runner:
             qsize = kwargs.get("qsize", 1)
             if summary := batch_start_summary(batch, qrank=qrank, qsize=qsize):
                 logger.log(logging.EMIT, summary, extra={"prefix": ""})
-            batch.save()
+            batch.setup()
             batch.run(backend=backend, qsize=qsize, qrank=qrank)
         finally:
             if summary := batch_finish_summary(batch, qrank=qrank, qsize=qsize):
