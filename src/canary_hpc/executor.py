@@ -39,14 +39,12 @@ class CanaryHPCExecutor:
             self.cases.extend(cases)
         pool = self.generate_resource_pool()
         self.pool = ResourcePool(pool)
-        stage = TestBatch.stage(self.batch, prefix="batches")
-        f = os.path.join(stage, "resource_pool.json")
-        if not os.path.exists(f):
-            with open(f, "w") as fh:
-                json.dump({"resource_pool": pool}, fh, indent=2)
-        stage = TestBatch.stage(self.batch, prefix="batches")
-        f = os.path.join(stage, "hpc_connect.yaml")
-        if not os.path.exists(f):
+        stage = TestBatch.stage(self.batch)
+        f = stage / "resource_pool.json"
+        if not f.exists():
+            f.write_text(json.dumps({"resource_pool": pool}, indent=2))
+        f = stage / "hpc_connect.yaml"
+        if not f.exists():
             with open(f, "w") as fh:
                 self.backend.config.dump(fh)
 

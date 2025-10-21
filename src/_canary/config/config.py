@@ -8,6 +8,7 @@ from collections.abc import ValuesView
 from contextlib import contextmanager
 from copy import deepcopy
 from functools import cached_property
+from pathlib import Path
 from string import Template
 from typing import IO
 from typing import Any
@@ -146,6 +147,17 @@ class Config:
                 self.push_scope(cscope)
         if self.get("config:debug"):
             logging.set_level(logging.DEBUG)
+
+    def stage(self, suffix: str | None = None) -> Path:
+        root: Path
+        if f := self.get("session:work_tree"):
+            root = Path(f)
+        else:
+            root = Path.cwd()
+        stage = root / ".canary"
+        if suffix is not None:
+            stage /= suffix
+        return stage
 
     def getoption(self, name: str, default: Any = None) -> Any:
         value = getattr(self.options, name, None)

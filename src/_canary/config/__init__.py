@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     load_snapshot = _config.load_snapshot
     archive = _config.archive
     temporary_scope = _config.temporary_scope
+    stage = _config.stage
 
 else:
     # allow config to be lazily loaded

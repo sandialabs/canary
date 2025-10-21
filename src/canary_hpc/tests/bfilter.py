@@ -4,7 +4,7 @@
 
 import glob
 import importlib.resources
-import os
+from pathlib import Path
 
 import _canary.config as config
 import _canary.session as session
@@ -13,8 +13,8 @@ from canary_hpc.conductor import CanaryHPCConductor
 
 
 def test_session_bfilter(tmpdir):
-    root = str(importlib.resources.files("canary"))
-    examples = os.path.join(root, "examples")
+    root = Path(importlib.resources.files("canary"))
+    examples = root / "examples"
     with working_dir(tmpdir.strpath, create=True):
         with config.override():
             config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
@@ -26,9 +26,9 @@ def test_session_bfilter(tmpdir):
             conductor = CanaryHPCConductor(backend="shell")
             config.pluginmanager.register(conductor, f"canary_hpc{conductor.backend.name}")
             s = session.Session("tests", mode="w", force=True)
-            s.add_search_paths([os.path.join(examples, "basic"), os.path.join(examples, "vvt")])
+            s.add_search_paths([str(examples / "basic"), str(examples / "vvt")])
             s.discover()
             s.lock()
             s.run()
-            files = glob.glob("tests/.canary/batches/**/canary-inp.sh", recursive=True)
+            files = glob.glob("tests/.canary/canary_hpc/batches/**/canary-inp.sh", recursive=True)
             assert len(files) == 2
