@@ -267,3 +267,9 @@ def canary_resource_pool_count(type: str) -> int:
 def canary_resource_pool_types() -> list[str]:
     """Return the names of available resources"""
     raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_resource_pool_describe() -> str:
+    """Return a string describing the resource pool"""
+    raise NotImplementedError

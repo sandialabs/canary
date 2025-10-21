@@ -1,6 +1,7 @@
 import io
 import os
 import threading
+import yaml
 from datetime import datetime
 from typing import TYPE_CHECKING
 from typing import Any
@@ -51,6 +52,13 @@ class TestCaseExecutor:
     def canary_resource_pool_types(self) -> list[str]:
         rpool = self.get_rpool()
         return rpool.types
+
+    @hookimpl(trylast=True)
+    def canary_resource_pool_describe(self) -> str:
+        rpool = self.get_rpool()
+        fp = io.StringIO()
+        rpool.dump(fp)
+        return fp.getvalue()
 
     @hookimpl(trylast=True)
     def canary_runtests(self, cases: Sequence["TestCase"]) -> int:

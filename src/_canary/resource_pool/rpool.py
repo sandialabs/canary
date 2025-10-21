@@ -6,6 +6,7 @@ import io
 import pickle  # nosec B403
 from collections import Counter
 from typing import TYPE_CHECKING
+from typing import IO
 from typing import Any
 
 import psutil
@@ -116,13 +117,16 @@ class ResourcePool:
             self.fill(pool)
 
     def __repr__(self) -> str:
-        pool = {"additional_properties": self.additional_properties, "resources": self.resources}
-        fh = io.StringIO()
-        yaml.dump({"resource_pool": pool}, fh, default_flow_style=False)
-        return fh.getvalue()
+        file = io.StringIO()
+        self.dump(file)
+        return file.getvalue()
 
     def __contains__(self, type: str) -> bool:
         return type in self.resources
+
+    def dump(self, file: IO[Any]) -> None:
+        pool = {"additional_properties": self.additional_properties, "resources": self.resources}
+        yaml.dump({"resource_pool": pool}, file, default_flow_style=False)
 
     @property
     def types(self) -> list[str]:

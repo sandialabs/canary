@@ -29,22 +29,20 @@ def canary_addcommand(parser: "Parser") -> None:
 
 class ConfigCmd(CanarySubcommand):
     name = "config"
-    description = "Print configuration variable values"
+    description = "Get and set configuration options"
 
     def setup_parser(self, parser: "Parser") -> None:
         sp = parser.add_subparsers(dest="subcommand")
-        p = sp.add_parser("show", help="Show the current configuration")
-        p.add_argument(
-            "-r",
-            action="store_true",
-            default=False,
-            help="Include resource pool in configuration that is shown",
+        p = sp.add_parser(
+            "show",
+            help="Show current configuration. To show the resource pool, let section=resource_pool",
         )
         p.add_argument(
             "-p",
             "--paths",
             action="store_true",
             default=False,
+            dest="file_paths",
             help="Show paths to canary configuration files",
         )
         p.add_argument(
@@ -74,6 +72,7 @@ class ConfigCmd(CanarySubcommand):
         )
         p.add_argument(
             "path",
+            metavar="PATH",
             help="colon-separated path to config to be set, e.g. 'config:debug:true'",
         )
 
@@ -98,7 +97,7 @@ def show_config(args: "argparse.Namespace"):
     from ... import config
 
     text: str
-    if args.paths:
+    if args.file_paths:
         global_f = config.get_scope_filename("global")
         local_f = os.path.realpath(config.get_scope_filename("local") or "canary.yaml")
         with io.StringIO() as fp:
@@ -110,12 +109,13 @@ def show_config(args: "argparse.Namespace"):
     if args.section in ("plugins", "plugin"):
         print_active_plugin_descriptions()
         return
+    elif args.section in ("resource_pool", "resource-pool", "resources"):
+        print(config.pluginmanager.hook.canary_resource_pool_describe())
+        return
     else:
         state = config.getstate(pretty=True)
         if args.section is not None:
             state = {args.section: state[args.section]}
-        elif not args.r:
-            state["resource_pool"] = "... (-r to include resource pool)"
         if args.format == "json":
             text = json.dumps(state, indent=2)
         else:
