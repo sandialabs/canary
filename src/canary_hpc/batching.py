@@ -219,12 +219,12 @@ class TestBatch(AbstractTestCase):
         return self._id
 
     def submission_script_filename(self) -> str:
-        return os.path.join(self.stage(self.id), "canary-inp.sh")
+        return os.path.join(self.stage(self.id, prefix="batches"), "canary-inp.sh")
 
     @staticmethod
     def logfile(batch_id: str) -> str:
         """Get the path of the batch log file"""
-        return os.path.join(TestBatch.stage(batch_id), "canary-out.txt")
+        return os.path.join(TestBatch.stage(batch_id, prefix="batches"), "canary-out.txt")
 
     @property
     def path(self) -> str:
@@ -235,7 +235,7 @@ class TestBatch(AbstractTestCase):
         return self.path
 
     def save(self):
-        f = os.path.join(self.stage(self.id), "index")
+        f = os.path.join(self.stage(self.id, prefix="batches"), "index")
         canary.filesystem.mkdirp(os.path.dirname(f))
         with open(f, "w") as fh:
             json.dump([case.id for case in self], fh, indent=2)
@@ -256,7 +256,7 @@ class TestBatch(AbstractTestCase):
         replacements: dict[str, str] = {
             "%id": self.id[:7],
             "%p": self.path,
-            "%P": self.stage(self.id),
+            "%P": str(self.stage(self.id, prefix="batches")),
             "%n": repr(self),
             "%j": self.jobid or "none",
             "%l": str(len(self)),
@@ -290,7 +290,7 @@ class TestBatch(AbstractTestCase):
     @staticmethod
     def loadindex(batch_id: str) -> list[str]:
         full_batch_id = TestBatch.find(batch_id)
-        stage = TestBatch.stage(full_batch_id)
+        stage = TestBatch.stage(full_batch_id, prefix="batches")
         f = os.path.join(stage, "index")
         if not os.path.exists(f):
             raise ValueError(f"Index for batch {batch_id} not found in {stage}")
@@ -298,10 +298,13 @@ class TestBatch(AbstractTestCase):
             return json.load(fh)
 
     @staticmethod
-    def stage(batch_id: str) -> str:
+    def stage(batch_id: str, prefix: str | None = None) -> str:
         work_tree = canary.config.get("session:work_tree")
         assert work_tree is not None
-        root = os.path.join(work_tree, ".canary/batches", batch_id[:2])
+        root = os.path.join(work_tree, ".canary/canary_hpc")
+        if prefix is not None:
+            root = os.path.join(root, prefix)
+        root = os.path.join(root, batch_id[:2])
         if os.path.exists(root) and os.path.exists(os.path.join(root, batch_id[2:])):
             return os.path.join(root, batch_id[2:])
         pattern = os.path.join(root, f"{batch_id[2:]}*")
@@ -349,7 +352,7 @@ class TestBatch(AbstractTestCase):
         batchspec = canary.config.getoption("canary_hpc_batchspec")
         flat = batchspec["layout"] == "flat"
         try:
-            breadcrumb = os.path.join(self.stage(self.id), ".running")
+            breadcrumb = os.path.join(self.stage(self.id, prefix="batches"), ".running")
             canary.filesystem.touchp(breadcrumb)
             default_int_signal = signal.signal(signal.SIGINT, cancel)
             default_term_signal = signal.signal(signal.SIGTERM, cancel)

@@ -413,10 +413,13 @@ class TestCase(AbstractTestCase):
     def __repr__(self) -> str:
         return self.display_name
 
-    def stage(self) -> str:
+    def stage(self, prefix: str | None = None) -> str:
         dir = config.get("session:work_tree")
         assert dir is not None
-        return os.path.join(dir, ".canary/objects/cases", self.id[:2], self.id[2:])
+        root = os.path.join(dir, ".canary/objects/cases")
+        if prefix is not None:
+            root = os.path.join(root, prefix)
+        return os.path.join(root, self.id[:2], self.id[2:])
 
     @property
     def lockfile(self) -> str:
