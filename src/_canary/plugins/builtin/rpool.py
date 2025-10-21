@@ -29,12 +29,14 @@ def canary_addoption(parser: "Parser") -> None:
         action=update_action,
         dest="resource_pool_mods",
         metavar="TYPE=N",
+        group="resource control",
         help=f"N instances of resource TYPE are available [default: cpus={psutil.cpu_count()}]",
     )
     parser.add_argument(
         "--resource-pool-file",
         dest="resource_pool_file",
         metavar="FILE",
+        group="resource control",
         help="Read resource pool from this JSON or YAML file",
     )
     parser.add_argument(
