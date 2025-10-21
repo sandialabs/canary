@@ -5,6 +5,7 @@ import copy
 import io
 import pickle  # nosec B403
 from collections import Counter
+from typing import TYPE_CHECKING
 from typing import Any
 
 import psutil
@@ -15,6 +16,9 @@ from ..third_party.color import colorize
 from ..util import logging
 from ..util.string import pluralize
 from .schemas import resource_pool_schema
+
+if TYPE_CHECKING:
+    from ..config import Config
 
 logger = logging.get_logger(__name__)
 
@@ -283,6 +287,13 @@ class ResourcePool:
                 instance["slots"] += slots
                 return slots
         raise ValueError(f"Attempting to checkin a resource whose ID is unknown: {rspec!r}")
+
+
+def make_resource_pool(config: "Config"):
+    resources: dict[str, list[dict[str, Any]]] = {}
+    config.pluginmanager.hook.canary_fill_resource_pool(config=config, resources=resources)
+    pool = resource_pool_schema.validate({"resources": resources, "additional_properties": {}})
+    return ResourcePool(pool)
 
 
 class ResourceUnavailable(Exception):

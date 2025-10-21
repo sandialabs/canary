@@ -14,7 +14,7 @@ import uvicorn
 
 from ..util.logging import get_logger
 from .rpool import ResourcePool
-from .schemas import resource_pool_schema
+from .rpool import make_resource_pool
 from .server_app import create_pool_server_app_starlette
 
 if TYPE_CHECKING:
@@ -34,13 +34,6 @@ def setup_logging(logfile: Path) -> None:
     # Redirect uvicorn logs to same handlers
     logging.getLogger("uvicorn").handlers = logging.getLogger().handlers
     logging.getLogger("uvicorn.access").handlers = logging.getLogger().handlers
-
-
-def make_resource_pool(config: "Config"):
-    resources: dict[str, list[dict[str, Any]]] = {}
-    config.pluginmanager.hook.canary_fill_resource_pool(config=config, resources=resources)
-    pool = resource_pool_schema.validate({"resources": resources, "additional_properties": {}})
-    return ResourcePool(pool)
 
 
 def run_resource_pool_server(pool: ResourcePool, kwargs: dict) -> None:
