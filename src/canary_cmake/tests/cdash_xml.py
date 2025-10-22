@@ -16,7 +16,6 @@ def config(request):
         os.environ.pop("CANARYCFG64", None)
         os.environ["CANARY_DISABLE_KB"] = "1"
         _canary.config._config = _canary.config.Config()
-        _canary.config.resource_pool.populate(cpus=6, gpus=0)
         yield
     except:
         os.environ.clear()
@@ -32,7 +31,7 @@ def test_report_cdash(tmpdir):
 
 
 def run_canary(command, *args, cwd=None):
-    cmd = [sys.executable, "-m", "canary"]
+    cmd = [sys.executable, "-m", "canary", "-r", "cpus:6", "-r", "gpus:0"]
     if cwd:
         cmd.extend(["-C", cwd])
     cmd.append(command)

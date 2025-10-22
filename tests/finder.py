@@ -6,6 +6,8 @@ import _canary.config as config
 import _canary.testcase as tc
 import canary
 from _canary import finder
+from _canary.plugins.hookspec import hookimpl
+from _canary.plugins.types import Result
 from _canary.util.filesystem import mkdirp
 from _canary.util.filesystem import working_dir
 
@@ -136,6 +138,17 @@ def test_parameterize_3(tmpdir):
     assert cases[0].parameters == {}
 
 
+class Hook:
+    def __init__(self, cpus):
+        self.cpus = cpus
+
+    @hookimpl
+    def canary_resource_pool_accommodates(self, case):
+        if case.cpus > self.cpus:
+            return Result(False, reason="Not enough cpus")
+        return Result(True)
+
+
 def test_cpu_count(tmpdir):
     workdir = tmpdir.strpath
     with working_dir(workdir):
@@ -143,18 +156,20 @@ def test_cpu_count(tmpdir):
             fh.write("import canary\n")
             fh.write("canary.directives.parameterize('cpus', [1, 4, 8, 32])\n")
     with canary.config.override():
-        canary.config.resource_pool.populate(cpus=42)
+        canary.config.pluginmanager.register(Hook(42), "myhook")
         f = finder.Finder()
         f.add(workdir)
         f.prepare()
         files = f.discover()
         cases = finder.generate_test_cases(files)
         assert len([c for c in cases if not c.masked()]) == 4
+        canary.config.pluginmanager.unregister(name="myhook")
     with canary.config.override():
-        canary.config.resource_pool.populate(cpus=2)
+        canary.config.pluginmanager.register(Hook(2), "myhook")
         cases = finder.generate_test_cases(files)
         mask(cases)
         assert len([c for c in cases if not c.masked()]) == 1
+        canary.config.pluginmanager.unregister(name="myhook")
 
 
 def test_dep_patterns(tmpdir):

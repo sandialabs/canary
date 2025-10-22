@@ -12,7 +12,7 @@ Resource allocation
 Resource pool specification
 ---------------------------
 
-The resource pool is defined by the ``resource_pool`` :ref:`configuration <configuration>` field.  ``resource_pool`` is a JSON object whose entries describe the resources available to ``canary``.  For example, a machine having ``N-1`` CPUs is defined by:
+The resource pool is a JSON object whose entries describe the resources available to ``canary``.  For example, a machine having ``N`` CPUs is defined by:
 
 .. code-block:: json
 
@@ -43,6 +43,7 @@ A machine having 4 CPUs with one slot each and 2 GPUs with 2 slots each would be
 
   {
     "resource_pool": {
+      "additional_properties": {},
       "resources": {
         "cpus": [
           {"id": "0", "slots": 1},
@@ -72,16 +73,18 @@ The resource pool can be specified on the command line by simply defining the nu
 
 .. code-block:: console
 
-  canary -c resource_pool:gpus:4 ...
+  canary -r gpus=4 ...
 
-The resource pool can also be defined in the ``resource_pool`` section of the configuration file:
+The resource pool can also be defined in a configuration file and passed to ``canary``:
 
-.. code-block:: yaml
+.. code-block:: console
 
+  $ cat FILE.yaml
   resource_pool:
     gpus: 4
+  $ canary --resource-pool-file=FILE.json ...
 
-For more complex resource pools, it is necessary to define the resource explicitly:
+For more complex resource pools, it is necessary to define resources explicitly:
 
 .. code-block:: yaml
 
@@ -104,6 +107,12 @@ For more complex resource pools, it is necessary to define the resource explicit
         slots: 4
       - id: "3"
         slots: 4
+
+To see the resource pool, issue
+
+.. code-block:: console
+
+  canary config show resource-pool
 
 Defining resources required by a test case
 ------------------------------------------

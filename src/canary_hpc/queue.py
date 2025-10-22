@@ -5,23 +5,27 @@
 import io
 import threading
 import time
+from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
 
 import canary
 from _canary import queue
-from _canary.config.rpool import ResourcePool
 from _canary.third_party import color
 from _canary.util.time import hhmmss
 
 from .batching import TestBatch
 from .batching import batch_testcases
 
+if TYPE_CHECKING:
+    from _canary.resource_pool import ResourcePool
+
+
 logger = canary.get_logger(__name__)
 
 
 class ResourceQueue(queue.AbstractResourceQueue):
-    def __init__(self, *, lock: threading.Lock, resource_pool: ResourcePool) -> None:
+    def __init__(self, *, lock: threading.Lock, resource_pool: "ResourcePool") -> None:
         workers = int(canary.config.getoption("workers", -1))
         super().__init__(
             lock=lock,
@@ -35,7 +39,7 @@ class ResourceQueue(queue.AbstractResourceQueue):
         cls,
         lock: threading.Lock,
         cases: Sequence[canary.TestCase],
-        resource_pool: ResourcePool,
+        resource_pool: "ResourcePool",
         **kwds: Any,
     ) -> "ResourceQueue":
         self = ResourceQueue(lock=lock, resource_pool=resource_pool)
@@ -100,18 +104,17 @@ class ResourceQueue(queue.AbstractResourceQueue):
                         case.save()
 
     def put(self, *cases: canary.TestCase) -> None:
+        pm = canary.config.pluginmanager
         for case in cases:
             if canary.config.get("config:debug"):
                 # The case should have already been validated
-                check = canary.config.pluginmanager.hook.canary_resources_avail(case=case)
+                check = pm.hook.canary_resource_pool_accommodates(case=case)
                 if not check:
-                    raise ValueError(
-                        f"Unable to run {case} for the the following reason: {check.reason}"
-                    )
+                    raise ValueError(f"Cannot put inadmissible case in queue ({check.reason})")
             status = case.status
             if status == "skipped":
                 case.save()
-            elif not case.status.satisfies(("ready", "pending")):
+            elif not status.satisfies(("ready", "pending")):
                 raise ValueError(f"{case}: case is not ready or pending")
             else:
                 self.tmp_buffer.append(case)

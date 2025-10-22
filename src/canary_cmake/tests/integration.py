@@ -27,7 +27,6 @@ def config(request):
         os.environ.pop("CANARYCFG64", None)
         os.environ["CANARY_DISABLE_KB"] = "1"
         _canary.config._config = _canary.config.Config()
-        _canary.config.resource_pool.populate(cpus=6, gpus=0)
         yield
     except:
         os.environ.clear()
@@ -65,6 +64,7 @@ def test_cmake_integration(tmpdir):
             make()
             print(os.listdir("."))
             run = CanaryCommand("run")
+            run.add_default_args("-r", "cpus:6", "-r", "gpus:0")
             run("-w", "--recurse-ctest", ".", debug=True)
             dirs = sorted(os.listdir("TestResults"))
             dirs.remove(".canary")
@@ -102,6 +102,7 @@ def test_cmake_integration_parallel(tmpdir):
             make = ex.Executable("make")
             make()
             run = CanaryCommand("run")
+            run.add_default_args("-r", "cpus:6", "-r", "gpus:0")
             cp = run("-w", ".", debug=True, check=False)
             if cp.returncode != 0:
                 files = glob.glob("TestResults/**/canary-*.txt", recursive=True)

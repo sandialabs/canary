@@ -19,6 +19,7 @@ _canary
    paramset
    plugins/index
    queue
+   resource_pool/index
    session
    status
    testcase

@@ -25,8 +25,7 @@ def test_config_args():
     config = Config()
     config.set_main_options(args)
     assert config.get("config:debug") is True
-    assert len(config.resource_pool.resources["cpus"]) == 8
-    assert len(config.resource_pool.resources["gpus"]) == 4
+    assert config.getoption("resource_pool_mods") == {"cpus": 8, "gpus": 4}
     assert config.get("environment")["set"]["SPAM"] == "EGGS"
     assert os.environ["SPAM"] == "EGGS"
     os.environ.pop("SPAM")

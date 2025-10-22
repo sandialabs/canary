@@ -10,8 +10,28 @@ from typing import Generator
 from .config import Config
 from .config import ConfigScope  # noqa: F401
 from .config import get_scope_filename  # noqa: F401
-from .rpool import ResourcePool  # noqa: F401
-from .rpool import ResourceUnavailable  # noqa: F401
+
+
+class _resource_pool_attr_error:
+    def __getattribute__(self, name):
+        import io
+
+        f = io.StringIO()
+        f.write(
+            "The global canary resource pool has been removed in favor of executor-specific "
+            "resource pools.  Properties of the resource pool are accessed through the canary "
+            "plugin manager. "
+        )
+        if name in ("count", "types", "accommodates"):
+            repl = f"config.pluginmanger.canary_resource_pool_{name}"
+        else:
+            repl = f"a plugin call that can return the pool's {name!r} attribute"
+        f.write(f"In this case, replace config.resource_pool.{name} with {repl}.")
+        raise AttributeError(f.getvalue().strip()) from None
+
+
+resource_pool = _resource_pool_attr_error()
+
 
 if TYPE_CHECKING:
     _config = Config()
@@ -25,7 +45,6 @@ if TYPE_CHECKING:
     invocation_dir = _config.invocation_dir
     ioptions = _config.ioptions
     working_dir = _config.working_dir
-    resource_pool = _config.resource_pool
     getoption = _config.getoption
     set_main_options = _config.set_main_options
     cache_dir = _config.cache_dir
@@ -35,6 +54,7 @@ if TYPE_CHECKING:
     load_snapshot = _config.load_snapshot
     archive = _config.archive
     temporary_scope = _config.temporary_scope
+    stage = _config.stage
 
 else:
     # allow config to be lazily loaded

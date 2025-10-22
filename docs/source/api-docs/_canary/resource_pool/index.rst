@@ -2,16 +2,15 @@
 
    SPDX-License-Identifier: MIT
 
-canary_hpc
-==========
+resource_pool
+=============
 
 .. toctree::
    :maxdepth: 1
 
-   .canary_cache/index
-   argparsing
-   batching
-   binpack
-   conductor
-   executor
-   queue
+   adapter
+   paths
+   rpool
+   schemas
+   server_app
+   startup

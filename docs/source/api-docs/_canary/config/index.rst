@@ -13,5 +13,4 @@ config
    config
    linux
    macos
-   rpool
    schemas

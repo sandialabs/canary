@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-resource
-========
+schemas
+=======
 
-.. automodule:: _canary.plugins.builtin.resource
+.. automodule:: _canary.resource_pool.schemas
    :members:
    :undoc-members:
    :show-inheritance:

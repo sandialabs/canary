@@ -3,10 +3,10 @@
    SPDX-License-Identifier: MIT
 
 
-partitioning
-============
+addcommand
+==========
 
-.. automodule:: canary_hpc.partitioning
+.. automodule:: _canary.plugins.builtin.addcommand
    :members:
    :undoc-members:
    :show-inheritance:

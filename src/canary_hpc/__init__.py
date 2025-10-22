@@ -3,9 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import glob
 import json
-import os
+from pathlib import Path
 
 import canary
 from _canary.plugins.subcommands.run import Run
@@ -87,7 +86,6 @@ class HPC(canary.CanarySubcommand):
             executor = CanaryHPCExecutor(
                 backend=backend, batch=args.batch_id, case=args.canary_hpc_case
             )
-            executor.setup(canary.config._config)
             executor.register(canary.config.pluginmanager)
             return executor.run(args)
         elif args.hpc_cmd == "help":
@@ -127,10 +125,10 @@ class Batch(canary.CanarySubcommand):
     def execute(self, args: argparse.Namespace) -> int:
         if args.batch_cmd == "location":
             location = self.location(args.batch_id)
-            print(location)
+            print(str(location))
         elif args.batch_cmd == "log":
             location = self.location(args.batch_id)
-            display_file(os.path.join(location, "canary-out.txt"))
+            display_file(location / "canary-out.txt")
         elif args.batch_cmd == "list":
             batches = self.find_batches()
             print("\n".join(batches))
@@ -142,32 +140,29 @@ class Batch(canary.CanarySubcommand):
             raise ValueError(f"canary batch: unknown subcommand {args.batch_cmd!r}")
         return 0
 
-    def location(self, batch_id: str) -> str:
-        session = canary.Session(os.getcwd(), mode="r")
-        root = os.path.join(session.work_tree, ".canary/batches", batch_id[:2])
-        if os.path.exists(root) and os.path.exists(os.path.join(root, batch_id[2:])):
-            return os.path.join(root, batch_id[2:])
-        pattern = os.path.join(root, f"{batch_id[2:]}*")
-        matches = glob.glob(pattern)
-        if matches:
+    def location(self, batch_id: str) -> Path:
+        session = canary.Session(str(Path.cwd()), mode="r")
+        root = Path(session.work_tree) / ".canary/canary_hpc/batches" / batch_id[:2]
+        if root.exists() and (root / batch_id[2:]).exists():
+            return root / batch_id[2:]
+        elif matches := list(root.glob(f"{batch_id[2:]}*")):
             return matches[0]
         raise ValueError(f"Stage directory for batch {batch_id} not found in {session.work_tree}")
 
     def find_batches(self) -> list[str]:
-        session = canary.Session(os.getcwd(), mode="r")
-        root = os.path.join(session.work_tree, ".canary/batches")
+        session = canary.Session(str(Path.cwd()), mode="r")
+        root = Path(session.work_tree) / ".canary/canary_hpc/batches"
         batches: list[str] = []
-        for stem in os.listdir(root):
-            leaves = os.listdir(os.path.join(root, stem))
-            batches.extend([f"{stem}{leaf}" for leaf in leaves])
+        for p in root.iterdir():
+            if p.is_dir():
+                batches.extend(["".join([p.stem, c.stem]) for c in p.iterdir() if c.is_dir()])
         return batches
 
     def print_status(self, batch_id: str) -> None:
         location = self.location(batch_id)
-        f = os.path.join(location, "index")
-        with open(f, "r") as fh:
-            case_ids = json.load(fh)
-        session = canary.Session(os.getcwd(), mode="r")
+        f = location / "index"
+        case_ids = json.loads(f.read_text())
+        session = canary.Session(str(Path.cwd()), mode="r")
         for case in session.cases:
             if case.id not in case_ids:
                 case.mask = "[MASKED]"
@@ -177,10 +172,9 @@ class Batch(canary.CanarySubcommand):
     def describe(self, batch_id: str) -> None:
         print(f"Batch {batch_id}")
         location = self.location(batch_id)
-        f = os.path.join(location, "index")
-        with open(f, "r") as fh:
-            case_ids = json.load(fh)
-        session = canary.Session(os.getcwd(), mode="r")
+        f = location / "index"
+        case_ids = json.loads(f.read_text())
+        session = canary.Session(str(Path.cwd()), mode="r")
         for case in session.cases:
             if case.id not in case_ids:
                 continue
@@ -190,10 +184,10 @@ class Batch(canary.CanarySubcommand):
         return
 
 
-def display_file(file: str) -> None:
+def display_file(file: Path) -> None:
     import pydoc
 
     print(f"{file}:")
-    if not os.path.isfile(file):
+    if not file.is_file():
         raise ValueError(f"{file}: no such file")
-    pydoc.pager(open(file).read())
+    pydoc.pager(file.read_text())

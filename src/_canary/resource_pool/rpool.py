@@ -5,6 +5,7 @@ import copy
 import io
 import pickle  # nosec B403
 from collections import Counter
+from typing import IO
 from typing import TYPE_CHECKING
 from typing import Any
 
@@ -18,7 +19,7 @@ from ..util.string import pluralize
 from .schemas import resource_pool_schema
 
 if TYPE_CHECKING:
-    from ..testcase import TestCase
+    from ..config import Config
 
 logger = logging.get_logger(__name__)
 
@@ -116,13 +117,16 @@ class ResourcePool:
             self.fill(pool)
 
     def __repr__(self) -> str:
-        pool = {"additional_properties": self.additional_properties, "resources": self.resources}
-        fh = io.StringIO()
-        yaml.dump({"resource_pool": pool}, fh, default_flow_style=False)
-        return fh.getvalue()
+        file = io.StringIO()
+        self.dump(file)
+        return file.getvalue()
 
     def __contains__(self, type: str) -> bool:
         return type in self.resources
+
+    def dump(self, file: IO[Any]) -> None:
+        pool = {"additional_properties": self.additional_properties, "resources": self.resources}
+        yaml.dump({"resource_pool": pool}, file, default_flow_style=False)
 
     @property
     def types(self) -> list[str]:
@@ -135,7 +139,8 @@ class ResourcePool:
 
     def count(self, type: str) -> int:
         if type in ("node", "nodes"):
-            return 1
+            node_info: dict = self.additional_properties.setdefault("nodes", {})
+            return node_info.setdefault("count", 1)
         if type in self.resources:
             return len(self.resources[type])
         elif f"{type}s" in self.resources:
@@ -182,7 +187,7 @@ class ResourcePool:
         for type in kwds:
             self.slots_per_resource_type[type] = sum([_["slots"] for _ in self.resources[type]])
 
-    def accommodates(self, case: "TestCase") -> Result:
+    def accommodates(self, request: list[list[dict[str, Any]]]) -> Result:
         """determine if the resources for this test are available"""
         if self.empty():
             raise EmptyResourcePoolError
@@ -191,7 +196,7 @@ class ResourcePool:
         missing: set[str] = set()
 
         # Step 1: Gather resource requirements and detect missing types
-        for group in case.required_resources():
+        for group in request:
             for member in group:
                 rtype = member["type"]
                 if rtype in self.resources:
@@ -216,7 +221,7 @@ class ResourcePool:
             if levelno <= logging.DEBUG:
                 fmt = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
                 types = ", ".join(fmt(k, *wanting[k]) for k in sorted(wanting))
-                reason = f"{case}: insufficient slots of {types}"
+                reason = f"insufficient slots of {types}"
             else:
                 types = ", ".join(colorize("@*{%s}" % t) for t in wanting)
                 reason = f"insufficient slots of {types}"
@@ -287,6 +292,13 @@ class ResourcePool:
                 instance["slots"] += slots
                 return slots
         raise ValueError(f"Attempting to checkin a resource whose ID is unknown: {rspec!r}")
+
+
+def make_resource_pool(config: "Config"):
+    pool: dict[str, dict[str, Any]] = {"resources": {}, "additional_properties": {}}
+    config.pluginmanager.hook.canary_resource_pool_fill(config=config, pool=pool)
+    pool = resource_pool_schema.validate(pool)
+    return ResourcePool(pool)
 
 
 class ResourceUnavailable(Exception):

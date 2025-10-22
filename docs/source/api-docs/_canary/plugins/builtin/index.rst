@@ -8,19 +8,20 @@ plugins.builtin
 .. toctree::
    :maxdepth: 1
 
+   addcommand
+   addoption
    discover
    email
+   executor
    html
    json
    junit
    markdown
    mask
-   oversubscribe
    post_clean
    pyt
    repeat
    reporting
-   resource
+   rpool
    runtest_protocol
-   runtests
    testcase_generator

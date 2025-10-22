@@ -15,10 +15,10 @@ import hpc_connect
 import psutil
 
 import canary
-from _canary.config.rpool import ResourcePool
 from _canary.plugins.subcommands.run import Run
 from _canary.plugins.types import Result
 from _canary.queue import process_queue
+from _canary.resource_pool import ResourcePool
 from _canary.third_party.color import colorize
 from _canary.util import logging
 from _canary.util.misc import digits
@@ -83,7 +83,7 @@ class CanaryHPCConductor:
         return self._slots_per_resource_type
 
     @canary.hookimpl
-    def canary_resource_count(self, type: str) -> int:
+    def canary_resource_pool_count(self, type: str) -> int:
         node_count = self.backend.config.node_count
         if type in ("nodes", "node"):
             return node_count
@@ -95,11 +95,11 @@ class CanaryHPCConductor:
             return node_count * type_per_node
 
     @canary.hookimpl
-    def canary_resource_types(self) -> list[str]:
+    def canary_resource_pool_types(self) -> list[str]:
         return self.available_resource_types
 
     @canary.hookimpl
-    def canary_resources_avail(self, case: canary.TestCase) -> Result:
+    def canary_resource_pool_accommodates(self, case: canary.TestCase) -> Result:
         return self.backend_accommodates(case)
 
     def backend_accommodates(self, case: canary.TestCase) -> Result:
@@ -242,7 +242,7 @@ class Runner:
             qsize = kwargs.get("qsize", 1)
             if summary := batch_start_summary(batch, qrank=qrank, qsize=qsize):
                 logger.log(logging.EMIT, summary, extra={"prefix": ""})
-            batch.save()
+            batch.setup()
             batch.run(backend=backend, qsize=qsize, qrank=qrank)
         finally:
             if summary := batch_finish_summary(batch, qrank=qrank, qsize=qsize):

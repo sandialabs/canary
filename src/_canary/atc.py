@@ -21,7 +21,6 @@ class AbstractTestCase(abc.ABC):
     def size(self) -> float:
         pass
 
-    @abc.abstractmethod
     def save(self) -> None:
         pass
 

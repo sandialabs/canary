@@ -24,10 +24,9 @@ import psutil
 
 from . import config
 from .atc import AbstractTestCase
-from .config.rpool import ResourcePool
-from .config.rpool import ResourceUnavailable
 from .error import FailFast
 from .error import StopExecution
+from .resource_pool.rpool import ResourceUnavailable
 from .third_party import color
 from .util import keyboard
 from .util import logging
@@ -41,13 +40,16 @@ from .util.time import hhmmss
 from .util.time import timestamp
 
 if TYPE_CHECKING:
+    from .resource_pool.rpool import ResourcePool
     from .testcase import TestCase
 
 logger = logging.get_logger(__name__)
 
 
 class AbstractResourceQueue(abc.ABC):
-    def __init__(self, *, lock: threading.Lock, workers: int, resource_pool: ResourcePool) -> None:
+    def __init__(
+        self, *, lock: threading.Lock, workers: int, resource_pool: "ResourcePool"
+    ) -> None:
         self.workers: int = workers
         self.buffer: dict[int, Any] = {}
         self._busy: dict[int, Any] = {}
@@ -185,7 +187,7 @@ class AbstractResourceQueue(abc.ABC):
 
 
 class ResourceQueue(AbstractResourceQueue):
-    def __init__(self, *, lock: threading.Lock, resource_pool: ResourcePool) -> None:
+    def __init__(self, *, lock: threading.Lock, resource_pool: "ResourcePool") -> None:
         workers = int(config.getoption("workers", -1))
         if workers < 0:
             workers = min(psutil.cpu_count(logical=False), 50)
@@ -196,7 +198,7 @@ class ResourceQueue(AbstractResourceQueue):
         cls,
         lock: threading.Lock,
         cases: Sequence["TestCase"],
-        resource_pool: ResourcePool,
+        resource_pool: "ResourcePool",
         **kwds: Any,
     ) -> "ResourceQueue":
         self = ResourceQueue(lock=lock, resource_pool=resource_pool)
@@ -220,7 +222,7 @@ class ResourceQueue(AbstractResourceQueue):
         for case in cases:
             if config.get("config:debug"):
                 # The case should have already been validated
-                check = config.pluginmanager.hook.canary_resources_avail(case=case)
+                check = config.pluginmanager.hook.canary_resource_pool_accommodates(case=case)
                 if not check:
                     raise ValueError(
                         f"Unable to run {case} for the the following reason: {check.reason}"
