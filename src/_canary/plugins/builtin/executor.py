@@ -38,7 +38,7 @@ class TestCaseExecutor:
         return self._rpool
 
     @hookimpl(trylast=True)
-    def canary_resource_pool_canrun(self, case: "TestCase") -> Result:
+    def canary_resource_pool_accommodates(self, case: "TestCase") -> Result:
         rpool = self.get_rpool()
         return rpool.accommodates(case.required_resources())
 

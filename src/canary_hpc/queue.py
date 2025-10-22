@@ -104,18 +104,17 @@ class ResourceQueue(queue.AbstractResourceQueue):
                         case.save()
 
     def put(self, *cases: canary.TestCase) -> None:
+        pm = canary.config.pluginmanager
         for case in cases:
             if canary.config.get("config:debug"):
                 # The case should have already been validated
-                check = canary.config.pluginmanager.hook.canary_resource_pool_canrun(case=case)
+                check = pm.hook.canary_resource_pool_accommodates(case=case)
                 if not check:
-                    raise ValueError(
-                        f"Unable to run {case} for the the following reason: {check.reason}"
-                    )
+                    raise ValueError(f"Cannot put inadmissible case in queue ({check.reason})")
             status = case.status
             if status == "skipped":
                 case.save()
-            elif not case.status.satisfies(("ready", "pending")):
+            elif not status.satisfies(("ready", "pending")):
                 raise ValueError(f"{case}: case is not ready or pending")
             else:
                 self.tmp_buffer.append(case)

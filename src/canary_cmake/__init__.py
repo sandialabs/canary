@@ -111,11 +111,14 @@ def canary_cdash_labels(case: canary.TestCase) -> list[str]:
 
 
 @canary.hookimpl
-def canary_resource_pool_fill(
-    config: canary.Config, resources: dict[str, list[dict[str, Any]]]
-) -> None:
+def canary_resource_pool_fill(config: canary.Config, pool: dict[str, dict[str, Any]]) -> None:
     if f := config.getoption("canary_cmake_resource_spec_file"):
         logger.info("Setting resource pool from ctest resource spec file")
+        pool["additional_properties"].clear()
+        pool["additional_properties"]["ctest"] = {"resource_spec_file": os.path.abspath(f)}
         resource_specs = read_resource_specs(f)
-        for rtype, rspec in resource_specs["local"].items():
-            resources[rtype] = rspec
+        cpu_spec = pool["resources"].pop("cpus")
+        pool["resources"].clear()
+        pool["resources"].update(resource_specs["local"])
+        if "cpus" not in pool["resources"]:
+            pool["resources"]["cpus"] = cpu_spec

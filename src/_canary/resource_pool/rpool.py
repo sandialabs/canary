@@ -139,7 +139,8 @@ class ResourcePool:
 
     def count(self, type: str) -> int:
         if type in ("node", "nodes"):
-            return 1
+            node_info: dict = self.additional_properties.setdefault("nodes", {})
+            return node_info.setdefault("count", 1)
         if type in self.resources:
             return len(self.resources[type])
         elif f"{type}s" in self.resources:
@@ -294,9 +295,9 @@ class ResourcePool:
 
 
 def make_resource_pool(config: "Config"):
-    resources: dict[str, list[dict[str, Any]]] = {}
-    config.pluginmanager.hook.canary_resource_pool_fill(config=config, resources=resources)
-    pool = resource_pool_schema.validate({"resources": resources, "additional_properties": {}})
+    pool: dict[str, dict[str, Any]] = {"resources": {}, "additional_properties": {}}
+    config.pluginmanager.hook.canary_resource_pool_fill(config=config, pool=pool)
+    pool = resource_pool_schema.validate(pool)
     return ResourcePool(pool)
 
 

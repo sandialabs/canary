@@ -99,7 +99,7 @@ class CanaryHPCConductor:
         return self.available_resource_types
 
     @canary.hookimpl
-    def canary_resource_pool_canrun(self, case: canary.TestCase) -> Result:
+    def canary_resource_pool_accommodates(self, case: canary.TestCase) -> Result:
         return self.backend_accommodates(case)
 
     def backend_accommodates(self, case: canary.TestCase) -> Result:

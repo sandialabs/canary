@@ -245,14 +245,12 @@ def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
 
 
 @hookspec
-def canary_resource_pool_fill(
-    config: "CanaryConfig", resources: dict[str, list[dict[str, Any]]]
-) -> None:
+def canary_resource_pool_fill(config: "CanaryConfig", pool: dict[str, dict[str, Any]]) -> None:
     """Fill ``resources`` with available resources."""
 
 
 @hookspec(firstresult=True)
-def canary_resource_pool_canrun(case: "TestCase") -> "Result":
+def canary_resource_pool_accommodates(case: "TestCase") -> "Result":
     """Determine if there are sufficient resource to run ``case``."""
     raise NotImplementedError
 

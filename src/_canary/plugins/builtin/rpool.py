@@ -1,4 +1,5 @@
 import argparse
+import os
 import re
 import shutil
 import subprocess
@@ -20,7 +21,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 resource_regex = r"^([a-zA-Z_][a-zA-Z0-9_]*?)[:=](\d+)$"
-rspec_type = dict[str, list[dict[str, Any]]]
 
 
 @hookimpl
@@ -54,7 +54,8 @@ def canary_addoption(parser: "Parser") -> None:
 
 
 @hookimpl(tryfirst=True, specname="canary_resource_pool_fill")
-def initialize_resource_pool_counts(config: "Config", resources: rspec_type) -> None:
+def initialize_resource_pool_counts(config: "Config", pool: dict[str, dict[str, Any]]) -> None:
+    resources: dict[str, list[dict[str, Any]]] = pool["resources"]
     resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(psutil.cpu_count())]
     gpu_ids: list[str] = []
     if nvidia_smi := shutil.which("nvidia-smi"):
@@ -67,10 +68,12 @@ def initialize_resource_pool_counts(config: "Config", resources: rspec_type) -> 
 
 
 @hookimpl(trylast=True, specname="canary_resource_pool_fill")
-def finalize_resource_pool_counts(config: "Config", resources: rspec_type) -> None:
+def finalize_resource_pool_counts(config: "Config", pool: dict[str, dict[str, Any]]) -> None:
     # Command line options take precedence, so they are filled last and overwrite whatever else is
     # present
+    resources: dict[str, list[dict[str, Any]]] = pool["resources"]
     if f := config.getoption("resource_pool_file"):
+        pool["additional_properties"]["resource_pool_file"] = os.path.abspath(f)
         with open(f) as fh:
             data = yaml.safe_load(fh)
             validated = resource_pool_schema.validate(data["resource_pool"])
