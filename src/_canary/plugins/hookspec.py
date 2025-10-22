@@ -247,6 +247,7 @@ def canary_addhooks(pluginmanager: "CanaryPluginManager") -> None:
 @hookspec
 def canary_resource_pool_fill(config: "CanaryConfig", pool: dict[str, dict[str, Any]]) -> None:
     """Fill ``resources`` with available resources."""
+    raise NotImplementedError
 
 
 @hookspec(firstresult=True)
