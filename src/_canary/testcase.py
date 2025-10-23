@@ -527,6 +527,9 @@ class TestCase(AbstractTestCase):
         assert self._stderr is not None
         return self._stderr
 
+    def log_to_stdout(self, message: str, end: str = "\n") -> None:
+        self.stdout.write(f"[{strtimestamp()}] {message}{end}")
+
     @property
     def execution_directory(self) -> str:
         return self.working_directory
@@ -1408,10 +1411,10 @@ class TestCase(AbstractTestCase):
             else:
                 dst = os.path.join(self.working_directory, asset.dst)
             if asset.action == "copy" or copy_all_resources:
-                self.stdout.write(f"==> copying {asset.src} to {dst}\n")
+                self.log_to_stdout(f"Copying {asset.src} to {dst}")
                 fs.force_copy(asset.src, dst)
             else:
-                self.stdout.write(f"==> linking {asset.src} to {dst}\n")
+                self.log_to_stdout(f"Linking {asset.src} to {dst}")
                 fs.force_symlink(asset.src, dst)
 
     def save(self):
@@ -1553,15 +1556,15 @@ class TestCase(AbstractTestCase):
                 f"\t{cwd=}"
             )
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
-        self.stdout.write(f"[{strtimestamp()}] Preparing test: {self.name}\n")
-        self.stdout.write(f"[{strtimestamp()}] Directory: {os.getcwd()}\n")
-        self.stdout.write(f"[{strtimestamp()}] Cleaning work directory...\n")
-        self.stdout.write(f"[{strtimestamp()}] Linking and copying working files...\n")
+        self.log_to_stdout(f"Preparing test: {self.name}")
+        self.log_to_stdout(f"Directory: {os.getcwd()}")
+        self.log_to_stdout("Cleaning work directory...")
+        self.log_to_stdout("Linking and copying working files...")
         if copy_all_resources:
-            self.stdout.write(f"[{strtimestamp()}] Copying {self.file} to {cwd}\n")
+            self.log_to_stdout(f"Copying {self.file} to {cwd}")
             fs.force_copy(self.file, os.path.basename(self.file))
         else:
-            self.stdout.write(f"[{strtimestamp()}] Linking {self.file} to {cwd}\n")
+            self.log_to_stdout(f"Linking {self.file} to {cwd}")
             fs.force_symlink(self.file, os.path.basename(self.file))
         self.copy_sources_to_workdir()
 
@@ -1696,13 +1699,13 @@ class TestCase(AbstractTestCase):
         cmd_line: str = shlex.join(cmd)
         timeout: float = self.timeout
         timeoutx: float | None = config.get("config:timeout:multiplier")
-        self.stdout.write(f"[{strtimestamp()}] Running {self.display_name}\n")
-        self.stdout.write(f"[{strtimestamp()}] Working directory: {self.working_directory}\n")
-        self.stdout.write(f"[{strtimestamp()}] Execution directory: {self.execution_directory}\n")
-        self.stdout.write(f"[{strtimestamp()}] Command line: {cmd_line}\n")
-        self.stdout.write(f"[{strtimestamp()}] Timeout: {timeout}\n")
+        self.log_to_stdout(f"Running {self.display_name}")
+        self.log_to_stdout(f"Working directory: {self.working_directory}")
+        self.log_to_stdout(f"Execution directory: {self.execution_directory}")
+        self.log_to_stdout(f"Command line: {cmd_line}")
+        self.log_to_stdout(f"Timeout: {timeout} s.")
         if timeoutx and timeoutx != 1.0:
-            self.stdout.write(f"[{strtimestamp()}] Timeout multiplier: {timeoutx}\n")
+            self.log_to_stdout(f"Timeout multiplier: {timeoutx}")
         self.stdout.flush()
 
         def cancel(sig, frame):
@@ -1744,6 +1747,8 @@ class TestCase(AbstractTestCase):
                         stderr = subprocess.STDOUT if self.efile == "<none>" else self.stderr
                     self.start = timestamp()
                     self.status.set("running")
+                    self.log_to_stdout(f"Submitting {self.display_name} to Popen for execution")
+                    self.stdout.flush()
                     proc = psutil.Popen(cmd, stdout=stdout, stderr=stderr, cwd=cwd)
                     metrics = get_process_metrics(proc)
                     while proc.poll() is None:
@@ -1790,9 +1795,9 @@ class TestCase(AbstractTestCase):
                 if metrics is not None:
                     self.add_measurement(**metrics)
             logger.debug(f"{self}: finished with status {self.status}")
-        self.stdout.write(
-            f"==> Finished running {self.display_name} "
-            f"in {self.duration} s. with exit code {self.returncode}\n"
+        self.log_to_stdout(
+            f"Finished running {self.display_name} "
+            f"in {self.duration} s. with exit code {self.returncode}"
         )
         self.stdout.flush()
         return
