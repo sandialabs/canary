@@ -230,7 +230,9 @@ class ResourcePool:
         # Step 3: all good
         return Result(True)
 
-    def checkout(self, resource_groups: list[list[dict[str, Any]]]) -> list[dict[str, list[dict]]]:
+    def checkout(
+        self, resource_groups: list[list[dict[str, Any]]], **kwds: Any
+    ) -> list[dict[str, list[dict]]]:
         """Returns resources available to the test
 
         local[i] = {<type>: [{'id': <id>, 'slots': <slots>}, ...], ... }

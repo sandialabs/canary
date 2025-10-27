@@ -32,6 +32,10 @@ class AbstractTestCase(abc.ABC):
     @abc.abstractmethod
     def duration(self) -> float: ...
 
+    @property
+    @abc.abstractmethod
+    def timeout(self) -> float: ...
+
     @abc.abstractmethod
     def required_resources(self) -> list[list[dict[str, Any]]]:
         """Returns a list of resource

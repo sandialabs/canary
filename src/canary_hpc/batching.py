@@ -91,6 +91,11 @@ class TestBatch(AbstractTestCase):
         t = sum(c.runtime for c in self)
         return float(min(height, t))
 
+    @property
+    def timeout(self) -> float:
+        timeoutx = canary.config.get("config:timeout:multiplier", 1.0)
+        return self.qtime() * timeoutx
+
     def qtime(self) -> float:
         scheduler_args = get_scheduler_args()
         p = argparse.ArgumentParser()

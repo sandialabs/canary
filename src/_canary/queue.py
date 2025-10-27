@@ -154,7 +154,7 @@ class AbstractResourceQueue(abc.ABC):
                         required = obj.required_resources()
                         if not required:
                             raise ValueError(f"{obj}: a test should require at least 1 cpu")
-                        acquired = self.resource_pool.checkout(required)
+                        acquired = self.resource_pool.checkout(required, timeout=obj.timeout)
                         obj.assign_resources(acquired)
                     except ResourceUnavailable:
                         continue
