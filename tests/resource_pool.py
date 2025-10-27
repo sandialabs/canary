@@ -31,6 +31,10 @@ class Case(AbstractTestCase):
     def gpus(self) -> int:
         return 4
 
+    @property
+    def timeout(self) -> float:
+        return 100.0
+
     def command(self, stage: str = "") -> list[str]:
         raise NotImplementedError
 
