@@ -32,7 +32,7 @@ def canary_addoption(parser: "Parser") -> None:
         dest="resource_pool_mods",
         metavar="TYPE=N",
         group="resource control",
-        help=f"N instances of resource TYPE are available [default: cpus={psutil.cpu_count()}]",
+        help=f"N instances of resource TYPE are available [default: cpus={psutil.cpu_count(logical=False)}]",
     )
     parser.add_argument(
         "--resource-pool-file",
@@ -51,12 +51,22 @@ def canary_addoption(parser: "Parser") -> None:
         help="Apply the multiplier N to the number of slots available "
         "per resource instance of type TYPE",
     )
+    parser.add_argument(
+        "--enable-hyperthreads",
+        type=bool,
+        action=store_true,
+        default=False,
+        dest="resource_pool_enable_hyperthreads",
+        group="resource control",
+        help="Include hyperthreads in resource detection [default: %s{default}]",
+    )
 
 
 @hookimpl(tryfirst=True, specname="canary_resource_pool_fill")
 def initialize_resource_pool_counts(config: "Config", pool: dict[str, dict[str, Any]]) -> None:
+    use_hyperthreads: bool = config.getoption("resource_pool_enable_hyperthreads", False)
     resources: dict[str, list[dict[str, Any]]] = pool["resources"]
-    resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(psutil.cpu_count())]
+    resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(psutil.cpu_count(logical=use_hyperthreads))]
     resources["gpus"] = []
 
 
