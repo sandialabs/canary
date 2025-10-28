@@ -57,14 +57,22 @@ def canary_addoption(parser: "Parser") -> None:
 def initialize_resource_pool_counts(config: "Config", pool: dict[str, dict[str, Any]]) -> None:
     resources: dict[str, list[dict[str, Any]]] = pool["resources"]
     resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(psutil.cpu_count())]
-    gpu_ids: list[str] = []
+    resources["gpus"] = []
+
+
+@hookimpl(specname="canary_resource_pool_fill")
+def fill_resource_pool_gpu_counts_nvidia(config: "Config", pool: dict[str, dict[str, Any]]) -> None:
     if nvidia_smi := shutil.which("nvidia-smi"):
+        gpu_ids: list[str] = []
         args = [nvidia_smi, "--list-gpus"]
-        p = subprocess.run(args, stdout=subprocess.PIPE, text=True)
-        for line in p.stdout.split("\n"):
-            if match := re.search("GPU (\d+):", line):
-                gpu_ids.append(match.group(1))
-    resources["gpus"] = [{"id": gpu_id, "slots": 1} for gpu_id in gpu_ids]
+        try:
+            p = subprocess.run(args, stdout=subprocess.PIPE, text=True)
+            for line in p.stdout.split("\n"):
+                if match := re.search("GPU (\d+):", line):
+                    gpu_ids.append(match.group(1))
+            pool["resources"]["gpus"] = [{"id": gpu_id, "slots": 1} for gpu_id in gpu_ids]
+        except Exception:
+            logger.debug(f"Failed to determine GPU counts from {nvidia_smi} --list-gpus")
 
 
 @hookimpl(trylast=True, specname="canary_resource_pool_fill")

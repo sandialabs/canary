@@ -38,6 +38,13 @@ class ConfigCmd(CanarySubcommand):
             help="Show current configuration. To show the resource pool, let section=resource_pool",
         )
         p.add_argument(
+            "-a",
+            action="store_true",
+            default=False,
+            dest="show_all",
+            help="Show all configuration sections, even internal",
+        )
+        p.add_argument(
             "-p",
             "--paths",
             action="store_true",
@@ -109,13 +116,17 @@ def show_config(args: "argparse.Namespace"):
     if args.section in ("plugins", "plugin"):
         print_active_plugin_descriptions()
         return
+
     elif args.section in ("resource_pool", "resource-pool", "resources"):
         print(config.pluginmanager.hook.canary_resource_pool_describe())
         return
+
     else:
         state = config.getstate(pretty=True)
         if args.section is not None:
             state = {args.section: state[args.section]}
+        elif not args.show_all:
+            state = {"config": state["config"]}
         if args.format == "json":
             text = json.dumps(state, indent=2)
         else:
