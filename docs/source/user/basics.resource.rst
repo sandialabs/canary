@@ -7,12 +7,108 @@
 Resource allocation
 ===================
 
-``canary`` uses a `ProcessPoolExecutor <https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ProcessPoolExecutor>`_ to execute tests asynchronously using ``N`` workers\ [1]_.  Tests are submitted to the executor such that the number of occupied slots of a resource remains less than or equal to the total number slots available.  Resources across compute nodes are specified within a "resource pool" using a structured JSON format\ [2]_.
+``canary`` uses two sets of resources to manage execution of test cases: "workers"\ [1]_ (lightweight threads responsible for
+*managing* asynchronous execution of concurrent tests in a `ProcessPoolExecutor <https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ProcessPoolExecutor>`_),
+and a "resource pool" that tracks hardware resources available for execution of the actual test cases within subprocesses.
+Generally speaking, the number of workers corresponds to the upper bound of the number of test cases that can run concurrently.
+By default, ``canary`` detects the physical CPU cores and GPU devices\ [4]_ available on the machine to construct the
+resource pool. The resource pool can be specified with command line options or a file as described below. Tests are
+submitted to the exector such that the number of occupied slots of each resource type remain less than or equal to the total
+number of slots of each type available. Tests request their resources from the pool as described in :ref:`test_resource_definition`.
+
+.. note::
+  ``canary`` extensions, such as for :ref:`HPC execution <canary_hpc_extension>`, may change the interpretation of the resource pool
+  and its specification on the command line. See specific extension's documentation for details.
+
+Defining the resource pool
+--------------------------
+
+By default, the resource pool is automatically generated based on a machine probe and consistes of a single node with ``N`` CPUs *and* 0 GPUs.  The number of CPUs ``N`` is determined by a system probe\ [3]_.  No other resource types are assumed to exist.  Users have the flexibility to define the resource pool in a variety of ways using command line flags, configuration file, or a combination of both, depending on the specific requirements of their computing environment.
+
+.. note::
+
+  Any resources other than ``cpus`` and ``gpus``\ [4]_ must be defined by the user.
+
+The resource pool can be specified on the command line by simply defining the number of each resource type.  For example, resource pool having the default CPU count (as determined by ``canary``) and 4 GPUs, can be generated via
+
+.. code-block:: console
+
+  canary -r gpus=4 ...
+
+The resource pool can also be defined in a configuration file and passed to ``canary``:
+
+.. code-block:: console
+
+  $ cat FILE.yaml
+  resource_pool:
+    gpus: 4
+  $ canary --resource-pool-file=FILE.yaml ...
+
+For more complex resource pools, it is necessary to define resources explicitly:
+
+.. code-block:: yaml
+
+  resource_pool:
+    resources:
+      cpus:
+      - id: "0"
+        slots: 1
+      - id: "1"
+        slots: 1
+      # Repeat entries until "id": "N-1" for N CPUs in total
+      - id: "N-1"
+        slots: 1
+      gpus:
+      - id: "0"
+        slots: 2
+      - id: "1"
+        slots: 2
+      - id: "2"
+        slots: 4
+      - id: "3"
+        slots: 4
+
+To see the resource pool, issue
+
+.. code-block:: console
+
+  canary config show resource-pool
+
+
+.. _test_resource_definition:
+
+Defining resources required by a test case
+------------------------------------------
+
+The resources required by a test case are inferred by comparing the case's :ref:`parameters <usage-parameterize>` with the resource types defined in the resource pool.  For example, a test requiring 4 ``cpus`` and 4 ``gpus`` must define the appropriate ``cpus`` and ``gpus`` parameters and the resource pool must contain enough slots of ``cpus`` and ``gpus`` resource types:
+
+.. code-block:: python
+
+  canary.directives.parameterize("cpus,gpus", [(4, 4)])
+
+
+.. code-block:: yaml
+
+  resource_pool:
+    cpus: 32
+    gpus: 4
+
+.. note::
+
+  A test case is assumed to require 1 CPU if not otherwise specified by the ``cpus`` parameter.
+
+If a test requires a non-default resource, that resource type must appear in the resource pool - even if the count is 0.  For example, consider the test requiring ``n`` `fpgas <https://en.wikipedia.org/wiki/Field-programmable_gate_array>`_
+
+.. code-block:: python
+
+  canary.directives.parameterize("fpgas", [n])
+
+``canary`` will not treat ``fpgas`` as a resource consuming parameter unless it is explicitly defined within the resource pool - either by the command line, a configuration file, or both. Even if the system does not contain any ``fpgas`` (i.e., the count is 0), the user still must explicitly set the count to zero. Otherwise, ``canary`` will treat ``fpgas`` as a regular parameter and proceed with executing the test on systems not having ``fpgas``.
 
 Resource pool specification
 ---------------------------
 
-The resource pool is a JSON object whose entries describe the resources available to ``canary``.  For example, a machine having ``N`` CPUs is defined by:
+The resource pool is a JSON object whose entries describe the resources available to ``canary``\ [2]_.  For example, a machine having ``N`` CPUs is defined by:
 
 .. code-block:: json
 
@@ -59,88 +155,6 @@ A machine having 4 CPUs with one slot each and 2 GPUs with 2 slots each would be
     }
   }
 
-Defining the resource pool
---------------------------
-
-By default, the resource pool is automatically generated based on a machine probe and consistes of a single node with ``N`` CPUs *and* 0 GPUs.  The number of CPUs ``N`` is determined by a system probe\ [3]_.  No other resource types are assumed to exist.  Users have the flexibility to define the resource pool in a variety of ways using command line flags, configuration file, or a combination of both, depending on the specific requirements of their computing environment.
-
-.. note::
-
-  * Any resources other than ``cpus`` and ``gpus`` must be defined by the user.
-  * ``canary`` assumes a default GPU count of 0
-
-The resource pool can be specified on the command line by simply defining the number of each resource type.  For example, resource pool having the default CPU count (as determined by ``canary``) and 4 GPUs, can be generated via
-
-.. code-block:: console
-
-  canary -r gpus=4 ...
-
-The resource pool can also be defined in a configuration file and passed to ``canary``:
-
-.. code-block:: console
-
-  $ cat FILE.yaml
-  resource_pool:
-    gpus: 4
-  $ canary --resource-pool-file=FILE.json ...
-
-For more complex resource pools, it is necessary to define resources explicitly:
-
-.. code-block:: yaml
-
-  resource_pool:
-    resources:
-      cpus:
-      - id: "0"
-        slots: 1
-      - id: "1"
-        slots: 1
-      # Repeat entries until "id": "N-1" for N CPUs in total
-      - id: "N-1"
-        slots: 1
-      gpus:
-      - id: "0"
-        slots: 2
-      - id: "1"
-        slots: 2
-      - id: "2"
-        slots: 4
-      - id: "3"
-        slots: 4
-
-To see the resource pool, issue
-
-.. code-block:: console
-
-  canary config show resource-pool
-
-Defining resources required by a test case
-------------------------------------------
-
-The resources required by a test case are inferred by comparing the case's :ref:`parameters <usage-parameterize>` with the resource types defined in the resource pool.  For example, a test requiring 4 ``cpus`` and 4 ``gpus`` must define the appropriate ``cpus`` and ``gpus`` parameters and the resource pool must contain enough slots of ``cpus`` and ``gpus`` resource types:
-
-.. code-block:: python
-
-  canary.directives.parameterize("cpus,gpus", [(4, 4)])
-
-
-.. code-block:: yaml
-
-  resource_pool:
-    cpus: 32
-    gpus: 4
-
-.. note::
-
-  A test case is assumed to require 1 CPU if not otherwise specified by the ``cpus`` parameter.
-
-If a test requires a non-default resource, that resource type must appear in the resource pool - even if the count is 0.  For example, consider the test requiring ``n`` `fpgas <https://en.wikipedia.org/wiki/Field-programmable_gate_array>`_
-
-.. code-block:: python
-
-  canary.directives.parameterize("fpgas", [n])
-
-``canary`` will not treat ``fpgas`` as a resource consuming parameter unless it is explicitly defined within the resource pool - either by the command line, a configuration file, or both. Even if the system does not contain any ``fpgas`` (i.e., the count is 0), the user still must explicitly set the count to zero. Otherwise, ``canary`` will treat ``fpgas`` as a regular parameter and proceed with executing the test on systems not having ``fpgas``.
 
 Environment variables
 ---------------------
@@ -160,3 +174,4 @@ Additionally, existing environment variables having the placeholders ``%(<name>_
 .. [1] The number of workers can be set by the ``--workers=N`` ``canary run`` flag.
 .. [2] ``canary``\ 's resource pool specification is a generalization of `ctest's <https://cmake.org/cmake/help/latest/manual/ctest.1.html#resource-allocation>`_.
 .. [3] The CPU IDs are ``canary``'s internal IDs (number ``0..N-1``) and may not represent actual hardware IDs.
+.. [4] ``canary`` currently only detects NVIDIA GPUs by default. Contributions for detecting other vendors or resource types are welcome!
