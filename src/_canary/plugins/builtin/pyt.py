@@ -565,7 +565,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                 sources.setdefault(ns.action, []).append((os.path.relpath(found[0], dirname), dst))
             else:
                 for src in found:
-                    sources.setdefault(ns.action, []).append((os.path.relpath(src, dirname), None))
+                    sources.setdefault(ns.action, []).append((os.path.relpath(src, dirname), None))  # type: ignore
 
         if src_not_found:
             msg = io.StringIO()
@@ -844,8 +844,8 @@ class PYTTestGenerator(AbstractTestGenerator):
         self._baseline.append(ns)
 
     def load(self):
-        import _canary
         import canary
+        from _canary import set_file_scanning
 
         try:
             # Replace functions in the dummy canary.directives module with
@@ -856,7 +856,7 @@ class PYTTestGenerator(AbstractTestGenerator):
             for item in dir(self):
                 if item.startswith("f_"):
                     setattr(m, item[2:], getattr(self, item))
-            _canary.FILE_SCANNING = True
+            set_file_scanning(True)
             with monkeypatch.context() as mp:
                 mp.setattr(canary, "directives", m)
                 code = compile(open(self.file).read(), self.file, "exec")
@@ -866,7 +866,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                 except SystemExit:
                     pass
         finally:
-            _canary.FILE_SCANNING = False
+            set_file_scanning(False)
 
     @classmethod
     def matches(cls, path: str) -> bool:

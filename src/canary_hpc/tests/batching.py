@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+
 import pytest
 
 import _canary.finder
@@ -35,11 +36,17 @@ def test_batch_n(generate_files):
     cases = _canary.finder.generate_test_cases(files)
     assert len([c for c in cases if c.status != "masked"]) == num_cases
     spec = {"count": 5, "duration": None, "nodes": "any", "layout": "flat"}
-    batches = batching.batch_testcases(cases=cases, **spec)
+    batches = batching.batch_testcases(
+        cases=cases,
+        **spec,  # ty: ignore[invalid-argument-type]
+    )
     assert len(batches) == 5
     assert sum(len(_) for _ in batches) == num_cases
     spec = {"count": ONE_PER_BIN, "duration": None, "nodes": "any", "layout": "flat"}
-    batches = batching.batch_testcases(cases=cases, **spec)
+    batches = batching.batch_testcases(
+        cases=cases,
+        **spec,  # ty: ignore[invalid-argument-type]
+    )
     assert len(batches) == num_cases
 
 
@@ -52,8 +59,14 @@ def test_batch_t(generate_files):
     cases = _canary.finder.generate_test_cases(files)
     assert len([c for c in cases if c.status != "masked"]) == num_cases
     spec = {"count": None, "duration": 15 * 60, "nodes": "any", "layout": "flat"}
-    batches = batching.batch_testcases(cases=cases, **spec)  # 5x long test case duration
+    batches = batching.batch_testcases(
+        cases=cases,
+        **spec,  # ty: ignore[invalid-argument-type]
+    )  # 5x long test case duration
     assert sum(len(_) for _ in batches) == num_cases
     spec = {"count": None, "duration": 15 * 60, "nodes": "same", "layout": "flat"}
-    batches = batching.batch_testcases(cases=cases, **spec)
+    batches = batching.batch_testcases(
+        cases=cases,
+        **spec,  # ty: ignore[invalid-argument-type]
+    )
     assert sum(len(_) for _ in batches) == num_cases

@@ -666,7 +666,7 @@ def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
     properties["working_dir"] = legacy["config"].pop("working_dir")
 
     scope: dict[str, Any] = {"name": "defaults", "file": None}
-    data = scope.setdefault("data", {})
+    data: dict[str, Any] = scope.setdefault("data", {})  # type: ignore
     data["build"] = legacy["build"]
     data["environment"] = legacy["environment"]
     data["session"] = legacy["session"]
