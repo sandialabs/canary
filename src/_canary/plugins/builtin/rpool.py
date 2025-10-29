@@ -53,8 +53,7 @@ def canary_addoption(parser: "Parser") -> None:
     )
     parser.add_argument(
         "--enable-hyperthreads",
-        type=bool,
-        action=store_true,
+        action="store_true",
         default=False,
         dest="resource_pool_enable_hyperthreads",
         group="resource control",
@@ -66,7 +65,9 @@ def canary_addoption(parser: "Parser") -> None:
 def initialize_resource_pool_counts(config: "Config", pool: dict[str, dict[str, Any]]) -> None:
     use_hyperthreads: bool = config.getoption("resource_pool_enable_hyperthreads", False)
     resources: dict[str, list[dict[str, Any]]] = pool["resources"]
-    resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(psutil.cpu_count(logical=use_hyperthreads))]
+    resources["cpus"] = [
+        {"id": str(j), "slots": 1} for j in range(psutil.cpu_count(logical=use_hyperthreads))
+    ]
     resources["gpus"] = []
 
 
