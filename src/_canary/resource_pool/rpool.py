@@ -9,11 +9,11 @@ from typing import IO
 from typing import TYPE_CHECKING
 from typing import Any
 
-import psutil
 import yaml
 
 from ..plugins.types import Result
 from ..third_party.color import colorize
+from ..util import cpu_count
 from ..util import logging
 from ..util.string import pluralize
 from .schemas import resource_pool_schema
@@ -175,7 +175,7 @@ class ResourcePool:
 
     def populate(self, **kwds: int) -> None:
         if "cpus" not in kwds:
-            kwds["cpus"] = psutil.cpu_count()
+            kwds["cpus"] = cpu_count()
         resources: dict[str, resource_spec] = {}
         for type, count in kwds.items():
             resources[type] = [{"id": str(j), "slots": 1} for j in range(count)]

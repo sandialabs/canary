@@ -658,7 +658,7 @@ def validate_resource_specs(resource_specs: dict) -> dict:
                 str: [
                     {
                         "id": schema.Use(str),
-                        schema.Optional("slots", default=1): schema.Or(int, float),
+                        schema.Optional("slots", default=1): schema.Or(int, float),  # type: ignore
                     }
                 ]
             }

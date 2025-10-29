@@ -12,7 +12,6 @@ from typing import Any
 from typing import Sequence
 
 import hpc_connect
-import psutil
 
 import canary
 from _canary.plugins.subcommands.run import Run
@@ -20,6 +19,7 @@ from _canary.plugins.types import Result
 from _canary.queue import process_queue
 from _canary.resource_pool import ResourcePool
 from _canary.third_party.color import colorize
+from _canary.util import cpu_count
 from _canary.util import logging
 from _canary.util.misc import digits
 from _canary.util.string import pluralize
@@ -54,15 +54,15 @@ class CanaryHPCConductor:
         # to finish.  Batches have no specialized resource requirements, just need cpus to run the
         # submission on.
         self.rpool = ResourcePool()
-        self.rpool.populate(cpus=psutil.cpu_count())
+        self.rpool.populate(cpus=cpu_count())
 
     def register(self, pluginmanager: canary.CanaryPluginManager) -> None:
         pluginmanager.register(self, "canary_hpc_conductor")
 
     def run(self, args: argparse.Namespace) -> int:
         if n := args.canary_hpc_batch_workers:
-            if n > psutil.cpu_count():
-                logger.warning(f"--hpc-batch-workers={n} > cpu_count={psutil.cpu_count()}")
+            if n > cpu_count():
+                logger.warning(f"--hpc-batch-workers={n} > cpu_count={cpu_count()}")
         batchspec = args.canary_hpc_batchspec or CanaryHPCBatchSpec.defaults()
         CanaryHPCBatchSpec.validate_and_set_defaults(batchspec)
         setattr(canary.config.options, "canary_hpc_batchspec", batchspec)

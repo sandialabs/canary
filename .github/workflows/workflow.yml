@@ -8,6 +8,8 @@ on:
 
 env:
   ACTIONS_RUNNER_DEBUG: "true"
+  CANARY_TESTING_CPUS: "8"
+  CANARY_TESTING_GPUS: "4"
 
 jobs:
   unit-tests:

@@ -2,6 +2,8 @@
 
    SPDX-License-Identifier: MIT
 
+.. _canary_hpc_extension:
+
 canary_hpc
 ==========
 

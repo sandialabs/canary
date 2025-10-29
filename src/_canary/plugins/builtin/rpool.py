@@ -7,10 +7,10 @@ from collections import Counter
 from typing import TYPE_CHECKING
 from typing import Any
 
-import psutil
 import yaml
 
 from ...resource_pool.schemas import resource_pool_schema
+from ...util import cpu_count
 from ...util import logging
 from ..hookspec import hookimpl
 
@@ -32,7 +32,7 @@ def canary_addoption(parser: "Parser") -> None:
         dest="resource_pool_mods",
         metavar="TYPE=N",
         group="resource control",
-        help=f"N instances of resource TYPE are available [default: cpus={psutil.cpu_count()}]",
+        help=f"N instances of resource TYPE are available [default: cpus={cpu_count(logical=False)}]",
     )
     parser.add_argument(
         "--resource-pool-file",
@@ -51,13 +51,30 @@ def canary_addoption(parser: "Parser") -> None:
         help="Apply the multiplier N to the number of slots available "
         "per resource instance of type TYPE",
     )
+    parser.add_argument(
+        "--enable-hyperthreads",
+        action="store_true",
+        default=False,
+        dest="resource_pool_enable_hyperthreads",
+        group="resource control",
+        help="Include hyperthreads in resource detection [default: %(default)s]",
+    )
 
 
 @hookimpl(tryfirst=True, specname="canary_resource_pool_fill")
 def initialize_resource_pool_counts(config: "Config", pool: dict[str, dict[str, Any]]) -> None:
+    use_hyperthreads: bool = config.getoption("resource_pool_enable_hyperthreads", False)
     resources: dict[str, list[dict[str, Any]]] = pool["resources"]
-    resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(psutil.cpu_count())]
-    resources["gpus"] = []
+    cpus: int
+    if var := os.getenv("CANARY_TESTING_CPUS"):
+        cpus = int(var)
+    else:
+        cpus = cpu_count(logical=use_hyperthreads)
+    resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(cpus)]
+    gpus: int = 0
+    if var := os.getenv("CANARY_TESTING_GPUS"):
+        gpus = int(var)
+    resources["gpus"] = [{"id": str(j), "slots": 1} for j in range(gpus)]
 
 
 @hookimpl(specname="canary_resource_pool_fill")
@@ -68,7 +85,7 @@ def fill_resource_pool_gpu_counts_nvidia(config: "Config", pool: dict[str, dict[
         try:
             p = subprocess.run(args, stdout=subprocess.PIPE, text=True)
             for line in p.stdout.split("\n"):
-                if match := re.search("GPU (\d+):", line):
+                if match := re.search(r"GPU (\d+):", line):
                     gpu_ids.append(match.group(1))
             pool["resources"]["gpus"] = [{"id": gpu_id, "slots": 1} for gpu_id in gpu_ids]
         except Exception:

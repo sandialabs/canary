@@ -10,7 +10,7 @@ from schema import Use
 
 # --- Resource pool schemas
 resource_spec_schema = Schema(
-    {str: [{"id": Use(str), Optional("slots", default=1): Or(int, float)}]}
+    {str: [{"id": Use(str), Optional("slots", default=1): Or(int, float)}]}  # type: ignore
 )
 
 

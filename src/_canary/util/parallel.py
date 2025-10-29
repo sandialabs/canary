@@ -12,7 +12,7 @@ from typing import Any
 from typing import Callable
 from typing import Sequence
 
-import psutil
+from . import cpu_count
 
 multiprocess_threshold = 100
 default_cpu_count = 8
@@ -116,7 +116,7 @@ def num_processes(max_processes: int | None = None, _cache: dict = {}) -> int:
     """
     if max_processes in _cache:
         return _cache[max_processes]
-    n = min(psutil.cpu_count(), max_processes or psutil.cpu_count())
+    n = min(cpu_count(), max_processes or cpu_count())
     _cache[max_processes] = n
     return n
 

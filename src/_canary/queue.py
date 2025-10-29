@@ -20,14 +20,13 @@ from typing import Any
 from typing import Callable
 from typing import Sequence
 
-import psutil
-
 from . import config
 from .atc import AbstractTestCase
 from .error import FailFast
 from .error import StopExecution
 from .resource_pool.rpool import ResourceUnavailable
 from .third_party import color
+from .util import cpu_count
 from .util import keyboard
 from .util import logging
 from .util.filesystem import working_dir
@@ -190,7 +189,7 @@ class ResourceQueue(AbstractResourceQueue):
     def __init__(self, *, lock: threading.Lock, resource_pool: "ResourcePool") -> None:
         workers = int(config.getoption("workers", -1))
         if workers < 0:
-            workers = min(psutil.cpu_count(logical=False), 50)
+            workers = min(cpu_count(logical=False), 50)
         super().__init__(lock=lock, workers=workers, resource_pool=resource_pool)
 
     @classmethod

@@ -102,7 +102,7 @@ class Profiler:
     def __init__(self, nlines: int = -1):
         self.nlines = nlines
         try:
-            import pyinstrument
+            import pyinstrument  # ty: ignore[unresolved-import]
 
             self.profiler = pyinstrument.Profiler()  # type: ignore
             self.type = 1
