@@ -57,7 +57,7 @@ def canary_addoption(parser: "Parser") -> None:
         default=False,
         dest="resource_pool_enable_hyperthreads",
         group="resource control",
-        help="Include hyperthreads in resource detection [default: %s{default}]",
+        help="Include hyperthreads in resource detection [default: %(default)s]",
     )
 
 
