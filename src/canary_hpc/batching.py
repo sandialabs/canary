@@ -19,11 +19,11 @@ from typing import Literal
 from typing import Sequence
 
 import hpc_connect
-import psutil
 
 import canary
 from _canary.atc import AbstractTestCase
 from _canary.status import Status
+from _canary.util import cpu_count
 from _canary.util.hash import hashit
 from _canary.util.time import time_in_seconds
 
@@ -540,7 +540,7 @@ def batch_testcases(
 def packed_perimeter(
     cases: Iterable[canary.TestCase], cpus_per_node: int | None = None
 ) -> tuple[int, int]:
-    cpus_per_node = cpus_per_node or psutil.cpu_count()
+    cpus_per_node = cpus_per_node or cpu_count()
     cases = sorted(cases, key=lambda c: c.size(), reverse=True)
     cpus = max(case.cpus for case in cases)
     nodes = math.ceil(cpus / cpus_per_node)
@@ -555,7 +555,7 @@ def packed_perimeter(
 
 class GroupByNodes:
     def __init__(self, cpus_per_node: int | None) -> None:
-        self.cpus_per_node: int = cpus_per_node or psutil.cpu_count()
+        self.cpus_per_node: int = cpus_per_node or cpu_count()
 
     def __call__(self, blocks: list[binpack.Block]) -> list[list[binpack.Block]]:
         groups: dict[int, list[binpack.Block]] = {}

@@ -16,8 +16,6 @@ from typing import IO
 from typing import Any
 from typing import Generator
 
-import psutil
-
 from . import config
 from . import finder
 from .error import StopExecution
@@ -28,6 +26,7 @@ from .testcase import TestMultiCase
 from .testcase import from_state as testcase_from_state
 from .third_party.lock import Lock
 from .third_party.lock import LockError
+from .util import cpu_count
 from .util import logging
 from .util.filesystem import find_work_tree
 from .util.filesystem import force_remove
@@ -283,7 +282,7 @@ class Session:
             if len(self.cases) < 100:
                 [case.save() for case in self.cases]
             else:
-                cpus = psutil.cpu_count()
+                cpus = cpu_count()
                 args = ((case.getstate(), case.lockfile) for case in self.cases)
                 pool = multiprocessing.Pool(cpus)
                 pool.imap_unordered(json_dump, args, chunksize=len(self.cases) // cpus or 1)

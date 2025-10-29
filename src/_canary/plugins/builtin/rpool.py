@@ -7,10 +7,10 @@ from collections import Counter
 from typing import TYPE_CHECKING
 from typing import Any
 
-import psutil
 import yaml
 
 from ...resource_pool.schemas import resource_pool_schema
+from ...util import cpu_count
 from ...util import logging
 from ..hookspec import hookimpl
 
@@ -32,7 +32,7 @@ def canary_addoption(parser: "Parser") -> None:
         dest="resource_pool_mods",
         metavar="TYPE=N",
         group="resource control",
-        help=f"N instances of resource TYPE are available [default: cpus={psutil.cpu_count(logical=False)}]",
+        help=f"N instances of resource TYPE are available [default: cpus={cpu_count(logical=False)}]",
     )
     parser.add_argument(
         "--resource-pool-file",
@@ -69,7 +69,7 @@ def initialize_resource_pool_counts(config: "Config", pool: dict[str, dict[str, 
     if var := os.getenv("CANARY_TESTING_CPUS"):
         cpus = int(var)
     else:
-        cpus = psutil.cpu_count(logical=use_hyperthreads)
+        cpus = cpu_count(logical=use_hyperthreads)
     resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(cpus)]
     gpus: int = 0
     if var := os.getenv("CANARY_TESTING_GPUS"):

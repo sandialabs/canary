@@ -15,12 +15,12 @@ from typing import Any
 from typing import Generator
 from typing import MutableMapping
 
-import psutil
 import yaml
 from schema import Schema
 
 from ..plugins.manager import CanaryPluginManager
 from ..third_party import color
+from ..util import cpu_count
 from ..util import logging
 from ..util.collections import merge
 from ..util.compression import compress64
@@ -386,8 +386,8 @@ class Config:
             raise ValueError("Stopping due to previous errors")
 
         if n := getattr(args, "workers", None):
-            if n > psutil.cpu_count():
-                logger.warning(f"workers={n} > cpu_count={psutil.cpu_count()}")
+            if n > cpu_count():
+                logger.warning(f"workers={n} > cpu_count={cpu_count()}")
 
         if t := getattr(args, "timeout", None):
             config_settings: dict = data.setdefault("config", {})
