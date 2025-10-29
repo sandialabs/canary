@@ -15,7 +15,8 @@ echo " "
 #yum update -y
 #yum upgrade -y
 #yum install -y curl openssl-devlel bzip2-devel libffi-devel
-curl -sSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o miniconda.sh
+MINICONDA=Miniconda3-py313_25.5.1-1-Linux-x86_64.sh
+curl -sSL https://repo.anaconda.com/miniconda/$MINICONDA -o miniconda.sh
 bash miniconda.sh -bfp $HOME/miniconda
 rm -rf miniconda.sh
 export PATH="$HOME/miniconda/bin:$PATH"

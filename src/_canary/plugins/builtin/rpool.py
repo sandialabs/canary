@@ -65,10 +65,16 @@ def canary_addoption(parser: "Parser") -> None:
 def initialize_resource_pool_counts(config: "Config", pool: dict[str, dict[str, Any]]) -> None:
     use_hyperthreads: bool = config.getoption("resource_pool_enable_hyperthreads", False)
     resources: dict[str, list[dict[str, Any]]] = pool["resources"]
-    resources["cpus"] = [
-        {"id": str(j), "slots": 1} for j in range(psutil.cpu_count(logical=use_hyperthreads))
-    ]
-    resources["gpus"] = []
+    cpus: int
+    if var := os.getenv("CANARY_TESTING_CPUS"):
+        cpus = int(var)
+    else:
+        cpus = psutil.cpu_count(logical=use_hyperthreads)
+    resources["cpus"] = [{"id": str(j), "slots": 1} for j in range(cpus)]
+    gpus: int = 0
+    if var := os.getenv("CANARY_TESTING_GPUS"):
+        gpus = int(var)
+    resources["gpus"] = [{"id": str(j), "slots": 1} for j in range(gpus)]
 
 
 @hookimpl(specname="canary_resource_pool_fill")

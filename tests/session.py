@@ -6,8 +6,6 @@ import os
 import types
 from unittest.mock import patch
 
-import psutil
-
 import _canary.config as config
 import _canary.session as session
 from _canary.util.filesystem import working_dir
@@ -27,9 +25,7 @@ def test_session_filter(tmpdir):
     with patch("psutil.cpu_count", return_value=12):
         with working_dir(tmpdir.strpath, create=True):
             s = session.Session("tests", mode="w", force=True)
-            s.add_search_paths(
-                [os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")]
-            )
+            s.add_search_paths([os.path.join(p.examples, "basic"), os.path.join(p.examples, "vvt")])
             s.discover()
             s.lock()
             s.run()
