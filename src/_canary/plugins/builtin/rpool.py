@@ -85,7 +85,7 @@ def fill_resource_pool_gpu_counts_nvidia(config: "Config", pool: dict[str, dict[
         try:
             p = subprocess.run(args, stdout=subprocess.PIPE, text=True)
             for line in p.stdout.split("\n"):
-                if match := re.search("GPU (\d+):", line):
+                if match := re.search(r"GPU (\d+):", line):
                     gpu_ids.append(match.group(1))
             pool["resources"]["gpus"] = [{"id": gpu_id, "slots": 1} for gpu_id in gpu_ids]
         except Exception:
