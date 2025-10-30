@@ -1756,7 +1756,7 @@ class TestCase(AbstractTestCase):
                             self.tee_run_output(proc)
                         get_process_metrics(proc, metrics=metrics)
                         if timeout > 0 and time.monotonic() - start_marker > timeout:
-                            os.kill(proc.pid, signal.SIGINT)
+                            proc.send_signal(signal.SIGINT)
                             raise TimeoutError
                         time.sleep(sleep_interval)
         except MissingSourceError as e:
@@ -1795,6 +1795,8 @@ class TestCase(AbstractTestCase):
                 if metrics is not None:
                     self.add_measurement(**metrics)
             logger.debug(f"{self}: finished with status {self.status}")
+            if proc is not None:
+                proc.kill()
         self.log_to_stdout(
             f"Finished running {self.display_name} "
             f"in {self.duration} s. with exit code {self.returncode}"
