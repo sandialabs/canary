@@ -40,6 +40,7 @@ from .error import timeout_exit_status
 from .paramset import ParameterSet
 from .status import Status
 from .util import filesystem as fs
+from .util import kill_tree
 from .util import logging
 from .util._json import safeload
 from .util._json import safesave
@@ -1795,8 +1796,8 @@ class TestCase(AbstractTestCase):
                 if metrics is not None:
                     self.add_measurement(**metrics)
             logger.debug(f"{self}: finished with status {self.status}")
-            if proc is not None:
-                proc.kill()
+            logger.debug(f"{self}: cleaning up resources (pid: {proc.pid})")
+            kill_tree(proc)
         self.log_to_stdout(
             f"Finished running {self.display_name} "
             f"in {self.duration} s. with exit code {self.returncode}"
