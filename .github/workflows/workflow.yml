@@ -13,8 +13,9 @@ env:
 
 jobs:
   unit-tests:
-
+  
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
@@ -46,6 +47,7 @@ jobs:
 
   slurm:
    runs-on: ubuntu-latest
+   timeout-minutes: 20
    steps:
      - uses: actions/checkout@v4
      - name: Build the Slurm Docker image
@@ -59,6 +61,7 @@ jobs:
 
   flux:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Pull the Flux Docker image
@@ -72,6 +75,7 @@ jobs:
 
   pbs:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Pull the PBS Docker image
@@ -85,6 +89,8 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
@@ -130,6 +136,8 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
