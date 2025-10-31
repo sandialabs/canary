@@ -1,8 +1,8 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import errno
+import hashlib
 import os
 from abc import ABC
 from abc import abstractmethod
@@ -58,6 +58,11 @@ class AbstractTestGenerator(ABC):
         if not os.path.exists(self.file):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.file)
         self.name = os.path.splitext(os.path.basename(self.path))[0]
+        sha = hashlib.sha256()
+        with open(self.file, "rb") as fh:
+            data = fh.read()
+            sha.update(data)
+        self.sha256: str = sha.hexdigest()
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(file={self.file!r})"
@@ -103,6 +108,7 @@ class AbstractTestGenerator(ABC):
         state["root"] = self.root
         state["path"] = self.path
         state["name"] = self.name
+        state["sha256"] = self.sha256
         return state
 
     @staticmethod
