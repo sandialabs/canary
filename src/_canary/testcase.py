@@ -41,8 +41,7 @@ from .paramset import ParameterSet
 from .status import Status
 from .util import filesystem as fs
 from .util import logging
-from .util._json import safeload
-from .util._json import safesave
+from .util import serialize
 from .util.compression import compress_str
 from .util.executable import Executable
 from .util.filesystem import copyfile
@@ -1419,13 +1418,13 @@ class TestCase(AbstractTestCase):
 
     def save(self):
         lockfile = self.lockfile
-        safesave(lockfile, self.getstate())
+        serialize.dump(lockfile, self.getstate())
         file = os.path.join(self.working_directory, self._lockfile)
         mkdirp(os.path.dirname(file))
         fs.force_symlink(lockfile, file)
 
     def _load_lockfile(self) -> dict[str, Any]:
-        return safeload(self.lockfile)
+        return serialize.load(self.lockfile)
 
     def refresh(self, propagate: bool = True) -> None:
         try:
@@ -1611,19 +1610,6 @@ class TestCase(AbstractTestCase):
                     continue
                 else:
                     fs.force_remove(file)
-
-    def dump(self, fname: str | IO[Any]) -> None:
-        file: IO[Any]
-        own_fh = False
-        if isinstance(fname, str):
-            file = open(fname, "w")
-            own_fh = True
-        else:
-            file = fname
-        state = self.getstate()
-        json.dump(state, file, indent=2)
-        if own_fh:
-            file.close()
 
     def getstate(self) -> dict[str, Any]:
         """Return a serializable dictionary from which the test case can be later loaded"""
@@ -1924,8 +1910,7 @@ def from_state(state: dict[str, Any]) -> TestCase | TestMultiCase:
 
 
 def from_lockfile(lockfile: str) -> TestCase | TestMultiCase:
-    with open(lockfile) as fh:
-        state = json.load(fh)
+    state = serialize.load(lockfile)
     return from_state(state)
 
 

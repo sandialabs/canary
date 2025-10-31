@@ -28,6 +28,7 @@ from .third_party.lock import Lock
 from .third_party.lock import LockError
 from .util import cpu_count
 from .util import logging
+from .util import serialize
 from .util.filesystem import find_work_tree
 from .util.filesystem import force_remove
 from .util.filesystem import mkdirp
@@ -283,9 +284,9 @@ class Session:
                 [case.save() for case in self.cases]
             else:
                 cpus = cpu_count()
-                args = ((case.getstate(), case.lockfile) for case in self.cases)
+                args = ((case.lockfile, case.getstate()) for case in self.cases)
                 pool = multiprocessing.Pool(cpus)
-                pool.imap_unordered(json_dump, args, chunksize=len(self.cases) // cpus or 1)
+                pool.imap_unordered(dump_obj, args, chunksize=len(self.cases) // cpus or 1)
                 pool.close()
                 pool.join()
             index = {case.id: [dep.id for dep in case.dependencies] for case in self.cases}
@@ -326,12 +327,7 @@ class Session:
                     continue
                 # see TestCase.lockfile for file pattern
                 file = self.db.join_path("cases", id[:2], id[2:], TestCase._lockfile)
-                with self.db.open(file) as fh:
-                    try:
-                        state = json.load(fh)
-                    except json.JSONDecodeError:
-                        logger.warning(f"Unable to load {file}!")
-                        continue
+                state = serialize.load(file)
                 state["properties"]["work_tree"] = self.work_tree
                 for i, dep_state in enumerate(state["properties"]["dependencies"]):
                     # assign dependencies from existing dependencies
@@ -677,11 +673,9 @@ def handle_signal(sig, frame):
     raise SystemExit(sig)
 
 
-def json_dump(args):
-    data, filename = args
-    mkdirp(os.path.dirname(filename))
-    with open(filename, "w") as fh:
-        json.dump(data, fh, indent=2)
+def dump_obj(args):
+    filename, obj = args
+    serialize.dump(filename, obj)
 
 
 def prefix_bits(byte_array: bytes, bits: int) -> int:

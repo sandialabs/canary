@@ -72,6 +72,7 @@ class Finder:
         generators: set[AbstractTestGenerator] = set()
         for root, paths in self.roots.items():
             found, e = config.pluginmanager.hook.canary_discover_generators(root=root, paths=paths)
+            print(found)
             generators.update(found)
             errors += e
             logger.debug(f"Found {len(found)} test files in {root}")

@@ -14,8 +14,7 @@ from .status import Status
 from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_lockfile as testcase_from_lockfile
-from .util._json import safeload
-from .util._json import safesave
+from .util import serialize
 
 key_type = tuple[str, ...] | str
 index_type = tuple[int, ...] | int
@@ -271,10 +270,10 @@ class TestInstance:
         return len(self.gpu_ids)
 
     def set_attribute(self, **kwargs: Any) -> None:
-        state = safeload(self.lockfile)
+        state = serialize.load(self.lockfile)
         self.attributes.update(kwargs)
         state["properties"].setdefault("instance_attributes").update(self.attributes)
-        safesave(self.lockfile, state)
+        serialize.dump(self.lockfile, state)
 
     def get_dependency(self, **params: Any) -> "TestInstance | None":
         for dep in self.dependencies:
