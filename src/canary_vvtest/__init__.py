@@ -113,7 +113,7 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
     attrs["TESTID"] = case.fullname
     attrs["PLATFORM"] = sys.platform.lower()
     attrs["COMPILER"] = compiler_spec or "UNKNOWN@UNKNOWN"
-    attrs["TESTROOT"] = case.work_tree
+    attrs["TESTROOT"] = case.session
     attrs["VVTESTSRC"] = ""
     attrs["PROJECT"] = ""
     attrs["OPTIONS"] = canary.config.getoption("on_options") or []
@@ -156,7 +156,7 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
     attrs["DEPDIRMAP"] = {}  # FIXME
 
     attrs["exec_dir"] = case.working_directory
-    attrs["exec_root"] = case.work_tree
+    attrs["exec_root"] = case.session
     attrs["exec_path"] = case.path
     attrs["file_root"] = case.file_root
     attrs["file_dir"] = case.file_dir

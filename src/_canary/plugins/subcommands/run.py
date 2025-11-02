@@ -3,12 +3,15 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+from pathlib import Path
 import sys
 from typing import TYPE_CHECKING
 
 from ... import config
 from ...util import graph
 from ...util import logging
+from ...repo import NotARepoError
+from ...repo import Repo
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import PathSpec
@@ -104,6 +107,24 @@ class Run(CanarySubcommand):
         from ...session import Session
 
         config.pluginmanager.hook.canary_runtests_startup()
+
+        repo: Repo
+        try:
+            repo = Repo.load(Path.cwd())
+        except NotARepoError:
+            repo = Repo.create(Path.cwd())
+        env_mods = config.getoption("env_mods") or {}
+        selection = repo.select_testcases(
+            keyword_exprs=config.getoption("keyword_exprs"),
+            parameter_expr=config.getoption("parameter_expr"),
+            on_options=config.getoption("on_options"),
+            env_mods=env_mods.get("test") or {},
+            regex=config.getoption("regex_filter"),
+        )
+        with repo.session(selection) as session:
+            session.run_all()
+
+        return session.returncode
 
         session: Session
         if args.mode == "w":

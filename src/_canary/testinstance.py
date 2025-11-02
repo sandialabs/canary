@@ -179,7 +179,7 @@ class TestInstance:
     runtime: float | int | None
     baseline: list[str | tuple[str, str]]
     sources: dict[str, list[tuple[str, str | None]]]
-    work_tree: str
+    session: str
     working_directory: str
     status: Status
     start: float
@@ -242,7 +242,7 @@ class TestInstance:
             runtime=case.runtime,
             baseline=case.baseline,
             sources=sources,
-            work_tree=case.work_tree,  # type: ignore
+            session=case.session,  # type: ignore
             working_directory=case.working_directory,
             status=case.status,
             start=case.start,
@@ -312,7 +312,7 @@ class TestMultiInstance(TestInstance):
             runtime=case.runtime,
             baseline=case.baseline,
             sources=sources,
-            work_tree=case.work_tree,  # type: ignore
+            session=case.session,  # type: ignore
             working_directory=case.working_directory,
             status=case.status,
             start=case.start,

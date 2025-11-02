@@ -63,6 +63,7 @@ class AbstractTestGenerator(ABC):
             data = fh.read()
             sha.update(data)
         self.sha256: str = sha.hexdigest()
+        self.id = hashlib.sha256(self.file.encode("utf-8")).hexdigest()[:20]
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(file={self.file!r})"

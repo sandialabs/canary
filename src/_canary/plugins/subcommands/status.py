@@ -5,9 +5,11 @@
 import argparse
 import json
 import os
+import sys
 from typing import TYPE_CHECKING
 
 from ... import config
+from ...repo import Repo
 from ..builtin.reporting import determine_cases_to_show
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
@@ -72,7 +74,9 @@ class Status(CanarySubcommand):
         parser.add_argument("pathspec", nargs="?", help="Limit status results to this path")
 
     def execute(self, args: "argparse.Namespace") -> int:
-        session = load_session()
+        repo = Repo.load()
+        repo.report_status(file=sys.stdout)
+        return 0
         config.pluginmanager.hook.canary_statusreport(session=session)
         if args.dump:
             report_chars = args.report_chars or "dftns"
