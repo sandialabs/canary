@@ -9,7 +9,6 @@ from . import config
 from . import describe
 from . import docs
 from . import edit
-from . import exec
 from . import fetch
 from . import find
 from . import help
@@ -32,7 +31,6 @@ plugins = [
     describe,
     docs,
     edit,
-    exec,
     fetch,
     find,
     help,

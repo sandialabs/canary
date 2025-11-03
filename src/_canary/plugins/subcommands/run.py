@@ -121,14 +121,15 @@ class Run(CanarySubcommand):
             except NotARepoError:
                 repo = Repo.create(Path(work_tree))
 
-        if args.tag:
-            selection = repo.get_selection(args.tag)
+        if args.runtag:
+            selection = repo.get_selection(args.runtag)
         elif args.casespecs:
             selection = repo.filter(
                 start=args.start,
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
                 case_specs=args.casespecs,
+                tag=args.tag,
             )
         elif args.paths:
             parsing_policy = config.getoption("parsing_policy") or "pedantic"
@@ -138,6 +139,7 @@ class Run(CanarySubcommand):
                 parameter_expr=args.parameter_expr,
                 on_options=args.on_options,
                 regex=args.regex_filter,
+                tag=args.tag,
             )
         else:
             if any((args.keyword_exprs, args.parameter_expr, args.on_options, args.regex_filter)):
@@ -146,6 +148,7 @@ class Run(CanarySubcommand):
                     parameter_expr=args.parameter_expr,
                     on_options=args.on_options,
                     regex=args.regex_filter,
+                    tag=args.tag,
                 )
             else:
                 selection = repo.get_selection()

@@ -69,6 +69,10 @@ def add_filter_arguments(parser: "Parser") -> None:
         action=RerunFailed,
         help="Rerun failed tests [default: False]",
     )
+    group.add_argument(
+        "--tag",
+        help="Tag this test case selection for future runs [default: False]",
+    )
 
 
 class RerunFailed(argparse.Action):

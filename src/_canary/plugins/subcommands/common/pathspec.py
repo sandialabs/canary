@@ -61,7 +61,7 @@ class PathSpec(argparse.Action):
         setdefault(namespace, "script_args", [])
         setdefault(namespace, "keyword_exprs", [])
         setdefault(namespace, "paths", {})
-        setdefault(namespace, "tag", None)
+        setdefault(namespace, "runtag", None)
         setdefault(namespace, "casespecs", None)
 
         if option_string == "-f":
@@ -83,7 +83,7 @@ class PathSpec(argparse.Action):
             if os.path.isfile(path) and path.endswith("testcases.lock"):
                 raise NotImplementedError
             elif repo is not None and repo.is_tag(path):
-                namespace.tag = path
+                namespace.runtag = path
             elif TestCase.spec_like(path):
                 setdefault(namespace, "casespecs", []).append(p)
             elif os.path.isfile(path) and is_test_file(path):
@@ -103,7 +103,7 @@ class PathSpec(argparse.Action):
             else:
                 raise ValueError(f"{path}: no such file or directory")
 
-        if namespace.casespecs and namespace.paths and namespace.tag is not None:
+        if namespace.casespecs and namespace.paths and namespace.runtag is not None:
             raise ValueError("do not mix /hash and other pathspec arguments")
 
         return

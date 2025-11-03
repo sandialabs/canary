@@ -31,7 +31,6 @@ class Lock(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         add_filter_arguments(parser)
-        parser.add_argument("--tag", help="Give selection this tag")
 
     def execute(self, args: "argparse.Namespace") -> int:
         repo: Repo = Repo.load(Path.cwd())

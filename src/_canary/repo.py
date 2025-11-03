@@ -419,6 +419,7 @@ class Repo:
         start: str | None = None,
         case_specs: list[str] | None = None,
         regex: str | None = None,
+        tag: str | None = None,
     ) -> CaseSelection:
         raise NotImplementedError
         cases = self.load_testcases()
