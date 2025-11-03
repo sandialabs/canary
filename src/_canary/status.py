@@ -131,24 +131,28 @@ class Status:
         else:
             self.set("failed", "a non-zero exit status was returned")
 
-    @property
-    def name(self) -> str:
-        if self.value == "invalid":
+    @staticmethod
+    def display_name(value) -> str:
+        if value == "invalid":
             return "INVALID (NOOP)"
-        elif self.value == "success":
+        elif value == "success":
             return "PASS"
-        elif self.value == "diffed":
+        elif value == "diffed":
             return "DIFF"
-        elif self.value == "failed":
+        elif value == "failed":
             return "FAIL"
-        elif self.value == "not_run":
+        elif value == "not_run":
             return "NOT RUN"
         else:
-            return self.value.upper()
+            return value.upper()
 
     @property
     def cname(self) -> str:
         return "@*%s{%s}" % (self.color, self.name)
+
+    @property
+    def name(self) -> str:
+        return self.display_name(self.value)
 
     @property
     def color(self) -> str:

@@ -91,14 +91,7 @@ def add_work_tree_arguments(parser: "Parser") -> None:
         action="store_true",
         help="Remove test execution directory, if it exists [default: %(default)s]",
     )
-    parser.add_argument(
-        "-d",
-        "--work-tree",
-        dest="work_tree",
-        metavar="directory",
-        help="Set the path to the working tree. It can be an absolute path or a "
-        "path relative to the current working directory. [default: ./TestResults]",
-    )
+    parser.add_argument("-d", "--work-tree", dest="work_tree", help=argparse.SUPPRESS)
 
 
 def add_resource_arguments(parser: "Parser") -> None:

@@ -3,10 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 import random
-import sys
 from itertools import cycle
-from typing import Any
 from typing import IO
+from typing import Any
 
 from .. import version
 from ..third_party.color import colorize

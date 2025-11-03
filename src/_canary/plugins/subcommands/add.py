@@ -5,16 +5,15 @@
 import argparse
 import json
 import os
-import sys
 from typing import TYPE_CHECKING
-from ...third_party.color import colorize
 
+from ...config.schemas import testpaths_schema
 from ...repo import Repo
-from ...util.filesystem import working_dir
+from ...third_party.color import colorize
 from ...util import logging
+from ...util.filesystem import working_dir
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from ...config.schemas import testpaths_schema
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser

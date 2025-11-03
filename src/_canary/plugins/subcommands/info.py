@@ -3,13 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import io
 from typing import TYPE_CHECKING
 
-from ...third_party.colify import colified
-from ...third_party.color import colorize
-from ...util import logging
-from ...util.term import terminal_size
 from ...repo import Repo
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
@@ -28,7 +23,6 @@ class Info(CanarySubcommand):
     description = "Print information about test session"
 
     def execute(self, args: argparse.Namespace) -> int:
-
         repo = Repo()
         info = repo.info()
         print(f"Test sessions repository: {info['root']}")

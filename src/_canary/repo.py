@@ -20,7 +20,6 @@ from .error import notests_exit_status
 from .finder import Finder
 from .finder import generate_test_cases
 from .generator import AbstractTestGenerator
-from .status import Status
 from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_state as testcase_from_state
@@ -28,6 +27,7 @@ from .third_party.color import clen
 from .third_party.lock import Lock
 from .third_party.lock import LockError
 from .util import logging
+from .util.filesystem import force_remove
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
 from .util.graph import find_reachable_nodes
@@ -83,9 +83,12 @@ class Session:
             "created_on": ts,
             "started_on": None,
             "finished_on": None,
+            "working_directory": None,
+            "execution_directory": None,
             "returncode": self.returncode,
             "status": "pending",
             "filters": selection.filters,
+            "selection": selection.tag,
         }
         (self.path / "session.json").write_text(json.dumps(data, indent=2))
 
@@ -131,6 +134,8 @@ class Session:
                 "duration": "NA" if case.duration < 0 else case.duration,
                 "started_on": timeformat(case.start),
                 "finished_on": timeformat(case.stop),
+                "working_directory": case.working_directory,
+                "execution_directory": case.execution_directory,
                 "status": {"value": case.status.value, "details": case.status.details},
             }
         (self.path / "results.json").write_text(json.dumps(results, indent=2))
@@ -138,6 +143,7 @@ class Session:
 
 class Repo:
     version_info = (1, 0, 0)
+
     def __init__(self, root: str | Path = Path.cwd() / ".canary") -> None:
         self.root = Path(root)
         self.objects_dir = self.root / "objects"
@@ -235,10 +241,13 @@ class Repo:
             file.symlink_to(link)
 
     def is_tag(self, name: str) -> bool:
+        if name == "default":
+            return True
         return (self.tags_dir / name).exists()
 
     def info(self) -> dict[str, Any]:
         import canary
+
         latest_session: str | None = None
         if (self.refs_dir / "latest").exists():
             link = (self.refs_dir / "latest").read_text().strip()
@@ -258,7 +267,7 @@ class Repo:
     def add_generator(self, generator: AbstractTestGenerator, _warned: list[int] = [0]) -> int:
         file = self.generators_dir / generator.id[:2] / f"{generator.id[2:]}.json"
         if file.exists():
-            logger.warning(f"Test case generator already in repo ({generator})")
+            logger.debug(f"Test case generator already in repo ({generator})")
             return 0
 
         file.parent.mkdir(parents=True, exist_ok=True)
@@ -269,7 +278,7 @@ class Repo:
         # Invalidate caches
         for file in self.cache_dir.glob("*"):
             if not _warned[0]:
-                logger.warning("Invalidated previously locked test case cache")
+                logger.info("Invalidating previously locked test case cache")
                 _warned[0] = 1
             cache = json.loads(file.read_text())
             cache["cases"] = None
@@ -437,6 +446,35 @@ class Repo:
             ignore_dependencies=False,
         )
 
+    def select_testcases(self, specs: list[str], tag: str | None = None) -> CaseSelection:
+        ids: list[str] = []
+        for spec in specs:
+            if spec.startswith("/"):
+                spec = spec[1:]
+            for f in self.cases_dir.rglob(f"{spec[:2]}/{spec[2:]}*/{TestCase._lockfile}"):
+                id = f"{f.parent.parent.stem}{f.parent.stem}"
+                ids.append(id)
+                break
+            else:
+                raise ValueError(f"{spec}: case not found")
+        cases = self.load_testcases(ids=ids)
+        for case in cases:
+            case.mark_as_ready()
+        selection = CaseSelection(
+            cases=cases,
+            filters={
+                "case_specs": specs,
+                "keyword_exprs": None,
+                "parameter_expr": None,
+                "owners": None,
+                "on_options": None,
+                "regex": None,
+            },
+            tag=tag,
+        )
+        self.cache_selection(selection)
+        return selection
+
     def stage(
         self,
         tag: str | None = None,
@@ -525,8 +563,16 @@ class Repo:
 
     def get_selection(self, tag: str | None = None):
         selection: CaseSelection
+        # Use the last run case selection, if available
         if tag is None:
-            tag = "default"
+            if (self.refs_dir / "latest").exists():
+                if (self.refs_dir / "latest").exists():
+                    link = (self.refs_dir / "latest").read_text().strip()
+                    file = self.refs_dir / link / "session.json"
+                    latest = json.loads(file.read_text())
+                    tag = latest["selection"].strip()
+            else:
+                tag = "default"
         file = self.tags_dir / tag
         if tag == "default" and not file.exists():
             logger.info("Creating default case selection")
@@ -537,7 +583,7 @@ class Repo:
         cache = json.loads(cache_file.read_text())
         if ids := cache.get("cases"):
             cases: list[TestCase] = self.load_testcases(ids=ids)
-            selection = CaseSelection(filters=cache["filters"], cases=cases)
+            selection = CaseSelection(cases=cases, filters=cache["filters"], tag=tag)
             selection._sha256 = cache["sha256"]
             selection._created_on = cache["created_on"]
             return selection
@@ -600,6 +646,25 @@ class Repo:
         table.insert(0, hlines)
         table.insert(0, header)
         return table
+
+    def gc(self) -> None:
+        """Garbage collect"""
+        removed: int = 0
+        logger.info(f"Garbage collecting {self.root}")
+        logger.warning("Garbage collection does not consider test case dependency graphs")
+        for dir in self.sessions_dir.iterdir():
+            if not dir.is_dir():
+                continue
+            file = dir / "results.json"
+            results = json.loads(file.read_text())
+            for data in results.values():
+                if data["status"]["value"] == "success":
+                    path = Path(data["working_directory"])
+                    if path.exists():
+                        logger.info(f"Removing working directory for {dir.stem}::{data['name']}")
+                        force_remove(data["working_directory"])
+                        removed += 1
+        logger.info(f"Removed working directories for {removed} test cases")
 
     @contextmanager
     def read_lock(self, file: Path) -> Generator[Lock, None, None]:

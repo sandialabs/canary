@@ -2,15 +2,15 @@
 #
 # SPDX-License-Identifier: MIT
 
-import shutil
 import argparse
 import os
-import sys
-from typing import TYPE_CHECKING
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ... import config
-from ...util import graph
+from ...repo import CaseSelection
+from ...repo import NotARepoError
+from ...repo import Repo
 from ...util import logging
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
@@ -18,9 +18,6 @@ from .common import PathSpec
 from .common import add_filter_arguments
 from .common import add_resource_arguments
 from .common import add_work_tree_arguments
-from ...repo import Repo
-from ...repo import NotARepoError
-from ...repo import CaseSelection
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -106,7 +103,6 @@ class Run(CanarySubcommand):
         PathSpec.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
-
         config.pluginmanager.hook.canary_runtests_startup()
 
         repo: Repo
@@ -123,13 +119,7 @@ class Run(CanarySubcommand):
         if args.runtag:
             selection = repo.get_selection(args.runtag)
         elif args.casespecs:
-            selection = repo.filter(
-                start=args.start,
-                keyword_exprs=args.keyword_exprs,
-                parameter_expr=args.parameter_expr,
-                case_specs=args.casespecs,
-                tag=args.tag,
-            )
+            selection = repo.select_testcases(args.casespecs, tag=args.tag)
         elif args.paths:
             parsing_policy = config.getoption("parsing_policy") or "pedantic"
             repo.collect_testcase_generators(args.paths, pedantic=parsing_policy)
@@ -152,7 +142,7 @@ class Run(CanarySubcommand):
             else:
                 selection = repo.get_selection()
 
-       # FIXME: env_mods = config.getoption("env_mods") or {}
+        # FIXME: env_mods = config.getoption("env_mods") or {}
         with repo.session(selection) as session:
             session.run_all()
 

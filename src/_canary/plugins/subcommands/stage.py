@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -11,7 +10,6 @@ from ...repo import Repo
 from ...util import logging
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from ...util.banner import print_banner
 from .common import add_filter_arguments
 
 if TYPE_CHECKING:

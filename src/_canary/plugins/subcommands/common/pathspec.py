@@ -8,12 +8,11 @@ import os
 
 from ....config.argparsing import Parser
 from ....config.schemas import testpaths_schema
-from ....third_party.color import colorize
-from ....util.filesystem import find_work_tree
-from ....util.filesystem import working_dir
-from ....util.string import strip_quotes
 from ....repo import NotARepoError
 from ....repo import Repo
+from ....third_party.color import colorize
+from ....util.filesystem import working_dir
+from ....util.string import strip_quotes
 
 
 def setdefault(obj, attr, default):
@@ -62,6 +61,7 @@ class PathSpec(argparse.Action):
         setdefault(namespace, "keyword_exprs", [])
         setdefault(namespace, "paths", {})
         setdefault(namespace, "runtag", None)
+        setdefault(namespace, "start", None)
         setdefault(namespace, "casespecs", None)
 
         if option_string == "-f":
@@ -84,11 +84,10 @@ class PathSpec(argparse.Action):
                 raise NotImplementedError
             elif repo is not None and repo.is_tag(path):
                 namespace.runtag = path
-            elif TestCase.spec_like(path):
-                setdefault(namespace, "casespecs", []).append(p)
             elif os.path.isfile(path) and is_test_file(path):
                 root, name = os.path.split(os.path.abspath(path))
                 namespace.paths.setdefault(root, []).append(name)
+                namespace.keyword_exprs.append(os.path.splitext(name)[0])
             elif os.path.isdir(path):
                 namespace.paths.setdefault(path, [])
             elif path.startswith(("git@", "repo@")):
@@ -100,6 +99,8 @@ class PathSpec(argparse.Action):
                 # allow specifying as root:name
                 root, name = path.split(os.pathsep, 1)
                 namespace.paths.setdefault(root, []).append(name.replace(os.pathsep, os.path.sep))
+            elif spec := TestCase.spec_like(path):
+                setdefault(namespace, "casespecs", []).append(path)
             else:
                 raise ValueError(f"{path}: no such file or directory")
 

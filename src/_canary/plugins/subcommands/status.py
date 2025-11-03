@@ -4,15 +4,14 @@
 
 import argparse
 import io
-import json
-import os
-import sys
+import itertools
+import re
 from typing import TYPE_CHECKING
-from ...third_party import colify
 
-from ... import config
+from ... import status
 from ...repo import Repo
-from ..builtin.reporting import determine_cases_to_show
+from ...third_party import colify
+from ...third_party.color import colorize
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
@@ -78,18 +77,42 @@ class Status(CanarySubcommand):
         repo = Repo.load()
         table = repo.status()
         fh = io.StringIO()
+        for row in table[2:]:
+            row[0] = colorize("@*b{%s}" % row[0])
+            row[1] = pretty_test_name(row[1])
+            row[3] = colorize("@*{%s}" % row[3])  # duration
+            row[5] = pretty_status_name(row[5])
         colify.colify_table(table, output=fh)
         print(fh.getvalue())
         return 0
-        config.pluginmanager.hook.canary_statusreport(session=session)
-        if args.dump:
-            report_chars = args.report_chars or "dftns"
-            cases_to_show = determine_cases_to_show(session, report_chars)
-            cases = [case.getstate() for case in cases_to_show]
-            file = os.path.join(config.invocation_dir, "testcases.lock")
-            with open(file, "w") as fh:
-                json.dump({"testcases": cases}, fh, indent=2)
-        return 0
+
+
+def pretty_test_name(name: str) -> str:
+    colors = itertools.cycle("bmgycr")
+    if match := re.search(r"(\w+)\[(.*)\]", name):
+        stem = match.group(1)
+        params = match.group(2).split(",")
+        string = ",".join("@%s{%s}" % (next(colors), p) for p in params)
+        return colorize("%s[%s]" % (stem, string))
+    return name
+
+
+def pretty_status_name(name: str) -> str:
+    color: str = ""
+    fmt: str = "%(name)s"
+    if name in ("created", "retry", "pending", "ready", "skipped"):
+        color = status.Status.colors["created"]
+        fmt = "@*%(color)s{not run} (%(name)s)"
+    elif name in ("not_run",):
+        color = status.Status.colors[name]
+        fmt = "@*%(color)s{not run} (failed dependency)"
+    elif name in ("diffed", "failed", "timeout", "invalid", "unknown"):
+        color = status.Status.colors["failed"]
+        fmt = "@*%(color)s{failed} (%(name)s)"
+    else:
+        color = status.Status.colors[name]
+        fmt = "@*%(color)s{%(name)s}"
+    return colorize(fmt % {"color": color, "name": name})
 
 
 class ReportCharAction(argparse.Action):
