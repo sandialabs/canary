@@ -3,17 +3,14 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import json
 import os
-from typing import TYPE_CHECKING
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from ... import config
-from ..builtin.reporting import determine_cases_to_show
+from ...repo import Repo
+from ...util import logging
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from ...util import logging
-from ...repo import Repo
 
 logger = logging.get_logger(__name__)
 

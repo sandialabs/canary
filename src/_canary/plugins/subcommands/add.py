@@ -3,23 +3,20 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import json
 import os
 from typing import TYPE_CHECKING
-from pathlib import Path
 
-from ... import config
-from ..builtin.reporting import determine_cases_to_show
+from ...repo import Repo
+from ...util import logging
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from ...util import logging
-from ...repo import Repo
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
 
 
 logger = logging.get_logger(__name__)
+
 
 @hookimpl
 def canary_addcommand(parser: "Parser") -> None:
@@ -42,7 +39,7 @@ class pathspec(argparse.Action):
                 else:
                     spec.setdefault(d, []).append(f)
             elif value.startswith(("git@", "repo@")):
-                vcs, _, root = root.partition("@")
+                vcs, _, root = value.partition("@")
                 if not os.path.isdir(root):
                     parser.error(f"{vcs}@{root}: directory does not exist")
             else:

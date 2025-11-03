@@ -3,17 +3,18 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import io
 import json
 import os
 import sys
 from typing import TYPE_CHECKING
+from ...third_party import colify
 
 from ... import config
 from ...repo import Repo
 from ..builtin.reporting import determine_cases_to_show
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -75,7 +76,10 @@ class Status(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         repo = Repo.load()
-        repo.report_status(file=sys.stdout)
+        table = repo.status()
+        fh = io.StringIO()
+        colify.colify_table(table, output=fh)
+        print(fh.getvalue())
         return 0
         config.pluginmanager.hook.canary_statusreport(session=session)
         if args.dump:

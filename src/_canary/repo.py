@@ -12,18 +12,18 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from typing import Generator
-from typing import IO
 
 from . import config
 from .error import StopExecution
 from .error import notests_exit_status
-from .finder import generate_test_cases
 from .finder import Finder
+from .finder import generate_test_cases
 from .generator import AbstractTestGenerator
-from .mask import mask_testcases
+from .status import Status
 from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_state as testcase_from_state
+from .third_party.color import clen
 from .third_party.lock import Lock
 from .third_party.lock import LockError
 from .util import logging
@@ -52,7 +52,7 @@ class CaseSelection:
                 filters[name] = value
         text = json.dumps({"cases": cases, "filters": filters})
         self._sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        self._created_on = datetime.datetime.now().isoformat()
+        self._created_on = timeformat(datetime.datetime.now())
 
     @property
     def sha256(self) -> str:
@@ -68,7 +68,7 @@ class CaseSelection:
 
 class Session:
     def __init__(self, root: Path, selection: CaseSelection) -> None:
-        ts = datetime.datetime.now().isoformat()
+        ts = timeformat(datetime.datetime.now())
         self.path = root / ts
         self.cases = selection.cases
         self.path.mkdir(parents=True, exist_ok=True)
@@ -82,7 +82,7 @@ class Session:
             "started_on": None,
             "finished_on": None,
             "returncode": self.returncode,
-            "status": "not run",
+            "status": "pending",
             "filters": selection.filters,
         }
         (self.path / "session.json").write_text(json.dumps(data, indent=2))
@@ -110,22 +110,26 @@ class Session:
 
     def enter(self) -> None:
         data = json.loads((self.path / "session.json").read_text())
-        data["started_on"] = datetime.datetime.now().isoformat()
+        data["started_on"] = timeformat(datetime.datetime.now())
         (self.path / "session.json").write_text(json.dumps(data, indent=2))
         return
 
     def exit(self) -> None:
         data = json.loads((self.path / "session.json").read_text())
-        data["finished_on"] = datetime.datetime.now().isoformat()
+        data["finished_on"] = timeformat(datetime.datetime.now())
+        data["status"] = "complete"
         data["returncode"] = self.returncode
         (self.path / "session.json").write_text(json.dumps(data, indent=2))
         results: dict[str, Any] = {}
         for case in self.cases:
+            case.refresh()
             results[case.id] = {
                 "name": case.display_name,
-                "started_on": datetime.datetime.fromtimestamp(case.start).isoformat(),
-                "finished_on": datetime.datetime.fromtimestamp(case.stop).isoformat(),
-                "status": {"value": case.status.value, "details": case.status.details}
+                "returncode": case.returncode,
+                "duration": "NA" if case.duration < 0 else case.duration,
+                "started_on": timeformat(case.start),
+                "finished_on": timeformat(case.stop),
+                "status": {"value": case.status.value, "details": case.status.details},
             }
         (self.path / "results.json").write_text(json.dumps(results, indent=2))
 
@@ -138,7 +142,6 @@ class Repo:
         self.generators_dir = self.objects_dir / "generators"
         self.refs_dir = self.root / "refs"
         self.sessions_dir = self.root / "sessions"
-        self.state_dir = self.root / "state"
         self.cache_dir = self.root / "cache"
         self.tags_dir = self.root / "tags"
         self.head = self.root / "HEAD"
@@ -149,11 +152,10 @@ class Repo:
         self.cases_dir.mkdir(parents=True, exist_ok=True)
         self.generators_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
-        self.state_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.tags_dir.mkdir(parents=True, exist_ok=True)
         self.refs_dir.mkdir(parents=True, exist_ok=True)
-        latest = self.state_dir / "latest.json"
+        latest = self.sessions_dir / "results.json"
         if not latest.exists():
             latest.write_text(json.dumps({"cases": {}}))
 
@@ -177,7 +179,9 @@ class Repo:
             if (start / ".canary").exists():
                 break
             if start.parent == start:
-                raise NotARepoError("not a Canary session (or any of the parent directories): .canary")
+                raise NotARepoError(
+                    "not a Canary session (or any of the parent directories): .canary"
+                )
             start = start.parent
         self = cls(start / ".canary")
         return self
@@ -190,22 +194,31 @@ class Repo:
             yield session
         finally:
             session.exit()
-            file = self.state_dir / "latest.json"
-            latest = json.loads(file.read_text())
-            for case in session.cases:
-                latest["cases"][case.id] = case.getstate(
-                    "start", "stop", "returncode", "session", "status", "measurements", "name", "id"
-                )
-            file.write_text(json.dumps(latest, indent=2))
 
+            file = self.sessions_dir / "results.json"
+            repo_results = json.loads(file.read_text())
+            session_results = json.loads((session.path / "results.json").read_text())
+            for id, entry in session_results.items():
+                entry["session"] = str(session.path.name)
+                repo_results["cases"][id] = entry
+            file.write_text(json.dumps(repo_results, indent=2))
+
+            # Write meta data file refs/latest -> ../sessions/{session.path}
             file = self.refs_dir / "latest"
             file.unlink(missing_ok=True)
-            file.symlink_to(session.work_dir)
+            link = os.path.relpath(str(session.path), str(file.parent))
+            file.write_text(str(link))
+
+            # Write meta data file HEAD -> ./sessions/{session.path}
             self.head.unlink(missing_ok=True)
-            self.head.symlink_to(self.refs_dir / "latest")
+            link = os.path.relpath(str(file), str(self.head.parent))
+            self.head.write_text(str(link))
+
+            # Link TestResults -> .canary/sessions/{session.work_dir}
             file = self.root.parent / "TestResults"
             file.unlink(missing_ok=True)
-            file.symlink_to(self.refs_dir / "latest")
+            link = os.path.relpath(str(session.work_dir), str(file.parent))
+            file.symlink_to(link)
 
     def add_generator(self, generator: AbstractTestGenerator) -> None:
         file = self.generators_dir / generator.id[:2] / f"{generator.id[2:]}.json"
@@ -303,8 +316,7 @@ class Repo:
         self,
         generators: list[AbstractTestGenerator],
         on_options: list[str] | None = None,
-        ) -> list[TestCase]:
-
+    ) -> list[TestCase]:
         cases: list[TestCase] = []
         generators = self.load_testcase_generators()
 
@@ -388,14 +400,14 @@ class Repo:
         """
         generators = self.load_testcase_generators()
         cases = generate_test_cases(generators, on_options=on_options)
-        mask_testcases(
-            cases,
-            config,
+        config.pluginmanager.hook.canary_testsuite_mask(
+            cases=cases,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
             start=start,
+            case_specs=None,
             ignore_dependencies=False,
         )
         for case in cases:
@@ -421,7 +433,7 @@ class Repo:
             "sha256": selection.sha256,
             "created_on": selection.created_on,
             "filters": selection.filters,
-            "cases": [case.id for case in selection.cases]
+            "cases": [case.id for case in selection.cases],
         }
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         cache_file.write_text(json.dumps(cache))
@@ -466,17 +478,31 @@ class Repo:
             with file.open(mode="a") as fh:
                 fh.write(json.dumps({case.id: [dep.id for dep in case.dependencies]}) + "\n")
 
-    def report_status(self, file: IO[Any] | None = None) -> None:
-        file = file or sys.stdout
-        state_file = self.state_dir / "latest.json"
-        state = json.loads(state_file.read_text())
-        groups = {}
-        for id, entry in state["cases"].items():
-            groups.setdefault(entry["properties"]["status"]["value"], []).append(entry)
+    def status(self) -> list[list[str]]:
+        file = self.sessions_dir / "results.json"
+        results = json.loads(file.read_text())
         table: list[list[str]] = []
-        for status, entries in groups.items():
-            for entry in entries:
-                file.write(f"{status}: {entry['properties']['name']}\n")
+        header = ["ID", "Name", "Session", "Exit Code", "Duration", "Status", "Details"]
+        widths: list[int] = [len(_) for _ in header]
+        for id, entry in results["cases"].items():
+            # status = Status(entry["status"]["value"], entry["status"]["details"])
+            row = [
+                id[:7],
+                entry["name"],
+                entry["session"],
+                entry["returncode"],
+                entry["duration"],
+                entry["status"]["value"],
+                entry["status"]["details"] or "",
+            ]
+            table.append(row)
+            for i, x in enumerate(row):
+                widths[i] = max(widths[i], clen(str(x)))
+        table = sorted(table, key=lambda x: (status_value_sort_key(x[5]), x[1]))
+        hlines = ["=" * width for width in widths]
+        table.insert(0, hlines)
+        table.insert(0, header)
+        return table
 
     @contextmanager
     def read_lock(self, file: Path) -> Generator[Lock, None, None]:
@@ -525,6 +551,28 @@ class Repo:
             lock.release_write()
 
 
+def status_value_sort_key(name: str) -> int:
+    map = {
+        "invalid": 0,
+        "created": 0,
+        "retry": 0,
+        "pending": 0,
+        "ready": 0,
+        "running": 0,
+        "success": 10,
+        "xfail": 11,
+        "xdiff": 12,
+        "cancelled": 19,
+        "skipped": 20,
+        "not_run": 21,
+        "diffed": 22,
+        "failed": 23,
+        "timeout": 24,
+        "unknown": 25,
+    }
+    return map[name]
+
+
 def prefix_bits(byte_array: bytes, bits: int) -> int:
     """Return the first <bits> bits of a byte array as an integer."""
     b2i = lambda b: b  # In Python 3, indexing byte_array gives int
@@ -544,6 +592,12 @@ def bit_length(arg: int):
     s = bin(arg)
     s = s.lstrip("-0b")
     return len(s)
+
+
+def timeformat(dt: float | datetime.datetime) -> str:
+    if isinstance(dt, (float, int)):
+        dt = datetime.datetime.fromtimestamp(dt)
+    return dt.strftime("%Y-%m-%dT%H-%M-%S.%f")
 
 
 class NotARepoError(Exception):

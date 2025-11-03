@@ -3,15 +3,15 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ... import config
-from ...util import graph
-from ...util import logging
 from ...repo import NotARepoError
 from ...repo import Repo
+from ...util import graph
+from ...util import logging
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import PathSpec

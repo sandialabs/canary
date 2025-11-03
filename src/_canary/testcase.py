@@ -1615,7 +1615,7 @@ class TestCase(AbstractTestCase):
         if own_fh:
             file.close()
 
-    def getstate(self, *attrs: str) -> dict[str, Any]:
+    def getstate(self) -> dict[str, Any]:
         """Return a serializable dictionary from which the test case can be later loaded"""
         state: dict[str, Any] = {"type": self.__class__.__name__}
         properties = state.setdefault("properties", {})
@@ -1624,8 +1624,6 @@ class TestCase(AbstractTestCase):
                 continue
             private = attr.startswith("_")
             name = attr[1:] if private else attr
-            if attrs and name not in attrs:
-                continue
             if name == "dependencies":
                 value = [dep.getstate() for dep in value]
             elif name == "assets":

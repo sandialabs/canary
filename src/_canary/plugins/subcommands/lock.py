@@ -4,20 +4,13 @@
 
 import argparse
 from pathlib import Path
-import sys
 from typing import TYPE_CHECKING
 
-from ... import config
-from ...util import graph
-from ...util import logging
-from ...repo import NotARepoError
 from ...repo import Repo
+from ...util import logging
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import PathSpec
 from .common import add_filter_arguments
-from .common import add_resource_arguments
-from .common import add_work_tree_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -41,11 +34,10 @@ class Lock(CanarySubcommand):
             "start",
             default=None,
             nargs="?",
-            help="Lock only test cases in this path (and its subdirectories)"
+            help="Lock only test cases in this path (and its subdirectories)",
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
-
         repo: Repo = Repo.load(Path.cwd())
         repo.lock(
             tag=args.tag,

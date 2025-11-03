@@ -154,11 +154,6 @@ def colify(elts, **options):
         except BaseException:
             pass
 
-    # Use only one column if not a tty.
-    if not console_cols and not tty:
-        if tty is False or not output.isatty():
-            cols = 1
-
     # Specify the number of character columns to use.
     if not console_cols:
         console_rows, console_cols = terminal_size()
