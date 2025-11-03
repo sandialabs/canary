@@ -15,11 +15,11 @@ from . import help
 from . import info
 from . import init
 from . import location
-from . import lock
 from . import log
 from . import rebaseline
 from . import report
 from . import run
+from . import stage
 from . import status
 from . import tree
 
@@ -37,11 +37,11 @@ plugins = [
     info,
     init,
     location,
-    lock,
     log,
     rebaseline,
     report,
     run,
+    stage,
     status,
     tree,
 ]

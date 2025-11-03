@@ -41,7 +41,6 @@ class Run(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         add_work_tree_arguments(parser)
         add_filter_arguments(parser)
-        parser.add_argument("-u", "--until", choices=("discover", "lock"), help=argparse.SUPPRESS)
         parser.add_argument(
             "--fail-fast",
             default=None,
@@ -134,7 +133,7 @@ class Run(CanarySubcommand):
         elif args.paths:
             parsing_policy = config.getoption("parsing_policy") or "pedantic"
             repo.collect_testcase_generators(args.paths, pedantic=parsing_policy)
-            selection = repo.lock(
+            selection = repo.stage(
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
                 on_options=args.on_options,
@@ -143,7 +142,7 @@ class Run(CanarySubcommand):
             )
         else:
             if any((args.keyword_exprs, args.parameter_expr, args.on_options, args.regex_filter)):
-                selection = repo.lock(
+                selection = repo.stage(
                     keyword_exprs=args.keyword_exprs,
                     parameter_expr=args.parameter_expr,
                     on_options=args.on_options,

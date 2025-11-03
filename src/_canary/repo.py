@@ -225,8 +225,11 @@ class Repo:
             link = os.path.relpath(str(file), str(self.head.parent))
             self.head.write_text(str(link))
 
-            # Link TestResults -> .canary/sessions/{session.work_dir}
+            # Link LatestResults -> .canary/sessions/{session.work_dir}
             file = self.root.parent / "TestResults"
+            if file.exists():
+                if not file.is_symlink():
+                    raise ValueError("The directory TestResults is not a symbolic link")
             file.unlink(missing_ok=True)
             link = os.path.relpath(str(session.work_dir), str(file.parent))
             file.symlink_to(link)
@@ -434,7 +437,7 @@ class Repo:
             ignore_dependencies=False,
         )
 
-    def lock(
+    def stage(
         self,
         tag: str | None = None,
         keyword_exprs: list[str] | None = None,
@@ -527,7 +530,7 @@ class Repo:
         file = self.tags_dir / tag
         if tag == "default" and not file.exists():
             logger.info("Creating default case selection")
-            selection = self.lock(tag=tag)
+            selection = self.stage(tag=tag)
             return selection
         relpath = file.read_text().strip()
         cache_file = self.tags_dir / relpath
@@ -540,7 +543,7 @@ class Repo:
             return selection
 
         # Cache was invalidated at some point
-        selection = self.lock(tag=tag, **cache["filters"])
+        selection = self.stage(tag=tag, **cache["filters"])
         return selection
 
     def add_testcase(self, case: TestCase) -> None:

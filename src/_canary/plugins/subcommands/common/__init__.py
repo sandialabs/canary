@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def add_filter_arguments(parser: "Parser") -> None:
+def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
     group = parser.add_argument_group("filtering")
     group.add_argument(
         "-k",
@@ -69,10 +69,11 @@ def add_filter_arguments(parser: "Parser") -> None:
         action=RerunFailed,
         help="Rerun failed tests [default: False]",
     )
-    group.add_argument(
-        "--tag",
-        help="Tag this test case selection for future runs [default: False]",
-    )
+    if tagged:
+        group.add_argument(
+            "--tag",
+            help="Tag this test case selection for future runs [default: False]",
+        )
 
 
 class RerunFailed(argparse.Action):
