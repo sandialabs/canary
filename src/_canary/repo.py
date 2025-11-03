@@ -6,6 +6,7 @@ import datetime
 import hashlib
 import json
 import os
+import shutil
 import sys
 import time
 from contextlib import contextmanager
@@ -39,6 +40,7 @@ logger = logging.get_logger(__name__)
 class CaseSelection:
     cases: list[TestCase]
     filters: dict[str, Any]
+    tag: str | None = None
     _sha256: str = dataclasses.field(init=False)
     _created_on: str = dataclasses.field(init=False)
 
@@ -54,6 +56,9 @@ class CaseSelection:
         self._sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
         self._created_on = timeformat(datetime.datetime.now())
 
+        if self.tag is None:
+            self.tag = self._created_on
+
     @property
     def sha256(self) -> str:
         return self._sha256
@@ -61,9 +66,6 @@ class CaseSelection:
     @property
     def created_on(self) -> str:
         return self._created_on
-
-    def is_default_selection(self) -> bool:
-        return all([value is None for value in self.filters.values()])
 
 
 class Session:
@@ -135,6 +137,7 @@ class Session:
 
 
 class Repo:
+    version_info = (1, 0, 0)
     def __init__(self, root: str | Path = Path.cwd() / ".canary") -> None:
         self.root = Path(root)
         self.objects_dir = self.root / "objects"
@@ -158,14 +161,22 @@ class Repo:
         latest = self.sessions_dir / "results.json"
         if not latest.exists():
             latest.write_text(json.dumps({"cases": {}}))
+        version = self.root / "VERSION"
+        if not version.exists():
+            ver = ".".join(str(_) for _ in self.version_info)
+            version.write_text(f"{ver}")
 
     @classmethod
-    def create(cls, path: Path) -> "Repo":
+    def create(cls, path: Path, force: bool = False) -> "Repo":
         path = Path(path).absolute()
         d = path
         while True:
             if (d / ".canary").exists():
-                raise ValueError(f".canary already exists at {d}")
+                if d == path and force:
+                    shutil.rmtree(str(path / ".canary"))
+                    break
+                else:
+                    raise ValueError(f".canary already exists at {d}")
             if d.parent == d:
                 break
             d = d.parent
@@ -220,16 +231,48 @@ class Repo:
             link = os.path.relpath(str(session.work_dir), str(file.parent))
             file.symlink_to(link)
 
-    def add_generator(self, generator: AbstractTestGenerator) -> None:
+    def is_tag(self, name: str) -> bool:
+        return (self.tags_dir / name).exists()
+
+    def info(self) -> dict[str, Any]:
+        import canary
+        latest_session: str | None = None
+        if (self.refs_dir / "latest").exists():
+            link = (self.refs_dir / "latest").read_text().strip()
+            path = self.refs_dir / link
+            latest_session = path.stem
+        info = {
+            "root": str(self.root),
+            "generator_count": len(list(self.generators_dir.rglob("*.json"))),
+            "session_count": len([p for p in self.sessions_dir.glob("*") if p.is_dir()]),
+            "latest_session": latest_session,
+            "tags": sorted(p.stem for p in self.tags_dir.glob("*")),
+            "version": canary.version,
+            "repo_version": (self.root / "VERSION").read_text().strip(),
+        }
+        return info
+
+    def add_generator(self, generator: AbstractTestGenerator, _warned: list[int] = [0]) -> int:
         file = self.generators_dir / generator.id[:2] / f"{generator.id[2:]}.json"
         if file.exists():
-            logger.warning("Test case already added to repo")
-            return
+            logger.warning(f"Test case generator already in repo ({generator})")
+            return 0
 
         file.parent.mkdir(parents=True, exist_ok=True)
         with self.write_lock(file):
             with open(file, "w") as fh:
                 json.dump(generator.getstate(), fh, indent=2)
+
+        # Invalidate caches
+        for file in self.cache_dir.glob("*"):
+            if not _warned[0]:
+                logger.warning("Invalidated previously locked test case cache")
+                _warned[0] = 1
+            cache = json.loads(file.read_text())
+            cache["cases"] = None
+            file.write_text(json.dumps(cache))
+
+        return 1
 
     def load_testcase_generators(self) -> list[AbstractTestGenerator]:
         """Load test case generators"""
@@ -261,9 +304,10 @@ class Repo:
             finder.add(root, *paths, tolerant=True)
         finder.prepare()
         generators = finder.discover(pedantic=pedantic)
+        n: int = 0
         for generator in generators:
-            self.add_generator(generator)
-        logger.debug(f"Discovered {len(generators)} test files")
+            n += self.add_generator(generator)
+        logger.info(f"@*{{Added}} {n} new test case generators to {self.root}")
         return generators
 
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
@@ -367,6 +411,28 @@ class Repo:
             file.write_text(json.dumps(case.getstate()))
         return cases
 
+    def filter(
+        self,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: set[str] | None = None,
+        start: str | None = None,
+        case_specs: list[str] | None = None,
+        regex: str | None = None,
+    ) -> CaseSelection:
+        raise NotImplementedError
+        cases = self.load_testcases()
+        config.pluginmanager.hook.canary_testsuite_mask(
+            cases=cases,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+            start=start,
+            case_specs=case_specs,
+            ignore_dependencies=False,
+        )
+
     def lock(
         self,
         tag: str | None = None,
@@ -374,7 +440,6 @@ class Repo:
         parameter_expr: str | None = None,
         owners: set[str] | None = None,
         on_options: list[str] | None = None,
-        start: str | None = None,
         regex: str | None = None,
     ) -> CaseSelection:
         """Generate (lock) test cases from generators
@@ -406,43 +471,49 @@ class Repo:
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
-            start=start,
             case_specs=None,
+            start=None,
             ignore_dependencies=False,
         )
         for case in cases:
             self.add_testcase(case)
+
+        default = all([not bool(_) for _ in (keyword_exprs, parameter_expr, owners, regex)])
+        if tag is None and default:
+            tag = "default"
+        selected = [case for case in cases if not case.mask]
+        n = len(selected)
+        if not selected:
+            logger.warning("Empty test case selection")
         selection = CaseSelection(
-            cases=[case for case in cases if not case.mask],
+            cases=selected,
             filters={
                 "keyword_exprs": keyword_exprs,
                 "parameter_expr": parameter_expr,
                 "owners": owners,
                 "on_options": on_options,
                 "regex": regex,
-                "start": start,
             },
+            tag=tag,
         )
-        self.cache_selection(selection, tag=tag)
+        self.cache_selection(selection)
+        logger.info(f"@*{{Selected}} {n} test cases based on filtering criteria")
         return selection
 
-    def cache_selection(self, selection: CaseSelection, tag: str | None = None) -> None:
-        id = selection.sha256[:20]
-        cache_file = self.cache_dir / id[:2] / id[2:]
+    def cache_selection(self, selection: CaseSelection) -> None:
+        id = selection.sha256[:10]
+        cache_file = self.cache_dir / id
         cache = {
             "sha256": selection.sha256,
             "created_on": selection.created_on,
             "filters": selection.filters,
             "cases": [case.id for case in selection.cases],
+            "tag": selection.tag,
         }
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         cache_file.write_text(json.dumps(cache))
 
-        if tag is None:
-            if selection.is_default_selection():
-                tag = "default"
-            else:
-                tag = selection.created_on
+        tag = selection.tag
         tag_file = self.tags_dir / tag
         tag_file.parent.mkdir(parents=True, exist_ok=True)
         link = os.path.relpath(str(cache_file), str(tag_file.parent))
@@ -451,16 +522,24 @@ class Repo:
     def get_selection(self, tag: str | None = None):
         selection: CaseSelection
         if tag is None:
-            selection = self.lock()
-        else:
-            file = self.tags_dir / tag
-            relpath = file.read_text().strip()
-            cache_file = self.tags_dir / relpath
-            cache = json.loads(cache_file.read_text())
-            cases: list[TestCase] = self.load_testcases(ids=cache["cases"])
+            tag = "default"
+        file = self.tags_dir / tag
+        if tag == "default" and not file.exists():
+            logger.info("Creating default case selection")
+            selection = self.lock(tag=tag)
+            return selection
+        relpath = file.read_text().strip()
+        cache_file = self.tags_dir / relpath
+        cache = json.loads(cache_file.read_text())
+        if ids := cache.get("cases"):
+            cases: list[TestCase] = self.load_testcases(ids=ids)
             selection = CaseSelection(filters=cache["filters"], cases=cases)
             selection._sha256 = cache["sha256"]
             selection._created_on = cache["created_on"]
+            return selection
+
+        # Cache was invalidated at some point
+        selection = self.lock(tag=tag, **cache["filters"])
         return selection
 
     def add_testcase(self, case: TestCase) -> None:
@@ -477,6 +556,20 @@ class Repo:
         with self.read_lock(file):
             with file.open(mode="a") as fh:
                 fh.write(json.dumps({case.id: [dep.id for dep in case.dependencies]}) + "\n")
+
+        file = self.sessions_dir / "results.json"
+        results = json.loads(file.read_text())
+        if case.id not in results["cases"]:
+            results["cases"][case.id] = {
+                "name": case.display_name,
+                "session": None,
+                "returncode": "NA",
+                "duration": "NA",
+                "started_on": "NA",
+                "finished_on": "NA",
+                "status": {"value": case.status.value, "details": case.status.details},
+            }
+        file.write_text(json.dumps(results))
 
     def status(self) -> list[list[str]]:
         file = self.sessions_dir / "results.json"

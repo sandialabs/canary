@@ -4,11 +4,13 @@
 
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ...repo import Repo
 from ...util import logging
+from ...util.banner import print_banner
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
@@ -36,6 +38,7 @@ class Init(CanarySubcommand):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
+        print_banner(file=sys.stderr)
         repo = Repo.create(Path(args.path).absolute())
-        logger.info(f"Canary session created at {repo.root.parent}")
+        logger.info(f"Initialized empty canary session created at {repo.root}")
         return 0

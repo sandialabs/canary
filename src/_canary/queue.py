@@ -29,6 +29,7 @@ from .third_party import color
 from .util import cpu_count
 from .util import keyboard
 from .util import logging
+from .util.filesystem import working_dir
 from .util.procutils import ProcessPoolExecutor
 from .util.procutils import cleanup_children
 from .util.progress import progress

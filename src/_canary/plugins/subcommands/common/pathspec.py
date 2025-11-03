@@ -12,6 +12,8 @@ from ....third_party.color import colorize
 from ....util.filesystem import find_work_tree
 from ....util.filesystem import working_dir
 from ....util.string import strip_quotes
+from ....repo import NotARepoError
+from ....repo import Repo
 
 
 def setdefault(obj, attr, default):
@@ -33,70 +35,78 @@ class PathSpec(argparse.Action):
 
     """
 
-    def __call__(self, parser, args, values, option_string=None):
-        if self.dest == "f_pathspec":
-            work_tree = find_work_tree(os.getcwd())
-            if work_tree is not None:
-                raise ValueError(f"-f {values} is illegal in re-use mode")
-            paths = self.read_paths(values)
-            args.mode = "w"
-            args.start = None
-            setattr(args, self.dest, values)
-            setdefault(args, "paths", {}).update(paths)
+    def __call__(self, parser, namespace, values, option_string=None):
+        """When this function call exits, the following variables will be set on ``namespace``:
+
+        paths: dict[str, list[str]]
+          paths.keys() are the roots to search for new tests in
+          paths.values() are (optional) specific files to read from the associated root
+        on_options: list[str]
+          filter tests that don't contain this option spec
+        script_args: list[str]
+          arguments to pass directly to test scripts
+        keyword_exprs: list[str]
+          keyword filtering expressions
+
+        """
+        from ....testcase import TestCase
+
+        repo: Repo | None
+        try:
+            repo = Repo.load()
+        except NotARepoError:
+            repo = None
+
+        setdefault(namespace, "on_options", [])
+        setdefault(namespace, "script_args", [])
+        setdefault(namespace, "keyword_exprs", [])
+        setdefault(namespace, "paths", {})
+        setdefault(namespace, "tag", None)
+        setdefault(namespace, "casespecs", None)
+
+        if option_string == "-f":
+            namespace.paths.update(self.read_paths(values))
             return
 
         ns = self.parse(values)
-        if not ns.pathspec and getattr(args, "f_pathspec", None):
-            # use values from file only
-            return
         if ns.on_options:
-            setdefault(args, "on_options", []).extend(ns.on_options)
+            namespace.on_options.extend(ns.on_options)
         if ns.off_options:
-            setdefault(args, "off_options", []).extend(ns.off_options)
+            namespace.off_options.extend(ns.off_options)
         if ns.script_args:
-            setdefault(args, "script_args", []).extend(ns.script_args)
+            namespace.script_args.extend(ns.script_args)
         if ns.keyword_exprs:
-            setdefault(args, "keyword_exprs", []).extend(ns.keyword_exprs)
-        args.pathspec = ns.pathspec
+            namespace.keyword_exprs.extend(ns.keyword_exprs)
 
-        work_tree = find_work_tree(os.getcwd())
-        if work_tree is None:
-            args.mode = "w"
-            args.start = None
-            self.parse_new_session(args)
-            return
+        pathspec: list[str] = ns.pathspec or []
+        for path in pathspec:
+            if os.path.isfile(path) and path.endswith("testcases.lock"):
+                raise NotImplementedError
+            elif repo is not None and repo.is_tag(path):
+                namespace.tag = path
+            elif TestCase.spec_like(path):
+                setdefault(namespace, "casespecs", []).append(p)
+            elif os.path.isfile(path) and is_test_file(path):
+                root, name = os.path.split(os.path.abspath(path))
+                namespace.paths.setdefault(root, []).append(name)
+            elif os.path.isdir(path):
+                namespace.paths.setdefault(path, [])
+            elif path.startswith(("git@", "repo@")):
+                if not os.path.isdir(path.partition("@")[2]):
+                    p = path.partition("@")[2]
+                    raise ValueError(f"{p}: no such file or directory")
+                namespace.paths.setdefault(path, [])
+            elif os.pathsep in path and os.path.exists(path.replace(os.pathsep, os.path.sep)):
+                # allow specifying as root:name
+                root, name = path.split(os.pathsep, 1)
+                namespace.paths.setdefault(root, []).append(name.replace(os.pathsep, os.path.sep))
+            else:
+                raise ValueError(f"{path}: no such file or directory")
 
-        assert work_tree is not None
-        if f := getattr(args, "f_pathspec", None):
-            raise ValueError(f"-f {f} is illegal in re-use mode")
-        if getattr(args, "wipe", None):
-            raise ValueError("-w option is illegal in re-use mode")
-        if getattr(args, "work_tree", None):
-            raise ValueError(f"-d {args.work_tree} option is illegal in re-use mode")
+        if namespace.casespecs and namespace.paths and namespace.tag is not None:
+            raise ValueError("do not mix /hash and other pathspec arguments")
 
-        args.work_tree = work_tree
-        case_specs, path = self.parse_in_session(ns.pathspec)
-        args.start = None
-        args.mode = "a"
-        args.case_specs = case_specs or None
-        if path is not None:
-            if not path.startswith(args.work_tree):  # type: ignore
-                raise ValueError("path arg must be a child of the work tree")
-            args.start = os.path.relpath(path, args.work_tree)
-            if os.path.isfile(path):
-                if is_test_file(path):
-                    name = os.path.splitext(os.path.basename(path))[0]
-                    setdefault(args, "keyword_exprs", []).append(name)
-                else:
-                    raise ValueError(f"{path}: unrecognized file extension")
-            elif getattr(args, "keyword_exprs", None) is None:
-                kwds = []
-                for f in os.listdir(path):
-                    if is_test_file(f):
-                        name = os.path.splitext(os.path.basename(f))[0]
-                        kwds.append(name)
-                if kwds:
-                    args.keyword_exprs = kwds
+        return
 
     @staticmethod
     def setup_parser(parser: Parser) -> None:
@@ -146,62 +156,6 @@ class PathSpec(argparse.Action):
             else:
                 namespace.pathspec.append(item)
         return namespace
-
-    @staticmethod
-    def parse_new_session(args: argparse.Namespace) -> None:
-        paths: dict[str, list[str]] = {}
-        pathspec: list[str] = args.pathspec
-        if not pathspec:
-            paths.setdefault(os.getcwd(), [])
-            setdefault(args, "paths", {}).update(paths)
-            return
-        for path in pathspec:
-            if os.path.isfile(path) and path.endswith("testcases.lock"):
-                if len(pathspec) > 1:
-                    raise ValueError("lock file consumption incompatible with other path args")
-                setdefault(args, "paths", {}).update(paths)
-                args.testcases_lock = path
-                return
-            if os.path.isfile(path) and is_test_file(path):
-                root, name = os.path.split(os.path.abspath(path))
-                paths.setdefault(root, []).append(name)
-            elif os.path.isdir(path):
-                paths.setdefault(path, [])
-            elif path.startswith(("git@", "repo@")):
-                if not os.path.isdir(path.partition("@")[2]):
-                    p = path.partition("@")[2]
-                    raise ValueError(f"{p}: no such file or directory")
-                paths.setdefault(path, [])
-            elif os.pathsep in path and os.path.exists(path.replace(os.pathsep, os.path.sep)):
-                # allow specifying as root:name
-                root, name = path.split(os.pathsep, 1)
-                paths.setdefault(root, []).append(name.replace(os.pathsep, os.path.sep))
-            else:
-                raise ValueError(f"{path}: no such file or directory")
-        setdefault(args, "paths", {}).update(paths)
-        return
-
-    @staticmethod
-    def parse_in_session(values: list[str]) -> tuple[list[str], str | None]:
-        from ....testcase import TestCase
-
-        paths: list[str] = []
-        case_specs: list[str] = []
-        path: str | None = None
-        for p in values:
-            if TestCase.spec_like(p):
-                case_specs.append(p)
-            else:
-                paths.append(p)
-        if len([1 for _ in (case_specs, paths) if _]) > 1:
-            raise ValueError("do not mix /hash and other pathspec arguments")
-        if len(paths) > 1:
-            raise ValueError("incompatible input path arguments")
-        if paths:
-            path = os.path.abspath(paths.pop(0))
-            if not os.path.exists(path):
-                raise ValueError(f"{path}: no such file or directory")
-        return case_specs, path
 
     @staticmethod
     def read_paths(file: str) -> dict[str, list[str]]:

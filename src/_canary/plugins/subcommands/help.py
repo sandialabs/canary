@@ -24,10 +24,13 @@ class Help(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         parser.add_argument("--all", action="store_true", help="list all commands and options")
         parser.add_argument("--pathspec", action="store_true", help="help on path spec syntax")
+        parser.add_argument("--pathfile", action="store_true", help="help on path file syntax")
 
     def execute(self, args: argparse.Namespace) -> int:
         if args.pathspec:
             self.print_pathspec_help(args)
+        elif args.pathfile:
+            self.print_pathfile_help(args)
         else:
             self.print_command_help(args)
         return 0
@@ -45,6 +48,12 @@ class Help(CanarySubcommand):
 
     @staticmethod
     def print_pathspec_help(args: argparse.Namespace) -> None:
-        from .common.pathspec import PathSpec
+        from .add import pathspec
 
-        print(PathSpec.description())
+        print(pathspec.pathspec_help())
+
+    @staticmethod
+    def print_pathfile_help(args: argparse.Namespace) -> None:
+        from .add import pathspec
+
+        print(pathspec.pathfile_help())
