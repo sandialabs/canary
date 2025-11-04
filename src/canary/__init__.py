@@ -24,6 +24,7 @@ from _canary.plugins.hookspec import hookspec
 from _canary.plugins.manager import CanaryPluginManager
 from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
+from _canary.repo import Repo
 from _canary.session import Session
 from _canary.testcase import DependencyPatterns
 from _canary.testcase import TestCase

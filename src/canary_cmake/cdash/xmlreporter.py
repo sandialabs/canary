@@ -34,9 +34,11 @@ class CDashXMLReporter:
         self.notes: dict[str, str] = {}
 
     @classmethod
-    def from_session(cls, session: "canary.Session", dest: str | None = None) -> "CDashXMLReporter":
-        self = cls(dest=dest or os.path.join(session.work_tree, "CDASH"))
-        for case in session.active_cases():
+    def from_repo(cls, dest: str | None = None) -> "CDashXMLReporter":
+        repo = canary.Repo.load()
+        cases = repo.load_testcases(latest=True)
+        self = cls(dest=dest or os.path.join(str(repo.sessions_dir), "CDASH"))
+        for case in cases:
             self.data.add_test(case)
         return self
 

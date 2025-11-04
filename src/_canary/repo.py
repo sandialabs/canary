@@ -322,14 +322,14 @@ class Repo:
         logger.info(f"@*{{Added}} {n} new test case generators to {self.root}")
         return generators
 
-    def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
-        """Load test cases previously dumped by ``dump_testcases``.  Dependency resolution is also
-        performed
+    def load_testcases(self, ids: list[str] | None = None, latest: bool = False) -> list[TestCase]:
+        """Load cached test cases.  Dependency resolution is performed.  If ``latest is True``,
+        update each case to point to the latest run instance.
         """
         msg = "@*{Loading} test cases"
         start = time.monotonic()
         logger.log(logging.DEBUG, msg, extra={"end": "..."})
-        cases: dict[str, TestCase | TestMultiCase] = {}
+        casemap: dict[str, TestCase | TestMultiCase] = {}
         try:
             file = self.cases_dir / "index.jsons"
             # index format: {ID: [DEPS_IDS]}
@@ -354,9 +354,9 @@ class Repo:
                     state = json.loads(file.read_text())
                 for i, dep_state in enumerate(state["properties"]["dependencies"]):
                     # assign dependencies from existing dependencies
-                    state["properties"]["dependencies"][i] = cases[dep_state["properties"]["id"]]
-                cases[id] = testcase_from_state(state)
-                assert id == cases[id].id
+                    state["properties"]["dependencies"][i] = casemap[dep_state["properties"]["id"]]
+                casemap[id] = testcase_from_state(state)
+                assert id == casemap[id].id
         except Exception:
             state = "failed"
             raise
@@ -366,7 +366,11 @@ class Repo:
             end = "... %s (%.2fs.)\n" % (state, time.monotonic() - start)
             extra = {"end": end, "rewind": True}
             logger.log(logging.DEBUG, msg, extra=extra)
-        return list(cases.values())
+        cases = list(casemap.values())
+        if not latest:
+            return cases
+        self.update_testcases(cases)
+        return [case for case in cases if not case.mask]
 
     def update_testcases(self, cases: list[TestCase]) -> None:
         """Update cases in ``cases`` with their latest results"""
@@ -382,6 +386,8 @@ class Repo:
                         "status": latest["status"],
                     }
                     case.update(**attrs)
+            elif not case.mask:
+                case.mask = "Case results not found in any test sessions"
 
     def select_testcases_by_spec(self, specs: list[str], tag: str | None = None) -> CaseSelection:
         ids: list[str] = []

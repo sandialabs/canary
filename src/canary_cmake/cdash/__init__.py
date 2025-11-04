@@ -231,14 +231,12 @@ class CDashReporter(canary.CanaryReporter):
         )
         return
 
-    def create(self, session: "canary.Session | None" = None, **kwargs: Any) -> None:
+    def create(self, **kwargs: Any) -> None:
         reporter: CDashXMLReporter
         if kwargs.get("json"):
             reporter = CDashXMLReporter.from_json(file=kwargs["json"], dest=kwargs["dest"])
         else:
-            if session is None:
-                raise ValueError("canary report html: session required")
-            reporter = CDashXMLReporter.from_session(session, dest=kwargs["dest"])
+            reporter = CDashXMLReporter.from_repo(dest=kwargs["dest"])
         if kwargs["f"]:
             opts = dict(
                 buildstamp=kwargs["buildstamp"],

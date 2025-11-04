@@ -35,8 +35,7 @@ class MarkdownReporter(CanaryReporter):
 
     def create(self, **kwargs: Any) -> None:
         repo = Repo.load()
-        cases = repo.load_testcases()
-        repo.update_testcases(cases)
+        cases = repo.load_testcases(latest=True)
         dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=repo.sessions_dir)
         self.md_dir = os.path.join(dest, self.default_output)
         self.index = os.path.join(dest, "canary-report.md")

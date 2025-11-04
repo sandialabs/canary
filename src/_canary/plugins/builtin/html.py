@@ -34,8 +34,7 @@ class HTMLReporter(CanaryReporter):
 
     def create(self, **kwargs: Any) -> None:
         repo = Repo.load()
-        cases = repo.load_testcases()
-        repo.update_testcases(cases)
+        cases = repo.load_testcases(latest=True)
         dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=repo.session_dir)
         self.html_dir = os.path.join(dest, "HTML")
         self.cases_dir = os.path.join(self.html_dir, "cases")
