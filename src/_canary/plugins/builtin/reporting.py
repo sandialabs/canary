@@ -23,7 +23,7 @@ from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...session import Session
+    from ...repo import Repo
     from ...testcase import TestCase
 
 
@@ -128,9 +128,9 @@ def print_runtests_durations(cases: list["TestCase"], include_pass: bool, trunca
 
 
 @hookimpl(specname="canary_statusreport")
-def print_statusreport_durations(session: "Session") -> None:
+def print_statusreport_durations(repo: "Repo") -> None:
     if N := config.getoption("durations"):
-        print_durations(session.active_cases(), N)
+        print_durations(repo.active_testcases(), N)
 
 
 @hookimpl(specname="canary_runtests_summary", trylast=True)
@@ -142,17 +142,17 @@ def runtests_footer(
 
 
 @hookimpl(specname="canary_statusreport", trylast=True)
-def status_footer(session: "Session") -> None:
+def status_footer(repo: "Repo") -> None:
     """Return a short, high-level, summary of test results"""
-    cases = session.active_cases()
+    cases = repo.active_testcases()
     print_footer(cases, "Summary")
 
 
 @hookimpl(specname="canary_statusreport", tryfirst=True)
-def runtest_report_status(session: "Session") -> None:
+def runtest_report_status(repo: "Repo") -> None:
     report_chars = config.getoption("report_chars") or "dftns"
     sortby = config.getoption("sort_by", "duration")
-    cases_to_show = determine_cases_to_show(session, report_chars)
+    cases_to_show = determine_cases_to_show(repo, report_chars)
     if cases_to_show:
         file = io.StringIO()
         totals: dict[str, list["TestCase"]] = {}
@@ -215,11 +215,11 @@ def sort_cases_by(cases: list["TestCase"], field="duration") -> list["TestCase"]
 
 
 def determine_cases_to_show(
-    session: "Session", report_chars: str, pathspec: str | None = None
+    repo: "Repo", report_chars: str, pathspec: str | None = None
 ) -> list["TestCase"]:
     from ...testcase import TestCase
 
-    cases: list["TestCase"] = session.cases
+    cases: list["TestCase"] = repo.load_testcases(latest=True)
     cases_to_show: list["TestCase"]
     rc = set(report_chars)
     if pathspec is not None:
@@ -228,7 +228,7 @@ def determine_cases_to_show(
             rc.add("A")
         else:
             pathspec = os.path.abspath(pathspec)
-            if pathspec != session.work_tree:
+            if pathspec != repo.root:
                 cases = [c for c in cases if c.working_directory.startswith(pathspec)]
     if "A" in rc:
         if "x" in rc:
@@ -270,11 +270,11 @@ def determine_cases_to_show(
 
 
 @hookimpl(specname="canary_session_finish", trylast=True)
-def show_capture(session: "Session", exitstatus: int) -> None:
+def show_capture(repo: "Repo", exitstatus: int) -> None:
     what = config.getoption("show_capture")
     if what in ("no", None):
         return
-    cases = session.active_cases()
+    cases = repo.active_testcases()
     failed = [case for case in cases if not case.status.satisfies(("success", "xdiff", "xfail"))]
     if failed:
         _, width = terminal_size()

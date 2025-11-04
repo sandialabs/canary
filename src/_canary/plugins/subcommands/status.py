@@ -29,7 +29,6 @@ class Status(CanarySubcommand):
     description = "Print information about a test run"
 
     def setup_parser(self, parser: "Parser"):
-        parser.epilog = self.in_session_note()
         parser.add_argument(
             "--durations",
             nargs="?",

@@ -169,12 +169,6 @@ def filter_cases_by_status(cases: list["TestCase"], status: tuple | str) -> list
     return [c for c in cases if c.status.value in status]
 
 
-def load_session(root: str | None = None, mode: str = "r"):
-    from ....session import Session
-
-    return Session(root or os.getcwd(), mode=mode)
-
-
 def bold(arg: str) -> str:
     if os.getenv("COLOR_WHEN", "auto") == "never":
         return f"**{arg}**"

@@ -25,7 +25,6 @@ class Report(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         from ... import config
 
-        parser.epilog = self.in_session_note()
         subparsers = parser.add_subparsers(dest="type", metavar="subcommands")
         for reporter in config.pluginmanager.hook.canary_session_reporter():
             parent = subparsers.add_parser(reporter.type, help=reporter.description)

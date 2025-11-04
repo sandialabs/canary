@@ -9,9 +9,9 @@ import json
 import os
 from typing import TYPE_CHECKING
 
+from ...repo import Repo
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -28,7 +28,6 @@ class Log(CanarySubcommand):
     description = "Show the session or a test case's log file"
 
     def setup_parser(self, parser: "Parser") -> None:
-        parser.epilog = self.in_session_note()
         parser.add_argument(
             "-e",
             "--error",
@@ -55,13 +54,12 @@ class Log(CanarySubcommand):
             return case.stdout_file
 
     def execute(self, args: argparse.Namespace) -> int:
-        from ...testcase import from_id as testcase_from_id
 
-        file: str
+        repo = Repo.load()
+
         if not args.testspec:
-            session = load_session(mode="r+")
-            file = os.path.join(session.config_dir, "canary-log.txt")
-            if os.path.exists(file):
+            file = repo.logs_dir / "canary-log.txt"
+            if file.exists():
                 text: str
                 if args.raw:
                     text = open(file).read()
@@ -69,22 +67,16 @@ class Log(CanarySubcommand):
                     text = reconstruct_log(file)
                 page_text(text)
                 return 0
-            raise ValueError(f"no log file found in {session.config_dir}")
+            raise ValueError(f"no log file found in {repo.root}")
 
-        if args.testspec.startswith("/"):
-            case = testcase_from_id(args.testspec[1:])
-            file = self.get_logfile(case, args)
-            display_file(file)
-            return 0
-
-        session = load_session()
-        for case in session.cases:
+        cases = repo.load_testcases(latest=True)
+        for case in cases:
             if case.matches(args.testspec):
                 file = self.get_logfile(case, args)
                 display_file(file)
                 return 0
 
-        raise ValueError(f"{args.testspec}: no matching test found in {session.work_tree}")
+        raise ValueError(f"{args.testspec}: no matching test found in {repo.root}")
 
 
 def reconstruct_log(file: str) -> str:

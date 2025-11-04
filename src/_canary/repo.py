@@ -153,6 +153,7 @@ class Repo:
         self.sessions_dir = self.root / "sessions"
         self.cache_dir = self.root / "cache"
         self.tags_dir = self.root / "tags"
+        self.logs_dir = self.root / "logs"
         self.head = self.root / "HEAD"
         self.lockfile = self.root / "lock"
         self.init()
@@ -163,6 +164,7 @@ class Repo:
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.tags_dir.mkdir(parents=True, exist_ok=True)
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.refs_dir.mkdir(parents=True, exist_ok=True)
         latest = self.sessions_dir / "results.json"
         if not latest.exists():
@@ -308,6 +310,10 @@ class Repo:
             logger.log(logging.DEBUG, msg, extra=extra)
         return generators
 
+    def active_testcases(self) -> list[TestCase]:
+        cases = self.load_testcases(latest=True)
+        return cases
+
     def collect_testcase_generators(
         self, scan_paths: dict[str, list[str]], pedantic: bool = True
     ) -> list[AbstractTestGenerator]:
@@ -417,6 +423,45 @@ class Repo:
         )
         self.cache_selection(selection)
         return selection
+
+    def filter(
+        self,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: set[str] | None = None,
+        regex: str | None = None,
+        start: str | None = None,
+        case_specs: list[str] | None = None,
+    ) -> None:
+        """Filter test cases (mask test cases that don't meet a specific criteria)
+
+        Args:
+          keyword_exprs: Include those tests matching this keyword expressions
+          parameter_expr: Include those tests matching this parameter expression
+          start: The starting directory the python session was invoked in
+          case_specs: Include those tests matching these specs
+
+        Returns:
+          A list of test cases
+
+        """
+        cases = self.active_testcases()
+        config.pluginmanager.hook.canary_testsuite_mask(
+            cases=cases,
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            regex=regex,
+            case_specs=case_specs,
+            start=start,
+            ignore_dependencies=False,
+        )
+        for case in static_order(cases):
+            config.pluginmanager.hook.canary_testcase_modify(case=case)
+        for case in cases:
+            if not case.wont_run():
+                case.mark_as_ready()
+        config.pluginmanager.hook.canary_collectreport(cases=cases)
 
     def stage(
         self,

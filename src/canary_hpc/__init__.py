@@ -105,7 +105,6 @@ class Batch(canary.CanarySubcommand):
     description = "Manage and run job batches"
 
     def setup_parser(self, parser: canary.Parser):
-        parser.epilog = self.in_session_note()
         subparsers = parser.add_subparsers(dest="batch_cmd", title="subcommands", metavar="")
 
         p = subparsers.add_parser("location", help="Print the location of the batch")

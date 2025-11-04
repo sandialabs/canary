@@ -29,12 +29,11 @@ class Rebaseline(CanarySubcommand):
     description = "Rebaseline tests"
 
     def setup_parser(self, parser: "Parser") -> None:
-        parser.epilog = self.in_session_note()
         add_filter_arguments(parser)
         PathSpec.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
-        from ...session import Session
+        from ...repo import Repo
 
         if getattr(args, "work_tree", None) is None:
             raise ValueError("rebaseline must be executed in a canary work tree")
@@ -44,13 +43,13 @@ class Rebaseline(CanarySubcommand):
             args.keyword_exprs = ["diff"]
 
         logger.log(logging.EMIT, banner(), extra={"prefix": ""})
-        session = Session(args.work_tree, mode="r")
-        session.filter(
+        repo = Repo.load()
+        cases = repo.filter(
             start=args.start,
             keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,
             case_specs=getattr(args, "case_specs", None),
         )
-        for case in session.active_cases():
+        for case in cases:
             case.do_baseline()
         return 0

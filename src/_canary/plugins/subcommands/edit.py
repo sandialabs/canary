@@ -6,10 +6,11 @@ import argparse
 import os
 from typing import TYPE_CHECKING
 
+from ...repo import NotARepoError
+from ...repo import Repo
 from ...util.editor import editor
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -45,10 +46,11 @@ def find_file(testspec: str) -> str | None:
     except Exception:  # nosec B110
         pass
     try:
-        session = load_session()
-    except Exception:
+        repo = Repo.load()
+    except NotARepoError:
         return None
-    for case in session.cases:
+    cases = repo.load_testcases(latest=True)
+    for case in cases:
         if case.matches(testspec):
             return case.file
     return None
