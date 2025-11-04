@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import os
 from argparse import Namespace
 from typing import TYPE_CHECKING
 
@@ -34,8 +33,6 @@ class Report(CanarySubcommand):
 
     def execute(self, args: Namespace) -> int:
         from ... import config
-        from ...repo import NotARepoError
-        from ...repo import Repo
 
         reporter: CanaryReporter
         for reporter in config.pluginmanager.hook.canary_session_reporter():

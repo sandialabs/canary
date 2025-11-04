@@ -565,8 +565,10 @@ class Repo:
         table: list[list[str]] = []
         header = ["ID", "Name", "Session", "Exit Code", "Duration", "Status", "Details"]
         widths: list[int] = [len(_) for _ in header]
+
         def dformat(arg) -> str:
             return "NA" if arg < 0 else f"{arg:.02f}"
+
         for id, entry in results["cases"].items():
             # status = Status(entry["status"]["value"], entry["status"]["details"])
             row = [

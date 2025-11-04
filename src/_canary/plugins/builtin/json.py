@@ -4,14 +4,11 @@
 
 import json
 import os
-from typing import TYPE_CHECKING
 from typing import Any
 
+from ...repo import Repo
 from ..hookspec import hookimpl
 from ..types import CanaryReporter
-
-if TYPE_CHECKING:
-    from ...session import Session
 
 
 @hookimpl
@@ -24,13 +21,13 @@ class JsonReporter(CanaryReporter):
     description = "JSON reporter"
     default_output = "canary.json"
 
-    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
-        if session is None:
-            raise ValueError("canary report json: session required")
-
+    def create(self, **kwargs: Any) -> None:
+        repo = Repo.load()
+        cases = repo.load_testcases()
+        repo.update_testcases(cases)
         file = os.path.abspath(kwargs["output"] or self.default_output)
         data: dict = {}
-        for case in session.cases:
+        for case in cases:
             data[case.id] = case.getstate()
         with open(file, "w") as fh:
             json.dump(data, fh, indent=2)

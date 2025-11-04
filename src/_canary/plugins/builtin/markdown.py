@@ -9,12 +9,12 @@ from typing import Any
 from typing import TextIO
 
 from ... import config
+from ...repo import Repo
 from ...util import logging
 from ...util.filesystem import force_remove
 from ...util.filesystem import mkdirp
 from ..hookspec import hookimpl
 from ..types import CanaryReporter
-from ...repo import Repo
 
 if TYPE_CHECKING:
     from ...testcase import TestCase
