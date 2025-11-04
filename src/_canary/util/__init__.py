@@ -21,7 +21,7 @@ def cpu_count(logical: bool | None = None) -> int:
     return count
 
 
-def kill_tree(proc: psutil.Process | None) -> None:
+def kill_process_tree(proc: psutil.Process | None) -> None:
     """kill a process tree rooted by `proc`"""
     if proc is None:
         return
