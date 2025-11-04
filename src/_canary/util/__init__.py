@@ -21,18 +21,28 @@ def cpu_count(logical: bool | None = None) -> int:
     return count
 
 
+def _kill_child_processes(proc: psutil.Process) -> None:
+    try:
+        children: list[psutil.Process] = proc.children(recursive=True)
+    except psutil.NoSuchProcess:
+        children = []
+        logger.debug(f"--> no child processes (root={proc.pid})")
+
+    for child in children:
+        try:
+            child.kill()
+            logger.debug(f"--> killed child process ({child.pid}, root={proc.pid})")
+        except psutil.NoSuchProcess:
+            pass
+
+
 def kill_process_tree(proc: psutil.Process | None) -> None:
     """kill a process tree rooted by `proc`"""
     if proc is None:
         return
 
     logger.debug(f"Killing process tree (root={proc.pid})")
-    for child in proc.children(recursive=True):
-        try:
-            child.kill()
-            logger.debug(f"--> killed child process ({child.pid}, root={proc.pid})")
-        except psutil.NoSuchProcess:
-            pass
+    _kill_child_processes(proc)
     try:
         proc.kill()
     except psutil.NoSuchProcess as e:
