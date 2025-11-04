@@ -1445,7 +1445,10 @@ class TestCase(AbstractTestCase):
 
     def update(self, **attrs):
         for name, value in attrs.items():
-            setattr(self, name, value)
+            if name == "status":
+                self.status = Status(value["value"], details=value["details"])
+            else:
+                setattr(self, name, value)
 
     @contextmanager
     def rc_environ(self, **env: str) -> Generator[None, None, None]:

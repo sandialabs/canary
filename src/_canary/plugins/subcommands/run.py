@@ -119,7 +119,7 @@ class Run(CanarySubcommand):
         if args.runtag:
             selection = repo.get_selection(args.runtag)
         elif args.casespecs:
-            selection = repo.select_testcases(args.casespecs, tag=args.tag)
+            selection = repo.select_testcases_by_spec(args.casespecs, tag=args.tag)
         elif args.paths:
             parsing_policy = config.getoption("parsing_policy") or "pedantic"
             repo.collect_testcase_generators(args.paths, pedantic=parsing_policy)

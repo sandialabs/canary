@@ -34,8 +34,8 @@ class Report(CanarySubcommand):
 
     def execute(self, args: Namespace) -> int:
         from ... import config
-        from ...session import NotASession
-        from ...session import Session
+        from ...repo import NotARepoError
+        from ...repo import Repo
 
         reporter: CanaryReporter
         for reporter in config.pluginmanager.hook.canary_session_reporter():
@@ -44,12 +44,6 @@ class Report(CanarySubcommand):
         else:
             raise ValueError(f"canary report: unknown report type {args.type!r}")
 
-        session: Session | None
-        try:
-            session = Session(os.getcwd(), mode="r")
-        except NotASession:
-            session = None
         kwargs = vars(args)
         action = getattr(reporter, args.action.replace("-", "_"), reporter.not_implemented)
-        action(session, **kwargs)
-        return 0
+        action(**kwargs)

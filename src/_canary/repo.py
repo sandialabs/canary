@@ -131,7 +131,7 @@ class Session:
             results[case.id] = {
                 "name": case.display_name,
                 "returncode": case.returncode,
-                "duration": "NA" if case.duration < 0 else case.duration,
+                "duration": case.duration,
                 "started_on": timeformat(case.start),
                 "finished_on": timeformat(case.stop),
                 "working_directory": case.working_directory,
@@ -368,85 +368,22 @@ class Repo:
             logger.log(logging.DEBUG, msg, extra=extra)
         return list(cases.values())
 
-    def get_testcases(
-        self,
-        generators: list[AbstractTestGenerator],
-        on_options: list[str] | None = None,
-    ) -> list[TestCase]:
-        cases: list[TestCase] = []
-        generators = self.load_testcase_generators()
-
-        case_ids: set[str] = set()
-        remaining = []
-        for generator in generators:
-            file = Path(self.generators_dir) / generator.id[:2] / f"{generator.id[2:]}.json"
-            f = file.with_suffix(".cache")
-            if f.exists():
-                cache = json.loads(f.read_text())
-                for entry in cache:
-                    if entry["on_options"] == on_options:
-                        case_ids.update(entry["cases"])
-                        break
-                else:
-                    remaining.append(generator)
-
-        if case_ids:
-            cases = self.load_testcases(ids=case_ids)
-
-        if remaining:
-            cases = generate_test_cases(remaining, on_options=on_options)
-
-        groups: dict[str, list[TestCase]] = {}
-        map = {Path(generator.file).absolute(): generator.id for generator in generators}
+    def update_testcases(self, cases: list[TestCase]) -> None:
+        """Update cases in ``cases`` with their latest results"""
+        file = self.sessions_dir / "results.json"
+        results = json.loads(file.read_text())
         for case in cases:
-            for f in map:
-                if f.samefile(case.file):
-                    groups.setdefault(f, []).append(case)
-                    break
-            else:
-                raise ValueError(f"Could not find generator for {case}")
-        for f, values in groups.items():
-            id = map[f]
-            file = Path(self.generators_dir) / id[:2] / f"{id[2:]}.cases.json"
-            cache: list[dict] = []
-            if file.exists():
-                cache = json.loads(file.read_text())
-            for entry in cache:
-                if entry["on_options"] == on_options:
-                    break
-            else:
-                cache.append({"on_options": on_options, "cases": [case.id for case in values]})
-            file.write_text(json.dumps(cache, indent=2))
-        for case in cases:
-            file = self.cases_dir / case.id[:2] / f"{case.id[2:]}.json"
-            file.parent.mkdir(parents=True, exist_ok=True)
-            file.write_text(json.dumps(case.getstate()))
-        return cases
+            if latest := results["cases"].get(case.id):
+                if session := latest["session"]:
+                    attrs = {
+                        "session": str(self.sessions_dir / session / "work"),
+                        "start": parsetime(latest["started_on"]),
+                        "stop": parsetime(latest["finished_on"]),
+                        "status": latest["status"],
+                    }
+                    case.update(**attrs)
 
-    def filter(
-        self,
-        keyword_exprs: list[str] | None = None,
-        parameter_expr: str | None = None,
-        owners: set[str] | None = None,
-        start: str | None = None,
-        case_specs: list[str] | None = None,
-        regex: str | None = None,
-        tag: str | None = None,
-    ) -> CaseSelection:
-        raise NotImplementedError
-        cases = self.load_testcases()
-        config.pluginmanager.hook.canary_testsuite_mask(
-            cases=cases,
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            regex=regex,
-            start=start,
-            case_specs=case_specs,
-            ignore_dependencies=False,
-        )
-
-    def select_testcases(self, specs: list[str], tag: str | None = None) -> CaseSelection:
+    def select_testcases_by_spec(self, specs: list[str], tag: str | None = None) -> CaseSelection:
         ids: list[str] = []
         for spec in specs:
             if spec.startswith("/"):
@@ -483,6 +420,7 @@ class Repo:
         owners: set[str] | None = None,
         on_options: list[str] | None = None,
         regex: str | None = None,
+        **kwargs: Any,
     ) -> CaseSelection:
         """Generate (lock) test cases from generators
 
@@ -614,7 +552,7 @@ class Repo:
                 "name": case.display_name,
                 "session": None,
                 "returncode": "NA",
-                "duration": "NA",
+                "duration": -1,
                 "started_on": "NA",
                 "finished_on": "NA",
                 "status": {"value": case.status.value, "details": case.status.details},
@@ -627,6 +565,8 @@ class Repo:
         table: list[list[str]] = []
         header = ["ID", "Name", "Session", "Exit Code", "Duration", "Status", "Details"]
         widths: list[int] = [len(_) for _ in header]
+        def dformat(arg) -> str:
+            return "NA" if arg < 0 else f"{arg:.02f}"
         for id, entry in results["cases"].items():
             # status = Status(entry["status"]["value"], entry["status"]["details"])
             row = [
@@ -634,7 +574,7 @@ class Repo:
                 entry["name"],
                 entry["session"],
                 entry["returncode"],
-                entry["duration"],
+                dformat(entry["duration"]),
                 entry["status"]["value"],
                 entry["status"]["details"] or "",
             ]
@@ -760,6 +700,11 @@ def timeformat(dt: float | datetime.datetime) -> str:
     if isinstance(dt, (float, int)):
         dt = datetime.datetime.fromtimestamp(dt)
     return dt.strftime("%Y-%m-%dT%H-%M-%S.%f")
+
+
+def parsetime(string: str) -> float:
+    dt = datetime.datetime.strptime(string, "%Y-%m-%dT%H-%M-%S.%f")
+    return dt.timestamp()
 
 
 class NotARepoError(Exception):
