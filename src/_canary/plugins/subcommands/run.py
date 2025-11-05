@@ -118,29 +118,28 @@ class Run(CanarySubcommand):
         if args.runtag:
             selection = workspace.get_selection(args.runtag)
         elif args.casespecs:
-            selection = workspace.select_testcases(args.casespecs, tag=args.tag)
+            selection = workspace.get_testcases_by_spec(args.casespecs, tag=args.tag)
         elif args.paths:
             parsing_policy = config.getoption("parsing_policy") or "pedantic"
             workspace.add(args.paths, pedantic=parsing_policy == "pedantic")
-            tag = workspace.tag(
-                args.tag,
+            selection = workspace.make_selection(
+                tag=args.tag,
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
                 on_options=args.on_options,
                 regex=args.regex_filter,
             )
-            selection = workspace.get_selection(tag)
         else:
             if any((args.keyword_exprs, args.parameter_expr, args.on_options, args.regex_filter)):
-                tag = workspace.tag(
-                    args.tag,
+                selection = workspace.make_selection(
+                    tag=args.tag,
                     keyword_exprs=args.keyword_exprs,
                     parameter_expr=args.parameter_expr,
                     on_options=args.on_options,
                     regex=args.regex_filter,
                 )
-                selection = workspace.get_selection(tag)
             else:
+                # Get the default selection
                 selection = workspace.get_selection()
 
         # FIXME: env_mods = config.getoption("env_mods") or {}

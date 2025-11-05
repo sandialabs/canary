@@ -41,7 +41,7 @@ session_tag = "VIEW.TAG"
 @dataclasses.dataclass
 class CaseSelection:
     cases: list[TestCase]
-    tag: str
+    tag: str | None
     _sha256: str = dataclasses.field(init=False)
     _created_on: str = dataclasses.field(init=False)
 
@@ -50,9 +50,6 @@ class CaseSelection:
         text = json.dumps({"tag": self.tag, "cases": cases})
         self._sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
         self._created_on = datetime.datetime.now().isoformat(timespec="microseconds")
-
-        if self.tag is None:
-            self.tag = self._created_on
 
     @property
     def sha256(self) -> str:
@@ -146,15 +143,14 @@ class Session:
         paths = {id: str(self.work_dir / p) for id, p in data["paths"].items()}
         return load_testcases(data["index"], paths, ids=ids)
 
-    def select(self, ids: list[str] | None = None) -> list[TestCase]:
-        if ids is None:
-            return self.cases
-        elif self._cases is None:
-            return self.load_testcases(ids=ids)
-        return [case for case in self._cases if case.id in ids]
-
     def get_ready(self, ids: list[str] | None) -> list[TestCase]:
-        cases = self.select(ids=ids)
+        cases: list[TestCase]
+        if ids is None:
+            cases = self.cases
+        elif self._cases is None:
+            cases = self.load_testcases(ids=ids)
+        else:
+            cases = [case for case in self._cases if case.id in ids]
         ready: list[TestCase] = []
         for case in cases:
             if case.wont_run():
@@ -516,13 +512,16 @@ class Workspace:
             n += self._add_generator(generator)
         # Invalidate caches
         warned = False
-        for file in self.cache_dir.glob("*"):
-            if not warned:
-                logger.info("Invalidating previously locked test case cache")
-                warned = True
-            cache = json.loads(file.read_text())
-            cache["cases"] = None
-            file.write_text(json.dumps(cache))
+        if (self.cache_dir / "select").exists():
+            for file in (self.cache_dir / "select").iterdir():
+                if not file.is_file():
+                    continue
+                if not warned:
+                    logger.info("Invalidating previously locked test case cache")
+                    warned = True
+                cache = json.loads(file.read_text())
+                cache["cases"] = None
+                file.write_text(json.dumps(cache))
         logger.info(f"@*{{Added}} {n} new test case generators to {self.root}")
         return generators
 
@@ -541,6 +540,14 @@ class Workspace:
             return cases
         self.update_testcases(cases)
         return cases
+
+    def get_testcases_by_spec(self, case_specs: list[str], tag: str | None = None) -> CaseSelection:
+        ids = [_[1:] for _ in case_specs]
+        cases = self.load_testcases(ids=ids)
+        selection = CaseSelection(cases, tag)
+        if tag is not None:
+            self.cache_selection(selection)
+        return selection
 
     def update_testcases(self, cases: list[TestCase]) -> None:
         """Update cases in ``cases`` with their latest results"""
@@ -593,30 +600,25 @@ class Workspace:
             ignore_dependencies=False,
         )
 
-    def tag(
-        self,
-        name: str | None,
-        keyword_exprs: list[str] | None = None,
-        parameter_expr: str | None = None,
-        owners: set[str] | None = None,
-        on_options: list[str] | None = None,
-        case_specs: list[str] | None = None,
-        regex: str | None = None,
-    ) -> str:
-        name = name or datetime.datetime.now().isoformat()
-        file = self.tags_dir / name
-        if file.exists():
+    def tag(self, name: str, **meta: Any) -> str:
+        tag_file = self.tags_dir / name
+        if tag_file.exists():
             raise ValueError(f"Tag {name!r} already exists")
-        meta = dict(
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            on_options=on_options,
-            case_specs=case_specs,
-            regex=regex,
-        )
-        file.write_text(json.dumps(meta))
+        cache_file = self.cache_dir / "tags" / name
+        link = os.path.relpath(str(cache_file), str(tag_file.parent))
+        tag_file.write_text(str(link))
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps(meta, indent=2))
         return name
+
+    def tag_info(self, name: str) -> dict[str, Any]:
+        tag_file = self.tags_dir / name
+        if not tag_file.exists():
+            raise ValueError(f"Tag {name} does not exist")
+        link = tag_file.read_text().strip()
+        cache_file = self.cache_dir / link
+        meta: dict[str, Any] = json.loads(cache_file.read_text())
+        return meta
 
     def lock(
         self,
@@ -690,7 +692,8 @@ class Workspace:
         return selected
 
     def cache_selection(self, selection: CaseSelection) -> None:
-        cache_file = self.cache_dir / "tags" / selection.tag
+        assert selection.tag is not None
+        cache_file = self.cache_dir / "select" / selection.tag
         cache = {
             "sha256": selection.sha256,
             "created_on": selection.created_on,
@@ -700,24 +703,45 @@ class Workspace:
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         cache_file.write_text(json.dumps(cache))
 
-        tag = selection.tag
-        tag_file = self.tags_dir / tag
-        tag_file.parent.mkdir(parents=True, exist_ok=True)
-        link = os.path.relpath(str(cache_file), str(tag_file.parent))
-        tag_file.write_text(str(link))
+    def make_selection(
+        self,
+        tag: str | None,
+        keyword_exprs: list[str] | None = None,
+        parameter_expr: str | None = None,
+        owners: set[str] | None = None,
+        on_options: list[str] | None = None,
+        case_specs: list[str] | None = None,
+        regex: str | None = None,
+    ) -> CaseSelection:
+        kwds = dict(
+            keyword_exprs=keyword_exprs,
+            parameter_expr=parameter_expr,
+            owners=owners,
+            on_options=on_options,
+            case_specs=case_specs,
+            regex=regex,
+        )
+        cases = self.lock(**kwds)
+        selection = CaseSelection(cases=cases, tag=tag)
+        if tag is not None:
+            self.tag(tag, **kwds)
+            self.cache_selection(selection)
+        return selection
 
-    def get_selection(self, tag: str = "default"):
+    def get_selection(self, tag: str = "default") -> CaseSelection:
         selection: CaseSelection
         tag_file = self.tags_dir / tag
         if not tag_file.exists():
             raise ValueError(f"Tag {tag} does not exist")
 
-        cache_file = self.cache_dir / "tags" / tag
+        cache_file = self.cache_dir / "select" / tag
         if not cache_file.exists():
-            meta = json.loads(tag_file.read_text())
+            link = tag_file.read_text().strip()
+            meta = json.loads((self.tags_dir / link).read_text())
             selected = self.lock(**meta)
             selection = CaseSelection(cases=selected, tag=tag)
             self.cache_selection(selection)
+            return selection
 
         cache = json.loads(cache_file.read_text())
         if ids := cache.get("cases"):
@@ -727,18 +751,11 @@ class Workspace:
             selection._created_on = cache["created_on"]
             return selection
 
-        # Cache was invalidated at some point
-        meta = json.loads(tag_file.read_text())
+        # No cases: cache was invalidated at some point
+        link = tag_file.read_text().strip()
+        meta = json.loads((self.tags_dir / link).read_text())
         selected = self.lock(**meta)
         selection = CaseSelection(cases=selected, tag=tag_file.name)
-        self.cache_selection(selection)
-        return selection
-
-    def select_testcases(self, case_specs: list[str], tag: str | None = None) -> CaseSelection:
-        ids = [_[1:] for _ in case_specs]
-        cases = self.load_testcases(ids=ids)
-        tag = tag or datetime.datetime.now().isoformat()
-        selection = CaseSelection(cases, tag)
         self.cache_selection(selection)
         return selection
 

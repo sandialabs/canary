@@ -32,8 +32,11 @@ class Add(CanarySubcommand):
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace = Workspace.load()
-        # FIXME: what to do about case specs and other pathspec types?
-        if args.case_specs:
-            raise TypeError("THIS DOESN'T MAKE SENSE")
+        if args.casespecs:
+            raise TypeError("Case specs incompatible with canary add")
+        if args.runtag:
+            raise TypeError("Tag name incompatible with canary add")
+        if args.start:
+            raise TypeError("Start directory incompatible with canary add")
         workspace.add(args.paths, pedantic=True)
         return 0

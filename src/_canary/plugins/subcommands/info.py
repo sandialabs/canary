@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import io
 from typing import TYPE_CHECKING
 
 from ...workspace import Workspace
@@ -22,13 +23,42 @@ class Info(CanarySubcommand):
     name = "info"
     description = "Print information about test session"
 
+    def setup_parser(self, parser: "Parser") -> None:
+        parser.add_argument("-t", "--tag", help="Show information about this tag")
+
     def execute(self, args: argparse.Namespace) -> int:
+        text: str
+        if args.tag:
+            text = self.get_tag_info(args.tag)
+        else:
+            text = self.get_workspace_info()
+        print(text)
+        return 0
+
+    def get_tag_info(self, tag: str) -> str:
+        workspace = Workspace.load()
+        info = workspace.tag_info(tag)
+        fh = io.StringIO()
+        fh.write(f"Tag: {tag}\n")
+        fh.write("Selection filters:")
+        for key, value in info.items():
+            fh.write(f"  • {key}: {value}\n")
+        selection = workspace.get_selection(tag)
+        fh.write("Test cases:\n")
+        fh.write(f"  Selected on: {selection.created_on}\n")
+        for case in selection.cases:
+            name = case.pretty_name()
+            fh.write(f"  • {name}\n")
+        return fh.getvalue()
+
+    def get_workspace_info(self) -> str:
         workspace = Workspace.load()
         info = workspace.info()
-        print(f"Test sessions repository: {info['root']}")
-        print(f"Version:       {info['version']}")
-        print(f"Generators:    {info['generator_count']}")
-        print(f"Sessions:      {info['session_count']}")
-        print(f"Latest:        {info['latest_session']}")
-        print(f"Tags:          {' '.join(info['tags'])}")
-        return 0
+        fh = io.StringIO()
+        fh.write(f"Workspace:   {info['root']}\n")
+        fh.write(f"Version:     {info['version']}\n")
+        fh.write(f"Generators:  {info['generator_count']}\n")
+        fh.write(f"Sessions:    {info['session_count']}\n")
+        fh.write(f"Latest:      {info['latest_session']}\n")
+        fh.write(f"Tags:        {' '.join(info['tags'])}\n")
+        return fh.getvalue()

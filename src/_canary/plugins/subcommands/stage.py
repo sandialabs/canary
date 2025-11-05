@@ -20,24 +20,46 @@ logger = logging.get_logger(__name__)
 @hookimpl
 def canary_addcommand(parser: "Parser") -> None:
     parser.add_command(Tag())
+    parser.add_command(Select())
 
 
 class Tag(CanarySubcommand):
     name = "tag"
-    description = "The the selection criteria"
+    description = "Tag a selection criteria for future use"
 
     def setup_parser(self, parser: "Parser") -> None:
         add_filter_arguments(parser, tagged=False)
-        parser.add_argument("tag", help="Tag this selection with TAG")
+        parser.add_argument("name", help="Tag name")
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace: Workspace = Workspace.load()
         workspace.tag(
-            args.tag,
+            args.name,
             keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,
             on_options=args.on_options,
             regex=args.regex_filter,
         )
         logger.info(f"To run this tag execute 'canary run {args.tag}'")
+        return 0
+
+
+class Select(CanarySubcommand):
+    name = "select"
+    description = "Make a tagged selection"
+
+    def setup_parser(self, parser: "Parser") -> None:
+        add_filter_arguments(parser, tagged=False)
+        parser.add_argument("-t", "--tag", required=True, help="Tag this selection with TAG")
+
+    def execute(self, args: "argparse.Namespace") -> int:
+        workspace: Workspace = Workspace.load()
+        workspace.make_selection(
+            tag=args.tag,
+            keyword_exprs=args.keyword_exprs,
+            parameter_expr=args.parameter_expr,
+            on_options=args.on_options,
+            regex=args.regex_filter,
+        )
+        logger.info(f"To run this selection execute 'canary run {args.tag}'")
         return 0
