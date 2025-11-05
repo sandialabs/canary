@@ -59,6 +59,7 @@ class PathSpec(argparse.Action):
         setdefault(namespace, "on_options", [])
         setdefault(namespace, "script_args", [])
         setdefault(namespace, "keyword_exprs", [])
+
         setdefault(namespace, "paths", {})
         setdefault(namespace, "runtag", None)
         setdefault(namespace, "start", None)
@@ -84,6 +85,8 @@ class PathSpec(argparse.Action):
                 raise NotImplementedError
             elif workspace is not None and workspace.is_tag(path):
                 namespace.runtag = path
+            elif workspace is not None and workspace.inside_view(path):
+                namespace.start = path
             elif os.path.isfile(path) and is_test_file(path):
                 root, name = os.path.split(os.path.abspath(path))
                 namespace.paths.setdefault(root, []).append(name)
@@ -104,8 +107,7 @@ class PathSpec(argparse.Action):
             else:
                 raise ValueError(f"{path}: no such file or directory")
 
-        if namespace.casespecs and namespace.paths and namespace.runtag is not None:
-            raise ValueError("do not mix /hash and other pathspec arguments")
+        check_mutually_exclusive_pathspec_args(namespace)
 
         return
 
@@ -253,3 +255,18 @@ def is_test_file(arg: str) -> bool:
     import _canary.finder
 
     return _canary.finder.is_test_file(arg)
+
+
+def check_mutually_exclusive_pathspec_args(namespace: argparse.Namespace) -> None:
+    if namespace.casespecs:
+        if any([namespace.paths, namespace.runtag, namespace.start]):
+            raise ValueError("do not mix /hash and other pathspec arguments")
+    if namespace.start:
+        if any([namespace.paths, namespace.runtag, namespace.casespecs]):
+            raise ValueError("do not mix start and other pathspec arguments")
+    if namespace.runtag:
+        if any([namespace.paths, namespace.start, namespace.casespecs]):
+            raise ValueError("do not mix tag and other pathspec arguments")
+    if namespace.paths:
+        if any([namespace.runtag, namespace.start, namespace.casespecs]):
+            raise ValueError("do not mix paths and other pathspec arguments")

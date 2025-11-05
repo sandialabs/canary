@@ -31,7 +31,12 @@ from .util.graph import find_reachable_nodes
 from .util.graph import static_order
 
 logger = logging.get_logger(__name__)
+
+workspace_path = ".canary"
+workspace_tag = "WORKSPACE.TAG"
 view_path = "TestResults"
+view_tag = "VIEW.TAG"
+session_tag = "VIEW.TAG"
 
 
 @dataclasses.dataclass
@@ -64,22 +69,32 @@ class Session:
         # Even through this function is not meant to be called, we declare types so that code
         # editors know what to work with.
         self.name: str
-        self.path: Path
+        self.root: Path
         self.work_dir: Path
         self._cases: list[TestCase] | None
         raise RuntimeError("Use Session factory methods create and load")
 
+    def initialize_properties(self, *, anchor: Path, name: str) -> None:
+        self.name = name
+        self.root = anchor / self.name
+        self.work_dir = self.root / "work"
+        self._cases = None
+
+    @staticmethod
+    def is_session(path: Path) -> Path | None:
+        return (path / session_tag).exists()
+
     @classmethod
-    def create(cls, root: Path, selection: CaseSelection) -> "Session":
+    def create(cls, anchor: Path, selection: CaseSelection) -> "Session":
         self: Session = object.__new__(cls)
         ts = datetime.datetime.now().isoformat(timespec="microseconds")
-        self.name = ts.replace(":", "-")
-        self.path = root / self.name
-        self.work_dir = self.path / "work"
-        self._cases = selection.cases
-        self.path.mkdir(parents=True, exist_ok=True)
+        self.initialize_properties(anchor=anchor, name=ts.replace(":", "-"))
+        if self.root.exists() or (self.root / session_tag).exists():
+            raise SessionExistsError(self.root)
+        self.root.mkdir(parents=True, exist_ok=True)
         self.work_dir.mkdir(parents=True, exist_ok=True)
-        for case in self.cases:
+        self._cases = selection.cases
+        for case in self._cases:
             case.session = str(self.work_dir)
         data = {
             "name": self.name,
@@ -88,27 +103,20 @@ class Session:
             "index": {case.id: [dep.id for dep in case.dependencies] for case in self._cases},
             "paths": {case.id: case.path for case in self._cases},
         }
-        (self.path / "session.json").write_text(json.dumps(data, indent=2))
-        (self.path / "latest.json").write_text(json.dumps({}))
+        (self.root / "session.json").write_text(json.dumps(data, indent=2))
+        (self.root / "latest.json").write_text(json.dumps({}))
         self.populate_worktree()
-        write_directory_tag(self.path / "SESSION.TAG")
+        write_directory_tag(self.root / session_tag)
         return self
 
     @classmethod
-    def load(cls, start: Path) -> "Session":
-        path = Path(start)
-        while True:
-            if (path / "SESSION.TAG").exists():
-                break
-            if path.parent == path:
-                raise NotASessionError(str(start))
-            path = path.parent
+    def load(cls, root: Path) -> "Session":
+        if not (root / session_tag).exists():
+            raise NotASessionError(root)
         self: Session = object.__new__(cls)
-        self.path = path
-        self.work_dir = self.path / "work"
-        data = json.loads((self.path / "session.json").read_text())
-        self.name = data["name"]
-        self._cases = None
+        data = json.loads((root / "session.json").read_text())
+        name = data["name"]
+        self.initialize_properties(anchor=root.parent, name=name)
         return self
 
     @property
@@ -127,7 +135,7 @@ class Session:
                 case.dump(fh)
 
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
-        data = json.loads((self.path / "session.json").read_text())
+        data = json.loads((self.root / "session.json").read_text())
         paths = {id: str(self.work_dir / p) for id, p in data["paths"].items()}
         return load_testcases(data["index"], paths, ids=ids)
 
@@ -191,12 +199,12 @@ class Session:
                 }
                 results[case.id] = entry
 
-            file = self.path / "latest.json"
+            file = self.root / "latest.json"
             atomic_write(file, json.dumps(latest, indent=2))
             return {"returncode": returncode, "cases": cases}
 
     def load_latest(self) -> dict[str, Any]:
-        file = self.path / "latest.json"
+        file = self.root / "latest.json"
         latest: dict[str, Any] = json.loads(file.read_text())
         latest.setdefault("history", [])
         latest.setdefault("cases", {})
@@ -210,151 +218,136 @@ class Session:
 class Workspace:
     version_info = (1, 0, 0)
 
-    def __init__(self, root: str | Path = Path.cwd() / ".canary") -> None:
+    def __init__(self, anchor: str | Path = Path.cwd()) -> None:
         # Even through this function is not meant to be called, we declare types so that code
         # editors know what to work with.
         self.root: Path
         self.view: Path
+
+        # "Immutable" objects
         self.objects_dir: Path
         self.cases_dir: Path
         self.generators_dir: Path
+
+        # Storage for pointers to test sessions
         self.refs_dir: Path
         self.work_dir: Path
+
+        # Storage for test sessions
         self.sessions_dir: Path
+
+        # Mutable data
         self.cache_dir: Path
+
+        # Storage for CaseSelection tags
         self.tags_dir: Path
+
+        # Text logs
         self.logs_dir: Path
+
+        # Pointer to latest session
         self.head: Path
+
         self.lockfile: Path
         raise RuntimeError("Use Workspace factory methods create and load")
 
+    def initialize_properties(self, *, anchor: Path) -> None:
+        self.root = anchor / workspace_path
+        self.view = anchor / view_path
+        self.objects_dir = self.root / "objects"
+        self.cases_dir = self.objects_dir / "cases"
+        self.generators_dir = self.objects_dir / "generators"
+        self.refs_dir = self.root / "refs"
+        self.sessions_dir = self.root / "sessions"
+        self.cache_dir = self.root / "cache"
+        self.tags_dir = self.root / "tags"
+        self.logs_dir = self.root / "logs"
+        self.head = self.root / "HEAD"
+        self.lockfile = self.root / "lock"
+
     @staticmethod
     def remove(start: str | Path = Path.cwd()) -> None:
-        path = Path(start).absolute()
-        d = path
-        while True:
-            if (d / ".canary").exists():
-                break
-            if d.parent == d:
-                return
-            d = d.parent
-        workspace = d / ".canary"
-        view = d / view_path
-        if (workspace / "WORKSPACE.TAG").exists() and (view / "VIEW.TAG").exists():
+        anchor = Workspace.find_anchor(start=start)
+        if anchor is None:
+            return
+        workspace = anchor / workspace_path
+        view = anchor / view_path
+        if (workspace / workspace_tag).exists() and (view / view_tag).exists():
             force_remove(str(workspace))
             force_remove(str(view))
-        elif (workspace / "WORKSPACE.TAG").exists() and view.exists():
+        elif (workspace / workspace_tag).exists() and view.exists():
             raise ValueError(f"Cannot remove {workspace} because {view} is not owned by Canary")
+        else:
+            logger.warning(f"Unable to remove {workspace}")
+
+    @staticmethod
+    def find_anchor(start: str | Path = Path.cwd()) -> Path | None:
+        current_path = Path(start).absolute()
+        if current_path.stem == workspace_path:
+            return current_path.parent
+        while True:
+            if (current_path / workspace_path).exists():
+                return current_path
+            if current_path.parent == current_path:
+                break
+            current_path = current_path.parent
+        return None
 
     @classmethod
     def create(cls, path: str | Path = Path.cwd(), force: bool = False) -> "Workspace":
         path = Path(path).absolute()
-        if path.stem == ".canary":
-            raise ValueError("Don't include .canary in workspace path")
+        if path.stem == workspace_path:
+            raise ValueError(f"Don't include {workspace_path} in workspace path")
         if force:
             cls.remove(start=path)
-        d = path
-        while True:
-            # Only allow one .canary directory in ancestry
-            if (d / ".canary").exists():
-                raise WorkspaceExistsError(f".canary already exists at {d}")
-            if d.parent == d:
-                break
-            d = d.parent
         self: Workspace = object.__new__(cls)
-        self.root = path / ".canary"
-
-        self.view = path / view_path
+        self.initialize_properties(anchor=path)
+        if self.root.exists():
+            raise WorkspaceExistsError(path)
         if self.view.exists():
             raise FileExistsError(
                 f"Canary requires ownership of existing directory {self.view}. "
-                "Rename the directory and try again."
+                f"Rename {self.view} and try again."
             )
-
         self.root.mkdir(parents=True)
-        write_directory_tag(self.root / "WORKSPACE.TAG")
+        write_directory_tag(self.root / workspace_tag)
 
         self.view.mkdir(parents=True)
-        write_directory_tag(self.view / "VIEW.TAG")
+        write_directory_tag(self.view / view_tag)
 
-        # "Immutable" objects
-        self.objects_dir = self.root / "objects"
-        self.cases_dir = self.objects_dir / "cases"
-        self.generators_dir = self.objects_dir / "generators"
         self.cases_dir.mkdir(parents=True)
         self.generators_dir.mkdir(parents=True)
-
-        # Storage for pointers to test sessions
-        self.refs_dir = self.root / "refs"
         self.refs_dir.mkdir(parents=True)
-
-        # Storage for test sessions
-        self.sessions_dir = self.root / "sessions"
         self.sessions_dir.mkdir(parents=True)
-
-        # Mutable data
-        self.cache_dir = self.root / "cache"
         self.cache_dir.mkdir(parents=True)
-
-        # Storage for CaseSelection tags
-        self.tags_dir = self.root / "tags"
         self.tags_dir.mkdir(parents=True)
         self.tag("default")
-
-        # Text logs
-        self.logs_dir = self.root / "logs"
         self.logs_dir.mkdir(parents=True)
-
-        # Pointer to latest session
-        self.head = self.root / "HEAD"
-        self.lockfile = self.root / "lock"
-
         file = self.sessions_dir / "latest.json"
         file.write_text(json.dumps({}))
-
         version = self.root / "VERSION"
         version.write_text(".".join(str(_) for _ in self.version_info))
-
         file = self.root / "config"
         with open(file, "w") as fh:
             config.dump_snapshot(fh, indent=2)
-
         f = self.logs_dir / "canary-log.txt"
         logging.add_file_handler(str(f), logging.TRACE)
-
         return self
 
     @classmethod
-    def load(cls, start: Path | None = None) -> "Workspace":
-        start = start or Path.cwd()
-        while True:
-            if (start / ".canary").exists():
-                break
-            if start.parent == start:
-                raise NotAWorkspaceError(
-                    "not a Canary session (or any of the parent directories): .canary"
-                )
-            start = start.parent
-
+    def load(cls, start: str | Path = Path.cwd()) -> "Workspace":
+        anchor = cls.find_anchor(start=start)
+        if anchor is None:
+            raise NotAWorkspaceError(
+                f"not a Canary session (or any of its parent directories): {workspace_path}"
+            )
         self: Workspace = object.__new__(cls)
-        self.root = start / ".canary"
-        self.view = start / view_path
-        self.objects_dir = self.root / "objects"
-        self.cases_dir = self.objects_dir / "cases"
-        self.generators_dir = self.objects_dir / "generators"
-        self.refs_dir = self.root / "refs"
-        self.sessions_dir = self.root / "sessions"
-        self.cache_dir = self.root / "cache"
-        self.tags_dir = self.root / "tags"
-        self.logs_dir = self.root / "logs"
-        self.head = self.root / "HEAD"
-        self.lockfile = self.root / "lock"
+        self.initialize_properties(anchor=anchor)
         file = self.root / "config"
         with open(file) as fh:
             config.load_snapshot(fh)
         f = self.logs_dir / "canary-log.txt"
         logging.add_file_handler(str(f), logging.TRACE)
-
         return self
 
     @contextmanager
@@ -362,17 +355,21 @@ class Workspace:
         self, selection: CaseSelection | None = None, name: str | None = None
     ) -> Generator[Session, None, None]:
         session: Session
-        if name is None:
-            assert selection is not None
+        if selection is not None and name is not None:
+            raise TypeError("Mutually exlusive keyword arguments: 'selection', 'name'")
+        elif selection is None and name is None:
+            raise TypeError("Missing required keyword arguments: 'selection' or 'name'")
+        if selection is not None:
             session = Session.create(self.sessions_dir, selection)
         else:
-            assert selection is None
-            path = self.sessions_dir / name
-            session = Session.load(path)
+            root = self.sessions_dir / name
+            if not Session.is_session(root):
+                raise NotASessionError(name)
+            session = Session.load(root)
         try:
             yield session
         finally:
-            self.update_latest(session)
+            self.update(session)
 
     def load_latest(self) -> dict[str, Any]:
         file = self.sessions_dir / "latest.json"
@@ -380,7 +377,8 @@ class Workspace:
         latest.setdefault("cases", {})
         return latest
 
-    def update_latest(self, session: Session) -> None:
+    def update(self, session: Session) -> None:
+        """Update latest results, view, and refs with results from ``session``"""
         latest = self.load_latest()
         results = latest["cases"]
         session_results = session.load_latest()
@@ -403,13 +401,13 @@ class Workspace:
         atomic_write(file, json.dumps(latest, indent=2))
         self._update_view(view_entries)
 
-        # Write meta data file refs/latest -> ../sessions/{session.path}
+        # Write meta data file refs/latest -> ../sessions/{session.root}
         file = self.refs_dir / "latest"
         file.unlink(missing_ok=True)
-        link = os.path.relpath(str(session.path), str(file.parent))
+        link = os.path.relpath(str(session.root), str(file.parent))
         file.write_text(str(link))
 
-        # Write meta data file HEAD -> ./sessions/{session.path}
+        # Write meta data file HEAD -> ./sessions/{session.root}
         self.head.unlink(missing_ok=True)
         link = os.path.relpath(str(file), str(self.head.parent))
         self.head.write_text(str(link))
@@ -425,7 +423,12 @@ class Workspace:
                 link.symlink_to(target)
 
     def is_tag(self, name: str) -> bool:
+        """Is ``name`` a tag?"""
         return (self.tags_dir / name).exists()
+
+    def inside_view(self, path: Path | str) -> bool:
+        """Is ``path`` inside of a self.view?"""
+        return Path(path).is_relative_to(self.view)
 
     def info(self) -> dict[str, Any]:
         import canary
@@ -947,4 +950,8 @@ class NotAWorkspaceError(Exception):
 
 
 class NotASessionError(Exception):
+    pass
+
+
+class SessionExistsError(Exception):
     pass
