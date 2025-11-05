@@ -524,7 +524,7 @@ def create_workspace_config() -> ConfigScope | None:
     if path := Workspace.find_workspace():
         if (path / "canary.yaml").exists():
             file = path / "canary.yaml"
-            return _create_config_scope("workspace", file)
+            return _create_config_scope("workspace", str(file))
     return None
 
 

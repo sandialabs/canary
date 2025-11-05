@@ -44,11 +44,18 @@ class Status(CanarySubcommand):
         )
         parser.add_argument(
             "-o",
-            "--format",
             dest="format_cols",
-            default="ID,Name,Name,Session,Exit Code,Duration,Status,Details",
+            default="ID,Name,Session,Exit Code,Duration,Status,Details",
             action=StatusFormatAction,
-            help="Change the format printed to the screen. [default: %(default)s]",
+            help="Comma separated list of fields to print to the screen [default: %(default)s]. "
+            "Choices are:\n\n"
+            "• Name: the testcase name\n\n"
+            "• FullName: the testcase full name (name including relative execution path)\n\n"
+            "• Session: the session name the testcase was last ran in\n\n"
+            "• Exit Code: the testcase's exit code\n\n"
+            "• Duration: testcase duration\n\n"
+            "• Status: testcase exit status\n\n"
+            "• Details: additional details, if any\n\n",
         )
         parser.add_argument(
             "-r",

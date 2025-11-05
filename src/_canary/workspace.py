@@ -650,12 +650,23 @@ class Workspace:
           A list of test cases
 
         """
+        cases: list[TestCase]
         generators = self.load_testcase_generators()
-        cases = generate_test_cases(generators, on_options=on_options)
-        for case in cases:
-            # Add all testcases to the object store before masking so that future stages don't
-            # inherit this stage's mask (if any)
-            self.add_testcase(case)
+        meta = {"f": sorted([str(generator.file) for generator in generators]), "o": on_options}
+        sha = hashlib.sha256(json.dumps(meta).encode("utf-8")).hexdigest()
+        file = self.cache_dir / "lock" / sha[:20]
+        if file.exists():
+            logger.debug("Reading testcases from cache")
+            cases = self.load_testcases(latest=True)
+        else:
+            logger.debug("Generating testcases")
+            cases = generate_test_cases(generators, on_options=on_options)
+            for case in cases:
+                # Add all testcases to the object store before masking so that future stages don't
+                # inherit this stage's mask (if any)
+                self.add_testcase(case)
+            file.parent.mkdir(parents=True)
+            file.touch()
 
         config.pluginmanager.hook.canary_testsuite_mask(
             cases=cases,
@@ -773,6 +784,8 @@ class Workspace:
             info.setdefault("returncode", []).append(entry["returncode"])
             info.setdefault("duration", []).append(entry["duration"])
             info.setdefault("status_value", []).append(entry["status"]["value"])
+            if entry["session"] is None and not entry["status"]["details"]:
+                entry["status"]["details"] = "Test case not included in any session"
             info.setdefault("status_details", []).append(entry["status"]["details"] or "")
         return info
 
