@@ -144,7 +144,7 @@ class Run(CanarySubcommand):
                 selection = workspace.get_selection()
 
         # FIXME: env_mods = config.getoption("env_mods") or {}
-        with workspace.session(selection) as session:
+        with workspace.session(selection=selection) as session:
             disp = session.run()
 
         config.pluginmanager.hook.canary_runtests_summary(

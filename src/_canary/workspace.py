@@ -22,7 +22,6 @@ from .generator import AbstractTestGenerator
 from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_state as testcase_from_state
-from .third_party.color import clen
 from .util import logging
 from .util.filesystem import force_remove
 from .util.filesystem import working_dir
@@ -95,7 +94,7 @@ class Session:
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self._cases = selection.cases
         for case in self._cases:
-            case.session = str(self.work_dir)
+            case.set_workspace_properties(workspace=self.root.parent.parent, session=self.name)
         data = {
             "name": self.name,
             "created_on": ts,
@@ -107,6 +106,10 @@ class Session:
         (self.root / "latest.json").write_text(json.dumps({}))
         self.populate_worktree()
         write_directory_tag(self.root / session_tag)
+        # Dump a snapshot of the configuration used to create this session
+        file = self.root / "config"
+        with open(file, "w") as fh:
+            config.dump_snapshot(fh)
         return self
 
     @classmethod
@@ -117,6 +120,10 @@ class Session:
         data = json.loads((root / "session.json").read_text())
         name = data["name"]
         self.initialize_properties(anchor=root.parent, name=name)
+        # Load the configuration used to create this session
+        file = self.root / "config"
+        with open(file) as fh:
+            config.load_snapshot(fh)
         return self
 
     @property
@@ -159,12 +166,17 @@ class Session:
         return ready
 
     def run(self, ids: list[str] | None = None) -> dict[str, Any]:
+        # Since test cases run in subprocesses, we archive the config to the environment.  The
+        # config object in the subprocess will read in the archive and use it to re-establish the
+        # correct config
+        config.archive(os.environ)
         cases = self.get_ready(ids=ids)
         if not cases:
             raise StopExecution("No tests to run", notests_exit_status)
-        logger.info(f"Starting session {self.name}")
+        logger.info(f"@*{{Starting}} session {self.name}")
         started_on: str = datetime.datetime.now().isoformat(timespec="microseconds")
         start = time.monotonic()
+        returncode: int = -1
         try:
             with working_dir(str(self.work_dir)):
                 returncode = config.pluginmanager.hook.canary_runtests(cases=cases)
@@ -188,6 +200,8 @@ class Session:
                 case.refresh()
                 entry = {
                     "name": case.display_name,
+                    "fullname": case.fullname,
+                    "family": case.family,
                     "returncode": case.returncode,
                     "duration": case.duration,
                     "started_on": timestamp_to_isoformat(case.start),
@@ -231,7 +245,6 @@ class Workspace:
 
         # Storage for pointers to test sessions
         self.refs_dir: Path
-        self.work_dir: Path
 
         # Storage for test sessions
         self.sessions_dir: Path
@@ -293,6 +306,12 @@ class Workspace:
             current_path = current_path.parent
         return None
 
+    @staticmethod
+    def find_workspace(start: str | Path = Path.cwd()) -> Path | None:
+        if anchor := Workspace.find_anchor(start=start):
+            return anchor / workspace_path
+        return None
+
     @classmethod
     def create(cls, path: str | Path = Path.cwd(), force: bool = False) -> "Workspace":
         path = Path(path).absolute()
@@ -327,11 +346,13 @@ class Workspace:
         file.write_text(json.dumps({}))
         version = self.root / "VERSION"
         version.write_text(".".join(str(_) for _ in self.version_info))
-        file = self.root / "config"
-        with open(file, "w") as fh:
-            config.dump_snapshot(fh, indent=2)
-        f = self.logs_dir / "canary-log.txt"
-        logging.add_file_handler(str(f), logging.TRACE)
+        file = self.logs_dir / "canary-log.txt"
+        logging.add_file_handler(str(file), logging.TRACE)
+
+        file = self.root / "canary.yaml"
+        file.write_text(json.dumps({}))
+        scope = config.ConfigScope("workspace", str(file), {})
+        config.push_scope(scope)
         return self
 
     @classmethod
@@ -343,11 +364,8 @@ class Workspace:
             )
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=anchor)
-        file = self.root / "config"
-        with open(file) as fh:
-            config.load_snapshot(fh)
-        f = self.logs_dir / "canary-log.txt"
-        logging.add_file_handler(str(f), logging.TRACE)
+        file = self.logs_dir / "canary-log.txt"
+        logging.add_file_handler(str(file), logging.TRACE)
         return self
 
     @contextmanager
@@ -532,7 +550,8 @@ class Workspace:
             if result := results.get(case.id):
                 if session := result["session"]:
                     attrs = {
-                        "session": str(self.sessions_dir / session / "work"),
+                        "session": session,
+                        "workspace": str(self.root),
                         "start": datetime.datetime.fromisoformat(result["started_on"]).timestamp(),
                         "stop": datetime.datetime.fromisoformat(result["finished_on"]).timestamp(),
                         "status": result["status"],
@@ -727,7 +746,10 @@ class Workspace:
         if case.id not in results:
             results[case.id] = {
                 "name": case.display_name,
+                "fullname": case.fullname,
+                "family": case.family,
                 "session": None,
+                "workspace": None,
                 "returncode": "NA",
                 "duration": -1,
                 "started_on": "NA",
@@ -736,36 +758,23 @@ class Workspace:
             }
         file.write_text(json.dumps(latest))
 
-    def status(self) -> list[list[str]]:
+    def statusinfo(self) -> dict[str, list[str]]:
         file = self.sessions_dir / "latest.json"
         latest: dict[str, Any] = json.loads(file.read_text())
-        table: list[list[str]] = []
-        header = ["ID", "Name", "Session", "Exit Code", "Duration", "Status", "Details"]
-        widths: list[int] = [len(_) for _ in header]
-
-        def dformat(arg) -> str:
-            return "NA" if arg < 0 else f"{arg:.02f}"
+        info: dict[str, list[str]] = {}
 
         results: dict[str, dict] = latest.setdefault("cases", {})
         for id, entry in results.items():
-            # status = Status(entry["status"]["value"], entry["status"]["details"])
-            row = [
-                id[:7],
-                entry["name"],
-                entry["session"],
-                entry["returncode"],
-                dformat(entry["duration"]),
-                entry["status"]["value"],
-                entry["status"]["details"] or "",
-            ]
-            table.append(row)
-            for i, x in enumerate(row):
-                widths[i] = max(widths[i], clen(str(x)))
-        table = sorted(table, key=lambda x: (status_value_sort_key(x[5]), x[1]))
-        hlines = ["=" * width for width in widths]
-        table.insert(0, hlines)
-        table.insert(0, header)
-        return table
+            info.setdefault("id", []).append(id[:7])
+            info.setdefault("name", []).append(entry["name"])
+            info.setdefault("fullname", []).append(entry["fullname"])
+            info.setdefault("family", []).append(entry["family"])
+            info.setdefault("session", []).append(entry["session"])
+            info.setdefault("returncode", []).append(entry["returncode"])
+            info.setdefault("duration", []).append(entry["duration"])
+            info.setdefault("status_value", []).append(entry["status"]["value"])
+            info.setdefault("status_details", []).append(entry["status"]["details"] or "")
+        return info
 
     def gc(self) -> None:
         """Garbage collect"""
@@ -817,6 +826,7 @@ class Workspace:
                 raise ValueError(f"{spec}: no matching test found in {self.root}")
         if latest:
             self.update_testcases([case])
+            case.set_workspace_properties(workspace=self.view, session=None)
         return case
 
 
@@ -856,28 +866,6 @@ def load_testcases(
         casemap[id] = testcase_from_state(state)
         assert id == casemap[id].id
     return list(casemap.values())
-
-
-def status_value_sort_key(name: str) -> int:
-    map = {
-        "invalid": 0,
-        "created": 0,
-        "retry": 0,
-        "pending": 0,
-        "ready": 0,
-        "running": 0,
-        "success": 10,
-        "xfail": 11,
-        "xdiff": 12,
-        "cancelled": 19,
-        "skipped": 20,
-        "not_run": 21,
-        "diffed": 22,
-        "failed": 23,
-        "timeout": 24,
-        "unknown": 25,
-    }
-    return map[name]
 
 
 def prefix_bits(byte_array: bytes, bits: int) -> int:

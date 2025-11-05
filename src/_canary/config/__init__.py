@@ -43,7 +43,6 @@ if TYPE_CHECKING:
 
     pluginmanager = _config.pluginmanager
     invocation_dir = _config.invocation_dir
-    ioptions = _config.ioptions
     working_dir = _config.working_dir
     getoption = _config.getoption
     set_main_options = _config.set_main_options
@@ -54,6 +53,7 @@ if TYPE_CHECKING:
     load_snapshot = _config.load_snapshot
     archive = _config.archive
     temporary_scope = _config.temporary_scope
+    push_scope = _config.push_scope
 
 else:
     # allow config to be lazily loaded

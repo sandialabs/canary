@@ -22,17 +22,10 @@ def canary_configure(config: "canary.Config") -> None:
     scheduler = config.getoption("canary_hpc_scheduler")
     command = config.getoption("command")
     if scheduler is not None and command == "run":
-        # Run with the HPC.execute command
-        config.ioptions.command = "hpc"
+        # Run with the HPC conductor
         config.options.command = "hpc"
         config.options.hpc_cmd = "run"
-        if ival := getattr(config.ioptions, "canary_hpc_batchspec", None):
-            # ioptions is the argparse.Namespace parsed from the command line, options is the
-            # argparse.Namespace merged from the original invocation of canary.  They are only
-            # different if this is a re-run scenario.  If the batchspec is defined in ioptions,
-            # we use it (it was passed on the command line this invocation)
-            setattr(config.options, "canary_hpc_batchspec", ival)
-        else:
+        if not hasattr(config.options, "canary_hpc_batchspec"):
             # no batchspec was passed on the command line, so set the defaults
             setattr(config.options, "canary_hpc_batchspec", CanaryHPCBatchSpec.defaults())
 
@@ -141,7 +134,7 @@ class Batch(canary.CanarySubcommand):
 
     def location(self, batch_id: str) -> Path:
         workspace = canary.Workspace.load()
-        root = workspace.work_dir / "canary_hpc/batches" / batch_id[:2]
+        root = workspace.cache_dir / "canary_hpc/batches" / batch_id[:2]
         if root.exists() and (root / batch_id[2:]).exists():
             return root / batch_id[2:]
         elif matches := list(root.glob(f"{batch_id[2:]}*")):
@@ -150,7 +143,7 @@ class Batch(canary.CanarySubcommand):
 
     def find_batches(self) -> list[str]:
         workspace = canary.Workspace.load()
-        root = workspace.work_dir / "canary_hpc/batches"
+        root = workspace.cache_dir / "canary_hpc/batches"
         batches: list[str] = []
         for p in root.iterdir():
             if p.is_dir():

@@ -106,12 +106,11 @@ class ConfigScope:
         data = {"name": self.name, "file": self.file, "data": self.data.copy()}
         return data
 
-    def dump(self, root: str | None = None) -> None:
+    def dump(self, root: str = "canary") -> None:
         if self.file is None:
             return
-        root = root or "canary"
         with open(self.file, "w") as fh:
-            yaml.dump({root or "canary": self.data}, fh, default_flow_style=False)
+            yaml.dump({root: self.data}, fh, default_flow_style=False)
 
 
 class Config:
@@ -120,7 +119,6 @@ class Config:
         self.working_dir = os.getcwd()
         self.pluginmanager: CanaryPluginManager = CanaryPluginManager.factory()
         self.options: argparse.Namespace = argparse.Namespace()
-        self.ioptions: argparse.Namespace = argparse.Namespace()
         self.scopes: dict[str, ConfigScope] = {}
         if envcfg := os.getenv(env_archive_name):
             with io.StringIO() as fh:
@@ -128,10 +126,12 @@ class Config:
                 fh.seek(0)
                 self.load_snapshot(fh)
         self.scopes["defaults"] = ConfigScope("defaults", None, default_config_values())
-        for scope in ("global", "local"):
-            config_scope = read_config_scope(scope)
+        for scope in ("site", "global", "local"):
+            config_scope = create_config_scope(scope)
             self.push_scope(config_scope)
-        if cscope := read_env_config():
+        if ws_scope := create_workspace_config():
+            self.push_scope(ws_scope)
+        if cscope := create_env_config():
             self.push_scope(cscope)
         if self.get("config:debug"):
             logging.set_level(logging.DEBUG)
@@ -373,7 +373,6 @@ class Config:
                 timeout_settings[key] = val
             config_settings["timeout"] = timeout_settings
 
-        self.ioptions = args
         self.options = merge_namespaces(self.options, args)
 
         if args.config_file:
@@ -463,22 +462,9 @@ class Config:
             self.pop_scope(scope)
 
 
-def read_config_scope(scope: str) -> ConfigScope:
-    data: dict[str, Any] = {}
-    if file := get_scope_filename(scope):
-        if fd := read_config_file(file):
-            if "canary" in fd:
-                data.update(fd.pop("canary"))
-            data.update(fd)
-        for section, section_data in data.items():
-            if schema := section_schemas.get(section):
-                if schema == any_schema:
-                    data[section] = section_data
-                else:
-                    data[section] = schema.validate(section_data)
-            else:
-                logger.warning(f"ignoring unrecognized config section: {section}")
-    return ConfigScope(scope, file, data)
+def create_config_scope(scope: str) -> ConfigScope:
+    file = get_scope_filename(scope)
+    return _create_config_scope(scope, file)
 
 
 def read_config_file(file: str) -> dict[str, Any] | None:
@@ -489,7 +475,7 @@ def read_config_file(file: str) -> dict[str, Any] | None:
         return yaml.safe_load(fh)
 
 
-def get_scope_filename(scope: str) -> str | None:
+def get_scope_filename(scope: str) -> str:
     if scope == "site":
         if var := os.getenv("CANARY_SITE_CONFIG"):
             return var
@@ -507,12 +493,39 @@ def get_scope_filename(scope: str) -> str | None:
     raise ValueError(f"Could not determine filename for scope {scope!r}")
 
 
-def read_env_config() -> ConfigScope | None:
+def _create_config_scope(scope_name: str, file: str) -> ConfigScope:
+    data: dict[str, Any] = {}
+    if fd := read_config_file(file):
+        if "canary" in fd:
+            data.update(fd.pop("canary"))
+        data.update(fd)
+    for section, section_data in data.items():
+        if schema := section_schemas.get(section):
+            if schema == any_schema:
+                data[section] = section_data
+            else:
+                data[section] = schema.validate(section_data)
+        else:
+            logger.warning(f"ignoring unrecognized config section: {section}")
+    return ConfigScope(scope_name, file, data)
+
+
+def create_env_config() -> ConfigScope | None:
     variables = {key: var for key, var in os.environ.items() if key.startswith("CANARY_")}
     if not variables:
         return None
     data = environment_variable_schema.validate(variables)
     return ConfigScope("environment", None, data)
+
+
+def create_workspace_config() -> ConfigScope | None:
+    from ..workspace import Workspace
+
+    if path := Workspace.find_workspace():
+        if (path / "canary.yaml").exists():
+            file = path / "canary.yaml"
+            return _create_config_scope("workspace", file)
+    return None
 
 
 def process_config_path(path: str) -> list[str]:

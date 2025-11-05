@@ -352,6 +352,8 @@ class TestBatch(AbstractTestCase):
             logger.debug(f"Submitting batch {self.id}")
             workspace = canary.Workspace.load()
             default_args: list[str] = ["-C", str(workspace.root.parent)]
+            if canary.config.get("config:debug"):
+                default_args.append("-d")
             if backend.supports_subscheduling and flat:
                 submit_script = self.submission_script_filename()
                 scriptdir = submit_script.parent

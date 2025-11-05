@@ -19,10 +19,10 @@ def test_repo_bfilter(tmpdir):
         with config.override():
             config.pluginmanager.hook.canary_addhooks(pluginmanager=config.pluginmanager)
             config.options.canary_hpc_scheduler = "shell"
-            config.ioptions.canary_hpc_scheduler = "shell"
+            # config.ioptions.canary_hpc_scheduler = "shell"
             spec = {"count": 2, "duration": None, "layout": "flat", "nodes": "any"}
             config.options.canary_hpc_batchspec = spec
-            config.ioptions.canary_hpc_batchspec = spec
+            # config.ioptions.canary_hpc_batchspec = spec
             conductor = CanaryHPCConductor(backend="shell")
             config.pluginmanager.register(conductor, f"canary_hpc{conductor.backend.name}")
             workspace = Workspace.create("tests", force=True)

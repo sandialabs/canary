@@ -257,16 +257,16 @@ def is_test_file(arg: str) -> bool:
     return _canary.finder.is_test_file(arg)
 
 
-def check_mutually_exclusive_pathspec_args(namespace: argparse.Namespace) -> None:
-    if namespace.casespecs:
-        if any([namespace.paths, namespace.runtag, namespace.start]):
-            raise ValueError("do not mix /hash and other pathspec arguments")
-    if namespace.start:
-        if any([namespace.paths, namespace.runtag, namespace.casespecs]):
-            raise ValueError("do not mix start and other pathspec arguments")
-    if namespace.runtag:
-        if any([namespace.paths, namespace.start, namespace.casespecs]):
-            raise ValueError("do not mix tag and other pathspec arguments")
-    if namespace.paths:
-        if any([namespace.runtag, namespace.start, namespace.casespecs]):
-            raise ValueError("do not mix paths and other pathspec arguments")
+def check_mutually_exclusive_pathspec_args(ns: argparse.Namespace) -> None:
+    if ns.casespecs:
+        if any([ns.paths, ns.runtag, ns.start]):
+            raise TypeError("/HASH pathspec argument[s] incompatible with other pathspec arguments")
+    if ns.start:
+        if any([ns.paths, ns.runtag, ns.casespecs]):
+            raise TypeError(f"{ns.start}: argument incompatible with other pathspec arguments")
+    if ns.runtag:
+        if any([ns.paths, ns.start, ns.casespecs]):
+            raise TypeError(f"{ns.runtag}: argument incompatible with other pathspec arguments")
+    if ns.paths:
+        if any([ns.runtag, ns.start, ns.casespecs]):
+            raise TypeError("PATH argument[s] incompatible with other pathspec arguments")

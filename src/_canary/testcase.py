@@ -4,7 +4,6 @@
 
 import dataclasses
 import fnmatch
-import glob
 import hashlib
 import io
 import itertools
@@ -23,6 +22,7 @@ from copy import deepcopy
 from datetime import datetime
 from datetime import timedelta
 from functools import lru_cache
+from pathlib import Path
 from types import SimpleNamespace
 from typing import IO
 from typing import Any
@@ -341,6 +341,7 @@ class TestCase(AbstractTestCase):
         self._display_name: str | None = None
         self._id: str | None = None
         self._status: Status = Status()
+        self._workspace: str | None = None
         self._session: str | None = None
         self._working_directory: str | None = None
         self._path: str | None = None
@@ -451,28 +452,47 @@ class TestCase(AbstractTestCase):
     def file_dir(self) -> str:
         return os.path.dirname(self.file)
 
+    def set_workspace_properties(self, *, workspace: Path, session: str | None) -> None:
+        self.workspace = str(workspace)
+        self.session = session
+        assert os.path.exists(self.workspace)
+        if session is not None:
+            assert os.path.exists(os.path.join(self.workspace, "sessions", self.session))
+
+    @property
+    def work_root(self) -> str:
+        if self.session is not None:
+            return os.path.join(self.workspace, "sessions", self.session, "work")
+        else:
+            return self.workspace
+
     @property
     def session(self) -> str | None:
-        """The session work tree.  Can be lazily evaluated so we don't set it here if missing"""
-        if self._session is None:
-            raise ValueError("session has not been set")
         return self._session
 
     @session.setter
     def session(self, arg: str | None) -> None:
         if arg is not None:
-            assert os.path.exists(arg)
             self._session = arg
 
-    # Backward compatibility
-    exec_root = session
+    @property
+    def workspace(self) -> str:
+        if self._workspace is None:
+            raise ValueError("workspace has not been set")
+        return self._workspace
+
+    @workspace.setter
+    def workspace(self, arg: str | None) -> None:
+        if arg is not None:
+            assert os.path.exists(arg)
+            self._workspace = arg
 
     @property
     def path(self) -> str:
-        """The relative path from ``session.session`` to ``self.working_directory``"""
+        """The relative path from ``workspace.session`` to ``self.working_directory``"""
         if self._path is None:
             dirname, basename = os.path.split(self.file_path)
-            path = os.path.join(self.session, dirname, self.name)
+            path = os.path.join(self.work_root, dirname, self.name)
             n = max_name_length()
             if len(os.path.join(path, basename)) < n:
                 self._path = os.path.join(dirname, self.name)
@@ -529,9 +549,7 @@ class TestCase(AbstractTestCase):
     def working_directory(self) -> str:
         """Directory where the test is executed."""
         if self._working_directory is None:
-            if not self.session:
-                raise ValueError("{self}: session not set") from None
-            self._working_directory = os.path.normpath(os.path.join(self.session, self.path))
+            self._working_directory = os.path.normpath(os.path.join(self.work_root, self.path))
         assert self._working_directory is not None
         return self._working_directory
 
@@ -1917,18 +1935,6 @@ def from_lockfile(lockfile: str) -> TestCase | TestMultiCase:
     with open(lockfile) as fh:
         state = json.load(fh)
     return from_state(state)
-
-
-def from_id(id: str) -> TestCase | TestMultiCase:
-    work_tree = config.get("session:work_tree")
-    if work_tree is None:
-        raise ValueError(f"cannot find test case {id} outside a test session")
-    config_dir = os.path.join(work_tree, ".canary")
-    pat = os.path.join(config_dir, "objects/cases", id[:2], f"{id[2:]}*", TestCase._lockfile)
-    lockfiles = glob.glob(pat)
-    if lockfiles:
-        return from_lockfile(lockfiles[0])
-    raise ValueError(f"no test case associated with {id} found in {work_tree}")
 
 
 def strtimestamp() -> str:

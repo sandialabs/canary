@@ -8,7 +8,6 @@ import concurrent.futures
 import io
 import json
 import math
-import os
 import signal
 import threading
 import time
@@ -370,7 +369,6 @@ def _process_queue(queue: AbstractResourceQueue, runner: Callable, **kwargs: Any
     ppe = None
     pbar = config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
     try:
-        config.archive(os.environ)
         with ProcessPoolExecutor(workers=queue.workers) as ppe:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
             while True:
