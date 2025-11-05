@@ -23,6 +23,6 @@ class GarbageCollect(CanarySubcommand):
     description = "Remove working directories of test cases having status 'success'"
 
     def execute(self, args: argparse.Namespace) -> int:
-        workspace = Workspace()
+        workspace = Workspace.load()
         workspace.gc()
         return 0
