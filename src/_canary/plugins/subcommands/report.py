@@ -43,3 +43,4 @@ class Report(CanarySubcommand):
         kwargs = vars(args)
         action = getattr(reporter, args.action.replace("-", "_"), reporter.not_implemented)
         action(**kwargs)
+        return 0

@@ -26,6 +26,7 @@ class CanaryHPCExecutor:
             raise ValueError("env batch id inconsistent with cli batch id")
         self.batch = batch
         config = TestBatch.loadconfig(self.batch)
+        self.session: str = config["session"]
         self.cases: list[str] = []
         if case is not None:
             self.cases.append(case)
@@ -57,13 +58,13 @@ class CanaryHPCExecutor:
     def run(self, args: argparse.Namespace) -> int:
         n = len(self.cases)
         logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {args.batch_id}")
-        case_specs = [f"/{case}" for case in self.cases]
-        session = canary.Session.casespecs_view(os.getcwd(), case_specs)
-        session.run()
+        workspace = canary.Workspace.load()
+        with workspace.session(name=self.session) as session:
+            disp = session.run(ids=self.cases)
         canary.config.pluginmanager.hook.canary_runtests_summary(
-            cases=session.active_cases(), include_pass=False, truncate=10
+            cases=disp["cases"], include_pass=False, truncate=10
         )
-        return session.exitstatus
+        return disp["returncode"]
 
     @staticmethod
     def setup_parser(parser: canary.Parser) -> None:

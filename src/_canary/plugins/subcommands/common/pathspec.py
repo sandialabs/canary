@@ -8,11 +8,11 @@ import os
 
 from ....config.argparsing import Parser
 from ....config.schemas import testpaths_schema
-from ....repo import NotARepoError
-from ....repo import Repo
 from ....third_party.color import colorize
 from ....util.filesystem import working_dir
 from ....util.string import strip_quotes
+from ....workspace import NotAWorkspaceError
+from ....workspace import Workspace
 
 
 def setdefault(obj, attr, default):
@@ -50,11 +50,11 @@ class PathSpec(argparse.Action):
         """
         from ....testcase import TestCase
 
-        repo: Repo | None
+        workspace: Workspace | None
         try:
-            repo = Repo.load()
-        except NotARepoError:
-            repo = None
+            workspace = Workspace.load()
+        except NotAWorkspaceError:
+            workspace = None
 
         setdefault(namespace, "on_options", [])
         setdefault(namespace, "script_args", [])
@@ -82,7 +82,7 @@ class PathSpec(argparse.Action):
         for path in pathspec:
             if os.path.isfile(path) and path.endswith("testcases.lock"):
                 raise NotImplementedError
-            elif repo is not None and repo.is_tag(path):
+            elif workspace is not None and workspace.is_tag(path):
                 namespace.runtag = path
             elif os.path.isfile(path) and is_test_file(path):
                 root, name = os.path.split(os.path.abspath(path))
@@ -117,15 +117,15 @@ class PathSpec(argparse.Action):
             action=PathSpec,
             dest="f_pathspec",
             help="Read test paths from a json or yaml file. "
-            'The file schema is {"testpaths": ["root": str, "paths": [str, ...], ...]}, where '
-            "paths is a list of files relative to root",
+            "See 'canary help --pathfile' for help on the file schema",
         )
         parser.add_argument(
             "pathspec",
             metavar="pathspec [--] [user args...]",
             action=PathSpec,
             nargs=argparse.REMAINDER,
-            help="Test file[s] or directories to search",
+            help="Test file[s] or directories to search. "
+            "See 'canary help --pathspec' for help on the path specification",
         )
 
     @staticmethod
@@ -181,7 +181,7 @@ class PathSpec(argparse.Action):
         return paths
 
     @staticmethod
-    def description() -> str:
+    def pathspec_help() -> str:
         pathspec_help = """\
 pathspec syntax:
 
@@ -220,6 +220,21 @@ pathspec syntax:
             "sep": bold("--"),
         }
         return pathspec_help
+
+    @staticmethod
+    def pathfile_help() -> str:
+        text = """\
+pathspec file schema syntax:
+
+  {
+    "testpaths": [
+      {
+        "root": str,
+        "paths": [str]
+      }
+    ]
+  }"""
+        return text
 
 
 def bold(arg: str) -> str:

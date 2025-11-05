@@ -35,9 +35,9 @@ class CDashXMLReporter:
 
     @classmethod
     def from_repo(cls, dest: str | None = None) -> "CDashXMLReporter":
-        repo = canary.Repo.load()
-        cases = repo.load_testcases(latest=True)
-        self = cls(dest=dest or os.path.join(str(repo.sessions_dir), "CDASH"))
+        workspace = canary.Workspace.load()
+        cases = workspace.load_testcases(latest=True)
+        self = cls(dest=dest or os.path.join(str(workspace.sessions_dir), "CDASH"))
         for case in cases:
             self.data.add_test(case)
         return self

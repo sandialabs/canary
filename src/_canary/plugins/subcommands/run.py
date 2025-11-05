@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ... import config
-from ...repo import CaseSelection
-from ...repo import NotARepoError
-from ...repo import Repo
 from ...util import logging
+from ...workspace import CaseSelection
+from ...workspace import NotAWorkspaceError
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import PathSpec
@@ -105,48 +105,49 @@ class Run(CanarySubcommand):
     def execute(self, args: "argparse.Namespace") -> int:
         config.pluginmanager.hook.canary_runtests_startup()
 
-        repo: Repo
+        workspace: Workspace
         selection: CaseSelection
         work_tree: str = args.work_tree or os.getcwd()
         if args.wipe:
-            repo = Repo.create(Path(work_tree), force=True)
-        else:
-            try:
-                repo = Repo.load()
-            except NotARepoError:
-                repo = Repo.create(Path(work_tree))
+            Workspace.remove(Path(work_tree))
+        try:
+            workspace = Workspace.load()
+        except NotAWorkspaceError:
+            workspace = Workspace.create(Path(work_tree))
 
         if args.runtag:
-            selection = repo.get_selection(args.runtag)
+            selection = workspace.get_selection(args.runtag)
         elif args.casespecs:
-            selection = repo.select_testcases_by_spec(args.casespecs, tag=args.tag)
+            selection = workspace.select_testcases(args.casespecs, tag=args.tag)
         elif args.paths:
             parsing_policy = config.getoption("parsing_policy") or "pedantic"
-            repo.collect_testcase_generators(args.paths, pedantic=parsing_policy)
-            selection = repo.stage(
+            workspace.add(args.paths, pedantic=parsing_policy == "pedantic")
+            tag = workspace.tag(
+                args.tag,
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
                 on_options=args.on_options,
                 regex=args.regex_filter,
-                tag=args.tag,
             )
+            selection = workspace.get_selection(tag)
         else:
             if any((args.keyword_exprs, args.parameter_expr, args.on_options, args.regex_filter)):
-                selection = repo.stage(
+                tag = workspace.tag(
+                    args.tag,
                     keyword_exprs=args.keyword_exprs,
                     parameter_expr=args.parameter_expr,
                     on_options=args.on_options,
                     regex=args.regex_filter,
-                    tag=args.tag,
                 )
+                selection = workspace.get_selection(tag)
             else:
-                selection = repo.get_selection()
+                selection = workspace.get_selection()
 
         # FIXME: env_mods = config.getoption("env_mods") or {}
-        with repo.session(selection) as session:
-            session.run_all()
+        with workspace.session(selection) as session:
+            disp = session.run()
 
         config.pluginmanager.hook.canary_runtests_summary(
-            cases=selection.cases, include_pass=False, truncate=10
+            cases=disp["cases"], include_pass=False, truncate=10
         )
-        return session.returncode
+        return disp["returncode"]

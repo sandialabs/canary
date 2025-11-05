@@ -11,8 +11,8 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from typing import Any
 
-from ...repo import Repo
 from ...util.filesystem import mkdirp
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanaryReporter
 
@@ -31,8 +31,8 @@ class JunitReporter(CanaryReporter):
     default_output = "junit.xml"
 
     def create(self, **kwargs: Any) -> None:
-        repo = Repo.load()
-        cases = repo.load_testcases(latest=True)
+        workspace = Workspace.load()
+        cases = workspace.load_testcases(latest=True)
         doc = JunitDocument()
         root = doc.create_testsuite_element(cases, name=get_root_name(), tagname="testsuites")
         output = kwargs["output"] or self.default_output

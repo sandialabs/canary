@@ -6,9 +6,9 @@ import argparse
 import os
 from typing import TYPE_CHECKING
 
-from ...repo import NotARepoError
-from ...repo import Repo
 from ...util.editor import editor
+from ...workspace import NotAWorkspaceError
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
@@ -46,11 +46,8 @@ def find_file(testspec: str) -> str | None:
     except Exception:  # nosec B110
         pass
     try:
-        repo = Repo.load()
-    except NotARepoError:
+        workspace = Workspace.load()
+    except NotAWorkspaceError:
         return None
-    cases = repo.load_testcases(latest=True)
-    for case in cases:
-        if case.matches(testspec):
-            return case.file
-    return None
+    case = workspace.find_testcase(testspec)
+    return case.file

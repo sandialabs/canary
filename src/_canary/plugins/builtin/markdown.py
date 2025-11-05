@@ -9,10 +9,10 @@ from typing import Any
 from typing import TextIO
 
 from ... import config
-from ...repo import Repo
 from ...util import logging
 from ...util.filesystem import force_remove
 from ...util.filesystem import mkdirp
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanaryReporter
 
@@ -34,9 +34,11 @@ class MarkdownReporter(CanaryReporter):
     default_output = "MARKDOWN"
 
     def create(self, **kwargs: Any) -> None:
-        repo = Repo.load()
-        cases = repo.load_testcases(latest=True)
-        dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=repo.sessions_dir)
+        workspace = Workspace.load()
+        cases = workspace.load_testcases(latest=True)
+        dest = string.Template(kwargs["dest"]).safe_substitute(
+            canary_work_tree=workspace.sessions_dir
+        )
         self.md_dir = os.path.join(dest, self.default_output)
         self.index = os.path.join(dest, "canary-report.md")
         self.root = dest

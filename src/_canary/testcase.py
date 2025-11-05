@@ -41,7 +41,6 @@ from .paramset import ParameterSet
 from .status import Status
 from .util import filesystem as fs
 from .util import logging
-from .util._json import safeload
 from .util._json import safesave
 from .util.compression import compress_str
 from .util.executable import Executable
@@ -1411,12 +1410,10 @@ class TestCase(AbstractTestCase):
     def save(self):
         safesave(self.lockfile, self.getstate())
 
-    def _load_lockfile(self) -> dict[str, Any]:
-        return safeload(self.lockfile)
-
     def refresh(self, propagate: bool = True) -> None:
         try:
-            state = self._load_lockfile()
+            with open(self.lockfile) as fh:
+                state = json.load(fh)
         except FailedToLoadLockfileError:
             self.status.set("unknown", details="Lockfile failed to load on refresh")
             self.save()

@@ -44,6 +44,7 @@ class TestBatch(AbstractTestCase):
         super().__init__()
         self.validate(cases)
         self.cases = list(cases)
+        self.session = self.cases[0].session
         self._id = hashit(",".join(case.id for case in self.cases), length=20)
         self.total_duration: float = -1
         self._runtime: float
@@ -233,7 +234,7 @@ class TestBatch(AbstractTestCase):
 
     @property
     def path(self) -> Path:
-        return Path(".canary/canary_hpc/batches", self.id[:2], self.id[2:])
+        return Path(".canary/work/canary_hpc/batches", self.id[:2], self.id[2:])
 
     @property
     def working_directory(self) -> str:
@@ -315,7 +316,7 @@ class TestBatch(AbstractTestCase):
     def setup(self) -> None:
         file = self.configfile(self.id)
         file.parent.mkdir(parents=True, exist_ok=True)
-        config = {"cases": [case.id for case in self]}
+        config = {"session": self.session, "cases": [case.id for case in self]}
         file.write_text(json.dumps(config, indent=2))
 
     def run(  # type: ignore[override]
@@ -349,6 +350,8 @@ class TestBatch(AbstractTestCase):
             default_term_signal = signal.signal(signal.SIGTERM, cancel)
             proc: hpc_connect.HPCProcess | None = None
             logger.debug(f"Submitting batch {self.id}")
+            workspace = canary.Workspace.load()
+            default_args: list[str] = ["-C", str(workspace.root.parent)]
             if backend.supports_subscheduling and flat:
                 submit_script = self.submission_script_filename()
                 scriptdir = submit_script.parent
@@ -356,7 +359,10 @@ class TestBatch(AbstractTestCase):
                 variables.pop("CANARY_BATCH_ID", None)
                 proc = backend.submitn(
                     [case.id for case in self],
-                    [[self.canary_testcase_invocation(case, backend)] for case in self],
+                    [
+                        [self.canary_testcase_invocation(case, backend, default_args)]
+                        for case in self
+                    ],
                     cpus=[case.cpus for case in self],
                     gpus=[case.gpus for case in self],
                     scriptname=[str(scriptdir / f"{case.id}-inp.sh") for case in self],
@@ -372,7 +378,7 @@ class TestBatch(AbstractTestCase):
                 nodes = self.nodes_required(backend)
                 proc = backend.submit(
                     f"canary.{self.id[:7]}",
-                    [self.canary_batch_invocation(backend)],
+                    [self.canary_batch_invocation(backend, default_args)],
                     nodes=nodes,
                     scriptname=str(self.submission_script_filename()),
                     output=str(self.logfile(self.id)),
@@ -450,31 +456,31 @@ class TestBatch(AbstractTestCase):
         return node_count
 
     def canary_testcase_invocation(
-        self, case: canary.TestCase, backend: hpc_connect.HPCSubmissionManager
+        self,
+        case: canary.TestCase,
+        backend: hpc_connect.HPCSubmissionManager,
+        default_args: list[str],
     ) -> str:
         """Write the canary invocation used to run this test case"""
         args: list[str] = ["canary"]
-        if canary.config.get("config:debug"):
-            args.append("-d")
-        args.extend(["-C", canary.config.get("session:work_tree"), "hpc", "exec"])
-        args.extend([f"--backend={backend.name}", f"--case={case.id}", self.id])
+        args.extend(default_args)
+        args.extend(["hpc", "exec", f"--backend={backend.name}", f"--case={case.id}", self.id])
         return shlex.join(args)
 
-    def canary_batch_invocation(self, backend: hpc_connect.HPCSubmissionManager) -> str:
+    def canary_batch_invocation(
+        self, backend: hpc_connect.HPCSubmissionManager, default_args: list[str]
+    ) -> str:
         """Write the canary invocation used to run this batch."""
         args: list[str] = ["canary"]
-        if canary.config.get("config:debug"):
-            args.append("-d")
+        args.extend(default_args)
         workers = canary.config.getoption("canary_hpc_batch_workers") or -1
-        args.extend(["-C", canary.config.get("session:work_tree"), "hpc", "exec"])
-        args.extend([f"--workers={workers}", f"--backend={backend.name}", self.id])
+        args.extend(["hpc", "exec", f"--workers={workers}", f"--backend={backend.name}", self.id])
         return shlex.join(args)
 
 
 def canary_hpc_stage() -> Path:
-    work_tree = canary.config.get("session:work_tree")
-    assert work_tree is not None
-    return Path(work_tree).absolute() / ".canary/canary_hpc"
+    workspace = canary.Workspace.load()
+    return workspace.cache_dir / "canary_hpc"
 
 
 def get_scheduler_args() -> list[str]:

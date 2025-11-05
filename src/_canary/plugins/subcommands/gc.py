@@ -5,7 +5,7 @@
 import argparse
 from typing import TYPE_CHECKING
 
-from ...repo import Repo
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
@@ -23,5 +23,6 @@ class GarbageCollect(CanarySubcommand):
     description = "Remove working directories of test cases having status 'success'"
 
     def execute(self, args: argparse.Namespace) -> int:
-        repo = Repo()
-        repo.gc()
+        workspace = Workspace()
+        workspace.gc()
+        return 0

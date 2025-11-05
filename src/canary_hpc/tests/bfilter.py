@@ -7,12 +7,12 @@ import importlib.resources
 from pathlib import Path
 
 import _canary.config as config
-import _canary.session as session
 from _canary.util.filesystem import working_dir
+from _canary.workspace import Workspace
 from canary_hpc.conductor import CanaryHPCConductor
 
 
-def test_session_bfilter(tmpdir):
+def test_repo_bfilter(tmpdir):
     root = Path(importlib.resources.files("canary"))
     examples = root / "examples"
     with working_dir(tmpdir.strpath, create=True):
@@ -25,10 +25,12 @@ def test_session_bfilter(tmpdir):
             config.ioptions.canary_hpc_batchspec = spec
             conductor = CanaryHPCConductor(backend="shell")
             config.pluginmanager.register(conductor, f"canary_hpc{conductor.backend.name}")
-            s = session.Session("tests", mode="w", force=True)
-            s.add_search_paths([str(examples / "basic"), str(examples / "vvt")])
-            s.discover()
-            s.lock()
-            s.run()
-            files = glob.glob("tests/.canary/canary_hpc/batches/**/canary-inp.sh", recursive=True)
+            workspace = Workspace.create("tests", force=True)
+            workspace.add({str(examples / "basic"): [], str(examples / "vvt"): []})
+            selection = workspace.get_selection()
+            with workspace.session(selection) as session:
+                session.run()
+            files = glob.glob(
+                "tests/.canary/work/canary_hpc/batches/**/canary-inp.sh", recursive=True
+            )
             assert len(files) == 2

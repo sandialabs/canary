@@ -9,7 +9,7 @@ import json
 import os
 from typing import TYPE_CHECKING
 
-from ...repo import Repo
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
@@ -54,11 +54,10 @@ class Log(CanarySubcommand):
             return case.stdout_file
 
     def execute(self, args: argparse.Namespace) -> int:
-
-        repo = Repo.load()
+        workspace = Workspace.load()
 
         if not args.testspec:
-            file = repo.logs_dir / "canary-log.txt"
+            file = workspace.logs_dir / "canary-log.txt"
             if file.exists():
                 text: str
                 if args.raw:
@@ -67,16 +66,12 @@ class Log(CanarySubcommand):
                     text = reconstruct_log(file)
                 page_text(text)
                 return 0
-            raise ValueError(f"no log file found in {repo.root}")
+            raise ValueError(f"no log file found in {workspace.root}")
 
-        cases = repo.load_testcases(latest=True)
-        for case in cases:
-            if case.matches(args.testspec):
-                file = self.get_logfile(case, args)
-                display_file(file)
-                return 0
-
-        raise ValueError(f"{args.testspec}: no matching test found in {repo.root}")
+        case = workspace.find_testcase(args.testspec, latest=True)
+        file = self.get_logfile(case, args)
+        display_file(file)
+        return 0
 
 
 def reconstruct_log(file: str) -> str:

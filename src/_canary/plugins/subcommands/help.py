@@ -48,12 +48,12 @@ class Help(CanarySubcommand):
 
     @staticmethod
     def print_pathspec_help(args: argparse.Namespace) -> None:
-        from .add import pathspec
+        from .common.pathspec import PathSpec
 
-        print(pathspec.pathspec_help())
+        print(PathSpec.pathspec_help())
 
     @staticmethod
     def print_pathfile_help(args: argparse.Namespace) -> None:
-        from .add import pathspec
+        from .common.pathspec import PathSpec
 
-        print(pathspec.pathfile_help())
+        print(PathSpec.pathfile_help())

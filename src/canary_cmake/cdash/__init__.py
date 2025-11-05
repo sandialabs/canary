@@ -197,7 +197,7 @@ class CDashReporter(canary.CanaryReporter):
         else:
             if session is None:
                 raise ValueError("canary report html: session required")
-            reporter = CDashXMLReporter.from_session(session, dest=kwargs["dest"])
+            reporter = CDashXMLReporter.from_repo(dest=kwargs["dest"])
             files.extend(glob.glob(os.path.join(reporter.dest, "*.xml")))
             if not files:
                 raise ValueError("canary report cdash post: no xml files to post")

@@ -5,7 +5,7 @@
 import argparse
 from typing import TYPE_CHECKING
 
-from ...repo import Repo
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
@@ -59,19 +59,10 @@ If no options are give, -x is assumed."""
     def execute(self, args: argparse.Namespace) -> int:
         from ...testcase import TestCase
         from ...testcase import TestMultiCase
-        from ...testcase import from_id as testcase_from_id
 
         case: TestCase | TestMultiCase
-        if args.testspec.startswith("/"):
-            case = testcase_from_id(args.testspec[1:])
-        else:
-            repo = Repo.load()
-            cases = repo.load_testcases(latest=True)
-            for case in cases:
-                if case.matches(args.testspec):
-                    break
-            else:
-                raise ValueError(f"{args.testspec}: no matching test found in {repo.root}")
+        workspace = Workspace.load()
+        case = workspace.find_testcase(args.testspec, latest=True)
         f: str
         if args.show_log:
             f = case.stdout_file

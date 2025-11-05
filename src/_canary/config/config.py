@@ -8,7 +8,6 @@ from collections.abc import ValuesView
 from contextlib import contextmanager
 from copy import deepcopy
 from functools import cached_property
-from pathlib import Path
 from string import Template
 from typing import IO
 from typing import Any
@@ -25,7 +24,6 @@ from ..util import logging
 from ..util.collections import merge
 from ..util.compression import compress64
 from ..util.compression import expand64
-from ..util.filesystem import find_work_tree
 from ..util.filesystem import mkdirp
 from ..util.string import strip_quotes
 from . import _machine
@@ -45,7 +43,6 @@ section_schemas: dict[str, Schema] = {
     "config": config_schema,
     "environment": environment_schema,
     "plugin": plugin_schema,
-    "session": any_schema,
     "system": any_schema,
     "user": user_schema,
 }
@@ -130,34 +127,14 @@ class Config:
                 fh.write(expand64(envcfg))
                 fh.seek(0)
                 self.load_snapshot(fh)
-        elif root := find_work_tree():
-            # If we are inside a session directory, then we want to restore its configuration.
-            file = os.path.join(root, ".canary/config")
-            if os.path.exists(file):
-                with open(file) as fh:
-                    self.load_snapshot(fh)
-            else:
-                raise FileNotFoundError(file)
-        else:
-            self.scopes["defaults"] = ConfigScope("defaults", None, default_config_values())
-            for scope in ("global", "local"):
-                config_scope = read_config_scope(scope)
-                self.push_scope(config_scope)
-            if cscope := read_env_config():
-                self.push_scope(cscope)
+        self.scopes["defaults"] = ConfigScope("defaults", None, default_config_values())
+        for scope in ("global", "local"):
+            config_scope = read_config_scope(scope)
+            self.push_scope(config_scope)
+        if cscope := read_env_config():
+            self.push_scope(cscope)
         if self.get("config:debug"):
             logging.set_level(logging.DEBUG)
-
-    def stage(self, suffix: str | None = None) -> Path:
-        root: Path
-        if f := self.get("session:work_tree"):
-            root = Path(f)
-        else:
-            root = Path.cwd()
-        stage = root / ".canary"
-        if suffix is not None:
-            stage /= suffix
-        return stage
 
     def getoption(self, name: str, default: Any = None) -> Any:
         value = getattr(self.options, name, None)
@@ -438,9 +415,6 @@ class Config:
         log_level = self.get("config:log_level")
         if logging.get_level_name(logger.level) != log_level:
             logging.set_level(log_level)
-        if root := find_work_tree():
-            f = os.path.abspath(os.path.join(root, ".canary/canary-log.txt"))
-            logging.add_file_handler(f, logging.TRACE)
 
     def dump_snapshot(self, file: IO[Any], indent: int | None = None) -> None:
         snapshot: dict[str, Any] = {}
@@ -609,11 +583,6 @@ def default_config_values() -> dict[str, Any]:
             "set": {},
             "unset": [],
         },
-        "session": {
-            "work_tree": None,
-            "level": None,
-            "mode": None,
-        },
         "system": _machine.system_config(),
     }
     return defaults
@@ -669,7 +638,6 @@ def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
     data: dict[str, Any] = scope.setdefault("data", {})  # type: ignore
     data["build"] = legacy["build"]
     data["environment"] = legacy["environment"]
-    data["session"] = legacy["session"]
     data["system"] = legacy["system"]
     data["config"] = legacy["config"]
     data["config"]["cache_dir"] = os.path.join(properties["invocation_dir"], ".canary_cache")

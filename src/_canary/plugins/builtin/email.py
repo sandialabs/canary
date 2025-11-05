@@ -12,8 +12,8 @@ from ...util.sendmail import sendmail
 from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
-    from ...repo import Repo
     from ...testcase import TestCase
+    from ...workspace import Session
 
 logger = logging.get_logger(__name__)
 
@@ -33,7 +33,7 @@ def canary_addoption(parser: Parser) -> None:
 
 
 @hookimpl(trylast=True)
-def canary_session_finish(repo: "Repo", exitstatus: int) -> None:
+def canary_session_finish(session: "Session", exitstatus: int) -> None:
     mail_to = config.getoption("mail_to")
     if mail_to is None:
         return
@@ -41,15 +41,15 @@ def canary_session_finish(repo: "Repo", exitstatus: int) -> None:
     if sendaddr is None:
         raise RuntimeError("missing required argument --mail-from")
     recvaddrs = [_.strip() for _ in mail_to.split(",") if _.split()]
-    html_report = generate_html_report(repo)
+    html_report = generate_html_report(session)
     subject = "Canary Summary"
     logger.info(f"Sending summary to {', '.join(recvaddrs)}")
     sendmail(sendaddr, recvaddrs, subject, html_report, subtype="html")
 
 
-def generate_html_report(repo: "Repo") -> str:
+def generate_html_report(session: "Session") -> str:
     totals: dict[str, list["TestCase"]] = {}
-    for case in repo.active_testcases():
+    for case in session.cases:
         group = case.status.name.title()
         totals.setdefault(group, []).append(case)
     file = io.StringIO()

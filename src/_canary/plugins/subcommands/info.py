@@ -5,7 +5,7 @@
 import argparse
 from typing import TYPE_CHECKING
 
-from ...repo import Repo
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
@@ -23,11 +23,12 @@ class Info(CanarySubcommand):
     description = "Print information about test session"
 
     def execute(self, args: argparse.Namespace) -> int:
-        repo = Repo()
-        info = repo.info()
+        workspace = Workspace.load()
+        info = workspace.info()
         print(f"Test sessions repository: {info['root']}")
         print(f"Version:       {info['version']}")
         print(f"Generators:    {info['generator_count']}")
         print(f"Sessions:      {info['session_count']}")
         print(f"Latest:        {info['latest_session']}")
         print(f"Tags:          {' '.join(info['tags'])}")
+        return 0

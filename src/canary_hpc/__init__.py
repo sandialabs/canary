@@ -140,17 +140,17 @@ class Batch(canary.CanarySubcommand):
         return 0
 
     def location(self, batch_id: str) -> Path:
-        session = canary.Session(str(Path.cwd()), mode="r")
-        root = Path(session.work_tree) / ".canary/canary_hpc/batches" / batch_id[:2]
+        workspace = canary.Workspace.load()
+        root = workspace.work_dir / "canary_hpc/batches" / batch_id[:2]
         if root.exists() and (root / batch_id[2:]).exists():
             return root / batch_id[2:]
         elif matches := list(root.glob(f"{batch_id[2:]}*")):
             return matches[0]
-        raise ValueError(f"Stage directory for batch {batch_id} not found in {session.work_tree}")
+        raise ValueError(f"Stage directory for batch {batch_id} not found in {workspace.root}")
 
     def find_batches(self) -> list[str]:
-        session = canary.Session(str(Path.cwd()), mode="r")
-        root = Path(session.work_tree) / ".canary/canary_hpc/batches"
+        workspace = canary.Workspace.load()
+        root = workspace.work_dir / "canary_hpc/batches"
         batches: list[str] = []
         for p in root.iterdir():
             if p.is_dir():
@@ -161,24 +161,24 @@ class Batch(canary.CanarySubcommand):
         location = self.location(batch_id)
         f = location / "index"
         case_ids = json.loads(f.read_text())
-        session = canary.Session(str(Path.cwd()), mode="r")
-        for case in session.cases:
+        workspace = canary.Workspace.load()
+        for case in workspace.active_testcases():
             if case.id not in case_ids:
                 case.mask = "[MASKED]"
         canary.config.options.report_chars = "A"
-        canary.config.pluginmanager.hook.canary_statusreport(session=session)
+        canary.config.pluginmanager.hook.canary_statusreport(workspace=workspace)
 
     def describe(self, batch_id: str) -> None:
         print(f"Batch {batch_id}")
         location = self.location(batch_id)
         f = location / "index"
         case_ids = json.loads(f.read_text())
-        session = canary.Session(str(Path.cwd()), mode="r")
-        for case in session.cases:
+        workspace = canary.Workspace.load()
+        for case in workspace.active_testcases():
             if case.id not in case_ids:
                 continue
-            if case.work_tree is None:
-                case.work_tree = session.work_tree
+            if case.session is None:
+                case.session = str(workspace.sessions_dir)
             print(f"- name: {case.display_name}\n  location: {case.working_directory}")
         return
 

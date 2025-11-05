@@ -9,9 +9,9 @@ import re
 from typing import TYPE_CHECKING
 
 from ... import status
-from ...repo import Repo
 from ...third_party import colify
 from ...third_party.color import colorize
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
@@ -73,8 +73,8 @@ class Status(CanarySubcommand):
         parser.add_argument("pathspec", nargs="?", help="Limit status results to this path")
 
     def execute(self, args: "argparse.Namespace") -> int:
-        repo = Repo.load()
-        table = repo.status()
+        workspace = Workspace.load()
+        table = workspace.status()
         fh = io.StringIO()
         for row in table[2:]:
             row[0] = colorize("@*b{%s}" % row[0])

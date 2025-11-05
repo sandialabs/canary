@@ -6,7 +6,7 @@ import json
 import os
 from typing import Any
 
-from ...repo import Repo
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanaryReporter
 
@@ -22,8 +22,8 @@ class JsonReporter(CanaryReporter):
     default_output = "canary.json"
 
     def create(self, **kwargs: Any) -> None:
-        repo = Repo.load()
-        cases = repo.load_testcases(latest=True)
+        workspace = Workspace.load()
+        cases = workspace.load_testcases(latest=True)
         file = os.path.abspath(kwargs["output"] or self.default_output)
         data: dict = {}
         for case in cases:

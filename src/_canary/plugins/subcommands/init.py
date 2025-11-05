@@ -7,8 +7,8 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ...repo import Repo
 from ...util import logging
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
@@ -37,6 +37,6 @@ class Init(CanarySubcommand):
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
-        repo = Repo.create(Path(args.path).absolute(), force=args.w)
-        logger.info(f"Initialized empty canary session created at {repo.root}")
+        workspace = Workspace.create(Path(args.path).absolute(), force=args.w)
+        logger.info(f"Initialized empty canary session created at {workspace.root}")
         return 0

@@ -18,8 +18,8 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
     from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
-    from ..repo import Repo
     from ..testcase import TestCase
+    from ..workspace import Session
     from .manager import CanaryPluginManager
     from .types import Result
 
@@ -87,7 +87,7 @@ def canary_configure(config: "CanaryConfig") -> None:
 
 
 @hookspec
-def canary_session_startup(repo: "Repo") -> None:
+def canary_session_startup(session: "Session") -> None:
     """Called after the session object has been created and before performing collection and
     entering the run test loop."""
 
@@ -96,12 +96,12 @@ _impl_warning = "canary_session_start is deprecated and will be removed, use can
 
 
 @hookspec(warn_on_impl=DeprecationWarning(_impl_warning))
-def canary_session_start(repo: "Repo") -> None:
+def canary_session_start(session: "Session") -> None:
     raise NotImplementedError
 
 
 @hookspec
-def canary_session_finish(repo: "Repo", exitstatus: int) -> None:
+def canary_session_finish(session: "Session", exitstatus: int) -> None:
     """Called after the test session has finished allowing plugins to perform custom actions after
     all tests have been run."""
     raise NotImplementedError
@@ -130,7 +130,7 @@ def canary_session_reporter() -> CanaryReporter:
 
 
 @hookspec
-def canary_statusreport(repo: "Repo") -> None:
+def canary_statusreport(session: "Session") -> None:
     raise NotImplementedError
 
 

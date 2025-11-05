@@ -3,10 +3,11 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import sys
 from typing import TYPE_CHECKING
 
 from ...util import logging
-from ...util.banner import banner
+from ...util.banner import print_banner
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import PathSpec
@@ -33,18 +34,16 @@ class Rebaseline(CanarySubcommand):
         PathSpec.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
-        from ...repo import Repo
-
-        if getattr(args, "work_tree", None) is None:
-            raise ValueError("rebaseline must be executed in a canary work tree")
+        from ...workspace import Workspace
 
         if not args.keyword_exprs and not args.start and not args.parameter_expr:
-            # Rebaseline diffed tests by default
-            args.keyword_exprs = ["diff"]
+            raise ValueError("At least one filtering criteria required")
 
-        logger.log(logging.EMIT, banner(), extra={"prefix": ""})
-        repo = Repo.load()
-        cases = repo.filter(
+        print_banner(sys.stderr)
+        workspace = Workspace.load()
+        cases = workspace.active_testcases()
+        workspace.filter(
+            cases,
             start=args.start,
             keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,

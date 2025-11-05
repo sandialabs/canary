@@ -9,8 +9,8 @@ from typing import Any
 import yaml
 
 from ...generator import AbstractTestGenerator
-from ...repo import Repo
 from ...third_party.color import colorize
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 
@@ -48,15 +48,10 @@ class Describe(CanarySubcommand):
             return 0
 
         # could be a test case in the test session?
-        repo = Repo.load()
-        cases = repo.load_testcases(latest=True)
-        for case in cases:
-            if case.matches(args.testspec):
-                describe_testcase(case)
-                return 0
-
-        print(f"{args.testspec}: could not find matching generator or test case")
-        return 1
+        workspace = Workspace.load()
+        case = workspace.find_testcase(args.testspec, latest=True)
+        describe_testcase(case)
+        return 0
 
 
 def describe_generator(
