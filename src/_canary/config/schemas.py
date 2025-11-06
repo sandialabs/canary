@@ -105,6 +105,7 @@ config_schema = Schema(
         Optional("debug"): Use(boolean),
         Optional("log_level"): Use(log_level_name),
         Optional("cache_dir"): str,
+        Optional("view"): Or(bool, str, None),
         Optional("multiprocessing"): {
             Optional("context"): multiprocessing_contexts,
             Optional("max_tasks_per_child"): positive_int,

@@ -190,11 +190,21 @@ class StatusFormatAction(argparse.Action):
 
     def __call__(self, parser, namespace, value, option_string=None):
         items = value.split(",")
-        for item in items:
-            if item not in self._choices:
+        for i, item in enumerate(items):
+            if choice := match_case_insensitive(item, self._choices):
+                items[i] = choice
+            else:
                 choices = ",".join(self._choices)
-                parser.error(f"Invalid status format {item!r}, choose any from {choices}")
+                parser.error(f"Invalid status format {item!r}, choose from {choices}")
+        value = ",".join(items)
         setattr(namespace, self.dest, value)
+
+
+def match_case_insensitive(s: str, choices: list[str]) -> str | None:
+    for choice in choices:
+        if s.lower() == choice.lower():
+            return choice
+    return None
 
 
 def sortby_status(info: dict[str, list]) -> dict[str, list]:

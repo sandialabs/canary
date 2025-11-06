@@ -572,6 +572,7 @@ def default_config_values() -> dict[str, Any]:
     defaults = {
         "config": {
             "debug": False,
+            "view": "TestResults",
             "log_level": "INFO",
             "cache_dir": os.path.join(os.getcwd(), ".canary_cache"),
             "multiprocessing": {

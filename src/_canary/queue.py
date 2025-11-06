@@ -228,6 +228,7 @@ class ResourceQueue(AbstractResourceQueue):
 
     def skip(self, obj_no: int) -> None:
         self._finished[obj_no] = self.buffer.pop(obj_no)
+        self._finished[obj_no].save()
         for case in self.buffer.values():
             for i, dep in enumerate(case.dependencies):
                 if dep.id == self._finished[obj_no].id:

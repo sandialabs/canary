@@ -6,6 +6,7 @@ import datetime
 import hashlib
 import json
 import os
+import shutil
 import tempfile
 import time
 from contextlib import contextmanager
@@ -23,7 +24,6 @@ from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_state as testcase_from_state
 from .util import logging
-from .util.filesystem import force_remove
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
 from .util.graph import find_reachable_nodes
@@ -33,7 +33,6 @@ logger = logging.get_logger(__name__)
 
 workspace_path = ".canary"
 workspace_tag = "WORKSPACE.TAG"
-view_path = "TestResults"
 view_tag = "VIEW.TAG"
 session_tag = "VIEW.TAG"
 
@@ -69,6 +68,9 @@ class Session:
         self.work_dir: Path
         self._cases: list[TestCase] | None
         raise RuntimeError("Use Session factory methods create and load")
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.root})"
 
     def initialize_properties(self, *, anchor: Path, name: str) -> None:
         self.name = name
@@ -194,6 +196,7 @@ class Session:
             results: dict[str, Any] = latest["cases"]
             for case in cases:
                 case.refresh()
+                print(case, case.status)
                 entry = {
                     "name": case.display_name,
                     "fullname": case.fullname,
@@ -232,7 +235,8 @@ class Workspace:
         # Even through this function is not meant to be called, we declare types so that code
         # editors know what to work with.
         self.root: Path
-        self.view: Path
+
+        self.view: Path | None
 
         # "Immutable" objects
         self.objects_dir: Path
@@ -262,7 +266,7 @@ class Workspace:
 
     def initialize_properties(self, *, anchor: Path) -> None:
         self.root = anchor / workspace_path
-        self.view = anchor / view_path
+        self.view = None
         self.objects_dir = self.root / "objects"
         self.cases_dir = self.objects_dir / "cases"
         self.generators_dir = self.objects_dir / "generators"
@@ -280,10 +284,18 @@ class Workspace:
         if anchor is None:
             return
         workspace = anchor / workspace_path
-        view = anchor / view_path
-        if (workspace / workspace_tag).exists() and (view / view_tag).exists():
-            force_remove(str(workspace))
-            force_remove(str(view))
+        view: Path | None = None
+        cache_dir = workspace / "cache"
+        file = workspace / "cache/view"
+        if file.exists():
+            relpath = file.read_text().strip()
+            view = cache_dir / relpath
+        if view is None:
+            if (workspace / workspace_tag).exists():
+                shutil.rmtree(workspace)
+        elif (workspace / workspace_tag).exists() and (view / view_tag).exists():
+            shutil.rmtree(view)
+            shutil.rmtree(workspace)
         elif (workspace / workspace_tag).exists() and view.exists():
             raise ValueError(f"Cannot remove {workspace} because {view} is not owned by Canary")
         else:
@@ -319,16 +331,8 @@ class Workspace:
         self.initialize_properties(anchor=path)
         if self.root.exists():
             raise WorkspaceExistsError(path)
-        if self.view.exists():
-            raise FileExistsError(
-                f"Canary requires ownership of existing directory {self.view}. "
-                f"Rename {self.view} and try again."
-            )
         self.root.mkdir(parents=True)
         write_directory_tag(self.root / workspace_tag)
-
-        self.view.mkdir(parents=True)
-        write_directory_tag(self.view / view_tag)
 
         self.cases_dir.mkdir(parents=True)
         self.generators_dir.mkdir(parents=True)
@@ -342,8 +346,25 @@ class Workspace:
         file.write_text(json.dumps({}))
         version = self.root / "VERSION"
         version.write_text(".".join(str(_) for _ in self.version_info))
+
         file = self.logs_dir / "canary-log.txt"
         logging.add_file_handler(str(file), logging.TRACE)
+
+        if var := config.get("config:view"):
+            if isinstance(var, str):
+                self.view = self.root.parent / var
+            else:
+                self.view = self.root.parent / "TestResults"
+            if self.view.exists():
+                raise FileExistsError(
+                    f"Canary requires ownership of existing directory {self.view}. "
+                    f"Rename {self.view} and try again."
+                )
+            self.view.mkdir(parents=True)
+            write_directory_tag(self.view / view_tag)
+            file = self.cache_dir / "view"
+            link = os.path.relpath(str(self.view), str(file.parent))
+            file.write_text(link)
 
         file = self.root / "canary.yaml"
         file.write_text(json.dumps({}))
@@ -360,6 +381,14 @@ class Workspace:
             )
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=anchor)
+        file = self.cache_dir / "view"
+        if file.exists():
+            relpath = file.read_text().strip()
+            self.view = self.cache_dir / relpath
+            self.view.mkdir(parents=True, exist_ok=True)
+            view_file = self.view / view_tag
+            if not view_file.exists():
+                write_directory_tag(view_file)
         file = self.logs_dir / "canary-log.txt"
         logging.add_file_handler(str(file), logging.TRACE)
         return self
@@ -427,6 +456,8 @@ class Workspace:
         self.head.write_text(str(link))
 
     def _update_view(self, view_entries: dict[Path, list[Path]]) -> None:
+        if self.view is None:
+            return
         for root, paths in view_entries.items():
             for path in paths:
                 target = root / path
@@ -442,6 +473,8 @@ class Workspace:
 
     def inside_view(self, path: Path | str) -> bool:
         """Is ``path`` inside of a self.view?"""
+        if self.view is None:
+            return False
         return Path(path).is_relative_to(self.view)
 
     def info(self) -> dict[str, Any]:
@@ -830,20 +863,30 @@ class Workspace:
         """Garbage collect"""
         removed: int = 0
         logger.info(f"Garbage collecting {self.root}")
-        logger.warning("Garbage collection does not consider test case dependency graphs")
+        cases: list[TestCase] = []
         for dir in self.sessions_dir.iterdir():
             if not dir.is_dir():
                 continue
-            file = dir / "latest.json"
-            latest: dict[str, Any] = json.loads(file.read_text())
-            results: dict[str, dict] = latest.setdefault("cases", {})
-            for data in results.values():
-                if data["status"]["value"] == "success":
-                    path = Path(data["working_directory"])
-                    if path.exists():
-                        logger.info(f"Removing working directory for {dir.stem}::{data['name']}")
-                        force_remove(data["working_directory"])
-                        removed += 1
+            session = Session.load(self.sessions_dir / dir)
+            cases.extend(session.load_testcases())
+        keep: set[TestCase] = {id(c) for c in cases if c.status != "success"}
+
+        needed: set[int] = set()
+        stack: list[TestCase] = [c for c in cases if id(c) in keep]
+        while stack:
+            case = stack.pop()
+            for dep in case.dependencies:
+                dep_id = id(dep)
+                if dep_id not in needed:
+                    needed.add(dep_id)
+                    stack.append(dep)
+
+        to_remove = [c for c in cases if c.status == "success" and id(c) not in needed]
+        removed: int = 0
+        for case in to_remove:
+            if Path(case.working_directory).exists():
+                removed += 1
+                shutil.rmtree(case.working_directory)
         logger.info(f"Removed working directories for {removed} test cases")
 
     def testcase_index(self) -> dict[str, list[str]]:
@@ -876,7 +919,10 @@ class Workspace:
                 raise ValueError(f"{spec}: no matching test found in {self.root}")
         if latest:
             self.update_testcases([case])
-            case.set_workspace_properties(workspace=self.view, session=None)
+            if self.view is None:
+                case.set_workspace_properties(workspace=self.root, session=self.name)
+            else:
+                case.set_workspace_properties(workspace=self.view, session=None)
         return case
 
 

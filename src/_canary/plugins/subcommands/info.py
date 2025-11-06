@@ -60,5 +60,5 @@ class Info(CanarySubcommand):
         fh.write(f"Generators:  {info['generator_count']}\n")
         fh.write(f"Sessions:    {info['session_count']}\n")
         fh.write(f"Latest:      {info['latest_session']}\n")
-        fh.write(f"Tags:        {' '.join(info['tags'])}\n")
+        fh.write(f"Tags:        {', '.join(info['tags'])}\n")
         return fh.getvalue()
