@@ -29,18 +29,23 @@ class Tag(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         add_filter_arguments(parser, tagged=False)
+        parser.add_argument("-d", dest="delete_tag", action="store_true", help="Remove tag NAME")
         parser.add_argument("name", help="Tag name")
 
     def execute(self, args: "argparse.Namespace") -> int:
         workspace: Workspace = Workspace.load()
-        workspace.tag(
-            args.name,
-            keyword_exprs=args.keyword_exprs,
-            parameter_expr=args.parameter_expr,
-            on_options=args.on_options,
-            regex=args.regex_filter,
-        )
-        logger.info(f"To run this tag execute 'canary run {args.tag}'")
+        if args.delete_tag:
+            if workspace.remove_tag(args.name):
+                logger.info(f"Removed tag {args.name!r}")
+        else:
+            workspace.tag(
+                args.name,
+                keyword_exprs=args.keyword_exprs,
+                parameter_expr=args.parameter_expr,
+                on_options=args.on_options,
+                regex=args.regex_filter,
+            )
+            logger.info(f"To run this tag execute 'canary run {args.name}'")
         return 0
 
 
@@ -55,11 +60,11 @@ class Select(CanarySubcommand):
     def execute(self, args: "argparse.Namespace") -> int:
         workspace: Workspace = Workspace.load()
         workspace.make_selection(
-            tag=args.tag,
+            tag=args.name,
             keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,
             on_options=args.on_options,
             regex=args.regex_filter,
         )
-        logger.info(f"To run this selection execute 'canary run {args.tag}'")
+        logger.info(f"To run this selection execute 'canary run {args.name}'")
         return 0

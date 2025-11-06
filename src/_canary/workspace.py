@@ -611,6 +611,21 @@ class Workspace:
         cache_file.write_text(json.dumps(meta, indent=2))
         return name
 
+    def remove_tag(self, name: str) -> bool:
+        if name == "default":
+            logger.error("Cannot remove default tag")
+            return False
+        tag_file = self.tags_dir / name
+        if not tag_file.exists():
+            logger.warning(f"Tag {name} does not exist")
+            return False
+        tag_file.unlink()
+        cache_file = self.cache_dir / "tags" / name
+        cache_file.unlink(missing_ok=True)
+        cache_file = self.cache_dir / "select" / name
+        cache_file.unlink(missing_ok=True)
+        return True
+
     def tag_info(self, name: str) -> dict[str, Any]:
         tag_file = self.tags_dir / name
         if not tag_file.exists():
@@ -667,7 +682,7 @@ class Workspace:
                 # Add all testcases to the object store before masking so that future stages don't
                 # inherit this stage's mask (if any)
                 self.add_testcase(case)
-            file.parent.mkdir(parents=True)
+            file.parent.mkdir(parents=True, exist_ok=True)
             file.touch()
 
         config.pluginmanager.hook.canary_testsuite_mask(
@@ -682,13 +697,12 @@ class Workspace:
         )
         for case in static_order(cases):
             config.pluginmanager.hook.canary_testcase_modify(case=case)
+        config.pluginmanager.hook.canary_collectreport(cases=cases)
 
         selected = [case for case in cases if not case.mask]
-        n = len(selected)
         if not selected:
             logger.warning("Empty test case selection")
 
-        logger.info(f"@*{{Selected}} {n} test cases based on filtering criteria")
         return selected
 
     def cache_selection(self, selection: CaseSelection) -> None:
@@ -713,6 +727,7 @@ class Workspace:
         case_specs: list[str] | None = None,
         regex: str | None = None,
     ) -> CaseSelection:
+        logger.info("@*{Selecting} test cases from generators")
         kwds = dict(
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
@@ -721,10 +736,15 @@ class Workspace:
             case_specs=case_specs,
             regex=regex,
         )
+        if tag is None and all(not value for value in kwds.values()):
+            # This is the default selection
+            return self.get_selection("default")
+        if tag is not None:
+            # Tag early to error out before locking if tag already exists
+            self.tag(tag, **kwds)
         cases = self.lock(**kwds)
         selection = CaseSelection(cases=cases, tag=tag)
         if tag is not None:
-            self.tag(tag, **kwds)
             self.cache_selection(selection)
         return selection
 
