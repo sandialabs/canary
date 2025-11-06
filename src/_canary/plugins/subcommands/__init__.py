@@ -20,8 +20,9 @@ from . import log
 from . import rebaseline
 from . import report
 from . import run
-from . import stage
+from . import select
 from . import status
+from . import tag
 from . import tree
 
 plugins = [
@@ -43,7 +44,8 @@ plugins = [
     rebaseline,
     report,
     run,
-    stage,
+    select,
     status,
+    tag,
     tree,
 ]

@@ -6,7 +6,6 @@ import datetime
 import hashlib
 import json
 import os
-import shutil
 import tempfile
 import time
 from contextlib import contextmanager
@@ -24,6 +23,7 @@ from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_state as testcase_from_state
 from .util import logging
+from .util.filesystem import force_remove
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
 from .util.graph import find_reachable_nodes
@@ -66,6 +66,8 @@ class Session:
         self.name: str
         self.root: Path
         self.work_dir: Path
+        self.meta_file: Path
+        self.index_file: Path
         self._cases: list[TestCase] | None
         raise RuntimeError("Use Session factory methods create and load")
 
@@ -77,6 +79,8 @@ class Session:
         self.root = anchor / self.name
         self.work_dir = self.root / "work"
         self._cases = None
+        self.meta_file = self.root / "session.json"
+        self.index_file = self.root / "index.json"
 
     @staticmethod
     def is_session(path: Path) -> Path | None:
@@ -101,8 +105,8 @@ class Session:
             "index": {case.id: [dep.id for dep in case.dependencies] for case in self._cases},
             "paths": {case.id: case.path for case in self._cases},
         }
-        (self.root / "session.json").write_text(json.dumps(data, indent=2))
-        (self.root / "latest.json").write_text(json.dumps({}))
+        self.meta_file.write_text(json.dumps(data, indent=2))
+        self.index_file.write_text(json.dumps({}))
         self.populate_worktree()
         write_directory_tag(self.root / session_tag)
         # Dump a snapshot of the configuration used to create this session
@@ -183,45 +187,67 @@ class Session:
             duration = stop - start
             logger.info(f"Finished session in {duration:.2f} s. with returncode {returncode}")
             finished_on: str = datetime.datetime.now().isoformat(timespec="microseconds")
-            latest = self.load_latest()
-            history: list[dict] = latest["history"]
-            history.append(
-                {
-                    "started_on": started_on,
-                    "finished_on": finished_on,
-                    "returncode": returncode,
-                    "cases": [case.id for case in cases],
-                }
-            )
-            results: dict[str, Any] = latest["cases"]
+            history = {
+                "started_on": started_on,
+                "finished_on": finished_on,
+                "returncode": returncode,
+                "action": "run",
+            }
             for case in cases:
                 case.refresh()
-                print(case, case.status)
-                entry = {
-                    "name": case.display_name,
-                    "fullname": case.fullname,
-                    "family": case.family,
-                    "returncode": case.returncode,
-                    "duration": case.duration,
-                    "started_on": timestamp_to_isoformat(case.start),
-                    "finished_on": timestamp_to_isoformat(case.stop),
-                    "working_directory": case.working_directory,
-                    "execution_directory": case.execution_directory,
-                    "instance_attributes": case.instance_attributes,
-                    "status": {"value": case.status.value, "details": case.status.details},
-                }
-                results[case.id] = entry
-
-            file = self.root / "latest.json"
-            atomic_write(file, json.dumps(latest, indent=2))
+            self.update_index(cases, history=history)
             return {"returncode": returncode, "cases": cases}
 
-    def load_latest(self) -> dict[str, Any]:
-        file = self.root / "latest.json"
-        latest: dict[str, Any] = json.loads(file.read_text())
-        latest.setdefault("history", [])
-        latest.setdefault("cases", {})
-        return latest
+    def load_index(self) -> dict[str, Any]:
+        index: dict[str, Any] = {}
+        if self.index_file.exists():
+            index.update(json.loads(self.index_file.read_text()))
+        index.setdefault("history", [])
+        index.setdefault("cases", {})
+        return index
+
+    def dump_index(self, index: dict[str, Any]) -> None:
+        assert "history" in index
+        assert "cases" in index
+        atomic_write(self.index_file, json.dumps(index, indent=2))
+
+    def rebuild_index(self) -> bool:
+        started_on: str = datetime.datetime.now().isoformat(timespec="microseconds")
+        cases: list[TestCase] = []
+        for file in self.work_dir.rglob("testcase.lock"):
+            state = json.loads(file.read_text())
+            case = testcase_from_state(state)
+            cases.append(case)
+        # Clear the current index
+        index = self.load_index()
+        index["cases"].clear()
+        self.dump_index(index)
+        finished_on: str = datetime.datetime.now().isoformat(timespec="microseconds")
+        history = {"started_on": started_on, "finished_on": finished_on, "action": "rebuild index"}
+        self.update_index(cases, history)
+        return True
+
+    def update_index(self, cases: list[TestCase], history: dict | None = None) -> bool:
+        index = self.load_index()
+        if history is not None:
+            index["history"].append(history)
+        for case in cases:
+            entry = {
+                "name": case.display_name,
+                "fullname": case.fullname,
+                "family": case.family,
+                "returncode": case.returncode,
+                "duration": case.duration,
+                "started_on": timestamp_to_isoformat(case.start),
+                "finished_on": timestamp_to_isoformat(case.stop),
+                "working_directory": case.working_directory,
+                "execution_directory": case.execution_directory,
+                "instance_attributes": case.instance_attributes,
+                "status": {"value": case.status.value, "details": case.status.details},
+            }
+            index["cases"][case.id] = entry
+        self.dump_index(index)
+        return True
 
     def enter(self) -> None: ...
 
@@ -262,6 +288,8 @@ class Workspace:
         self.head: Path
 
         self.lockfile: Path
+        self.index_file: Path
+
         raise RuntimeError("Use Workspace factory methods create and load")
 
     def initialize_properties(self, *, anchor: Path) -> None:
@@ -277,6 +305,7 @@ class Workspace:
         self.logs_dir = self.root / "logs"
         self.head = self.root / "HEAD"
         self.lockfile = self.root / "lock"
+        self.index_file = self.cache_dir / "index.json"
 
     @staticmethod
     def remove(start: str | Path = Path.cwd()) -> None:
@@ -292,10 +321,10 @@ class Workspace:
             view = cache_dir / relpath
         if view is None:
             if (workspace / workspace_tag).exists():
-                shutil.rmtree(workspace)
+                force_remove(workspace)
         elif (workspace / workspace_tag).exists() and (view / view_tag).exists():
-            shutil.rmtree(view)
-            shutil.rmtree(workspace)
+            force_remove(view)
+            force_remove(workspace)
         elif (workspace / workspace_tag).exists() and view.exists():
             raise ValueError(f"Cannot remove {workspace} because {view} is not owned by Canary")
         else:
@@ -342,8 +371,6 @@ class Workspace:
         self.tags_dir.mkdir(parents=True)
         self.tag("default")
         self.logs_dir.mkdir(parents=True)
-        file = self.sessions_dir / "latest.json"
-        file.write_text(json.dumps({}))
         version = self.root / "VERSION"
         version.write_text(".".join(str(_) for _ in self.version_info))
 
@@ -365,6 +392,8 @@ class Workspace:
             file = self.cache_dir / "view"
             link = os.path.relpath(str(self.view), str(file.parent))
             file.write_text(link)
+
+        self.index_file.write_text(json.dumps({}))
 
         file = self.root / "canary.yaml"
         file.write_text(json.dumps({}))
@@ -393,6 +422,11 @@ class Workspace:
         logging.add_file_handler(str(file), logging.TRACE)
         return self
 
+    def sessions(self) -> Generator[Session, None, None]:
+        for path in self.sessions_dir.iterdir():
+            if Session.is_session(path):
+                yield Session.load(path)
+
     @contextmanager
     def session(
         self, selection: CaseSelection | None = None, name: str | None = None
@@ -414,19 +448,26 @@ class Workspace:
         finally:
             self.update(session)
 
-    def load_latest(self) -> dict[str, Any]:
-        file = self.sessions_dir / "latest.json"
-        latest: dict[str, Any] = json.loads(file.read_text())
-        latest.setdefault("cases", {})
-        return latest
+    def load_index(self) -> dict[str, Any]:
+        index: dict[str, Any] = {}
+        if self.index_file.exists():
+            index.update(json.loads(self.index_file.read_text()))
+        index.setdefault("history", [])
+        index.setdefault("cases", {})
+        return index
+
+    def dump_index(self, index: dict[str, Any]) -> None:
+        assert "history" in index
+        assert "cases" in index
+        atomic_write(self.index_file, json.dumps(index, indent=2))
 
     def update(self, session: Session) -> None:
         """Update latest results, view, and refs with results from ``session``"""
-        latest = self.load_latest()
-        results = latest["cases"]
-        session_results = session.load_latest()
+        my_index = self.load_index()
+        results = my_index["cases"]
+        session_index = session.load_index()
         view_entries: dict[str, list[str]] = {}
-        for id, their_entry in session_results["cases"].items():
+        for id, their_entry in session_index["cases"].items():
             if id in results:
                 # Determine if this session's results are newer than my results
                 # They can be older if only a subset of the session's cases were run this last time
@@ -440,8 +481,7 @@ class Workspace:
             relpath = Path(their_entry["working_directory"]).relative_to(session.work_dir)
             view_entries.setdefault(session.work_dir, []).append(relpath)
 
-        file = self.sessions_dir / "latest.json"
-        atomic_write(file, json.dumps(latest, indent=2))
+        self.dump_index(my_index)
         self._update_view(view_entries)
 
         # Write meta data file refs/latest -> ../sessions/{session.root}
@@ -454,6 +494,31 @@ class Workspace:
         self.head.unlink(missing_ok=True)
         link = os.path.relpath(str(file), str(self.head.parent))
         self.head.write_text(str(link))
+
+    def rebuild_view(self) -> None:
+        if self.view is None:
+            return
+        my_index = self.load_index()
+        view_entries: dict[str, list[str]] = {}
+        for path in self.view.iterdir():
+            if path.is_dir():
+                force_remove(path)
+        for session in self.sessions():
+            session_index = session.load_index()
+            for id, their_entry in session_index["cases"].items():
+                if id in my_index["cases"]:
+                    # Determine if this session's results are newer than my results
+                    # They can be older if only a subset of the session's cases were run this last time
+                    my_entry = my_index["cases"][id]
+                    if my_entry["finished_on"] != "NA":
+                        my_time = datetime.datetime.fromisoformat(my_entry["finished_on"])
+                        their_time = datetime.datetime.fromisoformat(their_entry["finished_on"])
+                        if my_time > their_time:
+                            continue
+                my_entry = {"session": session.name, **their_entry}
+                relpath = Path(their_entry["working_directory"]).relative_to(session.work_dir)
+                view_entries.setdefault(session.work_dir, []).append(relpath)
+        self._update_view(view_entries)
 
     def _update_view(self, view_entries: dict[Path, list[Path]]) -> None:
         if self.view is None:
@@ -571,7 +636,7 @@ class Workspace:
         cases = load_testcases(index, paths, ids=ids)
         if not latest:
             return cases
-        self.update_testcases(cases)
+        self.update_testcases_with_newest_results(cases)
         return cases
 
     def get_testcases_by_spec(self, case_specs: list[str], tag: str | None = None) -> CaseSelection:
@@ -582,10 +647,10 @@ class Workspace:
             self.cache_selection(selection)
         return selection
 
-    def update_testcases(self, cases: list[TestCase]) -> None:
+    def update_testcases_with_newest_results(self, cases: list[TestCase]) -> None:
         """Update cases in ``cases`` with their latest results"""
-        latest = self.load_latest()
-        results: dict[str, dict] = latest["cases"]
+        my_index = self.load_index()
+        results: dict[str, dict] = my_index["cases"]
         for case in cases:
             if result := results.get(case.id):
                 if session := result["session"]:
@@ -781,7 +846,7 @@ class Workspace:
             self.cache_selection(selection)
         return selection
 
-    def get_selection(self, tag: str = "default") -> CaseSelection:
+    def get_selection(self, tag: str = "default", latest: bool = True) -> CaseSelection:
         selection: CaseSelection
         tag_file = self.tags_dir / tag
         if not tag_file.exists():
@@ -791,14 +856,16 @@ class Workspace:
         if not cache_file.exists():
             link = tag_file.read_text().strip()
             meta = json.loads((self.tags_dir / link).read_text())
-            selected = self.lock(**meta)
-            selection = CaseSelection(cases=selected, tag=tag)
+            cases = self.lock(**meta)
+            if latest:
+                self.update_testcases_with_newest_results(cases)
+            selection = CaseSelection(cases=cases, tag=tag)
             self.cache_selection(selection)
             return selection
 
         cache = json.loads(cache_file.read_text())
         if ids := cache.get("cases"):
-            cases: list[TestCase] = self.load_testcases(ids=ids)
+            cases: list[TestCase] = self.load_testcases(ids=ids, latest=latest)
             selection = CaseSelection(cases=cases, tag=tag)
             selection._sha256 = cache["sha256"]
             selection._created_on = cache["created_on"]
@@ -807,8 +874,10 @@ class Workspace:
         # No cases: cache was invalidated at some point
         link = tag_file.read_text().strip()
         meta = json.loads((self.tags_dir / link).read_text())
-        selected = self.lock(**meta)
-        selection = CaseSelection(cases=selected, tag=tag_file.name)
+        cases = self.lock(**meta)
+        if latest:
+            self.update_testcases_with_newest_results(cases)
+        selection = CaseSelection(cases=cases, tag=tag_file.name)
         self.cache_selection(selection)
         return selection
 
@@ -821,11 +890,9 @@ class Workspace:
         file = self.cases_dir / "index.jsons"
         with file.open(mode="a") as fh:
             fh.write(json.dumps({case.id: [dep.id for dep in case.dependencies]}) + "\n")
-        file = self.sessions_dir / "latest.json"
-        latest = json.loads(file.read_text())
-        results = latest.setdefault("cases", {})
-        if case.id not in results:
-            results[case.id] = {
+        my_index = self.load_index()
+        if case.id not in my_index["cases"]:
+            my_index["cases"][case.id] = {
                 "name": case.display_name,
                 "fullname": case.fullname,
                 "family": case.family,
@@ -837,15 +904,12 @@ class Workspace:
                 "finished_on": "NA",
                 "status": {"value": case.status.value, "details": case.status.details},
             }
-        file.write_text(json.dumps(latest))
+        self.dump_index(my_index)
 
     def statusinfo(self) -> dict[str, list[str]]:
-        file = self.sessions_dir / "latest.json"
-        latest: dict[str, Any] = json.loads(file.read_text())
+        my_index = self.load_index()
         info: dict[str, list[str]] = {}
-
-        results: dict[str, dict] = latest.setdefault("cases", {})
-        for id, entry in results.items():
+        for id, entry in my_index["cases"].items():
             info.setdefault("id", []).append(id[:7])
             info.setdefault("name", []).append(entry["name"])
             info.setdefault("fullname", []).append(entry["fullname"])
@@ -859,35 +923,63 @@ class Workspace:
             info.setdefault("status_details", []).append(entry["status"]["details"] or "")
         return info
 
-    def gc(self) -> None:
+    def collect_all_testcases(self) -> Generator[TestCase, None, None]:
+        for session in self.sessions():
+            yield from session.cases
+
+    def gc(self, purge: bool = False, dryrun: bool = False) -> None:
         """Garbage collect"""
-        removed: int = 0
         logger.info(f"Garbage collecting {self.root}")
-        cases: list[TestCase] = []
-        for dir in self.sessions_dir.iterdir():
-            if not dir.is_dir():
-                continue
-            session = Session.load(self.sessions_dir / dir)
-            cases.extend(session.load_testcases())
-        keep: set[TestCase] = {id(c) for c in cases if c.status != "success"}
-
-        needed: set[int] = set()
-        stack: list[TestCase] = [c for c in cases if id(c) in keep]
-        while stack:
-            case = stack.pop()
-            for dep in case.dependencies:
-                dep_id = id(dep)
-                if dep_id not in needed:
-                    needed.add(dep_id)
-                    stack.append(dep)
-
-        to_remove = [c for c in cases if c.status == "success" and id(c) not in needed]
         removed: int = 0
-        for case in to_remove:
-            if Path(case.working_directory).exists():
-                removed += 1
-                shutil.rmtree(case.working_directory)
-        logger.info(f"Removed working directories for {removed} test cases")
+        try:
+            allcases = list(self.collect_all_testcases())
+            removable = find_removable_cases(allcases)
+            for case in removable:
+                if Path(case.working_directory).exists():
+                    removed += 1
+                    logger.info(f"gc: removing {case}::{case.session}")
+                    if dryrun:
+                        continue
+                    elif purge:
+                        force_remove(case.working_directory)
+                    else:
+                        case.teardown()
+        finally:
+            if not dryrun:
+                self.rebuild_index()
+                self.rebuild_view()
+        logger.info(f"Removed {removed} test cases")
+
+    def rebuild_index(self) -> bool:
+        "Rebuild index.json and self.view"
+        started_on = datetime.datetime.now()
+        for session in self.sessions():
+            session.rebuild_index()
+        index = self.load_index()
+        index["cases"].clear()
+        for session in self.sessions():
+            session_index = session.load_index()
+            for case_id, their_entry in session_index["cases"].items():
+                if case_id in index["cases"]:
+                    # Determine if this session's results are newer than my results
+                    # They can be older if only a subset of the session's cases were run this last time
+                    my_entry = index["cases"][case_id]
+                    if my_entry["finished_on"] != "NA":
+                        my_time = datetime.datetime.fromisoformat(my_entry["finished_on"])
+                        their_time = datetime.datetime.fromisoformat(their_entry["finished_on"])
+                        if my_time > their_time:
+                            continue
+                my_entry = {"session": session.name, **their_entry}
+                index["cases"][case_id] = my_entry
+        finished_on = datetime.datetime.now()
+        history = {
+            "started_on": started_on.isoformat(),
+            "finished_on": finished_on.isoformat(),
+            "command": "rebuild index",
+        }
+        index["history"].append(history)
+        self.dump_index(index)
+        return True
 
     def testcase_index(self) -> dict[str, list[str]]:
         # index format: {ID: [DEPS_IDS]}
@@ -898,7 +990,12 @@ class Workspace:
             index.update(entry)
         return index
 
-    def find_testcase(self, spec: str, latest: bool = False) -> TestCase:
+    def locate(self, *, case: str | None = None) -> Any:
+        """Locate something in the workspace"""
+        if case is not None:
+            return self.locate_testcase(case)
+
+    def locate_testcase(self, spec: str) -> TestCase:
         case: TestCase
         if spec.startswith("/"):
             index = self.testcase_index()
@@ -917,12 +1014,7 @@ class Workspace:
                     break
             else:
                 raise ValueError(f"{spec}: no matching test found in {self.root}")
-        if latest:
-            self.update_testcases([case])
-            if self.view is None:
-                case.set_workspace_properties(workspace=self.root, session=self.name)
-            else:
-                case.set_workspace_properties(workspace=self.view, session=None)
+        self.update_testcases_with_newest_results([case])
         return case
 
 
@@ -1023,6 +1115,46 @@ def expand_ids(ids: list[str], index: list[str]) -> None:
                     break
             else:
                 raise ValueError(f"ID for {id} not found")
+
+
+def find_removable_cases(cases: list[TestCase]) -> list[TestCase]:
+    """Identify testcases eligible for garbage collection
+
+    A test case can be removed if:
+      1. Its status is "success"
+      2. All its dependencies (if any) are successful
+      3. No test cases with non-success status depends on it (directly or indirectly)
+
+    """
+    # Use id(case), not the case directly since the case's __hash__ is derived from case.id
+    # and the list of cases could have multiple cases with the same ID across multiple
+    # sessions
+    okstats = ("success", "xfail", "xdiff")
+    case_by_id: dict[int, TestCase] = {id(case): case for case in cases}
+    failed_cases: set[int] = {id(case) for case in cases if not case.status.satisfies(okstats)}
+    dependents: dict[int, set[int]] = {id(case): set() for case in cases}
+    for case in cases:
+        for dep in case.dependencies:
+            dependents[id(dep)].add(id(case))
+    needed: set[int] = set(failed_cases)
+    stack: list[TestCase] = [case for case in cases if id(case) not in failed_cases]
+    while stack:
+        case = stack.pop()
+        for dep in case.dependencies:
+            dep_id = id(dep)
+            if dep_id not in needed:
+                needed.add(dep_id)
+                stack.append(dep)
+    removable: list[TestCase] = []
+    for case in cases:
+        if not case.status.satisfies(okstats):
+            continue
+        if id(case) in needed:
+            continue
+        if any(not dep.status.satisfies(okstats) for dep in case.dependencies):
+            continue
+        removable.append(case)
+    return removable
 
 
 class WorkspaceExistsError(Exception):

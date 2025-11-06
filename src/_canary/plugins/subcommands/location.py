@@ -62,7 +62,9 @@ If no options are give, -x is assumed."""
 
         case: TestCase | TestMultiCase
         workspace = Workspace.load()
-        case = workspace.find_testcase(args.testspec, latest=True)
+        case = workspace.locate(case=args.testspec)
+        if workspace.view:
+            case.set_workspace_properties(workspace=workspace.view, session=None)
         f: str
         if args.show_log:
             f = case.stdout_file

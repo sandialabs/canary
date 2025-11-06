@@ -454,7 +454,7 @@ class TestCase(AbstractTestCase):
 
     def set_workspace_properties(self, *, workspace: Path, session: str | None) -> None:
         self.workspace = str(workspace)
-        self.session = session
+        self._session = session
         assert os.path.exists(self.workspace)
         if session is not None:
             assert os.path.exists(os.path.join(self.workspace, "sessions", self.session))

@@ -1,0 +1,48 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+import argparse
+from typing import TYPE_CHECKING
+
+from ...util import logging
+from ...workspace import Workspace
+from ..hookspec import hookimpl
+from ..types import CanarySubcommand
+from .common import add_filter_arguments
+
+if TYPE_CHECKING:
+    from ...config.argparsing import Parser
+
+logger = logging.get_logger(__name__)
+
+
+@hookimpl
+def canary_addcommand(parser: "Parser") -> None:
+    parser.add_command(Tag())
+
+
+class Tag(CanarySubcommand):
+    name = "tag"
+    description = "Tag a selection criteria for future use"
+
+    def setup_parser(self, parser: "Parser") -> None:
+        add_filter_arguments(parser, tagged=False)
+        parser.add_argument("-d", dest="delete_tag", action="store_true", help="Remove tag NAME")
+        parser.add_argument("name", help="Tag name")
+
+    def execute(self, args: "argparse.Namespace") -> int:
+        workspace: Workspace = Workspace.load()
+        if args.delete_tag:
+            if workspace.remove_tag(args.name):
+                logger.info(f"Removed tag {args.name!r}")
+        else:
+            workspace.tag(
+                args.name,
+                keyword_exprs=args.keyword_exprs,
+                parameter_expr=args.parameter_expr,
+                on_options=args.on_options,
+                regex=args.regex_filter,
+            )
+            logger.info(f"To run this tag execute 'canary run {args.name}'")
+        return 0

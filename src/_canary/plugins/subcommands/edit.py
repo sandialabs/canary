@@ -49,5 +49,5 @@ def find_file(testspec: str) -> str | None:
         workspace = Workspace.load()
     except NotAWorkspaceError:
         return None
-    case = workspace.find_testcase(testspec)
+    case = workspace.locate(case=testspec)
     return case.file
