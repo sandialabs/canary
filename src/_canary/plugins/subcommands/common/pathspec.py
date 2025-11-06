@@ -57,6 +57,7 @@ class PathSpec(argparse.Action):
             workspace = None
 
         setdefault(namespace, "on_options", [])
+        setdefault(namespace, "off_options", [])
         setdefault(namespace, "script_args", [])
         setdefault(namespace, "keyword_exprs", [])
 
@@ -86,11 +87,12 @@ class PathSpec(argparse.Action):
             elif workspace is not None and workspace.is_tag(path):
                 namespace.runtag = path
             elif workspace is not None and workspace.inside_view(path):
-                namespace.start = path
+                namespace.start = os.path.abspath(path)
             elif os.path.isfile(path) and is_test_file(path):
-                root, name = os.path.split(os.path.abspath(path))
+                abspath = os.path.abspath(path)
+                root, name = os.path.split(abspath)
                 namespace.paths.setdefault(root, []).append(name)
-                namespace.keyword_exprs.append(os.path.splitext(name)[0])
+                namespace.keyword_exprs.append(abspath)
             elif os.path.isdir(path):
                 namespace.paths.setdefault(path, [])
             elif path.startswith(("git@", "repo@")):
@@ -102,7 +104,7 @@ class PathSpec(argparse.Action):
                 # allow specifying as root:name
                 root, name = path.split(os.pathsep, 1)
                 namespace.paths.setdefault(root, []).append(name.replace(os.pathsep, os.path.sep))
-            elif spec := TestCase.spec_like(path):
+            elif TestCase.spec_like(path):
                 setdefault(namespace, "casespecs", []).append(path)
             else:
                 raise ValueError(f"{path}: no such file or directory")

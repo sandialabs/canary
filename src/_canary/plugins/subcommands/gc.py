@@ -24,11 +24,6 @@ class GarbageCollect(CanarySubcommand):
 
     def setup_parser(self, parser: "Parser") -> None:
         parser.add_argument(
-            "--purge",
-            action="store_true",
-            help="Remove the test case work directories entirely, not just generated files",
-        )
-        parser.add_argument(
             "--dryrun",
             action="store_true",
             help="Show what would be removed by garbage collection, but don't perform deletion",
@@ -36,5 +31,5 @@ class GarbageCollect(CanarySubcommand):
 
     def execute(self, args: argparse.Namespace) -> int:
         workspace = Workspace.load()
-        workspace.gc(purge=args.purge, dryrun=args.dryrun)
+        workspace.gc(dryrun=args.dryrun)
         return 0

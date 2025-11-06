@@ -18,6 +18,7 @@ from . import init
 from . import location
 from . import log
 from . import rebaseline
+from . import refresh
 from . import report
 from . import run
 from . import select
@@ -42,6 +43,7 @@ plugins = [
     location,
     log,
     rebaseline,
+    refresh,
     report,
     run,
     select,

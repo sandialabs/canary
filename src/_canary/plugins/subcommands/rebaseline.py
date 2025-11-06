@@ -39,7 +39,6 @@ class Rebaseline(CanarySubcommand):
         if not args.keyword_exprs and not args.start and not args.parameter_expr:
             raise ValueError("At least one filtering criteria required")
 
-        print_banner(sys.stderr)
         workspace = Workspace.load()
         cases = workspace.active_testcases()
         workspace.filter(

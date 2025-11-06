@@ -27,6 +27,6 @@ if __name__ == '__main__':
         cp = run("-w", ".")
         assert cp.returncode == 7
         cp = run("-w", "-o", "baz", ".")
-        assert set(os.listdir("TestResults")) == {".canary", "f1"}
+        assert set(os.listdir("TestResults")) == {"VIEW.TAG", "f1"}
         assert len(os.listdir("TestResults")) == 2
         assert cp.returncode == 0

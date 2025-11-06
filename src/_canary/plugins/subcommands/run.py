@@ -111,7 +111,7 @@ class Run(CanarySubcommand):
         if args.wipe:
             Workspace.remove(Path(work_tree))
         try:
-            workspace = Workspace.load()
+            workspace = Workspace.load(Path(work_tree))
         except NotAWorkspaceError:
             workspace = Workspace.create(Path(work_tree))
 

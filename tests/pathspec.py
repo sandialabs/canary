@@ -42,7 +42,7 @@ def test_pathspec_parse_new(tmpdir):
         ]
         p = ps.PathSpec("", "f_pathspec")
         args = argparse.Namespace()
-        p(None, args, "foo.json")
+        p(None, args, "foo.json", option_string="-f")
         p = ps.PathSpec("", "pathspec")
         p(None, args, values)
         assert args.paths == {

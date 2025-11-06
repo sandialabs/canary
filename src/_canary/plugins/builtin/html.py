@@ -35,9 +35,8 @@ class HTMLReporter(CanaryReporter):
     def create(self, **kwargs: Any) -> None:
         workspace = Workspace.load()
         cases = workspace.load_testcases(latest=True)
-        dest = string.Template(kwargs["dest"]).safe_substitute(
-            canary_work_tree=str(workspace.sessions_dir)
-        )
+        work_tree = workspace.view or workspace.sessions_dir
+        dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=str(work_tree))
         self.html_dir = os.path.join(dest, "HTML")
         self.cases_dir = os.path.join(self.html_dir, "cases")
         self.index = os.path.join(dest, "canary-report.html")

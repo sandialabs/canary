@@ -589,7 +589,9 @@ class TestCase(AbstractTestCase):
     @property
     def implicit_keywords(self) -> list[str]:
         """Implicit keywords, used for some filtering operations"""
-        kwds = {self.status.name.lower(), self.status.value.lower(), self.name, self.family}
+        kwds = {
+            self.status.name.lower(), self.status.value.lower(), self.name, self.family, self.file
+        }
         return list(kwds)
 
     @property
