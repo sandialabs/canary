@@ -33,11 +33,11 @@ class Select(CanarySubcommand):
     def execute(self, args: "argparse.Namespace") -> int:
         workspace: Workspace = Workspace.load()
         workspace.make_selection(
-            tag=args.name,
+            tag=args.tag,
             keyword_exprs=args.keyword_exprs,
             parameter_expr=args.parameter_expr,
             on_options=args.on_options,
             regex=args.regex_filter,
         )
-        logger.info(f"To run this selection execute 'canary run {args.name}'")
+        logger.info(f"To run this selection execute 'canary run {args.tag}'")
         return 0
