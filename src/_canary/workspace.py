@@ -34,7 +34,7 @@ logger = logging.get_logger(__name__)
 workspace_path = ".canary"
 workspace_tag = "WORKSPACE.TAG"
 view_tag = "VIEW.TAG"
-session_tag = "VIEW.TAG"
+session_tag = "SESSION.TAG"
 
 
 @dataclasses.dataclass
