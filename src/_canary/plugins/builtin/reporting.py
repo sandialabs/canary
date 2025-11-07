@@ -190,7 +190,7 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
             logger.log(logging.EMIT, f"{'@M{==>}'} {n}: {reason}", extra={"prefix": ""})
             if config.getoption("show_excluded_tests"):
                 for case in reasons[key]:
-                    logger.log(logging.EMIT, f"... {case.format('%N')}", extra={"prefix": ""})
+                    logger.log(logging.EMIT, f"... {case.pretty_name()}", extra={"prefix": ""})
 
 
 def print_durations(cases: list["TestCase"], N: int) -> None:

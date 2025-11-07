@@ -53,9 +53,8 @@ echo " "
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=pbs ./examples || exit_code=$?
 if [ "${exit_code}" -ne 30 ]; then
-  cat TestResults/.canary/config || true
-  cat TestResults/.canary/batches/*/*/resource_pool.json || true
-  cat TestResults/.canary/batches/*/*/canary-out.txt || true
+  cat .canary/cache/canary_hpc/batches/*/*/resource_pool.json || true
+  cat .canary/cache/canary_hpc/batches/*/*/canary-out.txt || true
   cat TestResults/basic/second/second/canary-out.txt || true
   cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
@@ -68,9 +67,8 @@ echo " "
 exit_code=0
 canary -d run --show-excluded-tests -w -b scheduler=pbs -b spec=count:3 ./examples || exit_code=$?
 if [ "${exit_code}" -ne 30 ]; then
-  cat TestResults/.canary/config || true
-  cat TestResults/.canary/batches/*/*/resource_pool.json || true
-  cat TestResults/.canary/batches/*/*/canary-out.txt || true
+  cat .canary/cache/canary_hpc/batches/*/*/resource_pool.json || true
+  cat .canary/cache/canary_hpc/batches/*/*/canary-out.txt || true
   cat TestResults/basic/second/second/canary-out.txt || true
   cat TestResults/basic/second/second/canary-err.txt || true
   exit 1
@@ -80,5 +78,5 @@ echo " "
 echo " "
 echo "----------------------- Done! ----------------------"
 # Artifacts
-canary -C TestResults report junit create -o $CI_PROJECT_DIR/junit.xml || true
-canary -C TestResults report cdash create -d $CI_PROJECT_DIR/xml || true
+canary report junit create -o $CI_PROJECT_DIR/junit.xml || true
+canary report cdash create -d $CI_PROJECT_DIR/xml || true
