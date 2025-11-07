@@ -557,7 +557,10 @@ class Workspace:
 
     def is_tag(self, name: str) -> bool:
         """Is ``name`` a tag?"""
-        return name in list(self.tags_dir.iterdir())
+        for p in self.tags_dir.iterdir():
+            if p.name == name:
+                return True
+        return False
 
     def inside_view(self, path: Path | str) -> bool:
         """Is ``path`` inside of a self.view?"""
