@@ -37,12 +37,12 @@ def canary_addoption(parser: "canary.Parser") -> None:
 
 @canary.hookimpl
 def canary_addcommand(parser: canary.Parser) -> None:
-    parser.add_command(Batch())
     parser.add_command(HPC())
 
 
 class HPC(canary.CanarySubcommand):
     name = "hpc"
+    aliases = ["batch"]
     description = "Manage and run job batches on an HPC scheduler"
 
     def setup_parser(self, parser: canary.Parser):
@@ -55,6 +55,20 @@ class HPC(canary.CanarySubcommand):
 
         p = subparsers.add_parser("exec", help="Execute (run) the batch")
         CanaryHPCExecutor.setup_parser(p)
+
+        p = subparsers.add_parser("location", help="Print the location of the batch")
+        p.add_argument("batch_id")
+
+        p = subparsers.add_parser("log", help="Print the batch's log to the console")
+        p.add_argument("batch_id")
+
+        p = subparsers.add_parser("status", help="List statuses of each case in batch")
+        p.add_argument("batch_id")
+
+        subparsers.add_parser("list", help="List batch IDs")
+
+        p = subparsers.add_parser("describe", help="Print each test case in batch")
+        p.add_argument("batch_id")
 
         p = subparsers.add_parser("help", help="Additional canary_hpc help topics")
         p.add_argument(
@@ -83,6 +97,19 @@ class HPC(canary.CanarySubcommand):
             return executor.run(args)
         elif args.hpc_cmd == "help":
             self.extra_help(args)
+        elif args.hpc_cmd == "location":
+            location = self.location(args.batch_id)
+            print(str(location))
+        elif args.hpc_cmd == "log":
+            location = self.location(args.batch_id)
+            display_file(location / "canary-out.txt")
+        elif args.hpc_cmd == "list":
+            batches = self.find_batches()
+            print("\n".join(batches))
+        elif args.hpc_cmd == "status":
+            self.print_status(args.batch_id)
+        elif args.hpc_cmd == "describe":
+            self.describe(args.batch_id)
         else:
             raise ValueError(f"canary hpc: unknown subcommand {args.hpc_cmd!r}")
         return 0
@@ -91,46 +118,6 @@ class HPC(canary.CanarySubcommand):
         if args.spec:
             print(CanaryHPCBatchSpec.helppage())
         return
-
-
-class Batch(canary.CanarySubcommand):
-    name = "batch"
-    description = "Manage and run job batches"
-
-    def setup_parser(self, parser: canary.Parser):
-        subparsers = parser.add_subparsers(dest="batch_cmd", title="subcommands", metavar="")
-
-        p = subparsers.add_parser("location", help="Print the location of the batch")
-        p.add_argument("batch_id")
-
-        p = subparsers.add_parser("log", help="Print the batch's log to the console")
-        p.add_argument("batch_id")
-
-        p = subparsers.add_parser("status", help="List statuses of each case in batch")
-        p.add_argument("batch_id")
-
-        subparsers.add_parser("list", help="List batch IDs")
-
-        p = subparsers.add_parser("describe", help="Print each test case in batch")
-        p.add_argument("batch_id")
-
-    def execute(self, args: argparse.Namespace) -> int:
-        if args.batch_cmd == "location":
-            location = self.location(args.batch_id)
-            print(str(location))
-        elif args.batch_cmd == "log":
-            location = self.location(args.batch_id)
-            display_file(location / "canary-out.txt")
-        elif args.batch_cmd == "list":
-            batches = self.find_batches()
-            print("\n".join(batches))
-        elif args.batch_cmd == "status":
-            self.print_status(args.batch_id)
-        elif args.batch_cmd == "describe":
-            self.describe(args.batch_id)
-        else:
-            raise ValueError(f"canary batch: unknown subcommand {args.batch_cmd!r}")
-        return 0
 
     def location(self, batch_id: str) -> Path:
         workspace = canary.Workspace.load()
