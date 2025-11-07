@@ -4,6 +4,7 @@
 
 import os
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -118,7 +119,7 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
         mkdirp("./foo")
         runner = Runner()
         with canary.config.override():
-            case.set_workspace_properties(workspace=f"{os.getcwd()}/foo", session=None)
+            case.set_workspace_properties(workspace=Path.cwd() / "foo", session=None)
             runner(case)
             assert case.returncode == 0
             assert case.status == "failed"
@@ -142,7 +143,7 @@ set_tests_properties(test1 PROPERTIES  SKIP_REGULAR_EXPRESSION "^This test shoul
         mkdirp("./foo")
         runner = Runner()
         with canary.config.override():
-            case.set_workspace_properties(workspace=f"{os.getcwd()}/foo", session=None)
+            case.set_workspace_properties(workspace=Path.cwd() / "foo", session=None)
             runner(case)
 
 
@@ -164,7 +165,7 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
         mkdirp("./foo")
         runner = Runner()
         with canary.config.override():
-            case.set_workspace_properties(workspace=f"{os.getcwd()}/foo", session=None)
+            case.set_workspace_properties(workspace=Path.cwd() / "foo", session=None)
             runner(case)
         assert case.status == "success"
         assert case.returncode == 1
@@ -276,7 +277,7 @@ set_tests_properties(test1 PROPERTIES RESOURCE_GROUPS "2,gpus:2;gpus:4,gpus:1,cr
             pool = ResourcePool({"additional_properties": {}, "resources": pool})
             file = CTestTestGenerator(os.getcwd(), "CTestTestfile.cmake")
             [case] = file.lock()
-            case.set_workspace_properties(workspace=f"{os.getcwd()}/foo", session=None)
+            case.set_workspace_properties(workspace=Path.cwd() / "foo", session=None)
             check = pool.accommodates(case.required_resources())
             if not check:
                 raise ValueError(check.reason)

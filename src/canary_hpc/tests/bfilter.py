@@ -31,6 +31,6 @@ def test_repo_bfilter(tmpdir):
             with workspace.session(selection) as session:
                 session.run()
             files = glob.glob(
-                "tests/.canary/work/canary_hpc/batches/**/canary-inp.sh", recursive=True
+                "tests/.canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True
             )
             assert len(files) == 2

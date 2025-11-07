@@ -3,11 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import sys
 from typing import TYPE_CHECKING
 
 from ...util import logging
-from ...util.banner import print_banner
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import PathSpec

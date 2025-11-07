@@ -373,7 +373,7 @@ class Config:
                 timeout_settings[key] = val
             config_settings["timeout"] = timeout_settings
 
-        self.options = merge_namespaces(self.options, args)
+        self.options = args
 
         if args.config_file:
             if fd := read_config_file(args.config_file):
@@ -550,22 +550,6 @@ def try_loads(arg):
         return json.loads(arg)
     except json.decoder.JSONDecodeError:
         return arg
-
-
-def merge_namespaces(dest: argparse.Namespace, source: argparse.Namespace) -> argparse.Namespace:
-    for attr, value in vars(source).items():
-        if value is None:
-            if not hasattr(dest, attr):
-                setattr(dest, attr, None)
-            continue
-        elif not hasattr(dest, attr):
-            setattr(dest, attr, value)
-        else:
-            my_value = getattr(dest, attr)
-            if hasattr(my_value, "copy"):
-                my_value = my_value.copy()
-            setattr(dest, attr, merge(my_value, value))
-    return dest
 
 
 def default_config_values() -> dict[str, Any]:

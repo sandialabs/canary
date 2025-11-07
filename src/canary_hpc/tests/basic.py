@@ -47,13 +47,11 @@ if __name__ == '__main__':
         hpc.add_default_args("-r", "cpus=6", "-r", "gpus=0")
         cp = hpc("run", "-w", "--batch-spec=count=4", "--scheduler=shell", ".", debug=True)
         dirs = os.listdir("TestResults")
-        expected = [".canary"] + [f"test_{i}" for i in range(12)]
+        expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob.glob("TestResults/.canary/canary_hpc/batches/**/canary-inp.sh", recursive=True)
+        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True)
         assert len(files) == 4
-        files = glob.glob(
-            "TestResults/.canary/canary_hpc/batches/**/canary-out.txt", recursive=True
-        )
+        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-out.txt", recursive=True)
         assert len(files) == 4
         assert cp.returncode == 0
 
@@ -82,11 +80,11 @@ if __name__ == '__main__':
         args.append(".")
         cp = hpc(*args)
         dirs = os.listdir("TestResults")
-        expected = [".canary"] + [f"test_{i}" for i in range(12)]
+        expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob.glob("TestResults/.canary/canary_hpc/batches/**/canary-inp.sh", recursive=True)
+        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True)
         assert len(files) == 4
-        files = glob.glob("TestResults/.canary/canary_hpc/batches/**/canary-inp.sh", recursive=True)
+        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True)
         found = 0
         for line in open(files[0]):
             if re.search(r"#\s*BASH:? -l place=scatter:excl", line):
@@ -99,9 +97,7 @@ if __name__ == '__main__':
         if cp.returncode != 0:
             print(open(files[0], "r").read())
         assert len(files) == 4
-        files = glob.glob(
-            "TestResults/.canary/canary_hpc/batches/**/canary-out.txt", recursive=True
-        )
+        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-out.txt", recursive=True)
         assert len(files) == 4
         if cp.returncode != 0:
             print(open(files[0], "r").read())
@@ -129,13 +125,11 @@ if __name__ == '__main__':
         run.add_default_args("-r", "cpus=6", "-r", "gpus=0")
         cp = run("-w", "-b", "spec=count:4", "-b", "backend=shell", ".")
         dirs = os.listdir("TestResults")
-        expected = [".canary"] + [f"test_{i}" for i in range(12)]
+        expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob.glob("TestResults/.canary/canary_hpc/batches/**/canary-inp.sh", recursive=True)
+        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True)
         assert len(files) == 4
-        files = glob.glob(
-            "TestResults/.canary/canary_hpc/batches/**/canary-out.txt", recursive=True
-        )
+        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-out.txt", recursive=True)
         assert len(files) == 4
         assert cp.returncode == 0
 
@@ -164,11 +158,11 @@ if __name__ == '__main__':
         args.append(".")
         cp = run(*args)
         dirs = os.listdir("TestResults")
-        expected = [".canary"] + [f"test_{i}" for i in range(12)]
+        expected = ["VIEW.TAG"] + [f"test_{i}" for i in range(12)]
         assert sorted(expected) == sorted(dirs)
-        files = glob.glob("TestResults/.canary/canary_hpc/batches/**/canary-inp.sh", recursive=True)
+        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True)
         assert len(files) == 4
-        files = glob.glob("TestResults/.canary/canary_hpc/batches/**/canary-inp.sh", recursive=True)
+        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-inp.sh", recursive=True)
         found = 0
         print(open(files[0]).read())
         for line in open(files[0]):
@@ -182,9 +176,7 @@ if __name__ == '__main__':
         if cp.returncode != 0:
             print(open(files[0], "r").read())
         assert len(files) == 4
-        files = glob.glob(
-            "TestResults/.canary/canary_hpc/batches/**/canary-out.txt", recursive=True
-        )
+        files = glob.glob(".canary/cache/canary_hpc/batches/**/canary-out.txt", recursive=True)
         assert len(files) == 4
         if cp.returncode != 0:
             print(open(files[0], "r").read())
