@@ -12,6 +12,7 @@ import pluggy
 
 from .types import CanaryReporter
 from .types import CanarySubcommand
+from .types import ScanPath
 
 if TYPE_CHECKING:
     from ..atc import AbstractTestCase
@@ -271,4 +272,9 @@ def canary_resource_pool_types() -> list[str]:
 @hookspec(firstresult=True)
 def canary_resource_pool_describe() -> str:
     """Return a string describing the resource pool"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_collect_generators(scan_path: ScanPath) -> list["AbstractTestGenerator"]:
     raise NotImplementedError

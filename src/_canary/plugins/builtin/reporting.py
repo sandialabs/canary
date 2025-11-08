@@ -170,7 +170,7 @@ def runtest_report_status(session: "Session") -> None:
 def canary_collectreport(cases: list["TestCase"]) -> None:
     excluded: list["TestCase"] = []
     for case in cases:
-        if case.wont_run():
+        if case.mask:
             excluded.append(case)
     n = len(cases) - len(excluded)
     logger.info("@*{Selected} %d test %s" % (n, pluralize("case", n)))

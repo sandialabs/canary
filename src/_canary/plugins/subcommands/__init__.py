@@ -20,6 +20,7 @@ from . import log
 from . import rebaseline
 from . import refresh
 from . import report
+from . import rm
 from . import run
 from . import select
 from . import status
@@ -45,6 +46,7 @@ plugins = [
     rebaseline,
     refresh,
     report,
+    rm,
     run,
     select,
     status,

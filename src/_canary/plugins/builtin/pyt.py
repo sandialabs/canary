@@ -169,7 +169,6 @@ class PYTTestGenerator(AbstractTestGenerator):
 
         names = ", ".join(self.names())
         logger.debug(f"Generating test cases for {self} using the following test names: {names}")
-        dependencies: dict[str, list["DependencyPatterns"]] = {}
         for name in self.names():
             skip_reason = self.skipif_reason
 
@@ -212,6 +211,9 @@ class PYTTestGenerator(AbstractTestGenerator):
                         testname=name, on_options=on_options, parameters=parameters
                     ),
                 )
+                case.unresolved_dependencies = self.depends_on(
+                    testname=name, parameters=parameters, on_options=on_options
+                )
                 enabled, reason = self.enable(
                     testname=name, on_options=on_options, parameters=parameters
                 )
@@ -231,7 +233,6 @@ class PYTTestGenerator(AbstractTestGenerator):
                 )
                 for attr, value in attributes.items():
                     case.set_attribute(attr, value)
-                dependencies[case.id] = self.depends_on(testname=name, parameters=parameters)
                 cases.append(case)
 
             if ns := self.generate_composite_base_case(testname=name, on_options=on_options):
@@ -272,31 +273,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                 cases.append(parent)
 
             testcases.extend(cases)
-        self.resolve_inter_dependencies(testcases, dependencies)
         return testcases
-
-    def resolve_inter_dependencies(
-        self, cases: list["TestCase"], dependencies: dict[str, list["DependencyPatterns"]]
-    ) -> None:
-        logger.debug(f"Resolving dependencies in test {self}")
-        for case in cases:
-            if case.id not in dependencies:
-                continue
-            for dep in dependencies[case.id]:
-                matches = dep.evaluate([c for c in cases if c != case])
-                n = len(matches)
-                if matches:
-                    if dep.expect == "+" and n < 1:
-                        raise ValueError(f"{case}: expected at least one dependency, got {n}")
-                    elif dep.expect == "?" and n not in (0, 1):
-                        raise ValueError(f"{case}: expected 0 or 1 dependency, got {n}")
-                    elif isinstance(dep.expect, int) and n != dep.expect:
-                        raise ValueError(f"{case}: expected {dep.expect} dependencies, got {n}")
-                    for match in matches:
-                        case.add_dependency(match, dep.result)
-                else:
-                    # hope this gets resolved at the next level up
-                    case.unresolved_dependencies.append(dep)
 
     # -------------------------------------------------------------------------------- #
 

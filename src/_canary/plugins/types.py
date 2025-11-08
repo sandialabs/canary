@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import dataclasses
 from argparse import Namespace
 from typing import TYPE_CHECKING
 from typing import Any
@@ -89,3 +90,9 @@ class Result:
         state = "ok" if self.ok else "fail"
         reason = f": {self.reason}" if self.reason else ""
         return f"<{self.__class__.__name__} {state}{reason}>"
+
+
+@dataclasses.dataclass
+class ScanPath:
+    root: str
+    paths: list[str]

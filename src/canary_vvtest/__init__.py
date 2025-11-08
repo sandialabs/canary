@@ -24,14 +24,14 @@ def canary_testcase_generator(root: str, path: str | None) -> canary.AbstractTes
 
 @canary.hookimpl
 def canary_testcase_modify(case: "canary.TestCase") -> None:
-    if case.file_path.endswith(".vvt"):
+    if case.file_path.suffix == ".vvt":
         case.ofile = "execute.log"
         case.efile = "<none>"  # causes stderr to be merged into stdout
 
 
 @canary.hookimpl
 def canary_testcase_setup(case: "canary.TestCase") -> None:
-    if case.file_path.endswith(".vvt"):
+    if case.file_path.suffix == ".vvt":
         with canary.filesystem.working_dir(case.working_directory):
             write_vvtest_util(case)
 
@@ -81,7 +81,7 @@ def canary_addoption(parser: "canary.Parser") -> None:
 
 
 def write_vvtest_util(case: "canary.TestCase", stage: str = "run") -> None:
-    if not case.file_path.endswith(".vvt"):
+    if not case.file_path.suffix == ".vvt":
         return
     attrs = get_vvtest_attrs(case)
     file = os.path.abspath("./vvtest_util.py")

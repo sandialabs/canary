@@ -40,14 +40,14 @@ class Info(CanarySubcommand):
         info = workspace.tag_info(tag)
         fh = io.StringIO()
         fh.write(f"Tag: {tag}\n")
-        fh.write("Selection filters:")
+        selection = workspace.get_selection(tag)
+        fh.write(f"Selected on: {selection.created_on}\n")
+        fh.write("Selection filters:\n")
         for key, value in info.items():
             fh.write(f"  • {key}: {value}\n")
-        selection = workspace.get_selection(tag)
-        fh.write("Test cases:\n")
-        fh.write(f"  Selected on: {selection.created_on}\n")
-        for case in selection.cases:
-            name = case.pretty_name()
+        fh.write("Test specs:\n")
+        for spec in selection.specs:
+            name = spec.pretty_name()
             fh.write(f"  • {name}\n")
         return fh.getvalue()
 

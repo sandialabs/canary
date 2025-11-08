@@ -20,23 +20,22 @@ if TYPE_CHECKING:
 
 @hookimpl
 def canary_addcommand(parser: "Parser") -> None:
-    parser.add_command(Init())
+    parser.add_command(RemoveWorkspace())
 
 
-class Init(CanarySubcommand):
-    name = "init"
-    description = "Initialize a Canary session"
+class RemoveWorkspace(CanarySubcommand):
+    name = "rm"
+    description = "Remove Canary workspace"
 
     def setup_parser(self, parser: "Parser"):
-        parser.add_argument("-w", action="store_true", help="Wipe any existing session first")
         parser.add_argument(
-            "path",
+            "rm_path",
+            metavar="PATH",
             default=os.getcwd(),
-            nargs="?",
-            help="Initialize session in this directory [default: %(default)s]",
+            help="Remove workspace at PATH",
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
-        workspace = Workspace.create(Path(args.path).absolute(), force=args.w)
-        logger.info(f"Initialized empty canary workspace at {workspace.root}")
+        if p := Workspace.remove(start=Path(args.rm_path)):
+            logger.info(f"Removed canary workspace from {p}")
         return 0

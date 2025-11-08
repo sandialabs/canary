@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 import dataclasses
+import pickle
 import datetime
 import hashlib
 import json
@@ -14,11 +15,11 @@ from typing import Any
 from typing import Generator
 
 from . import config
+from . import testspec
 from .error import StopExecution
 from .error import notests_exit_status
-from .finder import Finder
-from .finder import generate_test_cases
 from .generator import AbstractTestGenerator
+from .plugins.types import ScanPath
 from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_state as testcase_from_state
@@ -35,6 +36,28 @@ workspace_path = ".canary"
 workspace_tag = "WORKSPACE.TAG"
 view_tag = "VIEW.TAG"
 session_tag = "SESSION.TAG"
+
+
+@dataclasses.dataclass
+class SpecSelection:
+    specs: list[testspec.TestSpec]
+    tag: str | None
+    _sha256: str = dataclasses.field(init=False)
+    _created_on: str = dataclasses.field(init=False)
+
+    def __post_init__(self) -> None:
+        specs = sorted([spec.id for spec in self.specs])
+        text = json.dumps({"tag": self.tag, "specs": specs})
+        self._sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        self._created_on = datetime.datetime.now().isoformat(timespec="microseconds")
+
+    @property
+    def sha256(self) -> str:
+        return self._sha256
+
+    @property
+    def created_on(self) -> str:
+        return self._created_on
 
 
 @dataclasses.dataclass
@@ -194,11 +217,10 @@ class Session:
             cases = [case for case in self._cases if case.id in ids]
         ready: list[TestCase] = []
         for case in cases:
-            if case.wont_run():
+            if case.masked():
                 continue
             elif ids is not None and case.id not in ids:
                 continue
-            case.mark_as_ready()
             ready.append(case)
         return ready
 
@@ -284,7 +306,7 @@ class Workspace:
 
         # "Immutable" objects
         self.objects_dir: Path
-        self.cases_dir: Path
+        self.casespecs_dir: Path
         self.generators_dir: Path
 
         # Storage for pointers to test sessions
@@ -318,7 +340,7 @@ class Workspace:
         self.root = anchor / workspace_path
         self.view = None
         self.objects_dir = self.root / "objects"
-        self.cases_dir = self.objects_dir / "cases"
+        self.casespecs_dir = self.objects_dir / "specs"
         self.generators_dir = self.objects_dir / "generators"
         self.refs_dir = self.root / "refs"
         self.sessions_dir = self.root / "sessions"
@@ -331,7 +353,7 @@ class Workspace:
         self.index_file = self.root / "index.jsons"
 
     @staticmethod
-    def remove(start: str | Path = Path.cwd()) -> None:
+    def remove(start: str | Path = Path.cwd()) -> Path | None:
         anchor = Workspace.find_anchor(start=start)
         if anchor is None:
             return
@@ -345,13 +367,16 @@ class Workspace:
         if view is None:
             if (workspace / workspace_tag).exists():
                 force_remove(workspace)
+            return workspace
         elif (workspace / workspace_tag).exists() and (view / view_tag).exists():
             force_remove(view)
             force_remove(workspace)
+            return workspace
         elif (workspace / workspace_tag).exists() and view.exists():
             raise ValueError(f"Cannot remove {workspace} because {view} is not owned by Canary")
         else:
             logger.warning(f"Unable to remove {workspace}")
+            return None
 
     @staticmethod
     def find_anchor(start: str | Path = Path.cwd()) -> Path | None:
@@ -386,7 +411,7 @@ class Workspace:
         self.root.mkdir(parents=True)
         write_directory_tag(self.root / workspace_tag)
 
-        self.cases_dir.mkdir(parents=True)
+        self.casespecs_dir.mkdir(parents=True)
         self.generators_dir.mkdir(parents=True)
         self.refs_dir.mkdir(parents=True)
         self.sessions_dir.mkdir(parents=True)
@@ -626,11 +651,10 @@ class Workspace:
         self, scan_paths: dict[str, list[str]], pedantic: bool = True
     ) -> list[AbstractTestGenerator]:
         """Find test case generators in scan_paths and add them to this workspace"""
-        finder = Finder()
+        generators: list[AbstractTestGenerator] = []
         for root, paths in scan_paths.items():
-            finder.add(root, *paths, tolerant=True)
-        finder.prepare()
-        generators = finder.discover(pedantic=pedantic)
+            p = ScanPath(root=root, paths=paths)
+            generators.extend(config.pluginmanager.hook.canary_collect_generators(scan_path=p))
         n: int = 0
         for generator in generators:
             n += self._add_generator(generator)
@@ -643,9 +667,11 @@ class Workspace:
                 if not warned:
                     logger.info("Invalidating previously locked test case cache")
                     warned = True
-                cache = json.loads(file.read_text())
-                cache["cases"] = None
-                file.write_text(json.dumps(cache))
+                with open(file, "rb") as fh:
+                    selection = pickle.load(fh)
+                    selection.specs = None
+                with open(file, "wb") as fh:
+                    pickle.dump(selection, file)
         logger.info(f"@*{{Added}} {n} new test case generators to {self.root}")
         return generators
 
@@ -656,7 +682,7 @@ class Workspace:
         index = self.load_index()
         paths: dict[str, str] = {}
         for id in index:
-            paths[id] = os.path.join(self.cases_dir, id[:2], id[2:])
+            paths[id] = os.path.join(self.casespecs_dir, id[:2], id[2:])
         if ids:
             expand_ids(ids, list(index.keys()))
         cases = load_testcases(index, paths, ids=ids)
@@ -664,6 +690,19 @@ class Workspace:
             return cases
         self.update_testcases_with_newest_results(cases)
         return cases
+
+    def load_draftspecs(self, ids: list[str] | None = None) -> list[testspec.DraftSpec]:
+        """Load cached test specs.  Dependency resolution is performed.  If ``latest is True``,
+        update each case to point to the latest run instance.
+        """
+        index = self.load_index()
+        files: list[Path] = []
+        for id in index:
+            files.append(self.casespecs_dir / id[:2] / id[2:] / "spec.lock")
+        if ids:
+            expand_ids(ids, list(index.keys()))
+        drafts = testspec.load(files, ids=ids)
+        return drafts
 
     def get_testcases_by_spec(self, case_specs: list[str], tag: str | None = None) -> CaseSelection:
         ids = [_[1:] for _ in case_specs]
@@ -679,6 +718,7 @@ class Workspace:
         results: dict[str, dict] = latest["cases"]
         for case in cases:
             if result := results.get(case.id):
+                print(result)
                 if session := result["session"]:
                     attrs = {
                         "session": session,
@@ -769,8 +809,8 @@ class Workspace:
         regex: str | None = None,
         case_specs: list[str] | None = None,
         **kwargs: Any,
-    ) -> list[TestCase]:
-        """Generate (lock) test cases from generators
+    ) -> list[testspec.TestSpec]:
+        """Generate (lock) test specs from generators
 
         Args:
           keyword_exprs: Used to filter tests by keyword.  E.g., if two test define the keywords
@@ -788,58 +828,58 @@ class Workspace:
           owners: Used to filter tests by owner.
 
         Returns:
-          A list of test cases
+          A list of test specs
 
         """
-        cases: list[TestCase]
+        # FIXME: Look into locking the latest, we used to do this.
+        drafts: list[testspec.DraftSpec]
         generators = self.load_testcase_generators()
         meta = {"f": sorted([str(generator.file) for generator in generators]), "o": on_options}
         sha = hashlib.sha256(json.dumps(meta).encode("utf-8")).hexdigest()
         file = self.cache_dir / "lock" / sha[:20]
         if file.exists():
-            logger.debug("Reading testcases from cache")
-            cases = self.load_testcases(latest=True)
+            logger.debug("Reading test specs from cache")
+            drafts = self.load_draftspecs()
         else:
-            logger.debug("Generating testcases")
-            cases = generate_test_cases(generators, on_options=on_options)
-            for case in cases:
-                # Add all testcases to the object store before masking so that future stages don't
+            logger.debug("Generating test specs")
+            drafts = testspec.generate_draftspecs(generators, on_options=on_options)
+            for draft in drafts:
+                # Add all test specs to the object store before masking so that future stages don't
                 # inherit this stage's mask (if any)
-                self.add_testcase(case)
+                self.add_draftspec(draft)
             file.parent.mkdir(parents=True, exist_ok=True)
             file.touch()
 
-        config.pluginmanager.hook.canary_testsuite_mask(
-            cases=cases,
+        ids: list[str] | None = None
+        if case_specs:
+            ids = [_[1:] for _ in case_specs]
+
+        testspec.apply_masks(
+            drafts,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
-            case_specs=case_specs,
-            start=None,
-            ignore_dependencies=False,
+            ids=ids,
         )
-        for case in static_order(cases):
-            config.pluginmanager.hook.canary_testcase_modify(case=case)
-        config.pluginmanager.hook.canary_collectreport(cases=cases)
+        for draft in static_order(drafts):
+            config.pluginmanager.hook.canary_testcase_modify(case=draft)
 
-        selected = [case for case in cases if not case.mask]
+        specs = testspec.finalize(drafts)
+        config.pluginmanager.hook.canary_collectreport(cases=specs)
+
+        selected = [spec for spec in specs if not spec.mask]
         if not selected:
-            logger.warning("Empty test case selection")
+            logger.warning("Empty test spec selection")
 
         return selected
 
-    def cache_selection(self, selection: CaseSelection) -> None:
+    def cache_selection(self, selection: SpecSelection) -> None:
         assert selection.tag is not None
         cache_file = self.cache_dir / "select" / selection.tag
-        cache = {
-            "sha256": selection.sha256,
-            "created_on": selection.created_on,
-            "cases": [case.id for case in selection.cases],
-            "tag": selection.tag,
-        }
         cache_file.parent.mkdir(parents=True, exist_ok=True)
-        cache_file.write_text(json.dumps(cache))
+        with open(cache_file, "wb") as fh:
+            pickle.dump(selection, fh)
 
     def make_selection(
         self,
@@ -866,68 +906,70 @@ class Workspace:
         if tag is not None:
             # Tag early to error out before locking if tag already exists
             self.tag(tag, **kwds)
-        cases = self.lock(**kwds)
-        selection = CaseSelection(cases=cases, tag=tag)
-        if tag is not None:
-            self.cache_selection(selection)
+        try:
+            specs = self.lock(**kwds)
+            selection = SpecSelection(specs=specs, tag=tag)
+            if tag is not None:
+                self.cache_selection(selection)
+        except Exception:
+            if tag is not None:
+                self.remove_tag(tag)
+            raise
         return selection
 
-    def get_selection(self, tag: str = "default", latest: bool = True) -> CaseSelection:
-        selection: CaseSelection
+    def get_selection(self, tag: str = "default") -> SpecSelection:
+
         tag_file = self.tags_dir / tag
         if not tag_file.exists():
             raise ValueError(f"Tag {tag} does not exist")
+
+        selection: CaseSelection
 
         cache_file = self.cache_dir / "select" / tag
         if not cache_file.exists():
             link = tag_file.read_text().strip()
             meta = json.loads((self.tags_dir / link).read_text())
-            cases = self.lock(**meta)
-            if latest:
-                self.update_testcases_with_newest_results(cases)
-            selection = CaseSelection(cases=cases, tag=tag)
+            specs = self.lock(**meta)
+            selection = SpecSelection(specs=specs, tag=tag)
             self.cache_selection(selection)
             return selection
 
-        cache = json.loads(cache_file.read_text())
-        if ids := cache.get("cases"):
-            cases: list[TestCase] = self.load_testcases(ids=ids, latest=latest)
-            selection = CaseSelection(cases=cases, tag=tag)
-            selection._sha256 = cache["sha256"]
-            selection._created_on = cache["created_on"]
+        with open(cache_file, "rb") as fh:
+            selection = pickle.load(fh)
+
+        if selection.specs:
             return selection
 
         # No cases: cache was invalidated at some point
         link = tag_file.read_text().strip()
         meta = json.loads((self.tags_dir / link).read_text())
-        cases = self.lock(**meta)
-        if latest:
-            self.update_testcases_with_newest_results(cases)
-        selection = CaseSelection(cases=cases, tag=tag_file.name)
+        specs = self.lock(**meta)
+        selection = SpecSelection(specs=specs, tag=tag_file.name)
         self.cache_selection(selection)
         return selection
 
-    def add_testcase(self, case: TestCase) -> None:
-        file = self.cases_dir / case.id[:2] / case.id[2:] / "testcase.lock"
+    def add_draftspec(self, spec: testspec.DraftSpec) -> None:
+        file = self.casespecs_dir / spec.id[:2] / spec.id[2:] / "spec.lock"
         if file.exists():
             return
         file.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(file, json.dumps(case.getstate(), indent=2))
+        atomic_write(file, spec.dumps(indent=2))
         with self.index_file.open(mode="a") as fh:
-            fh.write(json.dumps({case.id: [dep.id for dep in case.dependencies]}) + "\n")
+            fh.write(json.dumps({spec.id: [dep.id for dep in spec.dependencies]}) + "\n")
         latest = self.load_latest()
-        if case.id not in latest["cases"]:
-            latest["cases"][case.id] = {
-                "name": case.display_name,
-                "fullname": case.fullname,
-                "family": case.family,
-                "session": None,
-                "workspace": None,
-                "returncode": "NA",
+        if spec.id not in latest["cases"]:
+            latest["cases"][spec.id] = {
+                "name": spec.display_name,
+                "fullname": spec.fullname,
+                "family": spec.family,
+                "returncode": -1,
                 "duration": -1,
                 "started_on": "NA",
                 "finished_on": "NA",
-                "status": {"value": case.status.value, "details": case.status.details},
+                "working_directory": None,
+                "execution_directory": None,
+                "instance_attributes": None,
+                "status": {"value": "created", "details": None},
             }
         self.dump_latest(latest)
 
@@ -1020,7 +1062,7 @@ class Workspace:
                     break
             else:
                 raise ValueError(f"{spec}: no matching test found in {self.root}")
-            lockfile = self.cases_dir / id[:2] / id[2:] / TestCase._lockfile
+            lockfile = self.casespecs_dir / id[:2] / id[2:] / TestCase._lockfile
             state = json.loads(lockfile.read_text())
             case = testcase_from_state(state)
         else:
@@ -1070,6 +1112,41 @@ def load_testcases(
         casemap[id] = testcase_from_state(state)
         assert id == casemap[id].id
     return list(casemap.values())
+
+
+def load_draftspecs(
+    graph: dict[str, list[str]],
+    paths: dict[str, str],
+    ids: list[str] | None = None,
+) -> list[testspec.DraftSpec]:
+    """Load cached test specs.  Dependency resolution is performed.
+
+    Args:
+      graph: graph[case.id] are the dependencies of case
+      paths: path[case.id] is the working directory for case
+      ids: only return these ids
+
+    Returns:
+      Loaded test specs
+    """
+    ids_to_load: set[str] = set()
+    specmap: dict[str, testspec.DraftSpec] = {}
+    if ids:
+        # we must not only load the requested IDs, but also their dependencies
+        for id in ids:
+            ids_to_load.update(find_reachable_nodes(graph, id))
+    ts: TopologicalSorter = TopologicalSorter()
+    for id, deps in graph.items():
+        ts.add(id, *deps)
+    for id in ts.static_order():
+        if ids_to_load and id not in ids_to_load:
+            continue
+        file = Path(paths[id]) / "spec.lock"
+        with open(file) as fh:
+            spec = testspec.DraftSpec.load(fh)
+        specmap[id] = spec
+        assert id == specmap[id].id
+    return list(specmap.values())
 
 
 def prefix_bits(byte_array: bytes, bits: int) -> int:
