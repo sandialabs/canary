@@ -29,20 +29,26 @@ from typing import Protocol
 from . import config
 from . import when
 from .util import filesystem
-from .util import graph
 from .util import logging
 from .util.parallel import starmap
 from .util.string import stringify
 
 if TYPE_CHECKING:
     from .generator import AbstractTestGenerator
-    from .testcase import TestCase
+    from .testcase import TestCase as LegacyTestCase
 
 logger = logging.get_logger(__name__)
 
 
 # FIXME: Major things to address: case.dep_condition_flags()
 #        needs to be checked when filtering, as is currently done for case
+
+
+class PathEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Path):
+            return str(obj)
+        return json.JSONEncoder.default(self, obj)
 
 
 class Named(Protocol):
@@ -58,6 +64,8 @@ class Named(Protocol):
     def file(self) -> Path: ...
     @cached_property
     def name(self) -> str: ...
+    @cached_property
+    def display_name(self) -> str: ...
     def s_params(self, sep: str = ",") -> str: ...
 
 
@@ -104,26 +112,6 @@ class SpecCommons:
             parts.append("@%s{%s=%s}" % (next(colors), key, value))
         return f"{self.name}[{','.join(parts)}]"
 
-    @cached_property
-    def id(self: Named) -> str:
-        # Hasher is used to build ID
-        hasher = hashlib.sha256()
-        hasher.update(self.name.encode())
-        if self.parameters:
-            for p in sorted(self.parameters):
-                hasher.update(f"{p}={stringify(self.parameters[p], float_fmt='%.16e')}".encode())
-        hasher.update(self.file.read_bytes())
-        d = self.file.parent
-        while d.parent != d:
-            if (d / ".git").exists() or (d / ".repo").exists():
-                f = str(os.path.relpath(str(self.file), str(d)))
-                hasher.update(f.encode())
-                break
-            d = d.parent
-        else:
-            hasher.update(str(self.file_path.parent / self.name).encode())
-        return hasher.hexdigest()[:20]
-
     @property
     def implicit_keywords(self: Named) -> set[str]:
         """Implicit keywords, used for some filtering operations"""
@@ -145,9 +133,37 @@ class SpecCommons:
             parameters["runtime"] = float(rt)
         return parameters
 
+    def required_resources(self) -> list[list[dict[str, Any]]]:
+        group: list[dict[str, Any]] = []
+        for name, value in self.rparameters.items():
+            if name == "nodes":
+                continue
+            group.extend([{"type": name, "slots": 1} for _ in range(value)])
+        # by default, only one resource group is returned
+        return [group]
+
+    def asdict(self) -> dict:
+        return dataclasses.asdict(self)
+
+    def dump(self, file: IO[Any], **kwargs: Any) -> None:
+        json.dump(self.asdict(), file, cls=PathEncoder, **kwargs)
+
+    def dumps(self, **kwargs: Any) -> Any:
+        return json.dumps(self.asdict(), cls=PathEncoder, **kwargs)
+
+    def matches(self, arg: str) -> bool:
+        if self.id.startswith(arg):
+            return True
+        if self.display_name == arg:
+            return True
+        if self.name == arg:
+            return True
+        return False
+
 
 @dataclasses.dataclass(frozen=True)
 class TestSpec(SpecCommons):
+    id: str
     file_root: Path
     file_path: Path
     family: str
@@ -166,23 +182,14 @@ class TestSpec(SpecCommons):
     rcfiles: list[str] | None
     owners: list[str] | None
     mask: str
-    command: list[str] = dataclasses.field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        if not self.command:
-            command = [sys.executable, self.file.name]
-            object.__setattr__(self, "command", command)
-
-    def asdict(self) -> dict:
-        return dataclasses.asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "TestSpec":
+    def from_dict(cls, d: dict, lookup: dict[str, "TestSpec"]) -> "TestSpec":
         d["file_root"] = Path(d.pop("file_root"))
         d["file_path"] = Path(d.pop("file_path"))
         dependencies: list[TestSpec] = []
         for dep in d["dependencies"]:
-            dependencies.append(TestSpec.from_dict(dep))
+            dependencies.append(lookup[dep["id"]])
         d["dependencies"] = dependencies
         assets: list[Asset] = []
         for a in d["assets"]:
@@ -191,23 +198,43 @@ class TestSpec(SpecCommons):
         self = TestSpec(**d)  # ty: ignore[missing-argument]
         return self
 
-    def dump(self, file: IO[Any], **kwargs: Any) -> None:
-        json.dump(self.asdict(), file, cls=PathEncoder, **kwargs)
 
-    def dumps(self, **kwargs: Any) -> Any:
-        return json.dumps(self.asdict(), cls=PathEncoder, **kwargs)
+@dataclasses.dataclass
+class ResolvedSpec(SpecCommons):
+    id: str
+    file_root: Path
+    file_path: Path
+    family: str
+    dependencies: list["ResolvedSpec"]
+    keywords: list[str]
+    parameters: dict[str, Any]
+    rparameters: dict[str, int]
+    assets: list["Asset"]
+    baseline: list[dict]
+    artifacts: list[dict[str, str]]
+    exclusive: bool
+    timeout: float
+    xstatus: int
+    preload: str | None
+    modules: list[str] | None
+    rcfiles: list[str] | None
+    owners: list[str] | None
+    mask: str = ""
 
     @classmethod
-    def load(cls, file: IO[Any]) -> "TestSpec":
-        d = json.load(file)
-        return cls.from_dict(d)
-
-
-class PathEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Path):
-            return str(obj)
-        return json.JSONEncoder.default(self, obj)
+    def from_dict(cls, d: dict, lookup: dict[str, "ResolvedSpec"]) -> "ResolvedSpec":
+        d["file_root"] = Path(d.pop("file_root"))
+        d["file_path"] = Path(d.pop("file_path"))
+        dependencies: list[ResolvedSpec] = []
+        for dep in d["dependencies"]:
+            dependencies.append(lookup[dep["id"]])
+        d["dependencies"] = dependencies
+        assets: list[Asset] = []
+        for a in d["assets"]:
+            assets.append(Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]))
+        d["assets"] = assets
+        self = ResolvedSpec(**d)  # ty: ignore[missing-argument]
+        return self
 
 
 @dataclasses.dataclass
@@ -276,7 +303,8 @@ class DependencyPatterns:
 
 @dataclasses.dataclass
 class DraftSpec(SpecCommons):
-    """Temporary object used to hold TestCase properties"""
+    """Temporary object used to hold test spec properties until a concrete spec can be created
+    after dependency resolution"""
 
     file_root: Path
     file_path: Path
@@ -298,9 +326,9 @@ class DraftSpec(SpecCommons):
     owners: list[str] | None = None
     mask: str | None = None
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
-    command: list[str] = dataclasses.field(default_factory=list)
 
     # Fields that are generated in __post_init__
+    id: str = dataclasses.field(default="", init=False)
     assets: list[Asset] = dataclasses.field(default_factory=list, init=False)
     baseline_actions: list[dict] = dataclasses.field(default_factory=list, init=False)
     dependency_patterns: list[DependencyPatterns] = dataclasses.field(
@@ -313,6 +341,7 @@ class DraftSpec(SpecCommons):
     def __post_init__(self) -> None:
         assert self.file.exists()
         self.family = self.family or self.file.stem
+        self.id = self._generate_id()
 
         # We make sure objects have the right type, in case any were passed in as name=None
         if self.timeout < 0 or self.timeout is None:
@@ -327,26 +356,8 @@ class DraftSpec(SpecCommons):
         self.exclusive = bool(self.exclusive)
         self.dependency_patterns = self._generate_dependency_patterns(self.dependencies or [])
 
-        if not self.command:
-            self.command = [sys.executable, self.file.name]
-
-    def required_resources(self) -> list[list[dict[str, Any]]]:
-        group: list[dict[str, Any]] = []
-        for name, value in self.parameters.items():
-            if name == "resource::nodes":
-                continue
-            if name.startswith("resource::"):
-                assert isinstance(value, int)
-                name = name[10:]
-                group.extend([{"type": name, "slots": 1} for _ in range(value)])
-        # by default, only one resource group is returned
-        return [group]
-
-    def asdict(self) -> dict:
-        return dataclasses.asdict(self)
-
     @classmethod
-    def from_dict(cls, d: dict) -> "DraftSpec":
+    def from_dict(cls, d: dict, lookup: dict[str, "DraftSpec"]) -> "DraftSpec":
         """Reconstruct a DraftSpec from the output of asdict"""
         attrs: dict[str, Any] = {}
         attrs["file_root"] = Path(d.pop("file_root"))
@@ -378,20 +389,9 @@ class DraftSpec(SpecCommons):
         draft.baseline = d["baseline"]
         draft.baseline_actions = d["baseline_actions"]
         draft.dependency_patterns = d["dependency_patterns"]
-        draft.resolved_dependencies = [DraftSpec.from_dict(ds) for ds in d["resolved_dependencies"]]
+        draft.resolved_dependencies = [lookup[ds["id"]] for ds in d["resolved_dependencies"]]
         draft.resolved = d["resolved"]
         return draft
-
-    def dump(self, file: IO[Any], **kwargs: Any) -> None:
-        json.dump(self.asdict(), file, cls=PathEncoder, **kwargs)
-
-    def dumps(self, **kwargs: Any) -> Any:
-        return json.dumps(self.asdict(), cls=PathEncoder, **kwargs)
-
-    @classmethod
-    def load(cls, file: IO[Any]) -> "DraftSpec":
-        d = json.load(file)
-        return cls.from_dict(d)
 
     def resolve(self, *specs: "DraftSpec") -> None:
         self.resolved_dependencies.clear()
@@ -406,15 +406,6 @@ class DraftSpec(SpecCommons):
 
     def is_resolved(self) -> bool:
         return self.resolved
-
-    def matches(self, arg: str) -> bool:
-        if self.id.startswith(arg):
-            return True
-        if self.display_name == arg:
-            return True
-        if self.name == arg:
-            return True
-        return False
 
     def _generate_assets(
         self, file_resources: dict[Literal["copy", "link", "none"], list[tuple[str, str | None]]]
@@ -524,8 +515,28 @@ class DraftSpec(SpecCommons):
                 dependency_patterns.append(dep_pattern)
         return dependency_patterns
 
+    def _generate_id(self) -> str:
+        # Hasher is used to build ID
+        hasher = hashlib.sha256()
+        hasher.update(self.name.encode())
+        if self.parameters:
+            for p in sorted(self.parameters):
+                hasher.update(f"{p}={stringify(self.parameters[p], float_fmt='%.16e')}".encode())
+        hasher.update(self.file.read_bytes())
+        d = self.file.parent
+        while d.parent != d:
+            if (d / ".git").exists() or (d / ".repo").exists():
+                f = str(os.path.relpath(str(self.file), str(d)))
+                hasher.update(f.encode())
+                break
+            d = d.parent
+        else:
+            hasher.update(str(self.file_path.parent / self.name).encode())
+        return hasher.hexdigest()[:20]
+
+
     @classmethod
-    def from_legacy_testcase(cls, case: "TestCase") -> "DraftSpec":
+    def from_legacy_testcase(cls, case: "LegacyTestCase") -> "DraftSpec":
         spec = cls(
             file_root=Path(case.file_root),
             file_path=Path(case.file_path),
@@ -562,7 +573,7 @@ class DraftSpec(SpecCommons):
         return spec
 
 
-def resolve_dependencies(draft_specs: list[DraftSpec]) -> None:
+def resolve(draft_specs: list[DraftSpec]) -> list[ResolvedSpec]:
     errors: dict[str, list[str]] = {}
     for draft in draft_specs:
         matches: list[str] = []
@@ -581,17 +592,15 @@ def resolve_dependencies(draft_specs: list[DraftSpec]) -> None:
             msg.extend(f"  • {p}" for p in issues)
         raise DependencyResolutionFailed("\n".join(msg))
 
-
-def finalize(draft_specs: list[DraftSpec]) -> list[TestSpec]:
-    map: dict[str, DraftSpec] = {}
+    map: dict[str, ResolvedSpec] = {}
     graph: dict[str, list[str]] = {}
     for draft in draft_specs:
         if not draft.is_resolved():
-            raise ValueError(f"{draft}: cannot finalize unresolved drafts")
-    for draft in draft_specs:
+            raise ValueError(f"{draft}: unresolved draft!")
         map[draft.id] = draft
         graph[draft.id] = [d.id for d in draft.resolved_dependencies]
-    specs: dict[str, TestSpec] = {}
+
+    specs: dict[str, ResolvedSpec] = {}
     ts = TopologicalSorter(graph)
     ts.prepare()
     while ts.is_active():
@@ -602,7 +611,8 @@ def finalize(draft_specs: list[DraftSpec]) -> list[TestSpec]:
             draft = map[id]
             for dp in draft.resolved_dependencies:
                 dependencies.append(specs[dp.id])
-            spec = TestSpec(
+            spec = ResolvedSpec(
+                id=draft.id,
                 file_root=draft.file_root,
                 file_path=draft.file_path,
                 family=draft.family,
@@ -621,7 +631,49 @@ def finalize(draft_specs: list[DraftSpec]) -> list[TestSpec]:
                 rcfiles=draft.rcfiles,
                 owners=draft.owners,
                 mask=draft.mask,
-                command=draft.command,
+            )
+            specs[id] = spec
+        ts.done(*ids)
+    return list(specs.values())
+
+
+def finalize(resolved_specs: list[ResolvedSpec]) -> list[TestSpec]:
+    map: dict[str, ResolvedSpec] = {}
+    graph: dict[str, list[str]] = {}
+    for resolved_spec in resolved_specs:
+        map[resolved_spec.id] = resolved_spec
+        graph[resolved_spec.id] = [s.id for s in resolved_spec.dependencies]
+    specs: dict[str, TestSpec] = {}
+    ts = TopologicalSorter(graph)
+    ts.prepare()
+    while ts.is_active():
+        ids = ts.get_ready()
+        for id in ids:
+            # Replace dependencies with TestSpec objects
+            dependencies = []
+            resolved = map[id]
+            for dep in resolved.dependencies:
+                dependencies.append(specs[dep.id])
+            spec = TestSpec(
+                id=resolved.id,
+                file_root=resolved.file_root,
+                file_path=resolved.file_path,
+                family=resolved.family,
+                dependencies=dependencies,
+                keywords=resolved.keywords,
+                parameters=resolved.parameters,
+                rparameters=resolved.rparameters,
+                assets=resolved.assets,
+                baseline=resolved.baseline,
+                artifacts=resolved.artifacts,
+                exclusive=resolved.exclusive,
+                timeout=resolved.timeout,
+                xstatus=resolved.xstatus,
+                preload=resolved.preload,
+                modules=resolved.modules,
+                rcfiles=resolved.rcfiles,
+                owners=resolved.owners,
+                mask=resolved.mask,
             )
             specs[id] = spec
         ts.done(*ids)
@@ -629,7 +681,7 @@ def finalize(draft_specs: list[DraftSpec]) -> list[TestSpec]:
 
 
 def apply_masks(
-    drafts: list[DraftSpec],
+    specs: list[ResolvedSpec],
     *,
     keyword_exprs: list[str] | None = None,
     parameter_expr: str | None = None,
@@ -647,9 +699,6 @@ def apply_masks(
     """
     msg = "@*{Masking} test specs based on filtering criteria"
 
-    if any(not d.is_resolved for d in drafts):
-        raise TypeError("Cannot apply mask to unresolved draft specs")
-
     start = time.monotonic()
     logger.log(logging.INFO, msg, extra={"end": "..."})
 
@@ -661,67 +710,67 @@ def apply_masks(
     owners = set(owners or [])
 
     # Get an index of sorted order
-    map: dict[str, int] = {d.id: i for i, d in enumerate(drafts)}
-    graph: dict[int, int] = {map[d.id]: [map[_.id] for _ in d.resolved_dependencies] for d in drafts}
+    map: dict[str, int] = {d.id: i for i, d in enumerate(specs)}
+    graph: dict[int, int] = {map[s.id]: [map[_.id] for _ in s.dependencies] for s in specs}
     ts = TopologicalSorter(graph)
     order = list(ts.static_order())
 
     try:
         for i in order:
-            draft = drafts[i]
+            spec = specs[i]
 
-            if draft.mask:
+            if spec.mask:
                 continue
 
             if ids is not None:
-                if not any(draft.matches(id) for id in ids):
+                if not any(spec.matches(id) for id in ids):
                     expr = ",".join(ids)
-                    draft.mask = "testspec expression @*{%s} did not match" % expr
+                    spec.mask = "testspec expression @*{%s} did not match" % expr
                 continue
 
             try:
-                check = config.pluginmanager.hook.canary_resource_pool_accommodates(case=draft)
+                check = config.pluginmanager.hook.canary_resource_pool_accommodates(case=spec)
             except Exception as e:
-                draft.mask = "@*{%s}(%r)" % (e.__class__.__name__, e.args[0])
+                spec.mask = "@*{%s}(%r)" % (e.__class__.__name__, e.args[0])
                 continue
             else:
                 if not check:
-                    draft.mask = check.reason
+                    spec.mask = check.reason
                     continue
 
-            if owners and not owners.intersection(draft.owners or []):
-                draft.mask = "not owned by @*{%r}" % draft.owners
+            if owners and not owners.intersection(spec.owners or []):
+                spec.mask = "not owned by @*{%r}" % spec.owners
                 continue
 
             if keyword_exprs is not None:
-                kwds = set(draft.keywords)
-                kwds.update(draft.implicit_keywords)
+                kwds = set(spec.keywords)
+                kwds.update(spec.implicit_keywords)
                 kwd_all = contains_any(("__all__", ":all:"), keyword_exprs)
                 if not kwd_all:
                     for keyword_expr in keyword_exprs:
                         match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
                         if not match:
-                            draft.mask = "keyword expression @*{%r} did not match" % keyword_expr
+                            spec.mask = "keyword expression @*{%r} did not match" % keyword_expr
                             break
-                    if draft.mask:
+                    if spec.mask:
                         continue
 
             if parameter_expr:
                 match = when.when(
                     {"parameters": parameter_expr},
-                    parameters=draft.parameters | draft.implicit_parameters,
+                    parameters=spec.parameters | spec.implicit_parameters,
                 )
                 if not match:
-                    draft.mask = "parameter expression @*{%s} did not match" % parameter_expr
+                    spec.mask = "parameter expression @*{%s} did not match" % parameter_expr
                     continue
 
             if rx is not None:
-                if not filesystem.grep(rx, draft.file):
-                    for asset in draft.assets:
+                if not filesystem.grep(rx, spec.file):
+                    for asset in spec.assets:
                         if os.path.isfile(asset.src) and filesystem.grep(rx, asset.src):
                             break
                     else:
-                        draft.mask = "@*{re.search(%r) is None} evaluated to @*g{True}" % regex
+                        spec.mask = "@*{re.search(%r) is None} evaluated to @*g{True}" % regex
                         continue
 
     except Exception:
@@ -734,22 +783,22 @@ def apply_masks(
         extra = {"end": end, "rewind": True}
         logger.log(logging.INFO, msg, extra=extra)
 
-    propagate_masks(drafts)
+    propagate_masks(specs)
 
 
-def propagate_masks(drafts: list[DraftSpec]) -> None:
+def propagate_masks(specs: list[ResolvedSpec]) -> None:
     changed: bool = True
     while changed:
         changed = False
-        for draft in drafts:
-            if draft.mask:
+        for spec in specs:
+            if spec.mask:
                 continue
-            if any(dep.mask for dep in draft.resolved_dependencies):
-                draft.mask = "One or more dependencies masked"
+            if any(dep.mask for dep in spec.dependencies):
+                spec.mask = "One or more dependencies masked"
                 changed = True
 
 
-def load(files: list[Path], ids: list[str] | None = None) -> list[DraftSpec]:
+def load(files: list[Path], ids: list[str] | None = None) -> list[ResolvedSpec]:
     """Load cached test specs.  Dependency resolution is performed.
 
     Args:
@@ -759,55 +808,56 @@ def load(files: list[Path], ids: list[str] | None = None) -> list[DraftSpec]:
     Returns:
       Loaded test specs
     """
-    drafts: list[DraftSpec] = []
+
+    # Specs must be loaded in static order so that depedencies are correct
+    map: dict[str, dict] = {}
+    graph: dict[str, list[str]] = {}
     for file in files:
         with open(file) as fh:
-            draft = DraftSpec.load(fh)
-        assert draft.is_resolved()
-        drafts.append(draft)
-    map: dict[str, DraftSpec] = {draft.id: draft for draft in drafts}
-    graph: dict[str, list[str]] = {
-        draft.id: [d.id for d in draft.resolved_dependencies] for draft in drafts
-    }
+            item = json.load(fh)
+        map[item["id"]] = item
+        graph[item["id"]] = [d["id"] for d in item["dependencies"]]
+
+    # Lookup table for dependencies that have been resolved
+    lookup: dict[str, ResolvedSpec] = {}
     ts = TopologicalSorter(graph)
     ts.prepare()
     while ts.is_active():
-        draft_ids = ts.get_ready()
-        for id in draft_ids:
+        spec_ids = ts.get_ready()
+        for id in spec_ids:
             # Replace dependencies with actual references
-            dependencies = []
-            draft = map[id]
-            for dp in draft.resolved_dependencies:
-                dependencies.append(map[dp.id])
-            draft.resolved_dependencies.clear()
-            draft.resolved_dependencies.extend(dependencies)
-        ts.done(*draft_ids)
+            spec = ResolvedSpec.from_dict(map[id], lookup)
+            lookup[id] = spec
+        ts.done(*spec_ids)
+
+    # At this point, lookup contains all the resolved specs
     if not ids:
-        return drafts
+        return list(lookup.values())
+
     ids_to_load: set[str] = set()
     for id in ts.static_order():
         if ids_to_load and id not in ids_to_load:
-            map[id].mask = "==MASKED=="
-    return [draft for draft in drafts if not draft.mask]
+            lookup[id].mask = "==MASKED=="
+    return [spec for spec in lookup.values() if not spec.mask]
 
 
-def generate_draftspecs(
+def generate_specs(
     generators: list["AbstractTestGenerator"],
     on_options: list[str] | None = None,
-) -> list["DraftSpec"]:
+) -> list[ResolvedSpec]:
     """Generate test cases and filter based on criteria"""
-    from .testcase import TestCase
+    from .testcase import TestCase as LegacyTestCase
 
     msg = "@*{Generating} test cases"
     logger.log(logging.INFO, msg, extra={"end": "..."})
     created = time.monotonic()
     try:
-        locked: list[list[TestCase | DraftSpec]]
+        locked: list[list[LegacyTestCase | DraftSpec]]
         locked = starmap(lock_file, [(f, on_options) for f in generators])
         drafts: list[DraftSpec] = []
         for group in locked:
             for spec in group:
-                if isinstance(spec, TestCase):
+                if isinstance(spec, LegacyTestCase):
                     drafts.append(DraftSpec.from_legacy_testcase(spec))
                 else:
                     drafts.append(spec)
@@ -834,11 +884,7 @@ def generate_draftspecs(
                 )
         raise ValueError("Duplicate test IDs in test suite")
 
-    resolve_dependencies(drafts)
-    for draft in drafts:
-        assert draft.is_resolved()
-
-    return drafts
+    return resolve(drafts)
 
 
 def lock_file(file: "AbstractTestGenerator", on_options: list[str] | None):
@@ -854,19 +900,28 @@ def find_duplicates(specs: list["DraftSpec"]) -> dict[str, list["DraftSpec"]]:
     return duplicates
 
 
-class ExecutionPolicy(Protocol):
-    def command(self, spec: TestSpec) -> list[str]: ...
-
-
 @dataclasses.dataclass
 class Status:
     value: str = "created"
     details: str | None = None
 
 
+class ExecutionPolicy(Protocol):
+    def command(self, spec: TestSpec) -> list[str]: ...
+
+
 @dataclasses.dataclass
 class ExecutionSpace:
     root: Path
+
+    def create(self):
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    @contextmanager
+    def enter(self) -> Generator[None, None, None]:
+        self.create()
+        with filesystem.working_dir(self.root):
+            yield
 
 
 @dataclasses.dataclass
@@ -893,19 +948,59 @@ class TimeKeeper:
             self.stop()
 
 
-class TestInstance:
-    def __init__(self, spec: TestSpec, policy: ExecutionPolicy, workspace: ExecutionSpace) -> None:
+@dataclasses.dataclass
+class Measurements:
+    data: dict[str, Any] = dataclasses.field(default_factory=dict)
+
+    def add_measurement(self, name: str, value: Any):
+        self.data[name] = value
+
+
+class TestCase:
+    def __init__(self, spec: TestSpec, workspace: ExecutionSpace) -> None:
         self.spec = spec
-        self.policy = policy
         self.workspace = workspace
         self.status = Status()
         self.tk = TimeKeeper()
 
+    def setup(self) -> None:
+        with self.workspace.enter():
+            config.pluginmanager.hook.canary_testcase_setup(spec=self.spec)
+
+    def teardown(self) -> None:
+        with self.workspace.enter():
+            config.pluginmanager.hook.canary_testcase_teardown(spec=self.spec)
+
     def run(self) -> int:
-        with self.tk.timeit():
-            # do the run
-            pass
-        return 0
+        with self.workspace.enter():
+            try:
+                self.status.value = "running"
+                with open("spec.lock", "w") as fh:
+                    self.spec.dump(fh)
+                measurements = Measurements()
+                with self.tk.timeit():
+                    proc = config.pluginmanager.hook.canary_testcase_run(
+                        spec=self.spec, measurements=measurements
+                    )
+            except Exception:
+                self.status.value = "failed"
+                raise
+            else:
+                returncode = proc.returncode
+                if returncode == self.spec.xstatus:
+                    self.status.value = "success"
+                else:
+                    self.status.value = "failed"
+            finally:
+                record = {
+                    "status": dataclasses.asdict(self.status),
+                    "spec": self.spec.asdict(),
+                    "timekeeper": dataclasses.asdict(self.tk),
+                    "measurements": dataclasses.asdict(measurements),
+                }
+                with open("record.json", "w") as fh:
+                    json.dump(record, fh, cls=PathEncoder)
+        return returncode
 
 
 class PythonFilePolicy(ExecutionPolicy):

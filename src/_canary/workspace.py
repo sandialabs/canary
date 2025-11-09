@@ -691,7 +691,7 @@ class Workspace:
         self.update_testcases_with_newest_results(cases)
         return cases
 
-    def load_draftspecs(self, ids: list[str] | None = None) -> list[testspec.DraftSpec]:
+    def load_specs(self, ids: list[str] | None = None) -> list[testspec.ResolvedSpec]:
         """Load cached test specs.  Dependency resolution is performed.  If ``latest is True``,
         update each case to point to the latest run instance.
         """
@@ -701,8 +701,8 @@ class Workspace:
             files.append(self.casespecs_dir / id[:2] / id[2:] / "spec.lock")
         if ids:
             expand_ids(ids, list(index.keys()))
-        drafts = testspec.load(files, ids=ids)
-        return drafts
+        specs = testspec.load(files, ids=ids)
+        return specs
 
     def get_testcases_by_spec(self, case_specs: list[str], tag: str | None = None) -> CaseSelection:
         ids = [_[1:] for _ in case_specs]
@@ -832,21 +832,21 @@ class Workspace:
 
         """
         # FIXME: Look into locking the latest, we used to do this.
-        drafts: list[testspec.DraftSpec]
+        specs: list[testspec.ResolvedSpec]
         generators = self.load_testcase_generators()
         meta = {"f": sorted([str(generator.file) for generator in generators]), "o": on_options}
         sha = hashlib.sha256(json.dumps(meta).encode("utf-8")).hexdigest()
         file = self.cache_dir / "lock" / sha[:20]
         if file.exists():
             logger.debug("Reading test specs from cache")
-            drafts = self.load_draftspecs()
+            specs = self.load_specs()
         else:
             logger.debug("Generating test specs")
-            drafts = testspec.generate_draftspecs(generators, on_options=on_options)
-            for draft in drafts:
+            specs = testspec.generate_specs(generators, on_options=on_options)
+            for spec in specs:
                 # Add all test specs to the object store before masking so that future stages don't
                 # inherit this stage's mask (if any)
-                self.add_draftspec(draft)
+                self.add_spec(spec)
             file.parent.mkdir(parents=True, exist_ok=True)
             file.touch()
 
@@ -855,20 +855,20 @@ class Workspace:
             ids = [_[1:] for _ in case_specs]
 
         testspec.apply_masks(
-            drafts,
+            specs,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
             ids=ids,
         )
-        for draft in static_order(drafts):
-            config.pluginmanager.hook.canary_testcase_modify(case=draft)
+        for spec in static_order(specs):
+            config.pluginmanager.hook.canary_testcase_modify(case=spec)
 
-        specs = testspec.finalize(drafts)
-        config.pluginmanager.hook.canary_collectreport(cases=specs)
+        final = testspec.finalize(specs)
+        config.pluginmanager.hook.canary_collectreport(cases=final)
 
-        selected = [spec for spec in specs if not spec.mask]
+        selected = [spec for spec in final if not spec.mask]
         if not selected:
             logger.warning("Empty test spec selection")
 
@@ -947,7 +947,7 @@ class Workspace:
         self.cache_selection(selection)
         return selection
 
-    def add_draftspec(self, spec: testspec.DraftSpec) -> None:
+    def add_spec(self, spec: testspec.ResolvedSpec) -> None:
         file = self.casespecs_dir / spec.id[:2] / spec.id[2:] / "spec.lock"
         if file.exists():
             return
@@ -1111,41 +1111,6 @@ def load_testcases(
         casemap[id] = testcase_from_state(state)
         assert id == casemap[id].id
     return list(casemap.values())
-
-
-def load_draftspecs(
-    graph: dict[str, list[str]],
-    paths: dict[str, str],
-    ids: list[str] | None = None,
-) -> list[testspec.DraftSpec]:
-    """Load cached test specs.  Dependency resolution is performed.
-
-    Args:
-      graph: graph[case.id] are the dependencies of case
-      paths: path[case.id] is the working directory for case
-      ids: only return these ids
-
-    Returns:
-      Loaded test specs
-    """
-    ids_to_load: set[str] = set()
-    specmap: dict[str, testspec.DraftSpec] = {}
-    if ids:
-        # we must not only load the requested IDs, but also their dependencies
-        for id in ids:
-            ids_to_load.update(find_reachable_nodes(graph, id))
-    ts: TopologicalSorter = TopologicalSorter()
-    for id, deps in graph.items():
-        ts.add(id, *deps)
-    for id in ts.static_order():
-        if ids_to_load and id not in ids_to_load:
-            continue
-        file = Path(paths[id]) / "spec.lock"
-        with open(file) as fh:
-            spec = testspec.DraftSpec.load(fh)
-        specmap[id] = spec
-        assert id == specmap[id].id
-    return list(specmap.values())
 
 
 def prefix_bits(byte_array: bytes, bits: int) -> int:
