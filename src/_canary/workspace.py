@@ -2,11 +2,11 @@
 #
 # SPDX-License-Identifier: MIT
 import dataclasses
-import pickle
 import datetime
 import hashlib
 import json
 import os
+import pickle
 import tempfile
 import time
 from contextlib import contextmanager
@@ -918,7 +918,6 @@ class Workspace:
         return selection
 
     def get_selection(self, tag: str = "default") -> SpecSelection:
-
         tag_file = self.tags_dir / tag
         if not tag_file.exists():
             raise ValueError(f"Tag {tag} does not exist")

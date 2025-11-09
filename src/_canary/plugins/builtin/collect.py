@@ -8,10 +8,10 @@ from typing import Generator
 
 from ... import config
 from ...generator import AbstractTestGenerator
-from ..hookspec import hookimpl
-from ..types import ScanPath
 from ...util import logging
 from ...util.filesystem import working_dir
+from ..hookspec import hookimpl
+from ..types import ScanPath
 
 logger = logging.get_logger(__name__)
 

@@ -162,7 +162,6 @@ def test_roundtrip(tmpdir):
         f0 = Path("f1.pyt")
         f0.touch()
         s0 = spec.TestSpec(
-            id="s0",
             file_root=root,
             file_path=f0,
             family="f0",
@@ -187,7 +186,6 @@ def test_roundtrip(tmpdir):
         f1.touch()
 
         s1 = spec.TestSpec(
-            id="s1",
             file_root=root,
             file_path=f1,
             family="f1",

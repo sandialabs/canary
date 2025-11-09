@@ -8,29 +8,36 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Sequence
 from typing import TextIO
+from typing import TypeVar
 
 if TYPE_CHECKING:
     from ..testcase import TestCase
+    from ..testspec import DraftSpec
+    from ..testspec import TestSpec
+
+    SpecLike = TypeVar("SpecLike", TestCase, TestSpec, DraftSpec)
 
 builtin_print = print
 
 
-def static_order(cases: Sequence["TestCase"]) -> list["TestCase"]:
-    graph: dict["TestCase", list["TestCase"]] = {}
-    for case in cases:
-        graph[case] = case.dependencies
+def static_order(specs: Sequence["SpecLike"]) -> list["SpecLike"]:
+    map: dict[str, "SpecLike"] = {}
+    graph: dict[str, list[str]] = {}
+    for spec in specs:
+        map[spec.id] = spec
+        graph[spec.id] = [dep.id for dep in spec.dependencies]
     ts = TopologicalSorter(graph)
-    return list(ts.static_order())
+    return [map[id] for id in ts.static_order()]
 
 
-def static_order_ix(cases: Sequence["TestCase"]) -> list[int]:
-    graph: dict["TestCase", list["TestCase"]] = {}
+def static_order_ix(specs: Sequence["SpecLike"]) -> list[int]:
     map: dict[str, int] = {}
-    for i, case in enumerate(cases):
-        graph[case] = case.dependencies
-        map[case.id] = i
+    graph: dict[str, list[str]] = {}
+    for i, spec in enumerate(specs):
+        graph[spec.id] = [dep.id for dep in spec.dependencies]
+        map[spec.id] = i
     ts = TopologicalSorter(graph)
-    return [map[case.id] for case in ts.static_order()]
+    return [map[spec.id] for spec in ts.static_order()]
 
 
 def print_case(

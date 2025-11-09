@@ -47,7 +47,7 @@ class Info(CanarySubcommand):
             fh.write(f"  • {key}: {value}\n")
         fh.write("Test specs:\n")
         for spec in selection.specs:
-            name = spec.pretty_name()
+            name = spec.pretty_name
             fh.write(f"  • {name}\n")
         return fh.getvalue()
 

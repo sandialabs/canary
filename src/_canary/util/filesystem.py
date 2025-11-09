@@ -438,7 +438,7 @@ def ancestor(dir: str, n: int = 1) -> str:
     return parent
 
 
-def grep(regex: str | re.Pattern, file: str) -> bool:
+def grep(regex: str | re.Pattern, file: PathLike) -> bool:
     rx: re.Pattern = re.compile(regex) if isinstance(regex, str) else regex
     try:
         for line in open(file):
