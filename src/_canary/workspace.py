@@ -58,14 +58,6 @@ class SpecSelection:
     def created_on(self) -> str:
         return self._created_on
 
-    @property
-    def sha256(self) -> str:
-        return self._sha256
-
-    @property
-    def created_on(self) -> str:
-        return self._created_on
-
 
 class Session:
     def __init__(self) -> None:
@@ -103,11 +95,14 @@ class Session:
             raise SessionExistsError(self.root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.work_dir.mkdir(parents=True, exist_ok=True)
-        specs = testspec.finalize(selection.specs)
+        specs = selection.specs
         self._cases = []
-        for spec in specs:
+        lookup: dict[str, TestCase] = {}
+        for spec in static_order(specs):
+            dependencies = [lookup[dep.id] for dep in spec.dependencies]
             space = testspec.ExecutionSpace(root=self.work_dir / spec.fullname)
-            case = TestCase(spec=spec, workspace=space)
+            case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
+            lookup[spec.id] = case
             self._cases.append(case)
         graph: dict[str, list[str]] = {c.id: [d.id for d in c.dependencies] for c in self._cases}
         paths: dict[str, str] = {}
@@ -185,10 +180,9 @@ class Session:
 
     def populate_worktree(self) -> None:
         for case in self.cases:
-            path = Path(case.working_directory)
+            path = Path(case.workspace.root)
             path.mkdir(parents=True)
-            with open(case.lockfile, "w") as fh:
-                case.dump(fh)
+            case.save()
 
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
         raise NotImplementedError
@@ -263,14 +257,13 @@ class Session:
                 "name": case.spec.display_name,
                 "fullname": case.spec.fullname,
                 "family": case.spec.family,
-                "returncode": case.status.code,
                 "duration": case.timekeeper.duration,
                 "started_on": case.timekeeper.started_on,
                 "finished_on": case.timekeeper.finished_on,
-                "working_directory": case.workspace.root,
-                "execution_directory": case.workspace.root,
+                "working_directory": str(case.workspace.root),
+                "execution_directory": str(case.workspace.root),
                 "attributes": case.spec.attributes,
-                "status": {"value": case.status.value, "details": case.status.details},
+                "status": case.status.asdict(),
             }
             latest["cases"][case.id] = entry
         self.dump_latest(latest)
@@ -305,7 +298,7 @@ class Workspace:
         # Mutable data
         self.cache_dir: Path
 
-        # Storage for CaseSelection tags
+        # Storage for SpecSelection tags
         self.tags_dir: Path
 
         # Text logs
@@ -691,10 +684,10 @@ class Workspace:
         specs = testspec.load(files, ids=ids)
         return specs
 
-    def get_testcases_by_spec(self, case_specs: list[str], tag: str | None = None) -> CaseSelection:
+    def get_testcases_by_spec(self, case_specs: list[str], tag: str | None = None) -> SpecSelection:
         ids = [_[1:] for _ in case_specs]
         cases = self.load_testcases(ids=ids)
-        selection = CaseSelection(cases, tag)
+        selection = SpecSelection(cases, tag)
         if tag is not None:
             self.cache_selection(selection)
         return selection
@@ -877,7 +870,7 @@ class Workspace:
         on_options: list[str] | None = None,
         case_specs: list[str] | None = None,
         regex: str | None = None,
-    ) -> CaseSelection:
+    ) -> SpecSelection:
         logger.info("@*{Selecting} test cases from generators")
         kwds = dict(
             keyword_exprs=keyword_exprs,
@@ -909,7 +902,7 @@ class Workspace:
         if not tag_file.exists():
             raise ValueError(f"Tag {tag} does not exist")
 
-        selection: CaseSelection
+        selection: SpecSelection
 
         cache_file = self.cache_dir / "select" / tag
         if not cache_file.exists():
@@ -1078,7 +1071,7 @@ def load_testcases(
       Loaded test cases
     """
     ids_to_load: set[str] = set()
-    casemap: dict[str, TestCase | TestMultiCase] = {}
+    casemap: dict[str, TestCase] = {}
     if ids:
         # we must not only load the requested IDs, but also their dependencies
         for id in ids:
@@ -1259,6 +1252,9 @@ def find_duplicates(specs: list["testspec.DraftSpec"]) -> dict[str, list["testsp
         duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
     return duplicates
 
+
+def testcase_from_state(*args, **kwargs):
+    raise NotImplementedError
 
 class WorkspaceExistsError(Exception):
     pass

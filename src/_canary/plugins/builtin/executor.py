@@ -7,8 +7,9 @@ from typing import Any
 from typing import Sequence
 
 from ... import config
+from ...process_pool import ProcessPool
+import multiprocessing
 from ...queue import ResourceQueue
-from ...queue import process_queue
 from ...resource_pool import make_resource_pool
 from ...util import logging
 from ...util.misc import digits
@@ -73,13 +74,14 @@ class TestCaseExecutor:
         rpool = self.get_rpool()
         queue = ResourceQueue.factory(global_lock, cases, resource_pool=rpool)
         runner = Runner()
-        return process_queue(queue, runner)
+        pool = ProcessPool(queue.workers, queue, runner)
+        pool.run()
 
 
 class Runner:
     """Class for running ``AbstractTestCase``."""
 
-    def __call__(self, case: "TestCase", *args: str, **kwargs: Any) -> None:
+    def __call__(self, case: "TestCase", queue: multiprocessing.Queue, *args: str, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
         config.ensure_loaded()
         try:
@@ -88,7 +90,7 @@ class Runner:
             if summary := job_start_summary(case, qrank=qrank, qsize=qsize):
                 logger.log(logging.EMIT, summary, extra={"prefix": ""})
             config.pluginmanager.hook.canary_testcase_setup(case=case)
-            config.pluginmanager.hook.canary_testcase_run(case=case, qsize=qsize, qrank=qrank)
+            config.pluginmanager.hook.canary_testcase_run(case=case, queue=queue, qsize=qsize, qrank=qrank)
         finally:
             config.pluginmanager.hook.canary_testcase_finish(case=case)
             if summary := job_finish_summary(case, qrank=qrank, qsize=qsize):
@@ -103,8 +105,8 @@ def job_start_summary(case: "TestCase", *, qrank: int | None, qsize: int | None)
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
     if qrank is not None and qsize is not None:
         fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    fmt.write("Starting test case @*b{%id}: %X")
-    return case.format(fmt.getvalue()).strip()
+    fmt.write("Starting test case @*b{%s}: %s" % (case.id[:7], case.display_name))
+    return fmt.getvalue().strip()
 
 
 def job_finish_summary(case: "TestCase", *, qrank: int | None, qsize: int | None) -> str:
@@ -115,5 +117,9 @@ def job_finish_summary(case: "TestCase", *, qrank: int | None, qsize: int | None
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
     if qrank is not None and qsize is not None:
         fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    fmt.write("Finished test case @*b{%id}: %X %s.n")
-    return case.format(fmt.getvalue()).strip()
+    fmt.write(
+        "Finished test case @*b{%s}: %s @*%s{%s}" % (
+            case.id[:7], case.display_name, case.status.color[0], case.status.name
+        )
+    )
+    return fmt.getvalue().strip()

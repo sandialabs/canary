@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
 from typing import Sequence
+from .testspec import StatusValue
 
 from . import config
 from .atc import AbstractTestCase
@@ -38,7 +39,7 @@ from .util.time import timestamp
 
 if TYPE_CHECKING:
     from .resource_pool.rpool import ResourcePool
-    from .testcase import TestCase
+    from .testspec import TestCase
 
 logger = logging.get_logger(__name__)
 
@@ -57,6 +58,7 @@ class AbstractResourceQueue(abc.ABC):
         self.exclusive_lock: bool = False
         self.resource_pool = resource_pool
         assert not self.resource_pool.empty()
+        self.prepared: bool = False
 
     def __len__(self) -> int:
         return len(self.buffer)
@@ -115,7 +117,10 @@ class AbstractResourceQueue(abc.ABC):
             self.buffer[len(self.buffer)] = case
 
     def prepare(self, **kwds: Any) -> None:
-        pass
+        self.prepared = True
+
+    def is_active(self) -> bool:
+        return len(self.buffer)
 
     def close(self, cleanup: bool = True) -> None:
         if cleanup:
@@ -140,11 +145,11 @@ class AbstractResourceQueue(abc.ABC):
             for i in self.iter_keys():
                 obj = self.buffer[i]
                 status = obj.status
-                if status.value not in ("retry", "pending", "ready", "running"):
+                if status.value not in (StatusValue.RETRY, StatusValue.PENDING, StatusValue.READY, StatusValue.RUNNING):
                     # job will never be ready
                     self.skip(i)
                     continue
-                elif status == "ready":
+                elif status.value == StatusValue.READY:
                     try:
                         if self.exclusive_lock:
                             continue

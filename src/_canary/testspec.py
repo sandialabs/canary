@@ -4,6 +4,7 @@
 
 import dataclasses
 import datetime
+import enum
 import fnmatch
 import hashlib
 import importlib
@@ -95,7 +96,7 @@ class SpecCommons:
 
     @cached_property
     def fullname(self: Named) -> str:
-        return str(self.file_path / self.name)
+        return str(self.file_path.parent / self.name)
 
     @cached_property
     def display_name(self: Named) -> str:
@@ -230,7 +231,7 @@ class ResolvedSpec(SpecCommons):
     rcfiles: list[str] | None
     owners: list[str] | None
     mask: str = ""
-    attributes: dict[str, Any]
+    attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, d: dict, lookup: dict[str, "ResolvedSpec"]) -> "ResolvedSpec":
@@ -600,7 +601,7 @@ def resolve(draft_specs: list[DraftSpec]) -> list[ResolvedSpec]:
             deps = [u for u in draft_specs if u is not draft and dp.matches(u)]
             dp.update(*[u.id for u in deps])
             matches.extend([_.id for _ in deps])
-        graph[draft.id] = [m.id for m in matches]
+        graph[draft.id] = matches
 
     errors: dict[str, list[str]] = {}
     lookup: dict[str, ResolvedSpec] = {}
@@ -810,11 +811,183 @@ def load(files: list[Path], ids: list[str] | None = None) -> list[ResolvedSpec]:
     return [spec for spec in lookup.values() if not spec.mask]
 
 
+class StatusColor(str, enum.Enum):
+    PENDING = "blue"
+    READY = "blue"
+    RUNNING = "cyan"
+    SUCCESS = "green"
+    FAILED = "red"
+    DIFFED = "red"
+    NOT_RUN = "red"
+    SKIPPED = "magenta"
+    CANCELLED = "yellow"
+    BROKEN = "red"
+    XFAIL = "cyan"
+    XDIFF = "cyan"
+    TIMEOUT = "red"
+    RETRY = "yellow"
+
+
+class StatusValue(enum.Enum):
+    PENDING = enum.auto()
+    READY = enum.auto()
+    RUNNING = enum.auto()
+    SUCCESS = enum.auto()
+    FAILED = enum.auto()
+    DIFFED = enum.auto()
+    NOT_RUN = enum.auto()
+    SKIPPED = enum.auto()
+    CANCELLED = enum.auto()
+    RETRY = enum.auto()
+    BROKEN = enum.auto()
+    XFAIL = enum.auto()
+    XDIFF = enum.auto()
+    TIMEOUT = enum.auto()
+
+    @property
+    def color(self) -> StatusColor:
+        return {
+            StatusValue.PENDING: StatusColor.PENDING,
+            StatusValue.READY: StatusColor.READY,
+            StatusValue.RUNNING: StatusColor.RUNNING,
+            StatusValue.SUCCESS: StatusColor.SUCCESS,
+            StatusValue.FAILED: StatusColor.FAILED,
+            StatusValue.DIFFED: StatusColor.DIFFED,
+            StatusValue.NOT_RUN: StatusColor.NOT_RUN,
+            StatusValue.SKIPPED: StatusColor.SKIPPED,
+            StatusValue.CANCELLED: StatusColor.CANCELLED,
+            StatusValue.RETRY: StatusColor.RETRY,
+            StatusValue.BROKEN: StatusColor.BROKEN,
+            StatusValue.XFAIL: StatusColor.XFAIL,
+            StatusValue.XDIFF: StatusColor.XDIFF,
+            StatusValue.TIMEOUT: StatusColor.TIMEOUT,
+        }[self]
+
+    def default_code(self) -> int:
+        return {
+            StatusValue.PENDING: -1,
+            StatusValue.READY: -1,
+            StatusValue.RUNNING: -1,
+            StatusValue.SUCCESS: 0,
+            StatusValue.FAILED: 1,
+            StatusValue.DIFFED: diff_exit_status,
+            StatusValue.NOT_RUN: 1,
+            StatusValue.SKIPPED: skip_exit_status,
+            StatusValue.CANCELLED: signal.SIGINT.value,
+            StatusValue.RETRY: -1,
+            StatusValue.BROKEN: 1,
+            StatusValue.XFAIL: 0,
+            StatusValue.XDIFF: 0,
+            StatusValue.TIMEOUT: 66,
+        }[self]
+
+    @property
+    def glyph(self) -> str:
+        return {
+            StatusValue.PENDING: "—",
+            StatusValue.READY: "—",
+            StatusValue.RUNNING: "…",
+            StatusValue.SUCCESS: "✔",
+            StatusValue.FAILED: "✗",
+            StatusValue.DIFFED: "✗",
+            StatusValue.NOT_RUN: "✗",
+            StatusValue.SKIPPED: "✗",
+            StatusValue.CANCELLED: "🚫",
+            StatusValue.RETRY: "⟳",
+            StatusValue.BROKEN: "✗",
+            StatusValue.XFAIL: "✔",
+            StatusValue.XDIFF: "✔",
+            StatusValue.TIMEOUT: "✗",
+        }[self]
+
+
+
 @dataclasses.dataclass
 class Status:
-    value: str = "not-set"
+    value: StatusValue = dataclasses.field(default=StatusValue.PENDING)
     details: str | None = None
     code: int = -1
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, str):
+            return other.lower() == self.value.name.lower()
+        else:
+            assert isinstance(other, Status)
+            return self.iid == other.iid
+
+    @property
+    def name(self) -> str:
+        return self.value.name
+
+    @property
+    def color(self) -> str:
+        return self.value.color
+
+    @property
+    def glyph(self) -> str:
+        return self.value.glyph
+
+    @property
+    def iid(self) -> str:
+        if self.details:
+            return f"{self.value.name}:{self.details}"
+        return self.value
+
+    def satisfies(self, arg: str | tuple[str, ...]) -> bool:
+        if isinstance(arg, str):
+            arg = (arg,)
+        return self.value.name.lower() in arg
+
+    def set(self, arg: str | StatusValue, details: str | None = None, code: str | None = None) -> None:
+        if isinstance(arg, str):
+            arg = StatusValue[arg.upper()]
+        if not isinstance(arg, StatusValue):
+            raise ValueError(f"{arg} is not a valid status")
+        if arg in (StatusValue.SKIPPED, StatusValue.FAILED, StatusValue.DIFFED) and details is None:
+            details = "unknown"
+        if arg in (StatusValue.PENDING, StatusValue.READY, StatusValue.RETRY):
+            if details is not None:
+                raise ValueError(f"details not compatible with Status({arg!r})")
+        self.value = arg
+        self.details = details
+        if code is None:
+            code = arg.default_code()
+        self.code = code
+
+    def set_from_code(self, code: int, details: str | None = None) -> None:
+        if code == 0:
+            self.set(StatusValue.SUCCESS)
+        elif code == diff_exit_status:
+            self.set(
+                StatusValue.DIFFED,
+                details=details or "the diff exit status was returned",
+                code=code,
+            )
+        elif code == skip_exit_status:
+            self.set(
+                StatusValue.SKIPPED,
+                details=details or "the skip exit status was returned",
+                code=code,
+            )
+        elif code == fail_exit_status:
+            self.set(
+                StatusValue.FAILED,
+                details=details or "the fail exit status was returned",
+                code=code,
+            )
+        elif code == timeout_exit_status:
+            self.set(StatusValue.TIMEOUT, details=details, code=code)
+        elif abs(code) == signal.SIGINT.value:
+            self.set(StatusValue.CANCELLED, details="Keyboard interrupt", code=code)
+        else:
+            self.set(
+                StatusValue.BROKEN,
+                details=details or "a non-zero exit status was returned",
+                code=code,
+            )
+
+    def asdict(self) -> dict[str, Any]:
+        return {"value": self.value.name, "details": self.details, "code": self.code}
 
 
 class ExecutionPolicy(Protocol):
@@ -862,7 +1035,7 @@ class ExecutionSpace:
             file.write(f"[{stamp}] Copying {src} to {dst.name}\n")
             (self.root / dst.name).hardlink_to(src)
 
-    def link(self, src: Path, dst: Path | str | None) -> None:
+    def link(self, src: Path, dst: Path | str | None = None) -> None:
         dst: Path = Path(dst or src.name)
         (self.root / dst.name).unlink(missing_ok=True)
         with open(self.root / self.stdout, "a") as file:
@@ -872,27 +1045,30 @@ class ExecutionSpace:
 
 
 @dataclasses.dataclass
-class TimeKeeper:
+class Timekeeper:
     started_on: str = dataclasses.field(default="NA", init=False)
     finished_on: str = dataclasses.field(default="NA", init=False)
-    time: float = dataclasses.field(default=-1.0, init=False)
     duration: float = dataclasses.field(default=-1.0, init=False)
+    mark: float = dataclasses.field(default=-1.0, init=False, repr=False)
 
     def start(self) -> None:
-        self.time = time.monotonic()
+        self.mark = time.monotonic()
         self.started_on = datetime.datetime.now().isoformat(timespec="microseconds")
 
     def stop(self) -> None:
-        self.duration = time.monotonic() - self.time
+        self.duration = time.monotonic() - self.mark
         self.finished_on = datetime.datetime.now().isoformat(timespec="microseconds")
 
     @contextmanager
-    def timeit(self) -> Generator["TimeKeeper", None, None]:
+    def timeit(self) -> Generator["Timekeeper", None, None]:
         try:
             self.start()
             yield self
         finally:
             self.stop()
+
+    def asdict(self) -> dict[str, Any]:
+        return dataclasses.asdict(self)
 
 
 @dataclasses.dataclass
@@ -902,16 +1078,86 @@ class Measurements:
     def add_measurement(self, name: str, value: Any):
         self.data[name] = value
 
+    def asdict(self) -> dict[str, Any]:
+        return dataclasses.asdict(self)
+
 
 class TestCase:
-    def __init__(self, spec: TestSpec, workspace: ExecutionSpace) -> None:
+    def __init__(self, spec: TestSpec, workspace: ExecutionSpace, dependencies: list["TestCase"]) -> None:
         self.spec = spec
         self.workspace = workspace
         hk = config.pluginmanager.hook
         self.execution_policy: ExecutionPolicy = hk.canary_testcase_execution_policy(spec=self.spec)
-        self.status = Status(value="ready" if not self.spec.dependencies else "pending")
+        self._status = Status()
         self.measurements = Measurements()
-        self.timekeeper = TimeKeeper()
+        self.timekeeper = Timekeeper()
+        self.dependencies = dependencies
+
+        # Resources assigned to this test during execution
+        self._resources: list[dict[str, list[dict]]] = []
+
+        # Transfer some attributes from spec to me
+        self.id = self.spec.id
+        self.exclusive = self.spec.exclusive
+        self.mask = self.spec.mask
+        self.name = self.spec.name
+        self.timeout = self.spec.timeout
+        self.fullname = self.spec.fullname
+        self.display_name = self.spec.display_name
+        self.attributes = self.instance_attributes = self.spec.attributes
+        self.file_path = self.spec.file_path
+        self.file_root = self.spec.file_root
+        self.file = self.spec.file
+
+    @property
+    def cpus(self) -> int:
+        return self.spec.rparameters["cpus"]
+
+    @property
+    def runtime(self) -> float:
+        return self.spec.timeout  # FIXME
+
+    @property
+    def resources(self) -> list[dict[str, list[dict]]]:
+        """resources is of the form
+
+        resources[i] = {str: [{"id": str, "slots": int}]}
+
+        If the test required 2 cpus and 2 gpus, resources would look like
+
+        resources = [
+          {"cpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}]},
+          {"gpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}]},
+        ]
+
+        """
+        return self._resources
+
+    @resources.setter
+    def resources(self, arg: list[dict[str, list[dict]]]) -> None:
+        self.assign_resources(arg)
+
+    def assign_resources(self, arg: list[dict[str, list[dict]]]) -> None:
+        self._resources.clear()
+        self._resources.extend(arg)
+
+    def free_resources(self) -> list[dict[str, list[dict]]]:
+        tmp = self._resources
+        self._resources = []
+        return tmp
+
+    def required_resources(self) -> list[list[dict[str, Any]]]:
+        return self.spec.required_resources()
+
+    @property
+    def status(self) -> Status:
+        if self._status.value == StatusValue.PENDING and not self.dependencies:
+            self._status.value = StatusValue.READY
+        return self._status
+
+    @property
+    def lockfile(self) -> Path:
+        return self.workspace.root / "testcase.lock"
 
     def setup(self) -> None:
         with self.workspace.enter():
@@ -938,101 +1184,99 @@ class TestCase:
                         self.workspace.link(asset.src, asset.dst)
 
     def run(self, queue: multiprocessing.Queue) -> None:
-        with self.workspace.enter(), self.timekeeper.timeit():
-            code: int
-            message: str | None = None
-            try:
-                self.status.value = "running"
+        code: int
+        message: str | None = None
+        try:
+            with self.workspace.enter(), self.timekeeper.timeit():
+                self.status.set(StatusValue.RUNNING)
                 self.execution_policy.execute(case=self, queue=queue)
-            except KeyboardInterrupt:
-                code = signal.SIGINT.value
-            except SystemExit as e:
-                code = e.code if isinstance(e.code, int) else 1
-            except TestDiffed as e:
-                code = diff_exit_status
-                message = None if not e.args else e.args[0]
-            except TestFailed as e:
-                code = 1
-                message = None if not e.args else e.args[0]
-            except TestSkipped as e:
-                code = skip_exit_status
-                message = None if not e.args else e.args[0]
-            except TestTimedOut:
-                code = timeout_exit_status
-            except BaseException as e:
-                code = 66
-                message = f"Unknown failure: {e}"
-            else:
-                code = 0
-            finally:
-                self.update_status(code=code, message=message)
-                queue.put(
-                    {
-                        "status": self.status.value,
-                        "message": self.status.details,
-                        "returncode": self.status.code,
-                    }
-                )
-                self.save()
+        except KeyboardInterrupt:
+            code = signal.SIGINT.value
+        except SystemExit as e:
+            code = e.code if isinstance(e.code, int) else 1
+        except TestDiffed as e:
+            code = diff_exit_status
+            message = None if not e.args else e.args[0]
+        except TestFailed as e:
+            code = 1
+            message = None if not e.args else e.args[0]
+        except TestSkipped as e:
+            code = skip_exit_status
+            message = None if not e.args else e.args[0]
+        except TestTimedOut:
+            code = timeout_exit_status
+        except BaseException as e:
+            if config.get("config:debug"):
+                logger.exception("Exception during test case execution")
+            code = 66
+            message = f"Unknown failure: {e}"
+        else:
+            code = 0
+        finally:
+            logger.debug(f"Finished executing {self.spec.fullname}: code={code}, message={message}")
+            self.update_status(code=code, message=message)
+            queue.put({"status": self.status, "timekeeper": self.timekeeper})
+            self.save()
         return
 
     def update_status(self, *, code: int, message: str | None) -> None:
-        self.status.code = code
         xcode = self.spec.xstatus
+        status = self.status
         if xcode == diff_exit_status:
             if code != diff_exit_status:
-                self.status.value = "failed"
-                self.status.details = f"{self.spec.display_name}: expected test to diff"
+                status.set(
+                    StatusValue.FAILED,
+                    f"{self.spec.display_name}: expected test to diff",
+                    code=code,
+                )
             else:
-                self.status.value = "xdiff"
+                status.set(StatusValue.XDIFF)
         elif xcode != 0:
             # Expected to fail
             if xcode > 0 and code != code:
-                self.status.value = "failed"
-                self.status.details = f"{self.spec.display_name}: expected to exit with code={code}"
+                status.set(
+                    StatusValue.FAILED,
+                    details=f"{self.spec.display_name}: expected to exit with code={code}",
+                    code=code,
+                )
             elif code == 0:
-                self.status.value = "failed"
-                self.status.details = f"{self.spec.display_name}: expected to exit with code != 0"
+                status.set(
+                    StatusValue.FAILED,
+                    f"{self.spec.display_name}: expected to exit with code != 0",
+                    code=code,
+                )
             else:
-                self.status.value = "xfail"
-        elif code == 0:
-            self.status.value = "success"
-        elif code == diff_exit_status:
-            self.status.value = "diffed"
-            self.status.details = message or "the diff exit status was returned"
-        elif code == skip_exit_status:
-            self.status.value = "skipped"
-            self.status.details = message or "the skip exit status was returned"
-        elif code == fail_exit_status:
-            self.status.value = "failed"
-            self.status.details = message or "the fail exit status was returned"
-        elif code == timeout_exit_status:
-            self.status.value = "timeout"
-        elif abs(code) == signal.SIGINT.value:
-            self.status.value = "cancelled"
-            self.status.message = "keyboard interrupt"
+                status.set(StatusValue.XDIFF, code=code)
         else:
-            self.status.value = "failed"
-            self.status.details = "a non-zero exit status was returned"
+            status.set_from_code(code, message)
+
+    def update(self, **attrs: Any) -> None:
+        if status := attrs.get("status"):
+            self.status.set(status.value, status.details, status.code)
+        if timekeeper := attrs.get("timekeeper"):
+            self.timekeeper.started_on = timekeeper.started_on
+            self.timekeeper.finished_on = timekeeper.finished_on
+            self.timekeeper.duration = timekeeper.duration
 
     def teardown(self) -> None:
         pass
 
+    def finish(self) -> None:
+        pass
+
     def save(self) -> None:
         record = {
-            "status": dataclasses.asdict(self.status),
+            "status": self.status.asdict(),
             "spec": self.spec.asdict(),
-            "timekeeper": dataclasses.asdict(self.timekeeper),
-            "measurements": dataclasses.asdict(self.measurements),
+            "timekeeper": self.timekeeper.asdict(),
+            "measurements": self.measurements.asdict(),
         }
-        with self.workspace.enter():
-            with open("record.json", "w") as fh:
-                json.dump(record, fh, cls=PathEncoder)
+        self.lockfile.write_text(json.dumps(record, indent=2, cls=PathEncoder))
 
 
 class PythonFilePolicy(ExecutionPolicy):
     @contextmanager
-    def context(self) -> Generator[None, None, None]:
+    def context(self, case: TestCase) -> Generator[None, None, None]:
         """Temporarily patch:
         • canary.get_instance() to return `case`
         • canary.spec (optional)
@@ -1042,11 +1286,11 @@ class PythonFilePolicy(ExecutionPolicy):
         old_argv = sys.argv.copy()
 
         def get_instance():
-            return self
+            return case.spec
 
         canary.get_instance = get_instance
-        canary.__instance__ = self
-        sys.argv = [sys.executable, self.spec.file.name]
+        canary.__instance__ = case.spec
+        sys.argv = [sys.executable, case.spec.file.name]
         if a := config.getoption("script_args"):
             sys.argv.extend(a)
 
@@ -1058,8 +1302,10 @@ class PythonFilePolicy(ExecutionPolicy):
             sys.argv = old_argv
 
     def execute(self, case: "TestCase", queue: multiprocessing.Queue) -> None:
-        with self.context():
-            runpy.run_path(case.spec.file.name, run_name="__main__")
+        logger.debug(f"Starting {case.fullname} on pid {os.getpid()}")
+        with self.context(case):
+            runpy.run_path(case.spec.file, run_name="__main__")
+        logger.debug(f"Finished {case.fullname}")
 
 
 class ShellPolicy(ExecutionPolicy):
@@ -1094,3 +1340,7 @@ class UnresolvedDependenciesErrors(Exception):
     def __init__(self, errors: list[str]) -> None:
         self.errors = errors
         super().__init__("\n".join(errors))
+
+
+def runit(*args):
+    print("RUNNING", args)

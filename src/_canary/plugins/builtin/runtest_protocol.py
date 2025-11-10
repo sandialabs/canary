@@ -6,6 +6,7 @@
 from typing import Generator
 
 from ... import config
+from multiprocessing import Queue
 from ...testspec import ExecutionPolicy
 from ...testspec import PythonFilePolicy
 from ...testspec import TestCase
@@ -23,8 +24,8 @@ def canary_testcase_setup(case: TestCase) -> Generator[None, None, bool]:
 
 
 @hookimpl(wrapper=True)
-def canary_testcase_run(case: TestCase, qsize: int, qrank: int) -> Generator[None, None, bool]:
-    case.run()
+def canary_testcase_run(case: TestCase, queue: Queue, qsize: int, qrank: int) -> Generator[None, None, bool]:
+    case.run(queue)
     yield
     case.save()
     return True
@@ -41,5 +42,5 @@ def canary_testcase_finish(case: TestCase) -> Generator[None, None, bool]:
 @hookimpl
 def canary_testcase_execution_policy(spec: TestSpec) -> ExecutionPolicy | None:
     if spec.file.suffix in (".pyt", ".py", ".vvt"):
-        return PythonFilePolicy
+        return PythonFilePolicy()
     return None

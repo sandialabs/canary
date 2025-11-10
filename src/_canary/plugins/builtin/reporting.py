@@ -1,6 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import datetime
 import io
 import os
 import random
@@ -10,7 +11,8 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 from ... import config
-from ...status import Status
+from ...testspec import Status
+from ...testspec import StatusValue
 from ...third_party.color import ccenter
 from ...third_party.color import colorize
 from ...util import glyphs
@@ -23,7 +25,7 @@ from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...testcase import TestCase
+    from ...testspec import TestCase
     from ...workspace import Session
 
 
@@ -94,27 +96,28 @@ def print_short_test_status_summary(
     if not cases:
         file.write("Nothing to report\n")
     else:
-        totals: dict[str, list["TestCase"]] = {}
+        totals: dict[StatusValue, list["TestCase"]] = {}
         for case in cases:
             totals.setdefault(case.status.value, []).append(case)
-        for status in Status.members:
-            if not include_pass and status == "success":
+        for stat in totals:
+            if not include_pass and stat == StatusValue.SUCCESS:
                 continue
-            glyph = Status.glyph(status)
-            if status in totals:
-                n: int = 0
-                for case in sorted(totals[status], key=lambda t: t.name):
-                    file.write("%s %s\n" % (glyph, case.describe()))
-                    n += 1
-                    if truncate > 0 and truncate == n:
-                        cname = case.status.cname
-                        bullets = "@*{%s}" % (3 * ".")
-                        fmt = "%s %s %s truncating summary to the first %d entries. "
-                        alert = io.StringIO()
-                        alert.write(fmt % (glyph, cname, bullets, truncate))
-                        alert.write("See @*{canary status} for the full summary\n")
-                        file.write(alert.getvalue())
-                        break
+            glyph = stat.glyph
+            color = stat.color[0]
+            name = stat.name
+            n: int = 0
+            for case in sorted(totals[stat], key=lambda t: t.name):
+                file.write("@*%s{%s %s} %s\n" % (color, glyph, name, case.spec.fullname))
+                n += 1
+                if truncate > 0 and truncate == n:
+                    cname = case.status.value.name  #FIXME
+                    bullets = "@*{%s}" % (3 * ".")
+                    fmt = "%s %s %s truncating summary to the first %d entries. "
+                    alert = io.StringIO()
+                    alert.write(fmt % (glyph, cname, bullets, truncate))
+                    alert.write("See @*{canary status} for the full summary\n")
+                    file.write(alert.getvalue())
+                    break
     string = file.getvalue()
     if string.strip():
         string = "@*{Short test summary info}\n" + string
@@ -195,7 +198,7 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
 
 def print_durations(cases: list["TestCase"], N: int) -> None:
     string = io.StringIO()
-    cases = [c for c in cases if c.duration >= 0]
+    cases = [c for c in cases if c.timekeeper.duration >= 0]
     sorted_cases = sorted(cases, key=lambda x: x.duration)
     if N > 0:
         sorted_cases = sorted_cases[-N:]
@@ -315,23 +318,21 @@ def print_footer(cases: list["TestCase"], title: str) -> None:
     """Return a short, high-level, summary of test results"""
     string = io.StringIO()
     duration = -1.0
-    has_a = any(_.start for _ in cases if _.start > 0)
-    has_b = any(_.stop for _ in cases if _.stop > 0)
+    has_a = any(_.timekeeper.started_on != "NA" for _ in cases)
+    has_b = any(_.timekeeper.finished_on != "NA" for _ in cases)
     if has_a and has_b:
-        finish = max(_.stop for _ in cases if _.stop > 0)
-        start = min(_.start for _ in cases if _.start > 0)
-        duration = finish - start
-    totals: dict[str, list["TestCase"]] = {}
+        finish = max(datetime.datetime.fromisoformat(_.timekeeper.finished_on) for _ in cases if _.timekeeper.finished_on != "NA")
+        start = min(datetime.datetime.fromisoformat(_.timekeeper.started_on) for _ in cases if _.timekeeper.started_on != "NA")
+        duration = (finish - start).total_seconds()
+    totals: dict[StatusValue, list["TestCase"]] = {}
     for case in cases:
         totals.setdefault(case.status.value, []).append(case)
     N = len(cases)
     summary = ["@*b{%d total}" % N]
-    for member in Status.colors:
-        n = len(totals.get(member, []))
+    for stat in totals:
+        n = len(totals[stat])
         if n:
-            c = Status.colors[member]
-            stat = totals[member][0].status.name
-            summary.append("@%s{%d %s}" % (c, n, stat.lower()))
+            summary.append("@%s{%d %s}" % (stat.color[0], n, stat.name.lower()))
     emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
     x, y = random.sample(emojis, 2)
     kwds = {

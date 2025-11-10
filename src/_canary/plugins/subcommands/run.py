@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from ... import config
 from ...util import logging
-from ...workspace import CaseSelection
+from ...workspace import SpecSelection
 from ...workspace import NotAWorkspaceError
 from ...workspace import Workspace
 from ..hookspec import hookimpl
@@ -106,7 +106,7 @@ class Run(CanarySubcommand):
         config.pluginmanager.hook.canary_runtests_startup()
 
         workspace: Workspace
-        selection: CaseSelection
+        selection: SpecSelection
         work_tree: str = args.work_tree or os.getcwd()
         if args.wipe:
             Workspace.remove(Path(work_tree))
