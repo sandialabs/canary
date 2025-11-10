@@ -20,15 +20,14 @@ from .error import StopExecution
 from .error import notests_exit_status
 from .generator import AbstractTestGenerator
 from .plugins.types import ScanPath
-from .testcase import TestCase
-from .testcase import TestMultiCase
-from .testcase import from_state as testcase_from_state
+from .testspec import TestCase
 from .util import logging
 from .util.filesystem import force_remove
 from .util.filesystem import working_dir
 from .util.graph import TopologicalSorter
 from .util.graph import find_reachable_nodes
 from .util.graph import static_order
+from .util.parallel import starmap
 
 logger = logging.get_logger(__name__)
 
@@ -58,20 +57,6 @@ class SpecSelection:
     @property
     def created_on(self) -> str:
         return self._created_on
-
-
-@dataclasses.dataclass
-class CaseSelection:
-    cases: list[TestCase]
-    tag: str | None
-    _sha256: str = dataclasses.field(init=False)
-    _created_on: str = dataclasses.field(init=False)
-
-    def __post_init__(self) -> None:
-        cases = sorted([case.id for case in self.cases])
-        text = json.dumps({"tag": self.tag, "cases": cases})
-        self._sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        self._created_on = datetime.datetime.now().isoformat(timespec="microseconds")
 
     @property
     def sha256(self) -> str:
@@ -110,7 +95,7 @@ class Session:
         return (path / session_tag).exists()
 
     @classmethod
-    def create(cls, anchor: Path, selection: CaseSelection) -> "Session":
+    def create(cls, anchor: Path, selection: SpecSelection) -> "Session":
         self: Session = object.__new__(cls)
         ts = datetime.datetime.now().isoformat(timespec="microseconds")
         self.initialize_properties(anchor=anchor, name=ts.replace(":", "-"))
@@ -118,17 +103,20 @@ class Session:
             raise SessionExistsError(self.root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.work_dir.mkdir(parents=True, exist_ok=True)
-        self._cases = selection.cases
-        for case in self._cases:
-            case.set_workspace_properties(workspace=self.root.parent.parent, session=self.name)
+        specs = testspec.finalize(selection.specs)
+        self._cases = []
+        for spec in specs:
+            space = testspec.ExecutionSpace(root=self.work_dir / spec.fullname)
+            case = TestCase(spec=spec, workspace=space)
+            self._cases.append(case)
         graph: dict[str, list[str]] = {c.id: [d.id for d in c.dependencies] for c in self._cases}
         paths: dict[str, str] = {}
         for case in self._cases:
-            paths[case.id] = os.path.relpath(case.working_directory, str(self.root))
+            paths[case.id] = os.path.relpath(case.workspace.root, str(self.root))
             for dep in case.dependencies:
                 if dep.id not in graph:
                     # Dep lives outside of this session
-                    paths[dep.id] = os.path.relpath(dep.working_directory, str(self.root))
+                    paths[dep.id] = os.path.relpath(dep.workspace.root, str(self.root))
         index = {
             "name": self.name,
             "created_on": ts,
@@ -138,8 +126,8 @@ class Session:
         }
         self.dump_index(index)
         self.latest_file.write_text(json.dumps({}))
-        self.update_latest(self._cases)
         self.populate_worktree()
+        self.update_latest(self._cases)
         write_directory_tag(self.root / session_tag)
         # Dump a snapshot of the configuration used to create this session
         file = self.root / "config"
@@ -203,6 +191,7 @@ class Session:
                 case.dump(fh)
 
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
+        raise NotImplementedError
         index = self.load_index()
         paths = {id: str(self.root / p) for id, p in index["paths"].items()}
         return load_testcases(index["cases"], paths, ids=ids)
@@ -217,7 +206,7 @@ class Session:
             cases = [case for case in self._cases if case.id in ids]
         ready: list[TestCase] = []
         for case in cases:
-            if case.masked():
+            if case.mask:
                 continue
             elif ids is not None and case.id not in ids:
                 continue
@@ -242,8 +231,6 @@ class Session:
             stop = time.monotonic()
             duration = stop - start
             logger.info(f"Finished session in {duration:.2f} s. with returncode {returncode}")
-            for case in cases:
-                case.refresh()
             self.update_latest(cases)
             return {"returncode": returncode, "cases": cases}
 
@@ -273,16 +260,16 @@ class Session:
         latest = self.load_latest()
         for case in cases:
             entry = {
-                "name": case.display_name,
-                "fullname": case.fullname,
-                "family": case.family,
-                "returncode": case.returncode,
-                "duration": case.duration,
-                "started_on": timestamp_to_isoformat(case.start),
-                "finished_on": timestamp_to_isoformat(case.stop),
-                "working_directory": case.working_directory,
-                "execution_directory": case.execution_directory,
-                "instance_attributes": case.instance_attributes,
+                "name": case.spec.display_name,
+                "fullname": case.spec.fullname,
+                "family": case.spec.family,
+                "returncode": case.status.code,
+                "duration": case.timekeeper.duration,
+                "started_on": case.timekeeper.started_on,
+                "finished_on": case.timekeeper.finished_on,
+                "working_directory": case.workspace.root,
+                "execution_directory": case.workspace.root,
+                "attributes": case.spec.attributes,
                 "status": {"value": case.status.value, "details": case.status.details},
             }
             latest["cases"][case.id] = entry
@@ -477,7 +464,7 @@ class Workspace:
 
     @contextmanager
     def session(
-        self, selection: CaseSelection | None = None, name: str | None = None
+        self, selection: SpecSelection | None = None, name: str | None = None
     ) -> Generator[Session, None, None]:
         session: Session
         if selection is not None and name is not None:
@@ -842,7 +829,7 @@ class Workspace:
             specs = self.load_specs()
         else:
             logger.debug("Generating test specs")
-            specs = testspec.generate_specs(generators, on_options=on_options)
+            specs = generate_specs(generators, on_options=on_options)
             for spec in specs:
                 # Add all test specs to the object store before masking so that future stages don't
                 # inherit this stage's mask (if any)
@@ -1212,6 +1199,65 @@ def find_removable_cases(cases: list[TestCase]) -> list[TestCase]:
             continue
         removable.append(case)
     return removable
+
+
+def generate_specs(
+    generators: list["AbstractTestGenerator"],
+    on_options: list[str] | None = None,
+) -> list[testspec.ResolvedSpec]:
+    """Generate test cases and filter based on criteria"""
+    from .testcase import TestCase as LegacyTestCase
+
+    msg = "@*{Generating} test cases"
+    logger.log(logging.INFO, msg, extra={"end": "..."})
+    created = time.monotonic()
+    try:
+        locked: list[list[LegacyTestCase | testspec.DraftSpec]]
+        locked = starmap(lock_file, [(f, on_options) for f in generators])
+        drafts: list[testspec.DraftSpec] = []
+        for group in locked:
+            for spec in group:
+                if isinstance(spec, LegacyTestCase):
+                    drafts.append(testspec.DraftSpec.from_legacy_testcase(spec))
+                else:
+                    drafts.append(spec)
+        nc, ng = len(drafts), len(generators)
+    except Exception:
+        state = "failed"
+        raise
+    else:
+        state = "done"
+    finally:
+        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+        extra = {"end": end, "rewind": True}
+        logger.log(logging.INFO, msg, extra=extra)
+    logger.info("@*{Generated} %d test cases from %d generators" % (nc, ng))
+
+    duplicates = find_duplicates(drafts)
+    if duplicates:
+        logger.error("Duplicate test IDs generated for the following test cases")
+        for id, dspecs in duplicates.items():
+            logger.error(f"{id}:")
+            for spec in dspecs:
+                logger.log(
+                    logging.EMIT, f"  - {spec.display_name}: {spec.file_path}", extra={"prefix": ""}
+                )
+        raise ValueError("Duplicate test IDs in test suite")
+
+    return testspec.resolve(drafts)
+
+
+def lock_file(file: "AbstractTestGenerator", on_options: list[str] | None):
+    return file.lock(on_options=on_options)
+
+
+def find_duplicates(specs: list["testspec.DraftSpec"]) -> dict[str, list["testspec.DraftSpec"]]:
+    ids = [spec.id for spec in specs]
+    duplicate_ids = {id for id in ids if ids.count(id) > 1}
+    duplicates: dict[str, list["testspec.DraftSpec"]] = {}
+    for id in duplicate_ids:
+        duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
+    return duplicates
 
 
 class WorkspaceExistsError(Exception):

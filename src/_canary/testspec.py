@@ -6,12 +6,16 @@ import dataclasses
 import datetime
 import fnmatch
 import hashlib
+import importlib
 import itertools
 import json
 import math
+import multiprocessing
 import os
 import re
+import runpy
 import shlex
+import signal
 import string
 import sys
 import time
@@ -28,13 +32,19 @@ from typing import Protocol
 
 from . import config
 from . import when
+from .error import TestDiffed
+from .error import TestFailed
+from .error import TestSkipped
+from .error import TestTimedOut
+from .error import diff_exit_status
+from .error import fail_exit_status
+from .error import skip_exit_status
+from .error import timeout_exit_status
 from .util import filesystem
 from .util import logging
-from .util.parallel import starmap
 from .util.string import stringify
 
 if TYPE_CHECKING:
-    from .generator import AbstractTestGenerator
     from .testcase import TestCase as LegacyTestCase
 
 logger = logging.get_logger(__name__)
@@ -52,14 +62,13 @@ class PathEncoder(json.JSONEncoder):
 
 
 class Named(Protocol):
+    id: str
     file_root: Path
     file_path: Path
     family: str
     parameters: dict[str, Any]
     rparameters: dict[str, int]
 
-    @cached_property
-    def id(self) -> str: ...
     @cached_property
     def file(self) -> Path: ...
     @cached_property
@@ -182,6 +191,7 @@ class TestSpec(SpecCommons):
     rcfiles: list[str] | None
     owners: list[str] | None
     mask: str
+    attributes: dict[str, Any]
 
     @classmethod
     def from_dict(cls, d: dict, lookup: dict[str, "TestSpec"]) -> "TestSpec":
@@ -220,6 +230,7 @@ class ResolvedSpec(SpecCommons):
     rcfiles: list[str] | None
     owners: list[str] | None
     mask: str = ""
+    attributes: dict[str, Any]
 
     @classmethod
     def from_dict(cls, d: dict, lookup: dict[str, "ResolvedSpec"]) -> "ResolvedSpec":
@@ -235,6 +246,30 @@ class ResolvedSpec(SpecCommons):
         d["assets"] = assets
         self = ResolvedSpec(**d)  # ty: ignore[missing-argument]
         return self
+
+    def finalize(self, dependencies: list["TestSpec"]) -> TestSpec:
+        return TestSpec(
+            id=self.id,
+            file_root=self.file_root,
+            file_path=self.file_path,
+            family=self.family,
+            dependencies=dependencies,
+            keywords=self.keywords,
+            parameters=self.parameters,
+            rparameters=self.rparameters,
+            assets=self.assets,
+            baseline=self.baseline,
+            artifacts=self.artifacts,
+            exclusive=self.exclusive,
+            timeout=self.timeout,
+            xstatus=self.xstatus,
+            preload=self.preload,
+            modules=self.modules,
+            rcfiles=self.rcfiles,
+            owners=self.owners,
+            mask=self.mask,
+            attributes=self.attributes,
+        )
 
 
 @dataclasses.dataclass
@@ -326,9 +361,9 @@ class DraftSpec(SpecCommons):
     owners: list[str] | None = None
     mask: str | None = None
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
+    id: str = ""
 
     # Fields that are generated in __post_init__
-    id: str = dataclasses.field(default="", init=False)
     assets: list[Asset] = dataclasses.field(default_factory=list, init=False)
     baseline_actions: list[dict] = dataclasses.field(default_factory=list, init=False)
     dependency_patterns: list[DependencyPatterns] = dataclasses.field(
@@ -341,7 +376,8 @@ class DraftSpec(SpecCommons):
     def __post_init__(self) -> None:
         assert self.file.exists()
         self.family = self.family or self.file.stem
-        self.id = self._generate_id()
+        if not self.id:
+            self.id = self._generate_default_id()
 
         # We make sure objects have the right type, in case any were passed in as name=None
         if self.timeout < 0 or self.timeout is None:
@@ -356,53 +392,35 @@ class DraftSpec(SpecCommons):
         self.exclusive = bool(self.exclusive)
         self.dependency_patterns = self._generate_dependency_patterns(self.dependencies or [])
 
-    @classmethod
-    def from_dict(cls, d: dict, lookup: dict[str, "DraftSpec"]) -> "DraftSpec":
-        """Reconstruct a DraftSpec from the output of asdict"""
-        attrs: dict[str, Any] = {}
-        attrs["file_root"] = Path(d.pop("file_root"))
-        attrs["file_path"] = Path(d.pop("file_path"))
-        attrs["family"] = d.pop("family")
-        attrs["keywords"] = d.pop("keywords")
-        attrs["artifacts"] = d.pop("artifacts")
-        attrs["dependencies"] = d.pop("dependencies")
-        attrs["exclusive"] = d.pop("exclusive")
-        attrs["timeout"] = d.pop("timeout")
-        attrs["xstatus"] = d.pop("xstatus")
-        attrs["preload"] = d.pop("preload")
-        attrs["modules"] = d.pop("modules")
-        attrs["rcfiles"] = d.pop("rcfiles")
-        attrs["owners"] = d.pop("owners")
-        attrs["mask"] = d.pop("mask")
-        attrs["attributes"] = d.pop("attributes")
-        draft = DraftSpec(**attrs)  # ty: ignore[missing-argument]
-
-        # Reconstruct internal objects
-        assets: list[Asset] = []
-        for a in d["assets"]:
-            assets.append(Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]))
-        draft.assets.clear()
-        draft.assets.extend(assets)
-
-        draft.parameters.clear()
-        draft.parameters.update(d["parameters"])
-        draft.baseline = d["baseline"]
-        draft.baseline_actions = d["baseline_actions"]
-        draft.dependency_patterns = d["dependency_patterns"]
-        draft.resolved_dependencies = [lookup[ds["id"]] for ds in d["resolved_dependencies"]]
-        draft.resolved = d["resolved"]
-        return draft
-
-    def resolve(self, *specs: "DraftSpec") -> None:
-        self.resolved_dependencies.clear()
-        self.resolved_dependencies.extend(specs)
+    def resolve(self, dependencies: list["ResolvedSpec"]) -> "ResolvedSpec":
         errors: list[str] = []
         for dp in self.dependency_patterns:
             if e := dp.verify():
                 errors.extend(e)
         if errors:
             raise UnresolvedDependenciesErrors(errors)
-        self.resolved = True
+        return ResolvedSpec(
+            id=self.id,
+            file_root=self.file_root,
+            file_path=self.file_path,
+            family=self.family,
+            dependencies=dependencies,
+            keywords=self.keywords,
+            parameters=self.parameters,
+            rparameters=self.rparameters,
+            assets=self.assets,
+            baseline=self.baseline_actions,
+            artifacts=self.artifacts,
+            exclusive=self.exclusive,
+            timeout=self.timeout,
+            xstatus=self.xstatus,
+            preload=self.preload,
+            modules=self.modules,
+            rcfiles=self.rcfiles,
+            owners=self.owners,
+            mask=self.mask,
+            attributes=self.attributes,
+        )
 
     def is_resolved(self) -> bool:
         return self.resolved
@@ -515,7 +533,7 @@ class DraftSpec(SpecCommons):
                 dependency_patterns.append(dep_pattern)
         return dependency_patterns
 
-    def _generate_id(self) -> str:
+    def _generate_default_id(self) -> str:
         # Hasher is used to build ID
         hasher = hashlib.sha256()
         hasher.update(self.name.encode())
@@ -533,7 +551,6 @@ class DraftSpec(SpecCommons):
         else:
             hasher.update(str(self.file_path.parent / self.name).encode())
         return hasher.hexdigest()[:20]
-
 
     @classmethod
     def from_legacy_testcase(cls, case: "LegacyTestCase") -> "DraftSpec":
@@ -574,67 +591,41 @@ class DraftSpec(SpecCommons):
 
 
 def resolve(draft_specs: list[DraftSpec]) -> list[ResolvedSpec]:
-    errors: dict[str, list[str]] = {}
-    for draft in draft_specs:
-        matches: list[str] = []
-        for dp in draft.dependency_patterns:
-            specs = [u for u in draft_specs if u is not draft and dp.matches(u)]
-            dp.update(*[u.id for u in specs])
-            matches.extend(specs)
-        try:
-            draft.resolve(*matches)
-        except UnresolvedDependenciesErrors as e:
-            errors.setdefault(draft.fullname, []).extend(e.errors)
-    if errors:
-        msg: list[str] = ["Dependency resolution failed:"]
-        for name, issues in errors.items():
-            msg.append(f"  {name}")
-            msg.extend(f"  • {p}" for p in issues)
-        raise DependencyResolutionFailed("\n".join(msg))
-
-    map: dict[str, ResolvedSpec] = {}
     graph: dict[str, list[str]] = {}
+    draft_lookup: dict[str, list[str]] = {}
+    map: dict[str, DraftSpec] = {d.id: d for d in draft_specs}
     for draft in draft_specs:
-        if not draft.is_resolved():
-            raise ValueError(f"{draft}: unresolved draft!")
-        map[draft.id] = draft
-        graph[draft.id] = [d.id for d in draft.resolved_dependencies]
+        matches = draft_lookup.setdefault(draft.id, [])
+        for dp in draft.dependency_patterns:
+            deps = [u for u in draft_specs if u is not draft and dp.matches(u)]
+            dp.update(*[u.id for u in deps])
+            matches.extend([_.id for _ in deps])
+        graph[draft.id] = [m.id for m in matches]
 
-    specs: dict[str, ResolvedSpec] = {}
+    errors: dict[str, list[str]] = {}
+    lookup: dict[str, ResolvedSpec] = {}
     ts = TopologicalSorter(graph)
     ts.prepare()
     while ts.is_active():
         ids = ts.get_ready()
         for id in ids:
             # Replace dependencies with TestSpec objects
-            dependencies = []
             draft = map[id]
-            for dp in draft.resolved_dependencies:
-                dependencies.append(specs[dp.id])
-            spec = ResolvedSpec(
-                id=draft.id,
-                file_root=draft.file_root,
-                file_path=draft.file_path,
-                family=draft.family,
-                dependencies=dependencies,
-                keywords=draft.keywords,
-                parameters=draft.parameters,
-                rparameters=draft.rparameters,
-                assets=draft.assets,
-                baseline=draft.baseline_actions,
-                artifacts=draft.artifacts,
-                exclusive=draft.exclusive,
-                timeout=draft.timeout,
-                xstatus=draft.xstatus,
-                preload=draft.preload,
-                modules=draft.modules,
-                rcfiles=draft.rcfiles,
-                owners=draft.owners,
-                mask=draft.mask,
-            )
-            specs[id] = spec
+            dependencies: list[ResolvedSpec] = [lookup[id_] for id_ in draft_lookup[id]]
+            try:
+                spec = draft.resolve(dependencies)
+            except UnresolvedDependenciesErrors as e:
+                errors.setdefault(draft.fullname, []).extend(e.errors)
+            lookup[id] = spec
         ts.done(*ids)
-    return list(specs.values())
+
+    if errors:
+        msg: list[str] = ["Dependency resolution failed:"]
+        for name, issues in errors.items():
+            msg.append(f"  {name}")
+            msg.extend(f"  • {p}" for p in issues)
+        raise DependencyResolutionFailed("\n".join(msg))
+    return list(lookup.values())
 
 
 def finalize(resolved_specs: list[ResolvedSpec]) -> list[TestSpec]:
@@ -643,41 +634,19 @@ def finalize(resolved_specs: list[ResolvedSpec]) -> list[TestSpec]:
     for resolved_spec in resolved_specs:
         map[resolved_spec.id] = resolved_spec
         graph[resolved_spec.id] = [s.id for s in resolved_spec.dependencies]
-    specs: dict[str, TestSpec] = {}
+    lookup: dict[str, TestSpec] = {}
     ts = TopologicalSorter(graph)
     ts.prepare()
     while ts.is_active():
         ids = ts.get_ready()
         for id in ids:
             # Replace dependencies with TestSpec objects
-            dependencies = []
             resolved = map[id]
-            for dep in resolved.dependencies:
-                dependencies.append(specs[dep.id])
-            spec = TestSpec(
-                id=resolved.id,
-                file_root=resolved.file_root,
-                file_path=resolved.file_path,
-                family=resolved.family,
-                dependencies=dependencies,
-                keywords=resolved.keywords,
-                parameters=resolved.parameters,
-                rparameters=resolved.rparameters,
-                assets=resolved.assets,
-                baseline=resolved.baseline,
-                artifacts=resolved.artifacts,
-                exclusive=resolved.exclusive,
-                timeout=resolved.timeout,
-                xstatus=resolved.xstatus,
-                preload=resolved.preload,
-                modules=resolved.modules,
-                rcfiles=resolved.rcfiles,
-                owners=resolved.owners,
-                mask=resolved.mask,
-            )
-            specs[id] = spec
+            dependencies: list[TestSpec] = [lookup[dep.id] for dep in resolved.dependencies]
+            spec = resolved.finalize(dependencies)
+            lookup[id] = spec
         ts.done(*ids)
-    return list(specs.values())
+    return list(lookup.values())
 
 
 def apply_masks(
@@ -841,87 +810,65 @@ def load(files: list[Path], ids: list[str] | None = None) -> list[ResolvedSpec]:
     return [spec for spec in lookup.values() if not spec.mask]
 
 
-def generate_specs(
-    generators: list["AbstractTestGenerator"],
-    on_options: list[str] | None = None,
-) -> list[ResolvedSpec]:
-    """Generate test cases and filter based on criteria"""
-    from .testcase import TestCase as LegacyTestCase
-
-    msg = "@*{Generating} test cases"
-    logger.log(logging.INFO, msg, extra={"end": "..."})
-    created = time.monotonic()
-    try:
-        locked: list[list[LegacyTestCase | DraftSpec]]
-        locked = starmap(lock_file, [(f, on_options) for f in generators])
-        drafts: list[DraftSpec] = []
-        for group in locked:
-            for spec in group:
-                if isinstance(spec, LegacyTestCase):
-                    drafts.append(DraftSpec.from_legacy_testcase(spec))
-                else:
-                    drafts.append(spec)
-        nc, ng = len(drafts), len(generators)
-    except Exception:
-        state = "failed"
-        raise
-    else:
-        state = "done"
-    finally:
-        end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
-        extra = {"end": end, "rewind": True}
-        logger.log(logging.INFO, msg, extra=extra)
-    logger.info("@*{Generated} %d test cases from %d generators" % (nc, ng))
-
-    duplicates = find_duplicates(drafts)
-    if duplicates:
-        logger.error("Duplicate test IDs generated for the following test cases")
-        for id, dspecs in duplicates.items():
-            logger.error(f"{id}:")
-            for spec in dspecs:
-                logger.log(
-                    logging.EMIT, f"  - {spec.display_name}: {spec.file_path}", extra={"prefix": ""}
-                )
-        raise ValueError("Duplicate test IDs in test suite")
-
-    return resolve(drafts)
-
-
-def lock_file(file: "AbstractTestGenerator", on_options: list[str] | None):
-    return file.lock(on_options=on_options)
-
-
-def find_duplicates(specs: list["DraftSpec"]) -> dict[str, list["DraftSpec"]]:
-    ids = [spec.id for spec in specs]
-    duplicate_ids = {id for id in ids if ids.count(id) > 1}
-    duplicates: dict[str, list["DraftSpec"]] = {}
-    for id in duplicate_ids:
-        duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
-    return duplicates
-
-
 @dataclasses.dataclass
 class Status:
-    value: str = "created"
+    value: str = "not-set"
     details: str | None = None
+    code: int = -1
 
 
 class ExecutionPolicy(Protocol):
+    def execute(self, case: "TestCase", queue: multiprocessing.Queue) -> None: ...
     def command(self, spec: TestSpec) -> list[str]: ...
 
 
 @dataclasses.dataclass
 class ExecutionSpace:
     root: Path
+    stdout: str = "canary-out.txt"
+    stderr: str = "canary-err.txt"
 
     def create(self):
         self.root.mkdir(parents=True, exist_ok=True)
+        (self.root / self.stdout).unlink(missing_ok=True)
+        (self.root / self.stderr).unlink(missing_ok=True)
+        (self.root / self.stderr).touch()
+        with open(self.root / self.stdout, "w") as file:
+            stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
+            file.write(f"[{stamp}] Creating workspace root at {self.root}\n")
 
     @contextmanager
     def enter(self) -> Generator[None, None, None]:
-        self.create()
-        with filesystem.working_dir(self.root):
+        current_cwd = Path.cwd()
+        try:
+            os.chdir(self.root)
             yield
+        finally:
+            os.chdir(current_cwd)
+
+    def restore(self) -> None:
+        (self.root / self.stdout).unlink(missing_ok=True)
+        (self.root / self.stderr).unlink(missing_ok=True)
+        (self.root / self.stderr).touch()
+        with open(self.root / self.stdout, "w") as file:
+            stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
+            file.write(f"[{stamp}] Restoring workspace root\n")
+
+    def copy(self, src: Path, dst: Path | str | None) -> None:
+        dst: Path = Path(dst or src.name)
+        (self.root / dst.name).unlink(missing_ok=True)
+        with open(self.root / self.stdout, "a") as file:
+            stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
+            file.write(f"[{stamp}] Copying {src} to {dst.name}\n")
+            (self.root / dst.name).hardlink_to(src)
+
+    def link(self, src: Path, dst: Path | str | None) -> None:
+        dst: Path = Path(dst or src.name)
+        (self.root / dst.name).unlink(missing_ok=True)
+        with open(self.root / self.stdout, "a") as file:
+            stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
+            file.write(f"[{stamp}] Linking {src} to {dst.name}\n")
+            (self.root / dst.name).symlink_to(src)
 
 
 @dataclasses.dataclass
@@ -960,70 +907,164 @@ class TestCase:
     def __init__(self, spec: TestSpec, workspace: ExecutionSpace) -> None:
         self.spec = spec
         self.workspace = workspace
-        self.status = Status()
-        self.tk = TimeKeeper()
+        hk = config.pluginmanager.hook
+        self.execution_policy: ExecutionPolicy = hk.canary_testcase_execution_policy(spec=self.spec)
+        self.status = Status(value="ready" if not self.spec.dependencies else "pending")
+        self.measurements = Measurements()
+        self.timekeeper = TimeKeeper()
 
     def setup(self) -> None:
         with self.workspace.enter():
-            config.pluginmanager.hook.canary_testcase_setup(spec=self.spec)
+            copy_all_resources: bool = config.getoption("copy_all_resources", False)
+            prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
+            self.workspace.restore()
+            with self.workspace.enter():
+                with open(self.workspace.stdout, "a") as file:
+                    file.write(f"[{prefix}] Preparing test: {self.name}\n")
+                    file.write(f"[{prefix}] Directory: {self.workspace.root}\n")
+                    file.write(f"[{prefix}] Linking and copying working files...\n")
+                if copy_all_resources:
+                    self.workspace.copy(self.spec.file)
+                else:
+                    self.workspace.link(self.spec.file)
+                for asset in self.spec.assets:
+                    if asset.action not in ("copy", "link"):
+                        continue
+                    if not asset.src.exists():
+                        raise MissingSourceError(asset.src)
+                    if asset.action == "copy" or copy_all_resources:
+                        self.workspace.copy(asset.src, asset.dst)
+                    else:
+                        self.workspace.link(asset.src, asset.dst)
 
-    def teardown(self) -> None:
-        with self.workspace.enter():
-            config.pluginmanager.hook.canary_testcase_teardown(spec=self.spec)
-
-    def run(self) -> int:
-        with self.workspace.enter():
+    def run(self, queue: multiprocessing.Queue) -> None:
+        with self.workspace.enter(), self.timekeeper.timeit():
+            code: int
+            message: str | None = None
             try:
                 self.status.value = "running"
-                with open("spec.lock", "w") as fh:
-                    self.spec.dump(fh)
-                measurements = Measurements()
-                with self.tk.timeit():
-                    proc = config.pluginmanager.hook.canary_testcase_run(
-                        spec=self.spec, measurements=measurements
-                    )
-            except Exception:
-                self.status.value = "failed"
-                raise
+                self.execution_policy.execute(case=self, queue=queue)
+            except KeyboardInterrupt:
+                code = signal.SIGINT.value
+            except SystemExit as e:
+                code = e.code if isinstance(e.code, int) else 1
+            except TestDiffed as e:
+                code = diff_exit_status
+                message = None if not e.args else e.args[0]
+            except TestFailed as e:
+                code = 1
+                message = None if not e.args else e.args[0]
+            except TestSkipped as e:
+                code = skip_exit_status
+                message = None if not e.args else e.args[0]
+            except TestTimedOut:
+                code = timeout_exit_status
+            except BaseException as e:
+                code = 66
+                message = f"Unknown failure: {e}"
             else:
-                returncode = proc.returncode
-                if returncode == self.spec.xstatus:
-                    self.status.value = "success"
-                else:
-                    self.status.value = "failed"
+                code = 0
             finally:
-                record = {
-                    "status": dataclasses.asdict(self.status),
-                    "spec": self.spec.asdict(),
-                    "timekeeper": dataclasses.asdict(self.tk),
-                    "measurements": dataclasses.asdict(measurements),
-                }
-                with open("record.json", "w") as fh:
-                    json.dump(record, fh, cls=PathEncoder)
-        return returncode
+                self.update_status(code=code, message=message)
+                queue.put(
+                    {
+                        "status": self.status.value,
+                        "message": self.status.details,
+                        "returncode": self.status.code,
+                    }
+                )
+                self.save()
+        return
+
+    def update_status(self, *, code: int, message: str | None) -> None:
+        self.status.code = code
+        xcode = self.spec.xstatus
+        if xcode == diff_exit_status:
+            if code != diff_exit_status:
+                self.status.value = "failed"
+                self.status.details = f"{self.spec.display_name}: expected test to diff"
+            else:
+                self.status.value = "xdiff"
+        elif xcode != 0:
+            # Expected to fail
+            if xcode > 0 and code != code:
+                self.status.value = "failed"
+                self.status.details = f"{self.spec.display_name}: expected to exit with code={code}"
+            elif code == 0:
+                self.status.value = "failed"
+                self.status.details = f"{self.spec.display_name}: expected to exit with code != 0"
+            else:
+                self.status.value = "xfail"
+        elif code == 0:
+            self.status.value = "success"
+        elif code == diff_exit_status:
+            self.status.value = "diffed"
+            self.status.details = message or "the diff exit status was returned"
+        elif code == skip_exit_status:
+            self.status.value = "skipped"
+            self.status.details = message or "the skip exit status was returned"
+        elif code == fail_exit_status:
+            self.status.value = "failed"
+            self.status.details = message or "the fail exit status was returned"
+        elif code == timeout_exit_status:
+            self.status.value = "timeout"
+        elif abs(code) == signal.SIGINT.value:
+            self.status.value = "cancelled"
+            self.status.message = "keyboard interrupt"
+        else:
+            self.status.value = "failed"
+            self.status.details = "a non-zero exit status was returned"
+
+    def teardown(self) -> None:
+        pass
+
+    def save(self) -> None:
+        record = {
+            "status": dataclasses.asdict(self.status),
+            "spec": self.spec.asdict(),
+            "timekeeper": dataclasses.asdict(self.timekeeper),
+            "measurements": dataclasses.asdict(self.measurements),
+        }
+        with self.workspace.enter():
+            with open("record.json", "w") as fh:
+                json.dump(record, fh, cls=PathEncoder)
 
 
 class PythonFilePolicy(ExecutionPolicy):
-    def command(self, spec: TestSpec) -> list[str]:
-        args: list[str] = [sys.executable, spec.file.name]
-        if script_args := config.getoption("script_args"):
-            args.extend(script_args)
-        return args
+    @contextmanager
+    def context(self) -> Generator[None, None, None]:
+        """Temporarily patch:
+        • canary.get_instance() to return `case`
+        • canary.spec (optional)
+        • sys.argv (optional)
+        """
+        canary = importlib.import_module("canary")
+        old_argv = sys.argv.copy()
+
+        def get_instance():
+            return self
+
+        canary.get_instance = get_instance
+        canary.__instance__ = self
+        sys.argv = [sys.executable, self.spec.file.name]
+        if a := config.getoption("script_args"):
+            sys.argv.extend(a)
+
+        try:
+            yield
+        finally:
+            delattr(canary, "get_instance")
+            delattr(canary, "__instance__")
+            sys.argv = old_argv
+
+    def execute(self, case: "TestCase", queue: multiprocessing.Queue) -> None:
+        with self.context():
+            runpy.run_path(case.spec.file.name, run_name="__main__")
 
 
 class ShellPolicy(ExecutionPolicy):
     def command(self, spec: TestSpec) -> list[str]:
         raise NotImplementedError
-        args: list[str] = ["sh", spec.file.name]
-        if script_args := config.getoption("script_args"):
-            args.extend(script_args)
-        return args
-
-
-def isrel(path1: str | None, path2: str) -> bool:
-    if path1 is None:
-        return False
-    return os.path.abspath(path1).startswith(os.path.abspath(path2))
 
 
 def contains_any(elements: tuple[str, ...], test_elements: list[str]) -> bool:

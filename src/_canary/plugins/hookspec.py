@@ -12,7 +12,6 @@ import pluggy
 
 from .types import CanaryReporter
 from .types import CanarySubcommand
-from .types import ScanPath
 
 if TYPE_CHECKING:
     from ..atc import AbstractTestCase
@@ -20,9 +19,12 @@ if TYPE_CHECKING:
     from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
     from ..testcase import TestCase
+    from ..testspec import ExecutionPolicy
+    from ..testspec import TestSpec
     from ..workspace import Session
     from .manager import CanaryPluginManager
     from .types import Result
+    from .types import ScanPath
 
 project_name = "canary"
 hookspec = pluggy.HookspecMarker(project_name)
@@ -276,5 +278,10 @@ def canary_resource_pool_describe() -> str:
 
 
 @hookspec(firstresult=True)
-def canary_collect_generators(scan_path: ScanPath) -> list["AbstractTestGenerator"]:
+def canary_collect_generators(scan_path: "ScanPath") -> list["AbstractTestGenerator"]:
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_testcase_execution_policy(spec: "TestSpec") -> "ExecutionPolicy":
     raise NotImplementedError
