@@ -79,13 +79,13 @@ class MeasuredProcess(mp.Process):
         """
         if not self.samples:
             return {
-                "duration_seconds": time.time() - self._start_time if self._start_time else 0,
-                "samples_collected": 0,
+                "duration": time.time() - self._start_time if self._start_time else 0,
+                "samples": 0,
             }
 
         measurements = {
-            "duration_seconds": time.time() - self._start_time if self._start_time else 0,
-            "samples_collected": len(self.samples),
+            "duration": time.time() - self._start_time if self._start_time else 0,
+            "samples": len(self.samples),
         }
 
         # Calculate stats for each metric
@@ -94,9 +94,9 @@ class MeasuredProcess(mp.Process):
         for metric in metrics:
             values = [s[metric] for s in self.samples if metric in s]
             if values:
-                measurements[f"{metric}_min"] = min(values)
-                measurements[f"{metric}_max"] = max(values)
-                measurements[f"{metric}_avg"] = sum(values) / len(values)
+                measurements.setdefault(metric, {})["min"] = min(values)
+                measurements.setdefault(metric, {})["max"] = max(values)
+                measurements.setdefault(metric, {})["ave"] = sum(values) / len(values)
 
         return measurements
 

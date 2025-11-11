@@ -25,10 +25,10 @@ class Status:
         "READY": (-2, "Blue", "○", ()),
         "RUNNING": (-1, "green", "▶", ()),
         "SUCCESS": (0, "Green", "✓", ("PASS",)),
-        "XFAIL": (1, "Cyan", "✓", ()),
-        "XDIFF": (2, "Cyan", "✓", ()),
-        "RETRY": (30, "Yellow", "⟳", ()),
-        "SKIPPED": (40, "Magenta", "⊘", ()),
+        "XFAIL": (50, "Cyan", "✓", ()),
+        "XDIFF": (51, "Cyan", "✓", ()),
+        "RETRY": (52, "Yellow", "⟳", ()),
+        "SKIPPED": (53, "Magenta", "⊘", ()),
         "CANCELLED": (63, "Magenta", "⊘", ()),
         "DIFFED": (64, "Red", "✗", ("DIFF",)),
         "FAILED": (65, "Red", "✗", ("FAIL",)),
@@ -74,7 +74,7 @@ class Status:
             if status in self.code2name:
                 self._name = self.code2name[status]
             else:
-                self._name = "ERROR"
+                self._name = "FAILED"
             self._code = code if code is not None else status
         elif isinstance(status, str):
             # Look up by name

@@ -8,7 +8,6 @@ import canary
 def test():
     instance = canary.get_instance()
     instance.set_attribute(attribute=23)
-    instance.save()
 
     with open("testcase.lock", "r") as fh:
         data = json.load(fh)

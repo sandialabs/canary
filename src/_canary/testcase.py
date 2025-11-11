@@ -241,6 +241,7 @@ class TestCase:
     def update_status(self, *, code: int, message: str | None) -> None:
         xcode = self.spec.xstatus
         status = self.status
+
         if xcode == diff_exit_status:
             if code != diff_exit_status:
                 status.set(
@@ -353,8 +354,9 @@ class TestCase:
                     self._status.set("SKIPPED", "one or more dependencies succeeded")
                 else:
                     self._status.set(
-                        "SKIPPED",
-                        f"one or more dependencies failed with status {dep.status.name!r}",
+                        "NOT_RUN",
+                        f"Dependency {dep.name} finished with status {dep.status.name!r}, "
+                        f"not {self.spec.dep_done_criteria}"
                     )
                 break
 
@@ -370,7 +372,7 @@ class TestCase:
                 flags[i] = "pending"
             elif expected[i] in (None, dep.status.name, "*"):
                 flags[i] = "can_run"
-            elif match_any(expected[i], [dep.status.name], ignore_case=True):
+            elif match_any(expected[i], [dep.status.name, *dep.status.labels], ignore_case=True):
                 flags[i] = "can_run"
             else:
                 flags[i] = "wont_run"
