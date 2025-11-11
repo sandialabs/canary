@@ -1692,6 +1692,15 @@ class TestCase(AbstractTestCase):
 
         return
 
+    def timeout_multiplier(self) -> float:
+        timeoutx: float = 1.0
+        timeouts = config.getoption("timeout")
+        if t := timeouts.get("multiplier"):
+            timeoutx = float(t)
+        elif t := config.get("config:timeout:multiplier"):
+            timeoutx = float(t)
+        return timeoutx
+
     def run(self, qsize: int = 1, qrank: int = 0) -> None:
         """Run the test case"""
 

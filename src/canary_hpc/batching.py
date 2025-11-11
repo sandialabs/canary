@@ -92,9 +92,18 @@ class TestBatch(AbstractTestCase):
         return float(min(height, t))
 
     @property
+    def timeout_multiplier(self) -> float:
+        timeoutx: float = 1.0
+        timeouts = canary.config.getoption("timeout")
+        if t := timeouts.get("multiplier"):
+            timeoutx = float(t)
+        elif t := canary.config.get("config:timeout:multiplier"):
+            timeoutx = float(t)
+        return timeoutx
+
+    @property
     def timeout(self) -> float:
-        timeoutx = canary.config.get("config:timeout:multiplier", 1.0)
-        return self.qtime() * timeoutx
+        return self.qtime() * self.timeout_multiplier
 
     def qtime(self) -> float:
         scheduler_args = get_scheduler_args()
@@ -352,7 +361,7 @@ class TestBatch(AbstractTestCase):
             if backend.supports_subscheduling and flat:
                 submit_script = self.submission_script_filename()
                 scriptdir = submit_script.parent
-                timeoutx = canary.config.get("config:timeout:multiplier", 1.0)
+                timeoutx = self.timeout_multiplier
                 variables.pop("CANARY_BATCH_ID", None)
                 proc = backend.submitn(
                     [case.id for case in self],
@@ -367,7 +376,7 @@ class TestBatch(AbstractTestCase):
                     qtime=[case.runtime * timeoutx for case in self],
                 )
             else:
-                timeoutx = canary.config.get("config:timeout:multiplier", 1.0)
+                timeoutx = self.timeout_multiplier
                 qtime = self.qtime() * timeoutx
                 nodes = self.nodes_required(backend)
                 proc = backend.submit(
