@@ -9,6 +9,7 @@ import os
 import shlex
 import signal
 import time
+from functools import cached_property
 from functools import lru_cache
 from graphlib import TopologicalSorter
 from itertools import repeat
@@ -91,13 +92,11 @@ class TestBatch(AbstractTestCase):
         t = sum(c.runtime for c in self)
         return float(min(height, t))
 
-    @property
+    @cached_property
     def timeout_multiplier(self) -> float:
-        timeoutx: float = 1.0
-        timeouts = canary.config.getoption("timeout")
+        timeoutx: float = canary.config.get("config:timeout:multiplier") or 1.0
+        timeouts = canary.config.getoption("timeout") or {}
         if t := timeouts.get("multiplier"):
-            timeoutx = float(t)
-        elif t := canary.config.get("config:timeout:multiplier"):
             timeoutx = float(t)
         return timeoutx
 

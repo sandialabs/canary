@@ -22,6 +22,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
 from datetime import timedelta
+from functools import cached_property
 from functools import lru_cache
 from types import SimpleNamespace
 from typing import IO
@@ -1692,12 +1693,11 @@ class TestCase(AbstractTestCase):
 
         return
 
+    @cached_property
     def timeout_multiplier(self) -> float:
-        timeoutx: float = 1.0
-        timeouts = config.getoption("timeout")
+        timeoutx: float = config.get("config:timeout:multiplier") or 1.0
+        timeouts = config.getoption("timeout") or {}
         if t := timeouts.get("multiplier"):
-            timeoutx = float(t)
-        elif t := config.get("config:timeout:multiplier"):
             timeoutx = float(t)
         return timeoutx
 
