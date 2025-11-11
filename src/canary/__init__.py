@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import atexit
+from pathlib import Path
 
 import schema
 
@@ -18,23 +20,22 @@ from _canary.error import TestDiffed
 from _canary.error import TestFailed
 from _canary.error import TestSkipped
 from _canary.generator import AbstractTestGenerator
-from _canary.legacy.session import Session
-from _canary.legacy.testcase import TestCase as LegacyTestCase
-from _canary.legacy.testcase import TestMultiCase as LegacyTestMultiCase
 from _canary.main import console_main
 from _canary.plugins.hookspec import hookimpl
 from _canary.plugins.hookspec import hookspec
 from _canary.plugins.manager import CanaryPluginManager
 from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
+from _canary.testcase import load as load_testcase
 from _canary.testcase import TestCase
-from _canary.testinstance import TestInstance
-from _canary.testinstance import TestMultiInstance
-from _canary.testinstance import load as load_instance
-from _canary.testspec import DependencyPatterns
-from _canary.testspec import DraftSpec
 from _canary.testexec import ExecutionPolicy
 from _canary.testexec import PythonFilePolicy
+from _canary.testexec import SubprocessPolicy
+from _canary.testinst import load as load_instance
+from _canary.testinst import TestInstance
+from _canary.testinst import TestMultiInstance
+from _canary.testspec import DependencyPatterns
+from _canary.testspec import DraftSpec
 from _canary.testspec import ResolvedSpec
 from _canary.testspec import TestSpec
 from _canary.third_party import color
@@ -50,6 +51,7 @@ from _canary.util.executable import Executable
 from _canary.version import version  # noqa: I001
 from _canary.version import version_info  # noqa: I001
 from _canary.workspace import Workspace
+from _canary.workspace import Session
 
 from . import directives
 from . import patterns
@@ -79,11 +81,21 @@ def make_argument_parser() -> TestParser:
 make_std_parser = make_argument_parser
 
 
-def get_instance(arg_path: str | None = None) -> TestInstance | None:
+def get_instance(arg_path: Path | str | None = None) -> TestInstance | None:
     try:
-        return load_instance(arg_path=arg_path)
+        instance = load_instance(arg_path)
     except FileNotFoundError:
         return None
+    return instance
+
+
+def get_testcase(arg_path: Path | str | None = None) -> TestCase | None:
+    try:
+        case = load_testcase(arg_path)
+        atexit.register(lambda: case.save())
+    except FileNotFoundError:
+        return None
+    return case
 
 
 def __getattr__(name):

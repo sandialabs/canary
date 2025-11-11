@@ -108,8 +108,8 @@ class Status(CanarySubcommand):
             "Session": "session",
             "Exit Code": "returncode",
             "Duration": "duration",
-            "Status": "status_value",
-            "Details": "status_details",
+            "Status": "status_name",
+            "Details": "status_message",
         }
         nrows = len(filtered_info["id"])
         table: list[list[str]] = []
@@ -226,7 +226,7 @@ def sortby_status(info: dict[str, list]) -> dict[str, list]:
         "failed": 31,
         "unknown": 40,
     }
-    status = info["status_value"]
+    status = info["status_name"]
     ix = sorted(range(len(status)), key=lambda n: map.get(status[n], 50))
     d: dict[str, list] = {}
     for key, value in info.items():
@@ -247,8 +247,8 @@ def filter_by_status(info: dict[str, list], chars: str | None) -> dict[str, list
     chars = chars or "dftns"
     if "A" in chars:
         return info
-    mask = [False] * len(info["status_value"])
-    for i, stat in enumerate(info["status_value"]):
+    mask = [False] * len(info["status_name"])
+    for i, stat in enumerate(info["status_name"]):
         if info["session"][i] is None:
             continue
         elif "a" in chars:

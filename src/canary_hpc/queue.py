@@ -91,16 +91,16 @@ class ResourceQueue(queue.AbstractResourceQueue):
             meta["retry"] = meta.setdefault("retry", 0) + 1
             if meta["retry"] >= 3:
                 for case in self._finished[obj_no]:
-                    case.status.set("failed", "Maximum number of retries exceeded")
+                    case.status.set("FAILED", "Maximum number of retries exceeded")
                     case.save()
             else:
                 self.buffer[obj_no] = self._finished.pop(obj_no)
                 for case in self.buffer[obj_no]:
-                    if case.status.value not in ("pending", "ready"):
+                    if case.status.name not in ("PENDING", "READY"):
                         if case.dependencies:
-                            case.status.set("pending")
+                            case.status.set("PENDING")
                         else:
-                            case.status.set("ready")
+                            case.status.set("READY")
                         case.save()
 
     def put(self, *cases: canary.TestCase) -> None:
@@ -112,9 +112,9 @@ class ResourceQueue(queue.AbstractResourceQueue):
                 if not check:
                     raise ValueError(f"Cannot put inadmissible case in queue ({check.reason})")
             status = case.status
-            if status == "skipped":
+            if status.name == "SKIPPED":
                 case.save()
-            elif not status.satisfies(("ready", "pending")):
+            elif not status.name != "PENDING":
                 raise ValueError(f"{case}: case is not ready or pending")
             else:
                 self.tmp_buffer.append(case)
@@ -140,7 +140,7 @@ class ResourceQueue(queue.AbstractResourceQueue):
         return list(self._notrun.values())
 
     def failed(self) -> list[canary.TestCase]:
-        return [_ for batch in self._finished.values() for _ in batch if _.status != "success"]
+        return [_ for batch in self._finished.values() for _ in batch if _.status.name != "SUCCESS"]
 
     def skip(self, obj_no: int) -> None:
         self._finished[obj_no] = self.buffer.pop(obj_no)
@@ -166,11 +166,11 @@ class ResourceQueue(queue.AbstractResourceQueue):
             total = done + busy + notrun
             for batch in self.finished():
                 for case in batch:
-                    if case.status.value in ("success", "xdiff", "xfail"):
+                    if case.status.name in ("SUCCESS", "XDIFF", "XFAIL"):
                         p += 1
-                    elif case.status == "diffed":
+                    elif case.status.name == "DIFFED":
                         d += 1
-                    elif case.status == "timeout":
+                    elif case.status.name == "TIMEOUT":
                         t += 1
                     else:
                         f += 1

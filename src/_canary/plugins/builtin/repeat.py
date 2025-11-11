@@ -44,12 +44,12 @@ def canary_addoption(parser: "Parser") -> None:
 
 @hookimpl(specname="canary_testcase_run")
 def repeat_until_pass(case: "TestCase", qsize: int, qrank: int) -> None:
-    if case.status.satisfies("failed") and (count := config.getoption("repeat_until_pass")):
+    if (case.status.name == "FAILED") and (count := config.getoption("repeat_until_pass")):
         i: int = 0
         while i < count:
             i += 1
             rerun_case(case, qsize, qrank, i)
-            if case.status.satisfies("success"):
+            if case.status.name == "SUCCESS":
                 return
         logger.error(
             f"{case}: failed to finish successfully after {i} additional {pluralize('attempt', i)}"
@@ -58,12 +58,12 @@ def repeat_until_pass(case: "TestCase", qsize: int, qrank: int) -> None:
 
 @hookimpl(specname="canary_testcase_run")
 def repeat_after_timeout(case: "TestCase", qsize: int, qrank: int) -> None:
-    if case.status.satisfies("timeout") and (count := config.getoption("repeat_after_timeout")):
+    if (case.status.name == "TIMEOUT") and (count := config.getoption("repeat_after_timeout")):
         i: int = 0
         while i < count:
             i += 1
             rerun_case(case, qsize, qrank, i)
-            if not case.status.satisfies("timeout"):
+            if not case.status.name == "TIMEOUT":
                 return
         logger.error(
             f"{case}: failed to finish without timing out after {i} additional {pluralize('attempt', i)}"
@@ -72,12 +72,12 @@ def repeat_after_timeout(case: "TestCase", qsize: int, qrank: int) -> None:
 
 @hookimpl(specname="canary_testcase_run")
 def repeat_until_fail(case: "TestCase", qsize: int, qrank: int) -> None:
-    if case.status.satisfies("success") and (count := config.getoption("repeat_until_fail")):
+    if (case.status.name == "SUCCESS") and (count := config.getoption("repeat_until_fail")):
         i: int = 1
         while i < count:
             i += 1
             rerun_case(case, qsize, qrank, i)
-            if not case.status.satisfies("success"):
+            if not case.status.name == "SUCCESS":
                 break
         else:
             return

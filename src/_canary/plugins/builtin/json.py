@@ -27,6 +27,6 @@ class JsonReporter(CanaryReporter):
         file = os.path.abspath(kwargs["output"] or self.default_output)
         data: dict = {}
         for case in cases:
-            data[case.id] = case.getstate()
+            data[case.id] = case.asdict()
         with open(file, "w") as fh:
             json.dump(data, fh, indent=2)

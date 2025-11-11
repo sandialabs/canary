@@ -14,7 +14,8 @@ from typing import IO
 from typing import Any
 
 import canary
-#from _canary.testcase import factory as testcase_factory
+
+# from _canary.testcase import factory as testcase_factory
 from _canary.util.compression import compress_str
 
 from . import interface
@@ -67,7 +68,7 @@ class CDashXMLReporter:
                 case.dependencies[i] = cases[dep.id]
             cases[id] = case
         for case in cases.values():
-            if not case.masked():
+            if not case.mask:
                 # case.refresh()
                 self.data.add_test(case)
         return self
@@ -254,59 +255,54 @@ class CDashXMLReporter:
             add_text_node(testlist, "Test", case.format("./%P/%D"))
         l1.appendChild(testlist)
 
-        success = ("success", "xfail", "xdiff")
         status: str
         for case in cases:
-            exit_value = case.returncode
+            exit_value = case.status.code
             fail_reason = None
-            if case.status.satisfies(("retry", "created", "pending", "ready", "running")):
+            if case.status.name in ("RETRY", "CREATED", "PENDING", "READY", "RUNNING"):
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.masked():
+            elif case.mask:
                 status = "notdone"
                 exit_code = "Not Done"
                 completion_status = "notrun"
-            elif case.invalid():
-                status = "notdone"
-                exit_code = "Initialization Error"
-                completion_status = "notrun"
-            elif case.status == "skipped":
+            elif case.status.name == "SKIPPED":
                 status = "notdone"
                 exit_code = "Skipped"
                 completion_status = "notrun"
-            elif case.status.value in success:
+            elif case.status.name in ("SUCCESS", "XFAIL", "XDIFF"):
                 status = "passed"
                 exit_code = "Passed"
                 completion_status = "Completed"
-            elif case.status == "diffed":
+            elif case.status.name == "DIFFED":
                 status = "failed"
                 exit_code = "Diffed"
                 completion_status = "Completed"
-                fail_reason = case.status.details or "Test diffed"
-            elif case.status == "failed":
+                fail_reason = case.status.message or "Test diffed"
+            elif case.status.name == "FAILED":
                 status = "failed"
                 exit_code = "Failed"
                 completion_status = "Completed"
-                fail_reason = case.status.details or "Test execution failed"
-            elif case.status == "timeout":
+                fail_reason = case.status.message or "Test execution failed"
+            elif case.status.name == "TIMEOUT":
                 status = "failed"
                 exit_code = completion_status = "Timeout"
-            elif case.status == "not_run":
+            elif case.status.name == "NOT_RUN":
                 status = "failed"
                 exit_code = "Not Run"
                 completion_status = "Completed"
-                fail_reason = case.status.details or "Test case was unexpectedly not run"
-            elif case.status == "cancelled":
+                fail_reason = case.status.message or "Test case was unexpectedly not run"
+            elif case.status.name == "CANCELLED":
                 status = "failed"
                 exit_code = "Cancelled"
                 completion_status = "Completed"
-                fail_reason = case.status.details or "Test case was cancelled"
-            elif case.status == "unknown":
+                fail_reason = case.status.message or "Test case was cancelled"
+            elif case.status.name == "UNKNOWN":
                 status = "failed"
                 exit_code = "Unknown"
                 completion_status = "Completed"
-                fail_reason = case.status.details or "Test case was unexpectedly not run"
+                fail_reason = case.status.message or "Test case was unexpectedly not run"
             else:
                 status = "failed"
                 exit_code = "No Status"
@@ -342,13 +338,13 @@ class CDashXMLReporter:
                         add_named_measurement(results, name.title(), json.dumps(value))
             add_measurement(
                 results,
-                case.output(compress=True),
+                case.read_output(compress=True),
                 encoding="base64",
                 compression="gzip",
             )
             test_node.appendChild(results)
 
-            if case.status.satisfies(("failed", "diffed")) and os.path.exists(case.file):
+            if case.status.name in ("FAILED", "DIFFED") and os.path.exists(case.file):
                 add_named_measurement(
                     test_node,
                     "Attached File",
@@ -360,14 +356,14 @@ class CDashXMLReporter:
                 )
             for artifact in case.artifacts:
                 when = artifact["when"]
-                if when == "success" and case.status != "success":
+                if when == "success" and case.status.name != "SUCCESS":
                     continue
-                elif when == "failure" and case.status == "success":
+                elif when == "failure" and case.status.name == "SUCCESS":
                     continue
                 file = artifact["file"]
                 if not os.path.exists(file) and not os.path.isabs(file):
-                    if os.path.exists(os.path.join(case.working_directory, file)):
-                        file = os.path.join(case.working_directory, file)
+                    if os.path.exists(os.path.join(case.workspace.dir, file)):
+                        file = os.path.join(case.workspace.dir, file)
                     elif os.path.exists(os.path.join(case.file_dir, file)):
                         file = os.path.join(case.file_dir, file)
                 if os.path.exists(file):
@@ -544,17 +540,17 @@ class TestData:
             yield case
 
     def update_status(self, case: "canary.TestCase") -> None:
-        if case.status == "diffed":
+        if case.status.name == "DIFFED":
             self.status |= 2**1
-        elif case.status == "failed":
+        elif case.status.name == "FAILED":
             self.status |= 2**2
-        elif case.status == "timeout":
+        elif case.status.name == "TIMEOUT":
             self.status |= 2**3
-        elif case.status == "skipped":  # notdone
+        elif case.status.name == "SKIPPED":  # notdone
             self.status |= 2**4
-        elif case.status == "ready":
+        elif case.status.name == "READY":
             self.status |= 2**5
-        elif case.status == "not_run":
+        elif case.status.name == "NOT_RUN":
             self.status |= 2**6
 
     def add_test(self, case: "canary.TestCase") -> None:

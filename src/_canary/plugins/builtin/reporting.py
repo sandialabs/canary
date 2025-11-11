@@ -12,7 +12,6 @@ from typing import Any
 
 from ... import config
 from ...status import Status
-from ...status import StatusValue
 from ...third_party.color import ccenter
 from ...third_party.color import colorize
 from ...util import glyphs
@@ -96,25 +95,22 @@ def print_short_test_status_summary(
     if not cases:
         file.write("Nothing to report\n")
     else:
-        totals: dict[StatusValue, list["TestCase"]] = {}
+        totals: dict[str, list["TestCase"]] = {}
         for case in cases:
-            totals.setdefault(case.status.value, []).append(case)
-        for stat in totals:
-            if not include_pass and stat == StatusValue.SUCCESS:
+            totals.setdefault(case.status.name, []).append(case)
+        for name in totals:
+            if not include_pass and name == "SUCCESS":
                 continue
-            glyph = stat.glyph
-            color = stat.color[0]
-            name = stat.name
             n: int = 0
-            for case in sorted(totals[stat], key=lambda t: t.name):
-                file.write("@*%s{%s %s} %s\n" % (color, glyph, name, case.spec.fullname))
+            for case in sorted(totals[name], key=lambda t: t.name):
+                file.write(case.statline)
                 n += 1
                 if truncate > 0 and truncate == n:
-                    cname = case.status.value.name  # FIXME
+                    cname = case.status.cname
                     bullets = "@*{%s}" % (3 * ".")
                     fmt = "%s %s %s truncating summary to the first %d entries. "
                     alert = io.StringIO()
-                    alert.write(fmt % (glyph, cname, bullets, truncate))
+                    alert.write(fmt % (case.status.glyph, cname, bullets, truncate))
                     alert.write("See @*{canary status} for the full summary\n")
                     file.write(alert.getvalue())
                     break
@@ -159,11 +155,11 @@ def runtest_report_status(session: "Session") -> None:
         file = io.StringIO()
         totals: dict[str, list["TestCase"]] = {}
         for case in cases_to_show:
-            totals.setdefault(case.status.value, []).append(case)
-        for member in Status.members:
+            totals.setdefault(case.status.name, []).append(case)
+        for member in Status.defaults:
             if member in totals:
                 for case in sort_cases_by(totals[member], field=sortby or "duration"):
-                    glyph = Status.glyph(case.status.value)
+                    glyph = case.status.glyph
                     description = case.describe()
                     file.write("%s %s\n" % (glyph, description))
         logger.log(logging.EMIT, file.getvalue(), extra={"prefix": ""})
@@ -184,8 +180,8 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
         for case in excluded:
             if case.mask:
                 reasons.setdefault(case.mask, []).append(case)
-            elif case.status == "invalid":
-                reasons.setdefault(case.status.details, []).append(case)
+            elif case.status.name == "INVALID":
+                reasons.setdefault(case.status.message, []).append(case)
         keys = sorted(reasons, key=lambda x: len(reasons[x]))
         for key in reversed(keys):
             reason = key if key is None else key.lstrip()
@@ -193,7 +189,7 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
             logger.log(logging.EMIT, f"{'@M{==>}'} {n}: {reason}", extra={"prefix": ""})
             if config.getoption("show_excluded_tests"):
                 for case in reasons[key]:
-                    logger.log(logging.EMIT, f"... {case.pretty_name()}", extra={"prefix": ""})
+                    logger.log(logging.EMIT, f"... {case.spec.pretty_name}", extra={"prefix": ""})
 
 
 def print_durations(cases: list["TestCase"], N: int) -> None:
@@ -205,7 +201,7 @@ def print_durations(cases: list["TestCase"], N: int) -> None:
     kwds = {"t": glyphs.turtle, "N": N}
     string.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for case in sorted_cases:
-        string.write("  %6.2f   %s\n" % (case.duration, case.format("%id   %X")))
+        string.write("  %6.2f   %s\n" % (case.timekeeper.duration, case.format("%id   %X")))
     string.write("\n")
     logger.log(logging.EMIT, string.getvalue(), extra={"prefix": ""})
 
@@ -231,41 +227,41 @@ def determine_cases_to_show(
         else:
             pathspec = os.path.abspath(pathspec)
             if pathspec != str(session.work_dir):
-                cases = [c for c in cases if c.working_directory.startswith(pathspec)]
+                cases = [c for c in cases if str(c.workspace.dir).startswith(pathspec)]
     if "A" in rc:
         if "x" in rc:
             cases_to_show = cases
         else:
-            cases_to_show = [c for c in cases if not c.masked()]
+            cases_to_show = [c for c in cases if not c.mask]
     elif "a" in rc:
         if "x" in rc:
-            cases_to_show = [c for c in cases if c.status != "success"]
+            cases_to_show = [c for c in cases if c.status.name != "SUCCESS"]
         else:
-            cases_to_show = [c for c in cases if not c.masked() and c.status != "success"]
+            cases_to_show = [c for c in cases if not c.mask and c.status.name != "SUCCESS"]
     else:
         cases_to_show = []
         for case in cases:
-            if case.masked():
+            if case.mask:
                 if "x" in rc:
                     cases_to_show.append(case)
-            elif "s" in rc and case.status == "skipped":
+            elif "s" in rc and case.status.name == "SKIPPED":
                 cases_to_show.append(case)
-            elif "p" in rc and case.status.value in ("success", "xdiff", "xfail"):
+            elif "p" in rc and case.status.name in ("SUCCESS", "XDIFF", "XFAIL"):
                 cases_to_show.append(case)
-            elif "f" in rc and case.status == "failed":
+            elif "f" in rc and case.status.name == "FAILED":
                 cases_to_show.append(case)
-            elif "d" in rc and case.status == "diffed":
+            elif "d" in rc and case.status.name == "DIFFED":
                 cases_to_show.append(case)
-            elif "t" in rc and case.status == "timeout":
+            elif "t" in rc and case.status.name == "TIMEOUT":
                 cases_to_show.append(case)
-            elif "n" in rc and case.status == "invalid":
+            elif "n" in rc and case.status.name == "INVALID":
                 cases_to_show.append(case)
-            elif "n" in rc and case.status.value in (
-                "ready",
-                "created",
-                "pending",
-                "cancelled",
-                "not_run",
+            elif "n" in rc and case.status.name in (
+                "READY",
+                "CREATED",
+                "PENDING",
+                "CANCELLED",
+                "NOT_RUN",
             ):
                 cases_to_show.append(case)
     return cases_to_show
@@ -287,7 +283,7 @@ def show_capture(session: "Session", exitstatus: int) -> None:
 
 def _show_capture(case: "TestCase", what="oe") -> None:
     _, width = terminal_size()
-    color = "g" if case.status == "success" else "R" if case.status == "failed" else "y"
+    color = "g" if case.status.name == "SUCCESS" else "R" if case.status.name == "FAILED" else "y"
     fp = io.StringIO()
     fp.write(ccenter(" @*%s{%s} " % (color, case.display_name), width, "-") + "\n")
     fp.write(f"{bold('Status')}: {case.status.cname}\n")
@@ -335,15 +331,16 @@ def print_footer(cases: list["TestCase"], title: str) -> None:
             finish = max(tf, finish)
     if finish:
         duration = (finish - start).total_seconds()
-    totals: dict[StatusValue, list["TestCase"]] = {}
+    totals: dict[str, list["TestCase"]] = {}
     for case in cases:
-        totals.setdefault(case.status.value, []).append(case)
+        totals.setdefault(case.status.name, []).append(case)
     N = len(cases)
     summary = ["@*b{%d total}" % N]
-    for stat in totals:
-        n = len(totals[stat])
+    for name in totals:
+        n = len(totals[name])
         if n:
-            summary.append("@%s{%d %s}" % (stat.color[0], n, stat.name.lower()))
+            color = Status.defaults[name][1][0]
+            summary.append("@%s{%d %s}" % (color[0], n, name.lower()))
     emojis = [glyphs.sparkles, glyphs.collision, glyphs.highvolt]
     x, y = random.sample(emojis, 2)
     kwds = {

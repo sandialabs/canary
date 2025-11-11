@@ -24,7 +24,6 @@ from .atc import AbstractTestCase
 from .error import FailFast
 from .error import StopExecution
 from .resource_pool.rpool import ResourceUnavailable
-from .status import StatusValue
 from .third_party import color
 from .util import cpu_count
 from .util import keyboard
@@ -125,11 +124,11 @@ class AbstractResourceQueue(abc.ABC):
     def close(self, cleanup: bool = True) -> None:
         if cleanup:
             for case in self.cases():
-                if case.status == "running":
-                    case.status.set("cancelled", "Case failed to stop")
+                if case.status.name == "RUNNING":
+                    case.status.set("CANCELLED", "Case failed to stop")
                     case.save()
-                elif case.status.value in ("retry", "created", "pending", "ready"):
-                    case.status.set("not_run", "Case failed to start")
+                elif case.status.name in ("RETRY", "CREATED", "PENDING", "READY"):
+                    case.status.set("NOT_RUN", "Case failed to start")
                     case.save()
         keys = list(self.buffer.keys())
         for key in keys:
@@ -145,16 +144,11 @@ class AbstractResourceQueue(abc.ABC):
             for id in self.iter_keys():
                 obj = self.buffer[id]
                 status = obj.status
-                if status.value not in (
-                    StatusValue.RETRY,
-                    StatusValue.PENDING,
-                    StatusValue.READY,
-                    StatusValue.RUNNING,
-                ):
+                if status.name not in ("RETRY", "PENDING", "READY", "RUNNING"):
                     # job will never be ready
                     self.skip(obj)
                     continue
-                elif status.value == StatusValue.READY:
+                elif status.name == "READY":
                     try:
                         if self.exclusive_lock:
                             continue
@@ -210,11 +204,11 @@ class ResourceQueue(AbstractResourceQueue):
     ) -> "ResourceQueue":
         self = ResourceQueue(lock=lock, resource_pool=resource_pool)
         for case in cases:
-            if case.status == "skipped":
+            if case.status.name == "SKIPPED":
                 case.save()
-            elif not case.status.satisfies(("ready", "pending")):
+            elif case.status.name not in ("READY", "PENDING"):
                 raise ValueError(f"{case}: case is not ready or pending")
-        self.put(*[case for case in cases if case.status.satisfies(("ready", "pending"))])
+        self.put(*[case for case in cases if case.status.name in ("READY", "PENDING")])
         self.prepare()
         if self.empty():
             raise ValueError("There are no cases to run in this session")
@@ -266,7 +260,7 @@ class ResourceQueue(AbstractResourceQueue):
         return list(self._notrun.values())
 
     def failed(self) -> list["TestCase"]:
-        return [_ for _ in self._finished.values() if _.status != "success"]
+        return [_ for _ in self._finished.values() if _.status.name != "SUCCESS"]
 
     def _counts(self) -> tuple[int, int, int]:
         done = len(self.finished())
@@ -276,19 +270,17 @@ class ResourceQueue(AbstractResourceQueue):
         return done, busy, notrun
 
     def status(self, start: float | None = None) -> str:
-        from .testspec import StatusValue
-
         string = io.StringIO()
         with self.lock:
             p = d = f = t = 0
             done, busy, notrun = self._counts()
             total = done + busy + notrun
             for case in self.finished():
-                if case.status.value in (StatusValue.SUCCESS, StatusValue.XDIFF, StatusValue.XFAIL):
+                if case.status.name in ("SUCCESS", "XDIFF", "XFAIL"):
                     p += 1
-                elif case.status.value == StatusValue.DIFFED:
+                elif case.status.name == "DIFFED":
                     d += 1
-                elif case.status == StatusValue.TIMEOUT:
+                elif case.status.name == "TIMEOUT":
                     t += 1
                 else:
                     f += 1

@@ -122,8 +122,8 @@ def group_failed_tests(cases: list["canary.TestCase"]):
         "invalid",
     )
     for case in cases:
-        if case.status.value in nonpass:
-            failed.setdefault(case.status.value, []).append(case)
+        if case.status.name in nonpass:
+            failed.setdefault(case.status.name, []).append(case)
     return failed
 
 

@@ -76,6 +76,7 @@ class TestCaseExecutor:
         runner = Runner()
         pool = ProcessPool(queue, runner)
         pool.run()
+        return 0
 
 
 class Runner:

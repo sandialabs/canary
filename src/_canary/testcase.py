@@ -1,12 +1,13 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import dataclasses
 import datetime
-import json
+import io
 import multiprocessing
+import os
 import signal
+import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -22,12 +23,13 @@ from .error import fail_exit_status
 from .error import skip_exit_status
 from .error import timeout_exit_status
 from .status import Status
-from .status import StatusValue
 from .testexec import ExecutionPolicy
 from .testexec import ExecutionSpace
 from .timekeeper import Timekeeper
+from .util import json_helper as json
 from .util import logging
-from .util._json import PathEncoder
+from .util.compression import compress_str
+from .util.time import hhmmss
 from .when import match_any
 
 if TYPE_CHECKING:
@@ -67,6 +69,35 @@ class TestCase:
         self.file_path = self.spec.file_path
         self.file_root = self.spec.file_root
         self.file = self.spec.file
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, TestCase):
+            raise TypeError(f"Cannot compare TestCase with type {other.__class__.__name__}")
+        return self.id == other.id
+
+    def __str__(self) -> str:
+        return self.display_name
+
+    def __repr__(self) -> str:
+        return self.display_name
+
+    def describe(self) -> str:
+        """Write a string describing the test case"""
+        name = str(self.workspace.path / self.display_name)
+        text = "%s @*b{%s} %s" % (self.status.cname, self.id[:7], name)
+        if self.timekeeper.duration >= 0:
+            text += " (%s)" % hhmmss(self.timekeeper.duration)
+        if self.status.message:
+            text += ": %s" % self.status.message
+        return text
+
+    @property
+    def statline(self) -> str:
+        color = self.status.color[0]
+        glyph = self.status.glyph
+        status_name = self.status.name
+        name = str(self.workspace.path.parent / self.spec.display_name)
+        return "@*%s{%s %s} %s\n" % (color, glyph, status_name, name)
 
     @property
     def cpus(self) -> int:
@@ -136,10 +167,9 @@ class TestCase:
 
     @property
     def status(self) -> Status:
-        sv = StatusValue
-        if self._status.value == sv.PENDING:
+        if self._status.name == "PENDING":
             if not self.dependencies:
-                self._status.value = sv.READY
+                self._status = Status.READY()
             else:
                 self.set_dependency_based_status()
         return self._status
@@ -177,7 +207,7 @@ class TestCase:
         message: str | None = None
         try:
             with self.workspace.enter(), self.timekeeper.timeit():
-                self.status.set(StatusValue.RUNNING)
+                self.status.set("RUNNING")
                 code = self.execution_policy.execute(case=self, queue=queue)
         except KeyboardInterrupt:
             code = signal.SIGINT.value
@@ -197,9 +227,8 @@ class TestCase:
         except BaseException as e:
             if config.get("config:debug"):
                 logger.exception("Exception during test case execution")
-            with self.workspace.enter():
-                with open(self.workspace.stdout, "a") as fh:
-                    fh.write(str(e))
+            with open(self.workspace.dir / self.workspace.stdout, "a") as fh:
+                traceback.print_exc(file=fh)
             code = exception_exit_status
             message = f"Caught exception: {e}"
         finally:
@@ -215,38 +244,70 @@ class TestCase:
         if xcode == diff_exit_status:
             if code != diff_exit_status:
                 status.set(
-                    StatusValue.FAILED,
+                    "FAILED",
                     f"{self.spec.display_name}: expected test to diff",
                     code=code,
                 )
             else:
-                status.set(StatusValue.XDIFF)
+                status.set("XDIFF")
         elif xcode != 0:
             # Expected to fail
             if xcode > 0 and code != code:
                 status.set(
-                    StatusValue.FAILED,
-                    details=f"{self.spec.display_name}: expected to exit with code={code}",
+                    "FAILED",
+                    f"{self.spec.display_name}: expected to exit with code={code}",
                     code=code,
                 )
             elif code == 0:
                 status.set(
-                    StatusValue.FAILED,
+                    "FAILED",
                     f"{self.spec.display_name}: expected to exit with code != 0",
                     code=code,
                 )
             else:
-                status.set(StatusValue.XDIFF, code=code)
+                status.set("XFAIL", code=code)
         else:
-            status.set_from_code(code, message)
+            status.set(code, message)
 
     def update(self, **attrs: Any) -> None:
         if status := attrs.get("status"):
-            self.status.set(status.value, status.details, status.code)
+            self.status.set(status.name, status.message, status.code)
         if timekeeper := attrs.get("timekeeper"):
             self.timekeeper.started_on = timekeeper.started_on
             self.timekeeper.finished_on = timekeeper.finished_on
             self.timekeeper.duration = timekeeper.duration
+
+    @property
+    def environment(self) -> dict[str, str | None]:
+        # Environment variables needed by this test
+        variables: dict[str, str] = {}
+        variables.update(self.spec.environment)
+        for mod in self.spec.environment_modifications:
+            name, action, value, sep = mod["name"], mod["action"], mod["value"], mod["sep"]
+            if action == "set":
+                variables[name] = value
+            elif action == "unset":
+                variables[name] = None
+            elif action == "prepend-path":
+                variables[name] = f"{value}{sep}{os.getenv(name, '')}"
+            elif action == "append-path":
+                variables[name] = f"{os.getenv(name, '')}{sep}{value}"
+
+        # Set resource-type variables
+        vars = {}
+        for group in self.resources:
+            for type, instances in group.items():
+                varname = type[:-1] if type[-1] == "s" else type
+                ids: list[str] = [str(_["id"]) for _ in instances]
+                vars[f"{varname}_ids"] = variables[f"CANARY_{varname.upper()}"] = ",".join(ids)
+        for key, value in variables.items():
+            try:
+                variables[key] = value % vars
+            except Exception:  # nosec B110
+                pass
+        variables["PYTHONPATH"] = f"{self.workspace.dir}:{os.getenv('PYTHONPATH', '')}"
+        variables["PATH"] = f"{self.workspace.dir}:{os.environ['PATH']}"
+        return variables
 
     def teardown(self) -> None:
         pass
@@ -255,40 +316,45 @@ class TestCase:
         pass
 
     def save(self) -> None:
-        record = {
+        record = self.asdict()
+        self.lockfile.write_text(json.dumps(record, indent=2))
+
+    def asdict(self) -> dict[str, dict]:
+        record: dict[str, dict] = {
             "status": self.status.asdict(),
             "spec": self.spec.asdict(),
             "timekeeper": self.timekeeper.asdict(),
             "measurements": self.measurements.asdict(),
+            "workspace": self.workspace.asdict(),
         }
-        self.lockfile.write_text(json.dumps(record, indent=2, cls=PathEncoder))
+        return record
 
     def set_dependency_based_status(self) -> None:
         # Determine if dependent cases have completed and, if so, flip status to 'ready'
         flags = self.dep_condition_flags()
         if all(flag == "can_run" for flag in flags):
-            self._status.value = StatusValue.READY
+            self._status.set("READY")
             return
         for i, flag in enumerate(flags):
             if flag == "wont_run":
                 # this case will never be able to run
                 dep = self.dependencies[i]
-                if dep.status.value == StatusValue.SKIPPED:
-                    self._status.set(StatusValue.SKIPPED, "one or more dependencies was skipped")
-                elif dep.status.value == StatusValue.CANCELLED:
-                    self._status.set(StatusValue.NOT_RUN, "one or more dependencies was cancelled")
-                elif dep.status.value == StatusValue.TIMEOUT:
-                    self._status.set(StatusValue.NOT_RUN, "one or more dependencies timed out")
-                elif dep.status.value == StatusValue.FAILED:
-                    self._status.set(StatusValue.NOT_RUN, "one or more dependencies failed")
-                elif dep.status.value == StatusValue.DIFFED:
-                    self._status.set(StatusValue.SKIPPED, "one or more dependencies diffed")
-                elif dep.status.value == StatusValue.SUCCESS:
-                    self._status.set(StatusValue.SKIPPED, "one or more dependencies succeeded")
+                if dep.status.name == "SKIPPED":
+                    self._status.set("SKIPPED", "one or more dependencies was skipped")
+                elif dep.status.name == "CANCELLED":
+                    self._status.set("NOT_RUN", "one or more dependencies was cancelled")
+                elif dep.status.name == "TIMEOUT":
+                    self._status.set("NOT_RUN", "one or more dependencies timed out")
+                elif dep.status.name == "FAILED":
+                    self._status.set("NOT_RUN", "one or more dependencies failed")
+                elif dep.status.name == "DIFFED":
+                    self._status.set("SKIPPED", "one or more dependencies diffed")
+                elif dep.status.name == "SUCCESS":
+                    self._status.set("SKIPPED", "one or more dependencies succeeded")
                 else:
                     self._status.set(
-                        StatusValue.SKIPPED,
-                        f"one or more dependencies failed with status {dep.status.value.name!r}",
+                        "SKIPPED",
+                        f"one or more dependencies failed with status {dep.status.name!r}",
                     )
                 break
 
@@ -297,18 +363,37 @@ class TestCase:
         expected = self.spec.dep_done_criteria
         flags: list[str] = ["none"] * len(self.dependencies)
         for i, dep in enumerate(self.dependencies):
-            if dep.mask and dep.status.value in (StatusValue.READY, StatusValue.PENDING):
+            if dep.mask and dep.status.name in ("READY", "PENDING"):
                 flags[i] = "wont_run"
-            elif dep.status.value in (StatusValue.READY, StatusValue.PENDING, StatusValue.RUNNING):
+            elif dep.status.name in ("READY", "PENDING", "RUNNING"):
                 # Still pending on this case
                 flags[i] = "pending"
-            elif expected[i] in (None, dep.status.value.name, "*"):
+            elif expected[i] in (None, dep.status.name, "*"):
                 flags[i] = "can_run"
             elif match_any(expected[i], [dep.status.name], ignore_case=True):
                 flags[i] = "can_run"
             else:
                 flags[i] = "wont_run"
         return flags
+
+    def read_output(self, compress: bool = False) -> str:
+        if self.status.name == "SKIPPED":
+            return f"Test skipped.  Reason: {self.status.message}"
+        file = self.workspace.dir / self.workspace.stdout
+        if not file.exists():
+            return "Log not found"
+        out = io.StringIO()
+        out.write(file.read_text(errors="ignore"))
+        if self.workspace.stderr:
+            file = self.workspace.dir / self.workspace.stderr
+            if file.exists():
+                out.write("\nCaptured stderr:\n")
+                out.write(file.read_text(errors="ignore"))
+        text = out.getvalue()
+        if compress:
+            kb_to_keep = 2 if self.status.name == "SUCCESS" else 300
+            text = compress_str(text, kb_to_keep=kb_to_keep)
+        return text
 
 
 @dataclasses.dataclass
@@ -323,6 +408,10 @@ class Measurements:
 
     def asdict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
+
+
+def load(path: str | Path | None) -> TestCase | None:
+    return None
 
 
 class MissingSourceError(Exception):

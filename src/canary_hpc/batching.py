@@ -58,10 +58,10 @@ class TestBatch(AbstractTestCase):
         self._jobid: str | None = None
         for case in self.cases:
             if any(dep not in self.cases for dep in case.dependencies):
-                self._status = Status("pending")
+                self._status = Status("PENDING")
                 break
         else:
-            self._status = Status("ready")
+            self._status = Status("READY")
 
     def __iter__(self):
         return iter(self.cases)
@@ -141,11 +141,11 @@ class TestBatch(AbstractTestCase):
     def validate(self, cases: Sequence[canary.TestCase]):
         errors = 0
         for case in cases:
-            if case.masked():
+            if case.mask:
                 logger.critical(f"{case}: case is masked")
                 errors += 1
             for dep in case.dependencies:
-                if dep.masked():
+                if dep.mask:
                     errors += 1
                     logger.critical(f"{dep}: dependent of {case} is masked")
         if errors:
@@ -180,23 +180,23 @@ class TestBatch(AbstractTestCase):
 
     @property
     def status(self) -> Status:
-        if self._status.value == "pending":
+        if self._status.name == "PENDING":
             # Determine if dependent cases have completed and, if so, flip status to 'ready'
             pending = 0
             for case in self.cases:
                 for dep in case.dependencies:
-                    if dep.status.value in ("created", "pending", "ready", "running"):
+                    if dep.status.name in ("PENDING", "READY", "RUNNING"):
                         pending += 1
             if not pending:
-                self._status.set("ready")
+                self._status.set("READY")
         return self._status
 
     @status.setter
     def status(self, arg: Status | dict[str, str]) -> None:
         if isinstance(arg, Status):
-            self._status.set(arg.value, details=arg.details)
+            self._status.set(arg)
         else:
-            self._status.set(arg["value"], details=arg["details"])
+            self._status.set(arg["name"], message=arg["message"])
 
     def refresh(self) -> None:
         for case in self:
@@ -206,16 +206,16 @@ class TestBatch(AbstractTestCase):
         self.refresh()
         failed: list[canary.TestCase] = []
         for case in self:
-            if case.status == "running":
+            if case.status.name == "RUNNING":
                 # Job was cancelled
-                case.status.set("cancelled", "batch cancelled")
-            elif case.status == "skipped":
+                case.status.set("CANCELLED", f"batch {self.id[:7]} cancelled")
+            elif case.status.name == "SKIPPED":
                 pass
-            elif case.status == "ready":
-                case.status.set("not_run", "test not run for unknown reasons")
-            elif case.start > 0 and case.stop < 0:
-                case.status.set("cancelled", "test case cancelled")
-            if not case.status.satisfies(("skipped", "success")):
+            elif case.status.name == "READY":
+                case.status.set("NOT_RUN", "test not run for unknown reasons")
+            elif case.timekeeper.start_on != "NA" and case.timekeeper.finished_on == "NA":
+                case.status.set("CANCELLED", "test case cancelled")
+            if not case.status.name in ("SKIPPED", "SUCCESS"):
                 failed.append(case)
                 logger.debug(f"Batch {self}: test case failed: {case}")
         return failed
@@ -248,9 +248,13 @@ class TestBatch(AbstractTestCase):
         """
         stat: dict[str, int] = {}
         for case in self.cases:
-            stat[case.status.value] = stat.get(case.status.value, 0) + 1
+            stat[case.status.name] = stat.get(case.status.name, 0) + 1
         colors = Status.colors
-        return ", ".join("@%s{%d %s}" % (colors[v], n, v) for (v, n) in stat.items())
+        parts: list[str] = []
+        for name, n in stat.items():
+            color = Status.defaults[name][1][0]
+            parts.append("@%s{%d %s}" % (color, n, name))
+        return ", ".join(parts)
 
     def format(self, format_spec: str) -> str:
         replacements: dict[str, str] = {
@@ -262,8 +266,8 @@ class TestBatch(AbstractTestCase):
             "%l": str(len(self)),
             "%S": self._combined_status(),
             "%s.n": self.status.cname,
-            "%s.v": self.status.value,
-            "%s.d": self.status.details or "unknown",
+            "%s.v": self.status.name,
+            "%s.d": self.status.message or "unknown",
         }
         if canary.config.getoption("format", "short") == "long":
             replacements["%X"] = replacements["%p"]
@@ -406,23 +410,23 @@ class TestBatch(AbstractTestCase):
             signal.signal(signal.SIGTERM, default_term_signal)
             self.total_duration = time.monotonic() - start
             self.refresh()
-            if all([_.status.satisfies(("ready", "pending")) for _ in self.cases]):
+            if all([_.status.name in ("READY", "PENDING") for _ in self.cases]):
                 f = "Batch @*b{%id}: no test cases have started; check %P for any emitted scheduler log files."
                 logger.warning(self.format(f))
             for case in self.cases:
-                if case.status == "skipped":
+                if case.status.name == "SKIPPED":
                     pass
-                elif case.status == "running":
+                elif case.status.name == "RUNNING":
                     logger.debug(f"{case}: cancelling (status: running)")
-                    case.status.set("cancelled", "case failed to stop")
+                    case.status.set("CANCELLED", "case failed to stop")
                     case.save()
-                elif case.start > 0 and case.stop < 0:
+                elif case.timekeeper.started_on != "NA" and case.timekeeper.finished_on == "NA":
                     logger.debug(f"{case}: cancelling (status: {case.status})")
-                    case.status.set("cancelled", "case failed to stop")
+                    case.status.set("CANCELLED", "case failed to stop")
                     case.save()
-                elif case.status == "ready":
+                elif case.status.name == "READY":
                     logger.debug(f"{case}: case failed to start")
-                    case.status.set("not_run", f"case failed to start (batch: {self.id})")
+                    case.status.set("NOT_RUN", f"case failed to start (batch: {self.id})")
                     case.save()
             if rc := getattr(proc, "returncode", None):
                 logger.debug(

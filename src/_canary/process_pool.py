@@ -4,11 +4,9 @@ from typing import Callable
 
 import psutil
 
-from .error import timeout_exit_status
 from .queue import AbstractResourceQueue
 from .queue import Busy
 from .queue import Empty
-from .status import StatusValue
 from .testcase import TestCase
 from .util import keyboard
 from .util import logging
@@ -144,11 +142,10 @@ class ProcessPool:
 
                     # Send timeout result
                     case.status.set(
-                        StatusValue.TIMEOUT,
-                        details=f"Process exceeded timeout of {timeout} seconds",
-                        code=timeout_exit_status,
+                        "TIMEOUT",
+                        message=f"Process exceeded timeout of {timeout} seconds",
                     )
-                    self.queue.put(case)
+                    self.queue.done(case)
                     case.save()
 
     def clean_finished_processes(self) -> None:
@@ -186,7 +183,7 @@ class ProcessPool:
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.1)  # Brief sleep before checking again
 
-    def run(self) -> None:
+    def run(self) -> int:
         """Main loop: get cases from queue and launch processes."""
         logger.info(f"Starting process pool with max {self.max_workers} workers")
 
@@ -248,6 +245,7 @@ class ProcessPool:
                 logger.warning(f"Terminating process {pid} (case {case})")
                 proc.terminate()
                 self.queue.done(case)
+                case.save()
 
         # Give processes time to terminate gracefully
         time.sleep(1)

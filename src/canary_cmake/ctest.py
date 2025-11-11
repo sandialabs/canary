@@ -397,7 +397,7 @@ class Foo:
 
         output = self.output()
 
-        if self.status.value in ("timeout", "skipped", "cancelled", "not_run"):
+        if self.status.name in ("timeout", "skipped", "cancelled", "not_run"):
             return
 
         if self.pass_regular_expression is not None:
@@ -433,9 +433,9 @@ class Foo:
 
         # invert logic
         if self.will_fail:
-            if self.status == "success":
+            if self.status.name == "SUCCESS":
                 self.status.set("failed", "Test case marked will_fail but succeeded")
-            elif self.status.value not in ("skipped",):
+            elif self.status.name not in ("skipped",):
                 self.status.set("success")
 
     @property

@@ -67,18 +67,18 @@ class HTMLReporter(CanaryReporter):
         return f"<head>\n{self.style}\n</head>\n"
 
     def generate_case_file(self, case: "TestCase", fh: TextIO) -> None:
-        if case.masked():
+        if case.mask:
             return
         fh.write("<html>\n")
         fh.write("<body>\n<table>\n")
         fh.write(f"<tr><td><b>Test:</b> {case.display_name}</td></tr>\n")
         fh.write(f"<tr><td><b>Status:</b> {case.status.name}</td></tr>\n")
-        fh.write(f"<tr><td><b>Exit code:</b> {case.returncode}</td></tr>\n")
+        fh.write(f"<tr><td><b>Exit code:</b> {case.status.code}</td></tr>\n")
         fh.write(f"<tr><td><b>ID:</b> {case.id}</td></tr>\n")
-        fh.write(f"<tr><td><b>Duration:</b> {case.duration}</td></tr>\n")
+        fh.write(f"<tr><td><b>Duration:</b> {case.timekeeper.duration}</td></tr>\n")
         fh.write("</table>\n")
         fh.write("<h2>Test output</h2>\n<pre>\n")
-        fh.write(case.output())
+        fh.write(case.read_output())
         fh.write("</pre>\n</body>\n</html>\n")
 
     def generate_index(self, cases: list["TestCase"], fh: TextIO) -> None:
@@ -137,7 +137,9 @@ class HTMLReporter(CanaryReporter):
                 raise ValueError(f"{file}: html file not found")
             link = f'<a href="file://{file}">{case.display_name}</a>'
             html_name = case.status.html_name
-            fh.write(f"<tr><td>{link}</td><td>{case.duration:.2f}</td><td>{html_name}</td></tr>\n")
+            fh.write(
+                f"<tr><td>{link}</td><td>{case.timekeeper.duration:.2f}</td><td>{html_name}</td></tr>\n"
+            )
         fh.write("</tbody>")
         fh.write("</table>\n</body>\n</html>")
 
@@ -154,6 +156,6 @@ class HTMLReporter(CanaryReporter):
                 link = f'<a href="file://{file}">{case.display_name}</a>'
                 html_name = case.status.html_name
                 fh.write(
-                    f"<tr><td>{link}</td><td>{case.duration:.2f}</td><td>{html_name}</td></tr>\n"
+                    f"<tr><td>{link}</td><td>{case.timekeeper.duration:.2f}</td><td>{html_name}</td></tr>\n"
                 )
         fh.write("</table>\n</body>\n</html>")

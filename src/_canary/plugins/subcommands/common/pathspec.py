@@ -104,7 +104,7 @@ class PathSpec(argparse.Action):
                 # allow specifying as root:name
                 root, name = path.split(os.pathsep, 1)
                 namespace.paths.setdefault(root, []).append(name.replace(os.pathsep, os.path.sep))
-            elif TestCase.spec_like(path):
+            elif path.startswith("/") and not os.path.exists(path):
                 setdefault(namespace, "casespecs", []).append(path)
             else:
                 raise ValueError(f"{path}: no such file or directory")

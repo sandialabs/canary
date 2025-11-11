@@ -6,7 +6,6 @@ import dataclasses
 import fnmatch
 import hashlib
 import itertools
-import json
 import math
 import os
 import re
@@ -26,13 +25,13 @@ from typing import Protocol
 from . import config
 from . import when
 from .util import filesystem
+from .util import json_helper as json
 from .util import logging
-from .util._json import PathEncoder
 from .util.string import stringify
 
 if TYPE_CHECKING:
-    from .legacy import TestCase
     from .legacy.testcase import TestCase as LegacyTestCase
+    from .testcase import TestCase
 
 logger = logging.get_logger(__name__)
 
@@ -131,10 +130,10 @@ class SpecCommons:
         return dataclasses.asdict(self)
 
     def dump(self, file: IO[Any], **kwargs: Any) -> None:
-        json.dump(self.asdict(), file, cls=PathEncoder, **kwargs)
+        json.dump(self.asdict(), file, **kwargs)
 
     def dumps(self, **kwargs: Any) -> Any:
-        return json.dumps(self.asdict(), cls=PathEncoder, **kwargs)
+        return json.dumps(self.asdict(), **kwargs)
 
     def matches(self, arg: str) -> bool:
         if self.id.startswith(arg):

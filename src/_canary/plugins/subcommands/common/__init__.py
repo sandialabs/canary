@@ -160,13 +160,13 @@ class TimeoutResource(argparse.Action):
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:
     prefix = os.path.abspath(pathspec)
-    return [c for c in cases if c.matches(pathspec) or c.working_directory.startswith(prefix)]
+    return [c for c in cases if c.matches(pathspec) or c.workspace.dir.relative_to(prefix)]
 
 
 def filter_cases_by_status(cases: list["TestCase"], status: tuple | str) -> list["TestCase"]:
     if isinstance(status, str):
         status = (status,)
-    return [c for c in cases if c.status.value in status]
+    return [c for c in cases if c.status.name in status]
 
 
 def bold(arg: str) -> str:

@@ -4,12 +4,14 @@
 
 import sys
 
-skip_exit_status = 63
-diff_exit_status = 64
-fail_exit_status = 65
-timeout_exit_status = 66
+from .status import Status
+
+skip_exit_status = Status.defaults["SKIPPED"][0]
+diff_exit_status = Status.defaults["DIFFED"][0]
+fail_exit_status = Status.defaults["FAILED"][0]
+timeout_exit_status = Status.defaults["TIMEOUT"][0]
+exception_exit_status = Status.defaults["ERROR"][0]
 notests_exit_status = 7
-exception_exit_status = 67
 
 
 class MyException(Exception):

@@ -56,22 +56,22 @@ class MarkdownReporter(CanaryReporter):
         logger.info(f"Markdown report written to {f}")
 
     def generate_case_file(self, case: "TestCase", fh: TextIO) -> None:
-        if case.masked():
+        if case.mask:
             return
         fh.write(f"# {case.display_name}\n\n")
         self.render_test_info_table(case, fh)
         fh.write("## Test output\n")
         fh.write("\n```console\n")
-        fh.write(case.output())
+        fh.write(case.read_output())
         fh.write("```\n\n")
 
     def render_test_info_table(self, case: "TestCase", fh: TextIO) -> None:
         info: dict[str, str] = {
             "**Status**": case.status.name,
-            "**Exit code**": str(case.returncode),
+            "**Exit code**": str(case.status.code),
             "**ID**": str(case.id),
-            "**Location**": case.working_directory,
-            "**Duration**": f"{case.duration:.4f}",
+            "**Location**": str(case.workspace.dir),
+            "**Duration**": f"{case.timekeeper.duration:.4f}",
         }
         fh.write("|||\n|---|---|\n")
         for key, val in info.items():
@@ -116,7 +116,7 @@ class MarkdownReporter(CanaryReporter):
             if not os.path.exists(file):
                 raise ValueError(f"{file}: markdown file not found")
             link = f"[{case.display_name}](./{os.path.basename(file)})"
-            duration = f"{case.duration:.2f}"
+            duration = f"{case.timekeeper.duration:.2f}"
             status = case.status.name
             fh.write(f"| {link} | {case.id} | {duration} | {status} |\n")
 
@@ -130,7 +130,7 @@ class MarkdownReporter(CanaryReporter):
                 if not os.path.exists(file):
                     raise ValueError(f"{file}: markdown file not found")
                 link = f"[{case.display_name}](./{os.path.basename(file)})"
-                duration = f"{case.duration:.2f}"
+                duration = f"{case.timekeeper.duration:.2f}"
                 status = case.status.name
                 fh.write(f"| {link} | {duration} | {status} |\n")
         fh.write("\n")

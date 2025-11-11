@@ -4,7 +4,6 @@
 import dataclasses
 import datetime
 import hashlib
-import json
 import os
 import pickle
 import tempfile
@@ -25,6 +24,7 @@ from .testexec import ExecutionSpace
 from .testspec import DraftSpec
 from .testspec import ResolvedSpec
 from .testspec import TestSpec
+from .util import json_helper as json
 from .util import logging
 from .util.filesystem import force_remove
 from .util.filesystem import working_dir
@@ -148,11 +148,11 @@ class Session:
         graph: dict[str, list[str]] = {c.id: [d.id for d in c.dependencies] for c in self._cases}
         paths: dict[str, str] = {}
         for case in cases:
-            paths[case.id] = os.path.relpath(case.working_directory, str(self.root))
+            paths[case.id] = os.path.relpath(case.workspace.dir, str(self.root))
             for dep in case.dependencies:
                 if dep.id not in graph:
                     # Dep lives outside of this session
-                    paths[dep.id] = os.path.relpath(dep.working_directory, str(self.root))
+                    paths[dep.id] = os.path.relpath(dep.workspace.dir, str(self.root))
         index = self.load_index()
         index["cases"].clear()
         index["cases"].update(graph)
@@ -265,8 +265,7 @@ class Session:
                 "duration": case.timekeeper.duration,
                 "started_on": case.timekeeper.started_on,
                 "finished_on": case.timekeeper.finished_on,
-                "working_directory": str(case.workspace.dir),
-                "execution_directory": str(case.workspace.dir),
+                "workspace": str(case.workspace.dir),
                 "attributes": case.spec.attributes,
                 "status": case.status.asdict(),
             }
@@ -502,12 +501,14 @@ class Workspace:
                 # They can be older if only a subset of the session's cases were run this last time
                 if results[id]["finished_on"] != "NA":
                     my_time = datetime.datetime.fromisoformat(results[id]["finished_on"])
+                    if their_entry["finished_on"] == "NA":
+                        print(their_entry)
                     their_time = datetime.datetime.fromisoformat(their_entry["finished_on"])
                     if my_time > their_time:
                         continue
             my_entry = {"session": session.name, **their_entry}
             results[id] = my_entry
-            relpath = Path(their_entry["working_directory"]).relative_to(session.work_dir)
+            relpath = Path(their_entry["workspace"]).relative_to(session.work_dir)
             view_entries.setdefault(session.work_dir, []).append(relpath)
 
         self.dump_latest(latest)
@@ -547,7 +548,7 @@ class Workspace:
                         if my_time > their_time:
                             continue
                 my_entry = {"session": session.name, **their_entry}
-                relpath = Path(their_entry["working_directory"]).relative_to(session.work_dir)
+                relpath = Path(their_entry["workspace"]).relative_to(session.work_dir)
                 view_entries.setdefault(session.work_dir, []).append(relpath)
         self._update_view(view_entries)
         logger.info("Done rebuilding view")
@@ -630,7 +631,8 @@ class Workspace:
 
     def active_testcases(self) -> list[TestCase]:
         cases = self.load_testcases(latest=True)
-        return [case for case in cases if case.session is not None]
+        # FIXME
+        return cases
 
     def add(
         self, scan_paths: dict[str, list[str]], pedantic: bool = True
@@ -711,7 +713,7 @@ class Workspace:
                         "stop": datetime.datetime.fromisoformat(result["finished_on"]).timestamp(),
                         "status": result["status"],
                         "returncode": result["returncode"],
-                        "instance_attributes": result["instance_attributes"],
+                        "attributes": result["attributes"],
                     }
                     case.update(**attrs)
 
@@ -950,10 +952,9 @@ class Workspace:
                 "duration": -1,
                 "started_on": "NA",
                 "finished_on": "NA",
-                "working_directory": None,
-                "execution_directory": None,
-                "instance_attributes": None,
-                "status": {"value": "created", "details": None},
+                "workspace": None,
+                "attributes": None,
+                "status": {"name": "pending", "message": None},
             }
         self.dump_latest(latest)
 
@@ -965,13 +966,13 @@ class Workspace:
             info.setdefault("name", []).append(entry["name"])
             info.setdefault("fullname", []).append(entry["fullname"])
             info.setdefault("family", []).append(entry["family"])
-            info.setdefault("session", []).append(entry["session"])
+            info.setdefault("workspace", []).append(entry["workspace"])
             info.setdefault("returncode", []).append(entry["returncode"])
             info.setdefault("duration", []).append(entry["duration"])
-            info.setdefault("status_value", []).append(entry["status"]["value"])
-            if entry["session"] is None and not entry["status"]["details"]:
-                entry["status"]["details"] = "Test case not included in any session"
-            info.setdefault("status_details", []).append(entry["status"]["details"] or "")
+            info.setdefault("status_name", []).append(entry["status"]["name"])
+            if entry["workspace"] is None and not entry["status"]["message"]:
+                entry["status"]["message"] = "Test case not included in any session"
+            info.setdefault("status_message", []).append(entry["status"]["message"] or "")
         return info
 
     def collect_all_testcases(self) -> Generator[TestCase, None, None]:
@@ -986,9 +987,9 @@ class Workspace:
             allcases = list(self.collect_all_testcases())
             removable = find_removable_cases(allcases)
             for case in removable:
-                if Path(case.working_directory).exists():
+                if Path(case.workspace.dir).exists():
                     removed += 1
-                    logger.info(f"gc: removing {case}::{case.session}")
+                    logger.info(f"gc: removing {case}::{case.workspace.dir}")
                     if dryrun:
                         continue
                     else:
@@ -1046,13 +1047,13 @@ class Workspace:
                     break
             else:
                 raise ValueError(f"{spec}: no matching test found in {self.root}")
-            lockfile = self.casespecs_dir / id[:2] / id[2:] / TestCase._lockfile
+            lockfile = self.casespecs_dir / id[:2] / id[2:] / "testcase.lock"
             state = json.loads(lockfile.read_text())
             case = testcase_from_state(state)
         else:
             cases = self.load_testcases()
             for case in cases:
-                if case.matches(spec):
+                if case.spec.matches(spec):
                     break
             else:
                 raise ValueError(f"{spec}: no matching test found in {self.root}")
@@ -1088,7 +1089,7 @@ def load_testcases(
         if ids_to_load and id not in ids_to_load:
             continue
         # see TestCase.lockfile for file pattern
-        file = Path(os.path.join(paths[id], TestCase._lockfile))
+        file = Path(os.path.join(paths[id], "testcase.lock"))
         state = json.loads(file.read_text())
         for i, dep_state in enumerate(state["properties"]["dependencies"]):
             # assign dependencies from existing dependencies
@@ -1171,9 +1172,9 @@ def find_removable_cases(cases: list[TestCase]) -> list[TestCase]:
     # Use id(case), not the case directly since the case's __hash__ is derived from case.id
     # and the list of cases could have multiple cases with the same ID across multiple
     # sessions
-    okstats = ("success", "xfail", "xdiff")
+    okstats = ("SUCCESS", "XFAIL", "XDIFF")
     case_by_id: dict[int, TestCase] = {id(case): case for case in cases}
-    failed_cases: set[int] = {id(case) for case in cases if not case.status.satisfies(okstats)}
+    failed_cases: set[int] = {id(case) for case in cases if case.status.name not in okstats}
     dependents: dict[int, set[int]] = {id(case): set() for case in cases}
     for case in cases:
         for dep in case.dependencies:
@@ -1189,11 +1190,11 @@ def find_removable_cases(cases: list[TestCase]) -> list[TestCase]:
                 stack.append(dep)
     removable: list[TestCase] = []
     for case in cases:
-        if not case.status.satisfies(okstats):
+        if case.status.name not in okstats:
             continue
         if id(case) in needed:
             continue
-        if any(not dep.status.satisfies(okstats) for dep in case.dependencies):
+        if any(dep.status.name not in okstats for dep in case.dependencies):
             continue
         removable.append(case)
     return removable
@@ -1204,23 +1205,18 @@ def generate_specs(
     on_options: list[str] | None = None,
 ) -> list[ResolvedSpec]:
     """Generate test cases and filter based on criteria"""
-    from .legacy.testcase import TestCase as LegacyTestCase
-
     msg = "@*{Generating} test cases"
     logger.log(logging.INFO, msg, extra={"end": "..."})
     created = time.monotonic()
     try:
-        locked: list[list[LegacyTestCase | DraftSpec]]
+        locked: list[list[DraftSpec]]
         for f in generators:
             lock_file(f, on_options)
         locked = starmap(lock_file, [(f, on_options) for f in generators])
         drafts: list[DraftSpec] = []
         for group in locked:
             for spec in group:
-                if isinstance(spec, LegacyTestCase):
-                    drafts.append(DraftSpec.from_legacy_testcase(spec))
-                else:
-                    drafts.append(spec)
+                drafts.append(spec)
         nc, ng = len(drafts), len(generators)
     except Exception:
         state = "failed"

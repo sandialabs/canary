@@ -11,11 +11,11 @@ from typing import Generator
 from typing import Type
 
 from .status import Status
-from .legacy.testcase import TestCase
-from .legacy.testcase import TestMultiCase
-from .legacy.testcase import from_lockfile as testcase_from_lockfile
-from .util._json import safeload
-from .util._json import safesave
+from .testcase import TestCase
+from .testcase import TestMultiCase
+from .testcase import from_lockfile as testcase_from_lockfile
+from ..util.json_helper import safeload
+from ..util.json_helper import safesave
 
 key_type = tuple[str, ...] | str
 index_type = tuple[int, ...] | int
@@ -179,7 +179,7 @@ class TestInstance:
     runtime: float | int | None
     baseline: list[str | tuple[str, str]]
     sources: dict[str, list[tuple[str, str | None]]]
-    session: str
+    work_tree: str
     working_directory: str
     status: Status
     start: float
@@ -242,7 +242,7 @@ class TestInstance:
             runtime=case.runtime,
             baseline=case.baseline,
             sources=sources,
-            session=case.session,  # type: ignore
+            work_tree=case.work_tree,  # type: ignore
             working_directory=case.working_directory,
             status=case.status,
             start=case.start,
@@ -312,7 +312,7 @@ class TestMultiInstance(TestInstance):
             runtime=case.runtime,
             baseline=case.baseline,
             sources=sources,
-            session=case.session,  # type: ignore
+            work_tree=case.work_tree,  # type: ignore
             working_directory=case.working_directory,
             status=case.status,
             start=case.start,

@@ -97,7 +97,7 @@ class Find(CanarySubcommand):
             finder.pprint_graph(cases_to_run)
         elif args.print_lock:
             file = os.path.join(config.invocation_dir, "testcases.lock")
-            states = [case.getstate() for case in cases_to_run]
+            states = [case.asdict() for case in cases_to_run]
             with open(file, "w") as fh:
                 json.dump({"testcases": states}, fh, indent=2)
             logger.info("test cases written to testcase.lock")

@@ -159,7 +159,7 @@ class HPC(canary.CanarySubcommand):
                 continue
             if case.session is None:
                 case.session = str(workspace.sessions_dir)
-            print(f"- name: {case.display_name}\n  location: {case.working_directory}")
+            print(f"- name: {case.display_name}\n  location: {case.workspace.dir}")
         return
 
 

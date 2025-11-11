@@ -121,8 +121,8 @@ set_tests_properties(test1 PROPERTIES  FAIL_REGULAR_EXPRESSION "^This test shoul
         with canary.config.override():
             case.set_workspace_properties(workspace=Path.cwd() / "foo", session=None)
             runner(case)
-            assert case.returncode == 0
-            assert case.status == "failed"
+            assert case.status.code == 0
+            assert case.status.name == "FAILED"
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")
@@ -167,8 +167,8 @@ set_tests_properties(test1 PROPERTIES  PASS_REGULAR_EXPRESSION "^This test shoul
         with canary.config.override():
             case.set_workspace_properties(workspace=Path.cwd() / "foo", session=None)
             runner(case)
-        assert case.status == "success"
-        assert case.returncode == 1
+        assert case.status.name == "SUCCESS"
+        assert case.status.code == 1
 
 
 @pytest.mark.skipif(which("cmake") is None, reason="cmake not on PATH")

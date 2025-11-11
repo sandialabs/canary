@@ -265,7 +265,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                     owners=self.owners,
                     artifacts=self.artifacts(testname=name, on_options=on_options),
                     exclusive=self.exclusive(testname=name, on_options=on_options),
-                    attributes={"paramsets": paramsets, "flag": ns.value},
+                    attributes={"multicase": True, "flag": ns.value},
                     dependencies=dependencies,
                 )
                 if test_mask is not None:

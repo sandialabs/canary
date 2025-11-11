@@ -73,8 +73,8 @@ If no options are give, -x is assumed."""
         elif args.show_source_dir:
             f = case.file_dir
         elif args.show_working_directory:
-            f = case.working_directory
+            f = case.workspace.dir
         else:
-            f = case.working_directory
+            f = case.workspace.dir
         print(f)
         return 0

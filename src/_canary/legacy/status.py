@@ -4,11 +4,11 @@
 
 import signal
 
-from .error import diff_exit_status
-from .error import fail_exit_status
-from .error import skip_exit_status
-from .error import timeout_exit_status
-from .util import glyphs
+from ..error import diff_exit_status
+from ..error import fail_exit_status
+from ..error import skip_exit_status
+from ..error import timeout_exit_status
+from ..util import glyphs
 
 
 class Status:
@@ -131,28 +131,24 @@ class Status:
         else:
             self.set("failed", "a non-zero exit status was returned")
 
-    @staticmethod
-    def display_name(value) -> str:
-        if value == "invalid":
+    @property
+    def name(self) -> str:
+        if self.value == "invalid":
             return "INVALID (NOOP)"
-        elif value == "success":
+        elif self.value == "success":
             return "PASS"
-        elif value == "diffed":
+        elif self.value == "diffed":
             return "DIFF"
-        elif value == "failed":
+        elif self.value == "failed":
             return "FAIL"
-        elif value == "not_run":
+        elif self.value == "not_run":
             return "NOT RUN"
         else:
-            return value.upper()
+            return self.value.upper()
 
     @property
     def cname(self) -> str:
         return "@*%s{%s}" % (self.color, self.name)
-
-    @property
-    def name(self) -> str:
-        return self.display_name(self.value)
 
     @property
     def color(self) -> str:

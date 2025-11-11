@@ -63,20 +63,20 @@ def canary_testsuite_mask(
         for i in order:
             case = cases[i]
 
-            if case.masked():
+            if case.mask:
                 continue
 
-            if start is not None and no_filter_criteria and isrel(case.working_directory, start):
+            if start is not None and no_filter_criteria and isrel(str(case.workspace.dir), start):
                 # won't mask
                 continue
 
-            if start is not None and not isrel(case.working_directory, start):
-                logger.debug(f"{case}: {case.working_directory=} but {start=}")
+            if start is not None and not isrel(str(case.workspace.dir), start):
+                logger.debug(f"{case}: {case.workspace.dir=} but {start=}")
                 case.mask = "Unreachable from start directory"
                 continue
 
             if case_specs is not None:
-                if not any(case.matches(case_spec) for case_spec in case_specs):
+                if not any(case.spec.matches(case_spec) for case_spec in case_specs):
                     expr = ",".join(case_specs)
                     case.mask = "testspec expression @*{%s} did not match" % expr
                 continue
@@ -91,13 +91,13 @@ def canary_testsuite_mask(
                     case.mask = check.reason
                     continue
 
-            if owners and not owners.intersection(case.owners):
-                case.mask = "not owned by @*{%r}" % case.owners
+            if owners and not owners.intersection(case.spec.owners or []):
+                case.mask = "not owned by @*{%r}" % case.spec.owners
                 continue
 
             if keyword_exprs is not None:
-                kwds = set(case.keywords)
-                kwds.update(case.implicit_keywords)
+                kwds = set(case.spec.keywords)
+                kwds.update(case.spec.implicit_keywords)  # ty: ignore[invalid-argument-type]
                 kwd_all = contains_any(("__all__", ":all:"), keyword_exprs)
                 if not kwd_all:
                     for keyword_expr in keyword_exprs:
@@ -105,13 +105,13 @@ def canary_testsuite_mask(
                         if not match:
                             case.mask = "keyword expression @*{%r} did not match" % keyword_expr
                             break
-                    if case.masked():
+                    if case.mask:
                         continue
 
             if parameter_expr:
                 match = when.when(
                     {"parameters": parameter_expr},
-                    parameters=case.parameters | case.implicit_parameters,
+                    parameters=case.spec.parameters | case.spec.implicit_parameters, # ty: ignore[unsupported-operator]
                 )
                 if not match:
                     case.mask = "parameter expression @*{%s} did not match" % parameter_expr
@@ -125,7 +125,7 @@ def canary_testsuite_mask(
 
             if rx is not None:
                 if not filesystem.grep(rx, case.file):
-                    for asset in case.assets:
+                    for asset in case.spec.assets:
                         if os.path.isfile(asset.src) and filesystem.grep(rx, asset.src):
                             break
                     else:
@@ -134,8 +134,8 @@ def canary_testsuite_mask(
 
             # If we got this far and the case is not masked, only mask it if no filtering criteria were
             # specified
-            if no_filter_criteria and not case.status.satisfies(("created", "pending", "ready")):
-                case.mask = f"previous status {case.status.value!r} is not 'ready'"
+            if no_filter_criteria and case.status.name not in ("PENDING", "READY"):
+                case.mask = f"previous status {case.status.name!r} is not 'ready'"
     except Exception:
         state = "failed"
         raise
