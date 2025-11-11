@@ -15,6 +15,7 @@ from .types import CanarySubcommand
 
 if TYPE_CHECKING:
     from multiprocessing import Queue
+
     from ..atc import AbstractTestCase
     from ..config.argparsing import Parser
     from ..config.config import Config as CanaryConfig

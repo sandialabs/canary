@@ -3,14 +3,11 @@
 # SPDX-License-Identifier: MIT
 
 
+from multiprocessing import Queue
 from typing import Generator
 
 from ... import config
-from multiprocessing import Queue
-from ...testspec import ExecutionPolicy
-from ...testspec import PythonFilePolicy
-from ...testspec import TestCase
-from ...testspec import TestSpec
+from ...testcase import TestCase
 from ..hookspec import hookimpl
 
 
@@ -24,7 +21,9 @@ def canary_testcase_setup(case: TestCase) -> Generator[None, None, bool]:
 
 
 @hookimpl(wrapper=True)
-def canary_testcase_run(case: TestCase, queue: Queue, qsize: int, qrank: int) -> Generator[None, None, bool]:
+def canary_testcase_run(
+    case: TestCase, queue: Queue, qsize: int, qrank: int
+) -> Generator[None, None, bool]:
     case.run(queue)
     yield
     case.save()
@@ -37,10 +36,3 @@ def canary_testcase_finish(case: TestCase) -> Generator[None, None, bool]:
     yield
     case.save()
     return True
-
-
-@hookimpl
-def canary_testcase_execution_policy(spec: TestSpec) -> ExecutionPolicy | None:
-    if spec.file.suffix in (".pyt", ".py", ".vvt"):
-        return PythonFilePolicy()
-    return None

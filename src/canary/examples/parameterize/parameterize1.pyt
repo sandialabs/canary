@@ -12,6 +12,7 @@ canary.directives.parameterize("a", (1, 4))
 def test():
     self = canary.get_instance()
     print(f"{self.parameters.a}")
+    return 0
 
 
 if __name__ == "__main__":

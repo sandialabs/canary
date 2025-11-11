@@ -16,26 +16,26 @@ from typing import IO
 from typing import Any
 from typing import Generator
 
-from . import config
-from . import finder
-from .error import StopExecution
-from .error import notests_exit_status
-from .generator import AbstractTestGenerator
+from .. import config
+from .. import finder
+from ..error import StopExecution
+from ..error import notests_exit_status
+from ..generator import AbstractTestGenerator
 from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_state as testcase_from_state
-from .third_party.lock import Lock
-from .third_party.lock import LockError
-from .util import cpu_count
-from .util import logging
-from .util.filesystem import find_work_tree
-from .util.filesystem import force_remove
-from .util.filesystem import mkdirp
-from .util.graph import TopologicalSorter
-from .util.graph import find_reachable_nodes
-from .util.graph import static_order
-from .util.procutils import cleanup_children
-from .util.time import timestamp
+from ..third_party.lock import Lock
+from ..third_party.lock import LockError
+from ..util import cpu_count
+from ..util import logging
+from ..util.filesystem import find_work_tree
+from ..util.filesystem import force_remove
+from ..util.filesystem import mkdirp
+from ..util.graph import TopologicalSorter
+from ..util.graph import find_reachable_nodes
+from ..util.graph import static_order
+from ..util.procutils import cleanup_children
+from ..util.time import timestamp
 
 # Session modes are analogous to file modes
 session_modes = (

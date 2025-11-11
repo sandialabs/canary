@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import typing
+from pathlib import Path
 
 import canary
 
@@ -25,14 +26,14 @@ def canary_testcase_generator(root: str, path: str | None) -> canary.AbstractTes
 @canary.hookimpl
 def canary_testcase_modify(case: "canary.TestCase") -> None:
     if case.file_path.suffix == ".vvt":
-        case.ofile = "execute.log"
-        case.efile = "<none>"  # causes stderr to be merged into stdout
+        case.stdout = "execute.log"
+        case.stderr = None
 
 
 @canary.hookimpl
 def canary_testcase_setup(case: "canary.TestCase") -> None:
-    if case.file_path.suffix == ".vvt":
-        with canary.filesystem.working_dir(case.working_directory):
+    if case.spec.file_path.suffix == ".vvt":
+        with canary.filesystem.working_dir(case.workspace.dir):
             write_vvtest_util(case)
 
 
@@ -81,11 +82,11 @@ def canary_addoption(parser: "canary.Parser") -> None:
 
 
 def write_vvtest_util(case: "canary.TestCase", stage: str = "run") -> None:
-    if not case.file_path.suffix == ".vvt":
+    if not case.spec.file_path.suffix == ".vvt":
         return
     attrs = get_vvtest_attrs(case)
-    file = os.path.abspath("./vvtest_util.py")
-    if os.path.dirname(file) != case.working_directory:
+    file = Path.cwd() / "vvtest_util.py"
+    if not case.workspace.dir.samefile(file.parent):
         raise ValueError("Incorrect directory for writing vvtest_util")
     with open(file, "w") as fh:
         fh.write("import os\n")
@@ -108,19 +109,19 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
     if vendor := canary.config.get("build:compiler:vendor"):
         version = canary.config.get("build:compiler:version")
         compiler_spec = f"{vendor}@{version}"
-    attrs["CASEID"] = case.id
-    attrs["NAME"] = case.family
-    attrs["TESTID"] = case.fullname
+    attrs["CASEID"] = case.spec.id
+    attrs["NAME"] = case.spec.family
+    attrs["TESTID"] = case.spec.fullname
     attrs["PLATFORM"] = sys.platform.lower()
     attrs["COMPILER"] = compiler_spec or "UNKNOWN@UNKNOWN"
-    attrs["TESTROOT"] = case.session
+    attrs["TESTROOT"] = str(case.workspace.root)
     attrs["VVTESTSRC"] = ""
     attrs["PROJECT"] = ""
     attrs["OPTIONS"] = canary.config.getoption("on_options") or []
     attrs["OPTIONS_OFF"] = canary.config.getoption("off_options") or []
-    attrs["SRCDIR"] = case.file_dir
-    attrs["TIMEOUT"] = case.timeout
-    attrs["KEYWORDS"] = case.keywords
+    attrs["SRCDIR"] = str(case.spec.file.parent)
+    attrs["TIMEOUT"] = case.spec.timeout
+    attrs["KEYWORDS"] = case.spec.keywords
     attrs["diff_exit_status"] = 64
     attrs["skip_exit_status"] = 63
 
@@ -138,29 +139,29 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
 
     attrs["is_analyze"] = isinstance(case, canary.TestMultiCase)
     attrs["is_baseline"] = canary.config.getoption("command") == "rebaseline"
-    attrs["PARAM_DICT"] = case.parameters or {}
-    for key, val in case.parameters.items():
+    attrs["PARAM_DICT"] = case.spec.parameters or {}
+    for key, val in case.spec.parameters.items():
         attrs[key] = val
-    if isinstance(case, canary.TestMultiCase):
-        for paramset in case.paramsets:
-            key = "_".join(paramset.keys)
-            table = attrs.setdefault(f"PARAM_{key}", [])
-            for row in paramset.values:
-                if len(paramset.keys) == 1:
-                    table.append(row[0])
-                else:
-                    table.append(list(row))
+    #    if isinstance(case, canary.TestMultiCase):
+    #        for paramset in case.paramsets:
+    #            key = "_".join(paramset.keys)
+    #            table = attrs.setdefault(f"PARAM_{key}", [])
+    #            for row in paramset.values:
+    #                if len(paramset.keys) == 1:
+    #                    table.append(row[0])
+    #                else:
+    #                    table.append(list(row))
 
     # DEPDIRS and DEPDIRMAP should always exist.
-    attrs["DEPDIRS"] = [dep.working_directory for dep in getattr(case, "dependencies", [])]
+    attrs["DEPDIRS"] = [str(dep.workspace.dir) for dep in case.spec.dependencies]
     attrs["DEPDIRMAP"] = {}  # FIXME
 
-    attrs["exec_dir"] = case.working_directory
-    attrs["exec_root"] = case.session
-    attrs["exec_path"] = case.path
-    attrs["file_root"] = case.file_root
-    attrs["file_dir"] = case.file_dir
-    attrs["file_path"] = case.file_path
+    attrs["exec_dir"] = str(case.workspace.dir)
+    attrs["exec_root"] = str(case.workspace.root)
+    attrs["exec_path"] = str(case.workspace.path)
+    attrs["file_root"] = str(case.spec.file_root)
+    attrs["file_dir"] = str(case.spec.file.parent)
+    attrs["file_path"] = str(case.spec.file_path)
 
     attrs["RESOURCE_np"] = case.cpus
     attrs["RESOURCE_IDS_np"] = [int(_) for _ in case.cpu_ids]
@@ -168,3 +169,10 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
     attrs["RESOURCE_IDS_ndevice"] = [int(_) for _ in case.gpu_ids]
 
     return attrs
+
+
+@canary.hookimpl
+def canary_testcase_execution_policy(spec: canary.TestSpec) -> canary.ExecutionPolicy | None:
+    if spec.file.suffix in (".vvt",):
+        return canary.PythonFilePolicy()
+    return None

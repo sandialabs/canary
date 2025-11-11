@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 from ... import config
-from ...testspec import Status
-from ...testspec import StatusValue
+from ...status import Status
+from ...status import StatusValue
 from ...third_party.color import ccenter
 from ...third_party.color import colorize
 from ...util import glyphs
@@ -110,7 +110,7 @@ def print_short_test_status_summary(
                 file.write("@*%s{%s %s} %s\n" % (color, glyph, name, case.spec.fullname))
                 n += 1
                 if truncate > 0 and truncate == n:
-                    cname = case.status.value.name  #FIXME
+                    cname = case.status.value.name  # FIXME
                     bullets = "@*{%s}" % (3 * ".")
                     fmt = "%s %s %s truncating summary to the first %d entries. "
                     alert = io.StringIO()
@@ -318,11 +318,22 @@ def print_footer(cases: list["TestCase"], title: str) -> None:
     """Return a short, high-level, summary of test results"""
     string = io.StringIO()
     duration = -1.0
-    has_a = any(_.timekeeper.started_on != "NA" for _ in cases)
-    has_b = any(_.timekeeper.finished_on != "NA" for _ in cases)
-    if has_a and has_b:
-        finish = max(datetime.datetime.fromisoformat(_.timekeeper.finished_on) for _ in cases if _.timekeeper.finished_on != "NA")
-        start = min(datetime.datetime.fromisoformat(_.timekeeper.started_on) for _ in cases if _.timekeeper.started_on != "NA")
+    start: datetime.datetime | None = None
+    finish: datetime.datetime | None = None
+    for case in cases:
+        if case.timekeeper.started_on == "NA":
+            continue
+        if case.timekeeper.finished_on == "NA":
+            continue
+        ti = datetime.datetime.fromisoformat(case.timekeeper.started_on)
+        tf = datetime.datetime.fromisoformat(case.timekeeper.finished_on)
+        if start is None:
+            start = ti
+            finish = tf
+        else:
+            start = min(ti, start)
+            finish = max(tf, finish)
+    if finish:
         duration = (finish - start).total_seconds()
     totals: dict[StatusValue, list["TestCase"]] = {}
     for case in cases:

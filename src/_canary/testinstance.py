@@ -11,9 +11,9 @@ from typing import Generator
 from typing import Type
 
 from .status import Status
-from .testcase import TestCase
-from .testcase import TestMultiCase
-from .testcase import from_lockfile as testcase_from_lockfile
+from .legacy.testcase import TestCase
+from .legacy.testcase import TestMultiCase
+from .legacy.testcase import from_lockfile as testcase_from_lockfile
 from .util._json import safeload
 from .util._json import safesave
 

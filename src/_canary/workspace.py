@@ -20,7 +20,11 @@ from .error import StopExecution
 from .error import notests_exit_status
 from .generator import AbstractTestGenerator
 from .plugins.types import ScanPath
-from .testspec import TestCase
+from .testcase import TestCase
+from .testexec import ExecutionSpace
+from .testspec import DraftSpec
+from .testspec import ResolvedSpec
+from .testspec import TestSpec
 from .util import logging
 from .util.filesystem import force_remove
 from .util.filesystem import working_dir
@@ -39,7 +43,7 @@ session_tag = "SESSION.TAG"
 
 @dataclasses.dataclass
 class SpecSelection:
-    specs: list[testspec.TestSpec]
+    specs: list[TestSpec]
     tag: str | None
     _sha256: str = dataclasses.field(init=False)
     _created_on: str = dataclasses.field(init=False)
@@ -96,22 +100,23 @@ class Session:
         self.root.mkdir(parents=True, exist_ok=True)
         self.work_dir.mkdir(parents=True, exist_ok=True)
         specs = selection.specs
-        self._cases = []
+        cases = []
         lookup: dict[str, TestCase] = {}
         for spec in static_order(specs):
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
-            space = testspec.ExecutionSpace(root=self.work_dir / spec.fullname)
+            space = ExecutionSpace(root=self.work_dir, path=spec.fullname)
             case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
             lookup[spec.id] = case
-            self._cases.append(case)
+            cases.append(case)
+        self._cases = cases
         graph: dict[str, list[str]] = {c.id: [d.id for d in c.dependencies] for c in self._cases}
         paths: dict[str, str] = {}
         for case in self._cases:
-            paths[case.id] = os.path.relpath(case.workspace.root, str(self.root))
+            paths[case.id] = os.path.relpath(str(case.workspace.dir), str(self.root))
             for dep in case.dependencies:
                 if dep.id not in graph:
                     # Dep lives outside of this session
-                    paths[dep.id] = os.path.relpath(dep.workspace.root, str(self.root))
+                    paths[dep.id] = os.path.relpath(str(dep.workspace.dir), str(self.root))
         index = {
             "name": self.name,
             "created_on": ts,
@@ -180,7 +185,7 @@ class Session:
 
     def populate_worktree(self) -> None:
         for case in self.cases:
-            path = Path(case.workspace.root)
+            path = Path(case.workspace.dir)
             path.mkdir(parents=True)
             case.save()
 
@@ -260,8 +265,8 @@ class Session:
                 "duration": case.timekeeper.duration,
                 "started_on": case.timekeeper.started_on,
                 "finished_on": case.timekeeper.finished_on,
-                "working_directory": str(case.workspace.root),
-                "execution_directory": str(case.workspace.root),
+                "working_directory": str(case.workspace.dir),
+                "execution_directory": str(case.workspace.dir),
                 "attributes": case.spec.attributes,
                 "status": case.status.asdict(),
             }
@@ -671,7 +676,7 @@ class Workspace:
         self.update_testcases_with_newest_results(cases)
         return cases
 
-    def load_specs(self, ids: list[str] | None = None) -> list[testspec.ResolvedSpec]:
+    def load_specs(self, ids: list[str] | None = None) -> list[ResolvedSpec]:
         """Load cached test specs.  Dependency resolution is performed.  If ``latest is True``,
         update each case to point to the latest run instance.
         """
@@ -698,7 +703,6 @@ class Workspace:
         results: dict[str, dict] = latest["cases"]
         for case in cases:
             if result := results.get(case.id):
-                print(result)
                 if session := result["session"]:
                     attrs = {
                         "session": session,
@@ -789,7 +793,7 @@ class Workspace:
         regex: str | None = None,
         case_specs: list[str] | None = None,
         **kwargs: Any,
-    ) -> list[testspec.TestSpec]:
+    ) -> list[TestSpec]:
         """Generate (lock) test specs from generators
 
         Args:
@@ -812,7 +816,7 @@ class Workspace:
 
         """
         # FIXME: Look into locking the latest, we used to do this.
-        specs: list[testspec.ResolvedSpec]
+        specs: list[ResolvedSpec]
         generators = self.load_testcase_generators()
         meta = {"f": sorted([str(generator.file) for generator in generators]), "o": on_options}
         sha = hashlib.sha256(json.dumps(meta).encode("utf-8")).hexdigest()
@@ -844,6 +848,7 @@ class Workspace:
         )
         for spec in static_order(specs):
             config.pluginmanager.hook.canary_testcase_modify(case=spec)
+        testspec.propagate_masks(specs)
 
         final = testspec.finalize(specs)
         config.pluginmanager.hook.canary_collectreport(cases=final)
@@ -927,7 +932,7 @@ class Workspace:
         self.cache_selection(selection)
         return selection
 
-    def add_spec(self, spec: testspec.ResolvedSpec) -> None:
+    def add_spec(self, spec: ResolvedSpec) -> None:
         file = self.casespecs_dir / spec.id[:2] / spec.id[2:] / "spec.lock"
         if file.exists():
             return
@@ -1197,21 +1202,23 @@ def find_removable_cases(cases: list[TestCase]) -> list[TestCase]:
 def generate_specs(
     generators: list["AbstractTestGenerator"],
     on_options: list[str] | None = None,
-) -> list[testspec.ResolvedSpec]:
+) -> list[ResolvedSpec]:
     """Generate test cases and filter based on criteria"""
-    from .testcase import TestCase as LegacyTestCase
+    from .legacy.testcase import TestCase as LegacyTestCase
 
     msg = "@*{Generating} test cases"
     logger.log(logging.INFO, msg, extra={"end": "..."})
     created = time.monotonic()
     try:
-        locked: list[list[LegacyTestCase | testspec.DraftSpec]]
+        locked: list[list[LegacyTestCase | DraftSpec]]
+        for f in generators:
+            lock_file(f, on_options)
         locked = starmap(lock_file, [(f, on_options) for f in generators])
-        drafts: list[testspec.DraftSpec] = []
+        drafts: list[DraftSpec] = []
         for group in locked:
             for spec in group:
                 if isinstance(spec, LegacyTestCase):
-                    drafts.append(testspec.DraftSpec.from_legacy_testcase(spec))
+                    drafts.append(DraftSpec.from_legacy_testcase(spec))
                 else:
                     drafts.append(spec)
         nc, ng = len(drafts), len(generators)
@@ -1244,10 +1251,10 @@ def lock_file(file: "AbstractTestGenerator", on_options: list[str] | None):
     return file.lock(on_options=on_options)
 
 
-def find_duplicates(specs: list["testspec.DraftSpec"]) -> dict[str, list["testspec.DraftSpec"]]:
+def find_duplicates(specs: list[DraftSpec]) -> dict[str, list[DraftSpec]]:
     ids = [spec.id for spec in specs]
     duplicate_ids = {id for id in ids if ids.count(id) > 1}
-    duplicates: dict[str, list["testspec.DraftSpec"]] = {}
+    duplicates: dict[str, list[DraftSpec]] = {}
     for id in duplicate_ids:
         duplicates.setdefault(id, []).extend([_ for _ in specs if _.id == id])
     return duplicates
@@ -1255,6 +1262,7 @@ def find_duplicates(specs: list["testspec.DraftSpec"]) -> dict[str, list["testsp
 
 def testcase_from_state(*args, **kwargs):
     raise NotImplementedError
+
 
 class WorkspaceExistsError(Exception):
     pass

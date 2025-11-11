@@ -18,13 +18,13 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import Callable
 from typing import Sequence
-from .testspec import StatusValue
 
 from . import config
 from .atc import AbstractTestCase
 from .error import FailFast
 from .error import StopExecution
 from .resource_pool.rpool import ResourceUnavailable
+from .status import StatusValue
 from .third_party import color
 from .util import cpu_count
 from .util import keyboard
@@ -49,11 +49,11 @@ class AbstractResourceQueue(abc.ABC):
         self, *, lock: threading.Lock, workers: int, resource_pool: "ResourcePool"
     ) -> None:
         self.workers: int = workers
-        self.buffer: dict[int, Any] = {}
-        self._busy: dict[int, Any] = {}
-        self._finished: dict[int, Any] = {}
-        self._notrun: dict[int, Any] = {}
-        self.meta: dict[int, dict] = {}
+        self.buffer: dict[str, Any] = {}
+        self._busy: dict[str, Any] = {}
+        self._finished: dict[str, Any] = {}
+        self._notrun: dict[str, Any] = {}
+        self.meta: dict[str, dict] = {}
         self.lock = lock
         self.exclusive_lock: bool = False
         self.resource_pool = resource_pool
@@ -70,9 +70,9 @@ class AbstractResourceQueue(abc.ABC):
     ) -> "AbstractResourceQueue": ...
 
     @abc.abstractmethod
-    def iter_keys(self) -> list[int]: ...
+    def iter_keys(self) -> list[str]: ...
 
-    def retry(self, obj_id: int) -> None:
+    def retry(self, obj: any) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -100,7 +100,7 @@ class AbstractResourceQueue(abc.ABC):
         return len(self.buffer) == 0
 
     @abc.abstractmethod
-    def skip(self, obj_id: int) -> None: ...
+    def skip(self, obj: Any) -> None: ...
 
     def available_workers(self) -> int:
         return self.workers - len(self._busy)
@@ -114,7 +114,7 @@ class AbstractResourceQueue(abc.ABC):
 
     def put(self, *cases: AbstractTestCase) -> None:
         for case in cases:
-            self.buffer[len(self.buffer)] = case
+            self.buffer[case.id] = case
 
     def prepare(self, **kwds: Any) -> None:
         self.prepared = True
@@ -135,19 +135,24 @@ class AbstractResourceQueue(abc.ABC):
         for key in keys:
             self._notrun[key] = self.buffer.pop(key)
 
-    def get(self) -> tuple[int, AbstractTestCase]:
+    def get(self) -> AbstractTestCase:
         """return (total number in queue, this number, iid, obj)"""
         with self.lock:
             if self.available_workers() <= 0:
                 raise Busy
             if not len(self.buffer):
                 raise Empty
-            for i in self.iter_keys():
-                obj = self.buffer[i]
+            for id in self.iter_keys():
+                obj = self.buffer[id]
                 status = obj.status
-                if status.value not in (StatusValue.RETRY, StatusValue.PENDING, StatusValue.READY, StatusValue.RUNNING):
+                if status.value not in (
+                    StatusValue.RETRY,
+                    StatusValue.PENDING,
+                    StatusValue.READY,
+                    StatusValue.RUNNING,
+                ):
                     # job will never be ready
-                    self.skip(i)
+                    self.skip(obj)
                     continue
                 elif status.value == StatusValue.READY:
                     try:
@@ -161,17 +166,17 @@ class AbstractResourceQueue(abc.ABC):
                     except ResourceUnavailable:
                         continue
                     else:
-                        self._busy[i] = self.buffer.pop(i)
+                        self._busy[obj.id] = self.buffer.pop(obj.id)
                         if obj.exclusive:
                             self.exclusive_lock = True
-                        return (i, self._busy[i])
+                        return self._busy[id]
         raise Busy
 
-    def done(self, obj_no: int) -> AbstractTestCase:
+    def done(self, obj: Any) -> AbstractTestCase:
         with self.lock:
-            if obj_no not in self._busy:
-                raise RuntimeError(f"job {obj_no} is not running")
-            obj = self._finished[obj_no] = self._busy.pop(obj_no)
+            if obj.id not in self._busy:
+                raise RuntimeError(f"job {obj} is not running")
+            self._finished[obj.id] = self._busy.pop(obj.id)
             if obj.exclusive:
                 self.exclusive_lock = False
             self.resource_pool.checkin(obj.free_resources())
@@ -215,7 +220,7 @@ class ResourceQueue(AbstractResourceQueue):
             raise ValueError("There are no cases to run in this session")
         return self
 
-    def iter_keys(self) -> list[int]:
+    def iter_keys(self) -> list[str]:
         # want bigger tests first
         norm = lambda c: math.sqrt(c.cpus**2 + c.runtime**2)
         return sorted(self.buffer.keys(), key=lambda k: norm(self.buffer[k]), reverse=True)
@@ -231,13 +236,13 @@ class ResourceQueue(AbstractResourceQueue):
                     )
             super().put(case)
 
-    def skip(self, obj_no: int) -> None:
-        self._finished[obj_no] = self.buffer.pop(obj_no)
-        self._finished[obj_no].save()
+    def skip(self, obj: Any) -> None:
+        self._finished[obj.id] = self.buffer.pop(obj.id)
+        self._finished[obj.id].save()
         for case in self.buffer.values():
             for i, dep in enumerate(case.dependencies):
-                if dep.id == self._finished[obj_no].id:
-                    case.dependencies[i] = self._finished[obj_no]
+                if dep.id == self._finished[obj.id].id:
+                    case.dependencies[i] = self._finished[obj.id]
 
     def update_pending(self, obj: "TestCase") -> None:
         for pending in self.buffer.values():
@@ -271,17 +276,19 @@ class ResourceQueue(AbstractResourceQueue):
         return done, busy, notrun
 
     def status(self, start: float | None = None) -> str:
+        from .testspec import StatusValue
+
         string = io.StringIO()
         with self.lock:
             p = d = f = t = 0
             done, busy, notrun = self._counts()
             total = done + busy + notrun
             for case in self.finished():
-                if case.status.value in ("success", "xdiff", "xfail"):
+                if case.status.value in (StatusValue.SUCCESS, StatusValue.XDIFF, StatusValue.XFAIL):
                     p += 1
-                elif case.status == "diffed":
+                elif case.status.value == StatusValue.DIFFED:
                     d += 1
-                elif case.status == "timeout":
+                elif case.status == StatusValue.TIMEOUT:
                     t += 1
                 else:
                     f += 1

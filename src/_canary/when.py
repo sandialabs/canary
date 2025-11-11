@@ -338,9 +338,9 @@ class PlatformMatcher:
         return anymatch(self.own_platform_names, name, case_sensitive=False)
 
 
-def match_any(code: str, items: list[str]) -> bool:
+def match_any(code: str, items: list[str], ignore_case: bool = False) -> bool:
     expr = Expression.compile(code, allow_wildcards=True)
-    return expr.evaluate(AnyMatcher(set(items), True))
+    return expr.evaluate(AnyMatcher(set(items), case_sensitive=not ignore_case))
 
 
 def safe_substitute(arg: str, **kwds) -> str:

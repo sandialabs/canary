@@ -18,19 +18,25 @@ from _canary.error import TestDiffed
 from _canary.error import TestFailed
 from _canary.error import TestSkipped
 from _canary.generator import AbstractTestGenerator
+from _canary.legacy.session import Session
+from _canary.legacy.testcase import TestCase as LegacyTestCase
+from _canary.legacy.testcase import TestMultiCase as LegacyTestMultiCase
 from _canary.main import console_main
 from _canary.plugins.hookspec import hookimpl
 from _canary.plugins.hookspec import hookspec
 from _canary.plugins.manager import CanaryPluginManager
 from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
-from _canary.session import Session
-from _canary.testcase import DependencyPatterns
 from _canary.testcase import TestCase
-from _canary.testcase import TestMultiCase
 from _canary.testinstance import TestInstance
 from _canary.testinstance import TestMultiInstance
 from _canary.testinstance import load as load_instance
+from _canary.testspec import DependencyPatterns
+from _canary.testspec import DraftSpec
+from _canary.testexec import ExecutionPolicy
+from _canary.testexec import PythonFilePolicy
+from _canary.testspec import ResolvedSpec
+from _canary.testspec import TestSpec
 from _canary.third_party import color
 from _canary.util import _difflib as difflib
 from _canary.util import filesystem

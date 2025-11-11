@@ -11,6 +11,7 @@ import shlex
 import subprocess
 from contextlib import contextmanager
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 from typing import Generator
 
@@ -55,7 +56,7 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
     def always_matches(cls, path: str) -> bool:
         return os.path.basename(path) == "CTestTestfile.cmake"
 
-    def lock(self, on_options: list[str] | None = None) -> list[canary.TestCase]:
+    def lock(self, on_options: list[str] | None = None) -> list[canary.DraftSpec]:
         cmake = find_cmake()
         if cmake is None:
             logger.warning("cmake not found, test cases cannot be generated")
@@ -63,16 +64,16 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
         tests = self.load()
         if not tests:
             return []
-        cases: list[CTestTestCase] = []
+        drafts: list[canary.DraftSpec] = []
         realpath = os.path.realpath
         for family, details in tests.items():
             path = os.path.relpath(details["ctestfile"], self.root)
             if not os.path.exists(os.path.join(self.root, path)):
                 path = os.path.relpath(realpath(details["ctestfile"]), realpath(self.root))
-            case = CTestTestCase(file_root=self.root, file_path=path, family=family, **details)
-            cases.append(case)
-        self.resolve_inter_dependencies(cases)
-        self.resolve_fixtures(cases)
+            draft = create_draft_spec(file_root=self.root, file_path=path, family=family, **details)
+            drafts.append(draft)
+        self.resolve_inter_dependencies(drafts)
+        self.resolve_fixtures(drafts)
         return cases  # type: ignore
 
     def describe(self, on_options: list[str] | None = None) -> str:
@@ -150,140 +151,158 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
                     case.add_dependency(match)
 
 
-class CTestTestCase(canary.TestCase):
-    def __init__(
-        self,
-        *,
-        file_root: str | None = None,
-        file_path: str | None = None,
-        family: str | None = None,
-        command: list[str] | None = None,
-        attached_files: list[str] | None = None,
-        attached_files_on_fail: list[str] | None = None,
-        cost: float | None = None,
-        depends: list[str] | None = None,
-        disabled: bool = False,
-        environment: dict[str, str] | None = None,
-        environment_modification: list[dict[str, str]] | None = None,
-        fail_regular_expression: list[str] | None = None,
-        fixtures_cleanup: list[str] | None = None,
-        fixtures_required: list[str] | None = None,
-        fixtures_setup: list[str] | None = None,
-        generated_resource_spec_file: str | None = None,
-        labels: list[str] | None = None,
-        measurement: dict[str, float | str] | None = None,
-        pass_regular_expression: list[str] | None = None,
-        processor_affinity: bool = False,
-        processors: int | None = None,
-        required_files: list[str] | None = None,
-        resource_groups: list[list[dict[str, Any]]] | None = None,
-        resource_lock: list[str] | None = None,
-        run_serial: bool = False,
-        skip_regular_expression: list[str] | None = None,
-        skip_return_code: int | None = None,
-        timeout: float | None = None,
-        timeout_after_match: dict[str, str | float] | None = None,
-        timeout_signal_grace_period: float | None = None,
-        timeout_signal_name: str | None = None,
-        will_fail: bool | None = None,
-        working_directory: str | None = None,
-        backtrace_triples: list[str] | None = None,
-        ctestfile: str | None = None,
-        **kwds,
-    ) -> None:
-        super().__init__(
-            file_root=file_root,
-            file_path=file_path,
-            family=family,
-            keywords=labels,
-        )
+def create_draft_spec(
+    self,
+    *,
+    file_root: str | None = None,
+    file_path: str | None = None,
+    family: str | None = None,
+    command: list[str] | None = None,
+    attached_files: list[str] | None = None,
+    attached_files_on_fail: list[str] | None = None,
+    cost: float | None = None,
+    depends: list[str] | None = None,
+    disabled: bool = False,
+    environment: dict[str, str] | None = None,
+    environment_modification: list[dict[str, str]] | None = None,
+    fail_regular_expression: list[str] | None = None,
+    fixtures_cleanup: list[str] | None = None,
+    fixtures_required: list[str] | None = None,
+    fixtures_setup: list[str] | None = None,
+    generated_resource_spec_file: str | None = None,
+    labels: list[str] | None = None,
+    measurement: dict[str, float | str] | None = None,
+    pass_regular_expression: list[str] | None = None,
+    processor_affinity: bool = False,
+    processors: int | None = None,
+    required_files: list[str] | None = None,
+    resource_groups: list[list[dict[str, Any]]] | None = None,
+    resource_lock: list[str] | None = None,
+    run_serial: bool = False,
+    skip_regular_expression: list[str] | None = None,
+    skip_return_code: int | None = None,
+    timeout: float | None = None,
+    timeout_after_match: dict[str, str | float] | None = None,
+    timeout_signal_grace_period: float | None = None,
+    timeout_signal_name: str | None = None,
+    will_fail: bool | None = None,
+    working_directory: str | None = None,
+    backtrace_triples: list[str] | None = None,
+    ctestfile: str | None = None,
+    **kwds,
+) -> canary.DraftSpec:
+    kwargs: dict[str, Any] = {}
+    kwargs["file_root"] = Path(file_root)
+    kwargs["file_path"] = Path(file_path)
+    kwargs["family"] = family
+    kwargs["keywords"] = labels
+    kwargs.setdefault("attributes", {})["command"] = command
+    if processors is not None:
+        kwargs.setdefault("parameters", {})["cpus"] = processors
+    elif np := parse_np(command):
+        kwargs.setdefault("parameters", {})["cpus"] = np
+    if depends:
+        deps = kwargs.setdefault("dependencies", [])
+        for d in depends:
+            deps.append(canary.DependencyPatterns(pattern=d, expects="+", result_match="success"))
+    if environment is not None:
+        kwargs.setdefault("environment", {}).update(environment)
+    if disabled:
+        kwargs["mask"] = f"Explicitly disabled in {file_root}/{file_path}"
+    if resource_groups is not None:
+        attributes = kwargs.setdefault("attributes", {})
+        attributes["resource_groups"] = resource_groups
+        gpus: int = 0
+        for group in resource_groups:
+            for item in group:
+                if item["type"] == "gpus":
+                    gpus += item["slots"]  # type: ignore
+        kwargs.setdefault("parameters", {})["gpus"] = gpus
 
-        self._resource_groups: list[list[dict[str, Any]]] | None = None
-        self._required_files: list[str] | None = None
-        self._will_fail: bool = will_fail or False
-        self._ctestfile = ctestfile
-        self.ctest_working_directory = working_directory
-        self.timeout_property = timeout
-        self.cmd: list[str] = command or []
-        if processors is not None:
-            self.parameters["cpus"] = processors
-        elif np := parse_np(self.cmd):
-            self.parameters["cpus"] = np
+    if attached_files is not None:
+        artifacts = kwargs.setdefault("artifacts", [])
+        artifacts.extend([{"file": f, "when": "always"} for f in attached_files])
+    if attached_files_on_fail is not None:
+        artifacts = kwargs.setdefault("artifacts", [])
+        artifacts.extend([{"file": f, "when": "on_failure"} for f in attached_files_on_fail])
+    if run_serial is True:
+        kwargs["exclusive"] = True
+    if required_files:
+        attributes = kwargs.setdefault("attributes", {})
+        attributes["required_files"] = required_files
+    if environment_modification is not None:
+        kwargs["environment_modifications"] = env_mods(environment_modification)
+    if var := canary.config.getoption("canary_cmake_test_timeout"):
+        kwargs["timeout"] = float(var)
+    elif var := os.getenv("CTEST_TEST_TIMEOUT"):
+        kwargs["timeout"] = canary.time.time_in_seconds(var)
+    elif t := kwds.get("timeout_property"):
+        kwargs["timeout"] = float(t)
+    else:
+        kwargs["timeout"] = canary.config.get("config:timeout:ctest", 1500.0)
+    attributes = kwargs.setdefault("attributes", {})
+    attributes["pass_regular_expression"] = pass_regular_expression
+    attributes["fail_regular_expression"] = fail_regular_expression
+    attributes["skip_regular_expression"] = skip_regular_expression
+    attributes["skip_return_code"] = skip_return_code
+    if fixtures_cleanup:
+        fixtures = attributes.setdefault("fixtures", {})
+        fixtures["cleanup"].extend(fixtures_cleanup)
+    if fixtures_required:
+        fixtures = attributes.setdefault("fixtures", {})
+        fixtures["required"].extend(fixtures_required)
+    if fixtures_setup:
+        fixtures = attributes.setdefault("fixtures", {})
+        fixtures["setup"].extend(fixtures_setup)
+    if cost is not None:
+        warn_unsupported_ctest_option("cost")
+    if generated_resource_spec_file is not None:
+        warn_unsupported_ctest_option("generated_resource_spec_file")
+    if measurement is not None:
+        warn_unsupported_ctest_option("measurement")
+    if processor_affinity:
+        warn_unsupported_ctest_option("processor_affinity")
+    if resource_lock is not None:
+        warn_unsupported_ctest_option("resource_lock")
+    if timeout_after_match is not None:
+        warn_unsupported_ctest_option("timeout_after_match")
+    if timeout_signal_grace_period is not None:
+        warn_unsupported_ctest_option("timeout_signal_grace_period")
+    if timeout_signal_name is not None:
+        warn_unsupported_ctest_option("timeout_signal_name")
 
-        if depends:
-            self.unresolved_dependencies.extend(
-                [canary.DependencyPatterns(value=d, result="success", expect="+") for d in depends]
-            )
+    # concatenate stdout and stderr
+    kwargs["stderr"] = "merge"
 
-        if environment is not None:
-            self.add_default_env(**environment)
+    draft = canary.DraftSpec(**kwargs)
+    return draft
 
-        if resource_groups is not None:
-            self.resource_groups = resource_groups
 
-        if disabled:
-            self.mask = f"Explicitly disabled in {self.file}"
+def env_mods(self, mods: list[dict[str, str]]) -> list[dict[str, str]]:
+    mods: list[dict[str, str]] = {}
+    for em in mods:
+        op, name, value = em["op"], em["name"], em["value"]
+        entry: dict[str, str] = dict(name=name)
+        match op:
+            case "set" | "unset":
+                entry.update({"value": value, "action": op})
+            case "string_append":
+                entry.update({"value": f"{os.getenv(name, '')}{value}", "action": "set"})
+            case "string_prepend":
+                entry.update({"value": f"{value}{os.getenv(name, '')}", "action": "set"})
+            case "path_list_append":
+                entry.update({"value": value, "action": "append-path", "sep": ":"})
+            case "path_list_prepend":
+                entry.update({"value": value, "action": "prepend-path", "sep": ":"})
+            case "cmake_list_append":
+                entry.update({"value": value, "action": "append-path", "sep": ";"})
+            case "cmake_list_prepend":
+                entry.update({"value": value, "action": "prepend-path", "sep": ";"})
+        mods.append(entry)
+    return mods
 
-        if attached_files is not None:
-            self.artifacts.extend([{"file": f, "when": "always"} for f in attached_files])
 
-        if attached_files_on_fail is not None:
-            self.artifacts.extend([{"file": f, "when": "failure"} for f in attached_files_on_fail])
-
-        if run_serial is True:
-            self.exclusive = True
-
-        if required_files:
-            self.required_files = required_files
-
-        if environment_modification is not None:
-            self.apply_environment_modifications(environment_modification)
-
-        self.pass_regular_expression = pass_regular_expression
-        self.fail_regular_expression = fail_regular_expression
-        self.skip_regular_expression = skip_regular_expression
-        self.skip_return_code = skip_return_code
-        self.fixtures: dict[str, list[str]] = {"cleanup": [], "required": [], "setup": []}
-        if fixtures_cleanup:
-            self.fixtures["cleanup"].extend(fixtures_cleanup)
-        if fixtures_required:
-            self.fixtures["required"].extend(fixtures_required)
-        if fixtures_setup:
-            self.fixtures["setup"].extend(fixtures_setup)
-
-        if cost is not None:
-            warn_unsupported_ctest_option("cost")
-        if generated_resource_spec_file is not None:
-            warn_unsupported_ctest_option("generated_resource_spec_file")
-        if measurement is not None:
-            warn_unsupported_ctest_option("measurement")
-        if processor_affinity:
-            warn_unsupported_ctest_option("processor_affinity")
-        if resource_lock is not None:
-            warn_unsupported_ctest_option("resource_lock")
-        if timeout_after_match is not None:
-            warn_unsupported_ctest_option("timeout_after_match")
-        if timeout_signal_grace_period is not None:
-            warn_unsupported_ctest_option("timeout_signal_grace_period")
-        if timeout_signal_name is not None:
-            warn_unsupported_ctest_option("timeout_signal_name")
-
-        # concatenate stdout and stderr
-        self.efile = "<none>"
-
-    def set_default_timeout(self) -> None:
-        """Sets the default timeout which is 1500 for CMake generated files."""
-        timeout: float
-        if var := canary.config.getoption("canary_cmake_test_timeout"):
-            timeout = float(var)
-        elif var := os.getenv("CTEST_TEST_TIMEOUT"):
-            timeout = canary.time.time_in_seconds(var)
-        elif self.timeout_property is not None:
-            timeout = self.timeout_property
-        else:
-            timeout = canary.config.get("config:timeout:ctest", 1500.0)
-        self._timeout = float(timeout)
-
+class Foo:
     @property
     def file(self) -> str:
         return self.ctestfile
@@ -333,25 +352,6 @@ class CTestTestCase(canary.TestCase):
 
     def command(self) -> list[str]:
         return list(self.cmd)
-
-    def apply_environment_modifications(self, mods: list[dict[str, str]]) -> None:
-        for em in mods:
-            op, name, value = em["op"], em["name"], em["value"]
-            match op:
-                case "set" | "unset":
-                    self.modify_env(name, value, action=op)
-                case "string_append":
-                    self.modify_env(name, f"{os.getenv(name, '')}{value}", action="set")
-                case "string_prepend":
-                    self.modify_env(name, f"{value}{os.getenv(name, '')}", action="set")
-                case "path_list_append":
-                    self.modify_env(name, value, action="append-path", sep=":")
-                case "path_list_prepend":
-                    self.modify_env(name, value, action="prepend-path", sep=":")
-                case "cmake_list_append":
-                    self.modify_env(name, value, action="append-path", sep=";")
-                case "cmake_list_prepend":
-                    self.modify_env(name, value, action="prepend-path", sep=";")
 
     @contextmanager
     def rc_environ(self, **env: str) -> Generator[None, None, None]:

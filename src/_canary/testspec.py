@@ -3,63 +3,38 @@
 # SPDX-License-Identifier: MIT
 
 import dataclasses
-import datetime
-import enum
 import fnmatch
 import hashlib
-import importlib
 import itertools
 import json
 import math
-import multiprocessing
 import os
 import re
-import runpy
 import shlex
-import signal
 import string
 import sys
 import time
-from contextlib import contextmanager
 from functools import cached_property
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import IO
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Generator
 from typing import Literal
 from typing import Protocol
 
 from . import config
 from . import when
-from .error import TestDiffed
-from .error import TestFailed
-from .error import TestSkipped
-from .error import TestTimedOut
-from .error import diff_exit_status
-from .error import fail_exit_status
-from .error import skip_exit_status
-from .error import timeout_exit_status
 from .util import filesystem
 from .util import logging
+from .util._json import PathEncoder
 from .util.string import stringify
 
 if TYPE_CHECKING:
-    from .testcase import TestCase as LegacyTestCase
+    from .legacy import TestCase
+    from .legacy.testcase import TestCase as LegacyTestCase
 
 logger = logging.get_logger(__name__)
-
-
-# FIXME: Major things to address: case.dep_condition_flags()
-#        needs to be checked when filtering, as is currently done for case
-
-
-class PathEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Path):
-            return str(obj)
-        return json.JSONEncoder.default(self, obj)
 
 
 class Named(Protocol):
@@ -178,6 +153,7 @@ class TestSpec(SpecCommons):
     file_path: Path
     family: str
     dependencies: list["TestSpec"]
+    dep_done_criteria: list[str]
     keywords: list[str]
     parameters: dict[str, Any]
     rparameters: dict[str, int]
@@ -192,7 +168,11 @@ class TestSpec(SpecCommons):
     rcfiles: list[str] | None
     owners: list[str] | None
     mask: str
-    attributes: dict[str, Any]
+    attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
+    environment: dict[str, str] = dataclasses.field(default_factory=dict)
+    environment_modifications: dict[str, str] = dataclasses.field(default_factory=dict)
+    stdout: str = "canary-out.txt"
+    stderr: str | None = "canary-err.txt"
 
     @classmethod
     def from_dict(cls, d: dict, lookup: dict[str, "TestSpec"]) -> "TestSpec":
@@ -217,6 +197,7 @@ class ResolvedSpec(SpecCommons):
     file_path: Path
     family: str
     dependencies: list["ResolvedSpec"]
+    dep_done_criteria: list[str]
     keywords: list[str]
     parameters: dict[str, Any]
     rparameters: dict[str, int]
@@ -232,6 +213,10 @@ class ResolvedSpec(SpecCommons):
     owners: list[str] | None
     mask: str = ""
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
+    environment: dict[str, str] = dataclasses.field(default_factory=dict)
+    environment_modifications: list[dict[str, str]] = dataclasses.field(default_factory=list)
+    stdout: str = "canary-out.txt"
+    stderr: str | None = "canary-err.txt"
 
     @classmethod
     def from_dict(cls, d: dict, lookup: dict[str, "ResolvedSpec"]) -> "ResolvedSpec":
@@ -255,6 +240,7 @@ class ResolvedSpec(SpecCommons):
             file_path=self.file_path,
             family=self.family,
             dependencies=dependencies,
+            dep_done_criteria=self.dep_done_criteria,
             keywords=self.keywords,
             parameters=self.parameters,
             rparameters=self.rparameters,
@@ -270,6 +256,10 @@ class ResolvedSpec(SpecCommons):
             owners=self.owners,
             mask=self.mask,
             attributes=self.attributes,
+            environment=self.environment,
+            environment_modifications=self.environment_modifications,
+            stdout=self.stdout,
+            stderr=self.stderr,
         )
 
 
@@ -301,12 +291,17 @@ class DependencyPatterns:
     resolves_to: list[str] = dataclasses.field(default_factory=list, init=False)
 
     def __post_init__(self):
-        self.patterns = shlex.split(self.pattern)
+        if isinstance(self.pattern, list):
+            self.patterns = self.pattern
+            self.pattern = " ".join(self.pattern)
+        else:
+            self.patterns = shlex.split(self.pattern)
         if self.expects is None:
             self.expects = "+"
 
     def matches(self, spec: "DraftSpec") -> bool:
         names = {
+            spec.id,
             spec.name,
             spec.family,
             spec.fullname,
@@ -362,6 +357,10 @@ class DraftSpec(SpecCommons):
     owners: list[str] | None = None
     mask: str | None = None
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
+    environment: dict[str, str] = dataclasses.field(default_factory=dict)
+    environment_modifications: list[dict[str, str]] = dataclasses.field(default_factory=list)
+    stdout: str = "canary-out.txt"
+    stderr: str | None = "canary-err.txt"
     id: str = ""
 
     # Fields that are generated in __post_init__
@@ -381,6 +380,8 @@ class DraftSpec(SpecCommons):
             self.id = self._generate_default_id()
 
         # We make sure objects have the right type, in case any were passed in as name=None
+        if self.timeout is None:
+            self.timeout = -1.0
         if self.timeout < 0 or self.timeout is None:
             self.timeout = self._default_timeout()
         if self.xstatus is None:
@@ -388,16 +389,19 @@ class DraftSpec(SpecCommons):
         self.keywords = self.keywords or []
         self.file_resources = self.file_resources or []
         self.parameters = self._validate_parameters(self.parameters or {})
-        self.assets = self._generate_assets(self.assets or {})
+        self.assets = self._generate_assets(self.file_resources or {})
         self.baseline_actions = self._generate_baseline_actions(self.baseline or [])
         self.exclusive = bool(self.exclusive)
         self.dependency_patterns = self._generate_dependency_patterns(self.dependencies or [])
 
-    def resolve(self, dependencies: list["ResolvedSpec"]) -> "ResolvedSpec":
+    def resolve(
+        self, dependencies: list["ResolvedSpec"], dep_done_criteria: list[str] | None = None
+    ) -> "ResolvedSpec":
         errors: list[str] = []
         for dp in self.dependency_patterns:
             if e := dp.verify():
                 errors.extend(e)
+        dep_done_criteria = dep_done_criteria or ["success"] * len(dependencies)
         if errors:
             raise UnresolvedDependenciesErrors(errors)
         return ResolvedSpec(
@@ -406,6 +410,7 @@ class DraftSpec(SpecCommons):
             file_path=self.file_path,
             family=self.family,
             dependencies=dependencies,
+            dep_done_criteria=dep_done_criteria,
             keywords=self.keywords,
             parameters=self.parameters,
             rparameters=self.rparameters,
@@ -421,6 +426,10 @@ class DraftSpec(SpecCommons):
             owners=self.owners,
             mask=self.mask,
             attributes=self.attributes,
+            environment=self.environment,
+            environment_modifications=self.environment_modifications,
+            stderr=self.stderr,
+            stdout=self.stdout,
         )
 
     def is_resolved(self) -> bool:
@@ -526,6 +535,9 @@ class DraftSpec(SpecCommons):
         dependency_patterns: list[DependencyPatterns] = []
         for arg in args:
             if isinstance(arg, DependencyPatterns):
+                for i, f in enumerate(arg.patterns):
+                    t = string.Template(f)
+                    arg.patterns[i] = t.safe_substitute(**self.parameters)
                 dependency_patterns.append(arg)
             else:
                 t = string.Template(arg)
@@ -594,13 +606,16 @@ class DraftSpec(SpecCommons):
 def resolve(draft_specs: list[DraftSpec]) -> list[ResolvedSpec]:
     graph: dict[str, list[str]] = {}
     draft_lookup: dict[str, list[str]] = {}
+    dep_done_criteria: dict[str, list[str]] = {}
     map: dict[str, DraftSpec] = {d.id: d for d in draft_specs}
     for draft in draft_specs:
         matches = draft_lookup.setdefault(draft.id, [])
+        done_criteria = dep_done_criteria.setdefault(draft.id, [])
         for dp in draft.dependency_patterns:
             deps = [u for u in draft_specs if u is not draft and dp.matches(u)]
             dp.update(*[u.id for u in deps])
             matches.extend([_.id for _ in deps])
+            done_criteria.extend([dp.result_match] * len(deps))
         graph[draft.id] = matches
 
     errors: dict[str, list[str]] = {}
@@ -614,7 +629,7 @@ def resolve(draft_specs: list[DraftSpec]) -> list[ResolvedSpec]:
             draft = map[id]
             dependencies: list[ResolvedSpec] = [lookup[id_] for id_ in draft_lookup[id]]
             try:
-                spec = draft.resolve(dependencies)
+                spec = draft.resolve(dependencies, dep_done_criteria[draft.id])
             except UnresolvedDependenciesErrors as e:
                 errors.setdefault(draft.fullname, []).extend(e.errors)
             lookup[id] = spec
@@ -756,15 +771,15 @@ def apply_masks(
     propagate_masks(specs)
 
 
-def propagate_masks(specs: list[ResolvedSpec]) -> None:
+def propagate_masks(items: list["TestCase | ResolvedSpec"]) -> None:
     changed: bool = True
     while changed:
         changed = False
-        for spec in specs:
-            if spec.mask:
+        for item in items:
+            if item.mask:
                 continue
-            if any(dep.mask for dep in spec.dependencies):
-                spec.mask = "One or more dependencies masked"
+            if any(dep.mask for dep in item.dependencies):
+                item.mask = "One or more dependencies masked"
                 changed = True
 
 
@@ -811,514 +826,8 @@ def load(files: list[Path], ids: list[str] | None = None) -> list[ResolvedSpec]:
     return [spec for spec in lookup.values() if not spec.mask]
 
 
-class StatusColor(str, enum.Enum):
-    PENDING = "blue"
-    READY = "blue"
-    RUNNING = "cyan"
-    SUCCESS = "green"
-    FAILED = "red"
-    DIFFED = "red"
-    NOT_RUN = "red"
-    SKIPPED = "magenta"
-    CANCELLED = "yellow"
-    BROKEN = "red"
-    XFAIL = "cyan"
-    XDIFF = "cyan"
-    TIMEOUT = "red"
-    RETRY = "yellow"
-
-
-class StatusValue(enum.Enum):
-    PENDING = enum.auto()
-    READY = enum.auto()
-    RUNNING = enum.auto()
-    SUCCESS = enum.auto()
-    FAILED = enum.auto()
-    DIFFED = enum.auto()
-    NOT_RUN = enum.auto()
-    SKIPPED = enum.auto()
-    CANCELLED = enum.auto()
-    RETRY = enum.auto()
-    BROKEN = enum.auto()
-    XFAIL = enum.auto()
-    XDIFF = enum.auto()
-    TIMEOUT = enum.auto()
-
-    @property
-    def color(self) -> StatusColor:
-        return {
-            StatusValue.PENDING: StatusColor.PENDING,
-            StatusValue.READY: StatusColor.READY,
-            StatusValue.RUNNING: StatusColor.RUNNING,
-            StatusValue.SUCCESS: StatusColor.SUCCESS,
-            StatusValue.FAILED: StatusColor.FAILED,
-            StatusValue.DIFFED: StatusColor.DIFFED,
-            StatusValue.NOT_RUN: StatusColor.NOT_RUN,
-            StatusValue.SKIPPED: StatusColor.SKIPPED,
-            StatusValue.CANCELLED: StatusColor.CANCELLED,
-            StatusValue.RETRY: StatusColor.RETRY,
-            StatusValue.BROKEN: StatusColor.BROKEN,
-            StatusValue.XFAIL: StatusColor.XFAIL,
-            StatusValue.XDIFF: StatusColor.XDIFF,
-            StatusValue.TIMEOUT: StatusColor.TIMEOUT,
-        }[self]
-
-    def default_code(self) -> int:
-        return {
-            StatusValue.PENDING: -1,
-            StatusValue.READY: -1,
-            StatusValue.RUNNING: -1,
-            StatusValue.SUCCESS: 0,
-            StatusValue.FAILED: 1,
-            StatusValue.DIFFED: diff_exit_status,
-            StatusValue.NOT_RUN: 1,
-            StatusValue.SKIPPED: skip_exit_status,
-            StatusValue.CANCELLED: signal.SIGINT.value,
-            StatusValue.RETRY: -1,
-            StatusValue.BROKEN: 1,
-            StatusValue.XFAIL: 0,
-            StatusValue.XDIFF: 0,
-            StatusValue.TIMEOUT: 66,
-        }[self]
-
-    @property
-    def glyph(self) -> str:
-        return {
-            StatusValue.PENDING: "—",
-            StatusValue.READY: "—",
-            StatusValue.RUNNING: "…",
-            StatusValue.SUCCESS: "✔",
-            StatusValue.FAILED: "✗",
-            StatusValue.DIFFED: "✗",
-            StatusValue.NOT_RUN: "✗",
-            StatusValue.SKIPPED: "✗",
-            StatusValue.CANCELLED: "🚫",
-            StatusValue.RETRY: "⟳",
-            StatusValue.BROKEN: "✗",
-            StatusValue.XFAIL: "✔",
-            StatusValue.XDIFF: "✔",
-            StatusValue.TIMEOUT: "✗",
-        }[self]
-
-
-
-@dataclasses.dataclass
-class Status:
-    value: StatusValue = dataclasses.field(default=StatusValue.PENDING)
-    details: str | None = None
-    code: int = -1
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, str):
-            return other.lower() == self.value.name.lower()
-        else:
-            assert isinstance(other, Status)
-            return self.iid == other.iid
-
-    @property
-    def name(self) -> str:
-        return self.value.name
-
-    @property
-    def color(self) -> str:
-        return self.value.color
-
-    @property
-    def glyph(self) -> str:
-        return self.value.glyph
-
-    @property
-    def iid(self) -> str:
-        if self.details:
-            return f"{self.value.name}:{self.details}"
-        return self.value
-
-    def satisfies(self, arg: str | tuple[str, ...]) -> bool:
-        if isinstance(arg, str):
-            arg = (arg,)
-        return self.value.name.lower() in arg
-
-    def set(self, arg: str | StatusValue, details: str | None = None, code: str | None = None) -> None:
-        if isinstance(arg, str):
-            arg = StatusValue[arg.upper()]
-        if not isinstance(arg, StatusValue):
-            raise ValueError(f"{arg} is not a valid status")
-        if arg in (StatusValue.SKIPPED, StatusValue.FAILED, StatusValue.DIFFED) and details is None:
-            details = "unknown"
-        if arg in (StatusValue.PENDING, StatusValue.READY, StatusValue.RETRY):
-            if details is not None:
-                raise ValueError(f"details not compatible with Status({arg!r})")
-        self.value = arg
-        self.details = details
-        if code is None:
-            code = arg.default_code()
-        self.code = code
-
-    def set_from_code(self, code: int, details: str | None = None) -> None:
-        if code == 0:
-            self.set(StatusValue.SUCCESS)
-        elif code == diff_exit_status:
-            self.set(
-                StatusValue.DIFFED,
-                details=details or "the diff exit status was returned",
-                code=code,
-            )
-        elif code == skip_exit_status:
-            self.set(
-                StatusValue.SKIPPED,
-                details=details or "the skip exit status was returned",
-                code=code,
-            )
-        elif code == fail_exit_status:
-            self.set(
-                StatusValue.FAILED,
-                details=details or "the fail exit status was returned",
-                code=code,
-            )
-        elif code == timeout_exit_status:
-            self.set(StatusValue.TIMEOUT, details=details, code=code)
-        elif abs(code) == signal.SIGINT.value:
-            self.set(StatusValue.CANCELLED, details="Keyboard interrupt", code=code)
-        else:
-            self.set(
-                StatusValue.BROKEN,
-                details=details or "a non-zero exit status was returned",
-                code=code,
-            )
-
-    def asdict(self) -> dict[str, Any]:
-        return {"value": self.value.name, "details": self.details, "code": self.code}
-
-
-class ExecutionPolicy(Protocol):
-    def execute(self, case: "TestCase", queue: multiprocessing.Queue) -> None: ...
-    def command(self, spec: TestSpec) -> list[str]: ...
-
-
-@dataclasses.dataclass
-class ExecutionSpace:
-    root: Path
-    stdout: str = "canary-out.txt"
-    stderr: str = "canary-err.txt"
-
-    def create(self):
-        self.root.mkdir(parents=True, exist_ok=True)
-        (self.root / self.stdout).unlink(missing_ok=True)
-        (self.root / self.stderr).unlink(missing_ok=True)
-        (self.root / self.stderr).touch()
-        with open(self.root / self.stdout, "w") as file:
-            stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
-            file.write(f"[{stamp}] Creating workspace root at {self.root}\n")
-
-    @contextmanager
-    def enter(self) -> Generator[None, None, None]:
-        current_cwd = Path.cwd()
-        try:
-            os.chdir(self.root)
-            yield
-        finally:
-            os.chdir(current_cwd)
-
-    def restore(self) -> None:
-        (self.root / self.stdout).unlink(missing_ok=True)
-        (self.root / self.stderr).unlink(missing_ok=True)
-        (self.root / self.stderr).touch()
-        with open(self.root / self.stdout, "w") as file:
-            stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
-            file.write(f"[{stamp}] Restoring workspace root\n")
-
-    def copy(self, src: Path, dst: Path | str | None) -> None:
-        dst: Path = Path(dst or src.name)
-        (self.root / dst.name).unlink(missing_ok=True)
-        with open(self.root / self.stdout, "a") as file:
-            stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
-            file.write(f"[{stamp}] Copying {src} to {dst.name}\n")
-            (self.root / dst.name).hardlink_to(src)
-
-    def link(self, src: Path, dst: Path | str | None = None) -> None:
-        dst: Path = Path(dst or src.name)
-        (self.root / dst.name).unlink(missing_ok=True)
-        with open(self.root / self.stdout, "a") as file:
-            stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
-            file.write(f"[{stamp}] Linking {src} to {dst.name}\n")
-            (self.root / dst.name).symlink_to(src)
-
-
-@dataclasses.dataclass
-class Timekeeper:
-    started_on: str = dataclasses.field(default="NA", init=False)
-    finished_on: str = dataclasses.field(default="NA", init=False)
-    duration: float = dataclasses.field(default=-1.0, init=False)
-    mark: float = dataclasses.field(default=-1.0, init=False, repr=False)
-
-    def start(self) -> None:
-        self.mark = time.monotonic()
-        self.started_on = datetime.datetime.now().isoformat(timespec="microseconds")
-
-    def stop(self) -> None:
-        self.duration = time.monotonic() - self.mark
-        self.finished_on = datetime.datetime.now().isoformat(timespec="microseconds")
-
-    @contextmanager
-    def timeit(self) -> Generator["Timekeeper", None, None]:
-        try:
-            self.start()
-            yield self
-        finally:
-            self.stop()
-
-    def asdict(self) -> dict[str, Any]:
-        return dataclasses.asdict(self)
-
-
-@dataclasses.dataclass
-class Measurements:
-    data: dict[str, Any] = dataclasses.field(default_factory=dict)
-
-    def add_measurement(self, name: str, value: Any):
-        self.data[name] = value
-
-    def asdict(self) -> dict[str, Any]:
-        return dataclasses.asdict(self)
-
-
-class TestCase:
-    def __init__(self, spec: TestSpec, workspace: ExecutionSpace, dependencies: list["TestCase"]) -> None:
-        self.spec = spec
-        self.workspace = workspace
-        hk = config.pluginmanager.hook
-        self.execution_policy: ExecutionPolicy = hk.canary_testcase_execution_policy(spec=self.spec)
-        self._status = Status()
-        self.measurements = Measurements()
-        self.timekeeper = Timekeeper()
-        self.dependencies = dependencies
-
-        # Resources assigned to this test during execution
-        self._resources: list[dict[str, list[dict]]] = []
-
-        # Transfer some attributes from spec to me
-        self.id = self.spec.id
-        self.exclusive = self.spec.exclusive
-        self.mask = self.spec.mask
-        self.name = self.spec.name
-        self.timeout = self.spec.timeout
-        self.fullname = self.spec.fullname
-        self.display_name = self.spec.display_name
-        self.attributes = self.instance_attributes = self.spec.attributes
-        self.file_path = self.spec.file_path
-        self.file_root = self.spec.file_root
-        self.file = self.spec.file
-
-    @property
-    def cpus(self) -> int:
-        return self.spec.rparameters["cpus"]
-
-    @property
-    def runtime(self) -> float:
-        return self.spec.timeout  # FIXME
-
-    @property
-    def resources(self) -> list[dict[str, list[dict]]]:
-        """resources is of the form
-
-        resources[i] = {str: [{"id": str, "slots": int}]}
-
-        If the test required 2 cpus and 2 gpus, resources would look like
-
-        resources = [
-          {"cpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}]},
-          {"gpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}]},
-        ]
-
-        """
-        return self._resources
-
-    @resources.setter
-    def resources(self, arg: list[dict[str, list[dict]]]) -> None:
-        self.assign_resources(arg)
-
-    def assign_resources(self, arg: list[dict[str, list[dict]]]) -> None:
-        self._resources.clear()
-        self._resources.extend(arg)
-
-    def free_resources(self) -> list[dict[str, list[dict]]]:
-        tmp = self._resources
-        self._resources = []
-        return tmp
-
-    def required_resources(self) -> list[list[dict[str, Any]]]:
-        return self.spec.required_resources()
-
-    @property
-    def status(self) -> Status:
-        if self._status.value == StatusValue.PENDING and not self.dependencies:
-            self._status.value = StatusValue.READY
-        return self._status
-
-    @property
-    def lockfile(self) -> Path:
-        return self.workspace.root / "testcase.lock"
-
-    def setup(self) -> None:
-        with self.workspace.enter():
-            copy_all_resources: bool = config.getoption("copy_all_resources", False)
-            prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
-            self.workspace.restore()
-            with self.workspace.enter():
-                with open(self.workspace.stdout, "a") as file:
-                    file.write(f"[{prefix}] Preparing test: {self.name}\n")
-                    file.write(f"[{prefix}] Directory: {self.workspace.root}\n")
-                    file.write(f"[{prefix}] Linking and copying working files...\n")
-                if copy_all_resources:
-                    self.workspace.copy(self.spec.file)
-                else:
-                    self.workspace.link(self.spec.file)
-                for asset in self.spec.assets:
-                    if asset.action not in ("copy", "link"):
-                        continue
-                    if not asset.src.exists():
-                        raise MissingSourceError(asset.src)
-                    if asset.action == "copy" or copy_all_resources:
-                        self.workspace.copy(asset.src, asset.dst)
-                    else:
-                        self.workspace.link(asset.src, asset.dst)
-
-    def run(self, queue: multiprocessing.Queue) -> None:
-        code: int
-        message: str | None = None
-        try:
-            with self.workspace.enter(), self.timekeeper.timeit():
-                self.status.set(StatusValue.RUNNING)
-                self.execution_policy.execute(case=self, queue=queue)
-        except KeyboardInterrupt:
-            code = signal.SIGINT.value
-        except SystemExit as e:
-            code = e.code if isinstance(e.code, int) else 1
-        except TestDiffed as e:
-            code = diff_exit_status
-            message = None if not e.args else e.args[0]
-        except TestFailed as e:
-            code = 1
-            message = None if not e.args else e.args[0]
-        except TestSkipped as e:
-            code = skip_exit_status
-            message = None if not e.args else e.args[0]
-        except TestTimedOut:
-            code = timeout_exit_status
-        except BaseException as e:
-            if config.get("config:debug"):
-                logger.exception("Exception during test case execution")
-            code = 66
-            message = f"Unknown failure: {e}"
-        else:
-            code = 0
-        finally:
-            logger.debug(f"Finished executing {self.spec.fullname}: code={code}, message={message}")
-            self.update_status(code=code, message=message)
-            queue.put({"status": self.status, "timekeeper": self.timekeeper})
-            self.save()
-        return
-
-    def update_status(self, *, code: int, message: str | None) -> None:
-        xcode = self.spec.xstatus
-        status = self.status
-        if xcode == diff_exit_status:
-            if code != diff_exit_status:
-                status.set(
-                    StatusValue.FAILED,
-                    f"{self.spec.display_name}: expected test to diff",
-                    code=code,
-                )
-            else:
-                status.set(StatusValue.XDIFF)
-        elif xcode != 0:
-            # Expected to fail
-            if xcode > 0 and code != code:
-                status.set(
-                    StatusValue.FAILED,
-                    details=f"{self.spec.display_name}: expected to exit with code={code}",
-                    code=code,
-                )
-            elif code == 0:
-                status.set(
-                    StatusValue.FAILED,
-                    f"{self.spec.display_name}: expected to exit with code != 0",
-                    code=code,
-                )
-            else:
-                status.set(StatusValue.XDIFF, code=code)
-        else:
-            status.set_from_code(code, message)
-
-    def update(self, **attrs: Any) -> None:
-        if status := attrs.get("status"):
-            self.status.set(status.value, status.details, status.code)
-        if timekeeper := attrs.get("timekeeper"):
-            self.timekeeper.started_on = timekeeper.started_on
-            self.timekeeper.finished_on = timekeeper.finished_on
-            self.timekeeper.duration = timekeeper.duration
-
-    def teardown(self) -> None:
-        pass
-
-    def finish(self) -> None:
-        pass
-
-    def save(self) -> None:
-        record = {
-            "status": self.status.asdict(),
-            "spec": self.spec.asdict(),
-            "timekeeper": self.timekeeper.asdict(),
-            "measurements": self.measurements.asdict(),
-        }
-        self.lockfile.write_text(json.dumps(record, indent=2, cls=PathEncoder))
-
-
-class PythonFilePolicy(ExecutionPolicy):
-    @contextmanager
-    def context(self, case: TestCase) -> Generator[None, None, None]:
-        """Temporarily patch:
-        • canary.get_instance() to return `case`
-        • canary.spec (optional)
-        • sys.argv (optional)
-        """
-        canary = importlib.import_module("canary")
-        old_argv = sys.argv.copy()
-
-        def get_instance():
-            return case.spec
-
-        canary.get_instance = get_instance
-        canary.__instance__ = case.spec
-        sys.argv = [sys.executable, case.spec.file.name]
-        if a := config.getoption("script_args"):
-            sys.argv.extend(a)
-
-        try:
-            yield
-        finally:
-            delattr(canary, "get_instance")
-            delattr(canary, "__instance__")
-            sys.argv = old_argv
-
-    def execute(self, case: "TestCase", queue: multiprocessing.Queue) -> None:
-        logger.debug(f"Starting {case.fullname} on pid {os.getpid()}")
-        with self.context(case):
-            runpy.run_path(case.spec.file, run_name="__main__")
-        logger.debug(f"Finished {case.fullname}")
-
-
-class ShellPolicy(ExecutionPolicy):
-    def command(self, spec: TestSpec) -> list[str]:
-        raise NotImplementedError
-
-
 def contains_any(elements: tuple[str, ...], test_elements: list[str]) -> bool:
     return any(element in test_elements for element in elements)
-
-
-class MissingSourceError(Exception):
-    pass
 
 
 class DependencyResolutionFailed(Exception):
@@ -1340,7 +849,3 @@ class UnresolvedDependenciesErrors(Exception):
     def __init__(self, errors: list[str]) -> None:
         self.errors = errors
         super().__init__("\n".join(errors))
-
-
-def runit(*args):
-    print("RUNNING", args)

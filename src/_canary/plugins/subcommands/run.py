@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 
 from ... import config
 from ...util import logging
-from ...workspace import SpecSelection
 from ...workspace import NotAWorkspaceError
+from ...workspace import SpecSelection
 from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand

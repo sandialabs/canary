@@ -14,7 +14,9 @@ def test():
     assert vvt.x == x
     if os.getenv("VVTEST_PATH_NAMING_CONVENTION", "yes").lower() == "yes":
         basename = os.path.basename(vvt.exec_path)
-        assert os.path.basename(vvt.exec_path).endswith(f"np={vvt.np}.x={x}")
+        expected = f"np={vvt.np}.x={x}"
+        if not os.path.basename(vvt.exec_path).endswith(expected):
+            raise ValueError(f"Excpected {basename} to end with {expected}")
 
 
 if __name__ == "__main__":

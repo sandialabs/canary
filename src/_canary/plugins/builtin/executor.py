@@ -1,4 +1,5 @@
 import io
+import multiprocessing
 import os
 import threading
 from datetime import datetime
@@ -8,7 +9,6 @@ from typing import Sequence
 
 from ... import config
 from ...process_pool import ProcessPool
-import multiprocessing
 from ...queue import ResourceQueue
 from ...resource_pool import make_resource_pool
 from ...util import logging
@@ -74,14 +74,16 @@ class TestCaseExecutor:
         rpool = self.get_rpool()
         queue = ResourceQueue.factory(global_lock, cases, resource_pool=rpool)
         runner = Runner()
-        pool = ProcessPool(queue.workers, queue, runner)
+        pool = ProcessPool(queue, runner)
         pool.run()
 
 
 class Runner:
     """Class for running ``AbstractTestCase``."""
 
-    def __call__(self, case: "TestCase", queue: multiprocessing.Queue, *args: str, **kwargs: Any) -> None:
+    def __call__(
+        self, case: "TestCase", queue: multiprocessing.Queue, *args: str, **kwargs: Any
+    ) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
         config.ensure_loaded()
         try:
@@ -90,7 +92,9 @@ class Runner:
             if summary := job_start_summary(case, qrank=qrank, qsize=qsize):
                 logger.log(logging.EMIT, summary, extra={"prefix": ""})
             config.pluginmanager.hook.canary_testcase_setup(case=case)
-            config.pluginmanager.hook.canary_testcase_run(case=case, queue=queue, qsize=qsize, qrank=qrank)
+            config.pluginmanager.hook.canary_testcase_run(
+                case=case, queue=queue, qsize=qsize, qrank=qrank
+            )
         finally:
             config.pluginmanager.hook.canary_testcase_finish(case=case)
             if summary := job_finish_summary(case, qrank=qrank, qsize=qsize):
@@ -118,8 +122,7 @@ def job_finish_summary(case: "TestCase", *, qrank: int | None, qsize: int | None
     if qrank is not None and qsize is not None:
         fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
     fmt.write(
-        "Finished test case @*b{%s}: %s @*%s{%s}" % (
-            case.id[:7], case.display_name, case.status.color[0], case.status.name
-        )
+        "Finished test case @*b{%s}: %s @*%s{%s}"
+        % (case.id[:7], case.display_name, case.status.color[0], case.status.name)
     )
     return fmt.getvalue().strip()

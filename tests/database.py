@@ -8,7 +8,7 @@ import random
 import string
 
 import _canary.util.filesystem as fs
-from _canary.session import Database
+from _canary.legacy.session import Database
 
 
 def random_chars():

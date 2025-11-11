@@ -14,7 +14,7 @@ from typing import IO
 from typing import Any
 
 import canary
-from _canary.testcase import factory as testcase_factory
+#from _canary.testcase import factory as testcase_factory
 from _canary.util.compression import compress_str
 
 from . import interface
