@@ -18,7 +18,7 @@ from ..types import Result
 
 if TYPE_CHECKING:
     from ...resource_pool import ResourcePool
-    from ...testspec import TestCase
+    from ...testcase import TestCase
 
 global_lock = threading.Lock()
 logger = logging.get_logger(__name__)

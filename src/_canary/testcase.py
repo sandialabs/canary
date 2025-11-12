@@ -185,6 +185,10 @@ class TestCase:
             self.workspace.unlink(self.stderr, missing_ok=True)
             self.workspace.touch(self.stderr)
 
+    def restore_workspace(self) -> None:
+        self.workspace.remove(missing_ok=True)
+        self.create_workspace()
+
     def setup(self) -> None:
         self.workspace.remove()
         self.create_workspace()

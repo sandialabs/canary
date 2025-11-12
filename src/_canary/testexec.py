@@ -54,9 +54,11 @@ class ExecutionSpace:
     def create(self, exist_ok: bool = False) -> None:
         self.dir.mkdir(parents=True, exist_ok=exist_ok)
 
-    def remove(self) -> None:
+    def remove(self, missing_ok: bool = False) -> None:
         if self.exists():
             shutil.rmtree(self.dir)
+        elif not missing_ok:
+            raise FileNotFoundError(self.dir)
 
     @contextmanager
     def enter(self) -> Generator[None, None, None]:

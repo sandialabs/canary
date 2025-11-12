@@ -50,60 +50,61 @@ class Find(CanarySubcommand):
     def execute(self, args: argparse.Namespace) -> int:
         from ... import config
         from ... import finder
+        raise NotImplementedError
 
-        work_tree = find_work_tree(os.getcwd())
-        if work_tree is not None:
-            raise ValueError("find must be executed outside of a canary work tree")
-        quiet = bool(args.print_files)
-        if quiet:
-            logging.set_level(logging.ERROR)
-        else:
-            logger.log(logging.EMIT, banner(), extra={"prefix": ""})
-        f = finder.Finder()
-        for root, paths in args.paths.items():
-            f.add(root, *paths, tolerant=True)
-        f.prepare()
-        s = ", ".join(os.path.relpath(p, os.getcwd()) for p in f.roots)
-        logger.info("@*{Searching} for tests in %s" % s)
-        generators = f.discover()
-        logger.debug(f"Discovered {len(generators)} test files")
+        #work_tree = find_work_tree(os.getcwd())
+        #if work_tree is not None:
+            #raise ValueError("find must be executed outside of a canary work tree")
+        #quiet = bool(args.print_files)
+        #if quiet:
+            #logging.set_level(logging.ERROR)
+        #else:
+            #logger.log(logging.EMIT, banner(), extra={"prefix": ""})
+        #f = finder.Finder()
+        #for root, paths in args.paths.items():
+            #f.add(root, *paths, tolerant=True)
+        #f.prepare()
+        #s = ", ".join(os.path.relpath(p, os.getcwd()) for p in f.roots)
+        #logger.info("@*{Searching} for tests in %s" % s)
+        #generators = f.discover()
+        #logger.debug(f"Discovered {len(generators)} test files")
 
-        cases = finder.generate_test_cases(generators, on_options=args.on_options)
+        #cases = finder.generate_test_cases(generators, on_options=args.on_options)
 
-        config.pluginmanager.hook.canary_testsuite_mask(
-            cases=cases,
-            keyword_exprs=args.keyword_exprs,
-            parameter_expr=args.parameter_expr,
-            owners=None if not args.owners else set(args.owners),
-            regex=args.regex_filter,
-            case_specs=None,
-            stage=None,
-            start=None,
-            ignore_dependencies=False,
-        )
-        for case in static_order(cases):
-            config.pluginmanager.hook.canary_testcase_modify(case=case)
-        cases_to_run = [case for case in cases if not case.wont_run()]
-        if not cases_to_run:
-            raise StopExecution("No tests to run", 7)
-        if not quiet:
-            config.pluginmanager.hook.canary_collectreport(cases=cases)
-        cases_to_run.sort(key=lambda x: x.name)
-        if args.print_paths:
-            finder.pprint_paths(cases_to_run)
-        elif args.print_files:
-            finder.pprint_files(cases_to_run)
-        elif args.print_graph:
-            finder.pprint_graph(cases_to_run)
-        elif args.print_lock:
-            file = os.path.join(config.invocation_dir, "testcases.lock")
-            states = [case.asdict() for case in cases_to_run]
-            with open(file, "w") as fh:
-                json.dump({"testcases": states}, fh, indent=2)
-            logger.info("test cases written to testcase.lock")
-        else:
-            finder.pprint(cases_to_run)
-        return 0
+        #config.pluginmanager.hook.canary_testsuite_mask(
+            #cases=cases,
+            #keyword_exprs=args.keyword_exprs,
+            #parameter_expr=args.parameter_expr,
+            #owners=None if not args.owners else set(args.owners),
+            #regex=args.regex_filter,
+            #case_specs=None,
+            #stage=None,
+            #start=None,
+            #ignore_dependencies=False,
+        #)
+        #for case in static_order(cases):
+            #config.pluginmanager.hook.canary_testcase_modify(case=case)
+        #cases_to_run = [case for case in cases if not case.wont_run()]
+        #if not cases_to_run:
+            #raise StopExecution("No tests to run", 7)
+        #if not quiet:
+            #config.pluginmanager.hook.canary_collectreport(cases=cases)
+        #cases_to_run.sort(key=lambda x: x.name)
+        #if args.print_paths:
+            #finder.pprint_paths(cases_to_run)
+        #elif args.print_files:
+            #finder.pprint_files(cases_to_run)
+        #elif args.print_graph:
+            #finder.pprint_graph(cases_to_run)
+        #elif args.print_lock:
+            #file = os.path.join(config.invocation_dir, "testcases.lock")
+            #states = [case.asdict() for case in cases_to_run]
+            #with open(file, "w") as fh:
+                #json.dump({"testcases": states}, fh, indent=2)
+            #logger.info("test cases written to testcase.lock")
+        #else:
+            #finder.pprint(cases_to_run)
+        #return 0
 
 
 def add_group_argument(group, name, help_string, add_short_arg=True):

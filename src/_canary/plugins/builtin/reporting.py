@@ -24,7 +24,7 @@ from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...testspec import TestCase
+    from ...testcase import TestCase
     from ...workspace import Session
 
 
@@ -285,7 +285,7 @@ def _show_capture(case: "TestCase", what="oe") -> None:
     fp = io.StringIO()
     fp.write(ccenter(" @*%s{%s} " % (color, case.display_name), width, "-") + "\n")
     fp.write(f"{bold('Status')}: {case.status.cname}\n")
-    fp.write(f"{bold('Execution directory')}: {case.execution_directory}\n")
+    fp.write(f"{bold('Execution directory')}: {case.workspace.dir}\n")
     fp.write(f"{bold('Command')}: {' '.join(case.command())}\n")
     if what in ("o", "oe") and case.stdout:
         file = case.workspace.joinpath(case.stdout)

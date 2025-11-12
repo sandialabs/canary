@@ -91,10 +91,10 @@ def repeat_until_fail(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int)
 def rerun_case(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int, attempt: int) -> None:
     dont_restage = config.getoption("dont_restage")
     try:
-        case.workspace.restore()
+        case.restore_workspace()
         if summary := job_start_summary(case, qsize=qsize, qrank=qrank):
             logger.log(logging.EMIT, summary, extra={"prefix": ""})
-        config.pluginmanager.hook.canary_testcase_setup(case=case)
+        case.setup()
         case.run(queue=queue)
     finally:
         if summary := job_finish_summary(case, qsize=qsize, qrank=qrank, attempt=attempt):
