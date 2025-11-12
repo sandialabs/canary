@@ -24,6 +24,7 @@ class Timekeeper:
     def stop(self) -> None:
         self.duration = time.monotonic() - self.mark
         self.finished_on = datetime.datetime.now().isoformat(timespec="microseconds")
+        self.mark = -1.0
 
     @contextmanager
     def timeit(self) -> Generator["Timekeeper", None, None]:

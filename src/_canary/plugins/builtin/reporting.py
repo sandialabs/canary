@@ -201,7 +201,7 @@ def print_durations(cases: list["TestCase"], N: int) -> None:
     kwds = {"t": glyphs.turtle, "N": N}
     string.write("%(t)s%(t)s Slowest %(N)d durations %(t)s%(t)s\n" % kwds)
     for case in sorted_cases:
-        string.write("  %6.2f   %s\n" % (case.timekeeper.duration, case.format("%id   %X")))
+        string.write("  %6.2f   %s   %s\n" % (case.timekeeper.duration, case.id[:7], case.fullname))
     string.write("\n")
     logger.log(logging.EMIT, string.getvalue(), extra={"prefix": ""})
 
@@ -215,13 +215,12 @@ def sort_cases_by(cases: list["TestCase"], field="duration") -> list["TestCase"]
 def determine_cases_to_show(
     session: "Session", report_chars: str, pathspec: str | None = None
 ) -> list["TestCase"]:
-    from ...testcase import TestCase
 
     cases: list["TestCase"] = session.cases
     cases_to_show: list["TestCase"]
     rc = set(report_chars)
     if pathspec is not None:
-        if TestCase.spec_like(pathspec):
+        if not os.path.exists(pathspec) and pathspec.startswith("/"):
             cases = [c for c in cases if c.matches(pathspec)]
             rc.add("A")
         else:
@@ -273,7 +272,7 @@ def show_capture(session: "Session", exitstatus: int) -> None:
     if what in ("no", None):
         return
     cases = session.cases
-    failed = [case for case in cases if not case.status.satisfies(("success", "xdiff", "xfail"))]
+    failed = [case for case in cases if case.status.name not in ("SUCCESS", "XDIFF", "XFAIL")]
     if failed:
         _, width = terminal_size()
         print(ccenter(" @*R{%d Test failures} " % len(failed), width, "="), end="\n\n")

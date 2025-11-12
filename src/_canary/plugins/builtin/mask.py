@@ -111,7 +111,7 @@ def canary_testsuite_mask(
             if parameter_expr:
                 match = when.when(
                     {"parameters": parameter_expr},
-                    parameters=case.spec.parameters | case.spec.implicit_parameters, # ty: ignore[unsupported-operator]
+                    parameters=case.spec.parameters | case.spec.implicit_parameters,  # ty: ignore[unsupported-operator]
                 )
                 if not match:
                     case.mask = "parameter expression @*{%s} did not match" % parameter_expr

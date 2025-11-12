@@ -37,7 +37,7 @@ class CDashXMLReporter:
     @classmethod
     def from_workspace(cls, dest: str | None = None) -> "CDashXMLReporter":
         workspace = canary.Workspace.load()
-        cases = workspace.load_testcases(latest=True)
+        cases = workspace.load_testcases()
         if dest is None:
             dest = str((workspace.view or workspace.sessions_dir) / "CDASH")
         self = cls(dest=dest)

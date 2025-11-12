@@ -26,14 +26,14 @@ from _canary.plugins.hookspec import hookspec
 from _canary.plugins.manager import CanaryPluginManager
 from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
-from _canary.testcase import load as load_testcase
 from _canary.testcase import TestCase
+from _canary.testcase import load as load_testcase
 from _canary.testexec import ExecutionPolicy
 from _canary.testexec import PythonFilePolicy
 from _canary.testexec import SubprocessPolicy
-from _canary.testinst import load as load_instance
 from _canary.testinst import TestInstance
 from _canary.testinst import TestMultiInstance
+from _canary.testinst import load as load_instance
 from _canary.testspec import DependencyPatterns
 from _canary.testspec import DraftSpec
 from _canary.testspec import ResolvedSpec
@@ -50,8 +50,8 @@ from _canary.util import time
 from _canary.util.executable import Executable
 from _canary.version import version  # noqa: I001
 from _canary.version import version_info  # noqa: I001
-from _canary.workspace import Workspace
 from _canary.workspace import Session
+from _canary.workspace import Workspace
 
 from . import directives
 from . import patterns

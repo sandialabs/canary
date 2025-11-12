@@ -137,7 +137,7 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
     analyze_check = "'--execute-analysis-sections' in sys.argv[1:]"
     attrs["opt_analyze"] = attrs["is_analysis_only"] = analyze_check
 
-    attrs["is_analyze"] = "multicase" in  case.spec.attributes
+    attrs["is_analyze"] = "multicase" in case.spec.attributes
     attrs["is_baseline"] = canary.config.getoption("command") == "rebaseline"
     attrs["PARAM_DICT"] = case.spec.parameters or {}
     for key, val in case.spec.parameters.items():
@@ -145,14 +145,14 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
         if attrs["is_analyze"]:
             # FIXME
             pass
-#            for paramset in case.paramsets:
-#                key = "_".join(paramset.keys)
-#                table = attrs.setdefault(f"PARAM_{key}", [])
-#                for row in paramset.values:
-#                    if len(paramset.keys) == 1:
-#                        table.append(row[0])
-#                    else:
-#                        table.append(list(row))
+    #            for paramset in case.paramsets:
+    #                key = "_".join(paramset.keys)
+    #                table = attrs.setdefault(f"PARAM_{key}", [])
+    #                for row in paramset.values:
+    #                    if len(paramset.keys) == 1:
+    #                        table.append(row[0])
+    #                    else:
+    #                        table.append(list(row))
 
     # DEPDIRS and DEPDIRMAP should always exist.
     attrs["DEPDIRS"] = [str(dep.workspace.dir) for dep in case.spec.dependencies]

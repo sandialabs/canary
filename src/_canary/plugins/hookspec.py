@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
     from ..testcase import TestCase
-    from ..testspec import ExecutionPolicy
+    from ..testexec import ExecutionPolicy
     from ..testspec import TestSpec
     from ..workspace import Session
     from .manager import CanaryPluginManager

@@ -151,17 +151,17 @@ def pretty_test_name(name: str) -> str:
 def pretty_status_name(name: str) -> str:
     color: str = ""
     fmt: str = "%(name)s"
-    if name in ("created", "retry", "pending", "ready", "skipped"):
-        color = status.Status.colors[name]
+    if name in ("RETRY", "PENDING", "READY", "SKIPPED"):
+        color = status.Status.defaults[name][1][0]
         fmt = "@*c{not run} (@*%(color)s{%(name)s})"
-    elif name in ("not_run",):
-        color = status.Status.colors[name]
+    elif name in ("NOT_RUN",):
+        color = status.Status.defaults[name][1][0]
         fmt = "@*%(color)s{not run} (failed dependency)"
-    elif name in ("diffed", "failed", "timeout", "invalid", "unknown"):
-        color = status.Status.colors[name]
+    elif name in ("DIFFED", "FAILED", "TIMEOUT", "INVALID", "UNKNOWN"):
+        color = status.Status.defaults[name][1][0]
         fmt = "@*r{failed} (@*%(color)s{%(name)s})"
     else:
-        color = status.Status.colors[name]
+        color = status.Status.defaults[name][1][0]
         fmt = "@*%(color)s{%(name)s}"
     return colorize(fmt % {"color": color, "name": name})
 
@@ -252,20 +252,20 @@ def filter_by_status(info: dict[str, list], chars: str | None) -> dict[str, list
         if info["session"][i] is None:
             continue
         elif "a" in chars:
-            mask[i] = stat != "success"
-        elif stat == "skipped":
+            mask[i] = stat != "SUCCESS"
+        elif stat == "SKIPPED":
             mask[i] = "s" in chars
-        elif stat in ("success", "xdiff", "xfail"):
+        elif stat in ("SUCCESS", "XDIFF", "XFAIL"):
             mask[i] = "p" in chars
-        elif stat == "failed":
+        elif stat == "FAILED":
             mask[i] = "f" in chars
-        elif stat == "diffed":
+        elif stat == "DIFFED":
             mask[i] = "d" in chars
-        elif stat == "timeout":
+        elif stat == "TIMEOUT":
             mask[i] = "t" in chars
-        elif stat == "invalid":
+        elif stat == "INVALId":
             mask[i] = "n" in chars
-        elif stat in ("ready", "created", "pending", "cancelled", "not_run"):
+        elif stat in ("READY", "CREATED", "PENDING", "CANCELLED", "NOT_RUN"):
             mask[i] = "n" in chars
         else:
             logger.warning(f"Unhandled status {stat}")

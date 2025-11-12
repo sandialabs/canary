@@ -30,11 +30,11 @@ class Status:
         "RETRY": (52, "Yellow", "⟳", ()),
         "SKIPPED": (53, "Magenta", "⊘", ()),
         "CANCELLED": (63, "Magenta", "⊘", ()),
-        "DIFFED": (64, "Red", "✗", ("DIFF",)),
+        "DIFFED": (64, "Magenta", "✗", ("DIFF",)),
         "FAILED": (65, "Red", "✗", ("FAIL",)),
         "TIMEOUT": (66, "Red", "⏱", ()),
         "ERROR": (67, "Red", "⚠", ()),
-        "NOT_RUN": (68, "Red", "✗", ("wont_run", "not_run")),
+        "NOT_RUN": (68, "Red", "✗", ()),
     }
 
     # Reverse mapping: code -> name (for default codes only)

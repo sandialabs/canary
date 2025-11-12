@@ -19,7 +19,9 @@ from .error import StopExecution
 from .error import notests_exit_status
 from .generator import AbstractTestGenerator
 from .plugins.types import ScanPath
+from .status import Status
 from .testcase import TestCase
+from .testcase import Timekeeper
 from .testexec import ExecutionSpace
 from .testspec import DraftSpec
 from .testspec import ResolvedSpec
@@ -32,6 +34,7 @@ from .util.graph import TopologicalSorter
 from .util.graph import find_reachable_nodes
 from .util.graph import static_order
 from .util.parallel import starmap
+from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
 
@@ -100,7 +103,7 @@ class Session:
         self.root.mkdir(parents=True, exist_ok=True)
         self.work_dir.mkdir(parents=True, exist_ok=True)
         specs = selection.specs
-        cases = []
+        cases: list[TestCase] = []
         lookup: dict[str, TestCase] = {}
         for spec in static_order(specs):
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
@@ -190,7 +193,6 @@ class Session:
             case.save()
 
     def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
-        raise NotImplementedError
         index = self.load_index()
         paths = {id: str(self.root / p) for id, p in index["paths"].items()}
         return load_testcases(index["cases"], paths, ids=ids)
@@ -225,8 +227,9 @@ class Session:
         returncode: int = -1
         try:
             with working_dir(str(self.work_dir)):
-                returncode = config.pluginmanager.hook.canary_runtests(cases=cases)
+                config.pluginmanager.hook.canary_runtests(cases=cases)
         finally:
+            returncode = compute_returncode(cases)
             stop = time.monotonic()
             duration = stop - start
             logger.info(f"Finished session in {duration:.2f} s. with returncode {returncode}")
@@ -258,18 +261,19 @@ class Session:
     def update_latest(self, cases: list[TestCase]) -> bool:
         latest = self.load_latest()
         for case in cases:
-            entry = {
-                "name": case.spec.display_name,
-                "fullname": case.spec.fullname,
-                "family": case.spec.family,
-                "duration": case.timekeeper.duration,
-                "started_on": case.timekeeper.started_on,
-                "finished_on": case.timekeeper.finished_on,
-                "workspace": str(case.workspace.dir),
-                "attributes": case.spec.attributes,
+            latest_case_entry = {
+                "spec": {
+                    "name": case.spec.display_name,
+                    "fullname": case.spec.fullname,
+                    "family": case.spec.family,
+                    "file": str(case.spec.file),
+                    "mask": case.spec.mask,
+                },
                 "status": case.status.asdict(),
+                "timekeeper": case.timekeeper.asdict(),
+                "workspace": case.workspace.asdict(),
             }
-            latest["cases"][case.id] = entry
+            latest["cases"][case.id] = latest_case_entry
         self.dump_latest(latest)
         return True
 
@@ -313,7 +317,7 @@ class Workspace:
 
         self.lockfile: Path
         self.index_file: Path
-        self.latest_file: Path
+        self.latest_results_file: Path
 
         raise RuntimeError("Use Workspace factory methods create and load")
 
@@ -333,7 +337,7 @@ class Workspace:
         self.logs_dir = self.root / "logs"
         self.head = self.root / "HEAD"
         self.lockfile = self.root / "lock"
-        self.latest_file = self.root / "latest.json"
+        self.latest_results_file = self.root / "latest.json"
         self.index_file = self.root / "index.jsons"
 
     @staticmethod
@@ -425,7 +429,8 @@ class Workspace:
             link = os.path.relpath(str(self.view), str(file.parent))
             file.write_text(link)
 
-        self.latest_file.write_text(json.dumps({}))
+        self.latest_results_file.write_text(json.dumps({}))
+        self.index_file.write_text(json.dumps({}))
 
         file = self.root / "canary.yaml"
         file.write_text(json.dumps({}))
@@ -478,40 +483,42 @@ class Workspace:
         try:
             yield session
         finally:
-            self.update(session)
+            self.update_latest_results(session)
 
-    def load_latest(self) -> dict[str, Any]:
-        latest: dict[str, Any] = json.loads(self.latest_file.read_text())
+    def load_latest_results(self) -> dict[str, Any]:
+        latest: dict[str, Any] = json.loads(self.latest_results_file.read_text())
         latest.setdefault("cases", {})
         return latest
 
-    def dump_latest(self, latest: dict[str, Any]) -> None:
+    def dump_latest_results(self, latest: dict[str, Any]) -> None:
         assert "cases" in latest
-        atomic_write(self.latest_file, json.dumps(latest, indent=2))
+        atomic_write(self.latest_results_file, json.dumps(latest, indent=2))
 
-    def update(self, session: Session) -> None:
+    def update_latest_results(self, session: Session) -> None:
         """Update latest results, view, and refs with results from ``session``"""
-        latest = self.load_latest()
+        latest = self.load_latest_results()
         results = latest["cases"]
         session_latest = session.load_latest()
         view_entries: dict[str, list[str]] = {}
-        for id, their_entry in session_latest["cases"].items():
+        for id, theirs in session_latest["cases"].items():
             if id in results:
                 # Determine if this session's results are newer than my results
                 # They can be older if only a subset of the session's cases were run this last time
-                if results[id]["finished_on"] != "NA":
-                    my_time = datetime.datetime.fromisoformat(results[id]["finished_on"])
-                    if their_entry["finished_on"] == "NA":
-                        print(their_entry)
-                    their_time = datetime.datetime.fromisoformat(their_entry["finished_on"])
+                mine = results[id]
+                if mine["timekeeper"]["finished_on"] != "NA":
+                    my_time = datetime.datetime.fromisoformat(mine["timekeeper"]["finished_on"])
+                    their_time = datetime.datetime.fromisoformat(
+                        theirs["timekeeper"]["finished_on"]
+                    )
                     if my_time > their_time:
                         continue
-            my_entry = {"session": session.name, **their_entry}
+            my_entry = {"session": session.name, **theirs}
             results[id] = my_entry
-            relpath = Path(their_entry["workspace"]).relative_to(session.work_dir)
+            ws_dir = Path(theirs["workspace"]["root"]) / Path(theirs["workspace"]["path"])
+            relpath = ws_dir.relative_to(session.work_dir)
             view_entries.setdefault(session.work_dir, []).append(relpath)
 
-        self.dump_latest(latest)
+        self.dump_latest_results(latest)
         self._update_view(view_entries)
 
         # Write meta data file refs/latest -> ../sessions/{session.root}
@@ -529,7 +536,7 @@ class Workspace:
         if self.view is None:
             return
         logger.info(f"Rebuilding view at {self.view}")
-        latest = self.load_latest()
+        latest = self.load_latest_results()
         results = latest["cases"]
         view_entries: dict[str, list[str]] = {}
         for path in self.view.iterdir():
@@ -630,9 +637,7 @@ class Workspace:
         return generators
 
     def active_testcases(self) -> list[TestCase]:
-        cases = self.load_testcases(latest=True)
-        # FIXME
-        return cases
+        return self.load_testcases()
 
     def add(
         self, scan_paths: dict[str, list[str]], pedantic: bool = True
@@ -662,20 +667,32 @@ class Workspace:
         logger.info(f"@*{{Added}} {n} new test case generators to {self.root}")
         return generators
 
-    def load_testcases(self, ids: list[str] | None = None, latest: bool = False) -> list[TestCase]:
+    def load_testcases(self, ids: list[str] | None = None) -> list[TestCase]:
         """Load cached test cases.  Dependency resolution is performed.  If ``latest is True``,
         update each case to point to the latest run instance.
         """
-        index = self.load_index()
-        paths: dict[str, str] = {}
-        for id in index:
-            paths[id] = os.path.join(self.casespecs_dir, id[:2], id[2:])
-        if ids:
-            expand_ids(ids, list(index.keys()))
-        cases = load_testcases(index, paths, ids=ids)
-        if not latest:
-            return cases
-        self.update_testcases_with_newest_results(cases)
+        cases: list[TestCase] = []
+        lookup: dict[str, TestCase] = {}
+        specs = self.load_specs()
+        latest = self.load_latest_results()
+        for spec in static_order(specs):
+            if mine := latest["cases"].get(spec.id):
+                dependencies = [lookup[dep.id] for dep in spec.dependencies]
+                space = ExecutionSpace(
+                    root=Path(mine["workspace"]["root"]),
+                    path=Path(mine["workspace"]["path"]),
+                )
+                case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
+                case.status.set(
+                    mine["status"]["name"],
+                    message=mine["status"]["message"],
+                    code=mine["status"]["code"],
+                )
+                case.timekeeper.started_on = mine["timekeeper"]["started_on"]
+                case.timekeeper.finished_on = mine["timekeeper"]["finished_on"]
+                case.timekeeper.duration = mine["timekeeper"]["duration"]
+                lookup[spec.id] = case
+                cases.append(case)
         return cases
 
     def load_specs(self, ids: list[str] | None = None) -> list[ResolvedSpec]:
@@ -691,17 +708,19 @@ class Workspace:
         specs = testspec.load(files, ids=ids)
         return specs
 
-    def get_testcases_by_spec(self, case_specs: list[str], tag: str | None = None) -> SpecSelection:
+    def get_selection_by_specs(
+        self, case_specs: list[str], tag: str | None = None
+    ) -> SpecSelection:
         ids = [_[1:] for _ in case_specs]
-        cases = self.load_testcases(ids=ids)
-        selection = SpecSelection(cases, tag)
+        specs = self.load_specs(ids=ids)
+        selection = SpecSelection(specs, tag)
         if tag is not None:
             self.cache_selection(selection)
         return selection
 
     def update_testcases_with_newest_results(self, cases: list[TestCase]) -> None:
         """Update cases in ``cases`` with their latest results"""
-        latest = self.load_latest()
+        latest = self.load_latest_results()
         results: dict[str, dict] = latest["cases"]
         for case in cases:
             if result := results.get(case.id):
@@ -942,37 +961,43 @@ class Workspace:
         atomic_write(file, spec.dumps(indent=2))
         with self.index_file.open(mode="a") as fh:
             fh.write(json.dumps({spec.id: [dep.id for dep in spec.dependencies]}) + "\n")
-        latest = self.load_latest()
+        latest = self.load_latest_results()
         if spec.id not in latest["cases"]:
+            # Be sure to keep this entry up to date with the entry at Line 265
             latest["cases"][spec.id] = {
-                "name": spec.display_name,
-                "fullname": spec.fullname,
-                "family": spec.family,
-                "returncode": -1,
-                "duration": -1,
-                "started_on": "NA",
-                "finished_on": "NA",
+                "spec": {
+                    "name": spec.display_name,
+                    "fullname": spec.fullname,
+                    "family": spec.family,
+                    "file": str(spec.file),
+                    "mask": spec.mask,
+                },
+                "session": None,
+                "status": Status().asdict(),
+                "timekeeper": Timekeeper().asdict(),
                 "workspace": None,
-                "attributes": None,
-                "status": {"name": "pending", "message": None},
             }
-        self.dump_latest(latest)
+        self.dump_latest_results(latest)
 
     def statusinfo(self) -> dict[str, list[str]]:
-        latest = self.load_latest()
+        latest = self.load_latest_results()
         info: dict[str, list[str]] = {}
         for id, entry in latest["cases"].items():
             info.setdefault("id", []).append(id[:7])
-            info.setdefault("name", []).append(entry["name"])
-            info.setdefault("fullname", []).append(entry["fullname"])
-            info.setdefault("family", []).append(entry["family"])
+            info.setdefault("name", []).append(entry["spec"]["name"])
+            info.setdefault("fullname", []).append(entry["spec"]["fullname"])
+            info.setdefault("family", []).append(entry["spec"]["family"])
+            info.setdefault("file", []).append(entry["spec"]["file"])
+            info.setdefault("session", []).append(entry["session"])
             info.setdefault("workspace", []).append(entry["workspace"])
-            info.setdefault("returncode", []).append(entry["returncode"])
-            info.setdefault("duration", []).append(entry["duration"])
+            info.setdefault("returncode", []).append(entry["status"]["code"])
             info.setdefault("status_name", []).append(entry["status"]["name"])
             if entry["workspace"] is None and not entry["status"]["message"]:
                 entry["status"]["message"] = "Test case not included in any session"
             info.setdefault("status_message", []).append(entry["status"]["message"] or "")
+            info.setdefault("duration", []).append(entry["timekeeper"]["duration"])
+            info.setdefault("started_on", []).append(entry["timekeeper"]["started_on"])
+            info.setdefault("finished_on", []).append(entry["timekeeper"]["finished_on"])
         return info
 
     def collect_all_testcases(self) -> Generator[TestCase, None, None]:
@@ -996,16 +1021,16 @@ class Workspace:
                         case.teardown()
         finally:
             if not dryrun:
-                self.rebuild_latest()
+                self.rebdump_latest_results()
                 self.rebuild_view()
         logger.info(f"Garbage collected {removed} test cases")
 
-    def rebuild_latest(self) -> bool:
+    def rebdump_latest_results(self) -> bool:
         "Rebuild latest.json and self.view"
         logger.info("Rebuilding test results database")
         for session in self.sessions():
-            session.rebuild_latest()
-        latest = self.load_latest()
+            session.rebuild_lates()
+        latest = self.dump_latest_results()
         latest["cases"].clear()
         for session in self.sessions():
             session_latest = session.load_latest()
@@ -1021,7 +1046,7 @@ class Workspace:
                             continue
                 my_entry = {"session": session.name, **their_entry}
                 latest["cases"][case_id] = my_entry
-        self.dump_latest(latest)
+        self.dump_latest_results(latest)
         return True
 
     def load_index(self) -> dict[str, list[str]]:
@@ -1041,7 +1066,7 @@ class Workspace:
     def locate_testcase(self, spec: str) -> TestCase:
         case: TestCase
         if spec.startswith("/"):
-            latest = self.load_latest()
+            latest = self.dump_latest_results()
             for id in latest.keys():
                 if id.startswith(spec[1:]):
                     break

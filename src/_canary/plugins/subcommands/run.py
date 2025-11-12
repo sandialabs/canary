@@ -118,7 +118,7 @@ class Run(CanarySubcommand):
         if args.runtag:
             selection = workspace.get_selection(args.runtag)
         elif args.casespecs:
-            selection = workspace.get_testcases_by_spec(args.casespecs, tag=args.tag)
+            selection = workspace.get_selection_by_specs(args.casespecs, tag=args.tag)
         elif args.paths:
             parsing_policy = config.getoption("parsing_policy") or "pedantic"
             workspace.add(args.paths, pedantic=parsing_policy == "pedantic")

@@ -8,11 +8,11 @@ import os
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Type
+
 from .status import Status
 from .util import json_helper as json
-from .util.paramview import Parameters
 from .util.paramview import MultiParameters
-
+from .util.paramview import Parameters
 
 if TYPE_CHECKING:
     from .testcase import TestCase
@@ -100,7 +100,6 @@ class TestInstance:
 
 
 class TestMultiInstance(TestInstance):
-
     @property
     def analyze(self) -> bool:
         # compatibility with vvtest
@@ -110,26 +109,6 @@ class TestMultiInstance(TestInstance):
     def multicase(self) -> bool:
         # compatibility with vvtest
         return True
-
-
-def load(arg_path: str | None = None) -> TestInstance | TestMultiInstance:
-    dbf = TestCase._lockfile
-    file: str
-    if arg_path is None:
-        file = dbf
-    elif os.path.isdir(arg_path):
-        file = os.path.join(arg_path, dbf)
-    elif arg_path.endswith((".vvt", ".pyt")):
-        file = os.path.join(os.path.dirname(arg_path), dbf)
-    else:
-        raise ValueError(f"incorrect {arg_path=}")
-    case: TestCase | TestMultiCase = testcase_from_lockfile(file)
-    instance: TestInstance | TestMultiInstance
-    if isinstance(case, TestMultiCase):
-        instance = TestMultiInstance.from_case(case)
-    else:
-        instance = TestInstance.from_case(case)
-    return instance
 
 
 def factory(case: "TestCase") -> TestInstance:
@@ -181,5 +160,4 @@ def factory(case: "TestCase") -> TestInstance:
         efile=case.workspace.stderr,
         lockfile=str(case.workspace.dir / "testcase.lock"),
     )
-    print(f"HERE I AM, {instance}")
     return instance

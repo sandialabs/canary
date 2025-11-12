@@ -126,7 +126,7 @@ class SpecCommons:
         # by default, only one resource group is returned
         return [group]
 
-    def asdict(self) -> dict:
+    def asdict(self, shallow: bool = False) -> dict:
         return dataclasses.asdict(self)
 
     def dump(self, file: IO[Any], **kwargs: Any) -> None:
@@ -451,17 +451,18 @@ class DraftSpec(SpecCommons):
         return assets
 
     def _default_timeout(self) -> float:
-        timeout: float
-        if t := config.get("config:timeout:*"):
-            timeout = float(t)
-        else:
-            for keyword in self.keywords:
-                if t := config.get(f"config:timeout:{keyword}"):
-                    timeout = float(t)
-                    break
-            else:
-                timeout = float(config.get("config:timeout:default"))
-        return timeout
+        timeouts = config.getoption("timeout") or {}
+        for keyword in self.keywords:
+            if t := timeouts.get(keyword):
+                return float(t)
+        if t := timeouts.get("*"):
+            return float(t)
+        for keyword in self.keywords:
+            if t := config.get(f"config:timeout:{keyword}"):
+                return float(t)
+        if t := config.get("config:timeout:all"):
+            return float(t)
+        return float(config.get("config:timeout:default"))
 
     def _generate_baseline_actions(self, items: list[str | tuple[str, str]]) -> list[dict]:
         actions: list[dict] = []
@@ -770,7 +771,7 @@ def apply_masks(
     propagate_masks(specs)
 
 
-def propagate_masks(items: list["TestCase | ResolvedSpec"]) -> None:
+def propagate_masks(items: list["TestCase"] | list["ResolvedSpec"]) -> None:
     changed: bool = True
     while changed:
         changed = False

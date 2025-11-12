@@ -32,7 +32,7 @@ class JunitReporter(CanaryReporter):
 
     def create(self, **kwargs: Any) -> None:
         workspace = Workspace.load()
-        cases = workspace.load_testcases(latest=True)
+        cases = workspace.load_testcases()
         doc = JunitDocument()
         root = doc.create_testsuite_element(cases, name=get_root_name(), tagname="testsuites")
         output = kwargs["output"] or self.default_output

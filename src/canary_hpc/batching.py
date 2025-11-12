@@ -9,6 +9,7 @@ import os
 import shlex
 import signal
 import time
+from functools import cached_property
 from functools import lru_cache
 from graphlib import TopologicalSorter
 from itertools import repeat
@@ -92,10 +93,17 @@ class TestBatch(AbstractTestCase):
         t = sum(c.runtime for c in self)
         return float(min(height, t))
 
+    @cached_property
+    def timeout_multiplier(self) -> float:
+        timeoutx: float = canary.config.get("config:timeout:multiplier") or 1.0
+        timeouts = canary.config.getoption("timeout") or {}
+        if t := timeouts.get("multiplier"):
+            timeoutx = float(t)
+        return timeoutx
+
     @property
     def timeout(self) -> float:
-        timeoutx = canary.config.get("config:timeout:multiplier", 1.0)
-        return self.qtime() * timeoutx
+        return self.qtime() * self.timeout_multiplier
 
     def qtime(self) -> float:
         scheduler_args = get_scheduler_args()
@@ -347,6 +355,7 @@ class TestBatch(AbstractTestCase):
 
         batchspec = canary.config.getoption("canary_hpc_batchspec")
         flat = batchspec["layout"] == "flat"
+        timeoutx = self.timeout_multiplier
         try:
             breadcrumb = self.stage(self.id) / ".running"
             breadcrumb.touch()
@@ -361,7 +370,6 @@ class TestBatch(AbstractTestCase):
             if backend.supports_subscheduling and flat:
                 submit_script = self.submission_script_filename()
                 scriptdir = submit_script.parent
-                timeoutx = canary.config.get("config:timeout:multiplier", 1.0)
                 variables.pop("CANARY_BATCH_ID", None)
                 proc = backend.submitn(
                     [case.id for case in self],
@@ -379,7 +387,6 @@ class TestBatch(AbstractTestCase):
                     qtime=[case.runtime * timeoutx for case in self],
                 )
             else:
-                timeoutx = canary.config.get("config:timeout:multiplier", 1.0)
                 qtime = self.qtime() * timeoutx
                 nodes = self.nodes_required(backend)
                 proc = backend.submit(

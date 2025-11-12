@@ -356,7 +356,7 @@ class TestCase:
                     self._status.set(
                         "NOT_RUN",
                         f"Dependency {dep.name} finished with status {dep.status.name!r}, "
-                        f"not {self.spec.dep_done_criteria}"
+                        f"not {self.spec.dep_done_criteria}",
                     )
                 break
 
@@ -410,10 +410,6 @@ class Measurements:
 
     def asdict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
-
-
-def load(path: str | Path | None) -> TestCase | None:
-    return None
 
 
 class MissingSourceError(Exception):

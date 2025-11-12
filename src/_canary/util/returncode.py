@@ -22,17 +22,17 @@ def compute_returncode(cases: Sequence["TestCase"], permissive: bool = False) ->
     warned: set[str] = set()
     for result, n in results.items():
         for i in range(n):
-            if result in ("success", "xfail", "xdiff"):
+            if result in ("SUCCESS", "XFAIL", "XDIFF"):
                 continue
-            elif result == "diffed":
+            elif result == "DIFFED":
                 returncode |= 2**1
-            elif result == "failed":
+            elif result == "FAILED":
                 returncode |= 2**2
-            elif result == "timeout":
+            elif result == "TIMEOUT":
                 returncode |= 2**3
-            elif result in ("skipped", "not_run"):
+            elif result in ("SKIPPED", "NOT_RUN"):
                 returncode |= 2**4
-            elif result in ("cancelled", "ready"):
+            elif result in ("CANCELLED", "READY"):
                 returncode |= 2**5
             elif not permissive:
                 # any other code is a failure

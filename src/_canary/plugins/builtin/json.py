@@ -23,7 +23,7 @@ class JsonReporter(CanaryReporter):
 
     def create(self, **kwargs: Any) -> None:
         workspace = Workspace.load()
-        cases = workspace.load_testcases(latest=True)
+        cases = workspace.load_testcases()
         file = os.path.abspath(kwargs["output"] or self.default_output)
         data: dict = {}
         for case in cases:

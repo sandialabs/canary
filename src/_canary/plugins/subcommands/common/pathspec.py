@@ -48,7 +48,6 @@ class PathSpec(argparse.Action):
           keyword filtering expressions
 
         """
-        from ....testcase import TestCase
 
         workspace: Workspace | None
         try:

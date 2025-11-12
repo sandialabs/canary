@@ -12,10 +12,10 @@ from typing import TypeVar
 
 if TYPE_CHECKING:
     from ..testcase import TestCase
-    from ..testspec import DraftSpec
+    from ..testspec import ResolvedSpec
     from ..testspec import TestSpec
 
-    SpecLike = TypeVar("SpecLike", TestCase, TestSpec, DraftSpec)
+    SpecLike = TypeVar("SpecLike", TestCase, TestSpec, ResolvedSpec)
 
 builtin_print = print
 

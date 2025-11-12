@@ -1,9 +1,11 @@
 import multiprocessing as mp
 import time
+from functools import cached_property
 from typing import Callable
 
 import psutil
 
+from . import config
 from .queue import AbstractResourceQueue
 from .queue import Busy
 from .queue import Empty
@@ -127,7 +129,7 @@ class ProcessPool:
         current_time = time.time()
 
         for pid, (proc, _, case, start_time, timeout) in list(self.inflight.items()):
-            if timeout is not None and proc.is_alive():
+            if proc.is_alive():
                 elapsed = current_time - start_time
                 if elapsed > timeout:
                     # Get measurements before killing
@@ -216,7 +218,8 @@ class ProcessPool:
                 proc.start()
 
                 # Store process with its result queue, case, start time, and timeout
-                self.inflight[proc.pid] = (proc, result_queue, case, time.time(), case.timeout)
+                timeout = case.timeout * self.timeout_multiplier
+                self.inflight[proc.pid] = (proc, result_queue, case, time.time(), timeout)
 
             except Busy:
                 # Queue is busy, wait and try again
@@ -271,3 +274,11 @@ class ProcessPool:
                 logger.debug(f"Quiting due to caputuring {key!r} from the keyboard")
                 self.terminate_all()
                 raise KeyboardInterrupt
+
+    @cached_property
+    def timeout_multiplier(self) -> float:
+        timeoutx: float = config.get("config:timeout:multiplier") or 1.0
+        timeouts = config.getoption("timeout") or {}
+        if t := timeouts.get("multiplier"):
+            timeoutx = float(t)
+        return timeoutx

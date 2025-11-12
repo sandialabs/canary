@@ -10,12 +10,12 @@ from typing import Any
 from typing import Generator
 from typing import Type
 
+from ..util.json_helper import safeload
+from ..util.json_helper import safesave
 from .status import Status
 from .testcase import TestCase
 from .testcase import TestMultiCase
 from .testcase import from_lockfile as testcase_from_lockfile
-from ..util.json_helper import safeload
-from ..util.json_helper import safesave
 
 key_type = tuple[str, ...] | str
 index_type = tuple[int, ...] | int
