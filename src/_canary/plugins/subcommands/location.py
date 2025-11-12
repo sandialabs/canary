@@ -67,7 +67,7 @@ If no options are give, -x is assumed."""
             case.set_workspace_properties(workspace=workspace.view, session=None)
         f: str
         if args.show_log:
-            f = case.stdout_file
+            f = case.workspace.joinpath(case.stdout)
         elif args.show_input:
             f = case.file
         elif args.show_source_dir:

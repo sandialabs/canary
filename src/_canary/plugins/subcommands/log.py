@@ -7,6 +7,7 @@ import datetime
 import io
 import json
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ...workspace import Workspace
@@ -47,11 +48,13 @@ class Log(CanarySubcommand):
             help="Test name or /TEST_ID.  If not given, the session log will be shown",
         )
 
-    def get_logfile(self, case: "TestCase", args: argparse.Namespace) -> str:
+    def get_logfile(self, case: "TestCase", args: argparse.Namespace) -> Path | None:
         if args.error:
-            return case.stderr_file or ""
+            if case.stderr is None:
+                return None
+            return case.workspace.joinpath(case.stderr)
         else:
-            return case.stdout_file
+            return case.workspace.joinpath(case.stdout)
 
     def execute(self, args: argparse.Namespace) -> int:
         workspace = Workspace.load()
@@ -70,7 +73,8 @@ class Log(CanarySubcommand):
 
         case = workspace.locate(case=args.testspec)
         file = self.get_logfile(case, args)
-        display_file(file)
+        if file:
+            display_file(file)
         return 0
 
 
@@ -88,11 +92,11 @@ def reconstruct_log(file: str) -> str:
     return fp.getvalue()
 
 
-def display_file(file: str) -> None:
+def display_file(file: Path) -> None:
     print(f"{file}:")
-    if not os.path.isfile(file):
-        raise ValueError(f"{file}: no such file")
-    page_text(open(file).read())
+    if file.exists():
+        raise FileNotFoundError(file)
+    page_text(file.read_text())
 
 
 def page_text(text: str) -> None:

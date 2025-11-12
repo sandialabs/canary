@@ -156,8 +156,8 @@ def factory(case: "TestCase") -> TestInstance:
         returncode=case.status.code,
         variables=case.spec.environment,
         dependencies=dependencies,
-        ofile=case.workspace.stdout,
-        efile=case.workspace.stderr,
+        ofile=case.stdout,
+        efile=case.stderr,
         lockfile=str(case.workspace.dir / "testcase.lock"),
     )
     return instance

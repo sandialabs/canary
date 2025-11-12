@@ -160,7 +160,7 @@ class TimeoutResource(argparse.Action):
 
 def filter_cases_by_path(cases: list["TestCase"], pathspec: str) -> list["TestCase"]:
     prefix = os.path.abspath(pathspec)
-    return [c for c in cases if c.matches(pathspec) or c.workspace.dir.relative_to(prefix)]
+    return [c for c in cases if c.workspace.dir.relative_to(prefix)]
 
 
 def filter_cases_by_status(cases: list["TestCase"], status: tuple | str) -> list["TestCase"]:

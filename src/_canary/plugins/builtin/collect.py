@@ -18,7 +18,7 @@ logger = logging.get_logger(__name__)
 
 class Collector:
     errors: int = 0
-    skip = ("__pycache__", ".git", ".svn")
+    skip_dirs = ("__pycache__", ".git", ".svn")
 
     @hookimpl(specname="canary_collect_generators")
     def collect_from_directory(self, scan_path: ScanPath) -> list[AbstractTestGenerator] | None:
@@ -60,11 +60,18 @@ class Collector:
             except Exception as e:
                 raise ValueError(f"Failed to load {root}")
 
+    def skip_dir(self, dirname: str) -> bool:
+        if os.path.basename(dirname) in self.skip_dirs:
+            return True
+        if os.path.basename(dirname) == "TestResults":
+            return True
+        return False
+
     def from_directory(self, root: Path) -> Generator[AbstractTestGenerator, None, None]:
         hk = config.pluginmanager.hook
         for dir, dirs, files in os.walk(str(root)):
             try:
-                if dir.startswith(self.skip):
+                if self.skip_dir(dir):
                     del dirs[:]
                     continue
                 for name in files:

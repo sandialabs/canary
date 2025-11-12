@@ -185,7 +185,7 @@ class ProcessPool:
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.1)  # Brief sleep before checking again
 
-    def run(self) -> int:
+    def run(self) -> None:
         """Main loop: get cases from queue and launch processes."""
         logger.info(f"Starting process pool with max {self.max_workers} workers")
 

@@ -26,7 +26,7 @@ def compute_returncode(cases: Sequence["TestCase"], permissive: bool = False) ->
                 continue
             elif result == "DIFFED":
                 returncode |= 2**1
-            elif result == "FAILED":
+            elif result in ("FAILED", "ERROR"):
                 returncode |= 2**2
             elif result == "TIMEOUT":
                 returncode |= 2**3

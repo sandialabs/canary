@@ -27,13 +27,11 @@ from _canary.plugins.manager import CanaryPluginManager
 from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
 from _canary.testcase import TestCase
-from _canary.testcase import load as load_testcase
 from _canary.testexec import ExecutionPolicy
-from _canary.testexec import PythonFilePolicy
-from _canary.testexec import SubprocessPolicy
+from _canary.testexec import PythonFileExecutionPolicy
+from _canary.testexec import SubprocessExecutionPolicy
 from _canary.testinst import TestInstance
 from _canary.testinst import TestMultiInstance
-from _canary.testinst import load as load_instance
 from _canary.testspec import DependencyPatterns
 from _canary.testspec import DraftSpec
 from _canary.testspec import ResolvedSpec

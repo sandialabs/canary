@@ -257,7 +257,7 @@ def filter_by_status(info: dict[str, list], chars: str | None) -> dict[str, list
             mask[i] = "s" in chars
         elif stat in ("SUCCESS", "XDIFF", "XFAIL"):
             mask[i] = "p" in chars
-        elif stat == "FAILED":
+        elif stat in ("FAILED", "ERROR"):
             mask[i] = "f" in chars
         elif stat == "DIFFED":
             mask[i] = "d" in chars

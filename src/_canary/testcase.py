@@ -18,10 +18,7 @@ from .error import TestFailed
 from .error import TestSkipped
 from .error import TestTimedOut
 from .error import diff_exit_status
-from .error import exception_exit_status
 from .error import fail_exit_status
-from .error import skip_exit_status
-from .error import timeout_exit_status
 from .status import Status
 from .testexec import ExecutionPolicy
 from .testexec import ExecutionSpace
@@ -44,10 +41,11 @@ class TestCase:
     ) -> None:
         self.spec = spec
         self.workspace = workspace
-        self.workspace.stdout = self.spec.stdout
-        self.workspace.stderr = self.spec.stderr
+        self.stdout: str = "canary-out.txt"
+        self.stderr: str | None = "canary-err.txt"
         hk = config.pluginmanager.hook
-        self.execution_policy: ExecutionPolicy = hk.canary_testcase_execution_policy(spec=self.spec)
+        self.execution_policy: ExecutionPolicy = hk.canary_testcase_execution_policy(case=self)
+        hk.canary_testcase_modify(case=self)
         self._status = Status()
         self.measurements = Measurements()
         self.timekeeper = Timekeeper()
@@ -83,7 +81,7 @@ class TestCase:
 
     def describe(self) -> str:
         """Write a string describing the test case"""
-        name = str(self.workspace.path / self.display_name)
+        name = str(self.workspace.path.parent / self.spec.display_name)
         text = "%s @*b{%s} %s" % (self.status.cname, self.id[:7], name)
         if self.timekeeper.duration >= 0:
             text += " (%s)" % hhmmss(self.timekeeper.duration)
@@ -176,99 +174,117 @@ class TestCase:
 
     @property
     def lockfile(self) -> Path:
-        return self.workspace.dir / "testcase.lock"
+        return self.workspace.joinpath("testcase.lock")
+
+    def create_workspace(self) -> None:
+        self.workspace.create(exist_ok=True)
+        with self.workspace.open(self.stdout, "w") as file:
+            stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
+            file.write(f"[{stamp}] Creating workspace root at {self.workspace}\n")
+        if self.stderr is not None:
+            self.workspace.unlink(self.stderr, missing_ok=True)
+            self.workspace.touch(self.stderr)
 
     def setup(self) -> None:
-        with self.workspace.enter():
-            copy_all_resources: bool = config.getoption("copy_all_resources", False)
-            prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
-            self.workspace.restore()
-            with self.workspace.enter():
-                with open(self.workspace.stdout, "a") as file:
-                    file.write(f"[{prefix}] Preparing test: {self.name}\n")
-                    file.write(f"[{prefix}] Directory: {self.workspace.dir}\n")
-                    file.write(f"[{prefix}] Linking and copying working files...\n")
-                if copy_all_resources:
-                    self.workspace.copy(self.spec.file)
+        self.workspace.remove()
+        self.create_workspace()
+        copy_all_resources: bool = config.getoption("copy_all_resources", False)
+        prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
+        try:
+            file = open(self.workspace.joinpath(self.stdout), "a")
+            file.write(f"[{prefix}] Preparing test: {self.name}\n")
+            file.write(f"[{prefix}] Directory: {self.workspace.dir}\n")
+            file.write(f"[{prefix}] Linking and copying working files...\n")
+            if copy_all_resources:
+                file.write(f"[{prefix}] Copying {self.spec.file} to {self.workspace}\n")
+                self.workspace.copy(self.spec.file)
+            else:
+                file.write(f"[{prefix}] Linking {self.spec.file} to {self.workspace}\n")
+                self.workspace.link(self.spec.file)
+            for asset in self.spec.assets:
+                if asset.action not in ("copy", "link"):
+                    continue
+                if not asset.src.exists():
+                    raise MissingSourceError(asset.src)
+                if asset.action == "copy" or copy_all_resources:
+                    file.write(f"[{prefix}] Copying {asset.src} to {self.workspace}\n")
+                    self.workspace.copy(asset.src, asset.dst)
                 else:
-                    self.workspace.link(self.spec.file)
-                for asset in self.spec.assets:
-                    if asset.action not in ("copy", "link"):
-                        continue
-                    if not asset.src.exists():
-                        raise MissingSourceError(asset.src)
-                    if asset.action == "copy" or copy_all_resources:
-                        self.workspace.copy(asset.src, asset.dst)
-                    else:
-                        self.workspace.link(asset.src, asset.dst)
+                    file.write(f"[{prefix}] Linking {asset.src} to {self.workspace}\n")
+                    self.workspace.link(asset.src, asset.dst)
+        finally:
+            file.close()
 
     def run(self, queue: multiprocessing.Queue) -> None:
         code: int
-        message: str | None = None
         try:
+            xstatus = self.spec.xstatus
             with self.workspace.enter(), self.timekeeper.timeit():
                 self.status.set("RUNNING")
-                code = self.execution_policy.execute(case=self, queue=queue)
+                code = self.execution_policy.execute(case=self)
+                self.update_status_from_exit_code(code=code)
         except KeyboardInterrupt:
-            code = signal.SIGINT.value
+            self.status.set("CANCELLED", message="Keyboard interrupt", code=signal.SIGINT.value)
         except SystemExit as e:
-            code = 0 if e.code is None else e.code if isinstance(e.code, int) else 1
+            self.update_status_from_exit_code(code=e.code or 0)
         except TestDiffed as e:
-            code = diff_exit_status
-            message = None if not e.args else e.args[0]
+            stat = "XDIFF" if xstatus == diff_exit_status else "DIFFED"
+            self.status.set(stat, message=None if not e.args else e.args[0])
         except TestFailed as e:
-            code = fail_exit_status
-            message = None if not e.args else e.args[0]
+            stat = "XFAIL" if (xstatus == fail_exit_status or xstatus < 0) else "FAILED"
+            self.status.set(stat, message=None if not e.args else e.args[0])
         except TestSkipped as e:
-            code = skip_exit_status
-            message = None if not e.args else e.args[0]
-        except TestTimedOut:
-            code = timeout_exit_status
+            self.status.set("SKIPPED", message=None if not e.args else e.args[0])
+        except TestTimedOut as e:
+            self.status.set("TIMEOUT", message=None if not e.args else e.args[0])
         except BaseException as e:
             if config.get("config:debug"):
                 logger.exception("Exception during test case execution")
-            with open(self.workspace.dir / self.workspace.stdout, "a") as fh:
-                traceback.print_exc(file=fh)
-            code = exception_exit_status
-            message = f"Caught exception: {e}"
+            fh = io.StringIO()
+            traceback.print_exc(file=fh, limit=2)
+            message = fh.getvalue()
+            f = self.stderr or self.stdout
+            with self.workspace.open(f, "a") as fp:
+                fp.write(message)
+            self.status.set("ERROR", message=message)
         finally:
-            logger.debug(f"Finished executing {self.spec.fullname}: code={code}, message={message}")
-            self.update_status(code=code, message=message)
+            logger.debug(f"Finished executing {self.spec.fullname}: status={self.status}")
             queue.put({"status": self.status, "timekeeper": self.timekeeper})
             self.save()
         return
 
-    def update_status(self, *, code: int, message: str | None) -> None:
+    def update_status_from_exit_code(self, *, code: int) -> None:
         xcode = self.spec.xstatus
-        status = self.status
 
         if xcode == diff_exit_status:
             if code != diff_exit_status:
-                status.set(
+                self.status.set(
                     "FAILED",
                     f"{self.spec.display_name}: expected test to diff",
                     code=code,
                 )
             else:
-                status.set("XDIFF")
+                self.status.set("XDIFF")
         elif xcode != 0:
             # Expected to fail
             if xcode > 0 and code != code:
-                status.set(
+                self.status.set(
                     "FAILED",
                     f"{self.spec.display_name}: expected to exit with code={code}",
                     code=code,
                 )
             elif code == 0:
-                status.set(
+                self.status.set(
                     "FAILED",
                     f"{self.spec.display_name}: expected to exit with code != 0",
                     code=code,
                 )
             else:
-                status.set("XFAIL", code=code)
+                self.status.set("XFAIL", code=code)
+        elif code == 0:
+            self.status.set("SUCCESS")
         else:
-            status.set(code, message)
+            self.status.set("FAILED", code=code)
 
     def update(self, **attrs: Any) -> None:
         if status := attrs.get("status"):
@@ -381,13 +397,13 @@ class TestCase:
     def read_output(self, compress: bool = False) -> str:
         if self.status.name == "SKIPPED":
             return f"Test skipped.  Reason: {self.status.message}"
-        file = self.workspace.dir / self.workspace.stdout
+        file = self.workspace.joinpath(self.stdout)
         if not file.exists():
             return "Log not found"
         out = io.StringIO()
         out.write(file.read_text(errors="ignore"))
-        if self.workspace.stderr:
-            file = self.workspace.dir / self.workspace.stderr
+        if self.stderr:
+            file = self.workspace.joinpath(self.stderr)
             if file.exists():
                 out.write("\nCaptured stderr:\n")
                 out.write(file.read_text(errors="ignore"))

@@ -25,7 +25,7 @@ def canary_testcase_generator(root: str, path: str | None) -> canary.AbstractTes
 
 @canary.hookimpl
 def canary_testcase_modify(case: "canary.TestCase") -> None:
-    if case.file_path.suffix == ".vvt":
+    if case.spec.file_path.suffix == ".vvt":
         case.stdout = "execute.log"
         case.stderr = None
 
@@ -174,7 +174,7 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
 
 
 @canary.hookimpl
-def canary_testcase_execution_policy(spec: canary.TestSpec) -> canary.ExecutionPolicy | None:
-    if spec.file.suffix in (".vvt",):
-        return canary.PythonFilePolicy()
+def canary_testcase_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
+    if case.spec.file.suffix == ".vvt":
+        return canary.PythonFileExecutionPolicy()
     return None

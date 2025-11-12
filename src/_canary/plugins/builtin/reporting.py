@@ -215,13 +215,12 @@ def sort_cases_by(cases: list["TestCase"], field="duration") -> list["TestCase"]
 def determine_cases_to_show(
     session: "Session", report_chars: str, pathspec: str | None = None
 ) -> list["TestCase"]:
-
     cases: list["TestCase"] = session.cases
     cases_to_show: list["TestCase"]
     rc = set(report_chars)
     if pathspec is not None:
         if not os.path.exists(pathspec) and pathspec.startswith("/"):
-            cases = [c for c in cases if c.matches(pathspec)]
+            cases = [c for c in cases if c.spec.id.startswith(pathspec)]
             rc.add("A")
         else:
             pathspec = os.path.abspath(pathspec)
@@ -288,16 +287,16 @@ def _show_capture(case: "TestCase", what="oe") -> None:
     fp.write(f"{bold('Status')}: {case.status.cname}\n")
     fp.write(f"{bold('Execution directory')}: {case.execution_directory}\n")
     fp.write(f"{bold('Command')}: {' '.join(case.command())}\n")
-    if what in ("o", "oe") and case.stdout_file:
-        file = case.stdout_file
+    if what in ("o", "oe") and case.stdout:
+        file = case.workspace.joinpath(case.stdout)
         if os.path.exists(file):
             with open(file) as fh:
                 stdout = fh.read().strip()
             if stdout:
                 fp.write(bold("stdout") + "\n")
                 fp.write(indent(stdout, "  ") + "\n")
-    if what in ("e", "oe") and case.stderr_file:
-        file = case.stderr_file
+    if what in ("e", "oe") and case.stderr:
+        file = case.workspace.joinpath(case.stderr)
         if os.path.exists(file):
             with open(file) as fh:
                 stderr = fh.read().strip()

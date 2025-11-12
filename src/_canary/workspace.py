@@ -430,7 +430,7 @@ class Workspace:
             file.write_text(link)
 
         self.latest_results_file.write_text(json.dumps({}))
-        self.index_file.write_text(json.dumps({}))
+        self.index_file.touch()
 
         file = self.root / "canary.yaml"
         file.write_text(json.dumps({}))
@@ -858,19 +858,14 @@ class Workspace:
         ids: list[str] | None = None
         if case_specs:
             ids = [_[1:] for _ in case_specs]
-
-        testspec.apply_masks(
-            specs,
+        config.pluginmanager.hook.canary_testsuite_mask(
+            specs=specs,
             keyword_exprs=keyword_exprs,
             parameter_expr=parameter_expr,
             owners=owners,
             regex=regex,
             ids=ids,
         )
-        for spec in static_order(specs):
-            config.pluginmanager.hook.canary_testcase_modify(case=spec)
-        testspec.propagate_masks(specs)
-
         final = testspec.finalize(specs)
         config.pluginmanager.hook.canary_collectreport(cases=final)
 

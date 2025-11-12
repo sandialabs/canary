@@ -20,9 +20,9 @@ from ... import when as m_when
 from ...error import diff_exit_status
 from ...generator import AbstractTestGenerator
 from ...paramset import ParameterSet
+from ...testcase import TestCase
 from ...testexec import ExecutionPolicy
-from ...testexec import PythonFilePolicy
-from ...testspec import TestSpec
+from ...testexec import PythonFileExecutionPolicy
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
 from ...util import logging
@@ -996,7 +996,7 @@ def canary_testcase_generator(root: str, path: str | None) -> AbstractTestGenera
 
 
 @hookimpl
-def canary_testcase_execution_policy(spec: TestSpec) -> ExecutionPolicy | None:
-    if spec.file.suffix in (".pyt", ".py"):
-        return PythonFilePolicy()
+def canary_testcase_execution_policy(case: TestCase) -> ExecutionPolicy | None:
+    if case.spec.file.suffix in (".pyt", ".py"):
+        return PythonFileExecutionPolicy()
     return None
