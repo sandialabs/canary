@@ -1,22 +1,50 @@
 import argparse
 import os
+import shlex
 from typing import Any
 
 import canary
 
 from .cdash import CDashReporter
-
-# from .ctest import CTestTestGenerator
+from .ctest import CTestTestGenerator
+from .ctest import finish_ctest
 from .ctest import read_resource_specs
+from .ctest import setup_ctest
 
 logger = canary.get_logger(__name__)
 
 
-# @canary.hookimpl(specname="canary_testcase_generator")
-# def ctest_test_generator(root: str, path: str | None) -> canary.AbstractTestGenerator | None:
-#    if CTestTestGenerator.matches(root if path is None else os.path.join(root, path)):
-#        return CTestTestGenerator(root, path=path)
-#    return None
+@canary.hookimpl(specname="canary_testcase_generator")
+def ctest_test_generator(root: str, path: str | None) -> canary.AbstractTestGenerator | None:
+    if CTestTestGenerator.matches(root if path is None else os.path.join(root, path)):
+        return CTestTestGenerator(root, path=path)
+    return None
+
+
+@canary.hookimpl
+def canary_testcase_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
+    if case.spec.file.suffix == ".cmake":
+        return canary.SubprocessExecutionPolicy(["./runtest.sh"])
+    return None
+
+
+@canary.hookimpl
+def canary_testcase_modify(case: canary.TestCase) -> None:
+    if case.spec.file.suffix == ".cmake":
+        # concatenate stdout and stderr
+        case.stderr = None
+
+
+@canary.hookimpl
+def canary_testcase_setup(case: canary.TestCase) -> None:
+    if case.spec.file.suffix == ".cmake":
+        setup_ctest(case)
+
+
+@canary.hookimpl
+def canary_testcase_finish(case: canary.TestCase) -> None:
+    if case.spec.file.suffix == ".cmake":
+        finish_ctest(case)
 
 
 @canary.hookimpl(specname="canary_configure")

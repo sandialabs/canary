@@ -96,45 +96,16 @@ def print(cases: list["TestCase"], file: str | Path | TextIO = sys.stdout) -> No
         file.close()
 
 
-def find_reachable_nodes(graph: dict[str, list[str]], id: str) -> list[str]:
-    """Retrieve all direct and indirect dependencies for a given entity ID from a dependency graph.
-
-    This function performs a depth-first search (DFS) on the provided dependency graph,
-    starting from the specified entity ID. It returns a list of all unique entity IDs that
-    are either the specified entity or are dependencies of it, including indirect dependencies.
-
-    Args:
-        graph: A dictionary where keys are test case IDs and values are lists of
-           dependency IDs.
-           Example: {'A': ['B', 'C'], 'B': ['D'], 'C': ['D', 'E'], 'D': [], 'E': ['F'], 'F': []}
-        id: The ID of the test case for which to retrieve dependencies.
-
-    Returns:
-        A list of IDs representing the specified entity and all of its direct and
-          indirect dependencies. The order of IDs in the list is not guaranteed.
-
-    Example:
-        >>> graph = {
-        ...     'A': ['B', 'C'],
-        ...     'B': ['D'],
-        ...     'C': ['D', 'E'],
-        ...     'D': [],
-        ...     'E': ['F'],
-        ...     'F': []
-        ... }
-        >>> find_reachable_nodes(graph, 'A')
-        ['A', 'B', 'D', 'C', 'E', 'F']
-    """
-    dependencies = set()
-
-    def dfs(current_id):
-        # If the current ID has already been visited, return
-        if current_id in dependencies:
-            return
-        dependencies.add(current_id)
-        # Recursively visit all dependencies
-        for dependency in graph.get(current_id, []):
-            dfs(dependency)
-
-    dfs(id)
-    return sorted(dependencies)
+def reachable_nodes(graph: dict[str, list[str]], roots: list[str]) -> list[str]:
+    """Return all nodes reachable from any of the given roots"""
+    visited: set[str] = set()
+    stack: list[str] = list(roots)
+    while stack:
+        node = stack.pop()
+        if node in visited:
+            continue
+        visited.add(node)
+        for dep in graph.get(node, []):
+            if dep not in visited:
+                stack.append(dep)
+    return list(visited)

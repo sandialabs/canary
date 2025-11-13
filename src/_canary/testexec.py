@@ -70,7 +70,7 @@ class ExecutionSpace:
             os.chdir(current_cwd)
 
     @contextmanager
-    def open(self, name: Path | str, mode: str = "r") -> Generator[IO[Any], None, None]:
+    def openfile(self, name: Path | str, mode: str = "r") -> Generator[IO[Any], None, None]:
         try:
             fh = open(self.dir / name, mode=mode)
             yield fh

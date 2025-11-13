@@ -56,7 +56,7 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
     def always_matches(cls, path: str) -> bool:
         return os.path.basename(path) == "CTestTestfile.cmake"
 
-    def lock(self, on_options: list[str] | None = None) -> list[canary.DraftSpec]:
+    def lock(self, on_options: list[str] | None = None) -> list[canary.ResolvedSpec]:
         cmake = find_cmake()
         if cmake is None:
             logger.warning("cmake not found, test cases cannot be generated")
@@ -72,9 +72,9 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
                 path = os.path.relpath(realpath(details["ctestfile"]), realpath(self.root))
             draft = create_draft_spec(file_root=self.root, file_path=path, family=family, **details)
             drafts.append(draft)
-        self.resolve_inter_dependencies(drafts)
-        self.resolve_fixtures(drafts)
-        return cases  # type: ignore
+        resolved = self.resolve_inter_dependencies(drafts)
+        self.resolve_fixtures(resolved)
+        return resolved  # type: ignore
 
     def describe(self, on_options: list[str] | None = None) -> str:
         file = io.StringIO()
@@ -122,37 +122,33 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
             tests[name] = transformed
         return tests
 
-    def resolve_fixtures(self, cases: list["CTestTestCase"]) -> None:
-        setup_fixtures: dict[str, list[CTestTestCase]] = {}
-        cleanup_fixtures: dict[str, list[CTestTestCase]] = {}
-        for case in cases:
-            for fixture_name in case.fixtures["setup"]:
-                setup_fixtures.setdefault(fixture_name, []).append(case)
-            for fixture_name in case.fixtures["cleanup"]:
-                cleanup_fixtures.setdefault(fixture_name, []).append(case)
-        for case in cases:
-            for fixture_name in case.fixtures["required"]:
+    def resolve_fixtures(self, specs: list["canary.ResolvedSpec"]) -> None:
+        setup_fixtures: dict[str, list[canary.ResolvedSpec]] = {}
+        cleanup_fixtures: dict[str, list[canary.ResolvedSpec]] = {}
+        for spec in specs:
+            for fixture_name in spec.attributes["fixtures"]["setup"]:
+                setup_fixtures.setdefault(fixture_name, []).append(spec)
+            for fixture_name in spec.attributes["fixtures"]["cleanup"]:
+                cleanup_fixtures.setdefault(fixture_name, []).append(spec)
+        for spec in specs:
+            for fixture_name in spec.attributes["fixtures"]["required"]:
                 if fixture_name in setup_fixtures:
                     for fixture in setup_fixtures[fixture_name]:
-                        case.add_dependency(fixture)
+                        spec.dependencies.append(fixture)
                 if fixture_name in cleanup_fixtures:
                     for fixture in cleanup_fixtures[fixture_name]:
-                        fixture.add_dependency(case)
+                        fixture.dependencies.append(spec)
 
-    def resolve_inter_dependencies(self, cases: list["CTestTestCase"]) -> None:
-        logger.debug(f"Resolving dependencies in {self}")
-        for case in cases:
-            while True:
-                if not case.unresolved_dependencies:
-                    break
-                dep = case.unresolved_dependencies.pop(0)
-                matches = dep.evaluate([c for c in cases if c != case])
-                for match in matches:
-                    case.add_dependency(match)
+    def resolve_inter_dependencies(
+        self, drafts: list["canary.DraftSpec"]
+    ) -> list["canary.ResolvedSpec"]:
+        from _canary.testspec import resolve
+
+        resolved = resolve(drafts)
+        return resolved
 
 
 def create_draft_spec(
-    self,
     *,
     file_root: str | None = None,
     file_path: str | None = None,
@@ -195,8 +191,21 @@ def create_draft_spec(
     kwargs["file_root"] = Path(file_root)
     kwargs["file_path"] = Path(file_path)
     kwargs["family"] = family
-    kwargs["keywords"] = labels
-    kwargs.setdefault("attributes", {})["command"] = command
+    labels = labels or []
+    kwargs["keywords"] = ["ctest", *labels]
+
+    attributes: dict[str, Any] = kwargs.setdefault("attributes", {})
+    attributes["command"] = command
+    attributes["will_fail"] = will_fail or False
+
+    attributes["ctestfile"] = ctestfile
+    attributes["ctest_working_directory"] = working_directory
+    attributes["binary_dir"] = os.path.dirname(ctestfile)
+    if working_directory is not None:
+        attributes["execution_directory"] = working_directory
+    else:
+        attributes["execution_directory"] = attributes["binary_dir"]
+
     if processors is not None:
         kwargs.setdefault("parameters", {})["cpus"] = processors
     elif np := parse_np(command):
@@ -209,15 +218,17 @@ def create_draft_spec(
         kwargs.setdefault("environment", {}).update(environment)
     if disabled:
         kwargs["mask"] = f"Explicitly disabled in {file_root}/{file_path}"
+
+    attributes: dict[str, Any] = kwargs.setdefault("attributes", {})
+
+    attributes.setdefault("resource_groups", [])
     if resource_groups is not None:
-        attributes = kwargs.setdefault("attributes", {})
-        attributes["resource_groups"] = resource_groups
-        gpus: int = 0
+        attributes["resource_groups"].extend(resource_groups)
+        params: dict[str, float | int] = {}
         for group in resource_groups:
             for item in group:
-                if item["type"] == "gpus":
-                    gpus += item["slots"]  # type: ignore
-        kwargs.setdefault("parameters", {})["gpus"] = gpus
+                params[item["type"]] = params.get(item["type"], 0) + item["slots"]
+        kwargs.setdefault("parameters", {}).update(params)
 
     if attached_files is not None:
         artifacts = kwargs.setdefault("artifacts", [])
@@ -232,7 +243,10 @@ def create_draft_spec(
         attributes["required_files"] = required_files
     if environment_modification is not None:
         kwargs["environment_modifications"] = env_mods(environment_modification)
-    if var := canary.config.getoption("canary_cmake_test_timeout"):
+
+    if timeout is not None:
+        kwargs["timeout"] = float(timeout)
+    elif var := canary.config.getoption("canary_cmake_test_timeout"):
         kwargs["timeout"] = float(var)
     elif var := os.getenv("CTEST_TEST_TIMEOUT"):
         kwargs["timeout"] = canary.time.time_in_seconds(var)
@@ -240,20 +254,23 @@ def create_draft_spec(
         kwargs["timeout"] = float(t)
     else:
         kwargs["timeout"] = canary.config.get("config:timeout:ctest", 1500.0)
-    attributes = kwargs.setdefault("attributes", {})
+
+    attributes: dict[str, Any] = kwargs.setdefault("attributes", {})
     attributes["pass_regular_expression"] = pass_regular_expression
     attributes["fail_regular_expression"] = fail_regular_expression
     attributes["skip_regular_expression"] = skip_regular_expression
     attributes["skip_return_code"] = skip_return_code
+
+    fixtures: dict[str, list] = attributes.setdefault("fixtures", {})
+    cleanup_fixtures = fixtures.setdefault("cleanup", [])
     if fixtures_cleanup:
-        fixtures = attributes.setdefault("fixtures", {})
-        fixtures["cleanup"].extend(fixtures_cleanup)
+        cleanup_fixtures.extend(fixtures_cleanup)
+    required_fixtures = fixtures.setdefault("required", [])
     if fixtures_required:
-        fixtures = attributes.setdefault("fixtures", {})
-        fixtures["required"].extend(fixtures_required)
+        required_fixtures.extend(fixtures_required)
+    setup_fixtures = fixtures.setdefault("setup", [])
     if fixtures_setup:
-        fixtures = attributes.setdefault("fixtures", {})
-        fixtures["setup"].extend(fixtures_setup)
+        setup_fixtures.extend(fixtures_setup)
     if cost is not None:
         warn_unsupported_ctest_option("cost")
     if generated_resource_spec_file is not None:
@@ -271,11 +288,7 @@ def create_draft_spec(
     if timeout_signal_name is not None:
         warn_unsupported_ctest_option("timeout_signal_name")
 
-    # concatenate stdout and stderr
-    kwargs["stderr"] = "merge"
-
-    draft = canary.DraftSpec(**kwargs)
-    return draft
+    return canary.DraftSpec(**kwargs)
 
 
 def env_mods(self, mods: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -300,6 +313,84 @@ def env_mods(self, mods: list[dict[str, str]]) -> list[dict[str, str]]:
                 entry.update({"value": value, "action": "prepend-path", "sep": ";"})
         mods.append(entry)
     return mods
+
+
+def setup_ctest(case: canary.TestCase):
+    sh = canary.filesystem.which("sh")
+    exec_dir = case.spec.attributes["execution_directory"]
+    args = case.spec.attributes["command"]
+    with case.workspace.openfile("runtest.sh", "w") as fh:
+        fh.write(f"#!{sh}\n")
+        fh.write(f"cd {exec_dir}\n")
+        fh.write(shlex.join(args))
+    canary.filesystem.set_executable(case.workspace.joinpath("runtest.sh"))
+    set_resource_groups_vars(case)
+
+
+def set_resource_groups_vars(case: canary.TestCase) -> None:
+    # some resources may have been added to the required resources even if they aren't in the
+    # resource groups (eg, cpus).  make sure to remove them so they don't unexpectedly appear
+    # in the environment variables
+    my_resource_groups = case.spec.attributes.get("resource_groups") or []
+    resource_group_count: int = 0
+    resource_group_types = {inst["type"] for group in my_resource_groups for inst in group}
+    variables: dict[str, str] = {}
+    for i, spec in enumerate(case.resources):
+        types = sorted(resource_group_types & spec.keys())
+        if not types:
+            continue
+        resource_group_count += 1
+        variables[f"CTEST_RESOURCE_GROUP_{i}"] = ",".join(types)
+        for type, items in spec.items():
+            if type not in types:
+                continue
+            key = f"CTEST_RESOURCE_GROUP_{i}_{type.upper()}"
+            values = []
+            for item in items:
+                values.append(f"id:{item['id']},slots:{item['slots']}")
+            variables[key] = ";".join(values)
+    if resource_group_count:
+        variables["CTEST_RESOURCE_GROUP_COUNT"] = str(resource_group_count)
+    case.add_variables(**variables)
+
+
+def finish_ctest(case: "canary.TestCase") -> None:
+    output = case.read_output()
+
+    if case.status.name in ("TIMEOUT", "SKIPPED", "CANCELLED", "NOT_RUN"):
+        return
+
+    if pass_regular_expression := case.spec.attributes.get("pass_regular_expression"):
+        for regex in pass_regular_expression:
+            if re.search(regex, output, re.MULTILINE):
+                case.status.set("SUCCESS")
+                break
+        else:
+            regex = ", ".join(pass_regular_expression)
+            case.status.set("FAILED", f"Regular expressions {regex} not found in {case.stdout}")
+
+    if skip_return_code := case.spec.attributes.get("skip_return_code"):
+        if case.status.code == skip_return_code:
+            case.status.set("SKIPPED", f"Return code={skip_return_code!r}")
+
+    if skip_regular_expression := case.attributes.get("skip_regular_expression"):
+        for regex in skip_regular_expression:
+            if re.search(regex, output, re.MULTILINE):
+                case.status.set("SKIPPED", f"Regular expression {regex!r} found in {case.stdout}")
+                break
+
+    if fail_regular_expression := case.spec.attributes.get("fail_regular_expression"):
+        for regex in fail_regular_expression:
+            if re.search(regex, output, re.MULTILINE):
+                case.status.set("FAILED", f"Regular expression {regex!r} found in {case.stdout}")
+                break
+
+    # invert logic
+    if case.spec.attributes.get("will_fail"):
+        if case.status.name == "SUCCESS":
+            case.status.set("FAILED", "Test case marked will_fail but succeeded")
+        elif case.status.name not in ("SKIPPED",):
+            case.status.set("SUCCESS")
 
 
 class Foo:
@@ -358,85 +449,6 @@ class Foo:
         with super().rc_environ(**env):
             self.set_resource_groups_vars()
             yield
-
-    def set_resource_groups_vars(self) -> None:
-        # some resources may have been added to the required resources even if they aren't in the
-        # resource groups (eg, cpus).  make sure to remove them so they don't unexpectedly appear
-        # in the environment variables
-        resource_group_count: int = 0
-        resource_group_types = {inst["type"] for group in self.resource_groups for inst in group}
-        for i, spec in enumerate(self.resources):
-            types = sorted(resource_group_types & spec.keys())
-            if not types:
-                continue
-            resource_group_count += 1
-            os.environ[f"CTEST_RESOURCE_GROUP_{i}"] = ",".join(types)
-            for type, items in spec.items():
-                if type not in types:
-                    continue
-                key = f"CTEST_RESOURCE_GROUP_{i}_{type.upper()}"
-                values = []
-                for item in items:
-                    values.append(f"id:{item['id']},slots:{item['slots']}")
-                os.environ[key] = ";".join(values)
-        os.environ["CTEST_RESOURCE_GROUP_COUNT"] = str(resource_group_count)
-
-    def setup(self) -> None:
-        super().setup()
-        with canary.filesystem.working_dir(self.working_directory):
-            sh = canary.filesystem.which("sh")
-            with open("runtest", "w") as fh:
-                fh.write(f"#!{sh}\n")
-                fh.write(f"cd {self.execution_directory}\n")
-                fh.write(shlex.join(self.command()))
-            canary.filesystem.set_executable("runtest")
-
-    def finish(self, update_stats: bool = True) -> None:
-        if update_stats:
-            self.cache_last_run()
-
-        output = self.output()
-
-        if self.status.name in ("timeout", "skipped", "cancelled", "not_run"):
-            return
-
-        if self.pass_regular_expression is not None:
-            for regex in self.pass_regular_expression:
-                if re.search(regex, output, re.MULTILINE):
-                    self.status.set("success")
-                    break
-            else:
-                regex = ", ".join(self.pass_regular_expression)
-                self.status.set(
-                    "failed", f"Regular expressions {regex} not found in {self.stdout_file}"
-                )
-
-        if self.skip_return_code is not None:
-            if self.returncode == self.skip_return_code:
-                self.status.set("skipped", f"Return code={self.skip_return_code!r}")
-
-        if self.skip_regular_expression is not None:
-            for regex in self.skip_regular_expression:
-                if re.search(regex, output, re.MULTILINE):
-                    self.status.set(
-                        "skipped", f"Regular expression {regex!r} found in {self.stdout_file}"
-                    )
-                    break
-
-        if self.fail_regular_expression is not None:
-            for regex in self.fail_regular_expression:
-                if re.search(regex, output, re.MULTILINE):
-                    self.status.set(
-                        "failed", f"Regular expression {regex!r} found in {self.stdout_file}"
-                    )
-                    break
-
-        # invert logic
-        if self.will_fail:
-            if self.status.name == "SUCCESS":
-                self.status.set("failed", "Test case marked will_fail but succeeded")
-            elif self.status.name not in ("skipped",):
-                self.status.set("success")
 
     @property
     def resource_groups(self) -> list[list[dict[str, Any]]]:

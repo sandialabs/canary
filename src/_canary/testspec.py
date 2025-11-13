@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from .legacy.testcase import TestCase as LegacyTestCase
 
 logger = logging.get_logger(__name__)
+select_sygil = "/"
 
 
 class Named(Protocol):
@@ -131,6 +132,8 @@ class SpecCommons:
         return json.dumps(self.asdict(), **kwargs)
 
     def matches(self, arg: str) -> bool:
+        if arg.startswith(select_sygil) and not Path(arg).exists():
+            arg = arg[1:]
         if self.id.startswith(arg):
             return True
         if self.display_name == arg:
@@ -588,20 +591,23 @@ class DraftSpec(SpecCommons):
         return spec
 
 
-def resolve(draft_specs: list[DraftSpec]) -> list[ResolvedSpec]:
+def resolve(draft_specs: list[DraftSpec] | list[ResolvedSpec]) -> list[ResolvedSpec]:
     graph: dict[str, list[str]] = {}
     draft_lookup: dict[str, list[str]] = {}
     dep_done_criteria: dict[str, list[str]] = {}
     map: dict[str, DraftSpec] = {d.id: d for d in draft_specs}
-    for draft in draft_specs:
-        matches = draft_lookup.setdefault(draft.id, [])
-        done_criteria = dep_done_criteria.setdefault(draft.id, [])
-        for dp in draft.dependency_patterns:
-            deps = [u for u in draft_specs if u is not draft and dp.matches(u)]
-            dp.update(*[u.id for u in deps])
-            matches.extend([_.id for _ in deps])
-            done_criteria.extend([dp.result_match] * len(deps))
-        graph[draft.id] = matches
+    for spec in draft_specs:
+        if isinstance(spec, ResolvedSpec):
+            graph[spec.id] = [_.id for _ in spec.dependencies]
+        else:
+            matches = draft_lookup.setdefault(spec.id, [])
+            done_criteria = dep_done_criteria.setdefault(spec.id, [])
+            for dp in spec.dependency_patterns:
+                deps = [u for u in draft_specs if u is not spec and dp.matches(u)]
+                dp.update(*[u.id for u in deps])
+                matches.extend([_.id for _ in deps])
+                done_criteria.extend([dp.result_match] * len(deps))
+            graph[spec.id] = matches
 
     errors: dict[str, list[str]] = {}
     lookup: dict[str, ResolvedSpec] = {}
@@ -611,12 +617,15 @@ def resolve(draft_specs: list[DraftSpec]) -> list[ResolvedSpec]:
         ids = ts.get_ready()
         for id in ids:
             # Replace dependencies with TestSpec objects
-            draft = map[id]
+            spec = map[id]
+            if isinstance(spec, ResolvedSpec):
+                lookup[id] = spec
+                continue
             dependencies: list[ResolvedSpec] = [lookup[id_] for id_ in draft_lookup[id]]
             try:
-                spec = draft.resolve(dependencies, dep_done_criteria[draft.id])
+                spec = spec.resolve(dependencies, dep_done_criteria[spec.id])
             except UnresolvedDependenciesErrors as e:
-                errors.setdefault(draft.fullname, []).extend(e.errors)
+                errors.setdefault(spec.fullname, []).extend(e.errors)
             lookup[id] = spec
         ts.done(*ids)
 
@@ -648,49 +657,6 @@ def finalize(resolved_specs: list[ResolvedSpec]) -> list[TestSpec]:
             lookup[id] = spec
         ts.done(*ids)
     return list(lookup.values())
-
-
-def load(files: list[Path], ids: list[str] | None = None) -> list[ResolvedSpec]:
-    """Load cached test specs.  Dependency resolution is performed.
-
-    Args:
-      files: file paths to load
-      ids: only return these ids
-
-    Returns:
-      Loaded test specs
-    """
-
-    # Specs must be loaded in static order so that depedencies are correct
-    map: dict[str, dict] = {}
-    graph: dict[str, list[str]] = {}
-    for file in files:
-        with open(file) as fh:
-            item = json.load(fh)
-        map[item["id"]] = item
-        graph[item["id"]] = [d["id"] for d in item["dependencies"]]
-
-    # Lookup table for dependencies that have been resolved
-    lookup: dict[str, ResolvedSpec] = {}
-    ts = TopologicalSorter(graph)
-    ts.prepare()
-    while ts.is_active():
-        spec_ids = ts.get_ready()
-        for id in spec_ids:
-            # Replace dependencies with actual references
-            spec = ResolvedSpec.from_dict(map[id], lookup)
-            lookup[id] = spec
-        ts.done(*spec_ids)
-
-    # At this point, lookup contains all the resolved specs
-    if not ids:
-        return list(lookup.values())
-
-    ids_to_load: set[str] = set()
-    for id in ts.static_order():
-        if ids_to_load and id not in ids_to_load:
-            lookup[id].mask = "==MASKED=="
-    return [spec for spec in lookup.values() if not spec.mask]
 
 
 def contains_any(elements: tuple[str, ...], test_elements: list[str]) -> bool:

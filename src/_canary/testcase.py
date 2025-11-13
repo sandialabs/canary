@@ -53,6 +53,7 @@ class TestCase:
 
         # Resources assigned to this test during execution
         self._resources: list[dict[str, list[dict]]] = []
+        self.variables: dict[str, str] = {}
 
         # Transfer some attributes from spec to me
         self.id = self.spec.id
@@ -89,6 +90,9 @@ class TestCase:
             text += ": %s" % self.status.message
         return text
 
+    def add_variables(self, **kwds: str) -> None:
+        self.variables.update(kwds)
+
     @property
     def statline(self) -> str:
         color = self.status.color[0]
@@ -107,7 +111,6 @@ class TestCase:
 
     @property
     def cpu_ids(self) -> list[str]:
-        # self._resources: list[dict[str, list[dict]]] = []
         cpu_ids: list[str] = []
         for group in self.resources:
             for type, instances in group.items():
@@ -178,7 +181,7 @@ class TestCase:
 
     def create_workspace(self) -> None:
         self.workspace.create(exist_ok=True)
-        with self.workspace.open(self.stdout, "w") as file:
+        with self.workspace.openfile(self.stdout, "w") as file:
             stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
             file.write(f"[{stamp}] Creating workspace root at {self.workspace}\n")
         if self.stderr is not None:
@@ -190,7 +193,7 @@ class TestCase:
         self.create_workspace()
 
     def setup(self) -> None:
-        self.workspace.remove()
+        self.workspace.remove(missing_ok=True)
         self.create_workspace()
         copy_all_resources: bool = config.getoption("copy_all_resources", False)
         prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
@@ -248,7 +251,7 @@ class TestCase:
             traceback.print_exc(file=fh, limit=2)
             message = fh.getvalue()
             f = self.stderr or self.stdout
-            with self.workspace.open(f, "a") as fp:
+            with self.workspace.openfile(f, "a") as fp:
                 fp.write(message)
             self.status.set("ERROR", message=message)
         finally:
@@ -301,7 +304,7 @@ class TestCase:
     @property
     def environment(self) -> dict[str, str | None]:
         # Environment variables needed by this test
-        variables: dict[str, str] = {}
+        variables = dict(self.variables)
         variables.update(self.spec.environment)
         for mod in self.spec.environment_modifications:
             name, action, value, sep = mod["name"], mod["action"], mod["value"], mod["sep"]
@@ -347,6 +350,7 @@ class TestCase:
             "timekeeper": self.timekeeper.asdict(),
             "measurements": self.measurements.asdict(),
             "workspace": self.workspace.asdict(),
+            "variables": self.variables,
         }
         return record
 

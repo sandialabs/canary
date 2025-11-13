@@ -209,13 +209,13 @@ class ProcessPool:
                 result_queue = mp.Queue()
 
                 # Launch a new measured process
-                qrank += 1
                 proc = MeasuredProcess(
                     target=self.runner,
                     args=(case, result_queue),
                     kwargs={"qsize": qsize, "qrank": qrank},
                 )
                 proc.start()
+                qrank += 1
 
                 # Store process with its result queue, case, start time, and timeout
                 timeout = case.timeout * self.timeout_multiplier

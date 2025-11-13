@@ -26,6 +26,7 @@ from _canary.plugins.hookspec import hookspec
 from _canary.plugins.manager import CanaryPluginManager
 from _canary.plugins.types import CanaryReporter
 from _canary.plugins.types import CanarySubcommand
+from _canary.session import Session
 from _canary.testcase import TestCase
 from _canary.testexec import ExecutionPolicy
 from _canary.testexec import PythonFileExecutionPolicy
@@ -48,7 +49,6 @@ from _canary.util import time
 from _canary.util.executable import Executable
 from _canary.version import version  # noqa: I001
 from _canary.version import version_info  # noqa: I001
-from _canary.workspace import Session
 from _canary.workspace import Workspace
 
 from . import directives

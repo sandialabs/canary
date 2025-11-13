@@ -468,3 +468,29 @@ def clean_out_folder(folder: str) -> None:
         with working_dir(folder):
             for f in os.listdir("."):
                 force_remove(f)
+
+
+def write_directory_tag(file: pathlib.Path | str) -> None:
+    file = pathlib.Path(file)
+    file.parent.mkdir(exist_ok=True)
+    file.write_text(
+        "Signature: 8a477f597d28d172789f06886806bc55\n"
+        "# This file is a directory tag automatically created by canary.\n"
+    )
+
+
+def atomic_write(path: pathlib.Path, text: str) -> None:
+    dir = path.parent
+    fd, tmp_path = tempfile.mkstemp(dir=dir, prefix=".tmp-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, str(path))
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise

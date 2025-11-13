@@ -37,6 +37,13 @@ def canary_testcase_setup(case: "canary.TestCase") -> None:
             write_vvtest_util(case)
 
 
+@canary.hookimpl
+def canary_testcase_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
+    if case.spec.file.suffix == ".vvt":
+        return canary.PythonFileExecutionPolicy()
+    return None
+
+
 class RerunAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         keywords = getattr(namespace, "keyword_exprs", None) or []
@@ -85,10 +92,8 @@ def write_vvtest_util(case: "canary.TestCase", stage: str = "run") -> None:
     if not case.spec.file_path.suffix == ".vvt":
         return
     attrs = get_vvtest_attrs(case)
-    file = Path.cwd() / "vvtest_util.py"
-    if not case.workspace.dir.samefile(file.parent):
-        raise ValueError("Incorrect directory for writing vvtest_util")
-    with open(file, "w") as fh:
+    file = case.workspace.joinpath("vvtest_util.py")
+    with case.workspace.openfile("vvtest_util.py", "w") as fh:
         fh.write("import os\n")
         fh.write("import sys\n")
         for key, value in attrs.items():
@@ -171,10 +176,3 @@ def get_vvtest_attrs(case: "canary.TestCase") -> dict:
     attrs["RESOURCE_IDS_ndevice"] = [int(_) for _ in case.gpu_ids]
 
     return attrs
-
-
-@canary.hookimpl
-def canary_testcase_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
-    if case.spec.file.suffix == ".vvt":
-        return canary.PythonFileExecutionPolicy()
-    return None

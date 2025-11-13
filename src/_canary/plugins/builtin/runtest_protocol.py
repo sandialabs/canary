@@ -34,5 +34,6 @@ def canary_testcase_run(
 def canary_testcase_finish(case: TestCase) -> Generator[None, None, bool]:
     case.finish()
     yield
+    # FIXME: case.cache_last_run()
     case.save()
     return True
