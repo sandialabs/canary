@@ -248,11 +248,11 @@ class _StreamHandler:
         elif fp is str:
             self.temporary = self.owned = True
             self.stream = tempfile.NamedTemporaryFile(mode="w+")
-            self.name = self.stream.name  # ty: ignore[possibly-missing-attribute]
+            self.name = self.stream.name  # ty: ignore[possibly-unbound-attribute]
         elif isinstance(fp, (str, Path)):
             self.owned = True
             self.stream = open(fp, "w")
-            self.name = self.stream.name  # ty: ignore[possibly-missing-attribute]
+            self.name = self.stream.name  # ty: ignore[possibly-unbound-attribute]
         else:
             raise TypeError(f"{fp}: unknown input argument type: {type(fp).__class__.__name__}")
 

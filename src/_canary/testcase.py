@@ -1707,13 +1707,13 @@ class TestCase(AbstractTestCase):
         cmd = self.command()
         cmd_line: str = shlex.join(cmd)
         timeout: float = self.timeout
-        timeoutx: float | None = config.get("config:timeout:multiplier")
+        timeoutx = self.timeout_multiplier
         self.log_to_stdout(f"Running {self.display_name}")
         self.log_to_stdout(f"Working directory: {self.working_directory}")
         self.log_to_stdout(f"Execution directory: {self.execution_directory}")
         self.log_to_stdout(f"Command line: {cmd_line}")
         self.log_to_stdout(f"Timeout: {timeout} s.")
-        if timeoutx and timeoutx != 1.0:
+        if timeoutx != 1.0:
             self.log_to_stdout(f"Timeout multiplier: {timeoutx}")
         self.stdout.flush()
 
@@ -1740,8 +1740,7 @@ class TestCase(AbstractTestCase):
             default_term_handler = signal.signal(signal.SIGTERM, cancel)
             proc: psutil.Popen | None = None
             metrics: dict[str, Any] | None = None
-            if timeoutx:
-                timeout *= timeoutx
+            timeout *= timeoutx
             with fs.working_dir(self.working_directory):
                 with self.rc_environ():
                     start_marker: float = time.monotonic()
