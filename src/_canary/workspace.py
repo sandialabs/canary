@@ -532,44 +532,27 @@ class Workspace:
 
     def get_selection_by_specs(self, roots: list[str], tag: str | None = None) -> SpecSelection:
         specs = self.load_testspecs(roots=roots)
-        selection = SpecSelection(specs, tag)
+        final = testspec.finalize(specs)
+        selection = SpecSelection(final, tag)
         if tag is not None:
             self.cache_selection(selection)
         return selection
 
-    @staticmethod
-    def filter(
-        cases: list[TestCase],
+    def select_from_path(
+        self,
+        path: Path,
         keyword_exprs: list[str] | None = None,
         parameter_expr: str | None = None,
         owners: set[str] | None = None,
         regex: str | None = None,
-        start: str | None = None,
-        case_specs: list[str] | None = None,
-    ) -> None:
-        """Filter test cases (mask test cases that don't meet a specific criteria)
-
-        Args:
-          keyword_exprs: Include those tests matching this keyword expressions
-          parameter_expr: Include those tests matching this parameter expression
-          start: The starting directory the python session was invoked in
-          case_specs: Include those tests matching these specs
-
-        Returns:
-          A list of test cases
-
-        """
-        raise NotImplementedError
-        config.pluginmanager.hook.canary_testsuite_mask(
-            cases=cases,
-            keyword_exprs=keyword_exprs,
-            parameter_expr=parameter_expr,
-            owners=owners,
-            regex=regex,
-            case_specs=case_specs,
-            start=start,
-            ignore_dependencies=False,
-        )
+        tag: str | None = None,
+    ) -> list[TestCase]:
+        roots: list[str] = []
+        for file in path.rglob("testcase.lock"):
+            lock_data = json.loads(file.read_text())
+            roots.append(lock_data["spec"]["id"])
+        cases = self.load_testcases(roots=roots)
+        return cases
 
     def tag(self, name: str, **meta: Any) -> str:
         tag_file = self.tags_dir / name

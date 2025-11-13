@@ -100,7 +100,7 @@ def rerun_case(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int, attemp
         if summary := job_finish_summary(case, qsize=qsize, qrank=qrank, attempt=attempt):
             logger.log(logging.EMIT, summary, extra={"prefix": ""})
         if dont_restage:
-            config.options.dont_restage = dont_restage
+            config.set("options:dont_restage", dont_restage, scope="command_line")
 
 
 def job_start_summary(case: "TestCase", qrank: int | None, qsize: int | None) -> str:

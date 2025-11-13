@@ -45,6 +45,7 @@ section_schemas: dict[str, Schema] = {
     "plugin": plugin_schema,
     "system": any_schema,
     "user": user_schema,
+    "options": any_schema,
 }
 
 
@@ -118,7 +119,6 @@ class Config:
         self.invocation_dir = invocation_dir
         self.working_dir = os.getcwd()
         self.pluginmanager: CanaryPluginManager = CanaryPluginManager.factory()
-        self.options: argparse.Namespace = argparse.Namespace()
         self.scopes: dict[str, ConfigScope] = {}
         if envcfg := os.getenv(env_archive_name):
             with io.StringIO() as fh:
@@ -137,10 +137,7 @@ class Config:
             logging.set_level(logging.DEBUG)
 
     def getoption(self, name: str, default: Any = None) -> Any:
-        value = getattr(self.options, name, None)
-        if value is None:
-            return default
-        return value
+        return self.get(f"options:{name}", default=default, scope="command_line")
 
     def getstate(self, pretty: bool = True) -> dict[str, Any]:
         data: dict[str, Any] = {}
@@ -148,7 +145,6 @@ class Config:
         for section in sections:
             section_data = self.get_config(section)
             data[section] = section_data
-        data["options"] = vars(self.options)
         data["invocation_dir"] = self.invocation_dir
         data["working_dir"] = self.working_dir
         return data
@@ -366,6 +362,7 @@ class Config:
             if n > cpu_count():
                 logger.warning(f"workers={n} > cpu_count={cpu_count()}")
 
+        # Put timeouts passed on the command line into the regular configuration
         if t := getattr(args, "timeout", None):
             config_settings: dict = data.setdefault("config", {})
             timeout_settings: dict[str, Any] = config_settings.setdefault("timeout", {})
@@ -373,7 +370,9 @@ class Config:
                 timeout_settings[key] = val
             config_settings["timeout"] = timeout_settings
 
-        self.options = args
+
+        options = data.setdefault("options", {})
+        options.update({k: v for k, v in vars(args).items() if v is not None})
 
         if args.config_file:
             if fd := read_config_file(args.config_file):
@@ -397,13 +396,9 @@ class Config:
 
     def load_snapshot(self, file: IO[Any]) -> None:
         snapshot = json.load(file)
-        if "config" in snapshot:
-            snapshot = convert_legacy_snapshot(snapshot)
         properties: dict[str, Any] = snapshot["properties"]
         self.working_dir = properties["working_dir"]
         self.invocation_dir = properties["invocation_dir"]
-        if options := properties.pop("options", None):
-            self.options = argparse.Namespace(**options)
         self.scopes.clear()
         for value in snapshot["scopes"]:
             scope = ConfigScope(value["name"], value["file"], value["data"])
@@ -418,7 +413,6 @@ class Config:
     def dump_snapshot(self, file: IO[Any], indent: int | None = None) -> None:
         snapshot: dict[str, Any] = {}
         properties = snapshot.setdefault("properties", {})
-        properties["options"] = vars(self.options)
         properties["invocation_dir"] = self.invocation_dir
         properties["working_dir"] = self.working_dir
         scopes = snapshot.setdefault("scopes", [])
@@ -623,30 +617,3 @@ def create_cache_dir(path: str) -> None:
             fh.write("# This file is a cache directory tag automatically created by canary.\n")
             fh.write("# For information about cache directory tags ")
             fh.write("see https://bford.info/cachedir/\n")
-
-
-def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
-    snapshot: dict[str, Any] = {}
-    properties = snapshot.setdefault("properties", {})
-    properties["options"] = legacy["options"]
-    properties["invocation_dir"] = legacy["config"].pop("invocation_dir")
-    properties["working_dir"] = legacy["config"].pop("working_dir")
-
-    scope: dict[str, Any] = {"name": "defaults", "file": None}
-    data: dict[str, Any] = scope.setdefault("data", {})  # type: ignore
-    data["build"] = legacy["build"]
-    data["environment"] = legacy["environment"]
-    data["system"] = legacy["system"]
-    data["config"] = legacy["config"]
-    data["config"]["cache_dir"] = os.path.join(properties["invocation_dir"], ".canary_cache")
-    if "mulitprocessing_context" in data["config"]:
-        data["config"]["multiprocessing"] = {
-            "context": data["config"].pop("multiprocessing_context", "spawn"),
-            "max_tasks_per_child": 1,
-        }
-    data["config"]["plugins"] = legacy["plugin_manager"]["plugins"]
-    if "test" in legacy:
-        data["config"]["timeout"] = legacy["test"]["timeout"]
-    data["config"].pop("_config_dir", None)
-    snapshot.setdefault("scopes", []).append(scope)
-    return snapshot

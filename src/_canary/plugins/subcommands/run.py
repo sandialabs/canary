@@ -110,27 +110,31 @@ class Run(CanarySubcommand):
         work_tree: str = args.work_tree or os.getcwd()
         if args.wipe:
             Workspace.remove(Path(work_tree))
+
         try:
             workspace = Workspace.load(Path(work_tree))
         except NotAWorkspaceError:
             workspace = Workspace.create(Path(work_tree))
 
-        if args.runtag:
-            selection = workspace.get_selection(args.runtag)
-        elif args.casespecs:
-            selection = workspace.get_selection_by_specs(args.casespecs, tag=args.tag)
-        elif args.paths:
-            parsing_policy = config.getoption("parsing_policy") or "pedantic"
-            workspace.add(args.paths, pedantic=parsing_policy == "pedantic")
-            selection = workspace.make_selection(
+        if args.start:
+            # Special case: re-run test cases from here down
+            cases = workspace.select_from_path(
+                path=Path(args.start),
                 tag=args.tag,
                 keyword_exprs=args.keyword_exprs,
                 parameter_expr=args.parameter_expr,
-                on_options=args.on_options,
                 regex=args.regex_filter,
             )
+            with workspace.session(name=cases[0].workspace.session) as session:
+                disp = session.run(roots=[case.id for case in cases])
         else:
-            if any((args.keyword_exprs, args.parameter_expr, args.on_options, args.regex_filter)):
+            if args.runtag:
+                selection = workspace.get_selection(args.runtag)
+            elif args.casespecs:
+                selection = workspace.get_selection_by_specs(args.casespecs, tag=args.tag)
+            elif args.paths:
+                parsing_policy = config.getoption("parsing_policy") or "pedantic"
+                workspace.add(args.paths, pedantic=parsing_policy == "pedantic")
                 selection = workspace.make_selection(
                     tag=args.tag,
                     keyword_exprs=args.keyword_exprs,
@@ -139,12 +143,20 @@ class Run(CanarySubcommand):
                     regex=args.regex_filter,
                 )
             else:
-                # Get the default selection
-                selection = workspace.get_selection()
+                if any((args.keyword_exprs, args.parameter_expr, args.on_options, args.regex_filter)):
+                    selection = workspace.make_selection(
+                        tag=args.tag,
+                        keyword_exprs=args.keyword_exprs,
+                        parameter_expr=args.parameter_expr,
+                        on_options=args.on_options,
+                        regex=args.regex_filter,
+                    )
+                else:
+                    # Get the default selection
+                    selection = workspace.get_selection()
 
-        # FIXME: env_mods = config.getoption("env_mods") or {}
-        with workspace.session(selection=selection) as session:
-            disp = session.run()
+            with workspace.session(selection=selection) as session:
+                disp = session.run()
 
         config.pluginmanager.hook.canary_runtests_summary(
             cases=disp["cases"], include_pass=False, truncate=10

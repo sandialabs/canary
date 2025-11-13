@@ -47,7 +47,6 @@ if TYPE_CHECKING:
     getoption = _config.getoption
     set_main_options = _config.set_main_options
     cache_dir = _config.cache_dir
-    options = _config.options
     dump_snapshot = _config.dump_snapshot
     ensure_loaded = lambda: None
     load_snapshot = _config.load_snapshot

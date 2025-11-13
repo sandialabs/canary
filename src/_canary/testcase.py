@@ -9,8 +9,10 @@ import math
 import multiprocessing
 import os
 import signal
+import sys
 import traceback
 from pathlib import Path
+from shutil import copyfile
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import MutableMapping
@@ -29,6 +31,7 @@ from .timekeeper import Timekeeper
 from .util import json_helper as json
 from .util import logging
 from .util.compression import compress_str
+from .util.executable import Executable
 from .util.time import hhmmss
 from .when import match_any
 
@@ -271,6 +274,30 @@ class TestCase:
             queue.put({"status": self.status, "timekeeper": self.timekeeper})
             self.save()
         return
+
+    def do_baseline(self) -> None:
+        if not self.spec.baseline:
+            return
+        logger.info(f"Rebaselining {self.spec.pretty_name}")
+        with self.workspace.enter():
+            for arg in self.spec.baseline:
+                if isinstance(arg, str):
+                    exe: Executable
+                    args: list[str] = []
+                    p = Path(arg)
+                    if p.exists():
+                        exe = Executable(str(p))
+                    else:
+                        args = [self.spec.file.name, arg]
+                        exe = Executable(sys.executable)
+                    exe(*args, fail_on_error=False)
+                else:
+                    a, b = arg
+                    src = self.workspace.dir / a
+                    dst = self.spec.file.parent / b
+                    if src.exists():
+                        logger.debug(f"    Replacing {b} with {a}\n")
+                        copyfile(src, dst)
 
     def update_status_from_exit_code(self, *, code: int) -> None:
         xcode = self.spec.xstatus

@@ -285,8 +285,8 @@ class ProcessPool:
 
     @cached_property
     def timeout_multiplier(self) -> float:
-        timeoutx: float = config.get("config:timeout:multiplier") or 1.0
-        timeouts = config.getoption("timeout") or {}
-        if t := timeouts.get("multiplier"):
-            timeoutx = float(t)
-        return timeoutx
+        if t := config.get("options:timeout:multiplier"):
+            return float(t)
+        elif t := config.get("config:timeout:multiplier"):
+            return float(t)
+        return 1.0

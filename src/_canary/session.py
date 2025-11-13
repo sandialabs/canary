@@ -190,6 +190,8 @@ class Session:
         start = time.monotonic()
         returncode: int = -1
         try:
+            for case in cases:
+                case.status.set("PENDING")
             with working_dir(str(self.work_dir)):
                 config.pluginmanager.hook.canary_runtests(cases=cases)
         finally:

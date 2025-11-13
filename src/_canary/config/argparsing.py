@@ -422,11 +422,8 @@ def make_argument_parser(**kwargs):
         metavar="var=val",
         default=None,
         action=EnvironmentModification,
-        help="Add environment variable %s to the testing environment with value %s.  Accepts "
-        "optional scope using the form %s:var=val.  Valid scopes are: "
-        "session: set environment variable for whole session; "
-        "test: set environment variable only during test execution"
-        % (colorize("@*{var}"), colorize("@*{val}"), colorize("@*{scope}")),
+        help="Add environment variable %s to the testing environment with value %s. "
+        % (colorize("@*{var}"), colorize("@*{val}")),
     )
     parser.add_argument(
         "--cache-dir",
