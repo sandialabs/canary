@@ -132,7 +132,7 @@ class PythonFileExecutionPolicy(ExecutionPolicy):
             return case
 
         try:
-            os.environ.update(case.environment)
+            case.update_env(os.environ)
             sys.path.insert(0, str(case.workspace.dir))
             setattr(canary, "get_instance", get_instance)
             setattr(canary, "get_testcase", get_testcase)
@@ -180,11 +180,7 @@ class SubprocessExecutionPolicy(ExecutionPolicy):
         old_env = os.environ.copy()
         old_cwd = Path.cwd()
         try:
-            os.environ.update(case.environment)
-            pypath = str(case.workspace.dir)
-            if var := os.getenv("PYTHONPATH"):
-                pypath = f"{pypath}:{var}"
-            os.environ["PYTHONPATH"] = pypath
+            case.update_env(os.environ)
             os.chdir(case.workspace.dir)
 
             yield
@@ -203,6 +199,8 @@ class SubprocessExecutionPolicy(ExecutionPolicy):
                     stderr = subprocess.STDOUT
                 else:
                     stderr = open(case.stderr, "a")
+                if a := config.getoption("script_args"):
+                    self.args.extend(a)
                 cp = subprocess.run(self.args, stdout=stdout, stderr=stderr, check=False)
             finally:
                 stdout.close()

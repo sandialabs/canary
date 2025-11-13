@@ -5,6 +5,7 @@
 import dataclasses
 import io
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Type
@@ -161,3 +162,17 @@ def factory(case: "TestCase") -> TestInstance:
         lockfile=str(case.workspace.dir / "testcase.lock"),
     )
     return instance
+
+
+def load_instance(arg: Path | str | None) -> TestInstance:
+    from _canary.workspace import Workspace
+
+    path = Path(arg or ".").absolute()
+    file = path / "testcase.lock" if path.is_dir() else path
+    lock_data = json.loads(file.read_text())
+    id = lock_data["spec"]["id"]
+    workspace = Workspace.load()
+    cases = workspace.load_testcases(roots=[id])
+    for case in cases:
+        return factory(case)
+    raise ValueError(f"Test instance not found in {workspace.root}")

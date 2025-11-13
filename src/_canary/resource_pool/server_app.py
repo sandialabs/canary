@@ -15,12 +15,12 @@ def create_pool_server_app_fastapi(pool: ResourcePool):
     ledger: dict[str, Any] = {}
 
     @app.post("/accommodates")
-    async def accommodates(request: list[list[dict[str, Any]]]) -> JSONResponse:
+    async def accommodates(request: list[dict[str, Any]]) -> JSONResponse:
         result = pool.accommodates(request)
         return JSONResponse(status_code=200, content={"ok": result.ok, "reason": result.reason})
 
     @app.post("/checkout")
-    async def checkout(request: list[list[dict[str, Any]]]) -> JSONResponse:
+    async def checkout(request: list[dict[str, Any]]) -> JSONResponse:
         transaction_id = str(uuid.uuid4())
         try:
             resources = pool.checkout(request)
@@ -33,7 +33,7 @@ def create_pool_server_app_fastapi(pool: ResourcePool):
             )
 
     @app.post("/checkin")
-    async def checkin(request: list[dict[str, list[dict]]]) -> JSONResponse:
+    async def checkin(request: dict[str, list[dict]]) -> JSONResponse:
         # resources = ledger.get(trnsaction_id)
         # if not resources:
         #    return JSONResponse(status_code=400, content={"error": "resources ..."})

@@ -195,6 +195,7 @@ def create_draft_spec(
     kwargs["keywords"] = ["ctest", *labels]
 
     attributes: dict[str, Any] = kwargs.setdefault("attributes", {})
+
     attributes["command"] = command
     attributes["will_fail"] = will_fail or False
 
@@ -219,8 +220,6 @@ def create_draft_spec(
     if disabled:
         kwargs["mask"] = f"Explicitly disabled in {file_root}/{file_path}"
 
-    attributes: dict[str, Any] = kwargs.setdefault("attributes", {})
-
     attributes.setdefault("resource_groups", [])
     if resource_groups is not None:
         attributes["resource_groups"].extend(resource_groups)
@@ -239,7 +238,6 @@ def create_draft_spec(
     if run_serial is True:
         kwargs["exclusive"] = True
     if required_files:
-        attributes = kwargs.setdefault("attributes", {})
         attributes["required_files"] = required_files
     if environment_modification is not None:
         kwargs["environment_modifications"] = env_mods(environment_modification)
@@ -255,7 +253,6 @@ def create_draft_spec(
     else:
         kwargs["timeout"] = canary.config.get("config:timeout:ctest", 1500.0)
 
-    attributes: dict[str, Any] = kwargs.setdefault("attributes", {})
     attributes["pass_regular_expression"] = pass_regular_expression
     attributes["fail_regular_expression"] = fail_regular_expression
     attributes["skip_regular_expression"] = skip_regular_expression
@@ -319,39 +316,58 @@ def setup_ctest(case: canary.TestCase):
     sh = canary.filesystem.which("sh")
     exec_dir = case.spec.attributes["execution_directory"]
     args = case.spec.attributes["command"]
+    variables = resource_groups_vars(case)
+    case.add_variables(**variables)
     with case.workspace.openfile("runtest.sh", "w") as fh:
         fh.write(f"#!{sh}\n")
         fh.write(f"cd {exec_dir}\n")
+        for name, value in variables.items():
+            fh.write(f"export {name}={value}\n")
         fh.write(shlex.join(args))
     canary.filesystem.set_executable(case.workspace.joinpath("runtest.sh"))
-    set_resource_groups_vars(case)
 
 
-def set_resource_groups_vars(case: canary.TestCase) -> None:
-    # some resources may have been added to the required resources even if they aren't in the
-    # resource groups (eg, cpus).  make sure to remove them so they don't unexpectedly appear
-    # in the environment variables
-    my_resource_groups = case.spec.attributes.get("resource_groups") or []
-    resource_group_count: int = 0
-    resource_group_types = {inst["type"] for group in my_resource_groups for inst in group}
+def resource_groups_vars(case: canary.TestCase) -> dict[str, str]:
+    """Set the resource group variables as required by CTest
+
+    canary does not have a notion of resource groups, like ctest does.  When a test checks out
+    resources from a pool the resources are in a dictionary of the form
+
+      {str: list[spec]}
+
+    where a spec is:
+
+      {"slots": N, "count": N}
+
+    """
     variables: dict[str, str] = {}
-    for i, spec in enumerate(case.resources):
-        types = sorted(resource_group_types & spec.keys())
-        if not types:
-            continue
-        resource_group_count += 1
+    resource_groups = case.spec.attributes.get("resource_groups") or []
+    if not resource_groups:
+        return variables
+    avail = copy.deepcopy(case.resources)
+
+    for i, group in enumerate(resource_groups):
+        types = sorted(set([_["type"] for _ in group]))
         variables[f"CTEST_RESOURCE_GROUP_{i}"] = ",".join(types)
-        for type, items in spec.items():
-            if type not in types:
+        specs: dict[str, list] = {}
+        for item in group:
+            type = item["type"]
+            if type not in avail:
                 continue
+            spec = specs.setdefault(type, [])
+            slots = item["slots"]
+            for inst in avail[type]:
+                if inst["slots"] >= slots:
+                    spec.append(f"id:{inst['id']},slots:{inst['slots']}")
+                    inst["slots"] = inst["slots"] - slots
+                    break
+            else:
+                raise ValueError(f"Insufficient slots of {type} to fill CTest resource group")
+        for type, spec in specs.items():
             key = f"CTEST_RESOURCE_GROUP_{i}_{type.upper()}"
-            values = []
-            for item in items:
-                values.append(f"id:{item['id']},slots:{item['slots']}")
-            variables[key] = ";".join(values)
-    if resource_group_count:
-        variables["CTEST_RESOURCE_GROUP_COUNT"] = str(resource_group_count)
-    case.add_variables(**variables)
+            variables[key] = ",".join(spec)
+    variables["CTEST_RESOURCE_GROUP_COUNT"] = str(len(resource_groups))
+    return variables
 
 
 def finish_ctest(case: "canary.TestCase") -> None:

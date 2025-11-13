@@ -269,7 +269,7 @@ class Workspace:
         try:
             yield session
         finally:
-            self.update_latest_results(session)
+            self.add_session_results(session)
 
     @property
     def spec_index(self) -> dict[str, list[str]]:
@@ -288,20 +288,13 @@ class Workspace:
     def dump_latest_results(self, latest: dict[str, Any]) -> None:
         atomic_write(self.latest_results_file, json.dumps(latest, indent=2))
 
-    def update_latest_results(self, session: Session) -> None:
+    def add_session_results(self, session: Session) -> None:
         """Update latest results, view, and refs with results from ``session``"""
         latest = self.load_latest_results()
         view_entries: dict[str, list[str]] = {}
         for case in session.cases:
-            if case.id in latest:
-                # Determine if this session's results are newer than my results
-                # They can be older if only a subset of the session's cases were run this last time
-                mine = latest[case.id]
-                if mine["timekeeper"]["finished_on"] != "NA":
-                    my_time = datetime.datetime.fromisoformat(mine["timekeeper"]["finished_on"])
-                    their_time = datetime.datetime.fromisoformat(case.timekeeper.finished_on)
-                    if my_time > their_time:
-                        continue
+            if case.status in ("READY", "PENDING"):
+                case.status.set("ERROR", message="Case did not run")
             entry = {"session": session.name, **case.asdict()}
             entry["spec"]["name"] = case.spec.name
             entry["spec"]["fullname"] = case.spec.fullname
@@ -461,12 +454,59 @@ class Workspace:
         logger.info(f"@*{{Added}} {n} new test case generators to {self.root}")
         return generators
 
+    def resolve_root_ids(self, roots: list[str]) -> None:
+        """Expand roots to full IDs.  roots is a spec ID, or partial ID, and can be preceded by /"""
+
+        def find(root: str) -> str:
+            sygil = testspec.select_sygil
+            if root in self.spec_index:
+                return root
+            for id in self.spec_index:
+                if id.startswith(root):
+                    return id
+                elif root.startswith(sygil) and id.startswith(root[1:]):
+                    return id
+            raise SpecNotFoundError(root)
+
+        for i, root in enumerate(roots):
+            roots[i] = find(root)
+
+    def _load_testspecs(self, roots: list[str] | None = None) -> list[ResolvedSpec]:
+        """Load cached test specs.  Dependency resolution is performed."""
+        graph: dict[str, list[str]] = {id: list(deps) for id, deps in self.spec_index.items()}
+        if roots:
+            self.resolve_root_ids(roots)
+            reachable = reachable_nodes(graph, roots)
+            graph = {id: graph[id] for id in reachable}
+        lookup: dict[str, ResolvedSpec] = {}
+        ts = TopologicalSorter(graph)
+        for id in ts.static_order():
+            file = self.specfile(id)
+            lock_data = json.loads(file.read_text())
+            spec = ResolvedSpec.from_dict(lock_data, lookup)
+            lookup[id] = spec
+        return list(lookup.values())
+
+    def load_testspecs(self, roots: list[str] | None = None) -> list[ResolvedSpec]:
+        """Load cached test specs.  Dependency resolution is performed.
+
+        Args:
+          roots: only return specs matching these roots
+
+        Returns:
+          Test specs
+        """
+        specs = self._load_testspecs(roots=roots)
+        if roots:
+            return [spec for spec in specs if spec.id in roots]
+        return specs
+
     def load_testcases(self, roots: list[str] | None = None) -> list[TestCase]:
         """Load cached test cases.  Dependency resolution is performed.  If ``latest is True``,
         update each case to point to the latest run instance.
         """
         lookup: dict[str, TestCase] = {}
-        specs = self.load_testspecs(roots=roots)
+        specs = self._load_testspecs(roots=roots)
         latest = self.load_latest_results()
         for spec in static_order(specs):
             if mine := latest.get(spec.id):
@@ -487,48 +527,6 @@ class Workspace:
                 lookup[spec.id] = case
         if roots:
             return [case for case in lookup.values() if case.id in roots]
-        return list(lookup.values())
-
-    def resolve_root_ids(self, roots: list[str]) -> None:
-        """Expand roots to full IDs.  roots is a spec ID, or partial ID, and can be preceded by /"""
-
-        def find(root: str) -> str:
-            sygil = testspec.select_sygil
-            if root in self.spec_index:
-                return root
-            for id in self.spec_index:
-                if id.startswith(root):
-                    return id
-                elif root.startswith(sygil) and id.startswith(root[1:]):
-                    return id
-            raise SpecNotFoundError(root)
-
-        for i, root in enumerate(roots):
-            roots[i] = find(root)
-
-    def load_testspecs(self, roots: list[str] | None = None) -> list[ResolvedSpec]:
-        """Load cached test specs.  Dependency resolution is performed.
-
-        Args:
-          roots: only return specs matching these roots
-
-        Returns:
-          Test specs
-        """
-        graph: dict[str, list[str]] = {id: list(deps) for id, deps in self.spec_index.items()}
-        if roots:
-            self.resolve_root_ids(roots)
-            reachable = reachable_nodes(graph, roots)
-            graph = {id: graph[id] for id in reachable}
-        lookup: dict[str, ResolvedSpec] = {}
-        ts = TopologicalSorter(graph)
-        for id in ts.static_order():
-            file = self.specfile(id)
-            lock_data = json.loads(file.read_text())
-            spec = ResolvedSpec.from_dict(lock_data, lookup)
-            lookup[id] = spec
-        if roots:
-            return [spec for spec in lookup.values() if spec.id in roots]
         return list(lookup.values())
 
     def get_selection_by_specs(self, roots: list[str], tag: str | None = None) -> SpecSelection:

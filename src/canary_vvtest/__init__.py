@@ -7,7 +7,6 @@ import json
 import os
 import sys
 import typing
-from pathlib import Path
 
 import canary
 

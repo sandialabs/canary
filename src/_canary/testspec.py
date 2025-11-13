@@ -113,14 +113,13 @@ class SpecCommons:
             parameters["runtime"] = float(rt)
         return parameters
 
-    def required_resources(self) -> list[list[dict[str, Any]]]:
-        group: list[dict[str, Any]] = []
+    def required_resources(self) -> list[dict[str, Any]]:
+        reqd: list[dict[str, Any]] = []
         for name, value in self.rparameters.items():
             if name == "nodes":
                 continue
-            group.extend([{"type": name, "slots": 1} for _ in range(value)])
-        # by default, only one resource group is returned
-        return [group]
+            reqd.extend([{"type": name, "slots": 1} for _ in range(value)])
+        return reqd
 
     def asdict(self, shallow: bool = False) -> dict:
         return dataclasses.asdict(self)

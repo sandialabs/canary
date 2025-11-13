@@ -1,6 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import copy
 import dataclasses
 import datetime
 import io
@@ -11,6 +12,7 @@ import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
+from typing import MutableMapping
 
 from . import config
 from .error import TestDiffed
@@ -52,8 +54,8 @@ class TestCase:
         self.dependencies = dependencies
 
         # Resources assigned to this test during execution
-        self._resources: list[dict[str, list[dict]]] = []
-        self.variables: dict[str, str] = {}
+        self._resources: dict[str, list[dict]] = {}
+        self.variables: dict[str, str | None] = self.get_environ_from_spec()
 
         # Transfer some attributes from spec to me
         self.id = self.spec.id
@@ -111,59 +113,59 @@ class TestCase:
 
     @property
     def cpu_ids(self) -> list[str]:
-        cpu_ids: list[str] = []
-        for group in self.resources:
-            for type, instances in group.items():
-                if type == "cpus":
-                    cpu_ids.extend([str(_["id"]) for _ in instances])
-        return cpu_ids
+        return [str(_["id"]) for _ in self.resources.get("cpus", [])]
 
     @property
     def gpu_ids(self) -> list[str]:
-        gpu_ids: list[str] = []
-        for group in self.resources:
-            for type, instances in group.items():
-                if type == "gpus":
-                    gpu_ids.extend([str(_["id"]) for _ in instances])
-        return gpu_ids
+        return [str(_["id"]) for _ in self.resources.get("gpus", [])]
 
     @property
     def runtime(self) -> float:
         return self.spec.timeout  # FIXME
 
     @property
-    def resources(self) -> list[dict[str, list[dict]]]:
+    def resources(self) -> dict[str, list[dict]]:
         """resources is of the form
 
-        resources[i] = {str: [{"id": str, "slots": int}]}
+        resources[type] = [{"id": str, "slots": int}]
 
         If the test required 2 cpus and 2 gpus, resources would look like
 
-        resources = [
-          {"cpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}]},
-          {"gpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}]},
-        ]
+        resources = {
+            "cpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}],
+            "gpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}],
+        }
 
         """
         return self._resources
 
-    @resources.setter
-    def resources(self, arg: list[dict[str, list[dict]]]) -> None:
-        self.assign_resources(arg)
-
     def set_attribute(self, **kwds: Any) -> None:
         self.spec.attributes.update(kwds)
 
-    def assign_resources(self, arg: list[dict[str, list[dict]]]) -> None:
+    def assign_resources(self, arg: dict[str, list[dict]]) -> None:
         self._resources.clear()
-        self._resources.extend(arg)
+        self._resources.update(arg)
 
-    def free_resources(self) -> list[dict[str, list[dict]]]:
-        tmp = self._resources
-        self._resources = []
+        # Set resource-type variables
+        vars: dict[str, str] = {}
+        for type, instances in arg.items():
+            varname = type[:-1] if type[-1] == "s" else type
+            ids: list[str] = [str(_["id"]) for _ in instances]
+            vars[f"{varname}_ids"] = self.variables[f"CANARY_{varname.upper()}_IDS"] = ",".join(ids)
+
+        # Look for variables to expand
+        for key, value in self.variables.items():
+            try:
+                self.variables[key] = value % vars
+            except Exception:  # nosec B110
+                pass
+
+    def free_resources(self) -> dict[str, list[dict]]:
+        tmp = copy.deepcopy(self._resources)
+        self._resources.clear()
         return tmp
 
-    def required_resources(self) -> list[list[dict[str, Any]]]:
+    def required_resources(self) -> list[dict[str, Any]]:
         return self.spec.required_resources()
 
     @property
@@ -225,6 +227,9 @@ class TestCase:
     def run(self, queue: multiprocessing.Queue) -> None:
         code: int
         try:
+            with self.workspace.openfile(self.stdout, "a") as fh:
+                prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S.%f")
+                fh.write(f"[{prefix}] Begin executing {self.spec.fullname}\n")
             xstatus = self.spec.xstatus
             with self.workspace.enter(), self.timekeeper.timeit():
                 self.status.set("RUNNING")
@@ -301,10 +306,16 @@ class TestCase:
             self.timekeeper.finished_on = timekeeper.finished_on
             self.timekeeper.duration = timekeeper.duration
 
-    @property
-    def environment(self) -> dict[str, str | None]:
+    def update_env(self, env: MutableMapping[str, str]) -> None:
+        for key, val in self.variables.items():
+            if val is None:
+                env.pop(key, None)
+            else:
+                env[key] = val
+
+    def get_environ_from_spec(self) -> dict[str, str | None]:
         # Environment variables needed by this test
-        variables = dict(self.variables)
+        variables: dict[str, str | None] = {}
         variables.update(self.spec.environment)
         for mod in self.spec.environment_modifications:
             name, action, value, sep = mod["name"], mod["action"], mod["value"], mod["sep"]
@@ -316,19 +327,6 @@ class TestCase:
                 variables[name] = f"{value}{sep}{os.getenv(name, '')}"
             elif action == "append-path":
                 variables[name] = f"{os.getenv(name, '')}{sep}{value}"
-
-        # Set resource-type variables
-        vars = {}
-        for group in self.resources:
-            for type, instances in group.items():
-                varname = type[:-1] if type[-1] == "s" else type
-                ids: list[str] = [str(_["id"]) for _ in instances]
-                vars[f"{varname}_ids"] = variables[f"CANARY_{varname.upper()}"] = ",".join(ids)
-        for key, value in variables.items():
-            try:
-                variables[key] = value % vars
-            except Exception:  # nosec B110
-                pass
         variables["PYTHONPATH"] = f"{self.workspace.dir}:{os.getenv('PYTHONPATH', '')}"
         variables["PATH"] = f"{self.workspace.dir}:{os.environ['PATH']}"
         return variables
@@ -420,6 +418,20 @@ class TestCase:
             kb_to_keep = 2 if self.status.name == "SUCCESS" else 300
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
+
+
+def load_testcase(arg: Path | str | None) -> TestCase:
+    from _canary.workspace import Workspace
+
+    path = Path(arg or ".").absolute()
+    file = path / "testcase.lock" if path.is_dir() else path
+    lock_data = json.loads(file.read_text())
+    id = lock_data["spec"]["id"]
+    workspace = Workspace.load()
+    cases = workspace.load_testcases(roots=[id])
+    for case in cases:
+        return case
+    raise ValueError(f"Test case not found in {workspace.root}")
 
 
 @dataclasses.dataclass

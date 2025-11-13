@@ -187,7 +187,7 @@ class ResourcePool:
         for type in kwds:
             self.slots_per_resource_type[type] = sum([_["slots"] for _ in self.resources[type]])
 
-    def accommodates(self, request: list[list[dict[str, Any]]]) -> Result:
+    def accommodates(self, request: list[dict[str, Any]]) -> Result:
         """determine if the resources for this test are available"""
         if self.empty():
             raise EmptyResourcePoolError
@@ -196,13 +196,12 @@ class ResourcePool:
         missing: set[str] = set()
 
         # Step 1: Gather resource requirements and detect missing types
-        for group in request:
-            for member in group:
-                rtype = member["type"]
-                if rtype in self.resources:
-                    slots_needed[rtype] += member["slots"]
-                else:
-                    missing.add(rtype)
+        for member in request:
+            rtype = member["type"]
+            if rtype in self.resources:
+                slots_needed[rtype] += member["slots"]
+            else:
+                missing.add(rtype)
         if missing:
             types = colorize("@*{%s}" % ",".join(sorted(missing)))
             key = pluralize("Resource", n=len(missing))
@@ -230,9 +229,7 @@ class ResourcePool:
         # Step 3: all good
         return Result(True)
 
-    def checkout(
-        self, resource_groups: list[list[dict[str, Any]]], **kwds: Any
-    ) -> list[dict[str, list[dict]]]:
+    def checkout(self, request: list[dict[str, Any]], **kwds: Any) -> dict[str, list[dict]]:
         """Returns resources available to the test
 
         local[i] = {<type>: [{'id': <id>, 'slots': <slots>}, ...], ... }
@@ -241,20 +238,17 @@ class ResourcePool:
         if self.empty():
             raise EmptyResourcePoolError
         totals: Counter[str] = Counter()
-        acquired: list[dict[str, list[dict]]] = []
+        acquired: dict[str, list[dict]] = {}
         try:
             stash: bytes = pickle.dumps(self.resources)  # nosec B301
-            for group in resource_groups:
+            for item in request:
                 # {type: [{id: ..., slots: ...}]}
-                local: dict[str, list[dict]] = {}
-                for member in group:
-                    rtype, slots = member["type"], member["slots"]
-                    if rtype not in self.resources:
-                        raise TypeError(f"Unknown resource requirement type {rtype!r}")
-                    rspec = self._get_from_pool(rtype, slots)
-                    local.setdefault(rtype, []).append(rspec)
-                    totals[rtype] += slots
-                acquired.append(local)
+                rtype, slots = item["type"], item["slots"]
+                if rtype not in self.resources:
+                    raise TypeError(f"Unknown resource requirement type {rtype!r}")
+                rspec = self._get_from_pool(rtype, slots)
+                acquired.setdefault(rtype, []).append(rspec)
+                totals[rtype] += slots
         except Exception:
             self.resources.clear()
             self.resources.update(pickle.loads(stash))  # nosec B301
@@ -266,13 +260,12 @@ class ResourcePool:
                 logger.debug(f"Acquiring {n} {key} from {N} available")
         return acquired
 
-    def checkin(self, resources: list[dict[str, list[dict]]]) -> None:
+    def checkin(self, resources: dict[str, list[dict]]) -> None:
         types: Counter[str] = Counter()
-        for resource in resources:  # list[dict[str, list[dict]]]) -> None:
-            for type, rspecs in resource.items():
-                for rspec in rspecs:
-                    n = self._return_to_pool(type, rspec)
-                    types[type] += n
+        for type, rspecs in resources.items():
+            for rspec in rspecs:
+                n = self._return_to_pool(type, rspec)
+                types[type] += n
         if logging.get_level() <= logging.DEBUG:
             for type, n in types.items():
                 key = type[:-1] if n == 1 and type.endswith("s") else type
