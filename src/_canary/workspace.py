@@ -514,6 +514,7 @@ class Workspace:
                 space = ExecutionSpace(
                     root=Path(mine["workspace"]["root"]),
                     path=Path(mine["workspace"]["path"]),
+                    session=mine["workspace"]["session"],
                 )
                 case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
                 case.status.set(

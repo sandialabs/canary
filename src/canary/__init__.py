@@ -81,6 +81,7 @@ make_std_parser = make_argument_parser
 
 def get_instance(arg_path: Path | str | None = None) -> TestInstance | None:
     from _canary.testinst import load_instance
+
     try:
         instance = load_instance(arg_path)
     except FileNotFoundError:
@@ -90,6 +91,7 @@ def get_instance(arg_path: Path | str | None = None) -> TestInstance | None:
 
 def get_testcase(arg_path: Path | str | None = None) -> TestCase | None:
     from _canary.testcase import load_testcase
+
     try:
         case = load_testcase(arg_path)
         atexit.register(lambda: case.save())

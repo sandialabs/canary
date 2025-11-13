@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
-import multiprocessing as mp
+import argparse
 import copy
 import datetime
-import argparse
 import json
 import math
+import multiprocessing as mp
 import os
 import shlex
 import signal
@@ -26,9 +26,9 @@ import hpc_connect
 
 import canary
 from _canary.status import Status
+from _canary.testcase import Measurements
 from _canary.util import cpu_count
 from _canary.util.hash import hashit
-from _canary.testcase import Measurements
 from _canary.util.time import time_in_seconds
 
 from . import binpack
@@ -67,8 +67,8 @@ class TestBatch:
         else:
             self._status = Status("READY")
         self.variables = {"CANARY_BATCH_ID": str(self.id)}
-        self.cpus = 1 # only one CPU needed to submit this batch and wait for scheduler
-        self.gpus = 1 # no GPU needed to submit this batch and wait for scheduler
+        self.cpus = 1  # only one CPU needed to submit this batch and wait for scheduler
+        self.gpus = 1  # no GPU needed to submit this batch and wait for scheduler
         self.exclusive = False
         self._resources: dict[str, list[dict]] = {}
         self.measurements = Measurements()
@@ -294,9 +294,11 @@ class TestBatch:
 
     def times(self) -> tuple[float | None, float | None, float | None]:
         """Return total, running, and time in queue"""
+
         def started(case):
             s = case.timekeeper.started_on
             return None if s == "NA" else datetime.datetime.fromisoformat(s)
+
         def finished(case):
             f = case.timekeeper.finished_on
             return None if f == "NA" else datetime.datetime.fromisoformat(f)

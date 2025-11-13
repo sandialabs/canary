@@ -48,6 +48,7 @@ class CDashXMLReporter:
         """Create an xml report from a json report"""
         raise NotImplementedError("No way of loading the case directly from lock yet")
         from _canary.testcase import factory as testcase_factory
+
         dest = dest or os.path.join(os.path.dirname(file), "CDASH")
         self = cls(dest=dest)
         data = json.load(open(file))

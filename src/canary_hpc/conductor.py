@@ -4,13 +4,13 @@
 
 import argparse
 import io
+import multiprocessing as mp
 import os
 import threading
 from collections import Counter
 from datetime import datetime
 from typing import Any
 from typing import Sequence
-import multiprocessing as mp
 
 import hpc_connect
 
@@ -259,7 +259,7 @@ def batch_start_summary(batch: TestBatch, qrank: int | None, qsize: int | None) 
     if qrank is not None and qsize is not None:
         fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
     fmt.write(
-        "Submitted batch @*b{%s}: %d %s" % (batch.id[:7], len(batch), pluralize('test', len(batch)))
+        "Submitted batch @*b{%s}: %d %s" % (batch.id[:7], len(batch), pluralize("test", len(batch)))
     )
     if batch.jobid:
         fmt.write(" (jobid: %s)" % batch.jobid)

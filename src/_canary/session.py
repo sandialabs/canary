@@ -2,11 +2,10 @@
 #
 # SPDX-License-Identifier: MIT
 import datetime
-from graphlib import TopologicalSorter
 import os
-from .util.graph import reachable_nodes
 import pickle
 import time
+from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Any
@@ -14,17 +13,19 @@ from typing import Any
 from . import config
 from .error import StopExecution
 from .error import notests_exit_status
-from .util import json_helper as json
 from .testcase import TestCase
 from .testexec import ExecutionSpace
 from .testspec import select_sygil
+from .util import json_helper as json
 from .util import logging
 from .util.filesystem import working_dir
 from .util.filesystem import write_directory_tag
+from .util.graph import reachable_nodes
 from .util.graph import static_order
 from .util.returncode import compute_returncode
 
 if TYPE_CHECKING:
+    from .testspec import TestSpec
     from .workspace import SpecSelection
 
 logger = logging.get_logger(__name__)
@@ -125,6 +126,7 @@ class Session:
     def resolve_root_ids(self, roots: list[str]) -> None:
         """Expand roots to full IDs.  roots is a spec ID, or partial ID, and can be preceded by /"""
         ids: set[str] = {spec.id for spec in self.selection.specs}
+
         def find(root: str) -> str:
             if root in ids:
                 return root
@@ -134,6 +136,7 @@ class Session:
                 elif root.startswith(select_sygil) and id.startswith(root[1:]):
                     return id
             raise SpecNotFoundError(root)
+
         for i, root in enumerate(roots):
             roots[i] = find(root)
 
@@ -145,8 +148,8 @@ class Session:
             self.resolve_root_ids(roots)
             reachable = reachable_nodes(graph, roots)
             graph = {id: graph[id] for id in reachable}
-        map: dict[str, TestSpec] = {spec.id: spec for spec in specs if spec.id in graph}
-        lookup: dict[str, TestCase] = {}
+        map: dict[str, "TestSpec"] = {spec.id: spec for spec in specs if spec.id in graph}
+        lookup: dict[str, "TestCase"] = {}
         ts = TopologicalSorter(graph)
         for id in ts.static_order():
             spec = map[id]
