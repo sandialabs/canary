@@ -10,12 +10,14 @@ from collections import Counter
 from datetime import datetime
 from typing import Any
 from typing import Sequence
+import multiprocessing as mp
 
 import hpc_connect
 
 import canary
 from _canary.plugins.subcommands.run import Run
 from _canary.plugins.types import Result
+from _canary.process_pool import ProcessPool
 from _canary.resource_pool import ResourcePool
 from _canary.third_party.color import colorize
 from _canary.util import cpu_count
@@ -107,14 +109,13 @@ class CanaryHPCConductor:
         slots_needed: Counter[str] = Counter()
         missing: set[str] = set()
 
-        # Step 1: Gathre resource requirements and detect missing types
-        for group in case.required_resources():
-            for member in group:
-                rtype = member["type"]
-                if rtype in self.slots_per_resource_type:
-                    slots_needed[rtype] += member["slots"]
-                else:
-                    missing.add(rtype)
+        # Step 1: Gather resource requirements and detect missing types
+        for member in case.required_resources():
+            rtype = member["type"]
+            if rtype in self.slots_per_resource_type:
+                slots_needed[rtype] += member["slots"]
+            else:
+                missing.add(rtype)
         if missing:
             types = colorize("@*{%s}" % ",".join(sorted(missing)))
             key = canary.string.pluralize("Resource", n=len(missing))
@@ -154,7 +155,8 @@ class CanaryHPCConductor:
         """
         queue = ResourceQueue.factory(global_lock, cases, resource_pool=self.rpool)
         runner = Runner()
-        return process_queue(queue, runner, backend=self.backend.name)
+        process_pool = ProcessPool(queue, runner)
+        process_pool.run(backend=self.backend.name)
 
     @staticmethod
     def setup_parser(
@@ -232,7 +234,7 @@ class KeyboardQuit(Exception):
 class Runner:
     """Class for running ``AbstractTestCase``."""
 
-    def __call__(self, batch: TestBatch, **kwargs: Any) -> None:
+    def __call__(self, batch: TestBatch, queue: mp.Queue, **kwargs: Any) -> None:
         # Ensure the config is loaded, since this may be called in a new subprocess
         canary.config.ensure_loaded()
         try:
@@ -242,7 +244,7 @@ class Runner:
             if summary := batch_start_summary(batch, qrank=qrank, qsize=qsize):
                 logger.log(logging.EMIT, summary, extra={"prefix": ""})
             batch.setup()
-            batch.run(backend=backend, qsize=qsize, qrank=qrank)
+            batch.run(queue, backend=backend, qsize=qsize, qrank=qrank)
         finally:
             if summary := batch_finish_summary(batch, qrank=qrank, qsize=qsize):
                 logger.log(logging.EMIT, summary, extra={"prefix": ""})
@@ -256,10 +258,12 @@ def batch_start_summary(batch: TestBatch, qrank: int | None, qsize: int | None) 
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
     if qrank is not None and qsize is not None:
         fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    fmt.write(f"Submitted batch @*b{{%id}}: %l {pluralize('test', len(batch))}")
+    fmt.write(
+        "Submitted batch @*b{%s}: %d %s" % (batch.id[:7], len(batch), pluralize('test', len(batch)))
+    )
     if batch.jobid:
-        fmt.write(" (jobid: %j)")
-    return batch.format(fmt.getvalue().strip())
+        fmt.write(" (jobid: %s)" % batch.jobid)
+    return fmt.getvalue().strip()
 
 
 def batch_finish_summary(batch: TestBatch, qrank: int | None, qsize: int | None) -> str:
@@ -271,10 +275,12 @@ def batch_finish_summary(batch: TestBatch, qrank: int | None, qsize: int | None)
     if qrank is not None and qsize is not None:
         fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
     times = batch.times()
-    fmt.write(f"Finished batch @*b{{%id}}: %S (time: {hhmmss(times[0], threshold=0)}")
+    combined_stat = batch._combined_status()
+    s = "Finished batch @*b{%s}: %s (time: %s)"
+    fmt.write(s % (batch.id[:7], combined_stat, hhmmss(times[0], threshold=0)))
     if times[1]:
         fmt.write(f", running: {hhmmss(times[1], threshold=0)}")
     if times[2]:
         fmt.write(f", queued: {hhmmss(times[2], threshold=0)}")
     fmt.write(")")
-    return batch.format(fmt.getvalue().strip())
+    return fmt.getvalue().strip()

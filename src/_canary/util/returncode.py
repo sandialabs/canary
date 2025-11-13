@@ -32,7 +32,7 @@ def compute_returncode(cases: Sequence["TestCase"], permissive: bool = False) ->
                 returncode |= 2**3
             elif result in ("SKIPPED", "NOT_RUN"):
                 returncode |= 2**4
-            elif result in ("CANCELLED", "READY"):
+            elif result in ("CANCELLED", "READY", "PENDING"):
                 returncode |= 2**5
             elif not permissive:
                 # any other code is a failure

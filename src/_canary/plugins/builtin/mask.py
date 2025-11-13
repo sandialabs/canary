@@ -97,6 +97,8 @@ def apply_masks(
             try:
                 check = config.pluginmanager.hook.canary_resource_pool_accommodates(case=spec)
             except Exception as e:
+                if config.get("config:debug"):
+                    raise
                 spec.mask = "@*{%s}(%r)" % (e.__class__.__name__, e.args[0])
                 continue
             else:

@@ -2,7 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 import datetime
+from graphlib import TopologicalSorter
 import os
+from .util.graph import reachable_nodes
 import pickle
 import time
 from pathlib import Path
@@ -12,6 +14,7 @@ from typing import Any
 from . import config
 from .error import StopExecution
 from .error import notests_exit_status
+from .util import json_helper as json
 from .testcase import TestCase
 from .testexec import ExecutionSpace
 from .testspec import select_sygil
@@ -37,6 +40,7 @@ class Session:
         self.work_dir: Path
         self.select_file: Path
         self._cases: list[TestCase]
+        self._selection: "SpecSelection | None"
         raise RuntimeError("Use Session factory methods create and load")
 
     def __repr__(self) -> str:
@@ -48,6 +52,7 @@ class Session:
         self._cases = []
         self.work_dir = self.root / "work"
         self.select_file = self.root / "selection"
+        self._selection = None
 
     @staticmethod
     def is_session(path: Path) -> Path | None:
@@ -64,14 +69,15 @@ class Session:
         self.work_dir.mkdir(parents=True, exist_ok=True)
         with open(self.select_file, "wb") as fh:
             pickle.dump(selection, fh)
+        self._selection = selection
         write_directory_tag(self.root / session_tag)
 
         self._cases.clear()
-        specs = selection.specs
+        specs = self.selection.specs
         lookup: dict[str, TestCase] = {}
         for spec in static_order(specs):
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
-            space = ExecutionSpace(root=self.work_dir, path=spec.fullname)
+            space = ExecutionSpace(root=self.work_dir, path=spec.fullname, session=self.name)
             case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
             lookup[spec.id] = case
             self._cases.append(case)
@@ -83,6 +89,14 @@ class Session:
         with open(file, "w") as fh:
             config.dump_snapshot(fh)
         return self
+
+    @property
+    def selection(self) -> "SpecSelection":
+        if self._selection is None:
+            with open(self.select_file, "rb") as fh:
+                self._selection = pickle.load(fh)
+        assert self._selection is not None
+        return self._selection
 
     @classmethod
     def load(cls, root: Path) -> "Session":
@@ -110,34 +124,50 @@ class Session:
 
     def resolve_root_ids(self, roots: list[str]) -> None:
         """Expand roots to full IDs.  roots is a spec ID, or partial ID, and can be preceded by /"""
-
+        ids: set[str] = {spec.id for spec in self.selection.specs}
         def find(root: str) -> str:
-            if root in self.index["cases"]:
+            if root in ids:
                 return root
-            for id in self.index["cases"]:
+            for id in ids:
                 if id.startswith(root):
                     return id
                 elif root.startswith(select_sygil) and id.startswith(root[1:]):
                     return id
-            raise CaseNotFoundError(root)
-
+            raise SpecNotFoundError(root)
         for i, root in enumerate(roots):
             roots[i] = find(root)
 
-    def load_testcases(self) -> list[TestCase]:
+    def load_testcases(self, roots: list[str] | None = None) -> list[TestCase]:
         """Load cached test cases.  Dependency resolution is performed."""
-        cases: list[TestCase] = []
-        with open(self.select_file, "rb") as fh:
-            selection: "SpecSelection" = pickle.load(fh)
-        specs = selection.specs
+        specs = self.selection.specs
+        graph = {spec.id: [d.id for d in spec.dependencies] for spec in specs}
+        if roots:
+            self.resolve_root_ids(roots)
+            reachable = reachable_nodes(graph, roots)
+            graph = {id: graph[id] for id in reachable}
+        map: dict[str, TestSpec] = {spec.id: spec for spec in specs if spec.id in graph}
         lookup: dict[str, TestCase] = {}
-        for spec in static_order(specs):
+        ts = TopologicalSorter(graph)
+        for id in ts.static_order():
+            spec = map[id]
             dependencies = [lookup[dep.id] for dep in spec.dependencies]
-            space = ExecutionSpace(root=self.work_dir, path=spec.fullname)
+            space = ExecutionSpace(root=self.work_dir, path=spec.fullname, session=self.name)
             case = TestCase(spec=spec, workspace=space, dependencies=dependencies)
+            f = case.workspace.dir / "testcase.lock"
+            if f.exists():
+                data = json.loads(f.read_text())
+                case.status.set(
+                    data["status"]["name"],
+                    message=data["status"]["message"],
+                    code=data["status"]["code"],
+                )
+                case.timekeeper.started_on = data["timekeeper"]["started_on"]
+                case.timekeeper.finished_on = data["timekeeper"]["finished_on"]
+                case.timekeeper.duration = data["timekeeper"]["duration"]
             lookup[case.spec.id] = case
-            cases.append(case)
-        return cases
+        if roots:
+            return [case for case in lookup.values() if case.id in roots]
+        return list(lookup.values())
 
     def get_ready(self, roots: list[str] | None) -> list[TestCase]:
         if not roots:
@@ -179,5 +209,5 @@ class SessionExistsError(Exception):
     pass
 
 
-class CaseNotFoundError(Exception):
+class SpecNotFoundError(Exception):
     pass

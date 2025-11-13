@@ -229,15 +229,15 @@ class ResourceQueue(AbstractResourceQueue):
                 if dep.id == obj.id:
                     pending.dependencies[i] = obj
 
-    def done(self, case: Any) -> None:
+    def done(self, obj: Any) -> None:
         with self.lock:
-            if case.id not in self._busy:
-                raise RuntimeError(f"job {case} is not running")
-            self._finished[case.id] = self._busy.pop(case.id)
-            if case.exclusive:
+            if obj.id not in self._busy:
+                raise RuntimeError(f"job {obj} is not running")
+            self._finished[obj.id] = self._busy.pop(obj.id)
+            if obj.exclusive:
                 self.exclusive_lock = False
-            self.resource_pool.checkin(case.free_resources())
-            self.update_pending(case)
+            self.resource_pool.checkin(obj.free_resources())
+            self.update_pending(obj)
             return
 
     def cases(self) -> list["TestCase"]:

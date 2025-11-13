@@ -1,6 +1,10 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
 import multiprocessing as mp
 import time
 from functools import cached_property
+from typing import Any
 from typing import Callable
 
 import psutil
@@ -9,7 +13,6 @@ from . import config
 from .queue import AbstractResourceQueue
 from .queue import Busy
 from .queue import Empty
-from .testcase import TestCase
 from .util import keyboard
 from .util import logging
 
@@ -121,20 +124,20 @@ class ProcessPool:
         self.runner = runner
         self.busy_wait_time = busy_wait_time
 
-        # Map: pid -> (MeasuredProcess, result_queue, case, start_time, timeout)
-        self.inflight: dict[int, tuple[MeasuredProcess, mp.Queue, TestCase, float, float]] = {}
+        # Map: pid -> (MeasuredProcess, result_queue, job, start_time, timeout)
+        self.inflight: dict[int, tuple[MeasuredProcess, mp.Queue, Any, float, float]] = {}
 
     def check_timeouts(self) -> None:
         """Check for and kill processes that have exceeded their timeout."""
         current_time = time.time()
 
-        for pid, (proc, _, case, start_time, timeout) in list(self.inflight.items()):
+        for pid, (proc, _, job, start_time, timeout) in list(self.inflight.items()):
             if proc.is_alive():
                 elapsed = current_time - start_time
                 if elapsed > timeout:
                     # Get measurements before killing
                     measurements = proc.get_measurements()
-                    case.measurements.update(measurements)
+                    job.measurements.update(measurements)
 
                     proc.kill()
                     proc.join()
@@ -143,12 +146,12 @@ class ProcessPool:
                     self.inflight.pop(pid)
 
                     # Send timeout result
-                    case.status.set(
+                    job.status.set(
                         "TIMEOUT",
                         message=f"Process exceeded timeout of {timeout} seconds",
                     )
-                    self.queue.done(case)
-                    case.save()
+                    self.queue.done(job)
+                    job.save()
 
     def clean_finished_processes(self) -> None:
         """Remove finished processes from the active dict and collect their results."""
@@ -160,22 +163,22 @@ class ProcessPool:
         ]
 
         for pid in finished_pids:
-            proc, result_queue, case, _, _ = self.inflight.pop(pid)
+            proc, result_queue, job, _, _ = self.inflight.pop(pid)
 
-            # Get measurements and store in case
+            # Get measurements and store in job
             measurements = proc.get_measurements()
-            case.measurements.update(measurements)
+            job.measurements.update(measurements)
 
             # Get the final result before cleaning up
             try:
                 result = result_queue.get_nowait()
-                case.update(**result)
+                job.update(**result)
             except Exception:
-                logger.exception(f"No result found for case {case} (pid {pid})")
+                logger.exception(f"No result found for job {job} (pid {pid})")
 
             proc.join()  # Clean up the process
-            self.queue.done(case)
-            case.save()
+            self.queue.done(job)
+            job.save()
             logger.debug(f"Process {pid} finished and cleaned up")
 
     def wait_for_slot(self) -> None:
@@ -185,8 +188,8 @@ class ProcessPool:
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.1)  # Brief sleep before checking again
 
-    def run(self) -> None:
-        """Main loop: get cases from queue and launch processes."""
+    def run(self, **kwargs: Any) -> None:
+        """Main loop: get jobs from queue and launch processes."""
         logger.info(f"Starting process pool with max {self.max_workers} workers")
 
         qsize = len(self.queue)
@@ -202,8 +205,8 @@ class ProcessPool:
                 # Wait for a slot if at max capacity
                 self.wait_for_slot()
 
-                # Get a case from the queue
-                case = self.queue.get()
+                # Get a job from the queue
+                job = self.queue.get()
 
                 # Create a result queue for this specific process
                 result_queue = mp.Queue()
@@ -211,16 +214,16 @@ class ProcessPool:
                 # Launch a new measured process
                 proc = MeasuredProcess(
                     target=self.runner,
-                    args=(case, result_queue),
-                    kwargs={"qsize": qsize, "qrank": qrank},
+                    args=(job, result_queue),
+                    kwargs={"qsize": qsize, "qrank": qrank, **kwargs},
                 )
 
                 proc.start()
                 qrank += 1
 
-                # Store process with its result queue, case, start time, and timeout
-                timeout = case.timeout * self.timeout_multiplier
-                self.inflight[proc.pid] = (proc, result_queue, case, time.time(), timeout)
+                # Store process with its result queue, job, start time, and timeout
+                timeout = job.timeout * self.timeout_multiplier
+                self.inflight[proc.pid] = (proc, result_queue, job, time.time(), timeout)
 
             except Busy:
                 # Queue is busy, wait and try again
@@ -235,6 +238,10 @@ class ProcessPool:
                 self.terminate_all()
                 break
 
+            except BaseException:
+                logger.exception("Unhandled exception in process pool")
+                raise
+
     def wait_all(self) -> None:
         """Wait for all active processes to complete."""
         while self.inflight:
@@ -244,24 +251,24 @@ class ProcessPool:
 
     def terminate_all(self):
         """Terminate all active processes."""
-        for pid, (proc, _, case, _, _) in self.inflight.items():
+        for pid, (proc, _, job, _, _) in self.inflight.items():
             if proc.is_alive():
-                logger.warning(f"Terminating process {pid} (case {case})")
+                logger.warning(f"Terminating process {pid} (job {job})")
                 proc.terminate()
-                self.queue.done(case)
-                case.save()
+                self.queue.done(job)
+                job.save()
 
         # Give processes time to terminate gracefully
         time.sleep(1)
 
         # Force kill if still alive
-        for pid, (proc, result_queue, case, start_time, timeout) in self.inflight.items():
+        for pid, (proc, result_queue, job, start_time, timeout) in self.inflight.items():
             if proc.is_alive():
-                logger.warning(f"Killing process {pid} (case {case})")
+                logger.warning(f"Killing process {pid} (job {job})")
                 proc.kill()
 
         # Clean up
-        for proc, result_queue, case, start_time, timeout in self.inflight.values():
+        for proc, result_queue, job, start_time, timeout in self.inflight.values():
             proc.join()
 
         self.inflight.clear()

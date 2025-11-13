@@ -49,7 +49,7 @@ class ResourceQueue(queue.AbstractResourceQueue):
             raise ValueError("There are no cases to run in this session")
         return self
 
-    def iter_keys(self) -> list[int]:
+    def iter_keys(self) -> list[str]:
         return list(self.buffer.keys())
 
     def prepare(self, **kwds: Any) -> None:
@@ -73,29 +73,40 @@ class ResourceQueue(queue.AbstractResourceQueue):
         fmt = "@*{Generated} %d batches from %d test cases"
         logger.info(fmt % (len(batches), len(self.tmp_buffer)))
         for batch in batches:
-            self.buffer[len(self.buffer)] = batch
+            self.buffer[batch.id] = batch
 
-    def update_pending(self, obj: TestBatch) -> None:
-        completed = dict([(case.id, case) for case in obj])
+    def update_pending(self, obj: Any) -> None:
+        completed = {case.id: case for case in obj}
         for batch in self.buffer.values():
             for case in batch:
                 for i, dep in enumerate(case.dependencies):
                     if dep.id in completed:
                         case.dependencies[i] = completed[dep.id]
 
-    def retry(self, obj_no: int) -> None:
-        if obj_no not in self._finished:
+    def done(self, obj: Any) -> None:
+        with self.lock:
+            if obj.id not in self._busy:
+                raise RuntimeError(f"job {obj} is not running")
+            self._finished[obj.id] = self._busy.pop(obj.id)
+            if obj.exclusive:
+                self.exclusive_lock = False
+            self.resource_pool.checkin(obj.free_resources())
+            self.update_pending(obj)
+        return
+
+    def retry(self, obj: Any) -> None:
+        if obj.id not in self._finished:
             raise ValueError("Cannot retry a job that is not done")
         with self.lock:
-            meta = self.meta.setdefault(obj_no, {})
+            meta = self.meta.setdefault(obj.id, {})
             meta["retry"] = meta.setdefault("retry", 0) + 1
             if meta["retry"] >= 3:
-                for case in self._finished[obj_no]:
+                for case in self._finished[obj.id]:
                     case.status.set("FAILED", "Maximum number of retries exceeded")
                     case.save()
             else:
-                self.buffer[obj_no] = self._finished.pop(obj_no)
-                for case in self.buffer[obj_no]:
+                self.buffer[obj.id] = self._finished.pop(obj.id)
+                for case in self.buffer[obj.id]:
                     if case.status.name not in ("PENDING", "READY"):
                         if case.dependencies:
                             case.status.set("PENDING")
@@ -114,8 +125,9 @@ class ResourceQueue(queue.AbstractResourceQueue):
             status = case.status
             if status.name == "SKIPPED":
                 case.save()
-            elif not status.name != "PENDING":
-                raise ValueError(f"{case}: case is not ready or pending")
+            elif status.name not in ("READY", "PENDING"):
+                logger.error(f"{case}: {case.status.name}: case is not ready or pending")
+                raise ValueError(f"{case}: {case.status.name}: case is not ready or pending")
             else:
                 self.tmp_buffer.append(case)
 
@@ -142,9 +154,9 @@ class ResourceQueue(queue.AbstractResourceQueue):
     def failed(self) -> list[canary.TestCase]:
         return [_ for batch in self._finished.values() for _ in batch if _.status.name != "SUCCESS"]
 
-    def skip(self, obj_no: int) -> None:
-        self._finished[obj_no] = self.buffer.pop(obj_no)
-        finished = {case.id: case for case in self._finished[obj_no]}
+    def skip(self, obj: Any) -> None:
+        self._finished[obj.id] = self.buffer.pop(obj.id)
+        finished = {case.id: case for case in self._finished[obj.id]}
         for batch in self.buffer.values():
             for case in batch:
                 for i, dep in enumerate(case.dependencies):

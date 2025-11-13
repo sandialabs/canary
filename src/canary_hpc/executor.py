@@ -60,7 +60,7 @@ class CanaryHPCExecutor:
         logger.info(f"Selected {n} {canary.string.pluralize('test', n)} from batch {args.batch_id}")
         workspace = canary.Workspace.load()
         with workspace.session(name=self.session) as session:
-            disp = session.run(ids=self.cases)
+            disp = session.run(roots=self.cases)
         canary.config.pluginmanager.hook.canary_runtests_summary(
             cases=disp["cases"], include_pass=False, truncate=10
         )

@@ -9,11 +9,8 @@ import os
 import re
 import shlex
 import subprocess
-from contextlib import contextmanager
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from typing import Generator
 
 import schema
 
@@ -407,97 +404,6 @@ def finish_ctest(case: "canary.TestCase") -> None:
             case.status.set("FAILED", "Test case marked will_fail but succeeded")
         elif case.status.name not in ("SKIPPED",):
             case.status.set("SUCCESS")
-
-
-class Foo:
-    @property
-    def file(self) -> str:
-        return self.ctestfile
-
-    @property
-    def ctestfile(self) -> str:
-        assert self._ctestfile is not None
-        return self._ctestfile
-
-    @ctestfile.setter
-    def ctestfile(self, arg: str) -> None:
-        self._ctestfile = arg
-
-    def chain(self, start: str | None = None, anchor: str = ".git") -> str:
-        return os.path.relpath(self.file, self.file_root)  # type: ignore
-
-    @property
-    def execution_directory(self) -> str:
-        if self.ctest_working_directory is not None:
-            return self.ctest_working_directory
-        return self.binary_dir
-
-    @property
-    def binary_dir(self) -> str:
-        return os.path.dirname(self.ctestfile)
-
-    @lru_cache
-    def required_resources(self) -> list[list[dict[str, Any]]]:
-        # The CTest resource group is already configured but CTest does not include CPUs in the
-        # resource groups, so we add it on here as a separate resource group.
-        required = copy.deepcopy(self.resource_groups)
-        has_cpu = any(inst["type"] == "cpus" for group in required for inst in group)
-        if not has_cpu:
-            cpus = self.parameters.get("cpus", 1)
-            cpu_group: list[dict[str, Any]] = [{"type": "cpus", "slots": 1} for _ in range(cpus)]
-            required.append(cpu_group)
-        return required
-
-    @property
-    def implicit_keywords(self) -> list[str]:
-        kwds = super().implicit_keywords
-        if "unit" not in kwds:
-            kwds.append("unit")
-        if "ctest" not in kwds:
-            kwds.append("ctest")
-        return list(kwds)
-
-    def command(self) -> list[str]:
-        return list(self.cmd)
-
-    @contextmanager
-    def rc_environ(self, **env: str) -> Generator[None, None, None]:
-        with super().rc_environ(**env):
-            self.set_resource_groups_vars()
-            yield
-
-    @property
-    def resource_groups(self) -> list[list[dict[str, Any]]]:
-        return self._resource_groups or []
-
-    @resource_groups.setter
-    def resource_groups(self, arg: list[list[dict[str, Any]]]) -> None:
-        self._resource_groups = arg
-        gpus: int = 0
-        for group in arg:
-            for item in group:
-                if item["type"] == "gpus":
-                    gpus += item["slots"]  # type: ignore
-        self.parameters["gpus"] = gpus
-
-    @property
-    def required_files(self) -> list[str]:
-        return self._required_files or []
-
-    @required_files.setter
-    def required_files(self, arg: list[str]) -> None:
-        self._required_files = list(arg)
-        for file in arg:
-            if not os.path.exists(file):
-                logger.debug(f"{self}: missing required file: {file}")
-
-    @property
-    def will_fail(self) -> bool:
-        return self._will_fail
-
-    @will_fail.setter
-    def will_fail(self, arg: bool) -> None:
-        self._will_fail = bool(arg)
 
 
 def safeint(arg: str) -> None | int:

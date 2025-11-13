@@ -5,6 +5,7 @@ import copy
 import dataclasses
 import datetime
 import io
+import math
 import multiprocessing
 import os
 import signal
@@ -103,6 +104,9 @@ class TestCase:
         name = str(self.workspace.path.parent / self.spec.display_name)
         return "@*%s{%s %s} %s\n" % (color, glyph, status_name, name)
 
+    def set_attribute(self, **kwds: Any) -> None:
+        self.spec.attributes.update(kwds)
+
     @property
     def cpus(self) -> int:
         return self.spec.rparameters["cpus"]
@@ -123,6 +127,12 @@ class TestCase:
     def runtime(self) -> float:
         return self.spec.timeout  # FIXME
 
+    def size(self) -> float:
+        vec: list[float | int] = [self.timeout]
+        for value in self.spec.rparameters.values():
+            vec.append(value)
+        return math.sqrt(sum(_**2 for _ in vec))
+
     @property
     def resources(self) -> dict[str, list[dict]]:
         """resources is of the form
@@ -138,9 +148,6 @@ class TestCase:
 
         """
         return self._resources
-
-    def set_attribute(self, **kwds: Any) -> None:
-        self.spec.attributes.update(kwds)
 
     def assign_resources(self, arg: dict[str, list[dict]]) -> None:
         self._resources.clear()
@@ -306,6 +313,15 @@ class TestCase:
             self.timekeeper.finished_on = timekeeper.finished_on
             self.timekeeper.duration = timekeeper.duration
 
+    def refresh(self) -> None:
+        data = json.loads(self.workspace.joinpath("testcase.lock").read_text())
+        status = data["status"]
+        self.status.set(status["name"], status["message"], status["code"])
+        tk = data["timekeeper"]
+        self.timekeeper.started_on = tk["started_on"]
+        self.timekeeper.finished_on = tk["finished_on"]
+        self.timekeeper.duration = tk["duration"]
+
     def update_env(self, env: MutableMapping[str, str]) -> None:
         for key, val in self.variables.items():
             if val is None:
@@ -420,7 +436,7 @@ class TestCase:
         return text
 
 
-def load_testcase(arg: Path | str | None) -> TestCase:
+def load_testcase_from_file(arg: Path | str | None) -> TestCase:
     from _canary.workspace import Workspace
 
     path = Path(arg or ".").absolute()
@@ -428,10 +444,14 @@ def load_testcase(arg: Path | str | None) -> TestCase:
     lock_data = json.loads(file.read_text())
     id = lock_data["spec"]["id"]
     workspace = Workspace.load()
-    cases = workspace.load_testcases(roots=[id])
-    for case in cases:
-        return case
-    raise ValueError(f"Test case not found in {workspace.root}")
+    return workspace.locate(case=id)
+
+
+def load_testcase_from_state(lock_data: dict) -> TestCase:
+    from _canary.workspace import Workspace
+
+    workspace = Workspace.load()
+    return workspace.locate(case=lock_data["spec"]["id"])
 
 
 @dataclasses.dataclass

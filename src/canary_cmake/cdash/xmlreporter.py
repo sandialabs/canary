@@ -14,8 +14,6 @@ from typing import IO
 from typing import Any
 
 import canary
-
-# from _canary.testcase import factory as testcase_factory
 from _canary.util.compression import compress_str
 
 from . import interface
@@ -48,6 +46,8 @@ class CDashXMLReporter:
     @classmethod
     def from_json(cls, file: str, dest: str | None = None) -> "CDashXMLReporter":
         """Create an xml report from a json report"""
+        raise NotImplementedError("No way of loading the case directly from lock yet")
+        from _canary.testcase import factory as testcase_factory
         dest = dest or os.path.join(os.path.dirname(file), "CDASH")
         self = cls(dest=dest)
         data = json.load(open(file))

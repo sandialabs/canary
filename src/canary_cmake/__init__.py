@@ -1,6 +1,5 @@
 import argparse
 import os
-import shlex
 from typing import Any
 
 import canary

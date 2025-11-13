@@ -34,6 +34,7 @@ index_type = tuple[int, ...] | int
 class ExecutionSpace:
     root: Path
     path: Path
+    session: str
     dir: Path = dataclasses.field(default_factory=Path, init=False, repr=False)
 
     def __str__(self) -> str:
@@ -49,7 +50,7 @@ class ExecutionSpace:
 
     @classmethod
     def from_dict(cls, state: dict[str, Any]) -> "ExecutionSpace":
-        return cls(root=Path(state["root"]), path=Path(state["path"]))
+        return cls(root=Path(state["root"]), path=Path(state["path"]), session=state["session"])
 
     def create(self, exist_ok: bool = False) -> None:
         self.dir.mkdir(parents=True, exist_ok=exist_ok)
