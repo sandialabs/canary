@@ -143,7 +143,9 @@ class Run(CanarySubcommand):
                     regex=args.regex_filter,
                 )
             else:
-                if any((args.keyword_exprs, args.parameter_expr, args.on_options, args.regex_filter)):
+                if any(
+                    (args.keyword_exprs, args.parameter_expr, args.on_options, args.regex_filter)
+                ):
                     selection = workspace.make_selection(
                         tag=args.tag,
                         keyword_exprs=args.keyword_exprs,

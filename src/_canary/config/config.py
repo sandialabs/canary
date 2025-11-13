@@ -370,7 +370,6 @@ class Config:
                 timeout_settings[key] = val
             config_settings["timeout"] = timeout_settings
 
-
         options = data.setdefault("options", {})
         options.update({k: v for k, v in vars(args).items() if v is not None})
 
