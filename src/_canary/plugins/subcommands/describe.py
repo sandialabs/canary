@@ -40,12 +40,12 @@ class Describe(CanarySubcommand):
         parser.add_argument("testspec", help="Test file or test case spec")
 
     def execute(self, args: argparse.Namespace) -> int:
-        import _canary.finder as finder
-
-        if finder.is_test_file(args.testspec):
-            file = finder.find(args.testspec)
-            describe_generator(file, on_options=args.on_options)
+        try:
+            generator = AbstractTestGenerator.factory(args.testspec)
+            describe_generator(generator, on_options=args.on_options)
             return 0
+        except TypeError:
+            pass
 
         # could be a test case in the test session?
         workspace = Workspace.load()

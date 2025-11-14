@@ -103,6 +103,7 @@ class PYTTestGenerator(AbstractTestGenerator):
         return f"{type(self).__name__}({self.path})"
 
     def describe(self, on_options: list[str] | None = None) -> str:
+        from ...testspec import resolve
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")
@@ -124,11 +125,15 @@ class PYTTestGenerator(AbstractTestGenerator):
                     if dst and dst != os.path.basename(src):
                         file.write(f" -> {dst}")
                     file.write("\n")
-        specs: list["DraftSpec"] = self.lock(on_options=on_options)
+        specs = self.lock(on_options=on_options)
+        specs = resolve(specs)
         n = len(specs)
         opts = ", ".join(on_options or [])
         file.write(f"{n} test {pluralize('spec', n)} using on_options={opts}:\n")
-        graph.print(specs, file=file)
+        try:
+            graph.print(specs, file=file)
+        except Exception:
+            pass
         return file.getvalue()
 
     def info(self) -> dict[str, Any]:

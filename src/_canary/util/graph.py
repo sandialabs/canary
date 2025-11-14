@@ -40,40 +40,40 @@ def static_order_ix(specs: Sequence["SpecLike"]) -> list[int]:
     return [map[spec.id] for spec in ts.static_order()]
 
 
-def print_case(
-    case: "TestCase",
+def print_spec(
+    spec: "TestSpec",
     level: int = -1,
     file=None,
     indent="",
     end=False,
 ):
-    """Given a list of test cases, print a visual tree structure"""
+    """Given a list of test specs, print a visual tree structure"""
     file = file or sys.stdout
     space = "    "
     branch = "│   "
     tee = "├── "
     last = "└── "
 
-    def inner(case: "TestCase", prefix: str = "", level=-1):
+    def inner(spec: "TestSpec", prefix: str = "", level=-1):
         if not level:
             return  # 0, stop iterating
-        dependencies = case.dependencies
+        dependencies = spec.dependencies
         pointers = [tee] * (len(dependencies) - 1) + [last]
         for pointer, dependency in zip(pointers, dependencies):
             if dependency.dependencies:
-                yield prefix + pointer + dependency.spec.pretty_name
+                yield prefix + pointer + dependency.pretty_name
                 extension = branch if pointer == tee else space
                 yield from inner(dependency, prefix=prefix + extension, level=level - 1)
             else:
-                yield prefix + pointer + dependency.spec.pretty_name
+                yield prefix + pointer + dependency.pretty_name
 
-    file.write(f"{tee if not end else last}{indent}{case.spec.pretty_name}\n")
-    iterator = inner(case, level=level)
+    file.write(f"{tee if not end else last}{indent}{spec.pretty_name}\n")
+    iterator = inner(spec, level=level)
     for line in iterator:
         file.write(f"{branch}{indent}{line}\n")
 
 
-def print(cases: list["TestCase"], file: str | Path | TextIO = sys.stdout) -> None:
+def print(specs: list["TestSpec"], file: str | Path | TextIO = sys.stdout) -> None:
     def streamify(arg) -> tuple[TextIO, bool]:
         if isinstance(arg, str):
             arg = Path(arg)
@@ -83,15 +83,15 @@ def print(cases: list["TestCase"], file: str | Path | TextIO = sys.stdout) -> No
             return arg, False
 
     file, fown = streamify(file)
-    cases = static_order(cases)
-    all_deps = [dep for case in cases for dep in case.dependencies]
+    specs = static_order(specs)
+    all_deps = [dep for spec in specs for dep in spec.dependencies]
     remove = []
-    for case in cases:
-        if case in all_deps:
-            remove.append(case)
-    cases = [case for case in cases if case not in remove]
-    for i, case in enumerate(cases):
-        print_case(case, file=file, end=i == len(cases) - 1)
+    for spec in specs:
+        if spec in all_deps:
+            remove.append(spec)
+    specs = [spec for spec in specs if spec not in remove]
+    for i, spec in enumerate(specs):
+        print_spec(spec, file=file, end=i == len(specs) - 1)
     if fown:
         file.close()
 

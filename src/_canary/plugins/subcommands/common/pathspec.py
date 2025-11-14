@@ -253,9 +253,11 @@ def code(arg: str) -> str:
 
 
 def is_test_file(arg: str) -> bool:
-    import _canary.finder
-
-    return _canary.finder.is_test_file(arg)
+    from .... import config
+    from ...types import ScanPath
+    p = ScanPath(root=arg, paths=[])
+    hook = config.pluginmanager.hook.canary_collect_generators
+    return hook(scan_path=p) is not None
 
 
 def check_mutually_exclusive_pathspec_args(ns: argparse.Namespace) -> None:

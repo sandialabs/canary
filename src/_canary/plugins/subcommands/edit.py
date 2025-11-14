@@ -38,13 +38,6 @@ class Edit(CanarySubcommand):
 
 
 def find_file(testspec: str) -> str | None:
-    from ... import finder
-
-    try:
-        generator = finder.find(testspec)
-        return generator.file
-    except Exception:  # nosec B110
-        pass
     try:
         workspace = Workspace.load()
     except NotAWorkspaceError:
