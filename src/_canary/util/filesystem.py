@@ -62,6 +62,9 @@ def max_name_length() -> int:
     return os.pathconf("/", "PC_NAME_MAX")
 
 
+PathLike = pathlib.Path | str
+
+
 def which(
     *args: str,
     path: str | list[str] | tuple[str, ...] | None = None,
@@ -157,7 +160,7 @@ def synctree(
     return rsync.returncode
 
 
-def force_remove(file_or_dir: str) -> None:
+def force_remove(file_or_dir: PathLike) -> None:
     """Remove ``file_or_dir`` forcefully"""
     try:
         remove(file_or_dir)
@@ -177,18 +180,16 @@ def force_copy(src: str, dst: str) -> None:
         raise ValueError(f"force_copy: file not found: {src}")
 
 
-def remove(file_or_dir: pathlib.Path | str) -> None:
+def remove(file_or_dir: PathLike) -> None:
     """Removes file or directory ``file_or_dir``"""
     path = pathlib.Path(file_or_dir)
-    if path.is_symlink():
-        os.unlink(path)
+    if path.is_file():
+        path.unlink()
     elif path.is_dir():
         rmtree2(path)
-    elif path.exists():
-        os.remove(path)
 
 
-def rmtree2(path: pathlib.Path | str, n: int = 5) -> None:
+def rmtree2(path: PathLike, n: int = 5) -> None:
     """Wrapper around shutil.rmtree to make it more robust when used on NFS
     mounted file systems."""
     from . import logging

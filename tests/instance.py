@@ -29,8 +29,8 @@ def test_instance_deps(tmpdir):
     work_tree = os.path.join(workdir, "tests")
     mkdirp(work_tree)
     with canary.config.override():
-        canary.config.set("session:work_tree", work_tree, scope="defaults")
         for case in cases:
+            case.set_workspace_properties(workspace=work_tree, session=None)
             case.save()
             instance = inst.load(case.working_directory)
             if isinstance(case, inst.TestMultiInstance):

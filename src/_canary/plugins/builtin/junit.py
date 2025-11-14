@@ -12,11 +12,11 @@ from typing import TYPE_CHECKING
 from typing import Any
 
 from ...util.filesystem import mkdirp
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanaryReporter
 
 if TYPE_CHECKING:
-    from ...session import Session
     from ...testcase import TestCase
 
 
@@ -30,16 +30,13 @@ class JunitReporter(CanaryReporter):
     description = "JUnit reporter"
     default_output = "junit.xml"
 
-    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
-        if session is None:
-            raise ValueError("canary report junit: session required")
-
+    def create(self, **kwargs: Any) -> None:
+        workspace = Workspace.load()
+        cases = workspace.load_testcases(latest=True)
         doc = JunitDocument()
-        root = doc.create_testsuite_element(
-            session.active_cases(), name=get_root_name(), tagname="testsuites"
-        )
+        root = doc.create_testsuite_element(cases, name=get_root_name(), tagname="testsuites")
         output = kwargs["output"] or self.default_output
-        groups = groupby_classname(session.active_cases())
+        groups = groupby_classname(cases)
         for classname, cases in groups.items():
             suite = doc.create_testsuite_element(cases, name=classname)
             for case in cases:

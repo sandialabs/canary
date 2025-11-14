@@ -12,11 +12,11 @@ from ... import config
 from ...util import logging
 from ...util.filesystem import force_remove
 from ...util.filesystem import mkdirp
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanaryReporter
 
 if TYPE_CHECKING:
-    from ...session import Session
     from ...testcase import TestCase
 
 logger = logging.get_logger(__name__)
@@ -32,23 +32,23 @@ class HTMLReporter(CanaryReporter):
     description = "HTML reporter"
     multipage = True
 
-    def create(self, session: "Session | None" = None, **kwargs: Any) -> None:
-        if session is None:
-            raise ValueError("canary report html: session required")
-
-        dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=session.work_tree)
+    def create(self, **kwargs: Any) -> None:
+        workspace = Workspace.load()
+        cases = workspace.load_testcases(latest=True)
+        work_tree = workspace.view or workspace.sessions_dir
+        dest = string.Template(kwargs["dest"]).safe_substitute(canary_work_tree=str(work_tree))
         self.html_dir = os.path.join(dest, "HTML")
         self.cases_dir = os.path.join(self.html_dir, "cases")
         self.index = os.path.join(dest, "canary-report.html")
 
         force_remove(self.html_dir)
         mkdirp(self.cases_dir)
-        for case in session.active_cases():
+        for case in cases:
             file = os.path.join(self.cases_dir, f"{case.id}.html")
             with open(file, "w") as fh:
                 self.generate_case_file(case, fh)
         with open(self.index, "w") as fh:
-            self.generate_index(session, fh)
+            self.generate_index(cases, fh)
         f = os.path.relpath(self.index, config.invocation_dir)
         logger.info(f"HTML report written to {f}")
 
@@ -81,7 +81,7 @@ class HTMLReporter(CanaryReporter):
         fh.write(case.output())
         fh.write("</pre>\n</body>\n</html>\n")
 
-    def generate_index(self, session: "Session", fh: TextIO) -> None:
+    def generate_index(self, cases: list["TestCase"], fh: TextIO) -> None:
         fh.write("<html>\n")
         fh.write(self.head)
         fh.write("<body>\n<h1>Canary Summary</h1>\n")
@@ -101,7 +101,7 @@ class HTMLReporter(CanaryReporter):
             fh.write(f"<th>{col}</th>")
         fh.write("</tr>\n")
         totals: dict[str, list["TestCase"]] = {}
-        for case in session.active_cases():
+        for case in cases:
             group = case.status.name.title()
             totals.setdefault(group, []).append(case)
         fh.write("<tr>")
@@ -117,7 +117,7 @@ class HTMLReporter(CanaryReporter):
                 with open(file, "w") as fp:
                     self.generate_group_index(totals[group], fp)
         file = os.path.join(self.html_dir, "Total.html")
-        fh.write(f'<td><a href="file://{file}">{len(session.active_cases())}</a></td>')
+        fh.write(f'<td><a href="file://{file}">{len(cases)}</a></td>')
         with open(file, "w") as fp:
             self.generate_all_tests_index(totals, fp)
         fh.write("</tr>\n")

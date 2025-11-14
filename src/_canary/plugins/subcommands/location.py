@@ -5,9 +5,9 @@
 import argparse
 from typing import TYPE_CHECKING
 
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -22,10 +22,7 @@ class Location(CanarySubcommand):
     name = "location"
     description = "Print locations of test files and directories"
     epilog = """\
-If no options are give, -x is assumed.
-
-Note: this command must be run from inside of a test session directory.
-"""
+If no options are give, -x is assumed."""
 
     def setup_parser(self, parser: "Parser") -> None:
         group = parser.add_mutually_exclusive_group()
@@ -62,18 +59,12 @@ Note: this command must be run from inside of a test session directory.
     def execute(self, args: argparse.Namespace) -> int:
         from ...testcase import TestCase
         from ...testcase import TestMultiCase
-        from ...testcase import from_id as testcase_from_id
 
         case: TestCase | TestMultiCase
-        if args.testspec.startswith("/"):
-            case = testcase_from_id(args.testspec[1:])
-        else:
-            session = load_session()
-            for case in session.cases:
-                if case.matches(args.testspec):
-                    break
-            else:
-                raise ValueError(f"{args.testspec}: no matching test found in {session.work_tree}")
+        workspace = Workspace.load()
+        case = workspace.locate(case=args.testspec)
+        if workspace.view:
+            case.set_workspace_properties(workspace=workspace.view, session=None)
         f: str
         if args.show_log:
             f = case.stdout_file

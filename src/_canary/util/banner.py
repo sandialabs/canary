@@ -4,8 +4,11 @@
 
 import random
 from itertools import cycle
+from typing import IO
+from typing import Any
 
 from .. import version
+from ..third_party.color import colorize
 from . import logging
 
 bird = """\
@@ -32,6 +35,10 @@ bird = """\
 
 
 logger = logging.get_logger(__name__)
+
+
+def print_banner(file: IO[Any] | None = None) -> None:
+    print(colorize(banner()), file=file)
 
 
 def banner(color: bool = True) -> str:

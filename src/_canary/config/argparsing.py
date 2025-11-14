@@ -163,6 +163,8 @@ class Parser(argparse.ArgumentParser):
             kwds["add_help"] = False  # ty: ignore[invalid-assignment]
             kwds["epilog"] = command.epilog  # ty: ignore[invalid-assignment]
             kwds["help"] = command.description
+        if hasattr(command, "aliases"):
+            kwds["aliases"] = command.aliases  # ty: ignore[invalid-assignment]
         subparser = self.subparsers.add_parser(command.name, **kwds)
         subparser.register("type", None, identity)
         command.setup_parser(subparser)  # type: ignore

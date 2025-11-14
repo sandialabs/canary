@@ -8,7 +8,6 @@ import concurrent.futures
 import io
 import json
 import math
-import os
 import signal
 import threading
 import time
@@ -29,7 +28,6 @@ from .third_party import color
 from .util import cpu_count
 from .util import keyboard
 from .util import logging
-from .util.filesystem import working_dir
 from .util.procutils import ProcessPoolExecutor
 from .util.procutils import cleanup_children
 from .util.progress import progress
@@ -230,6 +228,7 @@ class ResourceQueue(AbstractResourceQueue):
 
     def skip(self, obj_no: int) -> None:
         self._finished[obj_no] = self.buffer.pop(obj_no)
+        self._finished[obj_no].save()
         for case in self.buffer.values():
             for i, dep in enumerate(case.dependencies):
                 if dep.id == self._finished[obj_no].id:
@@ -301,7 +300,6 @@ class ResourceQueue(AbstractResourceQueue):
         """
         if not config.get("config:debug"):
             return None
-        assert config.get("session:work_tree") is not None
         hb: dict[str, Any] = {"date": datetime.now().strftime("%c")}
         busy = self.busy()
         hb["busy"] = [case.id for case in busy]
@@ -317,45 +315,42 @@ def process_queue(queue: AbstractResourceQueue, runner: Callable, **kwargs: Any)
     returncode: int = -10
     njobs = len(queue)
     pbar = config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
-    work_tree = config.get("session:work_tree")
-    assert work_tree is not None
-    with working_dir(work_tree):
-        cleanup_queue = True
-        try:
-            what = pluralize("job", njobs)
-            logger.info("@*{Running} %d %s" % (njobs, what))
-            start = timestamp()
-            stop = -1.0
-            logger.debug("Start: processing queue")
-            _process_queue(queue, runner, **kwargs)
-        except KeyboardInterrupt:
-            logger.debug("keyboard interrupt: killing child processes and exiting")
-            returncode = signal.SIGINT.value
-            cleanup_queue = False
-            raise
-        except StopExecution as e:
-            logger.debug("stop execution: killing child processes and exiting")
-            returncode = e.exit_code
-        except FailFast as e:
-            logger.debug("fail fast: killing child processes and exiting")
-            code = compute_returncode(e.failed)
-            returncode = code
-            cleanup_queue = False
-            names = ",".join(_.name for _ in e.failed)
-            raise StopExecution(f"fail_fast: {names}", code)
-        except Exception:
-            logger.exception("unknown failure: killing child processes and exiting")
-            returncode = compute_returncode(queue.cases())
-            raise
-        else:
-            if pbar:
-                queue.update_progress_bar(start, last=True)
-            returncode = compute_returncode(queue.cases())
-            queue.close(cleanup=cleanup_queue)
-            stop = timestamp()
-            dt = stop - start
-            logger.info("@*{Finished} %d %s (%s)" % (njobs, what, hhmmss(dt)))
-            atexit.unregister(cleanup_children)
+    cleanup_queue = True
+    try:
+        what = pluralize("job", njobs)
+        logger.info("@*{Running} %d %s" % (njobs, what))
+        start = timestamp()
+        stop = -1.0
+        logger.debug("Start: processing queue")
+        _process_queue(queue, runner, **kwargs)
+    except KeyboardInterrupt:
+        logger.debug("keyboard interrupt: killing child processes and exiting")
+        returncode = signal.SIGINT.value
+        cleanup_queue = False
+        raise
+    except StopExecution as e:
+        logger.debug("stop execution: killing child processes and exiting")
+        returncode = e.exit_code
+    except FailFast as e:
+        logger.debug("fail fast: killing child processes and exiting")
+        code = compute_returncode(e.failed)
+        returncode = code
+        cleanup_queue = False
+        names = ",".join(_.name for _ in e.failed)
+        raise StopExecution(f"fail_fast: {names}", code)
+    except Exception:
+        logger.exception("unknown failure: killing child processes and exiting")
+        returncode = compute_returncode(queue.cases())
+        raise
+    else:
+        if pbar:
+            queue.update_progress_bar(start, last=True)
+        returncode = compute_returncode(queue.cases())
+        queue.close(cleanup=cleanup_queue)
+        stop = timestamp()
+        dt = stop - start
+        logger.info("@*{Finished} %d %s (%s)" % (njobs, what, hhmmss(dt)))
+        atexit.unregister(cleanup_children)
     return returncode
 
 
@@ -375,7 +370,6 @@ def _process_queue(queue: AbstractResourceQueue, runner: Callable, **kwargs: Any
     ppe = None
     pbar = config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
     try:
-        config.archive(os.environ)
         with ProcessPoolExecutor(workers=queue.workers) as ppe:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
             while True:

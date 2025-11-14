@@ -18,8 +18,8 @@ if TYPE_CHECKING:
     from ..config.argparsing import Parser
     from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
-    from ..session import Session
     from ..testcase import TestCase
+    from ..workspace import Session
     from .manager import CanaryPluginManager
     from .types import Result
 

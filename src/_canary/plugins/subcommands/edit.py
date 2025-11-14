@@ -7,9 +7,10 @@ import os
 from typing import TYPE_CHECKING
 
 from ...util.editor import editor
+from ...workspace import NotAWorkspaceError
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -45,10 +46,8 @@ def find_file(testspec: str) -> str | None:
     except Exception:  # nosec B110
         pass
     try:
-        session = load_session()
-    except Exception:
+        workspace = Workspace.load()
+    except NotAWorkspaceError:
         return None
-    for case in session.cases:
-        if case.matches(testspec):
-            return case.file
-    return None
+    case = workspace.locate(case=testspec)
+    return case.file

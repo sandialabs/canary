@@ -52,7 +52,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             color.set_color_when(args.color)
         config.set_main_options(args)
         config.pluginmanager.hook.canary_configure(config=config)
-        command = parser.get_command(args.command)
+        command = parser.get_command(config.options.command)
         if command is None:
             parser.print_help()
             return -1

@@ -4,7 +4,6 @@
 
 import dataclasses
 import fnmatch
-import glob
 import hashlib
 import io
 import itertools
@@ -24,6 +23,7 @@ from datetime import datetime
 from datetime import timedelta
 from functools import cached_property
 from functools import lru_cache
+from pathlib import Path
 from types import SimpleNamespace
 from typing import IO
 from typing import Any
@@ -42,7 +42,6 @@ from .paramset import ParameterSet
 from .status import Status
 from .util import filesystem as fs
 from .util import logging
-from .util._json import safeload
 from .util._json import safesave
 from .util.compression import compress_str
 from .util.executable import Executable
@@ -322,6 +321,7 @@ class TestCase(AbstractTestCase):
         # initialize all attributes as private and employ getters/setters
         self._file_root: str = ""
         self._file_path: str = ""
+        self._generator: str = ""
         self._url: str | None = None
         self._family: str = ""
         self._classname: str | None = None
@@ -342,7 +342,8 @@ class TestCase(AbstractTestCase):
         self._display_name: str | None = None
         self._id: str | None = None
         self._status: Status = Status()
-        self._work_tree: str | None = None
+        self._workspace: str | None = None
+        self._session: str | None = None
         self._working_directory: str | None = None
         self._path: str | None = None
         self._cache: TestCaseCache | None = None
@@ -414,18 +415,10 @@ class TestCase(AbstractTestCase):
     def __repr__(self) -> str:
         return self.display_name
 
-    def stage(self, prefix: str | None = None) -> str:
-        dir = config.get("session:work_tree")
-        assert dir is not None
-        root = os.path.join(dir, ".canary/objects/cases")
-        if prefix is not None:
-            root = os.path.join(root, prefix)
-        return os.path.join(root, self.id[:2], self.id[2:])
-
     @property
     def lockfile(self) -> str:
         """Path to lock file containing information needed to generate this case at runtime"""
-        return os.path.join(self.stage(), self._lockfile)
+        return os.path.join(self.working_directory, self._lockfile)
 
     @property
     def file_root(self) -> str:
@@ -460,29 +453,47 @@ class TestCase(AbstractTestCase):
     def file_dir(self) -> str:
         return os.path.dirname(self.file)
 
-    @property
-    def work_tree(self) -> str | None:
-        """The session work tree.  Can be lazily evaluated so we don't set it here if missing"""
-        if self._work_tree is None:
-            self._work_tree = config.get("session:work_tree")
-        return self._work_tree
+    def set_workspace_properties(self, *, workspace: Path, session: str | None) -> None:
+        self.workspace = str(workspace)
+        self._session = session
+        assert os.path.exists(self.workspace)
+        if session is not None:
+            assert os.path.exists(os.path.join(self.workspace, "sessions", self.session))
 
-    @work_tree.setter
-    def work_tree(self, arg: str | None) -> None:
+    @property
+    def work_root(self) -> str:
+        if self.session is not None:
+            return os.path.join(self.workspace, "sessions", self.session, "work")
+        else:
+            return self.workspace
+
+    @property
+    def session(self) -> str | None:
+        return self._session
+
+    @session.setter
+    def session(self, arg: str | None) -> None:
+        if arg is not None:
+            self._session = arg
+
+    @property
+    def workspace(self) -> str:
+        if self._workspace is None:
+            raise ValueError("workspace has not been set")
+        return self._workspace
+
+    @workspace.setter
+    def workspace(self, arg: str | None) -> None:
         if arg is not None:
             assert os.path.exists(arg)
-            self._work_tree = arg
-
-    # Backward compatibility
-    exec_root = work_tree
+            self._workspace = arg
 
     @property
     def path(self) -> str:
-        """The relative path from ``config.session.work_tree`` to ``self.working_directory``"""
+        """The relative path from ``workspace.session`` to ``self.working_directory``"""
         if self._path is None:
-            work_tree = config.get("session:work_tree") or config.invocation_dir
             dirname, basename = os.path.split(self.file_path)
-            path = os.path.join(work_tree, dirname, self.name)
+            path = os.path.join(self.work_root, dirname, self.name)
             n = max_name_length()
             if len(os.path.join(path, basename)) < n:
                 self._path = os.path.join(dirname, self.name)
@@ -539,10 +550,7 @@ class TestCase(AbstractTestCase):
     def working_directory(self) -> str:
         """Directory where the test is executed."""
         if self._working_directory is None:
-            work_tree = config.get("session:work_tree")
-            if not work_tree:
-                raise ValueError("session work_tree not set") from None
-            self._working_directory = os.path.normpath(os.path.join(work_tree, self.path))
+            self._working_directory = os.path.normpath(os.path.join(self.work_root, self.path))
         assert self._working_directory is not None
         return self._working_directory
 
@@ -582,7 +590,13 @@ class TestCase(AbstractTestCase):
     @property
     def implicit_keywords(self) -> list[str]:
         """Implicit keywords, used for some filtering operations"""
-        kwds = {self.status.name.lower(), self.status.value.lower(), self.name, self.family}
+        kwds = {
+            self.status.name.lower(),
+            self.status.value.lower(),
+            self.name,
+            self.family,
+            self.file,
+        }
         return list(kwds)
 
     @property
@@ -1419,18 +1433,12 @@ class TestCase(AbstractTestCase):
                 fs.force_symlink(asset.src, dst)
 
     def save(self):
-        lockfile = self.lockfile
-        safesave(lockfile, self.getstate())
-        file = os.path.join(self.working_directory, self._lockfile)
-        mkdirp(os.path.dirname(file))
-        fs.force_symlink(lockfile, file)
-
-    def _load_lockfile(self) -> dict[str, Any]:
-        return safeload(self.lockfile)
+        safesave(self.lockfile, self.getstate())
 
     def refresh(self, propagate: bool = True) -> None:
         try:
-            state = self._load_lockfile()
+            with open(self.lockfile) as fh:
+                state = json.load(fh)
         except FailedToLoadLockfileError:
             self.status.set("unknown", details="Lockfile failed to load on refresh")
             self.save()
@@ -1439,7 +1447,7 @@ class TestCase(AbstractTestCase):
             "start",
             "stop",
             "returncode",
-            "work_tree",
+            "session",
             "status",
             "measurements",
             "instance_attributes",
@@ -1456,6 +1464,13 @@ class TestCase(AbstractTestCase):
         self.refresh()
         if not self.status.satisfies(("success", "skipped")):
             return self
+
+    def update(self, **attrs):
+        for name, value in attrs.items():
+            if name == "status":
+                self.status = Status(value["value"], details=value["details"])
+            else:
+                setattr(self, name, value)
 
     @contextmanager
     def rc_environ(self, **env: str) -> Generator[None, None, None]:
@@ -1540,7 +1555,6 @@ class TestCase(AbstractTestCase):
         elif self.unresolved_dependencies:
             raise RuntimeError("All dependencies must be resolved before running")
         logger.debug(f"Setting up {self}")
-        assert config.get("session:work_tree") is not None
         fs.mkdirp(self.working_directory)
         self.close_files()
         fs.clean_out_folder(self.working_directory)
@@ -1935,18 +1949,6 @@ def from_lockfile(lockfile: str) -> TestCase | TestMultiCase:
     with open(lockfile) as fh:
         state = json.load(fh)
     return from_state(state)
-
-
-def from_id(id: str) -> TestCase | TestMultiCase:
-    work_tree = config.get("session:work_tree")
-    if work_tree is None:
-        raise ValueError(f"cannot find test case {id} outside a test session")
-    config_dir = os.path.join(work_tree, ".canary")
-    pat = os.path.join(config_dir, "objects/cases", id[:2], f"{id[2:]}*", TestCase._lockfile)
-    lockfiles = glob.glob(pat)
-    if lockfiles:
-        return from_lockfile(lockfiles[0])
-    raise ValueError(f"no test case associated with {id} found in {work_tree}")
 
 
 def strtimestamp() -> str:

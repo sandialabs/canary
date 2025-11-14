@@ -13,10 +13,8 @@ from typing import Any
 import pluggy
 import yaml
 
-from ...util.filesystem import find_work_tree
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
-from .common import load_session
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
@@ -73,7 +71,7 @@ class ConfigCmd(CanarySubcommand):
         p = sp.add_parser("add", help="Add to the current configuration")
         p.add_argument(
             "--scope",
-            choices=("local", "global", "session"),
+            choices=("local", "global"),
             default="local",
             help="Configuration scope",
         )
@@ -86,8 +84,6 @@ class ConfigCmd(CanarySubcommand):
     def execute(self, args: "argparse.Namespace") -> int:
         from ... import config
 
-        if root := find_work_tree(os.getcwd()):
-            load_session(root=root)
         if args.subcommand == "show":
             show_config(args)
             return 0

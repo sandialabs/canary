@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import datetime
 import io
 from typing import TYPE_CHECKING
 
@@ -13,8 +12,8 @@ from ...util.sendmail import sendmail
 from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
-    from ...session import Session
     from ...testcase import TestCase
+    from ...workspace import Session
 
 logger = logging.get_logger(__name__)
 
@@ -43,16 +42,14 @@ def canary_session_finish(session: "Session", exitstatus: int) -> None:
         raise RuntimeError("missing required argument --mail-from")
     recvaddrs = [_.strip() for _ in mail_to.split(",") if _.split()]
     html_report = generate_html_report(session)
-    date = datetime.datetime.fromtimestamp(session.start)
-    st_time = date.strftime("%m/%d/%Y")
-    subject = f"Canary Summary for {st_time}"
+    subject = "Canary Summary"
     logger.info(f"Sending summary to {', '.join(recvaddrs)}")
     sendmail(sendaddr, recvaddrs, subject, html_report, subtype="html")
 
 
 def generate_html_report(session: "Session") -> str:
     totals: dict[str, list["TestCase"]] = {}
-    for case in session.active_cases():
+    for case in session.cases:
         group = case.status.name.title()
         totals.setdefault(group, []).append(case)
     file = io.StringIO()

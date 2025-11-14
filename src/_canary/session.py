@@ -352,27 +352,37 @@ class Session:
     def dump_testcase_generators(self) -> None:
         """Dump each test file (test generator) in this session to ``file`` in json format"""
         logger.debug("Dumping test case generators")
-        testfiles = [f.getstate() for f in self.generators]
-        with self.db.open("files", mode="w") as file:
-            json.dump(testfiles, file, indent=2)
+        index: dict[str, str] = {}
+        for i, generator in enumerate(self.generators):
+            id = f"{i:05d}"
+            f = os.path.join(id[:2], id[2:])
+            index[id] = f
+            with self.db.open(f"generators/{f}", mode="w") as file:
+                json.dump(generator.getstate(), file, indent=2)
+        with self.db.open("generators/index", "w") as fh:
+            json.dump({"index": index}, fh, indent=2)
 
     def load_testcase_generators(self) -> None:
         """Load test files (test generators) previously dumped by ``dump_testcase_generators``"""
         self.generators.clear()
         msg = "@*{Loading} test case generators"
         logger.log(logging.DEBUG, msg, extra={"end": "..."})
-        created = time.monotonic()
+        start = time.monotonic()
         try:
-            with self.db.open("files", "r") as file:
-                states = json.load(file)
-                self.generators.extend(map(AbstractTestGenerator.from_state, states))
+            with self.db.open("generators/index", "r") as file:
+                index = json.load(file)["index"]
+                for f in index.values():
+                    with self.db.open(f"generators/{f}", "r") as fh:
+                        state = json.load(fh)
+                    generator = AbstractTestGenerator.from_state(state)
+                    self.generators.append(generator)
         except Exception:
-            state = "failed"
+            status = "failed"
             raise
         else:
-            state = "done"
+            status = "done"
         finally:
-            end = "... %s (%.2fs.)\n" % (state, time.monotonic() - created)
+            end = "... %s (%.2fs.)\n" % (status, time.monotonic() - start)
             extra = {"end": end, "rewind": True}
             logger.log(logging.DEBUG, msg, extra=extra)
         return

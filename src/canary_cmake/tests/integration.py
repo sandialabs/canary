@@ -67,9 +67,8 @@ def test_cmake_integration(tmpdir):
             run.add_default_args("-r", "cpus:6", "-r", "gpus:0")
             run("-w", "--recurse-ctest", ".", debug=True)
             dirs = sorted(os.listdir("TestResults"))
-            dirs.remove(".canary")
-            assert len(dirs) == 3
-            assert dirs == ["baz", "foo", "spam"]
+            assert len(dirs) == 4
+            assert set(dirs) == {"VIEW.TAG", "baz", "foo", "spam"}
 
 
 f3 = fs.which("mpirun")

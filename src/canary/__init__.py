@@ -43,6 +43,7 @@ from _canary.util import time
 from _canary.util.executable import Executable
 from _canary.version import version  # noqa: I001
 from _canary.version import version_info  # noqa: I001
+from _canary.workspace import Workspace
 
 from . import directives
 from . import patterns

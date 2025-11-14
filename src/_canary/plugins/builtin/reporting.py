@@ -23,8 +23,8 @@ from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...session import Session
     from ...testcase import TestCase
+    from ...workspace import Session
 
 
 logger = logging.get_logger(__name__)
@@ -130,7 +130,7 @@ def print_runtests_durations(cases: list["TestCase"], include_pass: bool, trunca
 @hookimpl(specname="canary_statusreport")
 def print_statusreport_durations(session: "Session") -> None:
     if N := config.getoption("durations"):
-        print_durations(session.active_cases(), N)
+        print_durations(session.cases, N)
 
 
 @hookimpl(specname="canary_runtests_summary", trylast=True)
@@ -144,8 +144,7 @@ def runtests_footer(
 @hookimpl(specname="canary_statusreport", trylast=True)
 def status_footer(session: "Session") -> None:
     """Return a short, high-level, summary of test results"""
-    cases = session.active_cases()
-    print_footer(cases, "Summary")
+    print_footer(session.cases, "Summary")
 
 
 @hookimpl(specname="canary_statusreport", tryfirst=True)
@@ -191,7 +190,7 @@ def canary_collectreport(cases: list["TestCase"]) -> None:
             logger.log(logging.EMIT, f"{'@M{==>}'} {n}: {reason}", extra={"prefix": ""})
             if config.getoption("show_excluded_tests"):
                 for case in reasons[key]:
-                    logger.log(logging.EMIT, f"... {case.format('%N')}", extra={"prefix": ""})
+                    logger.log(logging.EMIT, f"... {case.pretty_name()}", extra={"prefix": ""})
 
 
 def print_durations(cases: list["TestCase"], N: int) -> None:
@@ -228,7 +227,7 @@ def determine_cases_to_show(
             rc.add("A")
         else:
             pathspec = os.path.abspath(pathspec)
-            if pathspec != session.work_tree:
+            if pathspec != str(session.work_dir):
                 cases = [c for c in cases if c.working_directory.startswith(pathspec)]
     if "A" in rc:
         if "x" in rc:
@@ -274,7 +273,7 @@ def show_capture(session: "Session", exitstatus: int) -> None:
     what = config.getoption("show_capture")
     if what in ("no", None):
         return
-    cases = session.active_cases()
+    cases = session.cases
     failed = [case for case in cases if not case.status.satisfies(("success", "xdiff", "xfail"))]
     if failed:
         _, width = terminal_size()

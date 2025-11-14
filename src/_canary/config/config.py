@@ -8,7 +8,6 @@ from collections.abc import ValuesView
 from contextlib import contextmanager
 from copy import deepcopy
 from functools import cached_property
-from pathlib import Path
 from string import Template
 from typing import IO
 from typing import Any
@@ -25,7 +24,6 @@ from ..util import logging
 from ..util.collections import merge
 from ..util.compression import compress64
 from ..util.compression import expand64
-from ..util.filesystem import find_work_tree
 from ..util.filesystem import mkdirp
 from ..util.string import strip_quotes
 from . import _machine
@@ -45,7 +43,6 @@ section_schemas: dict[str, Schema] = {
     "config": config_schema,
     "environment": environment_schema,
     "plugin": plugin_schema,
-    "session": any_schema,
     "system": any_schema,
     "user": user_schema,
 }
@@ -109,12 +106,11 @@ class ConfigScope:
         data = {"name": self.name, "file": self.file, "data": self.data.copy()}
         return data
 
-    def dump(self, root: str | None = None) -> None:
+    def dump(self, root: str = "canary") -> None:
         if self.file is None:
             return
-        root = root or "canary"
         with open(self.file, "w") as fh:
-            yaml.dump({root or "canary": self.data}, fh, default_flow_style=False)
+            yaml.dump({root: self.data}, fh, default_flow_style=False)
 
 
 class Config:
@@ -123,41 +119,22 @@ class Config:
         self.working_dir = os.getcwd()
         self.pluginmanager: CanaryPluginManager = CanaryPluginManager.factory()
         self.options: argparse.Namespace = argparse.Namespace()
-        self.ioptions: argparse.Namespace = argparse.Namespace()
         self.scopes: dict[str, ConfigScope] = {}
         if envcfg := os.getenv(env_archive_name):
             with io.StringIO() as fh:
                 fh.write(expand64(envcfg))
                 fh.seek(0)
                 self.load_snapshot(fh)
-        elif root := find_work_tree():
-            # If we are inside a session directory, then we want to restore its configuration.
-            file = os.path.join(root, ".canary/config")
-            if os.path.exists(file):
-                with open(file) as fh:
-                    self.load_snapshot(fh)
-            else:
-                raise FileNotFoundError(file)
-        else:
-            self.scopes["defaults"] = ConfigScope("defaults", None, default_config_values())
-            for scope in ("global", "local"):
-                config_scope = read_config_scope(scope)
-                self.push_scope(config_scope)
-            if cscope := read_env_config():
-                self.push_scope(cscope)
+        self.scopes["defaults"] = ConfigScope("defaults", None, default_config_values())
+        for scope in ("site", "global", "local"):
+            config_scope = create_config_scope(scope)
+            self.push_scope(config_scope)
+        if ws_scope := create_workspace_config():
+            self.push_scope(ws_scope)
+        if cscope := create_env_config():
+            self.push_scope(cscope)
         if self.get("config:debug"):
             logging.set_level(logging.DEBUG)
-
-    def stage(self, suffix: str | None = None) -> Path:
-        root: Path
-        if f := self.get("session:work_tree"):
-            root = Path(f)
-        else:
-            root = Path.cwd()
-        stage = root / ".canary"
-        if suffix is not None:
-            stage /= suffix
-        return stage
 
     def getoption(self, name: str, default: Any = None) -> Any:
         value = getattr(self.options, name, None)
@@ -396,8 +373,7 @@ class Config:
                 timeout_settings[key] = val
             config_settings["timeout"] = timeout_settings
 
-        self.ioptions = args
-        self.options = merge_namespaces(self.options, args)
+        self.options = args
 
         if args.config_file:
             if fd := read_config_file(args.config_file):
@@ -438,9 +414,6 @@ class Config:
         log_level = self.get("config:log_level")
         if logging.get_level_name(logger.level) != log_level:
             logging.set_level(log_level)
-        if root := find_work_tree():
-            f = os.path.abspath(os.path.join(root, ".canary/canary-log.txt"))
-            logging.add_file_handler(f, logging.TRACE)
 
     def dump_snapshot(self, file: IO[Any], indent: int | None = None) -> None:
         snapshot: dict[str, Any] = {}
@@ -489,22 +462,9 @@ class Config:
             self.pop_scope(scope)
 
 
-def read_config_scope(scope: str) -> ConfigScope:
-    data: dict[str, Any] = {}
-    if file := get_scope_filename(scope):
-        if fd := read_config_file(file):
-            if "canary" in fd:
-                data.update(fd.pop("canary"))
-            data.update(fd)
-        for section, section_data in data.items():
-            if schema := section_schemas.get(section):
-                if schema == any_schema:
-                    data[section] = section_data
-                else:
-                    data[section] = schema.validate(section_data)
-            else:
-                logger.warning(f"ignoring unrecognized config section: {section}")
-    return ConfigScope(scope, file, data)
+def create_config_scope(scope: str) -> ConfigScope:
+    file = get_scope_filename(scope)
+    return _create_config_scope(scope, file)
 
 
 def read_config_file(file: str) -> dict[str, Any] | None:
@@ -515,7 +475,7 @@ def read_config_file(file: str) -> dict[str, Any] | None:
         return yaml.safe_load(fh)
 
 
-def get_scope_filename(scope: str) -> str | None:
+def get_scope_filename(scope: str) -> str:
     if scope == "site":
         if var := os.getenv("CANARY_SITE_CONFIG"):
             return var
@@ -533,12 +493,39 @@ def get_scope_filename(scope: str) -> str | None:
     raise ValueError(f"Could not determine filename for scope {scope!r}")
 
 
-def read_env_config() -> ConfigScope | None:
+def _create_config_scope(scope_name: str, file: str) -> ConfigScope:
+    data: dict[str, Any] = {}
+    if fd := read_config_file(file):
+        if "canary" in fd:
+            data.update(fd.pop("canary"))
+        data.update(fd)
+    for section, section_data in data.items():
+        if schema := section_schemas.get(section):
+            if schema == any_schema:
+                data[section] = section_data
+            else:
+                data[section] = schema.validate(section_data)
+        else:
+            logger.warning(f"ignoring unrecognized config section: {section}")
+    return ConfigScope(scope_name, file, data)
+
+
+def create_env_config() -> ConfigScope | None:
     variables = {key: var for key, var in os.environ.items() if key.startswith("CANARY_")}
     if not variables:
         return None
     data = environment_variable_schema.validate(variables)
     return ConfigScope("environment", None, data)
+
+
+def create_workspace_config() -> ConfigScope | None:
+    from ..workspace import Workspace
+
+    if path := Workspace.find_workspace():
+        if (path / "canary.yaml").exists():
+            file = path / "canary.yaml"
+            return _create_config_scope("workspace", str(file))
+    return None
 
 
 def process_config_path(path: str) -> list[str]:
@@ -565,26 +552,11 @@ def try_loads(arg):
         return arg
 
 
-def merge_namespaces(dest: argparse.Namespace, source: argparse.Namespace) -> argparse.Namespace:
-    for attr, value in vars(source).items():
-        if value is None:
-            if not hasattr(dest, attr):
-                setattr(dest, attr, None)
-            continue
-        elif not hasattr(dest, attr):
-            setattr(dest, attr, value)
-        else:
-            my_value = getattr(dest, attr)
-            if hasattr(my_value, "copy"):
-                my_value = my_value.copy()
-            setattr(dest, attr, merge(my_value, value))
-    return dest
-
-
 def default_config_values() -> dict[str, Any]:
     defaults = {
         "config": {
             "debug": False,
+            "view": "TestResults",
             "log_level": "INFO",
             "cache_dir": os.path.join(os.getcwd(), ".canary_cache"),
             "multiprocessing": {
@@ -608,11 +580,6 @@ def default_config_values() -> dict[str, Any]:
             "append-path": {},
             "set": {},
             "unset": [],
-        },
-        "session": {
-            "work_tree": None,
-            "level": None,
-            "mode": None,
         },
         "system": _machine.system_config(),
     }
@@ -669,7 +636,6 @@ def convert_legacy_snapshot(legacy: dict[str, Any]) -> dict[str, Any]:
     data: dict[str, Any] = scope.setdefault("data", {})  # type: ignore
     data["build"] = legacy["build"]
     data["environment"] = legacy["environment"]
-    data["session"] = legacy["session"]
     data["system"] = legacy["system"]
     data["config"] = legacy["config"]
     data["config"]["cache_dir"] = os.path.join(properties["invocation_dir"], ".canary_cache")

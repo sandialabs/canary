@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def add_filter_arguments(parser: "Parser") -> None:
+def add_filter_arguments(parser: "Parser", tagged: bool = True) -> None:
     group = parser.add_argument_group("filtering")
     group.add_argument(
         "-k",
@@ -69,6 +69,11 @@ def add_filter_arguments(parser: "Parser") -> None:
         action=RerunFailed,
         help="Rerun failed tests [default: False]",
     )
+    if tagged:
+        group.add_argument(
+            "--tag",
+            help="Tag this test case selection for future runs [default: False]",
+        )
 
 
 class RerunFailed(argparse.Action):
@@ -86,14 +91,7 @@ def add_work_tree_arguments(parser: "Parser") -> None:
         action="store_true",
         help="Remove test execution directory, if it exists [default: %(default)s]",
     )
-    parser.add_argument(
-        "-d",
-        "--work-tree",
-        dest="work_tree",
-        metavar="directory",
-        help="Set the path to the working tree. It can be an absolute path or a "
-        "path relative to the current working directory. [default: ./TestResults]",
-    )
+    parser.add_argument("-d", "--work-tree", dest="work_tree", help=argparse.SUPPRESS)
 
 
 def add_resource_arguments(parser: "Parser") -> None:
@@ -169,12 +167,6 @@ def filter_cases_by_status(cases: list["TestCase"], status: tuple | str) -> list
     if isinstance(status, str):
         status = (status,)
     return [c for c in cases if c.status.value in status]
-
-
-def load_session(root: str | None = None, mode: str = "r"):
-    from ....session import Session
-
-    return Session(root or os.getcwd(), mode=mode)
 
 
 def bold(arg: str) -> str:
