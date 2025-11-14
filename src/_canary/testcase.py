@@ -130,11 +130,11 @@ class TestCase:
     @cached_property
     def runtime(self) -> float:
         try:
-            if cache := self.load_historic_timing_data():
-                try:
+            try:
+                if cache := self.load_cached_runs():
                     return float(cache["metrics"]["time"]["mean"])
-                except KeyError:
-                    pass
+            except KeyError:
+                pass
         except Exception:
             logger.debug("Failed to load historic timing data", exc_info=True)
         return self.spec.timeout
@@ -281,10 +281,6 @@ class TestCase:
         finally:
             logger.debug(f"Finished executing {self.spec.fullname}: status={self.status}")
             queue.put({"status": self.status, "timekeeper": self.timekeeper})
-            try:
-                self.cache_last_run()
-            except Exception:
-                logger.debug("Failed to cache last run", exc_info=True)
             self.save()
         return
 
@@ -352,6 +348,10 @@ class TestCase:
             self.timekeeper.started_on = timekeeper.started_on
             self.timekeeper.finished_on = timekeeper.finished_on
             self.timekeeper.duration = timekeeper.duration
+        try:
+            self.cache_last_run()
+        except Exception:
+            logger.debug("Failed to cache last run", exc_info=True)
 
     def refresh(self) -> None:
         data = json.loads(self.workspace.joinpath("testcase.lock").read_text())
@@ -475,7 +475,7 @@ class TestCase:
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
 
-    def load_historic_timing_data(self) -> dict[str, Any] | None:
+    def load_cached_runs(self) -> dict[str, Any] | None:
         cache_dir = Path(config.cache_dir)
         file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
         if file.exists():
@@ -487,9 +487,7 @@ class TestCase:
             return
         cache_dir = Path(config.cache_dir)
         file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
-        can_write = file.parent.is_dir() and os.access(file.parent, os.W_OK)
-        if not can_write:
-            return None
+        file.parent.mkdir(parents=True, exist_ok=True)
         cache: dict[str, Any]
         if not file.exists():
             cache = {
@@ -521,17 +519,17 @@ class TestCase:
             if t:
                 # Welford's single pass online algorithm to update statistics
                 count, mean, variance = t["count"], t["mean"], t["variance"]
-                delta = self.timekeerper.duration - mean
+                delta = self.timekeeper.duration - mean
                 mean += delta / (count + 1)
                 M2 = variance * count
-                delta2 = self.timekeerper.duration - mean
+                delta2 = self.timekeeper.duration - mean
                 M2 += delta * delta2
                 variance = M2 / (count + 1)
-                minimum = min(t["min"], self.timekeerper.duration)
-                maximum = max(t["max"], self.timekeerper.duration)
+                minimum = min(t["min"], self.timekeeper.duration)
+                maximum = max(t["max"], self.timekeeper.duration)
             else:
                 variance = 0.0
-                mean = minimum = maximum = self.timekeerper.duration
+                mean = minimum = maximum = self.timekeeper.duration
             t["mean"] = mean
             t["min"] = minimum
             t["max"] = maximum

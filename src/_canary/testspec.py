@@ -167,6 +167,7 @@ class TestSpec(SpecCommons):
     attributes: dict[str, Any] = dataclasses.field(default_factory=dict)
     environment: dict[str, str] = dataclasses.field(default_factory=dict)
     environment_modifications: dict[str, str] = dataclasses.field(default_factory=dict)
+    cache: dict[str, str] = dataclasses.field(default_factory=dict, init=False)
 
     @classmethod
     def from_dict(cls, d: dict, lookup: dict[str, "TestSpec"]) -> "TestSpec":
@@ -182,6 +183,36 @@ class TestSpec(SpecCommons):
         d["assets"] = assets
         self = TestSpec(**d)  # ty: ignore[missing-argument]
         return self
+
+    def set_default_timeout(self) -> None:
+        """Sets the default timeout.  If runtime statistics have been collected those will be used,
+        otherwise the timeout will be based on the presence of duration-like keywords (fast and
+        long being the builtin defaults)
+        """
+        t = self.cache.get("metrics:time")
+        if t is not None:
+            max_runtime = t["max"]
+            if max_runtime < 5.0:
+                timeout = 120.0
+            elif max_runtime < 120.0:
+                timeout = 360.0
+            elif max_runtime < 300.0:
+                timeout = 900.0
+            elif max_runtime < 600.0:
+                timeout = 1800.0
+            else:
+                timeout = 2.0 * max_runtime
+        else:
+            if t := config.get("config:timeout:*"):
+                timeout = float(t)
+            else:
+                for keyword in self.keywords:
+                    if t := config.get(f"config:timeout:{keyword}"):
+                        timeout = float(t)
+                        break
+                else:
+                    timeout = config.get("config:timeout:default")
+        self._timeout = float(timeout)
 
 
 @dataclasses.dataclass

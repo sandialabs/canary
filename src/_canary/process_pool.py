@@ -4,6 +4,7 @@
 import multiprocessing as mp
 import time
 from functools import cached_property
+from queue import Empty as EmptyResultQueue
 from typing import Any
 from typing import Callable
 
@@ -170,11 +171,24 @@ class ProcessPool:
             job.measurements.update(measurements)
 
             # Get the final result before cleaning up
+            result = None
             try:
                 result = result_queue.get_nowait()
-                job.update(**result)
+            except (EmptyResultQueue, OSError):
+                pass
             except Exception:
-                logger.exception(f"No result found for job {job} (pid {pid})")
+                logger.exception(f"Error retrieving result for {job}")
+
+            if result is not None:
+                job.update(**result)
+            else:
+                logger.error(f"No result found for job {job} (pid {pid})")
+
+            try:
+                result_queue.close()
+                result_queue.join_thread()
+            except Exception:
+                pass
 
             proc.join()  # Clean up the process
             self.queue.done(job)
@@ -192,11 +206,16 @@ class ProcessPool:
         """Main loop: get jobs from queue and launch processes."""
         logger.info(f"Starting process pool with max {self.max_workers} workers")
 
+        timeout = float(config.get("config:timeout:session", -1))
+
         qsize = len(self.queue)
         qrank = 0
         start = time.time()
         while True:
             try:
+                if timeout >= 0.0 and time.time() - start > timeout:
+                    raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
+
                 self.check_keyboard_input(start)
 
                 # Clean up any finished processes and collect results
@@ -222,8 +241,8 @@ class ProcessPool:
                 qrank += 1
 
                 # Store process with its result queue, job, start time, and timeout
-                timeout = job.timeout * self.timeout_multiplier
-                self.inflight[proc.pid] = (proc, result_queue, job, time.time(), timeout)
+                job_timeout = job.timeout * self.timeout_multiplier
+                self.inflight[proc.pid] = (proc, result_queue, job, time.time(), job_timeout)
 
             except Busy:
                 # Queue is busy, wait and try again

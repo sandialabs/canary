@@ -32,7 +32,7 @@ class Collector:
         else:
             for p in scan_path.paths:
                 if (root / p).is_file():
-                    if f := self.collect_file(root, p):
+                    if f := self.from_file(root, p):
                         generators.append(f)
                 elif (root / p).is_dir():
                     generators.extend(self.from_directory(root / p))

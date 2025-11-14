@@ -107,6 +107,7 @@ class ExecutionSpace:
 
 
 class ExecutionPolicy(Protocol):
+    def command(self) -> list[str]: ...
     def execute(self, case: "TestCase") -> int: ...
 
 
