@@ -35,7 +35,7 @@ class GitLabMRReporter(canary.CanaryReporter):
         access_token = kwargs["access_token"]
         cdash_url = kwargs["cdash_url"]
         mr = MergeRequest(access_token=access_token)
-        failed = group_failed_tests(session.active_cases())
+        failed = group_failed_tests(session.load_testcases())
         if failed:
             mr.report_failed(failed, cdash_build_url=cdash_url)
         else:

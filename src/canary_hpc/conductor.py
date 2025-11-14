@@ -156,7 +156,7 @@ class CanaryHPCConductor:
         queue = ResourceQueue.factory(global_lock, cases, resource_pool=self.rpool)
         runner = Runner()
         process_pool = ProcessPool(queue, runner)
-        process_pool.run(backend=self.backend.name)
+        return process_pool.run(backend=self.backend.name)
 
     @staticmethod
     def setup_parser(

@@ -11,11 +11,10 @@ from typing import TextIO
 from typing import TypeVar
 
 if TYPE_CHECKING:
-    from ..testcase import TestCase
     from ..testspec import ResolvedSpec
     from ..testspec import TestSpec
 
-    SpecLike = TypeVar("SpecLike", TestCase, TestSpec, ResolvedSpec)
+    SpecLike = TypeVar("SpecLike", TestSpec, ResolvedSpec)
 
 builtin_print = print
 
@@ -41,7 +40,7 @@ def static_order_ix(specs: Sequence["SpecLike"]) -> list[int]:
 
 
 def print_spec(
-    spec: "TestSpec",
+    spec: "SpecLike",
     level: int = -1,
     file=None,
     indent="",
@@ -54,7 +53,7 @@ def print_spec(
     tee = "├── "
     last = "└── "
 
-    def inner(spec: "TestSpec", prefix: str = "", level=-1):
+    def inner(spec: "SpecLike", prefix: str = "", level=-1):
         if not level:
             return  # 0, stop iterating
         dependencies = spec.dependencies
@@ -73,7 +72,7 @@ def print_spec(
         file.write(f"{branch}{indent}{line}\n")
 
 
-def print(specs: list["TestSpec"], file: str | Path | TextIO = sys.stdout) -> None:
+def print(specs: list["SpecLike"], file: str | Path | TextIO = sys.stdout) -> None:
     def streamify(arg) -> tuple[TextIO, bool]:
         if isinstance(arg, str):
             arg = Path(arg)
@@ -83,7 +82,7 @@ def print(specs: list["TestSpec"], file: str | Path | TextIO = sys.stdout) -> No
             return arg, False
 
     file, fown = streamify(file)
-    specs = static_order(specs)
+    specs = static_order(specs)  # ty: ignore[invalid-argument-type]
     all_deps = [dep for spec in specs for dep in spec.dependencies]
     remove = []
     for spec in specs:

@@ -135,7 +135,7 @@ def canary_addhooks(pluginmanager: "canary.CanaryPluginManager"):
 @canary.hookimpl(trylast=True)
 def canary_cdash_labels(case: canary.TestCase) -> list[str]:
     """Default implementation: return the test case's keywords"""
-    return list(case.keywords)
+    return list(case.spec.keywords)
 
 
 @canary.hookimpl

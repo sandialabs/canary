@@ -16,6 +16,7 @@ from .queue import Busy
 from .queue import Empty
 from .util import keyboard
 from .util import logging
+from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
 
@@ -202,7 +203,7 @@ class ProcessPool:
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.1)  # Brief sleep before checking again
 
-    def run(self, **kwargs: Any) -> None:
+    def run(self, **kwargs: Any) -> int:
         """Main loop: get jobs from queue and launch processes."""
         logger.info(f"Starting process pool with max {self.max_workers} workers")
 
@@ -260,6 +261,8 @@ class ProcessPool:
             except BaseException:
                 logger.exception("Unhandled exception in process pool")
                 raise
+
+        return compute_returncode(self.queue.cases())
 
     def wait_all(self) -> None:
         """Wait for all active processes to complete."""

@@ -362,7 +362,7 @@ def mkdirp(*paths: str, mode: int | None = None) -> None:
             raise OSError(errno.EEXIST, "File already exists", path)
 
 
-def set_executable(path: str) -> None:
+def set_executable(path: PathLike) -> None:
     """Set executable bits on ``path``"""
     mode = os.stat(path).st_mode
     if mode & stat.S_IRUSR:

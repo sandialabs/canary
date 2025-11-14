@@ -157,9 +157,7 @@ class HPC(canary.CanarySubcommand):
         for case in workspace.active_testcases():
             if case.id not in case_ids:
                 continue
-            if case.session is None:
-                case.session = str(workspace.sessions_dir)
-            print(f"- name: {case.display_name}\n  location: {case.workspace.dir}")
+            print(f"- name: {case.spec.display_name}\n  location: {case.workspace.dir}")
         return
 
 

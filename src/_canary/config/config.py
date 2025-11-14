@@ -120,6 +120,7 @@ class Config:
         self.working_dir = os.getcwd()
         self.pluginmanager: CanaryPluginManager = CanaryPluginManager.factory()
         self.scopes: dict[str, ConfigScope] = {}
+        self.options: argparse.Namespace = argparse.Namespace()
         if envcfg := os.getenv(env_archive_name):
             with io.StringIO() as fh:
                 fh.write(expand64(envcfg))
@@ -147,6 +148,7 @@ class Config:
             data[section] = section_data
         data["invocation_dir"] = self.invocation_dir
         data["working_dir"] = self.working_dir
+        data["options"] = vars(self.options)
         return data
 
     @cached_property
@@ -373,6 +375,8 @@ class Config:
         options = data.setdefault("options", {})
         options.update({k: v for k, v in vars(args).items() if v is not None})
 
+        self.options = args
+
         if args.config_file:
             if fd := read_config_file(args.config_file):
                 for sec, sd in fd.items():
@@ -398,6 +402,7 @@ class Config:
         properties: dict[str, Any] = snapshot["properties"]
         self.working_dir = properties["working_dir"]
         self.invocation_dir = properties["invocation_dir"]
+        self.options = argparse.Namespace(**properties["options"])
         self.scopes.clear()
         for value in snapshot["scopes"]:
             scope = ConfigScope(value["name"], value["file"], value["data"])
@@ -414,6 +419,7 @@ class Config:
         properties = snapshot.setdefault("properties", {})
         properties["invocation_dir"] = self.invocation_dir
         properties["working_dir"] = self.working_dir
+        properties["options"] = vars(self.options)
         scopes = snapshot.setdefault("scopes", [])
         for scope in self.scopes.values():
             scopes.append(scope.asdict())

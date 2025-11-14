@@ -67,7 +67,15 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
             path = os.path.relpath(details["ctestfile"], self.root)
             if not os.path.exists(os.path.join(self.root, path)):
                 path = os.path.relpath(realpath(details["ctestfile"]), realpath(self.root))
-            draft = create_draft_spec(file_root=self.root, file_path=path, family=family, **details)
+
+            draft = create_draft_spec(
+                file_root=self.root,
+                file_path=path,
+                family=family,
+                ctestfile=details.pop("ctestfile"),
+                command=details.pop("command"),
+                **details,
+            )
             drafts.append(draft)
         resolved = self.resolve_inter_dependencies(drafts)
         self.resolve_fixtures(resolved)
@@ -147,10 +155,11 @@ class CTestTestGenerator(canary.AbstractTestGenerator):
 
 def create_draft_spec(
     *,
-    file_root: str | None = None,
-    file_path: str | None = None,
-    family: str | None = None,
-    command: list[str] | None = None,
+    file_root: str,
+    file_path: str,
+    family: str,
+    command: list[str],
+    ctestfile: str,
     attached_files: list[str] | None = None,
     attached_files_on_fail: list[str] | None = None,
     cost: float | None = None,
@@ -181,7 +190,6 @@ def create_draft_spec(
     will_fail: bool | None = None,
     working_directory: str | None = None,
     backtrace_triples: list[str] | None = None,
-    ctestfile: str | None = None,
     **kwds,
 ) -> canary.DraftSpec:
     kwargs: dict[str, Any] = {}
@@ -196,9 +204,9 @@ def create_draft_spec(
     attributes["command"] = command
     attributes["will_fail"] = will_fail or False
 
-    attributes["ctestfile"] = ctestfile
+    attributes["ctestfile"] = str(ctestfile)
     attributes["ctest_working_directory"] = working_directory
-    attributes["binary_dir"] = os.path.dirname(ctestfile)
+    attributes["binary_dir"] = os.path.dirname(str(ctestfile))
     if working_directory is not None:
         attributes["execution_directory"] = working_directory
     else:
@@ -282,11 +290,11 @@ def create_draft_spec(
     if timeout_signal_name is not None:
         warn_unsupported_ctest_option("timeout_signal_name")
 
-    return canary.DraftSpec(**kwargs)
+    return canary.DraftSpec(**kwargs)  # ty: ignore[missing-argument]
 
 
-def env_mods(self, mods: list[dict[str, str]]) -> list[dict[str, str]]:
-    mods: list[dict[str, str]] = {}
+def env_mods(mods: list[dict[str, str]]) -> list[dict[str, str]]:
+    mods: list[dict[str, str]] = []
     for em in mods:
         op, name, value = em["op"], em["name"], em["value"]
         entry: dict[str, str] = dict(name=name)

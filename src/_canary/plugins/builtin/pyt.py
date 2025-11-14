@@ -125,15 +125,18 @@ class PYTTestGenerator(AbstractTestGenerator):
                     if dst and dst != os.path.basename(src):
                         file.write(f" -> {dst}")
                     file.write("\n")
-        specs = self.lock(on_options=on_options)
-        specs = resolve(specs)
-        n = len(specs)
-        opts = ", ".join(on_options or [])
-        file.write(f"{n} test {pluralize('spec', n)} using on_options={opts}:\n")
         try:
-            graph.print(specs, file=file)
+            specs = self.lock(on_options=on_options)
+            resolved = resolve(specs)
+            n = len(specs)
+            opts = ", ".join(on_options or [])
+            file.write(f"{n} test {pluralize('spec', n)} using on_options={opts}:\n")
+            try:
+                graph.print(resolved, file=file)
+            except Exception:
+                pass
         except Exception:
-            pass
+            logger.warning("Unable to generate dependency graph")
         return file.getvalue()
 
     def info(self) -> dict[str, Any]:

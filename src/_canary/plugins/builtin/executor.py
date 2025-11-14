@@ -75,8 +75,7 @@ class TestCaseExecutor:
         queue = ResourceQueue.factory(global_lock, cases, resource_pool=rpool)
         runner = Runner()
         pool = ProcessPool(queue, runner)
-        pool.run()
-        return 0
+        return pool.run()
 
 
 class Runner:
