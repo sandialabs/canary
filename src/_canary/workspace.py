@@ -15,9 +15,9 @@ from typing import Generator
 
 from . import config
 from . import testspec
+from . import when
 from .generator import AbstractTestGenerator
 from .plugins.types import ScanPath
-from .session import NotASessionError
 from .session import Session
 from .testcase import TestCase
 from .testexec import ExecutionSpace
@@ -263,8 +263,6 @@ class Workspace:
             session = Session.create(self.sessions_dir, selection)
         else:
             root = self.sessions_dir / name
-            if not Session.is_session(root):
-                raise NotASessionError(name)
             session = Session.load(root)
         try:
             yield session
@@ -542,17 +540,26 @@ class Workspace:
         self,
         path: Path,
         keyword_exprs: list[str] | None = None,
-        parameter_expr: str | None = None,
-        owners: set[str] | None = None,
-        regex: str | None = None,
-        tag: str | None = None,
     ) -> list[TestCase]:
         roots: list[str] = []
         for file in path.rglob("testcase.lock"):
             lock_data = json.loads(file.read_text())
             roots.append(lock_data["spec"]["id"])
         cases = self.load_testcases(roots=roots)
-        return cases
+        if keyword_exprs is None:
+            return cases
+        masks: dict[str, bool] = {}
+        for case in cases:
+            kwds = set(case.spec.keywords)
+            kwds.update(case.spec.implicit_keywords)
+            kwd_all = (":all:" in keyword_exprs) or ("__all__" in keyword_exprs)
+            if not kwd_all:
+                for keyword_expr in keyword_exprs:
+                    match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
+                    if not match:
+                        masks[case.id] = True
+                        break
+        return [case for case in cases if not masks.get(case.id)]
 
     def tag(self, name: str, **meta: Any) -> str:
         tag_file = self.tags_dir / name
@@ -812,18 +819,6 @@ class Workspace:
         for case in self.load_testcases(roots=[root]):
             return case
         raise ValueError(f"{root}: no matching test found in {self.root}")
-
-
-def expand_ids(ids: list[str], index: list[str]) -> None:
-    for i, id in enumerate(ids):
-        if id not in index:
-            # Expand to full length
-            for ix in index:
-                if ix.startswith(id):
-                    ids[i] = ix
-                    break
-            else:
-                raise ValueError(f"ID for {id} not found")
 
 
 def generate_specs(

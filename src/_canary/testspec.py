@@ -438,16 +438,15 @@ class DraftSpec(SpecCommons):
         return assets
 
     def _default_timeout(self) -> float:
-        timeouts = config.getoption("timeout") or {}
         for keyword in self.keywords:
-            if t := timeouts.get(keyword):
+            if t := config.get(f"options:timeout:{keyword}"):
                 return float(t)
-        if t := timeouts.get("*"):
+        if t := config.get("options:timeout:*"):
             return float(t)
         for keyword in self.keywords:
             if t := config.get(f"config:timeout:{keyword}"):
                 return float(t)
-        if t := config.get("config:timeout:all"):
+        if t := config.get("options:timeout:all"):
             return float(t)
         return float(config.get("config:timeout:default"))
 

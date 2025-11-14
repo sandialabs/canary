@@ -11,6 +11,7 @@ import os
 import signal
 import sys
 import traceback
+from functools import cached_property
 from pathlib import Path
 from shutil import copyfile
 from typing import TYPE_CHECKING
@@ -126,9 +127,17 @@ class TestCase:
     def gpu_ids(self) -> list[str]:
         return [str(_["id"]) for _ in self.resources.get("gpus", [])]
 
-    @property
+    @cached_property
     def runtime(self) -> float:
-        return self.spec.timeout  # FIXME
+        try:
+            if cache := self.load_historic_timing_data():
+                try:
+                    return float(cache["metrics"]["time"]["mean"])
+                except KeyError:
+                    pass
+        except Exception:
+            logger.debug("Failed to load historic timing data", exc_info=True)
+        return self.spec.timeout
 
     def size(self) -> float:
         vec: list[float | int] = [self.timeout]
@@ -272,6 +281,10 @@ class TestCase:
         finally:
             logger.debug(f"Finished executing {self.spec.fullname}: status={self.status}")
             queue.put({"status": self.status, "timekeeper": self.timekeeper})
+            try:
+                self.cache_last_run()
+            except Exception:
+                logger.debug("Failed to cache last run", exc_info=True)
             self.save()
         return
 
@@ -461,6 +474,70 @@ class TestCase:
             kb_to_keep = 2 if self.status.name == "SUCCESS" else 300
             text = compress_str(text, kb_to_keep=kb_to_keep)
         return text
+
+    def load_historic_timing_data(self) -> dict[str, Any] | None:
+        cache_dir = Path(config.cache_dir)
+        file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
+        if file.exists():
+            return json.loads(file.read_text())["cache"]
+
+    def cache_last_run(self) -> None:
+        """store relevant information for this run"""
+        if self.status.name in ("CANCELLED", "READY", "PENDING"):
+            return
+        cache_dir = Path(config.cache_dir)
+        file = cache_dir / "cases" / self.spec.id[:2] / f"{self.spec.id[2:]}.json"
+        can_write = file.parent.is_dir() and os.access(file.parent, os.W_OK)
+        if not can_write:
+            return None
+        cache: dict[str, Any]
+        if not file.exists():
+            cache = {
+                ".version": [3, 0],
+                "meta": {
+                    "name": self.spec.display_name,
+                    "id": self.spec.id,
+                    "root": self.spec.file_root,
+                    "path": self.spec.file_path,
+                    "parameters": self.spec.parameters,
+                },
+            }
+        else:
+            cache = json.loads(file.read_text())["cache"]
+        history = cache.setdefault("history", {})
+        dt = datetime.datetime.fromisoformat(self.timekeeper.started_on)
+        history["last_run"] = dt.strftime("%c")
+        name = "pass" if self.status.name == "SUCCESS" else self.status.name.lower()
+        history[name] = history.get(name, 0) + 1
+        if self.timekeeper.duration >= 0 and self.status.name in (
+            "SUCCESS",
+            "XFAIL",
+            "XDIFF",
+            "DIFF",
+        ):
+            count: int = 0
+            metrics = cache.setdefault("metrics", {})
+            t = metrics.setdefault("time", {})
+            if t:
+                # Welford's single pass online algorithm to update statistics
+                count, mean, variance = t["count"], t["mean"], t["variance"]
+                delta = self.timekeerper.duration - mean
+                mean += delta / (count + 1)
+                M2 = variance * count
+                delta2 = self.timekeerper.duration - mean
+                M2 += delta * delta2
+                variance = M2 / (count + 1)
+                minimum = min(t["min"], self.timekeerper.duration)
+                maximum = max(t["max"], self.timekeerper.duration)
+            else:
+                variance = 0.0
+                mean = minimum = maximum = self.timekeerper.duration
+            t["mean"] = mean
+            t["min"] = minimum
+            t["max"] = maximum
+            t["variance"] = variance
+            t["count"] = count + 1
+        file.write_text(json.dumps({"cache": cache}, indent=2))
 
 
 def load_testcase_from_file(arg: Path | str | None) -> TestCase:
