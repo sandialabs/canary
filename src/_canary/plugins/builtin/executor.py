@@ -8,7 +8,7 @@ from typing import Any
 from typing import Sequence
 
 from ... import config
-from ...process_pool import ProcessPool
+from ...process_pool import ResourceQueueExecutor
 from ...queue import ResourceQueue
 from ...resource_pool import make_resource_pool
 from ...util import logging
@@ -74,8 +74,8 @@ class TestCaseExecutor:
         rpool = self.get_rpool()
         queue = ResourceQueue.factory(global_lock, cases, resource_pool=rpool)
         runner = Runner()
-        with ProcessPool(queue, runner) as pool:
-            return pool.run()
+        with ResourceQueueExecutor(queue, runner) as ex:
+            return ex.run()
 
 
 class Runner:

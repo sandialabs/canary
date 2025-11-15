@@ -111,7 +111,7 @@ class MeasuredProcess(mp.Process):
         return measurements
 
 
-class ProcessPool:
+class ResourceQueueExecutor:
     """Manages a pool of worker processes with timeout support and metrics collection."""
 
     def __init__(self, queue: AbstractResourceQueue, runner: Callable, busy_wait_time: float = 0.5):
@@ -133,10 +133,13 @@ class ProcessPool:
         self.inflight: dict[int, tuple[MeasuredProcess, mp.Queue, Any, float, float]] = {}
         self.entered: bool = False
 
-    def __enter__(self) -> "ProcessPool":
+    def __enter__(self) -> "ResourceQueueExecutor":
         from .workspace import Workspace
 
         try:
+            # Since test cases run in subprocesses, we archive the config to the environment.  The
+            # config object in the subprocess will read in the archive and use it to re-establish
+            # the correct config
             ws = Workspace.load()
             f = ws.tmp_dir / f"{uuid4().hex[:8]}.json"
             with open(f, "w") as fh:
@@ -151,12 +154,14 @@ class ProcessPool:
     def __exit__(self, *args):
         if f := os.getenv(config.CONFIG_ENV_FILENAME):
             Path(f).unlink(missing_ok=True)
+        self.entered = False
 
     def run(self, **kwargs: Any) -> int:
         """Main loop: get jobs from queue and launch processes."""
-        # Since test cases run in subprocesses, we archive the config to the environment.  The
-        # config object in the subprocess will read in the archive and use it to re-establish the
-        # correct config
+        if not self.entered:
+            raise RuntimeError(
+                "ResourceQueueExecutor.run must be called in a ResourceQueueExector context"
+            )
 
         logger.info(f"Starting process pool with max {self.max_workers} workers")
 
@@ -170,13 +175,13 @@ class ProcessPool:
                 if timeout >= 0.0 and time.time() - start > timeout:
                     raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
 
-                self.check_keyboard_input(start)
+                self._check_keyboard_input(start)
 
                 # Clean up any finished processes and collect results
-                self.clean_finished_processes()
+                self._clean_finished_processes()
 
                 # Wait for a slot if at max capacity
-                self.wait_for_slot()
+                self._wait_for_slot()
 
                 # Get a job from the queue
                 job = self.queue.get()
@@ -204,11 +209,11 @@ class ProcessPool:
 
             except Empty:
                 # Queue is empty, wait for remaining jobs and exit
-                self.wait_all()
+                self._wait_all()
                 break
 
             except KeyboardInterrupt:
-                self.terminate_all()
+                self._terminate_all()
                 break
 
             except BaseException:
@@ -244,7 +249,7 @@ class ProcessPool:
                     self.queue.done(job)
                     job.save()
 
-    def clean_finished_processes(self) -> None:
+    def _clean_finished_processes(self) -> None:
         """Remove finished processes from the active dict and collect their results."""
         # First check for timeouts
         self.check_timeouts()
@@ -285,21 +290,21 @@ class ProcessPool:
             job.save()
             logger.debug(f"Process {pid} finished and cleaned up")
 
-    def wait_for_slot(self) -> None:
+    def _wait_for_slot(self) -> None:
         """Wait until a process slot is available."""
         while len(self.inflight) >= self.max_workers:
-            self.clean_finished_processes()
+            self._clean_finished_processes()
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.1)  # Brief sleep before checking again
 
-    def wait_all(self) -> None:
+    def _wait_all(self) -> None:
         """Wait for all active processes to complete."""
         while self.inflight:
-            self.clean_finished_processes()
+            self._clean_finished_processes()
             if self.inflight:
                 time.sleep(0.1)
 
-    def terminate_all(self):
+    def _terminate_all(self):
         """Terminate all active processes."""
         for pid, (proc, _, job, _, _) in self.inflight.items():
             if proc.is_alive():
@@ -323,14 +328,14 @@ class ProcessPool:
 
         self.inflight.clear()
 
-    def check_keyboard_input(self, start: float):
+    def _check_keyboard_input(self, start: float):
         if key := keyboard.get_key():
             if key in "sS":
                 text = self.queue.status(start=start)
                 logger.log(logging.EMIT, text, extra={"prefix": ""})
             elif key in "qQ":
                 logger.debug(f"Quiting due to caputuring {key!r} from the keyboard")
-                self.terminate_all()
+                self._terminate_all()
                 raise KeyboardInterrupt
 
     @cached_property

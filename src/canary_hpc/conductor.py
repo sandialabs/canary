@@ -17,7 +17,7 @@ import hpc_connect
 import canary
 from _canary.plugins.subcommands.run import Run
 from _canary.plugins.types import Result
-from _canary.process_pool import ProcessPool
+from _canary.process_pool import ResourceQueueExecutor
 from _canary.resource_pool import ResourcePool
 from _canary.third_party.color import colorize
 from _canary.util import cpu_count
@@ -155,8 +155,8 @@ class CanaryHPCConductor:
         """
         queue = ResourceQueue.factory(global_lock, cases, resource_pool=self.rpool)
         runner = Runner()
-        with ProcessPool(queue, runner) as pool:
-            return pool.run(backend=self.backend.name)
+        with ResourceQueueExecutor(queue, runner) as ex:
+            return ex.run(backend=self.backend.name)
 
     @staticmethod
     def setup_parser(
