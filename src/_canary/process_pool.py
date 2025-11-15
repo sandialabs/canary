@@ -1,11 +1,11 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-from pathlib import Path
 import multiprocessing as mp
 import os
 import time
 from functools import cached_property
+from pathlib import Path
 from queue import Empty as EmptyResultQueue
 from typing import Any
 from typing import Callable

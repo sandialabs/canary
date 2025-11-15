@@ -1,5 +1,4 @@
 import argparse
-import io
 import json
 import json.decoder
 import os
@@ -12,7 +11,6 @@ from string import Template
 from typing import IO
 from typing import Any
 from typing import Generator
-from typing import MutableMapping
 
 import yaml
 from schema import Schema
@@ -22,7 +20,6 @@ from ..third_party import color
 from ..util import cpu_count
 from ..util import logging
 from ..util.collections import merge
-from ..util.compression import compress64
 from ..util.filesystem import mkdirp
 from ..util.string import strip_quotes
 from . import _machine
@@ -56,7 +53,6 @@ log_levels: tuple[int, ...] = (
     logging.ERROR,
     logging.CRITICAL,
 )
-env_archive_name = "CANARYCFG64"
 CONFIG_ENV_FILENAME = "CANARYCFGFILE"
 
 logger = logging.get_logger(__name__)
@@ -458,11 +454,6 @@ class Config:
         for scope in self.scopes.values():
             scopes.append(scope.asdict())
         file.write(json.dumps(snapshot, indent=indent))
-
-    def archive(self, mapping: MutableMapping) -> None:
-        file = io.StringIO()
-        self.dump_snapshot(file)
-        mapping[env_archive_name] = compress64(file.getvalue())
 
     def apply_environment_mods(self, envmods: dict[str, Any]) -> None:
         for action, values in envmods.items():
