@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import io
 import os
 import shlex
 import signal
@@ -12,8 +13,6 @@ import urllib.parse
 from typing import TYPE_CHECKING
 from typing import Any
 from typing import Sequence
-
-import yaml
 
 from . import config
 from .config.argparsing import make_argument_parser
@@ -162,10 +161,10 @@ def determine_plugin_from_tb(tb: traceback.StackSummary) -> None | Any:
 
 
 def print_current_config() -> None:
-    state = config.getstate(pretty=True)
-    text = yaml.dump(state, default_flow_style=False)
+    fh = io.StringIO()
+    config.dump(fh)
     print("Current canary configuration:")
-    print(text)
+    print(fh.getvalue())
 
 
 def console_main() -> int:

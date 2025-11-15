@@ -222,7 +222,6 @@ class ResourceQueueExecutor:
 
         return compute_returncode(self.queue.cases())
 
-
     def check_timeouts(self) -> None:
         """Check for and kill processes that have exceeded their timeout."""
         current_time = time.time()

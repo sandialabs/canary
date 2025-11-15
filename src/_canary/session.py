@@ -87,7 +87,7 @@ class Session:
         # Dump a snapshot of the configuration used to create this session
         file = self.root / "config"
         with open(file, "w") as fh:
-            config.dump_snapshot(fh)
+            config.dump(fh)
         return self
 
     @property

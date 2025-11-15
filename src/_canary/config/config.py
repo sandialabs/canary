@@ -4,13 +4,11 @@ import json.decoder
 import os
 import sys
 from collections.abc import ValuesView
-from contextlib import contextmanager
 from copy import deepcopy
 from functools import cached_property
 from string import Template
 from typing import IO
 from typing import Any
-from typing import Generator
 
 import yaml
 from schema import Schema
@@ -20,7 +18,7 @@ from ..third_party import color
 from ..util import cpu_count
 from ..util import logging
 from ..util.collections import merge
-from ..util.filesystem import mkdirp
+from ..util.filesystem import write_directory_tag
 from ..util.string import strip_quotes
 from . import _machine
 from .schemas import any_schema
@@ -169,17 +167,6 @@ class Config:
 
     def getoption(self, name: str, default: Any = None) -> Any:
         return getattr(self.options, name, default)
-
-    def getstate(self, pretty: bool = True) -> dict[str, Any]:
-        data: dict[str, Any] = {}
-        sections = set([sec for scope in self.scopes.values() for sec in scope.data])
-        for section in sections:
-            section_data = self.get_config(section)
-            data[section] = section_data
-        data["invocation_dir"] = self.invocation_dir
-        data["working_dir"] = self.working_dir
-        data["options"] = vars(self.options)
-        return data
 
     @cached_property
     def cache_dir(self) -> str | None:
@@ -427,34 +414,6 @@ class Config:
         if self.get("config:debug", scope="command_line"):
             logging.set_level(logging.DEBUG)
 
-    def load_snapshot(self, file: IO[Any]) -> None:
-        snapshot = json.load(file)
-        properties: dict[str, Any] = snapshot["properties"]
-        self.working_dir = properties["working_dir"]
-        self.invocation_dir = properties["invocation_dir"]
-        self.options = argparse.Namespace(**properties["options"])
-        self.scopes.clear()
-        for value in snapshot["scopes"]:
-            scope = ConfigScope(value["name"], value["file"], value["data"])
-            self.push_scope(scope)
-
-        if not len(logger.handlers):
-            logging.setup_logging()
-        log_level = self.get("config:log_level")
-        if logging.get_level_name(logger.level) != log_level:
-            logging.set_level(log_level)
-
-    def dump_snapshot(self, file: IO[Any], indent: int | None = None) -> None:
-        snapshot: dict[str, Any] = {}
-        properties = snapshot.setdefault("properties", {})
-        properties["invocation_dir"] = self.invocation_dir
-        properties["working_dir"] = self.working_dir
-        properties["options"] = vars(self.options)
-        scopes = snapshot.setdefault("scopes", [])
-        for scope in self.scopes.values():
-            scopes.append(scope.asdict())
-        file.write(json.dumps(snapshot, indent=indent))
-
     def apply_environment_mods(self, envmods: dict[str, Any]) -> None:
         for action, values in envmods.items():
             if action == "set":
@@ -475,15 +434,6 @@ class Config:
                         os.environ[pathname] = f"{existing}:{path}"
                     else:
                         os.environ[pathname] = path
-
-    @contextmanager
-    def temporary_scope(self) -> Generator[ConfigScope, None, None]:
-        scope = ConfigScope("tmp", None, {})
-        self.push_scope(scope)
-        try:
-            yield scope
-        finally:
-            self.pop_scope(scope)
 
 
 def create_config_scope(scope: str) -> ConfigScope:
@@ -638,12 +588,4 @@ def expandvars(arg: Any, mapping: dict) -> Any:
 def create_cache_dir(path: str) -> None:
     if isnullpath(path):
         return
-    path = os.path.expanduser(path)
-    file = os.path.join(path, "CACHEDIR.TAG")
-    if not os.path.exists(file):
-        mkdirp(path)
-        with open(file, "w") as fh:
-            fh.write("Signature: 8a477f597d28d172789f06886806bc55\n")
-            fh.write("# This file is a cache directory tag automatically created by canary.\n")
-            fh.write("# For information about cache directory tags ")
-            fh.write("see https://bford.info/cachedir/\n")
+    write_directory_tag(path)

@@ -470,12 +470,13 @@ def clean_out_folder(folder: str) -> None:
                 force_remove(f)
 
 
-def write_directory_tag(file: pathlib.Path | str) -> None:
+def write_directory_tag(file: PathLike) -> None:
     file = pathlib.Path(file)
     file.parent.mkdir(exist_ok=True)
     file.write_text(
         "Signature: 8a477f597d28d172789f06886806bc55\n"
         "# This file is a directory tag automatically created by canary.\n"
+        "# For information about cache directory tags see https://bford.info/cachedir/\n"
     )
 
 
