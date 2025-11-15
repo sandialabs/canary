@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 from . import addoption
+from . import collect
 from . import discover
 from . import email
 from . import html
@@ -22,6 +23,7 @@ from .executor import TestCaseExecutor
 plugins = [
     addoption,
     TestCaseExecutor(),
+    collect.Collector(),
     discover,
     email,
     html,

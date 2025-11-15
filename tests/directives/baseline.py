@@ -30,7 +30,7 @@ if __name__ == '__main__':
         run = CanaryCommand("run")
         cp = run("-w", ".")
         if cp.returncode != 0:
-            for file in glob.glob("TestResults/**/canary-out.txt"):
+            for file in glob.glob("TestResults/**/canary-out.txt", recursive=True):
                 print(open(file).read())
         assert cp.returncode == 0
         with working_dir("TestResults"):
@@ -73,7 +73,7 @@ if __name__ == '__main__':
         run = CanaryCommand("run")
         cp = run("-w", ".")
         if cp.returncode != 0:
-            for file in glob.glob("TestResults/**/canary-out.txt"):
+            for file in glob.glob("TestResults/**/canary-out.txt", recursive=True):
                 print(open(file).read())
         assert cp.returncode == 0
         with working_dir("TestResults"):

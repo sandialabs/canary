@@ -22,17 +22,10 @@ def canary_configure(config: "canary.Config") -> None:
     scheduler = config.getoption("canary_hpc_scheduler")
     command = config.getoption("command")
     if scheduler is not None and command == "run":
-        # Run with the HPC.execute command
-        config.ioptions.command = "hpc"
+        # Run with the HPC conductor
         config.options.command = "hpc"
         config.options.hpc_cmd = "run"
-        if ival := getattr(config.ioptions, "canary_hpc_batchspec", None):
-            # ioptions is the argparse.Namespace parsed from the command line, options is the
-            # argparse.Namespace merged from the original invocation of canary.  They are only
-            # different if this is a re-run scenario.  If the batchspec is defined in ioptions,
-            # we use it (it was passed on the command line this invocation)
-            setattr(config.options, "canary_hpc_batchspec", ival)
-        else:
+        if not hasattr(config.options, "canary_hpc_batchspec"):
             # no batchspec was passed on the command line, so set the defaults
             setattr(config.options, "canary_hpc_batchspec", CanaryHPCBatchSpec.defaults())
 
@@ -44,12 +37,12 @@ def canary_addoption(parser: "canary.Parser") -> None:
 
 @canary.hookimpl
 def canary_addcommand(parser: canary.Parser) -> None:
-    parser.add_command(Batch())
     parser.add_command(HPC())
 
 
 class HPC(canary.CanarySubcommand):
     name = "hpc"
+    aliases = ["batch"]
     description = "Manage and run job batches on an HPC scheduler"
 
     def setup_parser(self, parser: canary.Parser):
@@ -62,6 +55,20 @@ class HPC(canary.CanarySubcommand):
 
         p = subparsers.add_parser("exec", help="Execute (run) the batch")
         CanaryHPCExecutor.setup_parser(p)
+
+        p = subparsers.add_parser("location", help="Print the location of the batch")
+        p.add_argument("batch_id")
+
+        p = subparsers.add_parser("log", help="Print the batch's log to the console")
+        p.add_argument("batch_id")
+
+        p = subparsers.add_parser("status", help="List statuses of each case in batch")
+        p.add_argument("batch_id")
+
+        subparsers.add_parser("list", help="List batch IDs")
+
+        p = subparsers.add_parser("describe", help="Print each test case in batch")
+        p.add_argument("batch_id")
 
         p = subparsers.add_parser("help", help="Additional canary_hpc help topics")
         p.add_argument(
@@ -90,6 +97,19 @@ class HPC(canary.CanarySubcommand):
             return executor.run(args)
         elif args.hpc_cmd == "help":
             self.extra_help(args)
+        elif args.hpc_cmd == "location":
+            location = self.location(args.batch_id)
+            print(str(location))
+        elif args.hpc_cmd == "log":
+            location = self.location(args.batch_id)
+            display_file(location / "canary-out.txt")
+        elif args.hpc_cmd == "list":
+            batches = self.find_batches()
+            print("\n".join(batches))
+        elif args.hpc_cmd == "status":
+            self.print_status(args.batch_id)
+        elif args.hpc_cmd == "describe":
+            self.describe(args.batch_id)
         else:
             raise ValueError(f"canary hpc: unknown subcommand {args.hpc_cmd!r}")
         return 0
@@ -99,59 +119,18 @@ class HPC(canary.CanarySubcommand):
             print(CanaryHPCBatchSpec.helppage())
         return
 
-
-class Batch(canary.CanarySubcommand):
-    name = "batch"
-    description = "Manage and run job batches"
-
-    def setup_parser(self, parser: canary.Parser):
-        parser.epilog = self.in_session_note()
-        subparsers = parser.add_subparsers(dest="batch_cmd", title="subcommands", metavar="")
-
-        p = subparsers.add_parser("location", help="Print the location of the batch")
-        p.add_argument("batch_id")
-
-        p = subparsers.add_parser("log", help="Print the batch's log to the console")
-        p.add_argument("batch_id")
-
-        p = subparsers.add_parser("status", help="List statuses of each case in batch")
-        p.add_argument("batch_id")
-
-        subparsers.add_parser("list", help="List batch IDs")
-
-        p = subparsers.add_parser("describe", help="Print each test case in batch")
-        p.add_argument("batch_id")
-
-    def execute(self, args: argparse.Namespace) -> int:
-        if args.batch_cmd == "location":
-            location = self.location(args.batch_id)
-            print(str(location))
-        elif args.batch_cmd == "log":
-            location = self.location(args.batch_id)
-            display_file(location / "canary-out.txt")
-        elif args.batch_cmd == "list":
-            batches = self.find_batches()
-            print("\n".join(batches))
-        elif args.batch_cmd == "status":
-            self.print_status(args.batch_id)
-        elif args.batch_cmd == "describe":
-            self.describe(args.batch_id)
-        else:
-            raise ValueError(f"canary batch: unknown subcommand {args.batch_cmd!r}")
-        return 0
-
     def location(self, batch_id: str) -> Path:
-        session = canary.Session(str(Path.cwd()), mode="r")
-        root = Path(session.work_tree) / ".canary/canary_hpc/batches" / batch_id[:2]
+        workspace = canary.Workspace.load()
+        root = workspace.cache_dir / "canary_hpc/batches" / batch_id[:2]
         if root.exists() and (root / batch_id[2:]).exists():
             return root / batch_id[2:]
         elif matches := list(root.glob(f"{batch_id[2:]}*")):
             return matches[0]
-        raise ValueError(f"Stage directory for batch {batch_id} not found in {session.work_tree}")
+        raise ValueError(f"Stage directory for batch {batch_id} not found in {workspace.root}")
 
     def find_batches(self) -> list[str]:
-        session = canary.Session(str(Path.cwd()), mode="r")
-        root = Path(session.work_tree) / ".canary/canary_hpc/batches"
+        workspace = canary.Workspace.load()
+        root = workspace.cache_dir / "canary_hpc/batches"
         batches: list[str] = []
         for p in root.iterdir():
             if p.is_dir():
@@ -162,25 +141,23 @@ class Batch(canary.CanarySubcommand):
         location = self.location(batch_id)
         f = location / "index"
         case_ids = json.loads(f.read_text())
-        session = canary.Session(str(Path.cwd()), mode="r")
-        for case in session.cases:
+        workspace = canary.Workspace.load()
+        for case in workspace.active_testcases():
             if case.id not in case_ids:
                 case.mask = "[MASKED]"
         canary.config.options.report_chars = "A"
-        canary.config.pluginmanager.hook.canary_statusreport(session=session)
+        canary.config.pluginmanager.hook.canary_statusreport(workspace=workspace)
 
     def describe(self, batch_id: str) -> None:
         print(f"Batch {batch_id}")
         location = self.location(batch_id)
         f = location / "index"
         case_ids = json.loads(f.read_text())
-        session = canary.Session(str(Path.cwd()), mode="r")
-        for case in session.cases:
+        workspace = canary.Workspace.load()
+        for case in workspace.active_testcases():
             if case.id not in case_ids:
                 continue
-            if case.work_tree is None:
-                case.work_tree = session.work_tree
-            print(f"- name: {case.display_name}\n  location: {case.working_directory}")
+            print(f"- name: {case.spec.display_name}\n  location: {case.workspace.dir}")
         return
 
 

@@ -1,10 +1,38 @@
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 from .filesystem import mkdirp
 from .string import pluralize
+
+
+class PathEncoder(json.JSONEncoder):
+    def default(self, obj):
+        from ..paramset import ParameterSet
+
+        if isinstance(obj, Path):
+            return str(obj)
+        elif isinstance(obj, ParameterSet):
+            return {"keys": obj.keys, "values": obj.values}
+        return json.JSONEncoder.default(self, obj)
+
+
+def dump(*args, **kwargs):
+    return json.dump(*args, cls=PathEncoder, **kwargs)
+
+
+def dumps(*args, **kwargs):
+    return json.dumps(*args, cls=PathEncoder, **kwargs)
+
+
+def load(*args, **kwargs):
+    return json.load(*args, **kwargs)
+
+
+def loads(*args, **kwargs):
+    return json.loads(*args, **kwargs)
 
 
 def safesave(file: str, state: dict[str, Any]) -> None:

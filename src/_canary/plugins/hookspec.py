@@ -14,14 +14,19 @@ from .types import CanaryReporter
 from .types import CanarySubcommand
 
 if TYPE_CHECKING:
+    from multiprocessing import Queue
+
     from ..atc import AbstractTestCase
     from ..config.argparsing import Parser
     from ..config.config import Config as CanaryConfig
     from ..generator import AbstractTestGenerator
-    from ..session import Session
     from ..testcase import TestCase
+    from ..testexec import ExecutionPolicy
+    from ..testspec import ResolvedSpec
+    from ..workspace import Session
     from .manager import CanaryPluginManager
     from .types import Result
+    from .types import ScanPath
 
 project_name = "canary"
 hookspec = pluggy.HookspecMarker(project_name)
@@ -167,14 +172,12 @@ def canary_discover_generators(
 
 @hookspec
 def canary_testsuite_mask(
-    cases: list["TestCase"],
+    specs: list["ResolvedSpec"],
     keyword_exprs: list[str],
     parameter_expr: str,
     owners: set[str],
     regex: str | None,
-    case_specs: list[str] | None,
-    start: str | None,
-    ignore_dependencies: bool,
+    ids: list[str] | None,
 ) -> None:
     """Filter test cases (mask test cases that don't meet a specific criteria)
 
@@ -185,6 +188,12 @@ def canary_testsuite_mask(
       case_specs: Include those tests matching these specs
 
     """
+
+
+@hookspec
+def canary_testspec_mask(spec: list["ResolvedSpec"]) -> None:
+    """Apply a mask to the test spec"""
+    ...
 
 
 @hookspec
@@ -209,7 +218,7 @@ def canary_testcase_setup(case: "AbstractTestCase") -> bool:
 
 
 @hookspec(firstresult=True)
-def canary_testcase_run(case: "AbstractTestCase", qsize: int, qrank: int) -> bool:
+def canary_testcase_run(case: "AbstractTestCase", queue: "Queue", qsize: int, qrank: int) -> bool:
     """Called to run the test case
 
     Args:
@@ -271,4 +280,14 @@ def canary_resource_pool_types() -> list[str]:
 @hookspec(firstresult=True)
 def canary_resource_pool_describe() -> str:
     """Return a string describing the resource pool"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_collect_generators(scan_path: "ScanPath") -> list["AbstractTestGenerator"]:
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def canary_testcase_execution_policy(case: "TestCase") -> "ExecutionPolicy":
     raise NotImplementedError

@@ -7,6 +7,7 @@ import glob
 import io
 import os
 import warnings
+from pathlib import Path
 from string import Template
 from types import ModuleType
 from typing import TYPE_CHECKING
@@ -19,6 +20,9 @@ from ... import when as m_when
 from ...error import diff_exit_status
 from ...generator import AbstractTestGenerator
 from ...paramset import ParameterSet
+from ...testcase import TestCase
+from ...testexec import ExecutionPolicy
+from ...testexec import PythonFileExecutionPolicy
 from ...third_party.monkeypatch import monkeypatch
 from ...util import graph
 from ...util import logging
@@ -28,8 +32,8 @@ from ...util.time import time_in_seconds
 from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
-    from ...testcase import DependencyPatterns
-    from ...testcase import TestCase
+    from ...testspec import DependencyPatterns
+    from ...testspec import DraftSpec
 
 
 WhenType = str | dict[str, str]
@@ -99,6 +103,8 @@ class PYTTestGenerator(AbstractTestGenerator):
         return f"{type(self).__name__}({self.path})"
 
     def describe(self, on_options: list[str] | None = None) -> str:
+        from ...testspec import resolve
+
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")
@@ -120,11 +126,18 @@ class PYTTestGenerator(AbstractTestGenerator):
                     if dst and dst != os.path.basename(src):
                         file.write(f" -> {dst}")
                     file.write("\n")
-        cases: list["TestCase"] = self.lock(on_options=on_options)
-        n = len(cases)
-        opts = ", ".join(on_options or [])
-        file.write(f"{n} test {pluralize('case', n)} using on_options={opts}:\n")
-        graph.print(cases, file=file)
+        try:
+            specs = self.lock(on_options=on_options)
+            resolved = resolve(specs)
+            n = len(specs)
+            opts = ", ".join(on_options or [])
+            file.write(f"{n} test {pluralize('spec', n)} using on_options={opts}:\n")
+            try:
+                graph.print(resolved, file=file)
+            except Exception:
+                pass
+        except Exception:
+            logger.warning("Unable to generate dependency graph")
         return file.getvalue()
 
     def info(self) -> dict[str, Any]:
@@ -146,42 +159,41 @@ class PYTTestGenerator(AbstractTestGenerator):
                         option_expressions.add(a.when.option_expr)
         return list(option_expressions)
 
-    def lock(self, on_options: list[str] | None = None) -> list["TestCase"]:
+    def lock(self, on_options: list[str] | None = None) -> list["DraftSpec"]:
         previous_level: int | None = None
         try:
             if self.filter_warnings:
                 previous_level = logging.set_level(logging.ERROR, only="stream")
-            cases = self._lock(on_options=on_options)
-            return cases
+            specs = self._lock(on_options=on_options)
+            return specs
         except Exception as e:
-            if config.get("config:debug"):
+            if config.get("debug"):
                 raise
             raise ValueError(f"Failed to lock {self.file}: {e}") from None
         finally:
             if previous_level is not None:
                 logging.set_level(previous_level, only="stream")
 
-    def _lock(self, on_options: list[str] | None = None) -> list["TestCase"]:
-        from ...testcase import TestCase
-        from ...testcase import TestMultiCase
+    def _lock(self, on_options: list[str] | None = None) -> list["DraftSpec"]:
+        from ...testspec import DependencyPatterns
+        from ...testspec import DraftSpec
 
-        testcases: list["TestCase"] = []
+        all_drafts: list["DraftSpec"] = []
 
         names = ", ".join(self.names())
-        logger.debug(f"Generating test cases for {self} using the following test names: {names}")
-        dependencies: dict[str, list["DependencyPatterns"]] = {}
+        logger.debug(f"Generating test specs for {self} using the following test names: {names}")
         for name in self.names():
             skip_reason = self.skipif_reason
 
-            cases: list["TestCase"] = []
+            my_drafts: list["DraftSpec"] = []
             paramsets = self.paramsets(testname=name, on_options=on_options)
             for parameters in ParameterSet.combine(paramsets) or [{}]:
                 test_mask: str | None = skip_reason
                 keywords = self.keywords(testname=name, parameters=parameters)
                 modules = self.modules(testname=name, on_options=on_options, parameters=parameters)
-                case = TestCase(
-                    self.root,
-                    self.path,
+                draft = DraftSpec(
+                    file_root=Path(self.root),
+                    file_path=Path(self.path),
                     family=name,
                     keywords=keywords,
                     parameters=parameters,
@@ -193,7 +205,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                     baseline=self.baseline(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
-                    sources=self.sources(
+                    file_resources=self.file_resources(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
                     xstatus=self.xstatus(
@@ -211,28 +223,30 @@ class PYTTestGenerator(AbstractTestGenerator):
                     exclusive=self.exclusive(
                         testname=name, on_options=on_options, parameters=parameters
                     ),
+                    dependencies=self.depends_on(
+                        testname=name, parameters=parameters, on_options=on_options
+                    ),
                 )
                 enabled, reason = self.enable(
                     testname=name, on_options=on_options, parameters=parameters
                 )
                 if test_mask is None and not enabled:
                     test_mask = reason
-                    logger.debug(f"{case}: disabled because {reason!r}")
+                    logger.debug(f"{draft}: disabled because {reason!r}")
                 if test_mask is not None:
-                    case.mask = test_mask
+                    draft.mask = test_mask
                 if any([_[1] is not None for _ in modules]):
                     mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
                     for _, use in modules:
                         if use:
                             mp.insert(0, use)
-                    case.add_default_env(MODULEPATH=":".join(mp))
+                    draft.environment["MODULEPATH"] = ":".join(mp)
                 attributes = self.attributes(
                     testname=name, on_options=on_options, parameters=parameters
                 )
                 for attr, value in attributes.items():
-                    case.set_attribute(attr, value)
-                dependencies[case.id] = self.depends_on(testname=name, parameters=parameters)
-                cases.append(case)
+                    draft.attributes[attr] = value
+                my_drafts.append(draft)
 
             if ns := self.generate_composite_base_case(testname=name, on_options=on_options):
                 # add previous cases as dependencies
@@ -241,16 +255,18 @@ class PYTTestGenerator(AbstractTestGenerator):
                         "Generation of composite base case requires at least one parameter"
                     )
                 modules = self.modules(testname=name, on_options=on_options)
-                parent = TestMultiCase(
-                    self.root,
-                    self.path,
-                    paramsets=paramsets,
-                    flag=ns.value,
+                dependencies = [
+                    DependencyPatterns(pattern=d.id, expects=1, result_match="success")
+                    for d in my_drafts
+                ]
+                parent = DraftSpec(
+                    file_root=Path(self.root),
+                    file_path=Path(self.path),
                     family=name,
                     keywords=self.keywords(testname=name),
                     timeout=self.timeout(testname=name, on_options=on_options),
                     baseline=self.baseline(testname=name, on_options=on_options),
-                    sources=self.sources(testname=name, on_options=on_options),
+                    file_resources=self.file_resources(testname=name, on_options=on_options),
                     xstatus=self.xstatus(testname=name, on_options=on_options),
                     preload=self.preload(testname=name, on_options=on_options),
                     modules=[_[0] for _ in modules],
@@ -258,45 +274,21 @@ class PYTTestGenerator(AbstractTestGenerator):
                     owners=self.owners,
                     artifacts=self.artifacts(testname=name, on_options=on_options),
                     exclusive=self.exclusive(testname=name, on_options=on_options),
+                    attributes={"multicase": True, "flag": ns.value},
+                    dependencies=dependencies,
                 )
                 if test_mask is not None:
-                    case.mask = test_mask
+                    parent.mask = test_mask
                 if any([_[1] is not None for _ in modules]):
                     mp = [_.strip() for _ in os.getenv("MODULEPATH", "").split(":") if _.split()]
                     for _, use in modules:
                         if use:
                             mp.insert(0, use)
-                    parent.add_default_env(MODULEPATH=":".join(mp))
-                for case in cases:
-                    parent.add_dependency(case, "success")
-                cases.append(parent)
+                    parent.environment["MODULEPATH"] = ":".join(mp)
+                my_drafts.append(parent)
 
-            testcases.extend(cases)
-        self.resolve_inter_dependencies(testcases, dependencies)
-        return testcases
-
-    def resolve_inter_dependencies(
-        self, cases: list["TestCase"], dependencies: dict[str, list["DependencyPatterns"]]
-    ) -> None:
-        logger.debug(f"Resolving dependencies in test {self}")
-        for case in cases:
-            if case.id not in dependencies:
-                continue
-            for dep in dependencies[case.id]:
-                matches = dep.evaluate([c for c in cases if c != case])
-                n = len(matches)
-                if matches:
-                    if dep.expect == "+" and n < 1:
-                        raise ValueError(f"{case}: expected at least one dependency, got {n}")
-                    elif dep.expect == "?" and n not in (0, 1):
-                        raise ValueError(f"{case}: expected 0 or 1 dependency, got {n}")
-                    elif isinstance(dep.expect, int) and n != dep.expect:
-                        raise ValueError(f"{case}: expected {dep.expect} dependencies, got {n}")
-                    for match in matches:
-                        case.add_dependency(match, dep.result)
-                else:
-                    # hope this gets resolved at the next level up
-                    case.unresolved_dependencies.append(dep)
+            all_drafts.extend(my_drafts)
+        return all_drafts
 
     # -------------------------------------------------------------------------------- #
 
@@ -521,7 +513,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                 baseline.append((file1, file2))
         return baseline
 
-    def sources(
+    def file_resources(
         self,
         testname: str | None = None,
         on_options: list[str] | None = None,
@@ -574,6 +566,7 @@ class PYTTestGenerator(AbstractTestGenerator):
                 for src in sorted(src_not_found[action]):
                     msg.write(f"...  {src} (action: {action})\n")
             logger.warning(msg.getvalue().strip())
+
         return sources
 
     def depends_on(
@@ -582,7 +575,7 @@ class PYTTestGenerator(AbstractTestGenerator):
         on_options: list[str] | None = None,
         parameters: dict[str, Any] | None = None,
     ) -> list["DependencyPatterns"]:
-        from ...testcase import DependencyPatterns
+        from ...testspec import DependencyPatterns
 
         kwds: dict[str, Any] = {}
         if parameters:
@@ -599,10 +592,8 @@ class PYTTestGenerator(AbstractTestGenerator):
             if not result.value:
                 continue
             dep = DependencyPatterns(
-                value=ns.value, result=ns.result or "success", expect=ns.expect or "+"
+                pattern=ns.value, result_match=ns.result or "success", expects=ns.expect or "+"
             )
-            for i, f in enumerate(dep.value):
-                dep.value[i] = self.safe_substitute(f, **kwds)  # type: ignore
             dependencies.append(dep)
         return dependencies
 
@@ -839,7 +830,7 @@ class PYTTestGenerator(AbstractTestGenerator):
             ns = FilterNamespace(flag, when=when)
         else:
             raise ValueError(
-                "PYTTestGenerator.baseline: missing required argument 'src'/'dst' or 'flag'"
+                "PYTTestGenerator.baseline: missing required argument 'src/dst' or 'flag'"
             )
         self._baseline.append(ns)
 
@@ -1010,4 +1001,11 @@ class PYTTestGenerator(AbstractTestGenerator):
 def canary_testcase_generator(root: str, path: str | None) -> AbstractTestGenerator | None:
     if PYTTestGenerator.matches(root if path is None else os.path.join(root, path)):
         return PYTTestGenerator(root, path=path)
+    return None
+
+
+@hookimpl
+def canary_testcase_execution_policy(case: TestCase) -> ExecutionPolicy | None:
+    if case.spec.file.suffix in (".pyt", ".py"):
+        return PythonFileExecutionPolicy()
     return None

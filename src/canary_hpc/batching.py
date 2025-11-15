@@ -3,8 +3,11 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
+import copy
+import datetime
 import json
 import math
+import multiprocessing as mp
 import os
 import shlex
 import signal
@@ -22,8 +25,8 @@ from typing import Sequence
 import hpc_connect
 
 import canary
-from _canary.atc import AbstractTestCase
 from _canary.status import Status
+from _canary.testcase import Measurements
 from _canary.util import cpu_count
 from _canary.util.hash import hashit
 from _canary.util.time import time_in_seconds
@@ -33,7 +36,7 @@ from . import binpack
 logger = canary.get_logger(__name__)
 
 
-class TestBatch(AbstractTestCase):
+class TestBatch:
     """A batch of test cases
 
     Args:
@@ -45,6 +48,7 @@ class TestBatch(AbstractTestCase):
         super().__init__()
         self.validate(cases)
         self.cases = list(cases)
+        self.session = self.cases[0].workspace.session
         self._id = hashit(",".join(case.id for case in self.cases), length=20)
         self.total_duration: float = -1
         self._runtime: float
@@ -58,10 +62,16 @@ class TestBatch(AbstractTestCase):
         self._jobid: str | None = None
         for case in self.cases:
             if any(dep not in self.cases for dep in case.dependencies):
-                self._status = Status("pending")
+                self._status = Status("PENDING")
                 break
         else:
-            self._status = Status("ready")
+            self._status = Status("READY")
+        self.variables = {"CANARY_BATCH_ID": str(self.id)}
+        self.cpus = 1  # only one CPU needed to submit this batch and wait for scheduler
+        self.gpus = 1  # no GPU needed to submit this batch and wait for scheduler
+        self.exclusive = False
+        self._resources: dict[str, list[dict]] = {}
+        self.measurements = Measurements()
 
     def __iter__(self):
         return iter(self.cases)
@@ -78,8 +88,12 @@ class TestBatch(AbstractTestCase):
         return f"TestBatch({case_repr})"
 
     @property
-    def variables(self) -> dict[str, str | None]:
-        return {"CANARY_BATCH_ID": str(self.id)}
+    def cpu_ids(self) -> list[str]:
+        return [str(_["id"]) for _ in self.resources.get("cpus", [])]
+
+    @property
+    def gpu_ids(self) -> list[str]:
+        return [str(_["id"]) for _ in self.resources.get("gpus", [])]
 
     @property
     def runtime(self) -> float:
@@ -94,11 +108,12 @@ class TestBatch(AbstractTestCase):
 
     @cached_property
     def timeout_multiplier(self) -> float:
-        timeoutx: float = canary.config.get("config:timeout:multiplier") or 1.0
-        timeouts = canary.config.getoption("timeout") or {}
-        if t := timeouts.get("multiplier"):
-            timeoutx = float(t)
-        return timeoutx
+        if cli_timeouts := canary.config.getoption("timeout"):
+            if t := cli_timeouts.get("multiplier"):
+                return float(t)
+        elif t := canary.config.get("timeout:multiplier"):
+            return float(t)
+        return 1.0
 
     @property
     def timeout(self) -> float:
@@ -132,10 +147,34 @@ class TestBatch(AbstractTestCase):
         vec = [self.runtime, self.cpus, self.gpus]
         return math.sqrt(sum(_**2 for _ in vec))
 
-    def required_resources(self) -> list[list[dict[str, Any]]]:
-        group: list[dict[str, Any]] = [{"type": "cpus", "slots": 1} for _ in range(self.cpus)]
-        # by default, only one resource group is returned
-        return [group]
+    @property
+    def resources(self) -> dict[str, list[dict]]:
+        """resources is of the form
+
+        resources[type] = [{"id": str, "slots": int}]
+
+        If the test required 2 cpus and 2 gpus, resources would look like
+
+        resources = {
+            "cpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}],
+            "gpus": [{"id": "1", "slots": 1}, {"id": "2", "slots": 1}],
+        }
+
+        """
+        return self._resources
+
+    def assign_resources(self, arg: dict[str, list[dict]]) -> None:
+        self._resources.clear()
+        self._resources.update(arg)
+
+    def free_resources(self) -> dict[str, list[dict]]:
+        tmp = copy.deepcopy(self._resources)
+        self._resources.clear()
+        return tmp
+
+    def required_resources(self) -> list[dict[str, Any]]:
+        # Only need one CPU to launch the batch
+        return [{"type": "cpus", "slots": 1}]
 
     @property
     def duration(self):
@@ -148,11 +187,11 @@ class TestBatch(AbstractTestCase):
     def validate(self, cases: Sequence[canary.TestCase]):
         errors = 0
         for case in cases:
-            if case.masked():
+            if case.mask:
                 logger.critical(f"{case}: case is masked")
                 errors += 1
             for dep in case.dependencies:
-                if dep.masked():
+                if dep.mask:
                     errors += 1
                     logger.critical(f"{dep}: dependent of {case} is masked")
         if errors:
@@ -170,14 +209,6 @@ class TestBatch(AbstractTestCase):
         return any(case.dependencies for case in self.cases)
 
     @property
-    def cpus(self) -> int:
-        return 1  # only one CPU needed to submit this batch and wait for scheduler
-
-    @property
-    def gpus(self) -> int:
-        return 0  # no GPU needed to submit this batch and wait for scheduler
-
-    @property
     def jobid(self) -> str | None:
         return self._jobid
 
@@ -187,23 +218,23 @@ class TestBatch(AbstractTestCase):
 
     @property
     def status(self) -> Status:
-        if self._status.value == "pending":
+        if self._status.name == "PENDING":
             # Determine if dependent cases have completed and, if so, flip status to 'ready'
             pending = 0
             for case in self.cases:
                 for dep in case.dependencies:
-                    if dep.status.value in ("created", "pending", "ready", "running"):
+                    if dep.status.name in ("PENDING", "READY", "RUNNING"):
                         pending += 1
             if not pending:
-                self._status.set("ready")
+                self._status.set("READY")
         return self._status
 
     @status.setter
     def status(self, arg: Status | dict[str, str]) -> None:
         if isinstance(arg, Status):
-            self._status.set(arg.value, details=arg.details)
+            self._status.set(arg)
         else:
-            self._status.set(arg["value"], details=arg["details"])
+            self._status.set(arg["name"], message=arg["message"])
 
     def refresh(self) -> None:
         for case in self:
@@ -213,16 +244,16 @@ class TestBatch(AbstractTestCase):
         self.refresh()
         failed: list[canary.TestCase] = []
         for case in self:
-            if case.status == "running":
+            if case.status.name == "RUNNING":
                 # Job was cancelled
-                case.status.set("cancelled", "batch cancelled")
-            elif case.status == "skipped":
+                case.status.set("CANCELLED", f"batch {self.id[:7]} cancelled")
+            elif case.status.name == "SKIPPED":
                 pass
-            elif case.status == "ready":
-                case.status.set("not_run", "test not run for unknown reasons")
-            elif case.start > 0 and case.stop < 0:
-                case.status.set("cancelled", "test case cancelled")
-            if not case.status.satisfies(("skipped", "success")):
+            elif case.status.name == "READY":
+                case.status.set("NOT_RUN", "test not run for unknown reasons")
+            elif case.timekeeper.start_on != "NA" and case.timekeeper.finished_on == "NA":
+                case.status.set("CANCELLED", "test case cancelled")
+            if not case.status.name in ("SKIPPED", "SUCCESS"):
                 failed.append(case)
                 logger.debug(f"Batch {self}: test case failed: {case}")
         return failed
@@ -241,7 +272,7 @@ class TestBatch(AbstractTestCase):
 
     @property
     def path(self) -> Path:
-        return Path(".canary/canary_hpc/batches", self.id[:2], self.id[2:])
+        return Path(".canary/work/canary_hpc/batches", self.id[:2], self.id[2:])
 
     @property
     def working_directory(self) -> str:
@@ -255,43 +286,35 @@ class TestBatch(AbstractTestCase):
         """
         stat: dict[str, int] = {}
         for case in self.cases:
-            stat[case.status.value] = stat.get(case.status.value, 0) + 1
-        colors = Status.colors
-        return ", ".join("@%s{%d %s}" % (colors[v], n, v) for (v, n) in stat.items())
-
-    def format(self, format_spec: str) -> str:
-        replacements: dict[str, str] = {
-            "%id": self.id[:7],
-            "%p": str(self.path),
-            "%P": str(self.stage(self.id)),
-            "%n": repr(self),
-            "%j": self.jobid or "none",
-            "%l": str(len(self)),
-            "%S": self._combined_status(),
-            "%s.n": self.status.cname,
-            "%s.v": self.status.value,
-            "%s.d": self.status.details or "unknown",
-        }
-        if canary.config.getoption("format", "short") == "long":
-            replacements["%X"] = replacements["%p"]
-        else:
-            replacements["%X"] = replacements["%n"]
-        formatted_text = format_spec
-        for placeholder, value in replacements.items():
-            formatted_text = formatted_text.replace(placeholder, value)
-        return formatted_text.strip()
+            stat[case.status.name] = stat.get(case.status.name, 0) + 1
+        parts: list[str] = []
+        for name, n in stat.items():
+            color = Status.defaults[name][1][0]
+            parts.append("@%s{%d %s}" % (color, n, name))
+        return ", ".join(parts)
 
     def times(self) -> tuple[float | None, float | None, float | None]:
         """Return total, running, and time in queue"""
+
+        def started(case):
+            s = case.timekeeper.started_on
+            return None if s == "NA" else datetime.datetime.fromisoformat(s)
+
+        def finished(case):
+            f = case.timekeeper.finished_on
+            return None if f == "NA" else datetime.datetime.fromisoformat(f)
+
         duration: float | None = self.total_duration if self.total_duration > 0 else None
         running: float | None = None
         time_in_queue: float | None = None
-        if any(_.start > 0 for _ in self.cases) and any(_.stop > 0 for _ in self.cases):
-            ti = min(_.start for _ in self.cases if _.start > 0)
-            tf = max(_.stop for _ in self.cases if _.stop > 0)
-            running = tf - ti
+        started_on = [started(case) for case in self.cases]
+        finished_on = [finished(case) for case in self.cases]
+        if any(started_on) and any(finished_on):
+            ti = min(dt for dt in started_on if dt)
+            tf = max(dt for dt in finished_on if dt)
+            running = (tf - ti).total_seconds()
             if duration:
-                time_in_queue = max(duration - (tf - ti), 0)
+                time_in_queue = max(duration - running, 0)
         return duration, running, time_in_queue
 
     @staticmethod
@@ -323,11 +346,15 @@ class TestBatch(AbstractTestCase):
     def setup(self) -> None:
         file = self.configfile(self.id)
         file.parent.mkdir(parents=True, exist_ok=True)
-        config = {"cases": [case.id for case in self]}
+        config = {"session": self.session, "cases": [case.id for case in self]}
         file.write_text(json.dumps(config, indent=2))
 
-    def run(  # type: ignore[override]
-        self, backend: hpc_connect.HPCSubmissionManager, qsize: int = 1, qrank: int = 1
+    def run(
+        self,
+        queue: mp.Queue,
+        backend: hpc_connect.HPCSubmissionManager,
+        qsize: int = 1,
+        qrank: int = 1,
     ) -> None:
         def cancel(sig, frame):
             nonlocal proc
@@ -345,11 +372,12 @@ class TestBatch(AbstractTestCase):
         variables = dict(self.variables)
         variables["CANARY_LEVEL"] = "1"
         variables["CANARY_DISABLE_KB"] = "1"
-        if canary.config.get("config:debug"):
+        if canary.config.get("debug"):
             variables["CANARY_DEBUG"] = "on"
 
         batchspec = canary.config.getoption("canary_hpc_batchspec")
         flat = batchspec["layout"] == "flat"
+        timeoutx = self.timeout_multiplier
         try:
             breadcrumb = self.stage(self.id) / ".running"
             breadcrumb.touch()
@@ -357,14 +385,20 @@ class TestBatch(AbstractTestCase):
             default_term_signal = signal.signal(signal.SIGTERM, cancel)
             proc: hpc_connect.HPCProcess | None = None
             logger.debug(f"Submitting batch {self.id}")
+            workspace = canary.Workspace.load()
+            default_args: list[str] = ["-C", str(workspace.root.parent)]
+            if canary.config.get("debug"):
+                default_args.append("-d")
             if backend.supports_subscheduling and flat:
                 submit_script = self.submission_script_filename()
                 scriptdir = submit_script.parent
-                timeoutx = self.timeout_multiplier
                 variables.pop("CANARY_BATCH_ID", None)
                 proc = backend.submitn(
                     [case.id for case in self],
-                    [[self.canary_testcase_invocation(case, backend)] for case in self],
+                    [
+                        [self.canary_testcase_invocation(case, backend, default_args)]
+                        for case in self
+                    ],
                     cpus=[case.cpus for case in self],
                     gpus=[case.gpus for case in self],
                     scriptname=[str(scriptdir / f"{case.id}-inp.sh") for case in self],
@@ -375,12 +409,11 @@ class TestBatch(AbstractTestCase):
                     qtime=[case.runtime * timeoutx for case in self],
                 )
             else:
-                timeoutx = self.timeout_multiplier
                 qtime = self.qtime() * timeoutx
                 nodes = self.nodes_required(backend)
                 proc = backend.submit(
                     f"canary.{self.id[:7]}",
-                    [self.canary_batch_invocation(backend)],
+                    [self.canary_batch_invocation(backend, default_args)],
                     nodes=nodes,
                     scriptname=str(self.submission_script_filename()),
                     output=str(self.logfile(self.id)),
@@ -397,7 +430,7 @@ class TestBatch(AbstractTestCase):
                     if proc.poll() is not None:
                         break
                 except Exception as e:
-                    logger.exception(self.format("Batch @*b{%id}: polling job failed!"))
+                    logger.exception("Batch @*b{%%s}: polling job failed!" % self.id[:7])
                     break
                 time.sleep(backend.polling_frequency)
         finally:
@@ -406,33 +439,41 @@ class TestBatch(AbstractTestCase):
             signal.signal(signal.SIGTERM, default_term_signal)
             self.total_duration = time.monotonic() - start
             self.refresh()
-            if all([_.status.satisfies(("ready", "pending")) for _ in self.cases]):
-                f = "Batch @*b{%id}: no test cases have started; check %P for any emitted scheduler log files."
-                logger.warning(self.format(f))
-            for case in self.cases:
-                if case.status == "skipped":
-                    pass
-                elif case.status == "running":
-                    logger.debug(f"{case}: cancelling (status: running)")
-                    case.status.set("cancelled", "case failed to stop")
-                    case.save()
-                elif case.start > 0 and case.stop < 0:
-                    logger.debug(f"{case}: cancelling (status: {case.status})")
-                    case.status.set("cancelled", "case failed to stop")
-                    case.save()
-                elif case.status == "ready":
-                    logger.debug(f"{case}: case failed to start")
-                    case.status.set("not_run", f"case failed to start (batch: {self.id})")
-                    case.save()
+            queue.put(
+                {case.id: {"status": case.status, "timekeeper": case.timekeeper} for case in self}
+            )
             if rc := getattr(proc, "returncode", None):
-                logger.debug(
-                    self.format(f"Batch @*b{{%id}}: batch processing exited with code {rc}")
-                )
+                logger.debug("Batch @*b{%s}: batch exited with code %d" % (self.id[:7], rc))
 
         return
 
+    def update(self, **data: Any):
+        lookup: dict[str, canary.TestCase] = {case.id: case for case in self.cases}
+        for id, attrs in data.items():
+            case = lookup[id]
+            case.update(**attrs)
+        if all([_.status.name in ("READY", "PENDING") for _ in self.cases]):
+            f = "Batch @*b{%s}: no test cases have started; check %s for any scheduler logs"
+            logger.warning(f % (self.id[:7], str(self.stage(self.id))))
+        for case in self.cases:
+            if case.status.name == "SKIPPED":
+                pass
+            elif case.status.name == "RUNNING":
+                logger.warning(f"{case}: cancelling (status: running)")
+                case.status.set("CANCELLED", "case failed to stop")
+            elif case.timekeeper.started_on != "NA" and case.timekeeper.finished_on == "NA":
+                logger.warning(f"{case}: cancelling (status: {case.status})")
+                case.status.set("CANCELLED", "case failed to stop")
+            elif case.status.name == "READY":
+                logger.warning(f"{case}: case failed to start")
+                case.status.set("NOT_RUN", f"case failed to start (batch: {self.id})")
+
     def finish(self) -> None:
         pass
+
+    def save(self):
+        for case in self:
+            case.save()
 
     @lru_cache
     def nodes_required(self, backend: hpc_connect.HPCSubmissionManager) -> int:
@@ -441,10 +482,9 @@ class TestBatch(AbstractTestCase):
         for case in self:
             reqd_resources = case.required_resources()
             total_slots_per_type: dict[str, int] = {}
-            for group in reqd_resources:
-                for member in group:
-                    type = member["type"]
-                    total_slots_per_type[type] = total_slots_per_type.get(type, 0) + member["slots"]
+            for member in reqd_resources:
+                type = member["type"]
+                total_slots_per_type[type] = total_slots_per_type.get(type, 0) + member["slots"]
             for type, count in total_slots_per_type.items():
                 max_count_per_type[type] = max(max_count_per_type.get(type, 0), count)
         node_count: int = 1
@@ -458,31 +498,31 @@ class TestBatch(AbstractTestCase):
         return node_count
 
     def canary_testcase_invocation(
-        self, case: canary.TestCase, backend: hpc_connect.HPCSubmissionManager
+        self,
+        case: canary.TestCase,
+        backend: hpc_connect.HPCSubmissionManager,
+        default_args: list[str],
     ) -> str:
         """Write the canary invocation used to run this test case"""
         args: list[str] = ["canary"]
-        if canary.config.get("config:debug"):
-            args.append("-d")
-        args.extend(["-C", canary.config.get("session:work_tree"), "hpc", "exec"])
-        args.extend([f"--backend={backend.name}", f"--case={case.id}", self.id])
+        args.extend(default_args)
+        args.extend(["hpc", "exec", f"--backend={backend.name}", f"--case={case.id}", self.id])
         return shlex.join(args)
 
-    def canary_batch_invocation(self, backend: hpc_connect.HPCSubmissionManager) -> str:
+    def canary_batch_invocation(
+        self, backend: hpc_connect.HPCSubmissionManager, default_args: list[str]
+    ) -> str:
         """Write the canary invocation used to run this batch."""
         args: list[str] = ["canary"]
-        if canary.config.get("config:debug"):
-            args.append("-d")
+        args.extend(default_args)
         workers = canary.config.getoption("canary_hpc_batch_workers") or -1
-        args.extend(["-C", canary.config.get("session:work_tree"), "hpc", "exec"])
-        args.extend([f"--workers={workers}", f"--backend={backend.name}", self.id])
+        args.extend(["hpc", "exec", f"--workers={workers}", f"--backend={backend.name}", self.id])
         return shlex.join(args)
 
 
 def canary_hpc_stage() -> Path:
-    work_tree = canary.config.get("session:work_tree")
-    assert work_tree is not None
-    return Path(work_tree).absolute() / ".canary/canary_hpc"
+    workspace = canary.Workspace.load()
+    return workspace.cache_dir / "canary_hpc"
 
 
 def get_scheduler_args() -> list[str]:
@@ -515,15 +555,17 @@ def batch_testcases(
     # The binpacking code works with Block not TestCase.
     blocks: dict[str, binpack.Block] = {}
     map: dict[str, canary.TestCase] = {}
-    graph: dict[canary.TestCase, list[canary.TestCase]] = {}
+    lookup: dict[str, canary.TestCase] = {case.id: case for case in cases}
+    graph: dict[str, list[str]] = {}
     for case in cases:
-        graph[case] = [dep for dep in case.dependencies if dep in cases]
+        graph[case.id] = [dep.id for dep in case.dependencies if dep.id in lookup]
     ts = TopologicalSorter(graph)
     ts.prepare()
     while ts.is_active():
         ready = ts.get_ready()
-        for case in ready:
-            map[case.id] = case
+        for id in ready:
+            case = lookup[id]
+            assert case.id == id
             dependencies: list[binpack.Block] = [blocks[dep.id] for dep in case.dependencies]
             blocks[case.id] = binpack.Block(
                 case.id, case.cpus, math.ceil(case.runtime), dependencies=dependencies
@@ -542,7 +584,8 @@ def batch_testcases(
             bins = binpack.pack_by_count_atomic(list(blocks.values()), count)
         else:
             bins = binpack.pack_by_count(list(blocks.values()), count, grouper=grouper)
-    return [TestBatch([map[block.id] for block in bin]) for bin in bins]
+    batches = [TestBatch([lookup[block.id] for block in bin]) for bin in bins]
+    return batches
 
 
 def packed_perimeter(

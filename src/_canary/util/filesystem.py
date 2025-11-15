@@ -62,6 +62,9 @@ def max_name_length() -> int:
     return os.pathconf("/", "PC_NAME_MAX")
 
 
+PathLike = pathlib.Path | str
+
+
 def which(
     *args: str,
     path: str | list[str] | tuple[str, ...] | None = None,
@@ -157,7 +160,7 @@ def synctree(
     return rsync.returncode
 
 
-def force_remove(file_or_dir: str) -> None:
+def force_remove(file_or_dir: PathLike) -> None:
     """Remove ``file_or_dir`` forcefully"""
     try:
         remove(file_or_dir)
@@ -177,18 +180,16 @@ def force_copy(src: str, dst: str) -> None:
         raise ValueError(f"force_copy: file not found: {src}")
 
 
-def remove(file_or_dir: pathlib.Path | str) -> None:
+def remove(file_or_dir: PathLike) -> None:
     """Removes file or directory ``file_or_dir``"""
     path = pathlib.Path(file_or_dir)
-    if path.is_symlink():
-        os.unlink(path)
+    if path.is_file():
+        path.unlink()
     elif path.is_dir():
         rmtree2(path)
-    elif path.exists():
-        os.remove(path)
 
 
-def rmtree2(path: pathlib.Path | str, n: int = 5) -> None:
+def rmtree2(path: PathLike, n: int = 5) -> None:
     """Wrapper around shutil.rmtree to make it more robust when used on NFS
     mounted file systems."""
     from . import logging
@@ -361,7 +362,7 @@ def mkdirp(*paths: str, mode: int | None = None) -> None:
             raise OSError(errno.EEXIST, "File already exists", path)
 
 
-def set_executable(path: str) -> None:
+def set_executable(path: PathLike) -> None:
     """Set executable bits on ``path``"""
     mode = os.stat(path).st_mode
     if mode & stat.S_IRUSR:
@@ -437,7 +438,7 @@ def ancestor(dir: str, n: int = 1) -> str:
     return parent
 
 
-def grep(regex: str | re.Pattern, file: str) -> bool:
+def grep(regex: str | re.Pattern, file: PathLike) -> bool:
     rx: re.Pattern = re.compile(regex) if isinstance(regex, str) else regex
     try:
         for line in open(file):
@@ -467,3 +468,30 @@ def clean_out_folder(folder: str) -> None:
         with working_dir(folder):
             for f in os.listdir("."):
                 force_remove(f)
+
+
+def write_directory_tag(file: PathLike) -> None:
+    file = pathlib.Path(file)
+    file.parent.mkdir(exist_ok=True)
+    file.write_text(
+        "Signature: 8a477f597d28d172789f06886806bc55\n"
+        "# This file is a directory tag automatically created by canary.\n"
+        "# For information about cache directory tags see https://bford.info/cachedir/\n"
+    )
+
+
+def atomic_write(path: pathlib.Path, text: str) -> None:
+    dir = path.parent
+    fd, tmp_path = tempfile.mkstemp(dir=dir, prefix=".tmp-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, str(path))
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise

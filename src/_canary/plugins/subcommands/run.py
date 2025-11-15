@@ -3,12 +3,16 @@
 # SPDX-License-Identifier: MIT
 
 import argparse
-import sys
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ... import config
-from ...util import graph
+from ... import when
 from ...util import logging
+from ...workspace import NotAWorkspaceError
+from ...workspace import SpecSelection
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 from ..types import CanarySubcommand
 from .common import PathSpec
@@ -18,6 +22,7 @@ from .common import add_work_tree_arguments
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
+    from ...testcase import TestCase
 
 logger = logging.get_logger(__name__)
 
@@ -35,7 +40,6 @@ class Run(CanarySubcommand):
     def setup_parser(self, parser: "Parser") -> None:
         add_work_tree_arguments(parser)
         add_filter_arguments(parser)
-        parser.add_argument("-u", "--until", choices=("discover", "lock"), help=argparse.SUPPRESS)
         parser.add_argument(
             "--fail-fast",
             default=None,
@@ -101,68 +105,81 @@ class Run(CanarySubcommand):
         PathSpec.setup_parser(parser)
 
     def execute(self, args: "argparse.Namespace") -> int:
-        from ...session import Session
-
         config.pluginmanager.hook.canary_runtests_startup()
 
-        session: Session
-        if args.mode == "w":
-            path = args.work_tree or Session.default_worktree
-            force = config.getoption("wipe") or False
-            session = Session(path, mode=args.mode, force=force)
-            if lockfile := getattr(args, "testcases_lock", None):
-                session.load_from_lockfile(lockfile)
-            else:
-                session.add_search_paths(args.paths)
-                parsing_policy = config.getoption("parsing_policy") or "pedantic"
-                session.discover(pedantic=parsing_policy == "pedantic")
-                if until := config.getoption("until"):
-                    generators = session.generators
-                    roots = set()
-                    for generator in generators:
-                        roots.add(generator.root)
-                    n, N = len(generators), len(roots)
-                    s, S = "" if n == 1 else "s", "" if N == 1 else "s"
-                    logger.info("@*{Collected} %d file%s from %d root%s" % (n, s, N, S))
-                    if until == "discover":
-                        logger.info("Done with test discovery")
-                        return 0
-                env_mods = config.getoption("env_mods") or {}
-                session.lock(
-                    keyword_exprs=config.getoption("keyword_exprs"),
-                    parameter_expr=config.getoption("parameter_expr"),
-                    on_options=config.getoption("on_options"),
-                    env_mods=env_mods.get("test") or {},
-                    regex=config.getoption("regex_filter"),
-                )
+        workspace: Workspace
+        selection: SpecSelection
+        work_tree: str = args.work_tree or os.getcwd()
+        if args.wipe:
+            Workspace.remove(Path(work_tree))
 
-                if until := config.getoption("until"):
-                    active_cases = session.get_ready()
-                    n, N = len(active_cases), len({case.file for case in active_cases})
-                    s, S = "" if n == 1 else "s", "" if N == 1 else "s"
-                    logger.info("@*{Expanded} %d case%s from %d file%s" % (n, s, N, S))
-                    graph.print(active_cases, file=sys.stdout)
-                    if until == "lock":
-                        logger.info("Done freezing test cases")
-                        return 0
-        elif args.mode == "a":
-            case_specs = getattr(args, "case_specs", None)
-            if case_specs and all([_.startswith("/") for _ in case_specs]):
-                session = Session.casespecs_view(args.work_tree, case_specs)
-            else:
-                # use args here instead of config.getoption so that in-session runs can be filtered
-                # with options not used during sesssion setup
-                session = Session.filter_view(
-                    args.work_tree,
-                    start=args.start,
+        try:
+            workspace = Workspace.load(Path(work_tree))
+        except NotAWorkspaceError:
+            workspace = Workspace.create(Path(work_tree))
+
+        if args.start:
+            # Special case: re-run test cases from here down
+            if args.parameter_expr:
+                raise TypeError(f"{args.start}: parameter expression incompatible with start dir")
+            if args.regex_filter:
+                raise TypeError(f"{args.start}: regular expression incompatible with start dir")
+            if args.tag:
+                raise TypeError(f"{args.start}: tags incompatible with start dir")
+            cases = workspace.select_from_path(path=Path(args.start))
+            if args.keyword_exprs:
+                cases = filter_cases_by_keyword(cases, args.keyword_exprs)
+            with workspace.session(name=cases[0].workspace.session) as session:
+                disp = session.run(roots=[case.id for case in cases])
+        else:
+            if args.runtag:
+                selection = workspace.get_selection(args.runtag)
+            elif args.casespecs:
+                selection = workspace.get_selection_by_specs(args.casespecs, tag=args.tag)
+            elif args.paths:
+                parsing_policy = config.getoption("parsing_policy") or "pedantic"
+                workspace.add(args.paths, pedantic=parsing_policy == "pedantic")
+                selection = workspace.make_selection(
+                    tag=args.tag,
                     keyword_exprs=args.keyword_exprs,
                     parameter_expr=args.parameter_expr,
-                    case_specs=case_specs,
+                    on_options=args.on_options,
+                    regex=args.regex_filter,
                 )
-        else:
-            raise ValueError(f"Unknown session mode {args.mode!r}")
-        session.run()
+            else:
+                if any(
+                    (args.keyword_exprs, args.parameter_expr, args.on_options, args.regex_filter)
+                ):
+                    selection = workspace.make_selection(
+                        tag=args.tag,
+                        keyword_exprs=args.keyword_exprs,
+                        parameter_expr=args.parameter_expr,
+                        on_options=args.on_options,
+                        regex=args.regex_filter,
+                    )
+                else:
+                    # Get the default selection
+                    selection = workspace.get_selection()
+
+            with workspace.session(selection=selection) as session:
+                disp = session.run()
+
         config.pluginmanager.hook.canary_runtests_summary(
-            cases=session.active_cases(), include_pass=False, truncate=10
+            cases=disp["cases"], include_pass=False, truncate=10
         )
-        return session.exitstatus
+        return disp["returncode"]
+
+
+def filter_cases_by_keyword(cases: list["TestCase"], keyword_exprs: list[str]) -> list["TestCase"]:
+    masks: dict[str, bool] = {}
+    for case in cases:
+        kwds = set(case.spec.keywords)
+        kwds.update(case.spec.implicit_keywords)  # ty: ignore[invalid-argument-type]
+        kwd_all = (":all:" in keyword_exprs) or ("__all__" in keyword_exprs)
+        if not kwd_all:
+            for keyword_expr in keyword_exprs:
+                match = when.when({"keywords": keyword_expr}, keywords=list(kwds))
+                if not match:
+                    masks[case.id] = True
+                    break
+    return [case for case in cases if not masks.get(case.id)]

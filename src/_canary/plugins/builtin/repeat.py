@@ -1,4 +1,5 @@
 import io
+import multiprocessing as mp
 import os
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -43,13 +44,13 @@ def canary_addoption(parser: "Parser") -> None:
 
 
 @hookimpl(specname="canary_testcase_run")
-def repeat_until_pass(case: "TestCase", qsize: int, qrank: int) -> None:
-    if case.status.satisfies("failed") and (count := config.getoption("repeat_until_pass")):
+def repeat_until_pass(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int) -> None:
+    if (case.status.name == "FAILED") and (count := config.getoption("repeat_until_pass")):
         i: int = 0
         while i < count:
             i += 1
-            rerun_case(case, qsize, qrank, i)
-            if case.status.satisfies("success"):
+            rerun_case(case, queue, qsize, qrank, i)
+            if case.status.name == "SUCCESS":
                 return
         logger.error(
             f"{case}: failed to finish successfully after {i} additional {pluralize('attempt', i)}"
@@ -57,13 +58,13 @@ def repeat_until_pass(case: "TestCase", qsize: int, qrank: int) -> None:
 
 
 @hookimpl(specname="canary_testcase_run")
-def repeat_after_timeout(case: "TestCase", qsize: int, qrank: int) -> None:
-    if case.status.satisfies("timeout") and (count := config.getoption("repeat_after_timeout")):
+def repeat_after_timeout(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int) -> None:
+    if (case.status.name == "TIMEOUT") and (count := config.getoption("repeat_after_timeout")):
         i: int = 0
         while i < count:
             i += 1
-            rerun_case(case, qsize, qrank, i)
-            if not case.status.satisfies("timeout"):
+            rerun_case(case, queue, qsize, qrank, i)
+            if not case.status.name == "TIMEOUT":
                 return
         logger.error(
             f"{case}: failed to finish without timing out after {i} additional {pluralize('attempt', i)}"
@@ -71,13 +72,13 @@ def repeat_after_timeout(case: "TestCase", qsize: int, qrank: int) -> None:
 
 
 @hookimpl(specname="canary_testcase_run")
-def repeat_until_fail(case: "TestCase", qsize: int, qrank: int) -> None:
-    if case.status.satisfies("success") and (count := config.getoption("repeat_until_fail")):
+def repeat_until_fail(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int) -> None:
+    if (case.status.name == "SUCCESS") and (count := config.getoption("repeat_until_fail")):
         i: int = 1
         while i < count:
             i += 1
-            rerun_case(case, qsize, qrank, i)
-            if not case.status.satisfies("success"):
+            rerun_case(case, queue, qsize, qrank, i)
+            if not case.status.name == "SUCCESS":
                 break
         else:
             return
@@ -87,19 +88,19 @@ def repeat_until_fail(case: "TestCase", qsize: int, qrank: int) -> None:
         )
 
 
-def rerun_case(case: "TestCase", qsize: int, qrank: int, attempt: int) -> None:
+def rerun_case(case: "TestCase", queue: mp.Queue, qsize: int, qrank: int, attempt: int) -> None:
     dont_restage = config.getoption("dont_restage")
     try:
-        case.reset()
+        case.restore_workspace()
         if summary := job_start_summary(case, qsize=qsize, qrank=qrank):
             logger.log(logging.EMIT, summary, extra={"prefix": ""})
-        config.pluginmanager.hook.canary_testcase_setup(case=case)
-        case.run()
+        case.setup()
+        case.run(queue=queue)
     finally:
         if summary := job_finish_summary(case, qsize=qsize, qrank=qrank, attempt=attempt):
             logger.log(logging.EMIT, summary, extra={"prefix": ""})
         if dont_restage:
-            config.options.dont_restage = dont_restage
+            config.set("options:dont_restage", dont_restage, scope="command_line")
 
 
 def job_start_summary(case: "TestCase", qrank: int | None, qsize: int | None) -> str:
@@ -110,8 +111,8 @@ def job_start_summary(case: "TestCase", qrank: int | None, qsize: int | None) ->
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
     if qrank is not None and qsize is not None:
         fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    fmt.write("Repeating @*b{%id}: %X")
-    return case.format(fmt.getvalue()).strip()
+    fmt.write("Repeating @*b{%s}: %s" % (case.id[:7], case.spec.fullname))
+    return fmt.getvalue().strip()
 
 
 def job_finish_summary(
@@ -124,5 +125,8 @@ def job_finish_summary(
         fmt.write(datetime.now().strftime("[%Y.%m.%d %H:%M:%S]") + " ")
     if qrank is not None and qsize is not None:
         fmt.write("@*{[%s]} " % f"{qrank + 1:0{digits(qsize)}}/{qsize}")
-    fmt.write(f"Finished @*b{{%id}} (attempt {attempt + 1}): %X %s.n")
-    return case.format(fmt.getvalue()).strip()
+    fmt.write(
+        f"Finished @*b{{%s}} (attempt {attempt + 1}): %s %s"
+        % (case.id[:7], case.fullname, case.status.cname)
+    )
+    return fmt.getvalue().strip()

@@ -144,7 +144,7 @@ class server:
                     m = payload["message"] = get_text(doc, "message")
                     lines = "\n    ".join([_.rstrip() for _ in open(efile).readlines()])
                     logger.error(f"Failed to upload {os.path.basename(file)}: {m}\n    {lines}")
-                if not canary.config.get("config:debug"):
+                if not canary.config.get("debug"):
                     force_remove(efile)
             return payload
 

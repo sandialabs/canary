@@ -34,7 +34,7 @@ def test_batch_n(generate_files):
     f.prepare()
     files = f.discover()
     cases = _canary.finder.generate_test_cases(files)
-    assert len([c for c in cases if c.status != "masked"]) == num_cases
+    assert len([c for c in cases if not c.spec.mask]) == num_cases
     spec = {"count": 5, "duration": None, "nodes": "any", "layout": "flat"}
     batches = batching.batch_testcases(
         cases=cases,
@@ -57,7 +57,7 @@ def test_batch_t(generate_files):
     f.prepare()
     files = f.discover()
     cases = _canary.finder.generate_test_cases(files)
-    assert len([c for c in cases if c.status != "masked"]) == num_cases
+    assert len([c for c in cases if not c.spec.mask]) == num_cases
     spec = {"count": None, "duration": 15 * 60, "nodes": "any", "layout": "flat"}
     batches = batching.batch_testcases(
         cases=cases,

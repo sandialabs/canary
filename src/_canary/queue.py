@@ -3,38 +3,23 @@
 # SPDX-License-Identifier: MIT
 
 import abc
-import atexit
-import concurrent.futures
 import io
 import json
 import math
-import os
-import signal
 import threading
 import time
-from concurrent.futures.process import BrokenProcessPool
 from datetime import datetime
-from functools import partial
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Callable
 from typing import Sequence
 
 from . import config
 from .atc import AbstractTestCase
-from .error import FailFast
-from .error import StopExecution
 from .resource_pool.rpool import ResourceUnavailable
 from .third_party import color
 from .util import cpu_count
-from .util import keyboard
 from .util import logging
-from .util.filesystem import working_dir
-from .util.procutils import ProcessPoolExecutor
-from .util.procutils import cleanup_children
 from .util.progress import progress
-from .util.returncode import compute_returncode
-from .util.string import pluralize
 from .util.time import hhmmss
 from .util.time import timestamp
 
@@ -50,15 +35,16 @@ class AbstractResourceQueue(abc.ABC):
         self, *, lock: threading.Lock, workers: int, resource_pool: "ResourcePool"
     ) -> None:
         self.workers: int = workers
-        self.buffer: dict[int, Any] = {}
-        self._busy: dict[int, Any] = {}
-        self._finished: dict[int, Any] = {}
-        self._notrun: dict[int, Any] = {}
-        self.meta: dict[int, dict] = {}
+        self.buffer: dict[str, Any] = {}
+        self._busy: dict[str, Any] = {}
+        self._finished: dict[str, Any] = {}
+        self._notrun: dict[str, Any] = {}
+        self.meta: dict[str, dict] = {}
         self.lock = lock
         self.exclusive_lock: bool = False
         self.resource_pool = resource_pool
         assert not self.resource_pool.empty()
+        self.prepared: bool = False
 
     def __len__(self) -> int:
         return len(self.buffer)
@@ -70,9 +56,9 @@ class AbstractResourceQueue(abc.ABC):
     ) -> "AbstractResourceQueue": ...
 
     @abc.abstractmethod
-    def iter_keys(self) -> list[int]: ...
+    def iter_keys(self) -> list[str]: ...
 
-    def retry(self, obj_id: int) -> None:
+    def retry(self, obj: Any) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -100,7 +86,10 @@ class AbstractResourceQueue(abc.ABC):
         return len(self.buffer) == 0
 
     @abc.abstractmethod
-    def skip(self, obj_id: int) -> None: ...
+    def skip(self, obj: Any) -> None: ...
+
+    @abc.abstractmethod
+    def done(self, obj: Any) -> None: ...
 
     def available_workers(self) -> int:
         return self.workers - len(self._busy)
@@ -114,66 +103,64 @@ class AbstractResourceQueue(abc.ABC):
 
     def put(self, *cases: AbstractTestCase) -> None:
         for case in cases:
-            self.buffer[len(self.buffer)] = case
+            self.buffer[case.id] = case
 
     def prepare(self, **kwds: Any) -> None:
-        pass
+        self.prepared = True
+
+    def is_active(self) -> bool:
+        return len(self.buffer) > 0
 
     def close(self, cleanup: bool = True) -> None:
         if cleanup:
             for case in self.cases():
-                if case.status == "running":
-                    case.status.set("cancelled", "Case failed to stop")
+                if case.status.name == "RUNNING":
+                    case.status.set("CANCELLED", "Case failed to stop")
                     case.save()
-                elif case.status.value in ("retry", "created", "pending", "ready"):
-                    case.status.set("not_run", "Case failed to start")
+                elif case.status.name in ("RETRY", "CREATED", "PENDING", "READY"):
+                    case.status.set("NOT_RUN", "Case failed to start")
                     case.save()
         keys = list(self.buffer.keys())
         for key in keys:
             self._notrun[key] = self.buffer.pop(key)
 
-    def get(self) -> tuple[int, AbstractTestCase]:
+    def get(self) -> AbstractTestCase:
         """return (total number in queue, this number, iid, obj)"""
         with self.lock:
             if self.available_workers() <= 0:
                 raise Busy
             if not len(self.buffer):
                 raise Empty
-            for i in self.iter_keys():
-                obj = self.buffer[i]
+            for id in self.iter_keys():
+                obj = self.buffer[id]
                 status = obj.status
-                if status.value not in ("retry", "pending", "ready", "running"):
+                if status.name not in ("RETRY", "PENDING", "READY", "RUNNING"):
                     # job will never be ready
-                    self.skip(i)
+                    self.skip(obj)
                     continue
-                elif status == "ready":
+                elif status.name == "READY":
                     try:
                         if self.exclusive_lock:
                             continue
                         required = obj.required_resources()
                         if not required:
-                            raise ValueError(f"{obj}: a test should require at least 1 cpu")
+                            obj.status.set("ERROR", "a test should require at least 1 cpu")
+                            self.skip(obj)
+                        elif not self.resource_pool.accommodates(required):
+                            obj.status.set(
+                                "ERROR", "resource for this job cannot be satisfied at run time"
+                            )
+                            self.skip(obj)
                         acquired = self.resource_pool.checkout(required, timeout=obj.timeout)
                         obj.assign_resources(acquired)
                     except ResourceUnavailable:
                         continue
                     else:
-                        self._busy[i] = self.buffer.pop(i)
+                        self._busy[obj.id] = self.buffer.pop(obj.id)
                         if obj.exclusive:
                             self.exclusive_lock = True
-                        return (i, self._busy[i])
+                        return self._busy[id]
         raise Busy
-
-    def done(self, obj_no: int) -> AbstractTestCase:
-        with self.lock:
-            if obj_no not in self._busy:
-                raise RuntimeError(f"job {obj_no} is not running")
-            obj = self._finished[obj_no] = self._busy.pop(obj_no)
-            if obj.exclusive:
-                self.exclusive_lock = False
-            self.resource_pool.checkin(obj.free_resources())
-            self.update_pending(obj)
-            return obj
 
     @abc.abstractmethod
     def status(self, start: float | None = None) -> str: ...
@@ -187,7 +174,7 @@ class AbstractResourceQueue(abc.ABC):
 
 class ResourceQueue(AbstractResourceQueue):
     def __init__(self, *, lock: threading.Lock, resource_pool: "ResourcePool") -> None:
-        workers = int(config.getoption("workers", -1))
+        workers = int(config.getoption("workers") or -1)
         if workers < 0:
             workers = min(cpu_count(logical=False), 50)
         super().__init__(lock=lock, workers=workers, resource_pool=resource_pool)
@@ -202,24 +189,24 @@ class ResourceQueue(AbstractResourceQueue):
     ) -> "ResourceQueue":
         self = ResourceQueue(lock=lock, resource_pool=resource_pool)
         for case in cases:
-            if case.status == "skipped":
+            if case.status.name == "SKIPPED":
                 case.save()
-            elif not case.status.satisfies(("ready", "pending")):
+            elif case.status.name not in ("READY", "PENDING"):
                 raise ValueError(f"{case}: case is not ready or pending")
-        self.put(*[case for case in cases if case.status.satisfies(("ready", "pending"))])
+        self.put(*[case for case in cases if case.status.name in ("READY", "PENDING")])
         self.prepare()
         if self.empty():
             raise ValueError("There are no cases to run in this session")
         return self
 
-    def iter_keys(self) -> list[int]:
+    def iter_keys(self) -> list[str]:
         # want bigger tests first
         norm = lambda c: math.sqrt(c.cpus**2 + c.runtime**2)
         return sorted(self.buffer.keys(), key=lambda k: norm(self.buffer[k]), reverse=True)
 
     def put(self, *cases: Any) -> None:
         for case in cases:
-            if config.get("config:debug"):
+            if config.get("debug"):
                 # The case should have already been validated
                 check = config.pluginmanager.hook.canary_resource_pool_accommodates(case=case)
                 if not check:
@@ -228,18 +215,30 @@ class ResourceQueue(AbstractResourceQueue):
                     )
             super().put(case)
 
-    def skip(self, obj_no: int) -> None:
-        self._finished[obj_no] = self.buffer.pop(obj_no)
+    def skip(self, obj: Any) -> None:
+        self._finished[obj.id] = self.buffer.pop(obj.id)
+        self._finished[obj.id].save()
         for case in self.buffer.values():
             for i, dep in enumerate(case.dependencies):
-                if dep.id == self._finished[obj_no].id:
-                    case.dependencies[i] = self._finished[obj_no]
+                if dep.id == self._finished[obj.id].id:
+                    case.dependencies[i] = self._finished[obj.id]
 
     def update_pending(self, obj: "TestCase") -> None:
         for pending in self.buffer.values():
             for i, dep in enumerate(pending.dependencies):
                 if dep.id == obj.id:
                     pending.dependencies[i] = obj
+
+    def done(self, obj: Any) -> None:
+        with self.lock:
+            if obj.id not in self._busy:
+                raise RuntimeError(f"job {obj} is not running")
+            self._finished[obj.id] = self._busy.pop(obj.id)
+            if obj.exclusive:
+                self.exclusive_lock = False
+            self.resource_pool.checkin(obj.free_resources())
+            self.update_pending(obj)
+            return
 
     def cases(self) -> list["TestCase"]:
         return self.queued() + self.busy() + self.finished() + self.notrun()
@@ -257,7 +256,7 @@ class ResourceQueue(AbstractResourceQueue):
         return list(self._notrun.values())
 
     def failed(self) -> list["TestCase"]:
-        return [_ for _ in self._finished.values() if _.status != "success"]
+        return [_ for _ in self._finished.values() if _.status.name != "SUCCESS"]
 
     def _counts(self) -> tuple[int, int, int]:
         done = len(self.finished())
@@ -273,11 +272,11 @@ class ResourceQueue(AbstractResourceQueue):
             done, busy, notrun = self._counts()
             total = done + busy + notrun
             for case in self.finished():
-                if case.status.value in ("success", "xdiff", "xfail"):
+                if case.status.name in ("SUCCESS", "XDIFF", "XFAIL"):
                     p += 1
-                elif case.status == "diffed":
+                elif case.status.name == "DIFFED":
                     d += 1
-                elif case.status == "timeout":
+                elif case.status.name == "TIMEOUT":
                     t += 1
                 else:
                     f += 1
@@ -299,9 +298,8 @@ class ResourceQueue(AbstractResourceQueue):
         currently busy
 
         """
-        if not config.get("config:debug"):
+        if not config.get("debug"):
             return None
-        assert config.get("session:work_tree") is not None
         hb: dict[str, Any] = {"date": datetime.now().strftime("%c")}
         busy = self.busy()
         hb["busy"] = [case.id for case in busy]
@@ -310,136 +308,6 @@ class ResourceQueue(AbstractResourceQueue):
         text = json.dumps(hb)
         logger.log(logging.TRACE, f"Hearbeat: {text}")
         return None
-
-
-def process_queue(queue: AbstractResourceQueue, runner: Callable, **kwargs: Any) -> int:
-    atexit.register(cleanup_children)
-    returncode: int = -10
-    njobs = len(queue)
-    pbar = config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
-    work_tree = config.get("session:work_tree")
-    assert work_tree is not None
-    with working_dir(work_tree):
-        cleanup_queue = True
-        try:
-            what = pluralize("job", njobs)
-            logger.info("@*{Running} %d %s" % (njobs, what))
-            start = timestamp()
-            stop = -1.0
-            logger.debug("Start: processing queue")
-            _process_queue(queue, runner, **kwargs)
-        except KeyboardInterrupt:
-            logger.debug("keyboard interrupt: killing child processes and exiting")
-            returncode = signal.SIGINT.value
-            cleanup_queue = False
-            raise
-        except StopExecution as e:
-            logger.debug("stop execution: killing child processes and exiting")
-            returncode = e.exit_code
-        except FailFast as e:
-            logger.debug("fail fast: killing child processes and exiting")
-            code = compute_returncode(e.failed)
-            returncode = code
-            cleanup_queue = False
-            names = ",".join(_.name for _ in e.failed)
-            raise StopExecution(f"fail_fast: {names}", code)
-        except Exception:
-            logger.exception("unknown failure: killing child processes and exiting")
-            returncode = compute_returncode(queue.cases())
-            raise
-        else:
-            if pbar:
-                queue.update_progress_bar(start, last=True)
-            returncode = compute_returncode(queue.cases())
-            queue.close(cleanup=cleanup_queue)
-            stop = timestamp()
-            dt = stop - start
-            logger.info("@*{Finished} %d %s (%s)" % (njobs, what, hhmmss(dt)))
-            atexit.unregister(cleanup_children)
-    return returncode
-
-
-def _process_queue(queue: AbstractResourceQueue, runner: Callable, **kwargs: Any) -> None:
-    """Process the test queue, asynchronously
-
-    Args:
-        queue: the test queue to process
-
-    """
-    futures: dict = {}
-    start = timestamp()
-    duration = lambda: timestamp() - start
-    timeout = float(config.get("config:timeout:session", -1))
-    qsize = queue.qsize
-    qrank = 0
-    ppe = None
-    pbar = config.getoption("format") == "progress-bar" or logging.get_level() > logging.INFO
-    try:
-        config.archive(os.environ)
-        with ProcessPoolExecutor(workers=queue.workers) as ppe:
-            signal.signal(signal.SIGTERM, signal.SIG_IGN)
-            while True:
-                if key := keyboard.get_key():
-                    if key in "sS":
-                        logger.log(logging.EMIT, queue.status(start=start), extra={"prefix": ""})
-                    elif key in "qQ":
-                        logger.debug(f"Quiting due to caputuring {key!r} from the keyboard")
-                        ppe.shutdown(cancel_futures=True)
-                        cleanup_children()
-                        raise KeyboardInterrupt
-                if pbar:
-                    queue.update_progress_bar(start)
-                if timeout >= 0.0 and duration() > timeout:
-                    raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
-                try:
-                    iid, obj = queue.get()
-                    queue.heartbeat()
-                except Busy:
-                    time.sleep(0.005)
-                    continue
-                except Empty:
-                    break
-                logger.debug(f"Submitting {obj} to process pool for execution")
-                future = ppe.submit(runner, obj, qsize=qsize, qrank=qrank, **kwargs)
-                qrank += 1
-                callback = partial(done_callback, queue, iid)
-                future.add_done_callback(callback)
-                logger.debug(f"Process pool execution for {obj} finished")
-                futures[iid] = (obj, future)
-    finally:
-        if ppe is not None:
-            ppe.shutdown(cancel_futures=True)
-
-
-def done_callback(queue: ResourceQueue, iid: int, future: concurrent.futures.Future) -> None:
-    """Function registered to the process pool executor to be called when a test completes
-
-    Args:
-        queue: the queue
-        iid: the queue's internal ID of the test
-        future: the future return by the process pool executor
-
-    """
-    if future.cancelled():
-        return
-    try:
-        future.result()
-    except BrokenProcessPool:
-        # The future was probably killed by fail_fast or a keyboard interrupt
-        return
-    except BrokenPipeError:
-        # something bad happened.  On some HPCs we have seen:
-        # BrokenPipeError: [Errno 108] Cannot send after transport endpoint shutdown
-        # Seems to be a filesystem issue, punt for now
-        return
-
-    # The job was run in a subprocess.  The object must be
-    # refreshed so that the state in this main thread is up to date.
-    obj = queue.done(iid)
-    failed = obj.reload_and_check()
-    if failed and config.getoption("fail_fast"):
-        raise FailFast(failed)
-    logger.debug(f"Finished {obj} ({obj.duration} s.)")
 
 
 class Empty(Exception):

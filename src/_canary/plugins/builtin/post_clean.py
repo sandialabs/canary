@@ -5,11 +5,12 @@
 from typing import TYPE_CHECKING
 
 from ... import config
+from ...workspace import Session
+from ...workspace import Workspace
 from ..hookspec import hookimpl
 
 if TYPE_CHECKING:
     from ...config.argparsing import Parser
-    from ...session import Session
 
 
 @hookimpl
@@ -27,6 +28,5 @@ def canary_addoption(parser: "Parser") -> None:
 @hookimpl(trylast=True)
 def canary_session_finish(session: "Session", exitstatus: int) -> None:
     if config.getoption("teardown"):
-        for case in session.active_cases():
-            if case.status == "success":
-                case.teardown()
+        workspace = Workspace.load()
+        workspace.gc()

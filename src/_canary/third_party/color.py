@@ -89,6 +89,8 @@ colors = {
     "R": 91,  # red
     "g": 32,
     "G": 92,  # green
+    "x": 37,
+    "X": 90,  # gray
     "y": 33,
     "Y": 93,  # yellow
     "b": 34,

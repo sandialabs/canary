@@ -6,7 +6,9 @@ import canary
 
 from .cdash import CDashReporter
 from .ctest import CTestTestGenerator
+from .ctest import finish_ctest
 from .ctest import read_resource_specs
+from .ctest import setup_ctest
 
 logger = canary.get_logger(__name__)
 
@@ -18,9 +20,35 @@ def ctest_test_generator(root: str, path: str | None) -> canary.AbstractTestGene
     return None
 
 
+@canary.hookimpl
+def canary_testcase_execution_policy(case: canary.TestCase) -> canary.ExecutionPolicy | None:
+    if case.spec.file.suffix == ".cmake":
+        return canary.SubprocessExecutionPolicy(["./runtest.sh"])
+    return None
+
+
+@canary.hookimpl
+def canary_testcase_modify(case: canary.TestCase) -> None:
+    if case.spec.file.suffix == ".cmake":
+        # concatenate stdout and stderr
+        case.stderr = None
+
+
+@canary.hookimpl
+def canary_testcase_setup(case: canary.TestCase) -> None:
+    if case.spec.file.suffix == ".cmake":
+        setup_ctest(case)
+
+
+@canary.hookimpl
+def canary_testcase_finish(case: canary.TestCase) -> None:
+    if case.spec.file.suffix == ".cmake":
+        finish_ctest(case)
+
+
 @canary.hookimpl(specname="canary_configure")
 def add_default_ctest_timeout(config: canary.Config):
-    config.set("config:timeout:ctest", 1500.0, scope="defaults")
+    config.set("timeout:ctest", 1500.0)
 
 
 @canary.hookimpl(specname="canary_addoption")
@@ -107,7 +135,7 @@ def canary_addhooks(pluginmanager: "canary.CanaryPluginManager"):
 @canary.hookimpl(trylast=True)
 def canary_cdash_labels(case: canary.TestCase) -> list[str]:
     """Default implementation: return the test case's keywords"""
-    return list(case.keywords)
+    return list(case.spec.keywords)
 
 
 @canary.hookimpl
