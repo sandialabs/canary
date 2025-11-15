@@ -51,6 +51,42 @@ CONFIG_ENV_FILENAME = "CANARYCFGFILE"
 logger = logging.get_logger(__name__)
 
 
+def default_config_values() -> dict[str, Any]:
+    defaults = {
+        "config": {
+            "debug": False,
+            "view": "TestResults",
+            "log_level": "INFO",
+            "cache_dir": os.path.join(os.getcwd(), ".canary_cache"),
+            "multiprocessing": {
+                "context": "spawn",
+                "max_tasks_per_child": 1,
+            },
+            "timeout": {
+                "session": -1.0,
+                "multiplier": 1.0,
+                "fast": 120.0,
+                "default": 300.0,
+                "long": 900.0,
+            },
+            "plugins": [],
+            "polling_frequency": {
+                "testcase": 0.05,
+            },
+        },
+        "options": {},
+        "environment": {
+            "prepend-path": {},
+            "append-path": {},
+            "set": {},
+            "unset": [],
+        },
+        "system": _machine.system_config(),
+        "scratch": {},
+    }
+    return defaults
+
+
 class Config:
     def __init__(self, initialize: bool = True) -> None:
         self.invocation_dir = invocation_dir
@@ -200,8 +236,7 @@ class Config:
                 raise ValueError(f"Invalid config section: {section!r}")
             schema = section_schemas[section]
             data[section] = schema.validate(section_data)
-
-        self.data = merge(self.data, data)
+            self.data[section] = merge(self.data[section], section_data)
 
         # Put timeouts passed on the command line into the regular configuration
         if t := getattr(args, "timeout", None):
@@ -336,41 +371,6 @@ def try_loads(arg):
         return json.loads(arg)
     except json.decoder.JSONDecodeError:
         return arg
-
-
-def default_config_values() -> dict[str, Any]:
-    defaults = {
-        "config": {
-            "debug": False,
-            "view": "TestResults",
-            "log_level": "INFO",
-            "cache_dir": os.path.join(os.getcwd(), ".canary_cache"),
-            "multiprocessing": {
-                "context": "spawn",
-                "max_tasks_per_child": 1,
-            },
-            "timeout": {
-                "session": -1.0,
-                "multiplier": 1.0,
-                "fast": 120.0,
-                "default": 300.0,
-                "long": 900.0,
-            },
-            "plugins": [],
-            "polling_frequency": {
-                "testcase": 0.05,
-            },
-        },
-        "options": {},
-        "environment": {
-            "prepend-path": {},
-            "append-path": {},
-            "set": {},
-            "unset": [],
-        },
-        "system": _machine.system_config(),
-    }
-    return defaults
 
 
 def isnullpath(path: str) -> bool:
