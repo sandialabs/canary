@@ -8,8 +8,8 @@ from typing import Any
 from typing import Sequence
 
 from ... import config
-from ...queue_executor import ResourceQueueExecutor
 from ...queue import ResourceQueue
+from ...queue_executor import ResourceQueueExecutor
 from ...resource_pool import make_resource_pool
 from ...util import logging
 from ...util.misc import digits

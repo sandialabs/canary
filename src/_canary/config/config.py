@@ -90,7 +90,6 @@ def default_config_values() -> dict[str, Any]:
 class Config:
     def __init__(self, initialize: bool = True) -> None:
         self.invocation_dir = invocation_dir
-        self.working_dir = os.getcwd()
         self.pluginmanager: CanaryPluginManager = CanaryPluginManager.factory()
         self.data: dict[str, Any] = {}
         self.options: argparse.Namespace = argparse.Namespace()
@@ -115,7 +114,6 @@ class Config:
         if f := os.getenv(CONFIG_ENV_FILENAME):
             with open(f, "r") as fh:
                 snapshot = json.load(fh)
-            config.working_dir = snapshot["working_dir"]
             config.invocation_dir = snapshot["invocation_dir"]
             config.options = argparse.Namespace(**snapshot["options"])
             config.data = snapshot["data"]
@@ -126,12 +124,13 @@ class Config:
                 logging.set_level(log_level)
         else:
             config.init()
+        for plugin in config.data["config"]["plugins"]:
+            config.pluginmanager.consider_plugin(plugin)
         return config
 
     def dump(self, file: IO[Any]) -> None:
         snapshot: dict[str, Any] = {
             "invocation_dir": str(self.invocation_dir),
-            "working_dir": str(self.working_dir),
             "options": vars(self.options),
             "data": self.data,
         }
@@ -161,10 +160,8 @@ class Config:
 
     def get(self, path: str, default: Any = None) -> Any:
         parts = process_config_path(path)
-        section = parts.pop(0)
-        value = self.data.get(section, {})
-        while parts:
-            key = parts.pop(0)
+        value = self.data.get(parts[0], {})
+        for key in parts[1:]:
             # cannot use value.get(key, default) in case there is another part
             # and default is not a dict
             if key not in value:
@@ -260,23 +257,18 @@ class Config:
     def apply_environment_mods(self, envmods: dict[str, Any]) -> None:
         for action, values in envmods.items():
             if action == "set":
-                for name, value in values.items():
-                    os.environ[name] = value
+                os.environ.update(values)
             elif action == "unset":
                 for value in values:
                     os.environ.pop(value, None)
             elif action == "prepend-path":
                 for pathname, path in values.items():
-                    if existing := os.getenv(pathname):
-                        os.environ[pathname] = f"{path}:{existing}"
-                    else:
-                        os.environ[pathname] = path
+                    existing = os.getenv(pathname, "")
+                    os.environ[pathname] = f"{path}:{existing}" if existing else path
             elif action == "append-path":
                 for pathname, path in values.items():
-                    if existing := os.getenv(pathname):
-                        os.environ[pathname] = f"{existing}:{path}"
-                    else:
-                        os.environ[pathname] = path
+                    existing = os.getenv(pathname, "")
+                    os.environ[pathname] = f"{existing}:{path}" if existing else path
 
 
 def get_config_scope(scope: str) -> dict[str, Any]:
@@ -357,7 +349,7 @@ def process_config_path(path: str) -> list[str]:
         front, _, path = path.partition(":")
         result.append(front)
         if path.startswith(("{", "[")):
-            result.append(path)
+            result.append(try_loads(path))
             return result
     return result
 

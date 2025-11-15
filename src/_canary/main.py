@@ -66,7 +66,6 @@ class CanaryMain:
 
     def __init__(self, argv: Sequence[str] | None = None) -> None:
         self.argv: Sequence[str] = list(argv or sys.argv[1:])
-        config.invocation_dir = config.working_dir = os.getcwd()
 
     def __enter__(self) -> "CanaryMain":
         """Preparsing is necessary to parse out options that need to take effect before the main
@@ -79,8 +78,7 @@ class CanaryMain:
         if args.debug:
             reraise = True
         if args.C:
-            config.working_dir = args.C
-        os.chdir(config.working_dir)
+            os.chdir(args.C)
 
         # Consider plugins passed in the environment and the command line early, before parsing the
         # main command line. This allows plugins to define a subcommand (which must be registered
