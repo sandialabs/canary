@@ -23,7 +23,6 @@ from ..util import cpu_count
 from ..util import logging
 from ..util.collections import merge
 from ..util.compression import compress64
-from ..util.compression import expand64
 from ..util.filesystem import mkdirp
 from ..util.string import strip_quotes
 from . import _machine
@@ -58,6 +57,7 @@ log_levels: tuple[int, ...] = (
     logging.CRITICAL,
 )
 env_archive_name = "CANARYCFG64"
+CONFIG_ENV_FILENAME = "CANARYCFGFILE"
 
 logger = logging.get_logger(__name__)
 
@@ -115,17 +115,16 @@ class ConfigScope:
 
 
 class Config:
-    def __init__(self) -> None:
+    def __init__(self, initialize: bool = True) -> None:
         self.invocation_dir = invocation_dir
         self.working_dir = os.getcwd()
         self.pluginmanager: CanaryPluginManager = CanaryPluginManager.factory()
         self.scopes: dict[str, ConfigScope] = {}
         self.options: argparse.Namespace = argparse.Namespace()
-        if envcfg := os.getenv(env_archive_name):
-            with io.StringIO() as fh:
-                fh.write(expand64(envcfg))
-                fh.seek(0)
-                self.load_snapshot(fh)
+        if initialize:
+            self.init()
+
+    def init(self) -> None:
         self.scopes["defaults"] = ConfigScope("defaults", None, default_config_values())
         for scope in ("site", "global", "local"):
             config_scope = create_config_scope(scope)
@@ -137,8 +136,43 @@ class Config:
         if self.get("config:debug"):
             logging.set_level(logging.DEBUG)
 
+    @staticmethod
+    def factory() -> "Config":
+        config: Config
+        if f := os.getenv(CONFIG_ENV_FILENAME):
+            config = Config(initialize=False)
+            with open(f, "r") as fh:
+                snapshot = json.load(fh)
+            properties: dict[str, Any] = snapshot["properties"]
+            config.working_dir = properties["working_dir"]
+            config.invocation_dir = properties["invocation_dir"]
+            config.options = argparse.Namespace(**properties["options"])
+            config.scopes.clear()
+            for value in snapshot["scopes"]:
+                scope = ConfigScope(value["name"], value["file"], value["data"])
+                config.push_scope(scope)
+            if not len(logger.handlers):
+                logging.setup_logging()
+            log_level = config.get("config:log_level")
+            if logging.get_level_name(logger.level) != log_level:
+                logging.set_level(log_level)
+        else:
+            config = Config()
+        return config
+
+    def dump(self, file: IO[Any]) -> None:
+        snapshot: dict[str, Any] = {}
+        properties = snapshot.setdefault("properties", {})
+        properties["invocation_dir"] = self.invocation_dir
+        properties["working_dir"] = self.working_dir
+        properties["options"] = vars(self.options)
+        scopes = snapshot.setdefault("scopes", [])
+        for scope in self.scopes.values():
+            scopes.append(scope.asdict())
+        file.write(json.dumps(snapshot, indent=2))
+
     def getoption(self, name: str, default: Any = None) -> Any:
-        return self.get(f"options:{name}", default=default, scope="command_line")
+        return getattr(self.options, name, default)
 
     def getstate(self, pretty: bool = True) -> dict[str, Any]:
         data: dict[str, Any] = {}

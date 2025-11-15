@@ -2,11 +2,10 @@
 #
 # SPDX-License-Identifier: MIT
 
+import typing
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
-from typing import Any
-from typing import Generator
 
+from .config import CONFIG_ENV_FILENAME  # noqa: F401
 from .config import Config
 from .config import ConfigScope  # noqa: F401
 from .config import get_scope_filename  # noqa: F401
@@ -33,48 +32,29 @@ class _resource_pool_attr_error:
 resource_pool = _resource_pool_attr_error()
 
 
-if TYPE_CHECKING:
-    _config = Config()
+_config: Config | None = None
 
-    add = _config.add
-    get = _config.get
-    set = _config.set
-    getstate = _config.getstate
+if typing.TYPE_CHECKING:
+    _config = typing.cast(Config, _config)
 
-    pluginmanager = _config.pluginmanager
-    invocation_dir = _config.invocation_dir
-    working_dir = _config.working_dir
-    getoption = _config.getoption
-    set_main_options = _config.set_main_options
-    options = _config.options
-    cache_dir = _config.cache_dir
-    dump_snapshot = _config.dump_snapshot
-    ensure_loaded = lambda: None
-    load_snapshot = _config.load_snapshot
-    archive = _config.archive
-    temporary_scope = _config.temporary_scope
-    push_scope = _config.push_scope
 
-else:
-    # allow config to be lazily loaded
-    _config: Config | None = None
+def ensure_loaded() -> None:
+    global _config
+    if _config is None:
+        _config = Config.factory()
 
-    def ensure_loaded() -> None:
-        global _config
-        if _config is None:
-            _config = Config()
 
-    def __getattr__(name: str) -> Any:
-        global _config
-        if _config is None:
-            _config = Config()
-        if name == "debug":
-            return _config.get("config:debug")
-        return getattr(_config, name)
+def __getattr__(name: str) -> typing.Any:
+    global _config
+    if _config is None:
+        _config = Config.factory()
+    if name == "debug":
+        return _config.get("config:debug")
+    return getattr(_config, name)
 
 
 @contextmanager
-def override() -> Generator[Config, None, None]:
+def override() -> typing.Generator[Config, None, None]:
     global _config
     save_config = _config
     try:

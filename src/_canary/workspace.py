@@ -87,6 +87,9 @@ class Workspace:
         # Mutable data
         self.cache_dir: Path
 
+        # Temporary data
+        self.tmp_dir: Path
+
         # Storage for SpecSelection tags
         self.tags_dir: Path
 
@@ -117,6 +120,7 @@ class Workspace:
         self.refs_dir = self.root / "refs"
         self.sessions_dir = self.root / "sessions"
         self.cache_dir = self.root / "cache"
+        self.tmp_dir = self.root / "tmp"
         self.tags_dir = self.root / "tags"
         self.logs_dir = self.root / "logs"
         self.head = self.root / "HEAD"
@@ -190,6 +194,7 @@ class Workspace:
         self.refs_dir.mkdir(parents=True)
         self.sessions_dir.mkdir(parents=True)
         self.cache_dir.mkdir(parents=True)
+        self.tmp_dir.mkdir(parents=True)
         self.tags_dir.mkdir(parents=True)
         self.tag("default")
         self.logs_dir.mkdir(parents=True)

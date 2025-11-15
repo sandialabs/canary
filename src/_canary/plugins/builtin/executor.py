@@ -34,7 +34,7 @@ class TestCaseExecutor:
         # Use a function instead of @property since pluggy tries to inspect properties and causes
         # the resource pool to be instantiated prematurely
         if self._rpool is None:
-            self._rpool = make_resource_pool(config._config)
+            self._rpool = make_resource_pool(config._config)  # ty: ignore[invalid-argument-type]
         assert self._rpool is not None
         return self._rpool
 
@@ -74,8 +74,8 @@ class TestCaseExecutor:
         rpool = self.get_rpool()
         queue = ResourceQueue.factory(global_lock, cases, resource_pool=rpool)
         runner = Runner()
-        pool = ProcessPool(queue, runner)
-        return pool.run()
+        with ProcessPool(queue, runner) as pool:
+            return pool.run()
 
 
 class Runner:

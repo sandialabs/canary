@@ -104,6 +104,7 @@ class PYTTestGenerator(AbstractTestGenerator):
 
     def describe(self, on_options: list[str] | None = None) -> str:
         from ...testspec import resolve
+
         file = io.StringIO()
         file.write(f"--- {self.name} ------------\n")
         file.write(f"File: {self.file}\n")

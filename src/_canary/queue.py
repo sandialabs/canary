@@ -174,7 +174,7 @@ class AbstractResourceQueue(abc.ABC):
 
 class ResourceQueue(AbstractResourceQueue):
     def __init__(self, *, lock: threading.Lock, resource_pool: "ResourcePool") -> None:
-        workers = int(config.getoption("workers", -1))
+        workers = int(config.getoption("workers") or -1)
         if workers < 0:
             workers = min(cpu_count(logical=False), 50)
         super().__init__(lock=lock, workers=workers, resource_pool=resource_pool)

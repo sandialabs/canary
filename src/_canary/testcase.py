@@ -348,10 +348,6 @@ class TestCase:
             self.timekeeper.started_on = timekeeper.started_on
             self.timekeeper.finished_on = timekeeper.finished_on
             self.timekeeper.duration = timekeeper.duration
-        try:
-            self.cache_last_run()
-        except Exception:
-            logger.debug("Failed to cache last run", exc_info=True)
 
     def refresh(self) -> None:
         data = json.loads(self.workspace.joinpath("testcase.lock").read_text())
@@ -391,7 +387,10 @@ class TestCase:
         pass
 
     def finish(self) -> None:
-        pass
+        try:
+            self.cache_last_run()
+        except Exception:
+            logger.debug("Failed to cache last run", exc_info=True)
 
     def save(self) -> None:
         record = self.asdict()

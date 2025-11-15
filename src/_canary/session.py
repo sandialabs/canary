@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 import datetime
-import os
 import pickle
 import time
 from graphlib import TopologicalSorter
@@ -179,10 +178,6 @@ class Session:
         return [case for case in self.cases if case.id in roots]
 
     def run(self, roots: list[str] | None = None) -> dict[str, Any]:
-        # Since test cases run in subprocesses, we archive the config to the environment.  The
-        # config object in the subprocess will read in the archive and use it to re-establish the
-        # correct config
-        config.archive(os.environ)
         cases = self.get_ready(roots=roots)
         if not cases:
             raise StopExecution("No tests to run", notests_exit_status)

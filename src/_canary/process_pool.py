@@ -1,12 +1,15 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+from pathlib import Path
 import multiprocessing as mp
+import os
 import time
 from functools import cached_property
 from queue import Empty as EmptyResultQueue
 from typing import Any
 from typing import Callable
+from uuid import uuid4
 
 import psutil
 
@@ -128,6 +131,92 @@ class ProcessPool:
 
         # Map: pid -> (MeasuredProcess, result_queue, job, start_time, timeout)
         self.inflight: dict[int, tuple[MeasuredProcess, mp.Queue, Any, float, float]] = {}
+        self.entered: bool = False
+
+    def __enter__(self) -> "ProcessPool":
+        from .workspace import Workspace
+
+        try:
+            ws = Workspace.load()
+            f = ws.tmp_dir / f"{uuid4().hex[:8]}.json"
+            with open(f, "w") as fh:
+                config.dump(fh)
+            os.environ[config.CONFIG_ENV_FILENAME] = str(f)
+        except Exception:
+            logger.exception("Unable to create configuration")
+            raise
+        self.entered = True
+        return self
+
+    def __exit__(self, *args):
+        if f := os.getenv(config.CONFIG_ENV_FILENAME):
+            Path(f).unlink(missing_ok=True)
+
+    def run(self, **kwargs: Any) -> int:
+        """Main loop: get jobs from queue and launch processes."""
+        # Since test cases run in subprocesses, we archive the config to the environment.  The
+        # config object in the subprocess will read in the archive and use it to re-establish the
+        # correct config
+
+        logger.info(f"Starting process pool with max {self.max_workers} workers")
+
+        timeout = float(config.get("config:timeout:session", -1))
+
+        qsize = len(self.queue)
+        qrank = 0
+        start = time.time()
+        while True:
+            try:
+                if timeout >= 0.0 and time.time() - start > timeout:
+                    raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
+
+                self.check_keyboard_input(start)
+
+                # Clean up any finished processes and collect results
+                self.clean_finished_processes()
+
+                # Wait for a slot if at max capacity
+                self.wait_for_slot()
+
+                # Get a job from the queue
+                job = self.queue.get()
+
+                # Create a result queue for this specific process
+                result_queue = mp.Queue()
+
+                # Launch a new measured process
+                proc = MeasuredProcess(
+                    target=self.runner,
+                    args=(job, result_queue),
+                    kwargs={"qsize": qsize, "qrank": qrank, **kwargs},
+                )
+
+                proc.start()
+                qrank += 1
+
+                # Store process with its result queue, job, start time, and timeout
+                job_timeout = job.timeout * self.timeout_multiplier
+                self.inflight[proc.pid] = (proc, result_queue, job, time.time(), job_timeout)
+
+            except Busy:
+                # Queue is busy, wait and try again
+                time.sleep(self.busy_wait_time)
+
+            except Empty:
+                # Queue is empty, wait for remaining jobs and exit
+                self.wait_all()
+                break
+
+            except KeyboardInterrupt:
+                self.terminate_all()
+                break
+
+            except BaseException:
+                logger.exception("Unhandled exception in process pool")
+                raise
+
+        return compute_returncode(self.queue.cases())
+
 
     def check_timeouts(self) -> None:
         """Check for and kill processes that have exceeded their timeout."""
@@ -202,67 +291,6 @@ class ProcessPool:
             self.clean_finished_processes()
             if len(self.inflight) >= self.max_workers:
                 time.sleep(0.1)  # Brief sleep before checking again
-
-    def run(self, **kwargs: Any) -> int:
-        """Main loop: get jobs from queue and launch processes."""
-        logger.info(f"Starting process pool with max {self.max_workers} workers")
-
-        timeout = float(config.get("config:timeout:session", -1))
-
-        qsize = len(self.queue)
-        qrank = 0
-        start = time.time()
-        while True:
-            try:
-                if timeout >= 0.0 and time.time() - start > timeout:
-                    raise TimeoutError(f"Test execution exceeded time out of {timeout} s.")
-
-                self.check_keyboard_input(start)
-
-                # Clean up any finished processes and collect results
-                self.clean_finished_processes()
-
-                # Wait for a slot if at max capacity
-                self.wait_for_slot()
-
-                # Get a job from the queue
-                job = self.queue.get()
-
-                # Create a result queue for this specific process
-                result_queue = mp.Queue()
-
-                # Launch a new measured process
-                proc = MeasuredProcess(
-                    target=self.runner,
-                    args=(job, result_queue),
-                    kwargs={"qsize": qsize, "qrank": qrank, **kwargs},
-                )
-
-                proc.start()
-                qrank += 1
-
-                # Store process with its result queue, job, start time, and timeout
-                job_timeout = job.timeout * self.timeout_multiplier
-                self.inflight[proc.pid] = (proc, result_queue, job, time.time(), job_timeout)
-
-            except Busy:
-                # Queue is busy, wait and try again
-                time.sleep(self.busy_wait_time)
-
-            except Empty:
-                # Queue is empty, wait for remaining jobs and exit
-                self.wait_all()
-                break
-
-            except KeyboardInterrupt:
-                self.terminate_all()
-                break
-
-            except BaseException:
-                logger.exception("Unhandled exception in process pool")
-                raise
-
-        return compute_returncode(self.queue.cases())
 
     def wait_all(self) -> None:
         """Wait for all active processes to complete."""
