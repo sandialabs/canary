@@ -181,6 +181,7 @@ class TestSpec(SpecCommons):
         for a in d["assets"]:
             assets.append(Asset(src=Path(a["src"]), dst=a["dst"], action=a["action"]))
         d["assets"] = assets
+        d.pop("cache", None)
         self = TestSpec(**d)  # ty: ignore[missing-argument]
         return self
 

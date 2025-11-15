@@ -15,9 +15,9 @@ def test_depends_on_one(tmpdir):
             spec.DraftSpec(file_root=Path("."), file_path=Path("f1.pyt"), dependencies=[]),
             spec.DraftSpec(file_root=Path("."), file_path=Path("f2.pyt"), dependencies=["f1"]),
         ]
-        spec.resolve_dependencies(drafts)
-        assert drafts[0].resolved_dependencies == []
-        assert drafts[1].resolved_dependencies == [drafts[0]]
+        resolved = spec.resolve(drafts)
+        assert resolved[0].dependencies == []
+        assert resolved[1].dependencies == [resolved[0]]
 
 
 def test_depends_on_one_to_many(tmpdir):
@@ -30,10 +30,10 @@ def test_depends_on_one_to_many(tmpdir):
         Path("f3.pyt").touch()
         b3 = spec.DraftSpec(file_root=root, file_path=Path("f3.pyt"), dependencies=["f1"])
         drafts = [b1, b2, b3]
-        spec.resolve_dependencies(drafts)
-        assert drafts[0].resolved_dependencies == []
-        assert drafts[1].resolved_dependencies == [drafts[0]]
-        assert drafts[2].resolved_dependencies == [drafts[0]]
+        resolved = spec.resolve(drafts)
+        assert resolved[0].dependencies == []
+        assert resolved[1].dependencies == [resolved[0]]
+        assert resolved[2].dependencies == [resolved[0]]
 
 
 def test_depends_on_param(tmpdir):
@@ -49,11 +49,11 @@ def test_depends_on_param(tmpdir):
         Path("f2.pyt").touch()
         b = spec.DraftSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=2"])
         drafts.append(b)
-        spec.resolve_dependencies(drafts)
-        assert drafts[0].resolved_dependencies == []
-        assert drafts[1].resolved_dependencies == []
-        assert drafts[2].resolved_dependencies == []
-        assert drafts[3].resolved_dependencies == [drafts[1]]
+        resolved = spec.resolve(drafts)
+        assert resolved[0].dependencies == []
+        assert resolved[1].dependencies == []
+        assert resolved[2].dependencies == []
+        assert resolved[3].dependencies == [resolved[1]]
 
 
 def test_depends_on_many_to_one(tmpdir):
@@ -63,9 +63,7 @@ def test_depends_on_many_to_one(tmpdir):
         f1.touch()
         drafts = []
         for a in (1, 2, 3, 4):
-            b = spec.DraftSpec(
-                file_root=root, file_path=f1, dependencies=[], parameters={"a": a}
-            )
+            b = spec.DraftSpec(file_root=root, file_path=f1, dependencies=[], parameters={"a": a})
             drafts.append(b)
         f2 = Path("f2.pyt")
         f2.touch()
@@ -73,11 +71,11 @@ def test_depends_on_many_to_one(tmpdir):
             file_root=root, file_path=f1, dependencies=["f1.a=1", "f1.a=3", "f1.a=4"]
         )
         drafts.append(b)
-        spec.resolve_dependencies(drafts)
-        assert drafts[0].resolved_dependencies == []
-        assert drafts[1].resolved_dependencies == []
-        assert drafts[2].resolved_dependencies == []
-        assert drafts[4].resolved_dependencies == [drafts[0], drafts[2], drafts[3]]
+        resolved = spec.resolve(drafts)
+        assert resolved[0].dependencies == []
+        assert resolved[1].dependencies == []
+        assert resolved[2].dependencies == []
+        assert resolved[4].dependencies == [resolved[0], resolved[2], resolved[3]]
 
 
 def test_depends_on_glob(tmpdir):
@@ -87,18 +85,16 @@ def test_depends_on_glob(tmpdir):
         f1.touch()
         drafts = []
         for a in (1, 2, 3):
-            b = spec.DraftSpec(
-                file_root=root, file_path=f1, dependencies=[], parameters={"a": a}
-            )
+            b = spec.DraftSpec(file_root=root, file_path=f1, dependencies=[], parameters={"a": a})
             drafts.append(b)
         Path("f2.pyt").touch()
         b = spec.DraftSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=*"])
         drafts.append(b)
-        spec.resolve_dependencies(drafts)
-        assert drafts[0].resolved_dependencies == []
-        assert drafts[1].resolved_dependencies == []
-        assert drafts[2].resolved_dependencies == []
-        assert drafts[3].resolved_dependencies == [drafts[0], drafts[1], drafts[2]]
+        resolved = spec.resolve(drafts)
+        assert resolved[0].dependencies == []
+        assert resolved[1].dependencies == []
+        assert resolved[2].dependencies == []
+        assert resolved[3].dependencies == [resolved[0], resolved[1], resolved[2]]
 
 
 def test_depends_on_param_subs(tmpdir):
@@ -115,16 +111,18 @@ def test_depends_on_param_subs(tmpdir):
             parameters={"my_var": 0.1},
         )
         drafts.append(b)
+        f2 = Path("f2.pyt")
+        f2.touch()
         b = spec.DraftSpec(
             file_root=root,
-            file_path=f1,
-            family="abc_run",
+            file_path=f2,
+            family="foobar",
             dependencies=["abc_run.my_var=${my_var}"],
             parameters={"my_var": 0.1},
         )
         drafts.append(b)
-        spec.resolve_dependencies(drafts)
-        assert drafts[1].resolved_dependencies == [drafts[0]]
+        resolved = spec.resolve(drafts)
+        assert resolved[1].dependencies == [resolved[0]]
 
 
 def test_depends_on_missing(tmpdir):
@@ -133,7 +131,7 @@ def test_depends_on_missing(tmpdir):
         Path("f1.pyt").touch()
         b = spec.DraftSpec(file_root=root, file_path=Path("f1.pyt"), dependencies=["f2"])
         with pytest.raises(spec.DependencyResolutionFailed):
-            spec.resolve_dependencies([b])
+            spec.resolve([b])
 
 
 def test_generate_specs(tmpdir):
@@ -143,15 +141,13 @@ def test_generate_specs(tmpdir):
         f1.touch()
         drafts = []
         for a in (1, 2, 3):
-            b = spec.DraftSpec(
-                file_root=root, file_path=f1, dependencies=[], parameters={"a": a}
-            )
+            b = spec.DraftSpec(file_root=root, file_path=f1, dependencies=[], parameters={"a": a})
             drafts.append(b)
         Path("f2.pyt").touch()
         b = spec.DraftSpec(file_root=root, file_path=Path("f2.pyt"), dependencies=["f1.a=*"])
         drafts.append(b)
-        spec.resolve_dependencies(draft_specs=drafts)
-        specs = spec.finalize(drafts)
+        resolved = spec.resolve(draft_specs=drafts)
+        specs = spec.finalize(resolved)
         assert len(specs) == 4
         assert len(specs[-1].dependencies) == 3
 
@@ -162,10 +158,12 @@ def test_roundtrip(tmpdir):
         f0 = Path("f1.pyt")
         f0.touch()
         s0 = spec.TestSpec(
+            id="F0",
             file_root=root,
             file_path=f0,
             family="f0",
             dependencies=[],
+            dep_done_criteria=[],
             keywords=[],
             parameters={},
             rparameters={},
@@ -186,10 +184,12 @@ def test_roundtrip(tmpdir):
         f1.touch()
 
         s1 = spec.TestSpec(
+            id="F1",
             file_root=root,
             file_path=f1,
             family="f1",
             dependencies=[s0],
+            dep_done_criteria=["success"],
             keywords=[],
             parameters={},
             rparameters={},
@@ -208,5 +208,7 @@ def test_roundtrip(tmpdir):
         with open("spec.lock", "w") as fh:
             s1.dump(fh)
         with open("spec.lock", "r") as fh:
-            s = spec.TestSpec.load(fh)
+            d = json.load(fh)
+            print(d)
+        s = spec.TestSpec.from_dict(d, {"F0": s0})
         assert s1 == s

@@ -215,7 +215,7 @@ exclude = [
     "src/canary_vvtest/tests/*",  # just until we get them fixed
     "src/canary_hpc/tests/*",  # just until we get them fixed
 ]
-include = ["src"]
+include = ["src", "tests"]
 
 
 [tool.bandit]
