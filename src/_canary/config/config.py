@@ -182,7 +182,7 @@ class Config:
             self.apply_environment_mods(data["environment"])
         self.data = merge(self.data, data)
 
-    def update(self, path: str, value: Any, scope: str) -> None:
+    def write_new(self, path: str, value: Any, scope: str) -> None:
         parts = process_config_path(path)
         data = value
         for key in reversed(parts):

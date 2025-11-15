@@ -88,7 +88,7 @@ class ConfigCmd(CanarySubcommand):
             return 0
         elif args.subcommand == "set":
             path, value = args.path_and_value
-            config.update(path, try_loads(value), args.scope)
+            config.write_new(path, try_loads(value), args.scope)
             return 0
         elif args.subcommand is None:
             raise ValueError("canary config: missing required subcommand (choose from show, add)")
