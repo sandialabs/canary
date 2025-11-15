@@ -11,104 +11,17 @@ from typing import Any
 from typing import Callable
 from uuid import uuid4
 
-import psutil
-
 from . import config
 from .queue import AbstractResourceQueue
 from .queue import Busy
 from .queue import Empty
+from .util import cpu_count
 from .util import keyboard
 from .util import logging
+from .util.procutils import MeasuredProcess
 from .util.returncode import compute_returncode
 
 logger = logging.get_logger(__name__)
-
-
-class MeasuredProcess(mp.Process):
-    """A Process subclass that collects resource usage metrics using psutil.
-    Metrics are sampled each time is_alive() is called.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.samples: list[dict[str, float]] = []
-        self._psutil_process = None
-        self._start_time = None
-
-    def start(self):
-        """Start the process and initialize psutil monitoring."""
-        super().start()
-        self._start_time = time.time()
-        try:
-            self._psutil_process = psutil.Process(self.pid)
-        except Exception:
-            logger.warning(f"Could not attach psutil to process {self.pid}")
-            self._psutil_process = None
-
-    def _sample_metrics(self):
-        """Sample current process metrics."""
-        if not psutil or not self._psutil_process:
-            return
-
-        try:
-            # Get process info
-            with self._psutil_process.oneshot():
-                cpu_percent = self._psutil_process.cpu_percent()
-                mem_info = self._psutil_process.memory_info()
-
-                sample = {
-                    "timestamp": time.time(),
-                    "cpu_percent": cpu_percent,
-                    "memory_rss_mb": mem_info.rss / (1024 * 1024),  # RSS in MB
-                    "memory_vms_mb": mem_info.vms / (1024 * 1024),  # VMS in MB
-                }
-
-                # Add number of threads if available
-                try:
-                    sample["num_threads"] = self._psutil_process.num_threads()
-                except:
-                    pass
-
-                self.samples.append(sample)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            # Process may have terminated
-            pass
-        except Exception as e:
-            logger.debug(f"Error sampling metrics: {e}")
-
-    def is_alive(self):
-        """Check if process is alive and sample metrics."""
-        alive = super().is_alive()
-        if alive:
-            self._sample_metrics()
-        return alive
-
-    def get_measurements(self):
-        """Calculate statistics from collected samples.
-        Returns a dict with min, max, avg for each metric.
-        """
-        if not self.samples:
-            return {
-                "duration": time.time() - self._start_time if self._start_time else 0,
-                "samples": 0,
-            }
-
-        measurements = {
-            "duration": time.time() - self._start_time if self._start_time else 0,
-            "samples": len(self.samples),
-        }
-
-        # Calculate stats for each metric
-        metrics = ["cpu_percent", "memory_rss_mb", "memory_vms_mb", "num_threads"]
-
-        for metric in metrics:
-            values = [s[metric] for s in self.samples if metric in s]
-            if values:
-                measurements.setdefault(metric, {})["min"] = min(values)
-                measurements.setdefault(metric, {})["max"] = max(values)
-                measurements.setdefault(metric, {})["ave"] = sum(values) / len(values)
-
-        return measurements
 
 
 class ResourceQueueExecutor:
@@ -125,6 +38,9 @@ class ResourceQueueExecutor:
             busy_wait_time: Time to wait when queue is busy
         """
         self.max_workers = queue.workers
+        if self.max_workers > cpu_count():
+            logger.warning(f"workers={self.max_workers} > cpu_count={cpu_count()}")
+
         self.queue: AbstractResourceQueue = queue
         self.runner = runner
         self.busy_wait_time = busy_wait_time

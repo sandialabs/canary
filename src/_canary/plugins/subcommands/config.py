@@ -36,13 +36,6 @@ class ConfigCmd(CanarySubcommand):
             help="Show current configuration. To show the resource pool, let section=resource_pool",
         )
         p.add_argument(
-            "-a",
-            action="store_true",
-            default=False,
-            dest="show_all",
-            help="Show all configuration sections, even internal",
-        )
-        p.add_argument(
             "-p",
             "--paths",
             action="store_true",
@@ -57,38 +50,45 @@ class ConfigCmd(CanarySubcommand):
             help="Print configuration in this format [default: %(default)s]",
         )
         p.add_argument(
-            "--pretty",
-            action="store_true",
-            default=False,
-            help="Pretty-print the contents of the config in the given format [default: False]",
-        )
-        p.add_argument(
             "section",
             nargs="?",
             help="Show only this section.  "
             "The section 'plugin' will print the currently active plugins",
         )
-        p = sp.add_parser("add", help="Add to the current configuration")
-        p.add_argument(
-            "--scope",
-            choices=("local", "global"),
+        p = sp.add_parser("set", help="Add to the current configuration")
+        g = p.add_mutually_exclusive_group()
+        g.add_argument(
+            "--local",
+            dest="scope",
             default="local",
-            help="Configuration scope",
+            const="local",
+            action="store_const",
+            help="Set the local configuration value",
+        )
+        g.add_argument(
+            "--global",
+            dest="scope",
+            const="global",
+            action="store_const",
+            help="Set the local configuration value",
         )
         p.add_argument(
-            "path",
-            metavar="PATH",
-            help="colon-separated path to config to be set, e.g. 'config:debug:true'",
+            "path_and_value",
+            nargs=2,
+            metavar="PATH VALUE",
+            help="colon-separated path to config to be set, e.g. 'config:debug true'",
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
         from ... import config
+        from ...config.config import try_loads
 
         if args.subcommand == "show":
             show_config(args)
             return 0
-        elif args.subcommand == "add":
-            config.add(args.path, scope=args.scope)
+        elif args.subcommand == "set":
+            path, value = args.path_and_value
+            config.update(path, try_loads(value), args.scope)
             return 0
         elif args.subcommand is None:
             raise ValueError("canary config: missing required subcommand (choose from show, add)")
@@ -118,20 +118,15 @@ def show_config(args: "argparse.Namespace"):
         return
 
     else:
-        state = config.getstate(pretty=True)
+        state = config.data
         if args.section is not None:
             state = {args.section: state[args.section]}
-        elif not args.show_all:
-            state = {"config": state["config"]}
         if args.format == "json":
             text = json.dumps(state, indent=2)
         else:
             text = yaml.dump(state, default_flow_style=False)
     try:
-        if args.pretty:
-            pretty_print(text, args.format)
-        else:
-            print(text)
+        pretty_print(text, args.format)
     except ImportError:
         print(text)
     return 0

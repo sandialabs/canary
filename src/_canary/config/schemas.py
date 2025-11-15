@@ -126,7 +126,6 @@ environment_schema = Schema(
     }
 )
 plugin_schema = Schema({str: dict}, ignore_extra_keys=True)
-user_schema = Schema({}, ignore_extra_keys=True)
 
 testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
 

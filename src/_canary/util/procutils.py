@@ -2,16 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
-import concurrent.futures
 import multiprocessing
 import os
-import sys
+import time
 import warnings
 from typing import Any
 
 import psutil
 
-from .. import config
 from . import logging
 
 logger = logging.get_logger(__name__)
@@ -111,13 +109,88 @@ def get_process_metrics(
         return metrics
 
 
-class ProcessPoolExecutor(concurrent.futures.ProcessPoolExecutor):
-    def __init__(self, *, workers: int) -> None:
-        context = config.get("config:multiprocessing:context") or "spawn"
-        mp_context = multiprocessing.get_context(context)
-        max_tasks_per_child = config.get("config:multiprocessing:max_tasks_per_child") or 1
-        if sys.version_info[:2] >= (3, 11):
-            n = max_tasks_per_child if context == "spawn" else None
-            super().__init__(max_workers=workers, mp_context=mp_context, max_tasks_per_child=n)
-        else:
-            super().__init__(max_workers=workers, mp_context=mp_context)
+class MeasuredProcess(multiprocessing.Process):
+    """A Process subclass that collects resource usage metrics using psutil.
+    Metrics are sampled each time is_alive() is called.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.samples: list[dict[str, float]] = []
+        self._psutil_process = None
+        self._start_time = None
+
+    def start(self):
+        """Start the process and initialize psutil monitoring."""
+        super().start()
+        self._start_time = time.time()
+        try:
+            self._psutil_process = psutil.Process(self.pid)
+        except Exception:
+            logger.warning(f"Could not attach psutil to process {self.pid}")
+            self._psutil_process = None
+
+    def _sample_metrics(self):
+        """Sample current process metrics."""
+        if not psutil or not self._psutil_process:
+            return
+
+        try:
+            # Get process info
+            with self._psutil_process.oneshot():
+                cpu_percent = self._psutil_process.cpu_percent()
+                mem_info = self._psutil_process.memory_info()
+
+                sample = {
+                    "timestamp": time.time(),
+                    "cpu_percent": cpu_percent,
+                    "memory_rss_mb": mem_info.rss / (1024 * 1024),  # RSS in MB
+                    "memory_vms_mb": mem_info.vms / (1024 * 1024),  # VMS in MB
+                }
+
+                # Add number of threads if available
+                try:
+                    sample["num_threads"] = self._psutil_process.num_threads()
+                except:
+                    pass
+
+                self.samples.append(sample)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            # Process may have terminated
+            pass
+        except Exception as e:
+            logger.debug(f"Error sampling metrics: {e}")
+
+    def is_alive(self):
+        """Check if process is alive and sample metrics."""
+        alive = super().is_alive()
+        if alive:
+            self._sample_metrics()
+        return alive
+
+    def get_measurements(self):
+        """Calculate statistics from collected samples.
+        Returns a dict with min, max, avg for each metric.
+        """
+        if not self.samples:
+            return {
+                "duration": time.time() - self._start_time if self._start_time else 0,
+                "samples": 0,
+            }
+
+        measurements = {
+            "duration": time.time() - self._start_time if self._start_time else 0,
+            "samples": len(self.samples),
+        }
+
+        # Calculate stats for each metric
+        metrics = ["cpu_percent", "memory_rss_mb", "memory_vms_mb", "num_threads"]
+
+        for metric in metrics:
+            values = [s[metric] for s in self.samples if metric in s]
+            if values:
+                measurements.setdefault(metric, {})["min"] = min(values)
+                measurements.setdefault(metric, {})["max"] = max(values)
+                measurements.setdefault(metric, {})["ave"] = sum(values) / len(values)
+
+        return measurements

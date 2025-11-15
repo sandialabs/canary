@@ -224,9 +224,7 @@ class Workspace:
         self.index_file.touch()
 
         file = self.root / "canary.yaml"
-        file.write_text(json.dumps({}))
-        scope = config.ConfigScope("workspace", str(file), {})
-        config.push_scope(scope)
+        file.write_text(json.dumps({"canary": {}}))
         return self
 
     @classmethod
@@ -453,7 +451,7 @@ class Workspace:
                     selection = pickle.load(fh)
                     selection.specs = None
                 with open(file, "wb") as fh:
-                    pickle.dump(selection, file)
+                    pickle.dump(selection, fh)
         logger.info(f"@*{{Added}} {n} new test case generators to {self.root}")
         return generators
 
