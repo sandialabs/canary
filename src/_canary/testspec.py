@@ -203,15 +203,15 @@ class TestSpec(SpecCommons):
             else:
                 timeout = 2.0 * max_runtime
         else:
-            if t := config.get("config:timeout:*"):
+            if t := config.get("timeout:*"):
                 timeout = float(t)
             else:
                 for keyword in self.keywords:
-                    if t := config.get(f"config:timeout:{keyword}"):
+                    if t := config.get(f"timeout:{keyword}"):
                         timeout = float(t)
                         break
                 else:
-                    timeout = config.get("config:timeout:default")
+                    timeout = config.get("timeout:default")
         self._timeout = float(timeout)
 
 
@@ -469,17 +469,18 @@ class DraftSpec(SpecCommons):
         return assets
 
     def _default_timeout(self) -> float:
-        for keyword in self.keywords:
-            if t := config.get(f"options:timeout:{keyword}"):
+        if cli_timeouts := config.getoption("timeout"):
+            for keyword in self.keywords:
+                if t := cli_timeouts.get(keyword):
+                    return float(t)
+            if t := cli_timeouts.get("*"):
                 return float(t)
-        if t := config.get("options:timeout:*"):
-            return float(t)
         for keyword in self.keywords:
-            if t := config.get(f"config:timeout:{keyword}"):
+            if t := config.get(f"timeout:{keyword}"):
                 return float(t)
-        if t := config.get("options:timeout:all"):
+        if t := config.get("timeout:all"):
             return float(t)
-        return float(config.get("config:timeout:default"))
+        return float(config.get("timeout:default"))
 
     def _generate_baseline_actions(self, items: list[str | tuple[str, str]]) -> list[dict]:
         actions: list[dict] = []

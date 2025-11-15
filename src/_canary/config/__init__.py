@@ -47,8 +47,6 @@ def __getattr__(name: str) -> typing.Any:
     global _config
     if _config is None:
         _config = Config.factory()
-    if name == "debug":
-        return _config.get("config:debug")
     return getattr(_config, name)
 
 

@@ -206,7 +206,7 @@ class ResourceQueue(AbstractResourceQueue):
 
     def put(self, *cases: Any) -> None:
         for case in cases:
-            if config.get("config:debug"):
+            if config.get("debug"):
                 # The case should have already been validated
                 check = config.pluginmanager.hook.canary_resource_pool_accommodates(case=case)
                 if not check:
@@ -298,7 +298,7 @@ class ResourceQueue(AbstractResourceQueue):
         currently busy
 
         """
-        if not config.get("config:debug"):
+        if not config.get("debug"):
             return None
         hb: dict[str, Any] = {"date": datetime.now().strftime("%c")}
         busy = self.busy()

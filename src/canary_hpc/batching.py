@@ -108,11 +108,12 @@ class TestBatch:
 
     @cached_property
     def timeout_multiplier(self) -> float:
-        timeoutx: float = canary.config.get("config:timeout:multiplier") or 1.0
-        timeouts = canary.config.getoption("timeout") or {}
-        if t := timeouts.get("multiplier"):
-            timeoutx = float(t)
-        return timeoutx
+        if cli_timeouts := canary.config.getoption("timeout"):
+            if t := cli_timeouts.get("multiplier"):
+                return float(t)
+        elif t := canary.config.get("timeout:multiplier"):
+            return float(t)
+        return 1.0
 
     @property
     def timeout(self) -> float:
@@ -371,7 +372,7 @@ class TestBatch:
         variables = dict(self.variables)
         variables["CANARY_LEVEL"] = "1"
         variables["CANARY_DISABLE_KB"] = "1"
-        if canary.config.get("config:debug"):
+        if canary.config.get("debug"):
             variables["CANARY_DEBUG"] = "on"
 
         batchspec = canary.config.getoption("canary_hpc_batchspec")
@@ -386,7 +387,7 @@ class TestBatch:
             logger.debug(f"Submitting batch {self.id}")
             workspace = canary.Workspace.load()
             default_args: list[str] = ["-C", str(workspace.root.parent)]
-            if canary.config.get("config:debug"):
+            if canary.config.get("debug"):
                 default_args.append("-d")
             if backend.supports_subscheduling and flat:
                 submit_script = self.submission_script_filename()

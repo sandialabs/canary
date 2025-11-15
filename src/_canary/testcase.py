@@ -269,7 +269,7 @@ class TestCase:
         except TestTimedOut as e:
             self.status.set("TIMEOUT", message=None if not e.args else e.args[0])
         except BaseException as e:
-            if config.get("config:debug"):
+            if config.get("debug"):
                 logger.exception("Exception during test case execution")
             fh = io.StringIO()
             traceback.print_exc(file=fh, limit=2)

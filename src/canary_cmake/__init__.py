@@ -48,7 +48,7 @@ def canary_testcase_finish(case: canary.TestCase) -> None:
 
 @canary.hookimpl(specname="canary_configure")
 def add_default_ctest_timeout(config: canary.Config):
-    config.set("config:timeout:ctest", 1500.0, scope="defaults")
+    config.set("timeout:ctest", 1500.0)
 
 
 @canary.hookimpl(specname="canary_addoption")

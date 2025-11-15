@@ -100,6 +100,15 @@ build_schema = Schema(
     },
     ignore_extra_keys=True,
 )
+environment_schema = Schema(
+    {
+        Optional("set"): vardict,
+        Optional("unset"): list_of_str,
+        Optional("prepend-path"): vardict,
+        Optional("append-path"): vardict,
+    }
+)
+
 config_schema = Schema(
     {
         Optional("debug"): Use(boolean),
@@ -115,18 +124,12 @@ config_schema = Schema(
             Optional("testcase"): Use(time_in_seconds),
         },
         Optional("plugins"): list_of_str,
-    }
+        Optional("build"): build_schema,
+        Optional("environment"): environment_schema,
+        Optional("scratch"): any_schema,
+    },
+    ignore_extra_keys=True,
 )
-environment_schema = Schema(
-    {
-        Optional("set"): vardict,
-        Optional("unset"): list_of_str,
-        Optional("prepend-path"): vardict,
-        Optional("append-path"): vardict,
-    }
-)
-plugin_schema = Schema({str: dict}, ignore_extra_keys=True)
-
 testpaths_schema = Schema({"testpaths": [{"root": str, "paths": list_of_str}]})
 
 
@@ -135,17 +138,16 @@ class EnvarSchema(Schema):
         data = super().validate(data, is_root_eval=False)
         if is_root_eval:
             validated = {}
-            config = validated.setdefault("config", {})
             for key, val in data.items():
                 name = key[7:].lower()
                 if name.startswith(("timeout_", "multiprocessing_")):
                     root, _, leaf = name.partition("_")
-                    config.setdefault(root, {})[leaf] = val
+                    validated.setdefault(root, {})[leaf] = val
                 elif name.endswith("_polling_frequency"):
                     leaf, _, root = name.partition("_")
-                    config.setdefault(root, {})[leaf] = val
+                    validated.setdefault(root, {})[leaf] = val
                 else:
-                    config[name] = val
+                    validated[name] = val
             return validated
         return data
 

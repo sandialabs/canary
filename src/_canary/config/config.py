@@ -4,38 +4,24 @@ import json.decoder
 import os
 import sys
 from functools import cached_property
+from pathlib import Path
 from string import Template
 from typing import IO
 from typing import Any
+from typing import Literal
 
 import yaml
-from schema import Schema
 
 from ..plugins.manager import CanaryPluginManager
 from ..third_party import color
 from ..util import logging
 from ..util.collections import merge
 from ..util.filesystem import write_directory_tag
-from . import _machine
-from .schemas import any_schema
-from .schemas import build_schema
+from ._machine import system_config
 from .schemas import config_schema
-from .schemas import environment_schema
 from .schemas import environment_variable_schema
-from .schemas import plugin_schema
 
 invocation_dir = os.getcwd()
-
-
-section_schemas: dict[str, Schema] = {
-    "build": build_schema,
-    "config": config_schema,
-    "environment": environment_schema,
-    "plugin": plugin_schema,
-    "system": any_schema,
-    "scratch": any_schema,
-    "options": any_schema,
-}
 
 
 log_levels: tuple[int, ...] = (
@@ -46,33 +32,34 @@ log_levels: tuple[int, ...] = (
     logging.ERROR,
     logging.CRITICAL,
 )
+
+TOP_LEVEL_CONFIG_KEY = "canary"
 CONFIG_ENV_FILENAME = "CANARYCFGFILE"
+ConfigScopes = Literal["site", "global", "local"]
 
 logger = logging.get_logger(__name__)
 
 
 def default_config_values() -> dict[str, Any]:
     defaults = {
-        "config": {
-            "debug": False,
-            "view": "TestResults",
-            "log_level": "INFO",
-            "cache_dir": os.path.join(os.getcwd(), ".canary_cache"),
-            "multiprocessing": {
-                "context": "spawn",
-                "max_tasks_per_child": 1,
-            },
-            "timeout": {
-                "session": -1.0,
-                "multiplier": 1.0,
-                "fast": 120.0,
-                "default": 300.0,
-                "long": 900.0,
-            },
-            "plugins": [],
-            "polling_frequency": {
-                "testcase": 0.05,
-            },
+        "debug": False,
+        "view": "TestResults",
+        "log_level": "INFO",
+        "cache_dir": os.path.join(os.getcwd(), ".canary_cache"),
+        "multiprocessing": {
+            "context": "spawn",
+            "max_tasks_per_child": 1,
+        },
+        "timeout": {
+            "session": -1.0,
+            "multiplier": 1.0,
+            "fast": 120.0,
+            "default": 300.0,
+            "long": 900.0,
+        },
+        "plugins": [],
+        "polling_frequency": {
+            "testcase": 0.05,
         },
         "options": {},
         "environment": {
@@ -81,8 +68,8 @@ def default_config_values() -> dict[str, Any]:
             "set": {},
             "unset": [],
         },
-        "system": _machine.system_config(),
         "scratch": {},
+        "system": system_config(),
     }
     return defaults
 
@@ -99,13 +86,14 @@ class Config:
     def init(self) -> None:
         self.data = default_config_values()
         for name in ("site", "global", "local"):
-            scope = get_config_scope(name)
+            try:
+                scope = get_config_scope_data(name)
+            except LocalScopeDoesNotExistError:
+                continue
             self.data = merge(self.data, scope)
-        if ws_scope := get_workspace_config():
-            self.data = merge(self.data, ws_scope)
         if env_scope := get_env_scope():
             self.data = merge(self.data, env_scope)
-        if self.get("config:debug"):
+        if self.get("debug"):
             logging.set_level(logging.DEBUG)
 
     @staticmethod
@@ -119,12 +107,12 @@ class Config:
             config.data = snapshot["data"]
             if not len(logger.handlers):
                 logging.setup_logging()
-            log_level = config.get("config:log_level")
+            log_level = config.get("log_level")
             if logging.get_level_name(logger.level) != log_level:
                 logging.set_level(log_level)
         else:
             config.init()
-        for plugin in config.data["config"]["plugins"]:
+        for plugin in config.data["plugins"]:
             config.pluginmanager.consider_plugin(plugin)
         return config
 
@@ -149,7 +137,7 @@ class Config:
             The path to the cache directory or None if not set.
         """
         cache_dir: str
-        if dir := self.get("config:cache_dir"):
+        if dir := self.get("cache_dir"):
             cache_dir = os.path.expanduser(dir)
         else:
             cache_dir = os.path.join(self.invocation_dir, ".canary_cache")
@@ -160,6 +148,9 @@ class Config:
 
     def get(self, path: str, default: Any = None) -> Any:
         parts = process_config_path(path)
+        if parts[0] == "config":
+            # Legacy support for top level config key
+            parts = parts[1:]
         value = self.data.get(parts[0], {})
         for key in parts[1:]:
             # cannot use value.get(key, default) in case there is another part
@@ -169,27 +160,27 @@ class Config:
             value = value[key]
         return value
 
-    def set(self, path: str, value: Any, scope: str | None = None) -> None:
+    def set(self, path: str, value: Any) -> None:
         parts = process_config_path(path)
         data = value
         for key in reversed(parts):
             data = {key: data}
-        data = validate_scope(data)
+        data = config_schema.validate(data)
         if parts[0] == "environment":
             self.apply_environment_mods(data["environment"])
         self.data = merge(self.data, data)
 
-    def write_new(self, path: str, value: Any, scope: str) -> None:
+    def write_new(self, path: str, value: Any, scope: ConfigScopes) -> None:
         parts = process_config_path(path)
         data = value
         for key in reversed(parts):
             data = {key: data}
-        data = validate_scope(data)
+        data = config_schema.validate(data)
         file = get_scope_filename(scope)
         if fd := read_config_file(file):
             data = merge(fd, data)
         with open(file, "w") as fh:
-            yaml.dump({"canary": data}, fh, default_flow_style=False)
+            yaml.dump({TOP_LEVEL_CONFIG_KEY: data}, fh, default_flow_style=False)
 
     def set_main_options(self, args: argparse.Namespace) -> None:
         """Set main configuration options based on command-line arguments.
@@ -202,9 +193,8 @@ class Config:
         """
         data: dict[str, Any] = {}
 
-        config: dict[str, Any] = data.setdefault("config", {})
         if cache_dir := getattr(args, "cache_dir", None):
-            config["cache_dir"] = cache_dir
+            data["cache_dir"] = cache_dir
 
         logging.set_level(logging.INFO)
         if args.color is not None:
@@ -217,27 +207,22 @@ class Config:
             if args.v:
                 level_index = max(0, level_index - args.v)
             levelno = log_levels[level_index]
-            config["log_level"] = logging.get_level_name(levelno)
+            data["log_level"] = logging.get_level_name(levelno)
             logging.set_level(levelno)
 
         if args.debug:
-            data.setdefault("config", {})["debug"] = True
-            data.setdefault("config", {})["log_level"] = "DEBUG"
+            data["debug"] = True
+            data["log_level"] = "DEBUG"
             logging.set_level(logging.DEBUG)
 
         if args.config_mods:
             data.update(args.config_mods)
 
-        for section, section_data in data.items():
-            if section not in section_schemas:
-                raise ValueError(f"Invalid config section: {section!r}")
-            schema = section_schemas[section]
-            data[section] = schema.validate(section_data)
-            self.data[section] = merge(self.data[section], section_data)
+        self.data = merge(self.data, data)
 
         # Put timeouts passed on the command line into the regular configuration
         if t := getattr(args, "timeout", None):
-            timeouts: dict[str, float] = config.setdefault("timeout", [])
+            timeouts: dict[str, float] = data.setdefault("timeout", [])
             for key, val in t.items():
                 timeouts[key] = float(val)
 
@@ -248,13 +233,18 @@ class Config:
 
         if args.config_file:
             if fd := read_config_file(args.config_file):
-                fd = validate_scope(fd)
+                fd = config_schema.validate(fd)
                 self.data = merge(self.data, fd)
 
-        if self.data["config"]["debug"]:
+        if self.data["debug"]:
             logging.set_level(logging.DEBUG)
 
     def apply_environment_mods(self, envmods: dict[str, Any]) -> None:
+        """Apply modifications to the environment
+
+        Warning:
+          This modifies os.environ for the entire process
+        """
         for action, values in envmods.items():
             if action == "set":
                 os.environ.update(values)
@@ -271,7 +261,7 @@ class Config:
                     os.environ[pathname] = f"{existing}:{path}" if existing else path
 
 
-def get_config_scope(scope: str) -> dict[str, Any]:
+def get_config_scope_data(scope: ConfigScopes) -> dict[str, Any]:
     """Read the data from config scope ``data``
 
     By the time the data leaves, it is validated and does not contain a top-level ``canary`` field
@@ -279,47 +269,42 @@ def get_config_scope(scope: str) -> dict[str, Any]:
     """
     data: dict[str, Any] = {}
     file = get_scope_filename(scope)
-    if fd := read_config_file(file):
+    if file is not None and (fd := read_config_file(file)):
         data.update(fd)
-    return validate_scope(data)
+    return config_schema.validate(data)
 
 
-def validate_scope(data: dict[str, Any]) -> dict[str, Any]:
-    for section, section_data in data.items():
-        if schema := section_schemas.get(section):
-            if schema == any_schema:
-                data[section] = section_data
-            else:
-                data[section] = schema.validate(section_data)
-        else:
-            logger.warning(f"ignoring unrecognized config section: {section}")
-    return data
-
-
-def read_config_file(file: str) -> dict[str, Any] | None:
+def read_config_file(file: str | Path) -> dict[str, Any] | None:
     """Load configuration settings from ``file``"""
-    if not os.path.exists(file):
+    file = Path(file)
+    if not file.exists():
         return None
     with open(file) as fh:
         fd = yaml.safe_load(fh)
-        return fd["canary"] if "canary" in fd else fd
+        return fd[TOP_LEVEL_CONFIG_KEY] if TOP_LEVEL_CONFIG_KEY in fd else fd
 
 
-def get_scope_filename(scope: str) -> str:
+def get_scope_filename(scope: str) -> Path:
+    from ..workspace import Workspace
+
     if scope == "site":
         if var := os.getenv("CANARY_SITE_CONFIG"):
-            return var
-        return os.path.join(sys.prefix, "etc/canary/config.yaml")
+            return Path(var)
+        return Path(sys.prefix) / "etc/canary/config.yaml"
     elif scope == "global":
         if var := os.getenv("CANARY_GLOBAL_CONFIG"):
-            return var
+            return Path(var)
         elif var := os.getenv("XDG_CONFIG_HOME"):
-            file = os.path.join(var, "canary/config.yaml")
-            if os.path.exists(file):
+            file = Path(var) / "canary/config.yaml"
+            if file.exists():
                 return file
-        return os.path.expanduser("~/.config/canary.yaml")
+        return Path("~/.config/canary.yaml").expanduser()
     elif scope == "local":
-        return os.path.abspath("./canary.yaml")
+        if path := Workspace.find_workspace():
+            return path / "config.yaml"
+        raise LocalScopeDoesNotExistError(
+            f"not a Canary workspace (or any of its parent directories): {Path.cwd()}"
+        )
     raise ValueError(f"Could not determine filename for scope {scope!r}")
 
 
@@ -328,17 +313,6 @@ def get_env_scope() -> dict[str, Any]:
     if variables:
         variables = environment_variable_schema.validate(variables)
     return variables
-
-
-def get_workspace_config() -> dict[str, Any]:
-    from ..workspace import Workspace
-
-    if path := Workspace.find_workspace():
-        if (path / "canary.yaml").exists():
-            file = path / "canary.yaml"
-            if fd := read_config_file(file):
-                return validate_scope(fd)
-    return {}
 
 
 def process_config_path(path: str) -> list[str]:
@@ -393,4 +367,10 @@ def expandvars(arg: Any, mapping: dict) -> Any:
 def create_cache_dir(path: str) -> None:
     if isnullpath(path):
         return
-    write_directory_tag(path)
+    p = Path(path)
+    p.mkdir(parents=True, exist_ok=True)
+    write_directory_tag(p / "CANARY_CACHE.TAG")
+
+
+class LocalScopeDoesNotExistError(Exception):
+    pass

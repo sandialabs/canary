@@ -204,7 +204,7 @@ class Workspace:
         file = self.logs_dir / "canary-log.txt"
         logging.add_file_handler(str(file), logging.TRACE)
 
-        if var := config.get("config:view"):
+        if var := config.get("view"):
             if isinstance(var, str):
                 self.view = (self.root.parent / var).resolve()
             else:
@@ -232,7 +232,7 @@ class Workspace:
         anchor = cls.find_anchor(start=start)
         if anchor is None:
             raise NotAWorkspaceError(
-                f"not a Canary session (or any of its parent directories): {workspace_path}"
+                f"not a Canary workspace (or any of its parent directories): {workspace_path}"
             )
         self: Workspace = object.__new__(cls)
         self.initialize_properties(anchor=anchor)
@@ -834,7 +834,7 @@ def generate_specs(
     created = time.monotonic()
     try:
         locked: list[list[DraftSpec]] = []
-        if config.get("config:debug"):
+        if config.get("debug"):
             for f in generators:
                 locked.append(lock_file(f, on_options))
         else:

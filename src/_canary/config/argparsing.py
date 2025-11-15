@@ -280,8 +280,7 @@ class RegisterPlugin(argparse.Action):
         option_str: str | None = None,
     ):
         config_mods = getattr(namespace, self.dest, None) or {}
-        config_section = config_mods.setdefault("config", {})
-        config_section.setdefault("plugins", []).append(option)
+        config_mods.setdefault("plugins", []).append(option)
         setattr(namespace, self.dest, config_mods)
 
 
@@ -414,7 +413,7 @@ def make_argument_parser(**kwargs):
         action=ConfigMods,
         metavar="path",
         help="Add the colon-separated path to test session's configuration, "
-        "e.g. %s" % colorize("@*{-c config:debug:true}"),
+        "e.g. %s" % colorize("@*{-c debug:true}"),
     )
     group.add_argument(
         "-e",

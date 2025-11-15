@@ -81,7 +81,7 @@ class ResourceQueueExecutor:
 
         logger.info(f"Starting process pool with max {self.max_workers} workers")
 
-        timeout = float(config.get("config:timeout:session", -1))
+        timeout = float(config.get("timeout:session", -1))
 
         qsize = len(self.queue)
         qrank = 0
@@ -255,8 +255,9 @@ class ResourceQueueExecutor:
 
     @cached_property
     def timeout_multiplier(self) -> float:
-        if t := config.get("options:timeout:multiplier"):
-            return float(t)
-        elif t := config.get("config:timeout:multiplier"):
+        if cli_timeouts := config.getoption("timeout"):
+            if t := cli_timeouts.get("multiplier"):
+                return float(t)
+        elif t := config.get("timeout:multiplier"):
             return float(t)
         return 1.0

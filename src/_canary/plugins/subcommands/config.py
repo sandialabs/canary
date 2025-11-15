@@ -76,7 +76,7 @@ class ConfigCmd(CanarySubcommand):
             "path_and_value",
             nargs=2,
             metavar="PATH VALUE",
-            help="colon-separated path to config to be set, e.g. 'config:debug true'",
+            help="colon-separated path to config to be set, e.g. 'timeout:default 10.0'",
         )
 
     def execute(self, args: "argparse.Namespace") -> int:
@@ -122,9 +122,9 @@ def show_config(args: "argparse.Namespace"):
         if args.section is not None:
             state = {args.section: state[args.section]}
         if args.format == "json":
-            text = json.dumps(state, indent=2)
+            text = json.dumps({"canary": state}, indent=2)
         else:
-            text = yaml.dump(state, default_flow_style=False)
+            text = yaml.dump({"canary": state}, default_flow_style=False)
     try:
         pretty_print(text, args.format)
     except ImportError:

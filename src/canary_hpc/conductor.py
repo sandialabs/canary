@@ -130,7 +130,7 @@ class CanaryHPCConductor:
         if wanting:
             types: str
             reason: str
-            if canary.config.get("config:debug"):
+            if canary.config.get("debug"):
                 fmt = lambda t, n, m: "@*{%s} (requested %d, available %d)" % (colorize(t), n, m)
                 types = ", ".join(fmt(k, *wanting[k]) for k in sorted(wanting))
                 reason = f"{case}: insufficient slots of {types}"

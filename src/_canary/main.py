@@ -196,7 +196,7 @@ def console_main() -> int:
     except TimeoutError as e:
         if reraise:
             raise
-        if config.get("config:debug"):
+        if config.get("debug"):
             print_current_config()
         logger.error(e.args[0])
         return 4
@@ -209,7 +209,7 @@ def console_main() -> int:
     except SystemExit as e:
         if e.code == 0:
             return 0
-        if config.get("config:debug"):
+        if config.get("debug"):
             print_current_config()
         if reraise:
             traceback.print_exc()
@@ -217,7 +217,7 @@ def console_main() -> int:
             return e.code
         return 1
     except Exception as e:
-        if config.get("config:debug"):
+        if config.get("debug"):
             print_current_config()
         if reraise:
             raise

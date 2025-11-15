@@ -95,7 +95,7 @@ def editor(*args_in: str, exec_fn: Callable[[str, list[str]], int] = os.execv) -
         try:
             return exec_fn(path, args) == 0
         except OSError as e:
-            if config.get("config:debug"):
+            if config.get("debug"):
                 raise
 
             # Show variable we were trying to use, if it's from one

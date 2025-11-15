@@ -117,7 +117,7 @@ class ResourceQueue(queue.AbstractResourceQueue):
     def put(self, *cases: canary.TestCase) -> None:
         pm = canary.config.pluginmanager
         for case in cases:
-            if canary.config.get("config:debug"):
+            if canary.config.get("debug"):
                 # The case should have already been validated
                 check = pm.hook.canary_resource_pool_accommodates(case=case)
                 if not check:

@@ -256,7 +256,7 @@ def create_draft_spec(
     elif t := kwds.get("timeout_property"):
         kwargs["timeout"] = float(t)
     else:
-        kwargs["timeout"] = canary.config.get("config:timeout:ctest", 1500.0)
+        kwargs["timeout"] = canary.config.get("timeout:ctest", 1500.0)
 
     attributes["pass_regular_expression"] = pass_regular_expression
     attributes["fail_regular_expression"] = fail_regular_expression
